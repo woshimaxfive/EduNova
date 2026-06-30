@@ -34,6 +34,13 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 | API 设计 | 本轮新增 | `docs/API.md` |
 | 数据库设计 | 本轮新增 | `docs/DATABASE_DESIGN.md` |
 | 项目看板 | 本轮新增 | `docs/PROJECT_BOARD.md` |
+| 仓库规则 | 本轮新增 | `AGENTS.md` |
+| 编辑器规则 | 本轮新增 | `.editorconfig` |
+| 环境变量示例 | 本轮新增 | `.env.example` |
+| 编码检查脚本 | 本轮新增 | `scripts/verify_encoding.ps1` |
+| 总测试脚本 | 本轮新增 | `scripts/test.ps1` |
+| 安全基线 | 本轮新增 | `docs/SECURITY.md` |
+| 风险登记册 | 本轮新增 | `docs/RISK_REGISTER.md` |
 | 代码实现 | 未开始 | 等基础文档和规范完成后进入 |
 
 ## 3. 里程碑
@@ -55,11 +62,11 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 
 ### P0 必须先做
 
-- [ ] 提交当前基础文档。
-- [ ] 创建编码检查脚本 `scripts/verify_encoding.ps1`。
-- [ ] 创建总测试脚本 `scripts/test.ps1`。
-- [ ] 创建基础 README。
-- [ ] 创建 `.env.example`。
+- [x] 提交当前基础文档。
+- [x] 创建编码检查脚本 `scripts/verify_encoding.ps1`。
+- [x] 创建总测试脚本 `scripts/test.ps1`。
+- [x] 创建基础 README。
+- [x] 创建 `.env.example`。
 - [ ] 搭建 FastAPI `/api/health`。
 - [ ] 搭建 Docker Compose 草案。
 
@@ -74,7 +81,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 
 ### P2 随开发推进
 
-- [ ] 补 `docs/SECURITY.md`。
+- [x] 补 `docs/SECURITY.md`。
 - [ ] 补 `docs/AGENT_DESIGN.md`。
 - [ ] 补 `docs/RAG_DESIGN.md`。
 - [ ] 补 `docs/UI_UX_DESIGN.md`。
@@ -83,7 +90,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 - [ ] 补 `docs/OPEN_SOURCE_NOTICE.md`。
 - [ ] 补 `docs/USER_GUIDE.md`。
 - [ ] 补 `docs/DEFENSE_QA.md`。
-- [ ] 补 `docs/RISK_REGISTER.md`。
+- [x] 补 `docs/RISK_REGISTER.md`。
 
 ## 5. 风险清单
 
@@ -142,11 +149,11 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 当前最合理的下一步：
 
 ```text
-1. 提交本轮基础文档。
-2. 补编码检查和测试脚本。
-3. 建 README 和 .env.example。
-4. 搭 FastAPI 后端健康检查。
-5. 搭 Docker Compose 草案。
+1. 提交 Phase 0A 工程护栏。
+2. 搭 FastAPI 后端健康检查。
+3. 搭 Docker Compose 草案。
+4. 为后端健康检查补最小测试。
+5. 同步更新 README、测试计划和项目看板。
 ```
 
 这一步完成后，再进入数据库、前端和 AI 功能开发。

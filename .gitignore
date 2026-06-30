@@ -1,6 +1,7 @@
 .superpowers/
 .agents/
 .codex/
+.worktrees/
 
 # Python
 __pycache__/

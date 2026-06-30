@@ -18,6 +18,7 @@ EduNova 是面向高校学生的 AI 个性化学习工作台，目标是参加�
 | 文档 | 说明 |
 | --- | --- |
 | [赛题原文](docs/软件杯A3赛题.txt) | A3 赛题要求 |
+| [仓库规则](AGENTS.md) | 编码、文档同步、Git、密钥和完成定义 |
 | [产品设计](docs/superpowers/specs/2026-07-01-edunova-product-design.md) | EduNova 做什么 |
 | [实施计划](docs/superpowers/plans/2026-07-01-edunova-mvp-implementation.md) | EduNova 怎么开发 |
 | [中文阅读版](docs/superpowers/plans/2026-07-01-edunova-mvp-implementation-中文阅读版.md) | 实施计划中文导读 |
@@ -26,6 +27,8 @@ EduNova 是面向高校学生的 AI 个性化学习工作台，目标是参加�
 | [API 设计](docs/API.md) | 前后端接口约定 |
 | [数据库设计](docs/DATABASE_DESIGN.md) | 数据表和关系 |
 | [测试计划](docs/TEST_PLAN.md) | 测试范围和验收流程 |
+| [安全基线](docs/SECURITY.md) | 账号、密钥、上传资料、RAG、日志和权限安全 |
+| [风险登记册](docs/RISK_REGISTER.md) | 项目风险、触发信号和应对策略 |
 | [项目看板](docs/PROJECT_BOARD.md) | 当前进度和下一步 |
 
 ## 第一版目标
@@ -53,4 +56,4 @@ EduNova 是面向高校学生的 AI 个性化学习工作台，目标是参加�
 
 ## 开发状态
 
-代码实现尚未开始。下一步是搭建工程骨架、编码检查脚本、FastAPI 健康检查和 Docker Compose 草案。
+当前正在进行 Phase 0A 工程护栏建设。下一步是搭建 FastAPI 健康检查和 Docker Compose 草案。

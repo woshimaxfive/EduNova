@@ -1,0 +1,29 @@
+.superpowers/
+.agents/
+.codex/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+build/
+.vite/
+
+# Environment and local data
+.env
+.env.*
+!.env.example
+uploads/
+storage/
+*.db
+
+# Logs
+*.log
+logs/

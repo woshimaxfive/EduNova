@@ -6,6 +6,8 @@
 
 EduNova 的测试目标不是只证明代码能运行，而是证明系统满足赛题要求、适合比赛演示、能够后续开源部署，并且关键 AI 输出具有可解释性和可信度。
 
+本文档是全项目测试计划。除“当前自动化验证入口”一节外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前 Phase 1A 已经实现。当前 Phase 1A 只验收 FastAPI 最小骨架、`/api/health`、pytest、ruff 和编码检查。
+
 测试需要覆盖以下问题：
 
 1. 学生是否能完整走通学习闭环。
@@ -78,6 +80,11 @@ EduNova 采用 7 层测试策略。
 ```powershell
 .\scripts\verify_encoding.ps1
 .\.venv\Scripts\python -m ruff check backend
+```
+
+前端创建后再启用：
+
+```powershell
 cd frontend
 pnpm lint
 pnpm build
@@ -463,7 +470,8 @@ cd ..
 | 阶段 | 验收标准 |
 | --- | --- |
 | Phase 0 | 编码检查脚本可运行，赛题和计划纳入 Git |
-| Phase 1 | 后端健康检查通过，PostgreSQL 和 Redis 可启动 |
+| Phase 1A | FastAPI 最小骨架、后端健康检查、pytest、ruff、编码检查通过 |
+| Phase 1B | Docker Compose 草案、PostgreSQL、Redis 和后端服务健康检查通过 |
 | Phase 2 | 核心表创建成功，人工智能导论课程可导入 |
 | Phase 3 | 前端工作台壳子可打开，构建通过 |
 | Phase 4 | 注册登录闭环通过 |
@@ -501,7 +509,35 @@ git status --short --untracked-files=all
 - AI Coding 工具使用说明完整。
 - 测试说明书包含测试范围、测试数据、测试结果和已知问题。
 
-## 13. 测试结论标准
+## 13. 当前自动化验证入口
+
+Phase 1A 起，仓库提供统一验证脚本：
+
+```powershell
+.\scripts\test.ps1
+```
+
+当前已覆盖：
+
+- UTF-8 无 BOM 与中文不转义检查。
+- 后端 pytest 测试。
+- 后端 ruff 检查。
+- 当前未创建前端时自动跳过前端检查。
+- 当前未接入 Docker Compose、PostgreSQL、Redis、前端和 AI/RAG；这些检查将在后续阶段加入。
+
+后端健康检查测试：
+
+```powershell
+.\.venv\Scripts\python -m pytest backend\tests\test_health.py
+```
+
+当前健康检查响应：
+
+```json
+{"status":"ok","service":"edunova-api"}
+```
+
+## 14. 测试结论标准
 
 只有同时满足以下条件，才能认为 EduNova 第一版测试通过：
 

@@ -56,4 +56,34 @@ EduNova 是面向高校学生的 AI 个性化学习工作台，目标是参加�
 
 ## 开发状态
 
-当前正在进行 Phase 0A 工程护栏建设。下一步是搭建 FastAPI 健康检查和 Docker Compose 草案。
+当前正在进行 Phase 1A 后端骨架建设。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试和编码检查已经实现。Docker Compose、数据库、Redis、前端和 AI/RAG 能力属于后续阶段。
+
+## 本地后端验证
+
+创建虚拟环境并安装依赖：
+
+```powershell
+py -3.12 -m venv .venv
+$env:PYTHONUTF8='1'
+$env:PYTHONIOENCODING='utf-8'
+$env:PIP_PROGRESS_BAR='off'
+.\.venv\Scripts\python -m pip install -r backend\requirements-dev.txt
+```
+
+运行检查：
+
+```powershell
+.\scripts\test.ps1
+```
+
+启动后端：
+
+```powershell
+.\.venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+
+健康检查：
+
+```text
+http://127.0.0.1:8000/api/health
+```

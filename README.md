@@ -56,7 +56,7 @@ EduNova 是面向高校学生的 AI 个性化学习工作台，目标是参加�
 
 ## 开发状态
 
-当前正在进行 Phase 1A 后端骨架建设。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试和编码检查已经实现。Docker Compose、数据库、Redis、前端和 AI/RAG 能力属于后续阶段。
+当前正在进行 Phase 1 工程骨架建设。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查和 Docker Compose 草案已经实现。数据库迁移、前端和 AI/RAG 能力属于后续阶段。
 
 ## 本地后端验证
 
@@ -86,4 +86,36 @@ $env:PIP_PROGRESS_BAR='off'
 
 ```text
 http://127.0.0.1:8000/api/health
+```
+
+## Docker Compose 骨架验证
+
+当前 Compose 草案包含：
+
+- PostgreSQL + pgvector。
+- Redis。
+- FastAPI backend。
+
+校验配置：
+
+```powershell
+docker compose config
+```
+
+启动并构建：
+
+```powershell
+docker compose up --build -d postgres redis backend
+```
+
+停止：
+
+```powershell
+docker compose down
+```
+
+当前已验证三项服务 health 都能达到 `healthy`，且 `http://127.0.0.1:8000/api/health` 返回：
+
+```json
+{"status":"ok","service":"edunova-api"}
 ```

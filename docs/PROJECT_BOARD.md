@@ -41,7 +41,8 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 | 总测试脚本 | 本轮新增 | `scripts/test.ps1` |
 | 安全基线 | 本轮新增 | `docs/SECURITY.md` |
 | 风险登记册 | 本轮新增 | `docs/RISK_REGISTER.md` |
-| 后端骨架 | 进行中 | FastAPI 最小应用、`/api/health`、pytest 与编码检查已完成 |
+| 后端骨架 | 已完成 | FastAPI 最小应用、`/api/health`、pytest 与编码检查已完成 |
+| Docker Compose 草案 | 已完成 | PostgreSQL、Redis、backend 三服务可启动且 healthy |
 
 ## 3. 里程碑
 
@@ -68,7 +69,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 - [x] 创建基础 README。
 - [x] 创建 `.env.example`。
 - [x] 搭建 FastAPI `/api/health`。
-- [ ] 搭建 Docker Compose 草案。
+- [x] 搭建 Docker Compose 草案。
 
 ### P1 紧接着做
 
@@ -86,7 +87,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 - [ ] 补 `docs/RAG_DESIGN.md`。
 - [ ] 补 `docs/UI_UX_DESIGN.md`。
 - [ ] 补 `docs/DEVELOPMENT_GUIDE.md`。
-- [ ] 补 `docs/DEPLOYMENT.md`。
+- [x] 补 `docs/DEPLOYMENT.md`。
 - [ ] 补 `docs/OPEN_SOURCE_NOTICE.md`。
 - [ ] 补 `docs/USER_GUIDE.md`。
 - [ ] 补 `docs/DEFENSE_QA.md`。
@@ -149,10 +150,10 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 当前最合理的下一步：
 
 ```text
-1. 提交并推送 Phase 1A 最小后端骨架。
-2. 进入 Phase 1B：Docker Compose 草案。
-3. 在 Phase 1B 中补 PostgreSQL、Redis 和后端服务健康检查。
-4. 同步更新 README、测试计划和项目看板。
+1. 提交并推送 Phase 1B Docker Compose 草案。
+2. 进入 Phase 2A：数据库依赖、SQLAlchemy、Alembic 与 pgvector 迁移基线。
+3. 建立核心表的第一批模型和迁移测试。
+4. 同步更新 README、数据库设计、测试计划和项目看板。
 ```
 
 这一步完成后，再进入数据库、前端和 AI 功能开发。

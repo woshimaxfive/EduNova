@@ -64,4 +64,12 @@ else {
   Write-Host "frontend package not found; skipped"
 }
 
+if (Test-Path -LiteralPath "$repoRoot\docker-compose.yml") {
+  Write-Host "== Docker Compose config =="
+  Invoke-CheckedCommand "docker" compose config
+}
+else {
+  Write-Host "docker-compose.yml not found; skipped"
+}
+
 Write-Host "verification complete"

@@ -91,6 +91,11 @@ export function LearningSpacePage() {
   return (
     <LearningSpaceShell>
       <div className="learning-home">
+        <div className="learning-signal" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
         <section className="home-history-rail" aria-label="历史对话">
           <div className="home-rail-heading">
             <span>历史对话</span>
@@ -117,7 +122,10 @@ export function LearningSpacePage() {
         <section className="home-chat-stage" aria-label="AI 学习入口">
           <div className="home-hero-copy">
             <p className="home-kicker">EduNova</p>
-            <h1>嗨，同学，准备好一起学习了吗？</h1>
+            <h1>
+              <span>嗨，同学，</span>
+              <span>准备好一起学习了吗？</span>
+            </h1>
             <p>上传课件、电子书或期末题，然后直接问。需要时再把这段对话变成一门课程。</p>
           </div>
 
@@ -173,19 +181,21 @@ export function LearningSpacePage() {
               <span>最近学习</span>
               <button type="button">查看全部</button>
             </div>
-            <div className="recent-course-list">
+            <ul className="recent-course-list" aria-label="最近学习列表">
               {recentCourses.map((course) => (
-                <button className="recent-course" key={course.id} type="button">
-                  <BookOpen size={18} weight="duotone" aria-hidden="true" />
-                  <span>
-                    <strong>{course.title}</strong>
-                    <small>{course.focus}</small>
-                  </span>
-                  <em>{course.progress}</em>
-                  <span className="course-next">{course.next}</span>
-                </button>
+                <li key={course.id}>
+                  <button className="recent-course" type="button">
+                    <BookOpen size={18} weight="duotone" aria-hidden="true" />
+                    <span>
+                      <strong>{course.title}</strong>
+                      <small>{course.focus}</small>
+                    </span>
+                    <em>{course.progress}</em>
+                    <span className="course-next">{course.next}</span>
+                  </button>
+                </li>
               ))}
-            </div>
+            </ul>
           </section>
         </section>
       </div>

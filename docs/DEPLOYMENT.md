@@ -12,6 +12,7 @@
 - Alembic 迁移。
 - pgvector 扩展初始化。
 - 用户、课程、选课、资料、知识点和知识切片表。
+- 人工智能导论内置课程包导入命令。
 
 以下能力还未接入当前部署：
 
@@ -135,9 +136,15 @@ docker compose up -d postgres redis
 CREATE EXTENSION IF NOT EXISTS vector
 ```
 
+导入内置课程包：
+
+```powershell
+.\.venv\Scripts\python -m backend.app.cli seed-ai-intro
+```
+
 ## 7. 当前验收标准
 
-Phase 2B 当前验收标准：
+Phase 2C 当前验收标准：
 
 1. `docker compose config` 通过。
 2. `postgres` 服务健康。
@@ -146,16 +153,17 @@ Phase 2B 当前验收标准：
 5. 浏览器或命令行访问 `/api/health` 返回预期 JSON。
 6. `alembic upgrade head` 能完成 pgvector 扩展迁移。
 7. `alembic upgrade head` 能创建第一批核心业务表。
-8. 停止服务后本地 Git 状态不出现运行产物。
+8. `python -m backend.app.cli seed-ai-intro` 能导入人工智能导论课程包。
+9. 重复执行导入命令不会创建重复课程。
+10. 停止服务后本地 Git 状态不出现运行产物。
 
-当前本机已验证以上 8 项，并验证第二条迁移可以 downgrade/upgrade 往返。
+当前本机已验证以上 10 项，并验证第二条迁移可以 downgrade/upgrade 往返。
 
 ## 8. 后续部署计划
 
 后续阶段将补充：
 
 - 后端数据库连接检查。
-- 内置人工智能导论课程数据导入。
 - 前端构建和静态服务。
 - Nginx 统一入口。
 - Demo Mode 初始化命令。

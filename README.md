@@ -57,7 +57,7 @@ EduNova 是面向高校学生的 AI 个性化学习工作台，目标是参加�
 
 ## 开发状态
 
-当前正在进行 Phase 2 数据与课程基础建设。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查、Docker Compose 草案、SQLAlchemy 数据库入口、Alembic 迁移基线、pgvector 扩展迁移和第一批核心业务表已经实现。人工智能导论课程包、前端和 AI/RAG 能力属于后续阶段。
+当前正在进行 Phase 2 数据与课程基础建设。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查、Docker Compose 草案、SQLAlchemy 数据库入口、Alembic 迁移基线、pgvector 扩展迁移、第一批核心业务表和人工智能导论内置课程包已经实现。前端和 AI/RAG 能力属于后续阶段。
 
 ## 本地后端验证
 
@@ -148,3 +148,11 @@ course_materials
 knowledge_points
 knowledge_chunks
 ```
+
+导入内置课程包：
+
+```powershell
+.\.venv\Scripts\python -m backend.app.cli seed-ai-intro
+```
+
+当前内置课程包包含 12 个知识点和 24 个基础资料切片，覆盖搜索、知识表示、机器学习、神经网络、自然语言处理、计算机视觉、多智能体和 AI 伦理安全。

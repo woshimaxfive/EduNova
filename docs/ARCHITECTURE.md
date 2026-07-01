@@ -120,6 +120,8 @@ backend/app/
 | `backend/app/db/base.py` | SQLAlchemy Declarative Base |
 | `backend/app/db/session.py` | 数据库 engine、Session 工厂和依赖入口 |
 | `backend/app/models` | 用户、课程、资料、知识点、知识切片核心模型 |
+| `backend/app/data/builtin_courses` | 内置课程包数据 |
+| `backend/app/services/course_seed.py` | 内置课程导入服务 |
 | `backend/migrations` | Alembic 迁移环境和 pgvector 扩展迁移 |
 
 分层职责：

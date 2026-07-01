@@ -26,12 +26,14 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 | 长任务进度 | Redis |
 | 文件内容 | 本地文件存储，数据库保存路径和元数据 |
 
-当前 Phase 2A/2B 已落地：
+当前 Phase 2A/2B/2C 已落地：
 
 - `backend/app/core/config.py`：读取数据库和 Redis 配置。
 - `backend/app/db/base.py`：SQLAlchemy metadata 入口。
 - `backend/app/db/session.py`：engine 与 Session 工厂。
 - `backend/app/models`：第一批核心业务模型。
+- `backend/app/data/builtin_courses/ai_intro.py`：人工智能导论内置课程包。
+- `backend/app/services/course_seed.py`：内置课程导入服务。
 - `backend/migrations`：Alembic 迁移目录。
 - `backend/migrations/versions/20260701_0001_enable_pgvector.py`：启用 pgvector 扩展。
 - `backend/migrations/versions/20260701_0002_create_core_learning_tables.py`：创建用户、课程、选课、资料、知识点和知识切片表。
@@ -588,3 +590,5 @@ Demo 数据要求：
 - `knowledge_chunks.embedding` 使用 `vector(1536)`。
 - `knowledge_chunks.embedding` 已建立 `ivfflat` 向量索引。
 - 第二条迁移已完成 downgrade/upgrade 往返验证。
+- 人工智能导论内置课程包可导入，包含 12 个知识点和 24 个基础资料切片。
+- 内置课程导入具备幂等性，重复执行不会创建重复课程。

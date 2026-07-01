@@ -1,8 +1,11 @@
 import {
   BookOpen,
+  Brain,
   ChartLineUp,
+  ChatCircleText,
   GearSix,
   House,
+  ListChecks,
   MagnifyingGlass,
   Notebook,
   SignOut,
@@ -22,7 +25,11 @@ const navItems = [
   { label: "学习空间", to: PATHS.app, icon: House },
   { label: "资料库", to: PATHS.library, icon: BookOpen },
   { label: "Studio", to: PATHS.studio, icon: Sparkle },
-  { label: "报告", to: PATHS.reports, icon: ChartLineUp }
+  { label: "画像", to: PATHS.profile, icon: Brain },
+  { label: "辅导", to: PATHS.tutor, icon: ChatCircleText },
+  { label: "练习", to: PATHS.practice, icon: ListChecks },
+  { label: "报告", to: PATHS.reports, icon: ChartLineUp },
+  { label: "设置", to: PATHS.settings, icon: GearSix }
 ];
 
 export function TopNavigation() {
@@ -66,9 +73,6 @@ export function TopNavigation() {
         </button>
         <NavLink className="icon-button" to={PATHS.library} aria-label="上传资料">
           <UploadSimple size={18} />
-        </NavLink>
-        <NavLink className="icon-button" to={PATHS.settings} aria-label="设置">
-          <GearSix size={18} />
         </NavLink>
         <div className="user-chip" aria-label="当前用户">
           <UserCircle size={20} weight="duotone" aria-hidden="true" />

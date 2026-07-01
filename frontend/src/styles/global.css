@@ -206,12 +206,21 @@ a {
   display: flex;
   justify-content: center;
   gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nav-links::-webkit-scrollbar,
+.mobile-route-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-link {
   gap: 7px;
+  flex: 0 0 auto;
   min-height: 36px;
-  padding: 0 12px;
+  padding: 0 10px;
   border-radius: var(--radius-control);
   color: var(--text-muted);
   transition:
@@ -1920,9 +1929,10 @@ a {
 
   .mobile-route-strip {
     display: flex;
+    flex-wrap: wrap;
     grid-column: 1 / -1;
     gap: 6px;
-    overflow-x: auto;
+    overflow-x: visible;
     padding-top: 2px;
   }
 

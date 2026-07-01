@@ -185,6 +185,15 @@ FastAPI 后端接口
 先和 EduNova 聊聊学习情况
 ```
 
+当前进展：
+
+- Phase 3A 前端工程骨架已经创建在 `frontend/`。
+- 登录、注册、Demo、受保护路由、学习空间、资料库、Studio、画像、AI 辅导、练习、报告和设置页面已具备静态/半静态壳子。
+- 学习空间已经包含顶部轻导航、中央学习画布、底部 AI 命令栏、Studio 输出区、证据层和 Agent 轨迹。
+- 当前登录和 Demo 是本地预览状态，还没有接真实后端认证。
+- 当前学习空间数据来自前端静态样例，后续 Phase 4 以后要接 `/dashboard/summary`、课程、画像、资源和 Agent 接口。
+- Tailwind 使用 v4 的 `@tailwindcss/vite` 插件；Markmap 使用实际 npm 包 `markmap-view`。
+
 ## Phase 4：登录和学习空间
 
 目标：用户能注册、登录，并进入自己的学生 AI 学习空间。

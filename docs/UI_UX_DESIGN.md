@@ -249,20 +249,32 @@ Phase 3 前端设计验收标准：
 
 Phase 3A 只实现前端工程骨架和静态/半静态学习空间壳子：
 
-- Vite + React + TypeScript。
-- Tailwind CSS 设计 token。
-- React Router。
-- API client。
-- 顶部轻导航。
-- 学习画布占位。
-- AI 命令栏占位。
-- Studio Dock 占位。
-- 证据层占位。
-- 登录/注册/Demo/学习空间/资料库/Studio/画像/辅导/练习/报告/设置基础路由。
-- 首次进入引导占位。
-- 设计状态和响应式基础。
+- [x] Vite + React + TypeScript。
+- [x] Tailwind CSS v4 设计 token。
+- [x] React Router。
+- [x] API client。
+- [x] 顶部轻导航。
+- [x] 学习画布占位。
+- [x] AI 命令栏占位。
+- [x] Studio Dock 占位。
+- [x] 证据层占位。
+- [x] 登录/注册/Demo/学习空间/资料库/Studio/画像/辅导/练习/报告/设置基础路由。
+- [x] 首次进入引导占位。
+- [x] 设计状态和响应式基础。
 
 Phase 3A 不实现真实 AI、真实上传解析、真实资源生成和复杂图谱算法。这些在后续阶段接入。
+
+### 13.1 当前实现说明
+
+当前 Phase 3A 已落地到 `frontend/`：
+
+- 登录页使用学习画布预览、登录表单、Demo 按钮和注册入口，不做后台登录框。
+- 应用区使用顶部轻导航，不使用固定左侧菜单。
+- `/app` 首屏包含学习画布、底部 AI 命令栏、Studio 输出区、证据层和 Agent 轨迹。
+- `/app/library`、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` 已有基础页面壳子。
+- 前端已支持浅色/深色系统偏好、`prefers-reduced-motion` 和移动宽度下的布局降级。
+- 当前登录、注册和 Demo 是本地预览状态；真实接口接入在 Phase 4。
+- 当前学习空间使用 `demoLearningSpace` 静态数据；真实课程、资料、画像、资源和 Agent 轨迹接入在后续阶段。
 
 ## 14. 文档同步规则
 

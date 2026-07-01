@@ -4,7 +4,7 @@
 
 ## 1. 当前部署范围
 
-本文档记录 EduNova 的部署方式。当前 Phase 2C 已覆盖工程骨架、核心数据表迁移和人工智能导论内置课程包导入命令：
+本文档记录 EduNova 的部署方式。当前已覆盖工程骨架、核心数据表迁移、人工智能导论内置课程包导入命令和 Phase 3A 前端本地开发/构建：
 
 - FastAPI backend。
 - PostgreSQL + pgvector。
@@ -13,11 +13,13 @@
 - pgvector 扩展初始化。
 - 用户、课程、选课、资料、知识点和知识切片表。
 - 人工智能导论内置课程包导入命令。
+- React + TypeScript + Vite 前端本地开发服务器。
+- 前端 lint、Vitest 和生产构建命令。
 
 以下能力还未接入当前部署：
 
-- React 前端。
 - Nginx。
+- Docker 前端静态服务。
 - AI/RAG、多智能体、上传资料和学习业务。
 
 这些能力会在后续阶段逐步加入，并同步更新本文档。
@@ -29,6 +31,8 @@
 - Docker Desktop。
 - Docker Compose。
 - Git。
+- Node.js。
+- pnpm。
 
 检查命令：
 
@@ -36,6 +40,8 @@
 docker --version
 docker compose version
 docker ps
+node -v
+pnpm -v
 ```
 
 ## 3. 环境变量
@@ -143,7 +149,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 
 ## 7. 当前验收标准
 
-Phase 2C 当前验收标准：
+当前基础部署验收标准：
 
 1. `docker compose config` 通过。
 2. `postgres` 服务健康。
@@ -154,16 +160,45 @@ Phase 2C 当前验收标准：
 7. `alembic upgrade head` 能创建第一批核心业务表。
 8. `python -m backend.app.cli seed-ai-intro` 能导入人工智能导论课程包。
 9. 重复执行导入命令不会创建重复课程。
-10. 停止服务后本地 Git 状态不出现运行产物。
+10. `frontend` 可执行 `pnpm lint`、`pnpm test` 和 `pnpm build`。
+11. 停止服务后本地 Git 状态不出现运行产物。
 
-当前本机已验证以上 10 项，并验证第二条迁移可以 downgrade/upgrade 往返。
+当前本机已验证后端与数据库基础验收项，并验证第二条迁移可以 downgrade/upgrade 往返。Phase 3A 已验证前端 lint、Vitest 和 Vite build。
 
-## 8. 后续部署计划
+## 8. 前端本地运行
+
+安装并验证：
+
+```powershell
+cd frontend
+pnpm install
+pnpm lint
+pnpm test
+pnpm build
+cd ..
+```
+
+启动开发服务器：
+
+```powershell
+cd frontend
+pnpm dev
+```
+
+默认访问：
+
+```text
+http://127.0.0.1:5173
+```
+
+当前前端使用本地预览会话和静态演示数据，不要求后端认证接口已经可用。
+
+## 9. 后续部署计划
 
 后续阶段将补充：
 
 - 后端数据库连接检查。
-- 前端构建和静态服务。
+- Docker 前端构建和静态服务。
 - Nginx 统一入口。
 - Demo Mode 初始化命令。
 - 生产部署建议。

@@ -431,3 +431,23 @@ Phase 5 以后：
 - `docs/PROJECT_BOARD.md`
 - `docs/superpowers/plans/2026-07-01-edunova-mvp-implementation.md`
 - `docs/superpowers/plans/2026-07-01-edunova-mvp-implementation-中文阅读版.md`
+
+## 15. 当前实现状态
+
+Phase 3A 已在 `frontend/` 中实现：
+
+- `/` 根据本地登录态跳转 `/login` 或 `/app`。
+- `/login`、`/register`、`/demo` 已有页面。
+- `/app/*` 使用 `ProtectedRoute` 保护，未登录会回到 `/login`。
+- 已登录用户访问 `/login` 或 `/register` 会通过 `PublicOnlyRoute` 回到 `/app`。
+- `authStore` 使用 Zustand 保存本地预览 token 和用户信息。
+- API client 会自动附加 Bearer token，接口返回 401 时清理登录态；如果用户位于 `/app/*`，会返回 `/login`。
+- 登录、注册和 Demo 当前只用于前端预览，未接真实 `/auth/register`、`/auth/login`、`/auth/me` 和 `/demo/reset`。
+- `FirstRunGuide` 已作为学习空间中的轻量引导占位，真实触发条件需要 Phase 4 根据画像和课程上下文接入。
+
+当前前端测试覆盖：
+
+- 未登录访问 `/app/studio` 会跳到登录入口。
+- 已登录访问 `/login` 会回到学习空间。
+- 登录态会写入本地存储。
+- 学习空间包含学习画布、Studio、证据层和 AI 命令栏。

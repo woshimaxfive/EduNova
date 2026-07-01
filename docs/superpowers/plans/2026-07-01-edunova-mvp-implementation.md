@@ -388,13 +388,12 @@ git commit -m "feat(data): seed artificial intelligence intro course"
 pnpm create vite frontend --template react-ts
 cd frontend
 pnpm install
-pnpm add @radix-ui/react-dialog @radix-ui/react-dropdown-menu @radix-ui/react-popover @radix-ui/react-tabs @tanstack/react-query axios zustand react-router-dom motion @xyflow/react echarts mermaid markmap-lib markmap-viewer clsx dayjs
-pnpm add -D tailwindcss postcss autoprefixer vitest @testing-library/react @testing-library/jest-dom @playwright/test
-pnpm exec tailwindcss init -p
+pnpm add @radix-ui/react-dialog @radix-ui/react-dropdown-menu @radix-ui/react-popover @radix-ui/react-tabs @tanstack/react-query axios zustand react-router-dom motion @xyflow/react echarts mermaid markmap-lib markmap-view clsx dayjs @phosphor-icons/react
+pnpm add -D tailwindcss @tailwindcss/vite vitest @testing-library/react @testing-library/jest-dom @testing-library/user-event @playwright/test
 cd ..
 ```
 
-- [ ] Configure Tailwind in `frontend/tailwind.config.js` and import styles in `frontend/src/styles/global.css`.
+- [ ] Configure Tailwind CSS v4 through `@tailwindcss/vite` in `frontend/vite.config.ts` and import styles in `frontend/src/styles/global.css`.
 - [ ] Create app shell based on `docs/UI_UX_DESIGN.md`:
 
 ```text
@@ -411,7 +410,7 @@ frontend/src/components/canvas/SourceCluster.tsx
 frontend/src/components/studio/StudioDock.tsx
 frontend/src/components/evidence/EvidenceLayer.tsx
 frontend/src/components/evidence/AgentTimeline.tsx
-frontend/src/stores/authStore.ts
+frontend/src/features/auth/authStore.ts
 frontend/src/api/client.ts
 frontend/src/features/demo/demoApi.ts
 frontend/src/features/onboarding/FirstRunGuide.tsx
@@ -426,7 +425,7 @@ DemoEntryPage.tsx
 LearningSpacePage.tsx
 LibraryPage.tsx
 StudioPage.tsx
-ReportPage.tsx
+ReportsPage.tsx
 ProfilePage.tsx
 TutorPage.tsx
 PracticePage.tsx
@@ -494,6 +493,14 @@ cd ..
 git add frontend
 git commit -m "feat(frontend): scaffold student workspace shell"
 ```
+
+Current Phase 3.1 implementation note:
+
+- `frontend/` has been created with React, TypeScript, Vite, Tailwind CSS v4, React Router, Zustand, React Query, Motion, Radix, React Flow, ECharts, Mermaid, Markmap, Vitest and ESLint.
+- `markmap-viewer` in the initial plan was corrected to the actual npm package `markmap-view`.
+- Routes, public/protected guards, local preview auth store, API client, login/register/Demo pages, learning-space shell, top navigation, learning canvas, command bar, Studio Dock, evidence layer, Agent timeline, first-run guide and placeholder student pages are implemented.
+- Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
+- Real backend auth, `/dashboard/summary`, upload/RAG/AI data and browser E2E remain later-phase work.
 
 ### Task 3.2: Add Frontend Data Contracts
 

@@ -59,7 +59,6 @@ frontend/src/
 ├── components/       通用组件
 ├── features/         按业务能力拆分的功能模块
 ├── pages/            页面
-├── stores/           状态管理
 ├── styles/           全局样式和设计 token
 ├── types/            类型定义
 └── visualizations/   学习画布、图谱、雷达图和思维导图
@@ -112,7 +111,7 @@ Studio 输出 Dock
 - `ProtectedRoute` 统一保护 `/app/*`。
 - `PublicOnlyRoute` 处理已登录用户访问 `/login` 和 `/register`。
 - API client 收到 401 后清理登录态并跳回 `/login`。
-- Demo 入口由独立 service 调用 `/demo/status` 和 `/demo/reset`，避免登录页堆业务逻辑。
+- Demo 入口由独立 service 管理，Phase 3A 使用本地预览会话，Phase 4 后接入 `/demo/status` 和 `/demo/reset`，避免登录页堆业务逻辑。
 
 前端状态分工：
 
@@ -130,7 +129,25 @@ Studio 输出 Dock
 | 动效 | Motion，所有动效支持 reduced motion |
 | 学习画布 | React Flow 或自定义 SVG/Canvas |
 | 数据可视化 | ECharts |
-| Markdown/思维导图 | Markdown 渲染 + Mermaid / Markmap |
+| Markdown/思维导图 | Markdown 渲染 + Mermaid / Markmap（npm 包使用 `markmap-lib` 和 `markmap-view`） |
+
+当前已落地的前端基础模块：
+
+| 模块 | 当前状态 |
+| --- | --- |
+| `frontend/package.json` | pnpm、Vite、TypeScript、React、Tailwind CSS v4、Vitest、ESLint 依赖和脚本 |
+| `frontend/src/app` | `App`、`AppProviders`、集中路由、路由常量、`ProtectedRoute`、`PublicOnlyRoute` |
+| `frontend/src/features/auth/authStore.ts` | Zustand 登录态，本地预览 token 和用户信息 |
+| `frontend/src/api/client.ts` | Axios 客户端，自动附加 token，401 清理登录态并返回登录页 |
+| `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、Studio、画像、辅导、练习、报告、设置和 404 |
+| `frontend/src/components` | 顶部轻导航、学习空间壳子、学习画布、资料源簇、AI 命令栏、Studio Dock、证据层和 Agent 轨迹 |
+| `frontend/src/styles/global.css` | 视觉 token、响应式布局、深色模式、reduced motion 和 reduced transparency 基础 |
+
+当前限制：
+
+- Phase 3A 登录、注册和 Demo 只用于本地预览，不代表后端认证已经完成。
+- 学习空间使用 `demoLearningSpace` 静态数据，后续由 `/dashboard/summary` 和课程相关接口替换。
+- React Flow、ECharts、Mermaid 和 Markmap 已作为依赖准备，复杂图谱和可视化在后续阶段逐步接入。
 
 ## 4. 后端架构
 

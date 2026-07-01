@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前处于前期基础建设阶段。核心原则是先完成需求、架构、API、数据库、测试和项目管理基线，再进入大规模功能开发。
+当前已完成前期基础建设、后端最小骨架、核心课程数据基础和 Phase 3A 前端工程骨架。核心原则仍然是先把主链路地基打稳，再逐步接入真实注册登录、上传建课、RAG、多智能体和学习评估。
 
 ## 文档入口
 
@@ -61,7 +61,9 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 当前 Phase 2 数据与课程基础建设已完成到内置人工智能导论课程包。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查、Docker Compose 草案、SQLAlchemy 数据库入口、Alembic 迁移基线、pgvector 扩展迁移、第一批核心业务表和人工智能导论内置课程包已经实现。
 
-Phase 3 进入前端前，已先补充 [前端与交互设计基线](docs/UI_UX_DESIGN.md) 和 [前端路由与入口体验设计](docs/FRONTEND_ROUTING_DESIGN.md)：EduNova 正式前端不采用固定左侧后台菜单和卡片堆，而采用“顶部轻导航 + 中央学习画布 + 底部 AI 命令栏 + Studio 输出区 + 可滑出证据层”的 AI 学习空间结构；登录、注册、Demo 体验、首次进入引导和路由保护也已经作为 Phase 3A 基线锁定。前端和 AI/RAG 真实能力仍属于后续实现阶段。
+Phase 3A 前端工程骨架已经落地：`frontend/` 使用 React、TypeScript、Vite、Tailwind CSS v4、React Router、Zustand、React Query、Motion、Radix、React Flow、ECharts、Mermaid、Markmap、Vitest 和 ESLint。当前已实现登录页、注册页、Demo 入口、受保护应用路由、顶部轻导航、学习画布、底部 AI 命令栏、Studio 输出区、证据层、Agent 轨迹、首次进入引导和多个学生端页面占位。
+
+当前前端仍是静态/半静态壳子：登录、注册和 Demo 使用本地预览状态，尚未接入真实后端认证；AI/RAG、上传资料、资源生成、报告和多智能体真实任务仍属于后续 Phase 4 以后实现阶段。
 
 ## 本地后端验证
 
@@ -160,3 +162,29 @@ knowledge_chunks
 ```
 
 当前内置课程包包含 12 个知识点和 24 个基础资料切片，覆盖搜索、知识表示、机器学习、神经网络、自然语言处理、计算机视觉、多智能体和 AI 伦理安全。
+
+## 本地前端验证
+
+安装依赖后运行：
+
+```powershell
+cd frontend
+pnpm install
+pnpm lint
+pnpm test
+pnpm build
+cd ..
+```
+
+启动前端开发服务器：
+
+```powershell
+cd frontend
+pnpm dev
+```
+
+默认访问：
+
+```text
+http://127.0.0.1:5173
+```

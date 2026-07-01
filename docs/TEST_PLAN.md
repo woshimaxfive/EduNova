@@ -6,7 +6,7 @@
 
 EduNova 的测试目标不是只证明代码能运行，而是证明系统满足赛题要求、适合比赛演示、能够后续开源部署，并且关键 AI 输出具有可解释性和可信度。
 
-本文档是全项目测试计划。除“当前自动化验证入口”一节外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前 Phase 2C 已经全部实现。当前 Phase 2C 已验收 FastAPI 最小骨架、`/api/health`、pytest、ruff、编码检查、Docker Compose 配置、PostgreSQL、Redis、backend 三服务真实启动健康检查、SQLAlchemy 数据库入口、Alembic 迁移环境、pgvector 扩展迁移、第一批核心业务表迁移和人工智能导论内置课程包导入。
+本文档是全项目测试计划。除“当前自动化验证入口”一节外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前阶段已经全部实现。当前已验收 FastAPI 最小骨架、`/api/health`、pytest、ruff、编码检查、Docker Compose 配置、PostgreSQL、Redis、backend 三服务真实启动健康检查、SQLAlchemy 数据库入口、Alembic 迁移环境、pgvector 扩展迁移、第一批核心业务表迁移、人工智能导论内置课程包导入，以及 Phase 3A 前端工程骨架、路由保护、登录入口、学习空间壳子、前端 lint、Vitest 和生产构建。
 
 测试需要覆盖以下问题：
 
@@ -84,7 +84,7 @@ EduNova 采用 7 层测试策略。
 .\.venv\Scripts\python -m ruff check backend
 ```
 
-前端创建后再启用：
+前端当前已启用：
 
 ```powershell
 cd frontend
@@ -551,9 +551,11 @@ Phase 1A 起，仓库提供统一验证脚本：
 - 人工智能导论课程包结构、对象图映射和导入幂等性测试。
 - 后端 ruff 检查。
 - Alembic revision head 解析检查。
+- 前端 ESLint 检查。
+- 前端 Vitest 路由、登录态和学习空间壳子测试。
+- 前端 TypeScript 与 Vite 生产构建。
 - Docker Compose 配置校验。
-- 当前未创建前端时自动跳过前端检查。
-- 当前未接入核心业务表、前端和 AI/RAG；这些检查将在后续阶段加入。
+- 当前未接入真实后端认证、上传建课、AI/RAG、多智能体、练习评估和浏览器 E2E；这些检查将在后续阶段加入。
 
 统一验证脚本是日常轻量门禁，不会自动启动 Docker 容器。
 

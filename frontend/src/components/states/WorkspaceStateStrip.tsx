@@ -17,6 +17,10 @@ const stateIcons = {
 export function WorkspaceStateStrip({ panels }: WorkspaceStateStripProps) {
   return (
     <section className="workspace-state-strip" aria-label="学习空间状态设计">
+      <div className="state-strip-heading">
+        <span>状态信号</span>
+        <strong>把异常、低依据和演示来源放在画布旁边，不做卡片墙。</strong>
+      </div>
       {panels.map((panel) => {
         const Icon = stateIcons[panel.kind];
 
@@ -29,7 +33,9 @@ export function WorkspaceStateStrip({ panels }: WorkspaceStateStripProps) {
               <strong>{panel.title}</strong>
               <small>{panel.description}</small>
             </span>
-            <button type="button">{panel.actionLabel}</button>
+            <button type="button" aria-label={`${panel.title}：${panel.actionLabel}`}>
+              {panel.actionLabel}
+            </button>
           </article>
         );
       })}

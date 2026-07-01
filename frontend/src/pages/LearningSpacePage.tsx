@@ -12,19 +12,36 @@ import { buildMaterialLifecycle, getWorkspaceStatePanels } from "../features/wor
 export function LearningSpacePage() {
   const materialLifecycle = buildMaterialLifecycle("embedding", 74);
   const workspaceStatePanels = getWorkspaceStatePanels();
+  const currentCourse = demoLearningSpace.currentCourse;
 
   return (
     <LearningSpaceShell>
       <section className="workspace-hero">
         <div>
-          <p className="section-kicker">学生端学习闭环</p>
+          <p className="section-kicker">学习操作系统</p>
           <h1>今天的 AI 学习空间</h1>
-          <p>围绕一门课程，把资料、路径、练习、Studio 和证据链放在同一个工作台里。</p>
+          <p>资料流入知识画布，AI 命令驱动路径、练习、资源和证据链。</p>
         </div>
-        <div className="hero-status" aria-label="当前学习状态">
-          <strong>{demoLearningSpace.currentCourse.title}</strong>
-          <span>焦点：监督学习</span>
+      </section>
+      <section className="workspace-status-bar" aria-label="当前学习上下文">
+        <div className="status-course">
+          <span>当前课程</span>
+          <strong>{currentCourse.title}</strong>
         </div>
+        <dl className="status-metrics">
+          <div>
+            <dt>焦点</dt>
+            <dd>监督学习</dd>
+          </div>
+          <div>
+            <dt>路径进度</dt>
+            <dd>{currentCourse.progressPercent}%</dd>
+          </div>
+          <div>
+            <dt>资料状态</dt>
+            <dd>索引中</dd>
+          </div>
+        </dl>
       </section>
       <div className="workspace-grid">
         <div className="workspace-main">
@@ -35,8 +52,8 @@ export function LearningSpacePage() {
             stages={materialLifecycle}
           />
           <WorkspaceStateStrip panels={workspaceStatePanels} />
-          <FirstRunGuide />
           <StudioDock outputs={demoLearningSpace.studioOutputs} />
+          <FirstRunGuide />
         </div>
         <EvidenceLayer snapshot={demoLearningSpace} />
       </div>

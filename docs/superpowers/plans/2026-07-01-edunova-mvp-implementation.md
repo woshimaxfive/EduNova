@@ -382,7 +382,7 @@ git commit -m "feat(data): seed artificial intelligence intro course"
 
 ### Task 3.1: Scaffold React Student Workspace
 
-- [ ] Create Vite React TypeScript app:
+- [x] Create Vite React TypeScript app:
 
 ```powershell
 pnpm create vite frontend --template react-ts
@@ -393,8 +393,8 @@ pnpm add -D tailwindcss @tailwindcss/vite vitest @testing-library/react @testing
 cd ..
 ```
 
-- [ ] Configure Tailwind CSS v4 through `@tailwindcss/vite` in `frontend/vite.config.ts` and import styles in `frontend/src/styles/global.css`.
-- [ ] Create app shell based on `docs/UI_UX_DESIGN.md`:
+- [x] Configure Tailwind CSS v4 through `@tailwindcss/vite` in `frontend/vite.config.ts` and import styles in `frontend/src/styles/global.css`.
+- [x] Create app shell based on `docs/UI_UX_DESIGN.md`:
 
 ```text
 frontend/src/app/App.tsx
@@ -416,7 +416,7 @@ frontend/src/features/demo/demoApi.ts
 frontend/src/features/onboarding/FirstRunGuide.tsx
 ```
 
-- [ ] Pages to create now:
+- [x] Pages to create now:
 
 ```text
 LoginPage.tsx
@@ -432,7 +432,7 @@ PracticePage.tsx
 SettingsPage.tsx
 ```
 
-- [ ] Design direction:
+- [x] Design direction:
 
 ```text
 AI learning operating system for students
@@ -449,7 +449,7 @@ No fixed left admin sidebar
 No KPI card wall
 ```
 
-- [ ] Route baseline:
+- [x] Route baseline:
 
 ```text
 / -> RootRedirect
@@ -467,7 +467,7 @@ No KPI card wall
 * -> NotFoundPage
 ```
 
-- [ ] Entry experience:
+- [x] Entry experience:
 
 ```text
 Login page includes normal login, register link and demo experience entry.
@@ -477,7 +477,7 @@ ProtectedRoute redirects unauthenticated `/app/*` users to `/login`.
 PublicOnlyRoute redirects authenticated users away from `/login` and `/register`.
 ```
 
-- [ ] Verify:
+- [x] Verify:
 
 ```powershell
 cd frontend
@@ -500,6 +500,8 @@ Current Phase 3.1 implementation note:
 - `markmap-viewer` in the initial plan was corrected to the actual npm package `markmap-view`.
 - Routes, public/protected guards, local preview auth store, API client, login/register/Demo pages, learning-space shell, top navigation, learning canvas, command bar, Studio Dock, evidence layer, Agent timeline, first-run guide and placeholder student pages are implemented.
 - Phase 3D/3E added frontend API contract modules, upload-to-course workflow state, empty/loading/error/low-evidence/demo-fallback state panels and page-level tests.
+- Phase 3 closure redesign applies the skill-based direction `Productivity Tool + AI-Native UI + Knowledge Graph + Process Map`, replacing the five-card status feel with a learning operating system canvas, process rail, status signals and dark Studio Dock.
+- Browser visual checks covered `/app` at 1440x900, 1366x768 and 390x844 with no horizontal overflow and fixed bottom command bar positioning.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
 - Real backend auth, `/dashboard/summary`, upload/RAG/AI data and final browser E2E remain later-phase work.
 

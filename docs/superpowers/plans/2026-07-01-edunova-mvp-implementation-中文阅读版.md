@@ -192,6 +192,8 @@ FastAPI 后端接口
 - 学习空间已经包含顶部轻导航、中央学习画布、底部 AI 命令栏、Studio 输出区、证据层和 Agent 轨迹。
 - 前端已补齐 API 合同模块，默认基础路径 `/api/v1`，路径与 `docs/API.md` 对齐。
 - 学习空间、资料库和 Studio 已加入上传建课状态轨道、空状态、加载状态、错误恢复、低依据提示和 Demo fallback 标记。
+- Phase 3 收口重设计已把学习空间从状态卡片堆调整为“学习操作系统画布 + 流程轨道 + 状态信号层 + Studio Dock”，更贴近学生实际学习入口。
+- 已用本地浏览器检查 `/app` 在 1440x900、1366x768 和 390x844 宽度下无水平溢出，底部 AI 命令栏定位正常。
 - 当前登录和 Demo 是本地预览状态，还没有接真实后端认证。
 - 当前学习空间数据来自前端静态样例，后续 Phase 4 以后要接 `/dashboard/summary`、课程、画像、资源和 Agent 接口。
 - Tailwind 使用 v4 的 `@tailwindcss/vite` 插件；Markmap 使用实际 npm 包 `markmap-view`。

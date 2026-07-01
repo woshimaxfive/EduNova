@@ -31,6 +31,10 @@ export function LearningCanvas({ snapshot }: LearningCanvasProps) {
         </div>
       </div>
       <div className="canvas-map">
+        <div className="canvas-map-label" aria-hidden="true">
+          资料流入知识画布
+        </div>
+        <div className="canvas-flow-line" aria-hidden="true" />
         <div className="canvas-path" aria-hidden="true" />
         {snapshot.knowledgeNodes.map((node) => (
           <button

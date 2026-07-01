@@ -29,6 +29,7 @@ EduNova 是面向高校学生的 AI 个性化学习工作台，目标是参加�
 | [测试计划](docs/TEST_PLAN.md) | 测试范围和验收流程 |
 | [安全基线](docs/SECURITY.md) | 账号、密钥、上传资料、RAG、日志和权限安全 |
 | [风险登记册](docs/RISK_REGISTER.md) | 项目风险、触发信号和应对策略 |
+| [部署说明](docs/DEPLOYMENT.md) | Docker Compose 和数据库迁移说明 |
 | [项目看板](docs/PROJECT_BOARD.md) | 当前进度和下一步 |
 
 ## 第一版目标
@@ -56,7 +57,7 @@ EduNova 是面向高校学生的 AI 个性化学习工作台，目标是参加�
 
 ## 开发状态
 
-当前正在进行 Phase 1 工程骨架建设。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查和 Docker Compose 草案已经实现。数据库迁移、前端和 AI/RAG 能力属于后续阶段。
+当前正在进行 Phase 2 数据与课程基础建设。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查、Docker Compose 草案、SQLAlchemy 数据库入口、Alembic 迁移基线和 pgvector 扩展迁移已经实现。核心业务表、前端和 AI/RAG 能力属于后续阶段。
 
 ## 本地后端验证
 
@@ -118,4 +119,21 @@ docker compose down
 
 ```json
 {"status":"ok","service":"edunova-api"}
+```
+
+## 数据库迁移
+
+当前 Alembic 配置文件位于 `alembic.ini`，迁移目录位于 `backend/migrations`。
+
+启动 PostgreSQL 后运行迁移：
+
+```powershell
+docker compose up -d postgres redis
+.\.venv\Scripts\python -m alembic upgrade head
+```
+
+当前首条迁移会启用 pgvector：
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector
 ```

@@ -43,6 +43,10 @@ if (Test-Path -LiteralPath "$repoRoot\backend") {
   if (Test-Path -LiteralPath "$repoRoot\backend") {
     Invoke-CheckedCommand $python -m ruff check "$repoRoot\backend"
   }
+
+  if (Test-Path -LiteralPath "$repoRoot\alembic.ini") {
+    Invoke-CheckedCommand $python -m alembic heads
+  }
 }
 else {
   Write-Host "backend directory not found; skipped"

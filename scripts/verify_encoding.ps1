@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = (git rev-parse --show-toplevel).Trim()
 Set-Location $repoRoot
 
-$textFilePattern = '(^|/)(Dockerfile|\.dockerignore|\.editorconfig|\.gitattributes|\.gitignore)$|\.(py|ts|tsx|js|jsx|json|md|txt|yml|yaml|toml|env|css|html|ps1|psm1|psd1|ini|cfg|conf|example|sql|sh|bash|dockerfile)$'
+$textFilePattern = '(^|/)(Dockerfile|README|\.dockerignore|\.editorconfig|\.gitattributes|\.gitignore)$|\.(py|ts|tsx|js|jsx|json|md|txt|yml|yaml|toml|env|css|html|ps1|psm1|psd1|ini|cfg|conf|example|sql|sh|bash|dockerfile|mako)$'
 $trackedAndUntracked = git -c core.quotePath=false ls-files --cached --others --exclude-standard
 
 $utf8Strict = New-Object System.Text.UTF8Encoding($false, $true)

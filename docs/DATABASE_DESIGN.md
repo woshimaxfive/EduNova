@@ -26,6 +26,14 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 | 长任务进度 | Redis |
 | 文件内容 | 本地文件存储，数据库保存路径和元数据 |
 
+当前 Phase 2A 已落地：
+
+- `backend/app/core/config.py`：读取数据库和 Redis 配置。
+- `backend/app/db/base.py`：SQLAlchemy metadata 入口。
+- `backend/app/db/session.py`：engine 与 Session 工厂。
+- `backend/migrations`：Alembic 迁移目录。
+- `backend/migrations/versions/20260701_0001_enable_pgvector.py`：启用 pgvector 扩展。
+
 ## 3. 核心关系图
 
 ```mermaid
@@ -542,20 +550,31 @@ Demo 数据要求：
 
 规则：
 
-1. 每次修改模型后生成迁移脚本。
-2. 迁移脚本进入 Git。
-3. 不能手动要求用户在数据库执行未记录 SQL。
-4. 表和字段命名保持小写下划线。
-5. 删除字段前先确认没有业务依赖。
+1. 所有数据库变更必须进入 Alembic 迁移。
+2. 每次修改模型后生成或手写对应迁移脚本。
+3. 迁移脚本进入 Git。
+4. 不能手动要求用户在数据库执行未记录 SQL。
+5. 表和字段命名保持小写下划线。
+6. 删除字段前先确认没有业务依赖。
+7. pgvector 扩展由首条迁移 `20260701_0001_enable_pgvector.py` 启用。
+
+当前迁移命令：
+
+```powershell
+.\.venv\Scripts\python -m alembic upgrade head
+```
 
 ## 10. 数据库验收标准
 
 第一版数据库达到以下标准才算可用：
 
-1. 所有核心表可通过迁移创建。
-2. 内置人工智能导论课程可导入。
-3. 上传资料能写入课程、材料、知识点和知识切片。
-4. RAG 检索能读取向量数据。
-5. 资源、报告、对话都能追溯用户、课程和 trace。
-6. 两个不同用户的数据互不可见。
-7. Demo 数据可重置且不污染普通用户数据。
+1. 数据库配置可从环境变量读取。
+2. Alembic 能连接 PostgreSQL 并执行迁移。
+3. pgvector 扩展可通过迁移启用。
+4. 所有核心表可通过迁移创建。
+5. 内置人工智能导论课程可导入。
+6. 上传资料能写入课程、材料、知识点和知识切片。
+7. RAG 检索能读取向量数据。
+8. 资源、报告、对话都能追溯用户、课程和 trace。
+9. 两个不同用户的数据互不可见。
+10. Demo 数据可重置且不污染普通用户数据。

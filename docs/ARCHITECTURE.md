@@ -100,7 +100,8 @@ frontend/src/
 ```text
 backend/app/
 ├── api/          HTTP 接口层
-├── core/         配置、数据库、安全、日志、SSE
+├── core/         配置、安全、日志、SSE
+├── db/           SQLAlchemy Base、engine、Session
 ├── models/       SQLAlchemy 数据模型
 ├── schemas/      Pydantic 请求响应模型
 ├── services/     业务服务
@@ -109,6 +110,16 @@ backend/app/
 ├── rag/          向量检索和引用
 └── tasks/        长任务和进度
 ```
+
+当前已落地的后端基础模块：
+
+| 模块 | 当前状态 |
+| --- | --- |
+| `backend/app/main.py` | FastAPI 应用和 `/api/health` |
+| `backend/app/core/config.py` | 环境配置，读取 `DATABASE_URL` 和 `REDIS_URL` |
+| `backend/app/db/base.py` | SQLAlchemy Declarative Base |
+| `backend/app/db/session.py` | 数据库 engine、Session 工厂和依赖入口 |
+| `backend/migrations` | Alembic 迁移环境和 pgvector 扩展迁移 |
 
 分层职责：
 

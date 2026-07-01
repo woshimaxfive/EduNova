@@ -6,7 +6,7 @@
 
 EduNova 的测试目标不是只证明代码能运行，而是证明系统满足赛题要求、适合比赛演示、能够后续开源部署，并且关键 AI 输出具有可解释性和可信度。
 
-本文档是全项目测试计划。除“当前自动化验证入口”一节外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前 Phase 1B 已经全部实现。当前 Phase 1B 已验收 FastAPI 最小骨架、`/api/health`、pytest、ruff、编码检查、Docker Compose 配置，以及 PostgreSQL、Redis、backend 三服务真实启动健康检查。
+本文档是全项目测试计划。除“当前自动化验证入口”一节外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前 Phase 2A 已经全部实现。当前 Phase 2A 已验收 FastAPI 最小骨架、`/api/health`、pytest、ruff、编码检查、Docker Compose 配置、PostgreSQL、Redis、backend 三服务真实启动健康检查、SQLAlchemy 数据库入口、Alembic 迁移环境和 pgvector 扩展迁移。
 
 测试需要覆盖以下问题：
 
@@ -472,7 +472,8 @@ cd ..
 | Phase 0 | 编码检查脚本可运行，赛题和计划纳入 Git |
 | Phase 1A | FastAPI 最小骨架、后端健康检查、pytest、ruff、编码检查通过 |
 | Phase 1B | Docker Compose 草案、PostgreSQL、Redis 和后端服务健康检查通过 |
-| Phase 2 | 核心表创建成功，人工智能导论课程可导入 |
+| Phase 2A | 数据库配置、SQLAlchemy、Alembic 和 pgvector 扩展迁移通过 |
+| Phase 2B | 核心表创建成功，人工智能导论课程可导入 |
 | Phase 3 | 前端工作台壳子可打开，构建通过 |
 | Phase 4 | 注册登录闭环通过 |
 | Phase 5 | 上传资料能生成课程结构 |
@@ -521,10 +522,12 @@ Phase 1A 起，仓库提供统一验证脚本：
 
 - UTF-8 无 BOM 与中文不转义检查。
 - 后端 pytest 测试。
+- 数据库配置、SQLAlchemy engine、Alembic metadata 和 pgvector 首迁移测试。
 - 后端 ruff 检查。
+- Alembic revision head 解析检查。
 - Docker Compose 配置校验。
 - 当前未创建前端时自动跳过前端检查。
-- 当前未接入数据库迁移、前端和 AI/RAG；这些检查将在后续阶段加入。
+- 当前未接入核心业务表、前端和 AI/RAG；这些检查将在后续阶段加入。
 
 统一验证脚本是日常轻量门禁，不会自动启动 Docker 容器。
 
@@ -545,6 +548,7 @@ Docker Compose 阶段验收命令：
 ```powershell
 docker compose config
 docker compose up --build -d postgres redis backend
+.\.venv\Scripts\python -m alembic upgrade head
 docker compose ps
 Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/health" -Method Get
 docker compose down

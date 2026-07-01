@@ -4,17 +4,18 @@
 
 ## 1. 当前部署范围
 
-本文档记录 EduNova 的部署方式。当前 Phase 1B 已覆盖工程骨架阶段的最小服务：
+本文档记录 EduNova 的部署方式。当前 Phase 2A 已覆盖工程骨架和数据库迁移基线：
 
 - FastAPI backend。
 - PostgreSQL + pgvector。
 - Redis。
+- Alembic 迁移。
+- pgvector 扩展初始化。
 
 以下能力还未接入当前部署：
 
 - React 前端。
 - Nginx。
-- 数据库迁移。
 - 内置课程导入。
 - AI/RAG、多智能体、上传资料和学习业务。
 
@@ -110,25 +111,49 @@ Compose 未固定 `container_name`，同机多个 checkout 可以通过不同项
 docker compose -p edunova-dev up --build -d postgres redis backend
 ```
 
-## 6. 当前验收标准
+## 6. 数据库迁移
 
-Phase 1B 当前验收标准：
+当前迁移配置：
+
+| 文件或目录 | 说明 |
+| --- | --- |
+| `alembic.ini` | Alembic 根配置 |
+| `backend/migrations/env.py` | 从应用配置读取 `DATABASE_URL` |
+| `backend/migrations/versions` | 迁移脚本目录 |
+
+启动 PostgreSQL 后执行：
+
+```powershell
+docker compose up -d postgres redis
+.\.venv\Scripts\python -m alembic upgrade head
+```
+
+当前首条迁移会执行：
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector
+```
+
+## 7. 当前验收标准
+
+Phase 2A 当前验收标准：
 
 1. `docker compose config` 通过。
 2. `postgres` 服务健康。
 3. `redis` 服务健康。
 4. `backend` 服务健康。
 5. 浏览器或命令行访问 `/api/health` 返回预期 JSON。
-6. 停止服务后本地 Git 状态不出现运行产物。
+6. `alembic upgrade head` 能完成 pgvector 扩展迁移。
+7. 停止服务后本地 Git 状态不出现运行产物。
 
-当前本机已验证以上 6 项。
+当前本机已验证以上 7 项。
 
-## 7. 后续部署计划
+## 8. 后续部署计划
 
 后续阶段将补充：
 
-- 数据库迁移。
 - 后端数据库连接检查。
+- 核心业务表迁移。
 - 前端构建和静态服务。
 - Nginx 统一入口。
 - Demo Mode 初始化命令。

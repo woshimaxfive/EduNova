@@ -57,7 +57,7 @@ EduNova 是面向高校学生的 AI 个性化学习工作台，目标是参加�
 
 ## 开发状态
 
-当前正在进行 Phase 2 数据与课程基础建设。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查、Docker Compose 草案、SQLAlchemy 数据库入口、Alembic 迁移基线和 pgvector 扩展迁移已经实现。核心业务表、前端和 AI/RAG 能力属于后续阶段。
+当前正在进行 Phase 2 数据与课程基础建设。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查、Docker Compose 草案、SQLAlchemy 数据库入口、Alembic 迁移基线、pgvector 扩展迁移和第一批核心业务表已经实现。人工智能导论课程包、前端和 AI/RAG 能力属于后续阶段。
 
 ## 本地后端验证
 
@@ -136,4 +136,15 @@ docker compose up -d postgres redis
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector
+```
+
+第二条迁移会创建学生学习主链路的第一批核心表：
+
+```text
+users
+courses
+course_enrollments
+course_materials
+knowledge_points
+knowledge_chunks
 ```

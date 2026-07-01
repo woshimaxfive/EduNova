@@ -119,6 +119,7 @@ backend/app/
 | `backend/app/core/config.py` | 环境配置，读取 `DATABASE_URL` 和 `REDIS_URL` |
 | `backend/app/db/base.py` | SQLAlchemy Declarative Base |
 | `backend/app/db/session.py` | 数据库 engine、Session 工厂和依赖入口 |
+| `backend/app/models` | 用户、课程、资料、知识点、知识切片核心模型 |
 | `backend/migrations` | Alembic 迁移环境和 pgvector 扩展迁移 |
 
 分层职责：

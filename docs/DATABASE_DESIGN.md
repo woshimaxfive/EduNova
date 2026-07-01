@@ -26,13 +26,15 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 | 长任务进度 | Redis |
 | 文件内容 | 本地文件存储，数据库保存路径和元数据 |
 
-当前 Phase 2A 已落地：
+当前 Phase 2A/2B 已落地：
 
 - `backend/app/core/config.py`：读取数据库和 Redis 配置。
 - `backend/app/db/base.py`：SQLAlchemy metadata 入口。
 - `backend/app/db/session.py`：engine 与 Session 工厂。
+- `backend/app/models`：第一批核心业务模型。
 - `backend/migrations`：Alembic 迁移目录。
 - `backend/migrations/versions/20260701_0001_enable_pgvector.py`：启用 pgvector 扩展。
+- `backend/migrations/versions/20260701_0002_create_core_learning_tables.py`：创建用户、课程、选课、资料、知识点和知识切片表。
 
 ## 3. 核心关系图
 
@@ -557,6 +559,7 @@ Demo 数据要求：
 5. 表和字段命名保持小写下划线。
 6. 删除字段前先确认没有业务依赖。
 7. pgvector 扩展由首条迁移 `20260701_0001_enable_pgvector.py` 启用。
+8. 第一批核心业务表由迁移 `20260701_0002_create_core_learning_tables.py` 创建。
 
 当前迁移命令：
 
@@ -578,3 +581,10 @@ Demo 数据要求：
 8. 资源、报告、对话都能追溯用户、课程和 trace。
 9. 两个不同用户的数据互不可见。
 10. Demo 数据可重置且不污染普通用户数据。
+
+当前已验证：
+
+- Alembic 能创建 `users`、`courses`、`course_enrollments`、`course_materials`、`knowledge_points`、`knowledge_chunks`。
+- `knowledge_chunks.embedding` 使用 `vector(1536)`。
+- `knowledge_chunks.embedding` 已建立 `ivfflat` 向量索引。
+- 第二条迁移已完成 downgrade/upgrade 往返验证。

@@ -4,13 +4,14 @@
 
 ## 1. 当前部署范围
 
-本文档记录 EduNova 的部署方式。当前 Phase 2A 已覆盖工程骨架和数据库迁移基线：
+本文档记录 EduNova 的部署方式。当前 Phase 2B 已覆盖工程骨架和核心数据表迁移：
 
 - FastAPI backend。
 - PostgreSQL + pgvector。
 - Redis。
 - Alembic 迁移。
 - pgvector 扩展初始化。
+- 用户、课程、选课、资料、知识点和知识切片表。
 
 以下能力还未接入当前部署：
 
@@ -136,7 +137,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 
 ## 7. 当前验收标准
 
-Phase 2A 当前验收标准：
+Phase 2B 当前验收标准：
 
 1. `docker compose config` 通过。
 2. `postgres` 服务健康。
@@ -144,16 +145,17 @@ Phase 2A 当前验收标准：
 4. `backend` 服务健康。
 5. 浏览器或命令行访问 `/api/health` 返回预期 JSON。
 6. `alembic upgrade head` 能完成 pgvector 扩展迁移。
-7. 停止服务后本地 Git 状态不出现运行产物。
+7. `alembic upgrade head` 能创建第一批核心业务表。
+8. 停止服务后本地 Git 状态不出现运行产物。
 
-当前本机已验证以上 7 项。
+当前本机已验证以上 8 项，并验证第二条迁移可以 downgrade/upgrade 往返。
 
 ## 8. 后续部署计划
 
 后续阶段将补充：
 
 - 后端数据库连接检查。
-- 核心业务表迁移。
+- 内置人工智能导论课程数据导入。
 - 前端构建和静态服务。
 - Nginx 统一入口。
 - Demo Mode 初始化命令。

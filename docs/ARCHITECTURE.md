@@ -48,7 +48,7 @@ Nginx
 
 前端使用 React + TypeScript + Vite，定位为学生 AI 学习空间。具体设计基线见 [UI_UX_DESIGN.md](UI_UX_DESIGN.md)，入口与路由设计见 [FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)。
 
-第一版前端不采用固定左侧后台菜单，不把首屏做成卡片堆。2026-07-01 重定向后，首页采用“总 AI 学习对话入口 + 独立资料库轻入口 + 最近课程”的结构；学习画布、路径、Studio 和证据层进入课程空间或 AI 回答后的可展开区域。
+第一版前端不采用固定左侧后台菜单，不把首屏做成卡片堆。2026-07-01 P3R2 视觉重建后，首页采用“左侧历史对话 + 中心 AI 学习入口 + 输入区资料库浮层按钮 + 最近学习轻轨”的结构；学习画布、路径、Studio 和证据层进入课程空间或 AI 回答后的可展开区域。
 
 目录规划：
 
@@ -69,8 +69,8 @@ frontend/src/
 ```text
 左侧或折叠区：主页历史对话
 中央：大输入框，支持上传资料、选择资料、生成课程
-右侧或抽屉：资料库轻入口
-下方：最近课程 / 最近学习空间
+输入区：上传资料 / 打开资料库 / 生成课程 / 联网搜索 / 深度思考 / 语音
+下方：最近学习轻轨 / 最近课程入口
 回答下方：引用来源、学习路径建议、Agent 过程，可展开
 ```
 
@@ -145,7 +145,7 @@ frontend/src/
 | `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、profiles、resources、agents、paths、tutor、practice、reports、demo、settings |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和学习空间状态面板的纯状态模型 |
 | `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、Studio、画像、辅导、练习、报告、设置和 404 |
-| `frontend/src/components` | 顶部轻导航、学习空间壳子、学习画布、资料源簇、AI 命令栏、Studio Dock、证据层、Agent 轨迹、上传建课状态轨道和学习空间状态条；`/app` 首页已补 AI 对话主页、主页历史、资料库轻入口、最近课程和生成课程浮层 |
+| `frontend/src/components` | 顶部轻导航、学习空间壳子、学习画布、资料源簇、AI 命令栏、Studio Dock、证据层、Agent 轨迹、上传建课状态轨道和学习空间状态条；`/app` 首页已补 AI 对话主页、历史对话、输入区资料库浮层入口、最近学习轻轨和生成课程浮层 |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、深色模式、reduced motion 和 reduced transparency 基础 |
 
 当前限制：

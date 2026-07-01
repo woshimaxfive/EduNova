@@ -19,7 +19,7 @@
 - [ ] 每个 AI 生成结果必须绑定 `trace_id`、`citation_refs`、`review_status`、`confidence_score` 中的关键字段。
 - [ ] 所有用户私有数据绑定 `user_id`；课程内数据绑定 `user_id` 与 `course_id`；主页会话和独立资料库允许先不绑定课程，避免多人部署后数据串用。
 - [ ] 第一版只做学生端主线和轻量系统设置；不建设完整教师端、家长端、班级运营后台、支付、真实视频生成、扫描 OCR、移动端。
-- [ ] Phase 3 前端必须遵守 `docs/UI_UX_DESIGN.md`：不采用固定左侧后台菜单和卡片堆，首页重定向为 AI 对话主页、独立资料库轻入口、最近课程和课程空间入口。
+- [ ] Phase 3 前端必须遵守 `docs/UI_UX_DESIGN.md`：不采用固定左侧后台菜单和卡片堆，首页重定向为 AI 对话主页、输入区资料库浮层入口、最近学习轻轨和课程空间入口。
 - [ ] Phase 3 路由与入口必须遵守 `docs/FRONTEND_ROUTING_DESIGN.md`：登录、注册、Demo、首次进入和路由保护先搭稳。
 - [ ] 每个阶段提交一次小而清晰的 commit；提交前运行本阶段列出的检查命令。
 
@@ -505,8 +505,8 @@ Current Phase 3.1 implementation note:
 - Routes, public/protected guards, local preview auth store, API client, login/register/Demo pages, learning-space shell, top navigation, AI conversation-first home, home history, material library entry, recent courses, course generation dialog, first-run guide and placeholder student pages are implemented.
 - Phase 3D/3E added frontend API contract modules, upload-to-course workflow state, empty/loading/error/low-evidence/demo-fallback state panels and page-level tests.
 - Phase 3 closure redesign first produced the skill-based direction `Productivity Tool + AI-Native UI + Knowledge Graph + Process Map`, replacing the five-card status feel with a learning operating system canvas, process rail, status signals and dark Studio Dock.
-- 2026-07-01 P3R implemented the AI conversation-first learning home with independent material library entry and recent courses; the existing learning canvas, Studio Dock and evidence layer should be reused inside course space or answer expansion instead of dominating `/app`.
-- Browser visual checks covered P3R `/app` at desktop and mobile widths with no horizontal overflow; the course generation dialog opens and remains readable.
+- 2026-07-01 P3R2 implemented the AI conversation-first learning home with history, centered learning input, material-library drawer entry, recent learning rail and course generation dialog; the existing learning canvas, Studio Dock and evidence layer should be reused inside course space or answer expansion instead of dominating `/app`.
+- Browser visual checks covered P3R2 `/app` at desktop and mobile widths with no horizontal overflow; the material-library drawer and course generation dialog open and remain readable.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
 - Real backend auth, `/dashboard/summary`, upload/RAG/AI data and final browser E2E remain later-phase work.
 

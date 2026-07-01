@@ -43,6 +43,6 @@ describe("EduNova routes", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole("heading", { name: "上传资料，开始和你的课程对话" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
   });
 });

@@ -6,19 +6,20 @@ import { describe, expect, it } from "vitest";
 import { LearningSpacePage } from "./LearningSpacePage";
 
 describe("LearningSpacePage", () => {
-  it("renders the Phase 3R AI conversation-first home", () => {
+  it("renders a calm ChatGPT-style learning home without dashboard rails", () => {
     render(
       <MemoryRouter>
         <LearningSpacePage />
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("heading", { name: "上传资料，开始和你的课程对话" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "主页历史" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "AI 学习对话" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "资料库轻入口" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "最近课程" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "历史对话" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "AI 学习入口" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "最近学习" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "学习问题输入" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开资料库" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "资料库轻入口" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "知识学习画布" })).not.toBeInTheDocument();
   });
 

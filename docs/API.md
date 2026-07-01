@@ -218,7 +218,7 @@ Authorization: Bearer <token>
 
 ### GET `/dashboard/summary`
 
-用途：获取 AI 学习主页首屏总览。Phase 3 重定向后，该接口服务主页历史对话、大输入框建议、资料库轻入口和最近课程，不再默认绑定某一门课程。
+用途：获取 AI 学习主页首屏总览。Phase 3R2 重定向后，该接口服务历史对话、大输入框建议、输入区资料库浮层入口和最近学习轻轨，不再默认绑定某一门课程。
 
 响应包含：
 
@@ -249,7 +249,7 @@ Authorization: Bearer <token>
     },
     "recent_resources": [],
     "command_suggestions": [
-      "上传资料，开始和你的课程对话",
+      "嗨，同学，准备好一起学习了吗？",
       "选择资料并生成课程",
       "总结我最近上传的资料"
     ],

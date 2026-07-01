@@ -1,3 +1,4 @@
+import { lazy, Suspense, type ReactElement } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "./ProtectedRoute";
@@ -17,17 +18,25 @@ import { SettingsPage } from "../pages/SettingsPage";
 import { StudioPage } from "../pages/StudioPage";
 import { TutorPage } from "../pages/TutorPage";
 
+const CourseSpacePage = lazy(() =>
+  import("../pages/CourseSpacePage").then((module) => ({ default: module.CourseSpacePage }))
+);
+
 function RootRedirect() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   return <Navigate to={isAuthenticated ? PATHS.app : PATHS.login} replace />;
 }
 
-function protectedPage(element: React.ReactElement) {
+function protectedPage(element: ReactElement) {
   return <ProtectedRoute>{element}</ProtectedRoute>;
 }
 
-function publicPage(element: React.ReactElement) {
+function publicPage(element: ReactElement) {
   return <PublicOnlyRoute>{element}</PublicOnlyRoute>;
+}
+
+function lazyPage(element: ReactElement) {
+  return <Suspense fallback={<div className="route-loading" role="status">正在打开学习空间</div>}>{element}</Suspense>;
 }
 
 export function AppRoutes() {
@@ -39,6 +48,7 @@ export function AppRoutes() {
       <Route path={PATHS.demo} element={publicPage(<DemoEntryPage />)} />
       <Route path={PATHS.app} element={protectedPage(<LearningSpacePage />)} />
       <Route path={PATHS.library} element={protectedPage(<LibraryPage />)} />
+      <Route path={PATHS.courseDetail} element={protectedPage(lazyPage(<CourseSpacePage />))} />
       <Route path={PATHS.studio} element={protectedPage(<StudioPage />)} />
       <Route path={PATHS.profile} element={protectedPage(<ProfilePage />)} />
       <Route path={PATHS.tutor} element={protectedPage(<TutorPage />)} />

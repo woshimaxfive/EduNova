@@ -45,4 +45,28 @@ describe("EduNova routes", () => {
 
     expect(await screen.findByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
   });
+
+  it("renders the protected course space for an authenticated student", async () => {
+    useAuthStore.getState().setSession({
+      token: "demo-token",
+      user: {
+        id: 1,
+        email: "demo@edunova.local",
+        displayName: "演示学生",
+        role: "student"
+      }
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/app/courses/course-ai"]}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: "人工智能导论" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "课程对话空间" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "知识学习画布" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "证据与 Agent 轨迹" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Studio 生成区" })).toBeInTheDocument();
+  });
 });

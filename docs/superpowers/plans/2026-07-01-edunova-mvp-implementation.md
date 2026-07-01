@@ -506,6 +506,7 @@ Current Phase 3.1 implementation note:
 - Phase 3D/3E added frontend API contract modules, upload-to-course workflow state, empty/loading/error/low-evidence/demo-fallback state panels and page-level tests.
 - Phase 3 closure redesign first produced the skill-based direction `Productivity Tool + AI-Native UI + Knowledge Graph + Process Map`, replacing the five-card status feel with a learning operating system canvas, process rail, status signals and dark Studio Dock.
 - 2026-07-01 P3R3 implemented the AI conversation-first learning home with history, centered learning input, material-library drawer entry, semantic recent-learning list, restrained learning-signal background and course generation dialog; the existing learning canvas, Studio Dock and evidence layer should be reused inside course space or answer expansion instead of dominating `/app`.
+- P3 completion added `/app/courses/:courseId` as a protected static/semi-static course space with course chat, course history, knowledge canvas, today's tasks, Studio output, citations and Agent trace; real backend data remains Phase 4+.
 - Browser visual checks covered P3R3 `/app` at desktop and mobile widths with no horizontal overflow; the material-library drawer and course generation dialog open and remain readable.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
 - Real backend auth, `/dashboard/summary`, upload/RAG/AI data and final browser E2E remain later-phase work.

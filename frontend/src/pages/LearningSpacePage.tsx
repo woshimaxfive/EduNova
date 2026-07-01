@@ -14,7 +14,9 @@ import {
   X
 } from "@phosphor-icons/react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
+import { buildCoursePath } from "../app/routePaths";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 
 const homeConversations = [
@@ -184,7 +186,7 @@ export function LearningSpacePage() {
             <ul className="recent-course-list" aria-label="最近学习列表">
               {recentCourses.map((course) => (
                 <li key={course.id}>
-                  <button className="recent-course" type="button">
+                  <Link className="recent-course" to={buildCoursePath(course.id)}>
                     <BookOpen size={18} weight="duotone" aria-hidden="true" />
                     <span>
                       <strong>{course.title}</strong>
@@ -192,7 +194,7 @@ export function LearningSpacePage() {
                     </span>
                     <em>{course.progress}</em>
                     <span className="course-next">{course.next}</span>
-                  </button>
+                  </Link>
                 </li>
               ))}
             </ul>

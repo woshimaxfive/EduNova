@@ -21,6 +21,7 @@ describe("LearningSpacePage", () => {
     expect(screen.getByRole("button", { name: "打开资料库" })).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "最近学习列表" })).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getByRole("link", { name: /人工智能导论/ })).toHaveAttribute("href", "/app/courses/course-ai");
     expect(screen.queryByRole("region", { name: "资料库轻入口" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "知识学习画布" })).not.toBeInTheDocument();
   });

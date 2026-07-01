@@ -2,6 +2,7 @@
 .agents/
 .codex/
 .codegraph/
+.playwright-cli/
 .worktrees/
 
 # Python

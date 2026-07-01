@@ -16,6 +16,7 @@
 - React + TypeScript + Vite 前端本地开发服务器。
 - 前端 lint、Vitest 和生产构建命令。
 - 前端 API 合同模块，默认请求基础路径 `/api/v1`。
+- Phase 3 学生端核心页面骨架，覆盖资料库、Studio、学习画像、AI 辅导、练习、报告和设置。
 
 以下能力还未接入当前部署：
 
@@ -164,7 +165,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 10. `frontend` 可执行 `pnpm lint`、`pnpm test` 和 `pnpm build`。
 11. 停止服务后本地 Git 状态不出现运行产物。
 
-当前本机已验证后端与数据库基础验收项，并验证第二条迁移可以 downgrade/upgrade 往返。Phase 3 已验证前端 lint、Vitest 和 Vite build，覆盖 AI 对话主页、课程空间路由、学习空间路由、API 合同和上传建课状态模型；P3R3 对话主页已用本地浏览器检查桌面和移动宽度的 `/app` 首屏，无水平溢出，资料库浮层和生成课程浮层可打开且保持可读。
+当前本机已验证后端与数据库基础验收项，并验证第二条迁移可以 downgrade/upgrade 往返。Phase 3 已验证前端 lint、Vitest 和 Vite build，覆盖 AI 对话主页、课程空间路由、学生端核心页面、学习空间路由、API 合同和上传建课状态模型；P3R3 对话主页已用本地浏览器检查桌面和移动宽度的 `/app` 首屏，无水平溢出，资料库浮层和生成课程浮层可打开且保持可读。P3.6 已用本地 Edge + Playwright 补充资料库、Studio、画像、辅导、练习、报告和设置在桌面与 390px 移动宽度下的可见性和无水平溢出检查。
 
 ## 8. 前端本地运行
 

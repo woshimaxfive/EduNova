@@ -1,3 +1,5 @@
+import { ClockCounterClockwise, FileText, Sparkle } from "@phosphor-icons/react";
+
 import { StudioDock } from "../components/studio/StudioDock";
 import { WorkspaceStateStrip } from "../components/states/WorkspaceStateStrip";
 import { demoLearningSpace } from "../data/demoLearningSpace";
@@ -11,7 +13,43 @@ export function StudioPage() {
 
   return (
     <PageFrame kicker="Studio" title="把知识点生成可学习资源" description="讲解、练习、思维导图、复盘报告和 PPT 大纲会绑定引用与审核状态。">
-      <WorkspaceStateStrip panels={evidencePanels} />
+      <section className="student-panel studio-workbench" role="region" aria-label="资源生成工作台">
+        <div className="student-panel-heading">
+          <div>
+            <p className="section-kicker">Studio Queue</p>
+            <h2>先选知识点，再决定生成什么</h2>
+          </div>
+          <button className="primary-action" type="button">
+            <Sparkle size={18} weight="fill" aria-hidden="true" />
+            <span>生成资源</span>
+          </button>
+        </div>
+
+        <WorkspaceStateStrip panels={evidencePanels} />
+
+        <section className="generation-queue" role="region" aria-label="生成队列">
+          {[
+            { title: "监督学习个性化讲解", meta: "绑定 2 条引用 · 待审核", icon: FileText },
+            { title: "反向传播薄弱点练习", meta: "8 道递进题 · 生成中", icon: ClockCounterClockwise },
+            { title: "神经网络知识图谱", meta: "等待选择输出格式", icon: Sparkle }
+          ].map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <article className="queue-row" key={item.title}>
+                <span className="queue-row-icon" aria-hidden="true">
+                  <Icon size={19} weight="duotone" />
+                </span>
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>{item.meta}</small>
+                </span>
+              </article>
+            );
+          })}
+        </section>
+      </section>
+
       <StudioDock outputs={demoLearningSpace.studioOutputs} />
     </PageFrame>
   );

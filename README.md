@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前已完成前期基础建设、后端最小骨架、核心课程数据基础和 Phase 3 前端体验壳子补完。前端已从“静态壳子”推进到具备登录注册入口、受保护路由、AI 对话主页、主页历史、输入区资料库浮层入口、最近学习轻量列表、课程空间静态壳子、生成课程浮层、上传建课进度轨道、克制状态信号层和 API 合同模块的可扩展基础。核心原则仍然是先把主链路地基打稳，再逐步接入真实注册登录、上传建课、RAG、多智能体和学习评估。
+当前已完成前期基础建设、后端最小骨架、核心课程数据基础和 Phase 3 前端学习空间骨架。前端已从“静态壳子”推进到具备登录注册入口、受保护路由、AI 对话主页、主页历史、输入区资料库浮层入口、最近学习轻量列表、课程空间静态壳子、资料库、Studio、学习画像、AI 辅导、练习、报告、设置核心页面骨架、生成课程浮层、上传建课进度轨道、克制状态信号层和 API 合同模块的可扩展基础。核心原则仍然是先把主链路地基打稳，再逐步接入真实注册登录、上传建课、RAG、多智能体和学习评估。
 
 ## 文档入口
 
@@ -61,9 +61,9 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 当前 Phase 2 数据与课程基础建设已完成到内置人工智能导论课程包。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查、Docker Compose 草案、SQLAlchemy 数据库入口、Alembic 迁移基线、pgvector 扩展迁移、第一批核心业务表和人工智能导论内置课程包已经实现。
 
-Phase 3 前端体验壳子已经落地：`frontend/` 使用 React、TypeScript、Vite、Tailwind CSS v4、React Router、Zustand、React Query、Motion、Radix、React Flow、ECharts、Mermaid、Markmap、Vitest 和 ESLint。当前已实现登录页、注册页、Demo 入口、受保护应用路由、顶部轻导航、AI 学习对话主页、主页历史、输入区资料库浮层入口、最近学习轻量列表、课程空间静态壳子、生成课程浮层、首次进入引导和多个学生端页面占位。
+Phase 3 前端学习空间骨架已经落地：`frontend/` 使用 React、TypeScript、Vite、Tailwind CSS v4、React Router、Zustand、React Query、Motion、Radix、React Flow、ECharts、Mermaid、Markmap、Vitest 和 ESLint。当前已实现登录页、注册页、Demo 入口、受保护应用路由、顶部轻导航、AI 学习对话主页、主页历史、输入区资料库浮层入口、最近学习轻量列表、课程空间静态壳子、生成课程浮层、首次进入引导，以及资料库、Studio、学习画像、AI 辅导、练习、报告、设置等学生端核心页面骨架。
 
-本轮补齐了前端 API 合同模块、学习空间状态设计，并完成 Phase 3 课程空间壳子补完：`frontend/src/api/` 已按 `docs/API.md` 拆出 auth、courses、materials、profiles、resources、paths、tutor、practice、reports、demo、settings 等模块，Axios 默认对齐 `/api/v1`；学习空间、资料库和课程空间已展示上传资料变成课程的阶段进度、空状态、加载状态、错误恢复、低依据提示、Demo 兜底标记、课程内对话、知识画布、Studio 生成区、引用来源和 Agent 轨迹。上一版“学习操作系统画布 + 流程轨道 + 状态信号层”已迁入课程空间或 AI 回答展开区素材，不再作为 `/app` 首页主结构；`/app` 当前采用更轻的标题层级、中心输入框、输入区资料库按钮、最近学习列表和微动效信号线。当前登录、注册和 Demo 仍使用本地预览状态，尚未接入真实后端认证；AI/RAG、真实上传资料、资源生成、报告和多智能体真实任务仍属于后续 Phase 4 以后实现阶段。
+本阶段补齐了前端 API 合同模块、学习空间状态设计、课程空间壳子和学生端核心页面骨架：`frontend/src/api/` 已按 `docs/API.md` 拆出 auth、courses、materials、profiles、resources、paths、tutor、practice、reports、demo、settings 等模块，Axios 默认对齐 `/api/v1`；学习主页、资料库、Studio、课程空间、画像、辅导、练习、报告和设置已展示上传资料变成课程的阶段进度、资料列表、课程归属、生成队列、画像证据、引用来源、练习反馈、掌握度地图、导出档案和隐私设置边界。上一版“学习操作系统画布 + 流程轨道 + 状态信号层”已迁入课程空间、资料库或 AI 回答展开区素材，不再作为 `/app` 首页主结构；`/app` 当前采用更轻的标题层级、中心输入框、输入区资料库按钮、最近学习列表和微动效信号线。当前登录、注册和 Demo 仍使用本地预览状态，尚未接入真实后端认证；AI/RAG、真实上传资料、资源生成、报告和多智能体真实任务仍属于后续 Phase 4 以后实现阶段。
 
 ## 本地后端验证
 

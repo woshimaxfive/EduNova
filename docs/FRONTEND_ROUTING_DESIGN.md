@@ -467,6 +467,9 @@ Phase 3 当前已在 `frontend/` 中实现：
 - `FirstRunGuide` 已作为学习空间中的轻量引导占位，真实触发条件需要 Phase 4 根据画像和课程上下文接入。
 - `/app` 已重做为总 AI 对话主页，包含历史对话、中心 AI 学习入口、输入区资料库按钮、最近学习轻量列表和生成课程浮层。
 - `/app/courses/:courseId` 已补课程空间静态/半静态壳子，展示课程内对话、今日任务、知识画布、Studio 输出区、引用来源和 Agent 轨迹。
+- `/app/library` 已补资料列表、资料操作、课程归属和上传建课状态轨道。
+- `/app/studio` 已补资源生成工作台、生成队列、Studio 输出和状态信号。
+- `/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` 已补学习画像、AI 辅导、练习、报告和设置核心页面骨架。
 - 学习画布、Studio、证据层和 Agent 轨迹组件不再作为首页首屏主体，已进入课程空间或回答展开区素材。
 - 学习空间相关状态模型已覆盖上传建课状态轨道、空状态、加载状态、错误恢复、低依据提示和 Demo fallback 标记，后续由真实接口驱动。
 
@@ -477,5 +480,6 @@ Phase 3 当前已在 `frontend/` 中实现：
 - 登录态会写入本地存储。
 - 学习空间页面测试已覆盖 AI 对话主页、历史对话、AI 学习入口、资料库按钮、语义化最近学习列表、最近课程链接、生成课程浮层，以及首页不再渲染资料库右栏和知识学习画布。
 - 路由测试已覆盖已登录学生访问 `/app/courses/:courseId` 时能看到课程对话空间、知识画布、证据与 Agent 轨迹和 Studio 生成区。
+- 学生核心页面测试已覆盖 `/app/library`、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` 对应的资料、生成、画像、辅导、练习、报告和设置区域。
 - 前端 API 合同模块默认使用 `/api/v1`，关键路径常量有 Vitest 覆盖。
 - 上传建课工作流状态和学习空间状态面板有 Vitest 覆盖。

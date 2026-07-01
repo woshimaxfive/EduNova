@@ -502,11 +502,11 @@ Current Phase 3.1 implementation note:
 
 - `frontend/` has been created with React, TypeScript, Vite, Tailwind CSS v4, React Router, Zustand, React Query, Motion, Radix, React Flow, ECharts, Mermaid, Markmap, Vitest and ESLint.
 - `markmap-viewer` in the initial plan was corrected to the actual npm package `markmap-view`.
-- Routes, public/protected guards, local preview auth store, API client, login/register/Demo pages, learning-space shell, top navigation, learning canvas, command bar, Studio Dock, evidence layer, Agent timeline, first-run guide and placeholder student pages are implemented.
+- Routes, public/protected guards, local preview auth store, API client, login/register/Demo pages, learning-space shell, top navigation, AI conversation-first home, home history, material library entry, recent courses, course generation dialog, first-run guide and placeholder student pages are implemented.
 - Phase 3D/3E added frontend API contract modules, upload-to-course workflow state, empty/loading/error/low-evidence/demo-fallback state panels and page-level tests.
 - Phase 3 closure redesign first produced the skill-based direction `Productivity Tool + AI-Native UI + Knowledge Graph + Process Map`, replacing the five-card status feel with a learning operating system canvas, process rail, status signals and dark Studio Dock.
-- 2026-07-01 later redirected the homepage target to an AI conversation-first learning home with independent material library and course spaces; the existing learning canvas, Studio Dock and evidence layer should be reused inside course space or answer expansion instead of dominating `/app`.
-- Browser visual checks covered `/app` at 1440x900, 1366x768 and 390x844 with no horizontal overflow and fixed bottom command bar positioning.
+- 2026-07-01 P3R implemented the AI conversation-first learning home with independent material library entry and recent courses; the existing learning canvas, Studio Dock and evidence layer should be reused inside course space or answer expansion instead of dominating `/app`.
+- Browser visual checks covered P3R `/app` at desktop and mobile widths with no horizontal overflow; the course generation dialog opens and remains readable.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
 - Real backend auth, `/dashboard/summary`, upload/RAG/AI data and final browser E2E remain later-phase work.
 

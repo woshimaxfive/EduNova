@@ -164,7 +164,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 10. `frontend` 可执行 `pnpm lint`、`pnpm test` 和 `pnpm build`。
 11. 停止服务后本地 Git 状态不出现运行产物。
 
-当前本机已验证后端与数据库基础验收项，并验证第二条迁移可以 downgrade/upgrade 往返。Phase 3 已验证前端 lint、Vitest 和 Vite build，覆盖学习空间候选壳子、API 合同和上传建课状态模型；候选壳子已用本地浏览器检查 1440x900、1366x768 和 390x844 的 `/app` 首屏，无水平溢出，底部 AI 命令栏定位正常。2026-07-01 后首页方向已重定向为 AI 对话主页、独立资料库和课程空间，新主页落地后需要重新运行前端构建和浏览器验收。
+当前本机已验证后端与数据库基础验收项，并验证第二条迁移可以 downgrade/upgrade 往返。Phase 3 已验证前端 lint、Vitest 和 Vite build，覆盖 AI 对话主页、学习空间路由、API 合同和上传建课状态模型；P3R 对话主页已用本地浏览器检查桌面和移动宽度的 `/app` 首屏，无水平溢出，生成课程浮层可打开且保持可读。
 
 ## 8. 前端本地运行
 

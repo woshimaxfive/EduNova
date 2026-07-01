@@ -76,9 +76,11 @@ export function TopNavigation() {
         </button>
       </div>
       <nav className="mobile-route-strip" aria-label="移动导航">
-        <NavLink to={PATHS.profile}>画像</NavLink>
-        <NavLink to={PATHS.tutor}>辅导</NavLink>
-        <NavLink to={PATHS.practice}>练习</NavLink>
+        {navItems.map((item) => (
+          <NavLink key={item.to} to={item.to} end={item.to === PATHS.app}>
+            {item.label}
+          </NavLink>
+        ))}
       </nav>
       <Notebook className="nav-watermark" size={120} weight="thin" aria-hidden="true" />
     </header>

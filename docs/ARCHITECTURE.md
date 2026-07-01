@@ -145,13 +145,13 @@ frontend/src/
 | `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、profiles、resources、agents、paths、tutor、practice、reports、demo、settings |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和学习空间状态面板的纯状态模型 |
 | `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、Studio、画像、辅导、练习、报告、设置和 404 |
-| `frontend/src/components` | 顶部轻导航、学习空间壳子、学习画布、资料源簇、AI 命令栏、Studio Dock、证据层、Agent 轨迹、上传建课状态轨道和学习空间状态条；后续需补 AI 对话主页、主页历史、资料库轻入口、最近课程和生成课程浮层 |
+| `frontend/src/components` | 顶部轻导航、学习空间壳子、学习画布、资料源簇、AI 命令栏、Studio Dock、证据层、Agent 轨迹、上传建课状态轨道和学习空间状态条；`/app` 首页已补 AI 对话主页、主页历史、资料库轻入口、最近课程和生成课程浮层 |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、深色模式、reduced motion 和 reduced transparency 基础 |
 
 当前限制：
 
 - Phase 3A 登录、注册和 Demo 只用于本地预览，不代表后端认证已经完成。
-- 当前学习空间候选壳子使用 `demoLearningSpace` 静态数据；重定向后的首页由 `/dashboard/summary`、主页会话、资料库和最近课程接口替换。
+- 当前 `/app` AI 对话主页使用前端样例主页会话、资料库和最近课程数据；后续由 `/dashboard/summary`、主页会话、资料库和最近课程接口替换。
 - 上传建课状态轨道和状态条当前使用前端样例状态，后续由 `/materials/{material_id}/progress`、`/courses/from-materials` 和长任务接口驱动。
 - React Flow、ECharts、Mermaid 和 Markmap 已作为依赖准备，复杂图谱和可视化在后续阶段逐步接入。
 

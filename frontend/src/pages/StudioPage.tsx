@@ -1,5 +1,7 @@
 import { ClockCounterClockwise, FileText, Sparkle } from "@phosphor-icons/react";
 
+import { ActionNotice } from "../components/feedback/ActionNotice";
+import { useActionNotice } from "../components/feedback/useActionNotice";
 import { StudioDock } from "../components/studio/StudioDock";
 import { WorkspaceStateStrip } from "../components/states/WorkspaceStateStrip";
 import { demoLearningSpace } from "../data/demoLearningSpace";
@@ -10,6 +12,7 @@ export function StudioPage() {
   const evidencePanels = getWorkspaceStatePanels().filter((panel) =>
     ["loading", "low_evidence", "demo_fallback"].includes(panel.kind)
   );
+  const { notice, showNotice } = useActionNotice();
 
   return (
     <PageFrame kicker="Studio" title="把知识点生成可学习资源" description="讲解、练习、思维导图、复盘报告和 PPT 大纲会绑定引用与审核状态。">
@@ -19,11 +22,12 @@ export function StudioPage() {
             <p className="section-kicker">Studio Queue</p>
             <h2>先选知识点，再决定生成什么</h2>
           </div>
-          <button className="primary-action" type="button">
+          <button className="primary-action" type="button" onClick={() => showNotice("已加入资源生成演示队列，真实任务 API 接入后会显示进度。", "success")}>
             <Sparkle size={18} weight="fill" aria-hidden="true" />
             <span>生成资源</span>
           </button>
         </div>
+        <ActionNotice notice={notice} />
 
         <WorkspaceStateStrip panels={evidencePanels} />
 

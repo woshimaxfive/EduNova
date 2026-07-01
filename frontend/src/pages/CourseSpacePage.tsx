@@ -6,6 +6,7 @@ import {
   Sparkle,
   Target
 } from "@phosphor-icons/react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
@@ -21,8 +22,12 @@ const courseThreads = [
   "解释泛化能力和过拟合的区别"
 ];
 
+type AnswerPanelKind = "citations" | "path" | "agent";
+
 export function CourseSpacePage() {
   const { courseId } = useParams();
+  const [activeThread, setActiveThread] = useState(courseThreads[0]);
+  const [activeAnswerPanel, setActiveAnswerPanel] = useState<AnswerPanelKind>("citations");
   const snapshot = demoLearningSpace;
   const canvasSnapshot = {
     ...snapshot,
@@ -75,7 +80,13 @@ export function CourseSpacePage() {
 
             <div className="course-thread-list" aria-label="课程内历史对话">
               {courseThreads.map((thread) => (
-                <button type="button" key={thread}>
+                <button
+                  className={activeThread === thread ? "active" : ""}
+                  type="button"
+                  key={thread}
+                  aria-pressed={activeThread === thread}
+                  onClick={() => setActiveThread(thread)}
+                >
                   {thread}
                 </button>
               ))}
@@ -89,19 +100,35 @@ export function CourseSpacePage() {
                 Agent 过程，后续接入真实 RAG 后这里会替换为流式回答。
               </p>
               <div className="answer-action-row" aria-label="回答展开入口">
-                <button type="button">
+                <button
+                  className={activeAnswerPanel === "citations" ? "active" : ""}
+                  type="button"
+                  aria-pressed={activeAnswerPanel === "citations"}
+                  onClick={() => setActiveAnswerPanel("citations")}
+                >
                   <FileText size={17} weight="duotone" aria-hidden="true" />
                   <span>引用来源</span>
                 </button>
-                <button type="button">
+                <button
+                  className={activeAnswerPanel === "path" ? "active" : ""}
+                  type="button"
+                  aria-pressed={activeAnswerPanel === "path"}
+                  onClick={() => setActiveAnswerPanel("path")}
+                >
                   <Target size={17} weight="duotone" aria-hidden="true" />
                   <span>学习路径</span>
                 </button>
-                <button type="button">
+                <button
+                  className={activeAnswerPanel === "agent" ? "active" : ""}
+                  type="button"
+                  aria-pressed={activeAnswerPanel === "agent"}
+                  onClick={() => setActiveAnswerPanel("agent")}
+                >
                   <Sparkle size={17} weight="duotone" aria-hidden="true" />
                   <span>Agent 过程</span>
                 </button>
               </div>
+              <AnswerDetailPanel activePanel={activeAnswerPanel} />
               <div className="answer-citation-strip" aria-label="回答引用预览">
                 {snapshot.citations.map((citation) => (
                   <span key={citation.id}>{citation.sourceTitle}</span>
@@ -144,5 +171,36 @@ export function CourseSpacePage() {
         </div>
       </div>
     </LearningSpaceShell>
+  );
+}
+
+type AnswerDetailPanelProps = {
+  activePanel: AnswerPanelKind;
+};
+
+function AnswerDetailPanel({ activePanel }: AnswerDetailPanelProps) {
+  if (activePanel === "path") {
+    return (
+      <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
+        <strong>建议路径</strong>
+        <p>先复习训练集、测试集和目标函数，再进入过拟合、正则化和泛化误差，最后用 10 分钟练习巩固。</p>
+      </section>
+    );
+  }
+
+  if (activePanel === "agent") {
+    return (
+      <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
+        <strong>Agent 过程</strong>
+        <p>RetrieverAgent 先检索课程资料，PlannerAgent 生成复习顺序，TutorAgent 再把结论写成可追问回答。</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
+      <strong>引用来源</strong>
+      <p>AI 导论内置讲义和期末复习题样例会作为回答依据，真实 RAG 接入后会显示页码、片段和置信度。</p>
+    </section>
   );
 }

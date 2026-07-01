@@ -1,8 +1,12 @@
 import { Database, GearSix, Key, ShieldCheck, UserCircle } from "@phosphor-icons/react";
 
+import { ActionNotice } from "../components/feedback/ActionNotice";
+import { useActionNotice } from "../components/feedback/useActionNotice";
 import { PageFrame } from "./PageFrame";
 
 export function SettingsPage() {
+  const { notice, showNotice } = useActionNotice();
+
   return (
     <PageFrame kicker="设置" title="轻量系统设置" description="模型 Key、个人资料和数据导出入口会保持最小化，不扩展成后台。">
       <div className="settings-workspace">
@@ -45,7 +49,12 @@ export function SettingsPage() {
             <h2>学生账号</h2>
             <p>第一版只保留学生端身份、昵称和学习偏好，不加入教师端、支付或运营后台。</p>
           </div>
-          <button className="primary-action" type="button">保存设置</button>
+          <div className="settings-action-stack">
+            <button className="primary-action" type="button" onClick={() => showNotice("设置已保存为本地演示态。", "success")}>
+              保存设置
+            </button>
+            <ActionNotice notice={notice} />
+          </div>
         </section>
       </div>
     </PageFrame>

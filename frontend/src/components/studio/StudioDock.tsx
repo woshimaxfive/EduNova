@@ -1,5 +1,7 @@
 import { Notebook, Sparkle } from "@phosphor-icons/react";
 
+import { ActionNotice } from "../feedback/ActionNotice";
+import { useActionNotice } from "../feedback/useActionNotice";
 import { type StudioOutput } from "../../types/api";
 
 type StudioDockProps = {
@@ -7,6 +9,8 @@ type StudioDockProps = {
 };
 
 export function StudioDock({ outputs }: StudioDockProps) {
+  const { notice, showNotice } = useActionNotice();
+
   return (
     <section className="studio-dock" role="region" aria-label="Studio 生成区">
       <div className="section-heading-line">
@@ -14,11 +18,12 @@ export function StudioDock({ outputs }: StudioDockProps) {
           <p className="section-kicker">Studio</p>
           <h2>资源生成工作台</h2>
         </div>
-        <button className="soft-button" type="button">
+        <button className="soft-button" type="button" onClick={() => showNotice("资源生成会在 Studio 任务 API 接入后开放。")}>
           <Sparkle size={17} weight="fill" aria-hidden="true" />
           <span>生成资源</span>
         </button>
       </div>
+      <ActionNotice notice={notice} />
       <div className="studio-track">
         {outputs.map((output) => (
           <article className={`studio-item ${output.reviewStatus === "低依据" ? "low-evidence" : ""}`} key={output.id}>

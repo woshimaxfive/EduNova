@@ -14,6 +14,8 @@ import {
 import { NavLink, useNavigate } from "react-router-dom";
 
 import { PATHS } from "../../app/routePaths";
+import { ActionNotice } from "../feedback/ActionNotice";
+import { useActionNotice } from "../feedback/useActionNotice";
 import { useAuthStore } from "../../features/auth/authStore";
 
 const navItems = [
@@ -27,6 +29,7 @@ export function TopNavigation() {
   const navigate = useNavigate();
   const clearSession = useAuthStore((state) => state.clearSession);
   const user = useAuthStore((state) => state.user);
+  const { notice, showNotice } = useActionNotice();
 
   function logout() {
     clearSession();
@@ -58,7 +61,7 @@ export function TopNavigation() {
         })}
       </nav>
       <div className="nav-actions">
-        <button className="icon-button" type="button" aria-label="搜索">
+        <button className="icon-button" type="button" aria-label="搜索" onClick={() => showNotice("全局搜索会在课程与资料索引接入后开放。")}>
           <MagnifyingGlass size={18} />
         </button>
         <NavLink className="icon-button" to={PATHS.library} aria-label="上传资料">
@@ -75,6 +78,7 @@ export function TopNavigation() {
           <SignOut size={18} />
         </button>
       </div>
+      <ActionNotice notice={notice} className="nav-action-notice" />
       <nav className="mobile-route-strip" aria-label="移动导航">
         {navItems.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.to === PATHS.app}>

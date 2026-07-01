@@ -1,9 +1,19 @@
 import { ChatCircleText, GraduationCap, MagnifyingGlass, Microphone, ShieldCheck, Sparkle } from "@phosphor-icons/react";
+import { useState } from "react";
 
+import { ActionNotice } from "../components/feedback/ActionNotice";
+import { useActionNotice } from "../components/feedback/useActionNotice";
 import { demoLearningSpace } from "../data/demoLearningSpace";
 import { PageFrame } from "./PageFrame";
 
+const tutorModes = ["直接解释", "苏格拉底追问", "考前冲刺"] as const;
+
+type TutorMode = (typeof tutorModes)[number];
+
 export function TutorPage() {
+  const [activeMode, setActiveMode] = useState<TutorMode>("直接解释");
+  const { notice, showNotice } = useActionNotice();
+
   return (
     <PageFrame kicker="AI 辅导" title="围绕课程资料追问" description="直接解释、苏格拉底追问和考前冲刺会共用同一套引用机制。">
       <div className="student-workspace tutor-workspace">
@@ -21,19 +31,20 @@ export function TutorPage() {
               <span>因为每一层参数对最终损失的影响都要沿计算图逐层传回。先把复合函数拆成局部梯度，再沿路径相乘。</span>
             </div>
             <div className="answer-action-row" aria-label="回答附加信息">
-              <button type="button">
+              <button type="button" onClick={() => showNotice("已展开回答来源，真实检索接入后会显示具体片段。")}>
                 <ShieldCheck size={17} weight="duotone" aria-hidden="true" />
                 <span>查看来源</span>
               </button>
-              <button type="button">
+              <button type="button" onClick={() => showNotice("已切换到深度思考演示态。")}>
                 <Sparkle size={17} weight="duotone" aria-hidden="true" />
                 <span>深度思考</span>
               </button>
-              <button type="button">
+              <button type="button" onClick={() => showNotice("语音输入会在录音权限和转写接口接入后开放。")}>
                 <Microphone size={17} weight="duotone" aria-hidden="true" />
                 <span>语音输入</span>
               </button>
             </div>
+            <ActionNotice notice={notice} />
           </div>
           <label className="tutor-composer">
             <span>追问输入</span>
@@ -44,13 +55,23 @@ export function TutorPage() {
         <aside className="tutor-side-stack">
           <section className="student-panel tutor-mode-panel" role="region" aria-label="辅导模式">
             <div className="mode-row">
-              {["直接解释", "苏格拉底追问", "考前冲刺"].map((mode, index) => (
-                <button className={index === 0 ? "active" : ""} type="button" key={mode}>
+              {tutorModes.map((mode) => (
+                <button
+                  className={activeMode === mode ? "active" : ""}
+                  type="button"
+                  key={mode}
+                  aria-pressed={activeMode === mode}
+                  onClick={() => {
+                    setActiveMode(mode);
+                    showNotice(`已切换到${mode}模式。`, "success");
+                  }}
+                >
                   <GraduationCap size={17} weight="duotone" aria-hidden="true" />
                   <span>{mode}</span>
                 </button>
               ))}
             </div>
+            <p className="mode-current">当前模式：{activeMode}</p>
           </section>
 
           <section className="student-panel citation-panel" role="region" aria-label="引用来源">

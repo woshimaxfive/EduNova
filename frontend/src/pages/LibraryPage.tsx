@@ -1,12 +1,23 @@
 import { BookOpen, FileArrowUp, FolderOpen, LinkSimple, SealCheck, Sparkle } from "@phosphor-icons/react";
+import { useState } from "react";
 
+import { ActionNotice } from "../components/feedback/ActionNotice";
+import { useActionNotice } from "../components/feedback/useActionNotice";
 import { WorkflowStatusRail } from "../components/states/WorkflowStatusRail";
 import { demoLearningSpace } from "../data/demoLearningSpace";
 import { buildMaterialLifecycle } from "../features/workspace/workflowState";
+import { type MaterialSource } from "../types/api";
 import { PageFrame } from "./PageFrame";
 
 export function LibraryPage() {
   const materialLifecycle = buildMaterialLifecycle("chunking", 60);
+  const [activeMaterial, setActiveMaterial] = useState<MaterialSource | null>(null);
+  const { notice, showNotice } = useActionNotice();
+
+  function showMaterialCitation(material: MaterialSource) {
+    setActiveMaterial(material);
+    showNotice(`已打开「${material.title}」的引用预览。`, "success");
+  }
 
   return (
     <PageFrame kicker="资料库" title="课程资料进入学习空间" description="内置课程、上传资料、解析阶段和引用覆盖度都在这里汇合。">
@@ -41,10 +52,21 @@ export function LibraryPage() {
                     {material.coverageLabel} · {material.parseStatus === "completed" ? "已解析" : "解析中"}
                   </small>
                 </div>
-                <button type="button">查看引用</button>
+                <button type="button" onClick={() => showMaterialCitation(material)}>
+                  查看引用
+                </button>
               </article>
             ))}
           </div>
+          {activeMaterial ? (
+            <section className="material-action-feedback" role="region" aria-label="资料动作反馈">
+              <strong>{activeMaterial.title}</strong>
+              <p>
+                {activeMaterial.coverageLabel}，当前状态：
+                {activeMaterial.parseStatus === "completed" ? "已完成解析" : "正在处理"}。后续接入真实引用接口后会显示片段、页码和置信度。
+              </p>
+            </section>
+          ) : null}
         </section>
 
         <aside className="library-side-stack">
@@ -56,19 +78,20 @@ export function LibraryPage() {
               </div>
             </div>
             <div className="action-stack">
-              <button className="primary-action" type="button">
+              <button className="primary-action" type="button" onClick={() => showNotice("真实上传会在资料解析接口接入后开放。")}>
                 <FileArrowUp size={18} weight="duotone" aria-hidden="true" />
                 <span>上传资料</span>
               </button>
-              <button type="button">
+              <button type="button" onClick={() => showNotice("生成课程会在课程创建接口接入后开放。")}>
                 <Sparkle size={18} weight="duotone" aria-hidden="true" />
                 <span>生成课程</span>
               </button>
-              <button type="button">
+              <button type="button" onClick={() => showNotice("已设为主页对话参考演示态。", "success")}>
                 <LinkSimple size={18} weight="duotone" aria-hidden="true" />
                 <span>作为对话参考</span>
               </button>
             </div>
+            <ActionNotice notice={notice} />
           </section>
 
           <section className="student-panel course-ownership-panel" role="region" aria-label="课程归属">

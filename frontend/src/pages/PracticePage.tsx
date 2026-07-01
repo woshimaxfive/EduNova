@@ -1,10 +1,25 @@
 import { CheckCircle, ListChecks, WarningCircle } from "@phosphor-icons/react";
+import { useState } from "react";
 
+import { ActionNotice } from "../components/feedback/ActionNotice";
+import { useActionNotice } from "../components/feedback/useActionNotice";
 import { PageFrame } from "./PageFrame";
 
 const reviewItems = ["链式法则应用", "计算图局部梯度", "反向传播步骤表达"];
 
 export function PracticePage() {
+  const [answer, setAnswer] = useState("");
+  const { notice, showNotice } = useActionNotice();
+
+  function submitAnswer() {
+    if (!answer.trim()) {
+      showNotice("先写下你的推导思路。", "warning");
+      return;
+    }
+
+    showNotice("已提交演示答案，真实批改接口接入后会更新掌握度。", "success");
+  }
+
   return (
     <PageFrame kicker="练习评估" title="用题目反推薄弱点" description="作答、批改、错因和复习队列会和知识画布同步。">
       <div className="student-workspace practice-workspace">
@@ -22,9 +37,18 @@ export function PracticePage() {
           </article>
           <label className="answer-box">
             <span>作答区</span>
-            <textarea rows={5} placeholder="写下你的推导过程，系统会先看思路再给答案。" />
+            <textarea
+              rows={5}
+              aria-label="作答区"
+              value={answer}
+              onChange={(event) => setAnswer(event.target.value)}
+              placeholder="写下你的推导过程，系统会先看思路再给答案。"
+            />
           </label>
-          <button className="primary-action" type="button">提交答案</button>
+          <button className="primary-action" type="button" onClick={submitAnswer}>
+            提交答案
+          </button>
+          <ActionNotice notice={notice} />
         </section>
 
         <aside className="practice-side-stack">

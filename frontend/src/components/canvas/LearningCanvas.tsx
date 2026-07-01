@@ -1,7 +1,8 @@
 import { Brain, Compass, Lightning } from "@phosphor-icons/react";
+import { useState } from "react";
 
 import { SourceCluster } from "./SourceCluster";
-import { type LearningSpaceSnapshot } from "../../types/api";
+import { type KnowledgeNode, type LearningSpaceSnapshot } from "../../types/api";
 
 type LearningCanvasProps = {
   snapshot: LearningSpaceSnapshot;
@@ -16,6 +17,8 @@ const statusLabel = {
 } as const;
 
 export function LearningCanvas({ snapshot }: LearningCanvasProps) {
+  const [selectedNode, setSelectedNode] = useState<KnowledgeNode | null>(null);
+
   return (
     <section className="learning-canvas" role="region" aria-label="知识学习画布">
       <div className="canvas-header">
@@ -39,10 +42,12 @@ export function LearningCanvas({ snapshot }: LearningCanvasProps) {
         {snapshot.knowledgeNodes.map((node) => (
           <button
             key={node.id}
-            className={`knowledge-node ${node.status}`}
+            className={`knowledge-node ${node.status} ${selectedNode?.id === node.id ? "active" : ""}`}
             style={{ left: `${node.x}%`, top: `${node.y}%` }}
             type="button"
             aria-label={`${node.title}，${statusLabel[node.status]}`}
+            aria-pressed={selectedNode?.id === node.id}
+            onClick={() => setSelectedNode(node)}
           >
             <span className="node-icon" aria-hidden="true">
               {node.status === "focus" ? (
@@ -56,6 +61,15 @@ export function LearningCanvas({ snapshot }: LearningCanvasProps) {
           </button>
         ))}
       </div>
+      {selectedNode ? (
+        <section className="canvas-node-detail" role="region" aria-label="当前知识点详情">
+          <span>{statusLabel[selectedNode.status]}</span>
+          <strong>{selectedNode.title}</strong>
+          <p>
+            {selectedNode.chapter} 会被用于课程对话、练习生成和掌握度更新。后续接入真实图谱后，这里会显示先修关系和证据来源。
+          </p>
+        </section>
+      ) : null}
       <SourceCluster materials={snapshot.materials} />
     </section>
   );

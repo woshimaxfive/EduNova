@@ -1,5 +1,7 @@
 import { ChartLineUp, FileArrowUp, FileText, Graph, ShieldCheck } from "@phosphor-icons/react";
 
+import { ActionNotice } from "../components/feedback/ActionNotice";
+import { useActionNotice } from "../components/feedback/useActionNotice";
 import { PageFrame } from "./PageFrame";
 
 const masteryRows = [
@@ -9,6 +11,8 @@ const masteryRows = [
 ];
 
 export function ReportsPage() {
+  const { notice, showNotice } = useActionNotice();
+
   return (
     <PageFrame kicker="学习报告" title="让推荐原因可解释" description="掌握度、画像变化、错因和 Agent 证据会进入学习档案。">
       <div className="student-workspace reports-workspace">
@@ -61,10 +65,11 @@ export function ReportsPage() {
             <h2>给答辩和复盘留证据</h2>
             <p>导出内容默认只包含学习过程、引用来源和掌握度，不包含真实密钥或隐私原文。</p>
           </div>
-          <button className="soft-button" type="button">
+          <button className="soft-button" type="button" onClick={() => showNotice("已准备导出演示档案，真实导出会走服务端脱敏流程。", "success")}>
             <FileArrowUp size={17} aria-hidden="true" />
             <span>导出档案</span>
           </button>
+          <ActionNotice notice={notice} />
         </aside>
       </div>
     </PageFrame>

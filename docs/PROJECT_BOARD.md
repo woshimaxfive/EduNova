@@ -29,6 +29,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 | 实施计划 | 已完成 | `docs/superpowers/plans/2026-07-01-edunova-mvp-implementation.md` |
 | 中文导读 | 已完成 | `docs/superpowers/plans/2026-07-01-edunova-mvp-implementation-中文阅读版.md` |
 | 前端与交互设计基线 | 已完成 | `docs/UI_UX_DESIGN.md`，已锁定学习画布、AI 命令栏、Studio 和证据层方向 |
+| 前端路由与入口体验设计 | 已完成 | `docs/FRONTEND_ROUTING_DESIGN.md`，已锁定登录、注册、Demo、首次进入和路由保护 |
 | 测试计划 | 已完成 | `docs/TEST_PLAN.md` |
 | 需求规格 | 本轮新增 | `docs/REQUIREMENTS.md` |
 | 架构设计 | 本轮新增 | `docs/ARCHITECTURE.md` |
@@ -83,6 +84,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 - [x] 建立核心业务表模型和迁移。
 - [x] 导入人工智能导论课程包。
 - [x] 补 `docs/UI_UX_DESIGN.md`，锁定 Phase 3 前端设计基线。
+- [x] 补 `docs/FRONTEND_ROUTING_DESIGN.md`，锁定 Phase 3A 路由与入口体验。
 - [ ] 实现注册登录。
 - [ ] 实现学生 AI 学习空间壳子。
 
@@ -92,6 +94,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 - [ ] 补 `docs/AGENT_DESIGN.md`。
 - [ ] 补 `docs/RAG_DESIGN.md`。
 - [x] 补 `docs/UI_UX_DESIGN.md`。
+- [x] 补 `docs/FRONTEND_ROUTING_DESIGN.md`。
 - [ ] 补 `docs/DEVELOPMENT_GUIDE.md`。
 - [x] 补 `docs/DEPLOYMENT.md`。
 - [ ] 补 `docs/OPEN_SOURCE_NOTICE.md`。
@@ -158,7 +161,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 ```text
 1. 提交并推送 Phase 2C 人工智能导论课程包。
 2. 进入 Phase 3A：前端工程骨架和学生 AI 学习空间壳子。
-3. 先建立 Vite、React、TypeScript、路由、基础布局、本地 API 客户端、顶部轻导航、学习画布占位、AI 命令栏、Studio Dock 和证据层。
+3. 先建立 Vite、React、TypeScript、集中路由、路由保护、登录注册页、Demo 入口、首次进入引导占位、本地 API 客户端、顶部轻导航、学习画布占位、AI 命令栏、Studio Dock 和证据层。
 4. 同步更新 README、架构、测试计划、部署说明和项目看板。
 ```
 

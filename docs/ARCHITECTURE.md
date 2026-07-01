@@ -46,7 +46,7 @@ Nginx
 
 ## 3. 前端架构
 
-前端使用 React + TypeScript + Vite，定位为学生 AI 学习空间。具体设计基线见 [UI_UX_DESIGN.md](UI_UX_DESIGN.md)。
+前端使用 React + TypeScript + Vite，定位为学生 AI 学习空间。具体设计基线见 [UI_UX_DESIGN.md](UI_UX_DESIGN.md)，入口与路由设计见 [FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)。
 
 第一版前端不采用固定左侧后台菜单，不把首屏做成卡片堆，而采用“轻导航 + 学习画布 + AI 命令栏 + Studio + 证据层”的结构。
 
@@ -98,6 +98,21 @@ Studio 输出 Dock
 | Studio | 查看和管理生成的学习资源 |
 | 报告 | 查看画像、掌握度、薄弱点、学习报告和导出入口 |
 | 设置 | 配置模型 Provider、个人信息和导出数据 |
+
+路由结构：
+
+| 路由组 | 路径 |
+| --- | --- |
+| 公开入口 | `/`、`/login`、`/register`、`/demo` |
+| 应用区 | `/app`、`/app/library`、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` |
+| 兜底 | `*` |
+
+路由保护：
+
+- `ProtectedRoute` 统一保护 `/app/*`。
+- `PublicOnlyRoute` 处理已登录用户访问 `/login` 和 `/register`。
+- API client 收到 401 后清理登录态并跳回 `/login`。
+- Demo 入口由独立 service 调用 `/demo/status` 和 `/demo/reset`，避免登录页堆业务逻辑。
 
 前端状态分工：
 

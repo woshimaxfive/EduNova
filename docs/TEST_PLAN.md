@@ -46,6 +46,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 | 部署 | Docker Compose 启动、环境变量、Nginx 入口 |
 | 文档 | README、部署说明、开发说明、测试说明、开源说明、答辩问答 |
 | 前端体验 | `docs/UI_UX_DESIGN.md` 中的布局、状态、动效和响应式约束 |
+| 前端入口 | `docs/FRONTEND_ROUTING_DESIGN.md` 中的登录、注册、Demo、首次进入和路由保护 |
 
 ### 2.2 暂不作为第一版必测范围
 
@@ -146,6 +147,7 @@ cd ..
 
 - 登录页
 - 注册页
+- Demo 入口页或 Demo 按钮流程
 - 学习空间
 - 资料库
 - Studio
@@ -165,6 +167,8 @@ cd ..
 - Studio Dock。
 - 可滑出证据层。
 - Agent 轨迹时间线。
+- 首次进入引导。
+- 受保护路由跳转。
 
 计划命令：
 
@@ -374,6 +378,11 @@ git status --short --untracked-files=all
 
 体验检查：
 
+- 登录页不能像后台系统登录框，必须体现 EduNova AI 学习空间气质。
+- 注册页不做复杂画像问卷，注册后进入首次进入引导。
+- Demo 体验入口清晰，并具备初始化中、成功、失败状态。
+- 未登录访问 `/app/*` 必须跳 `/login`。
+- Token 失效后清理登录态并跳回 `/login`。
 - 页面不能出现明显重叠。
 - 按钮文字不能溢出。
 - 移动端宽度下核心内容可读。
@@ -489,7 +498,7 @@ cd ..
 | Phase 2A | 数据库配置、SQLAlchemy、Alembic 和 pgvector 扩展迁移通过 |
 | Phase 2B | 用户、课程、资料、知识点和知识切片核心表创建成功 |
 | Phase 2C | 人工智能导论课程可导入且重复执行不产生重复课程 |
-| Phase 3 | 前端学习空间壳子可打开，符合 `docs/UI_UX_DESIGN.md`，构建通过 |
+| Phase 3 | 前端学习空间壳子可打开，符合 `docs/UI_UX_DESIGN.md` 和 `docs/FRONTEND_ROUTING_DESIGN.md`，构建通过 |
 | Phase 4 | 注册登录闭环通过 |
 | Phase 5 | 上传资料能生成课程结构 |
 | Phase 6 | RAG 检索返回引用 |

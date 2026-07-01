@@ -21,6 +21,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 | [仓库规则](AGENTS.md) | 编码、文档同步、Git、密钥和完成定义 |
 | [产品设计](docs/superpowers/specs/2026-07-01-edunova-product-design.md) | EduNova 做什么 |
 | [前端与交互设计基线](docs/UI_UX_DESIGN.md) | Phase 3 前端设计方向、页面结构和验收标准 |
+| [前端路由与入口体验设计](docs/FRONTEND_ROUTING_DESIGN.md) | 登录、注册、Demo、首次进入和路由保护 |
 | [实施计划](docs/superpowers/plans/2026-07-01-edunova-mvp-implementation.md) | EduNova 怎么开发 |
 | [中文阅读版](docs/superpowers/plans/2026-07-01-edunova-mvp-implementation-中文阅读版.md) | 实施计划中文导读 |
 | [需求规格](docs/REQUIREMENTS.md) | 功能范围和验收标准 |
@@ -60,7 +61,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 当前 Phase 2 数据与课程基础建设已完成到内置人工智能导论课程包。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查、Docker Compose 草案、SQLAlchemy 数据库入口、Alembic 迁移基线、pgvector 扩展迁移、第一批核心业务表和人工智能导论内置课程包已经实现。
 
-Phase 3 进入前端前，已先补充 [前端与交互设计基线](docs/UI_UX_DESIGN.md)：EduNova 正式前端不采用固定左侧后台菜单和卡片堆，而采用“顶部轻导航 + 中央学习画布 + 底部 AI 命令栏 + Studio 输出区 + 可滑出证据层”的 AI 学习空间结构。前端和 AI/RAG 真实能力仍属于后续实现阶段。
+Phase 3 进入前端前，已先补充 [前端与交互设计基线](docs/UI_UX_DESIGN.md) 和 [前端路由与入口体验设计](docs/FRONTEND_ROUTING_DESIGN.md)：EduNova 正式前端不采用固定左侧后台菜单和卡片堆，而采用“顶部轻导航 + 中央学习画布 + 底部 AI 命令栏 + Studio 输出区 + 可滑出证据层”的 AI 学习空间结构；登录、注册、Demo 体验、首次进入引导和路由保护也已经作为 Phase 3A 基线锁定。前端和 AI/RAG 真实能力仍属于后续实现阶段。
 
 ## 本地后端验证
 

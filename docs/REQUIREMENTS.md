@@ -10,6 +10,7 @@
 
 - 产品设计：[superpowers/specs/2026-07-01-edunova-product-design.md](superpowers/specs/2026-07-01-edunova-product-design.md)
 - 前端与交互设计基线：[UI_UX_DESIGN.md](UI_UX_DESIGN.md)
+- 前端路由与入口体验设计：[FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)
 - 实施计划：[superpowers/plans/2026-07-01-edunova-mvp-implementation.md](superpowers/plans/2026-07-01-edunova-mvp-implementation.md)
 - 中文阅读版：[superpowers/plans/2026-07-01-edunova-mvp-implementation-中文阅读版.md](superpowers/plans/2026-07-01-edunova-mvp-implementation-中文阅读版.md)
 - 测试计划：[TEST_PLAN.md](TEST_PLAN.md)
@@ -110,6 +111,9 @@ EduNova 面向高校学生，构建一个 AI 个性化学习空间。它以“�
 - 登录成功后返回访问令牌。
 - 未登录用户无法访问学生 AI 学习空间。
 - 密码加密存储，不能明文保存。
+- 登录页必须包含普通登录、注册入口和 Demo 体验入口。
+- 注册成功后进入首次进入引导或 AI 学习空间。
+- 路由保护行为符合 [FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)。
 
 ### FR-002 AI 学习空间
 
@@ -118,6 +122,7 @@ EduNova 面向高校学生，构建一个 AI 个性化学习空间。它以“�
 验收标准：
 
 - 首屏采用顶部轻导航、中央学习画布、底部 AI 命令栏、Studio 输出入口和可滑出证据层。
+- 登录、注册、Demo、首次进入引导和受保护路由已经设计清楚，且不会退化为后台系统入口。
 - 学生可以通过 AI 命令栏发起上传资料、生成课程、生成资源、解释错题和规划复习等操作。
 - 学习画布展示当前课程、知识点状态、学习路径节点、上传资料流入和薄弱点提示。
 - 证据层展示引用来源、Agent 轨迹、ReviewAgent 结论和低依据提示。
@@ -302,10 +307,12 @@ EduNova 面向高校学生，构建一个 AI 个性化学习空间。它以“�
 验收标准：
 
 - 提供演示账号。
+- 登录页提供清晰 Demo 体验入口。
 - 可以重置演示数据。
 - 模型不可用时可使用明确标记的 fallback 数据。
 - fallback 内容不能伪装成真实实时生成。
 - 主演示流程可以稳定走通。
+- Demo 进入学习空间后必须显示演示标识，fallback 内容必须明确标注。
 
 ### FR-015 学习档案导出
 

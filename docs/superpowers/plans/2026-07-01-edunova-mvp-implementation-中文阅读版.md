@@ -151,6 +151,39 @@ FastAPI 后端接口
 - 使用顶部轻导航、中央学习画布、底部 AI 命令栏、Studio 输出区和可滑出的证据层。
 - 看起来像现代 AI 学习空间，不像普通后台管理系统。
 - 具体设计基线以 `docs/UI_UX_DESIGN.md` 为准。
+- 登录、注册、Demo、首次进入和路由保护以 `docs/FRONTEND_ROUTING_DESIGN.md` 为准。
+
+路由先按这套搭：
+
+```text
+/login          登录页
+/register       注册页
+/demo           Demo 入口
+/app            学习空间
+/app/library    资料库
+/app/studio     Studio
+/app/profile    对话画像
+/app/tutor      AI 辅导
+/app/practice   练习评估
+/app/reports    学习报告
+/app/settings   设置
+```
+
+登录页要有三条清晰路径：
+
+```text
+普通登录
+创建账号
+体验演示学生
+```
+
+首次进入时，如果还没有画像或课程上下文，就显示轻量引导，让用户选择：
+
+```text
+从人工智能导论开始
+上传自己的课程资料
+先和 EduNova 聊聊学习情况
+```
 
 ## Phase 4：登录和学习空间
 
@@ -162,6 +195,9 @@ FastAPI 后端接口
 - 密码加密保存。
 - 前端连接登录注册接口。
 - 未登录时不能访问学生页面。
+- 未登录访问 `/app/*` 会跳回登录页。
+- 登录成功后回到原目标页面或进入 `/app`。
+- Demo 入口可以初始化演示数据并进入学习空间。
 - 学习空间展示画像摘要、当前课程、知识画布、AI 命令建议、Studio 输出摘要、引用来源和 Agent 轨迹入口。
 
 验收标准：

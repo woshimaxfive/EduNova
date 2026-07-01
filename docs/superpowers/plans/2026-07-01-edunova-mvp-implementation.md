@@ -20,6 +20,7 @@
 - [ ] 所有核心数据绑定 `user_id` 与 `course_id`，避免多人部署后数据串用。
 - [ ] 第一版只做学生端主线和轻量系统设置；不建设完整教师端、家长端、班级运营后台、支付、真实视频生成、扫描 OCR、移动端。
 - [ ] Phase 3 前端必须遵守 `docs/UI_UX_DESIGN.md`：不采用固定左侧后台菜单和卡片堆，首屏使用学习画布、AI 命令栏、Studio 和证据层。
+- [ ] Phase 3 路由与入口必须遵守 `docs/FRONTEND_ROUTING_DESIGN.md`：登录、注册、Demo、首次进入和路由保护先搭稳。
 - [ ] 每个阶段提交一次小而清晰的 commit；提交前运行本阶段列出的检查命令。
 
 ## Target Repository Structure
@@ -399,6 +400,9 @@ cd ..
 ```text
 frontend/src/app/App.tsx
 frontend/src/app/routes.tsx
+frontend/src/app/routePaths.ts
+frontend/src/app/ProtectedRoute.tsx
+frontend/src/app/PublicOnlyRoute.tsx
 frontend/src/components/layout/LearningSpaceShell.tsx
 frontend/src/components/layout/TopNavigation.tsx
 frontend/src/components/command/CommandBar.tsx
@@ -409,6 +413,8 @@ frontend/src/components/evidence/EvidenceLayer.tsx
 frontend/src/components/evidence/AgentTimeline.tsx
 frontend/src/stores/authStore.ts
 frontend/src/api/client.ts
+frontend/src/features/demo/demoApi.ts
+frontend/src/features/onboarding/FirstRunGuide.tsx
 ```
 
 - [ ] Pages to create now:
@@ -416,6 +422,7 @@ frontend/src/api/client.ts
 ```text
 LoginPage.tsx
 RegisterPage.tsx
+DemoEntryPage.tsx
 LearningSpacePage.tsx
 LibraryPage.tsx
 StudioPage.tsx
@@ -441,6 +448,34 @@ No decorative gradient orbs
 No giant hero section
 No fixed left admin sidebar
 No KPI card wall
+```
+
+- [ ] Route baseline:
+
+```text
+/ -> RootRedirect
+/login -> LoginPage
+/register -> RegisterPage
+/demo -> DemoEntryPage
+/app -> LearningSpacePage
+/app/library -> LibraryPage
+/app/studio -> StudioPage
+/app/profile -> ProfilePage
+/app/tutor -> TutorPage
+/app/practice -> PracticePage
+/app/reports -> ReportsPage
+/app/settings -> SettingsPage
+* -> NotFoundPage
+```
+
+- [ ] Entry experience:
+
+```text
+Login page includes normal login, register link and demo experience entry.
+Register page collects nickname, email, password and password confirmation only.
+FirstRunGuide appears when user has no profile or selected course.
+ProtectedRoute redirects unauthenticated `/app/*` users to `/login`.
+PublicOnlyRoute redirects authenticated users away from `/login` and `/register`.
 ```
 
 - [ ] Verify:
@@ -538,7 +573,10 @@ git commit -m "feat(auth): add student authentication"
 ### Task 4.2: Frontend Auth and Learning Space
 
 - [ ] Connect Login and Register pages to backend.
-- [ ] Protect student workspace routes.
+- [ ] Protect student learning-space routes.
+- [ ] Implement route return after login for users redirected from `/app/*`.
+- [ ] Connect Demo entry to `/demo/status` and `/demo/reset`.
+- [ ] Show FirstRunGuide for new accounts without profile or selected course.
 - [ ] LearningSpace page shows:
 
 ```text

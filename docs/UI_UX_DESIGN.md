@@ -15,6 +15,8 @@ EduNova 前端第一版不是教育后台，也不是课程管理系统，而是
 
 首屏必须让人一眼看出这是一个“学生 AI 学习操作系统”，而不是普通“左侧菜单 + 指标卡片”的管理页面。
 
+登录、注册、Demo 体验、首次进入和路由保护的详细设计见 [FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)。本文档和路由入口设计共同构成 Phase 3A 前端开工基线。
+
 ## 2. 参考来源与取舍
 
 | 参考方向 | 借鉴点 | EduNova 取舍 |
@@ -241,6 +243,7 @@ Phase 3 前端设计验收标准：
 6. 组件具备空状态、加载状态、错误状态和低依据提示。
 7. 通过浏览器截图检查桌面和移动宽度布局。
 8. 前端构建和基础测试通过。
+9. 登录页、注册页、Demo 入口、首次进入引导和路由保护符合 [FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)。
 
 ## 13. Phase 3 首版实现范围
 
@@ -255,7 +258,8 @@ Phase 3A 只实现前端工程骨架和静态/半静态学习空间壳子：
 - AI 命令栏占位。
 - Studio Dock 占位。
 - 证据层占位。
-- 登录/注册/学习空间/资料库/Studio/报告/设置基础路由。
+- 登录/注册/Demo/学习空间/资料库/Studio/画像/辅导/练习/报告/设置基础路由。
+- 首次进入引导占位。
 - 设计状态和响应式基础。
 
 Phase 3A 不实现真实 AI、真实上传解析、真实资源生成和复杂图谱算法。这些在后续阶段接入。
@@ -265,6 +269,7 @@ Phase 3A 不实现真实 AI、真实上传解析、真实资源生成和复杂�
 如果前端体验发生变化，必须同步检查：
 
 - `README.md`
+- `docs/FRONTEND_ROUTING_DESIGN.md`
 - `docs/REQUIREMENTS.md`
 - `docs/ARCHITECTURE.md`
 - `docs/API.md`

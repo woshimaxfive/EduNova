@@ -6,7 +6,7 @@
 
 EduNova 的测试目标不是只证明代码能运行，而是证明系统满足赛题要求、适合比赛演示、能够后续开源部署，并且关键 AI 输出具有可解释性和可信度。
 
-本文档是全项目测试计划。除“当前自动化验证入口”一节外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前阶段已经全部实现。当前已验收 FastAPI 最小骨架、`/api/health`、pytest、ruff、编码检查、Docker Compose 配置、PostgreSQL、Redis、backend 三服务真实启动健康检查、SQLAlchemy 数据库入口、Alembic 迁移环境、pgvector 扩展迁移、第一批核心业务表迁移、人工智能导论内置课程包导入，以及 Phase 3A 前端工程骨架、路由保护、登录入口、学习空间壳子、前端 lint、Vitest 和生产构建。
+本文档是全项目测试计划。除“当前自动化验证入口”一节外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前阶段已经全部实现。当前已验收 FastAPI 最小骨架、`/api/health`、pytest、ruff、编码检查、Docker Compose 配置、PostgreSQL、Redis、backend 三服务真实启动健康检查、SQLAlchemy 数据库入口、Alembic 迁移环境、pgvector 扩展迁移、第一批核心业务表迁移、人工智能导论内置课程包导入，以及 Phase 3 前端工程骨架、路由保护、登录入口、学习空间壳子、上传建课状态轨道、学习空间状态面板、前端 API 合同模块、前端 lint、Vitest 和生产构建。
 
 测试需要覆盖以下问题：
 
@@ -498,7 +498,7 @@ cd ..
 | Phase 2A | 数据库配置、SQLAlchemy、Alembic 和 pgvector 扩展迁移通过 |
 | Phase 2B | 用户、课程、资料、知识点和知识切片核心表创建成功 |
 | Phase 2C | 人工智能导论课程可导入且重复执行不产生重复课程 |
-| Phase 3 | 前端学习空间壳子可打开，符合 `docs/UI_UX_DESIGN.md` 和 `docs/FRONTEND_ROUTING_DESIGN.md`，构建通过 |
+| Phase 3 | 前端学习空间壳子可打开，符合 `docs/UI_UX_DESIGN.md` 和 `docs/FRONTEND_ROUTING_DESIGN.md`，上传建课状态、低依据、错误恢复、Demo fallback 和 API 合同测试通过，构建通过 |
 | Phase 4 | 注册登录闭环通过 |
 | Phase 5 | 上传资料能生成课程结构 |
 | Phase 6 | RAG 检索返回引用 |
@@ -553,6 +553,9 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Alembic revision head 解析检查。
 - 前端 ESLint 检查。
 - 前端 Vitest 路由、登录态和学习空间壳子测试。
+- 前端 API 合同测试，覆盖 `/api/v1` 基础路径和关键业务模块路径常量。
+- 上传建课工作流状态测试，覆盖 chunking、failed 和必要状态面板。
+- 学习空间页面测试，覆盖上传建课状态区域、低依据提示和 Demo fallback 标记。
 - 前端 TypeScript 与 Vite 生产构建。
 - Docker Compose 配置校验。
 - 当前未接入真实后端认证、上传建课、AI/RAG、多智能体、练习评估和浏览器 E2E；这些检查将在后续阶段加入。

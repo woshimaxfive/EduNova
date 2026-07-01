@@ -499,13 +499,14 @@ Current Phase 3.1 implementation note:
 - `frontend/` has been created with React, TypeScript, Vite, Tailwind CSS v4, React Router, Zustand, React Query, Motion, Radix, React Flow, ECharts, Mermaid, Markmap, Vitest and ESLint.
 - `markmap-viewer` in the initial plan was corrected to the actual npm package `markmap-view`.
 - Routes, public/protected guards, local preview auth store, API client, login/register/Demo pages, learning-space shell, top navigation, learning canvas, command bar, Studio Dock, evidence layer, Agent timeline, first-run guide and placeholder student pages are implemented.
+- Phase 3D/3E added frontend API contract modules, upload-to-course workflow state, empty/loading/error/low-evidence/demo-fallback state panels and page-level tests.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
-- Real backend auth, `/dashboard/summary`, upload/RAG/AI data and browser E2E remain later-phase work.
+- Real backend auth, `/dashboard/summary`, upload/RAG/AI data and final browser E2E remain later-phase work.
 
 ### Task 3.2: Add Frontend Data Contracts
 
-- [ ] Create `frontend/src/types/api.ts` mirroring backend response shapes for user, course, material, profile, resource, path, task, report, agent log.
-- [ ] Create API modules:
+- [x] Create `frontend/src/types/api.ts` mirroring backend response shapes for user, course, material, profile, resource, path, task, report, agent log.
+- [x] Create API modules:
 
 ```text
 frontend/src/api/auth.ts
@@ -521,8 +522,10 @@ frontend/src/api/demo.ts
 frontend/src/api/settings.ts
 ```
 
-- [ ] Configure Axios to attach JWT and handle 401 by returning to login.
-- [ ] Add Vitest tests for auth store token persistence and API client base URL.
+- [x] Configure Axios to attach JWT and handle 401 by returning to login.
+- [x] Add Vitest tests for auth store token persistence, API client base URL and key API route constants.
+- [x] Add Phase 3D state tests for upload-to-course workflow status and fallback state panels.
+- [x] Connect the state layer to LearningSpace, Library and Studio surfaces without introducing a fixed left admin dashboard.
 - [ ] Commit:
 
 ```powershell

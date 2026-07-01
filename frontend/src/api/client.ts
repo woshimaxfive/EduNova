@@ -4,7 +4,7 @@ import { PATHS } from "../app/routePaths";
 import { useAuthStore } from "../features/auth/authStore";
 
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? "/api",
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? "/api/v1",
   timeout: 20000
 });
 

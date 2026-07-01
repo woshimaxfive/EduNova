@@ -5,6 +5,19 @@ export type ApiUser = {
   role: "student" | "admin";
 };
 
+export type ApiEnvelope<T> = {
+  data: T;
+  trace_id: string;
+};
+
+export type ApiListEnvelope<T> = {
+  data: T[];
+  page: number;
+  page_size: number;
+  total: number;
+  trace_id: string;
+};
+
 export type CourseSummary = {
   id: number;
   title: string;
@@ -18,8 +31,38 @@ export type MaterialSource = {
   id: number;
   title: string;
   type: "pdf" | "pptx" | "docx" | "markdown" | "txt" | "builtin";
-  parseStatus: "uploaded" | "parsing" | "chunking" | "embedding" | "completed" | "failed";
+  parseStatus: MaterialProgressStatus;
   coverageLabel: string;
+};
+
+export type MaterialProgressStatus =
+  | "uploaded"
+  | "parsing"
+  | "building_course"
+  | "chunking"
+  | "embedding"
+  | "path_generating"
+  | "completed"
+  | "failed";
+
+export type WorkflowStageStatus = "completed" | "active" | "queued" | "failed";
+
+export type WorkflowStage = {
+  id: MaterialProgressStatus;
+  label: string;
+  message: string;
+  status: WorkflowStageStatus;
+  progressPercent: number;
+  nextAction?: string;
+};
+
+export type WorkspacePanelKind = "empty" | "loading" | "error" | "low_evidence" | "demo_fallback";
+
+export type WorkspaceStatePanel = {
+  kind: WorkspacePanelKind;
+  title: string;
+  description: string;
+  actionLabel: string;
 };
 
 export type KnowledgeNode = {

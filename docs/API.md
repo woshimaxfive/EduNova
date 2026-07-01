@@ -20,6 +20,34 @@
 
 ## 2. 通用约定
 
+### 2.0 前端合同模块
+
+当前前端已按本文档拆出 `frontend/src/api/` 合同模块。Axios 默认基础路径为：
+
+```text
+/api/v1
+```
+
+前端模块只负责路径、请求参数和响应类型约定，不在模块内塞业务编排。当前已覆盖：
+
+```text
+auth
+dashboard
+profiles
+courses
+materials
+resources
+agents
+paths
+tutor
+practice
+reports
+demo
+settings
+```
+
+这些模块已有 Vitest 合同测试，用于防止路径和基础路径漂移。
+
 ### 2.1 认证方式
 
 登录成功后，前端在请求头中携带 JWT：

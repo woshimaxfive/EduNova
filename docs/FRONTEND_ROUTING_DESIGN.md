@@ -434,16 +434,18 @@ Phase 5 以后：
 
 ## 15. 当前实现状态
 
-Phase 3A 已在 `frontend/` 中实现：
+Phase 3 当前已在 `frontend/` 中实现：
 
 - `/` 根据本地登录态跳转 `/login` 或 `/app`。
 - `/login`、`/register`、`/demo` 已有页面。
 - `/app/*` 使用 `ProtectedRoute` 保护，未登录会回到 `/login`。
 - 已登录用户访问 `/login` 或 `/register` 会通过 `PublicOnlyRoute` 回到 `/app`。
 - `authStore` 使用 Zustand 保存本地预览 token 和用户信息。
-- API client 会自动附加 Bearer token，接口返回 401 时清理登录态；如果用户位于 `/app/*`，会返回 `/login`。
+- API client 默认基础路径为 `/api/v1`，会自动附加 Bearer token；接口返回 401 时清理登录态，如果用户位于 `/app/*`，会返回 `/login`。
+- `frontend/src/api/` 已按业务域拆分 auth、courses、materials、profiles、resources、paths、tutor、practice、reports、demo、settings 等合同模块，路径与 `docs/API.md` 对齐。
 - 登录、注册和 Demo 当前只用于前端预览，未接真实 `/auth/register`、`/auth/login`、`/auth/me` 和 `/demo/reset`。
 - `FirstRunGuide` 已作为学习空间中的轻量引导占位，真实触发条件需要 Phase 4 根据画像和课程上下文接入。
+- 学习空间已展示上传建课状态轨道和空状态、加载状态、错误恢复、低依据提示、Demo fallback 标记。
 
 当前前端测试覆盖：
 
@@ -451,3 +453,5 @@ Phase 3A 已在 `frontend/` 中实现：
 - 已登录访问 `/login` 会回到学习空间。
 - 登录态会写入本地存储。
 - 学习空间包含学习画布、Studio、证据层和 AI 命令栏。
+- 前端 API 合同模块默认使用 `/api/v1`，关键路径常量有 Vitest 覆盖。
+- 上传建课工作流状态和学习空间状态面板有 Vitest 覆盖。

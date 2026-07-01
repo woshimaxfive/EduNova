@@ -352,16 +352,19 @@ a {
   grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
   gap: 18px;
   align-items: start;
+  min-width: 0;
 }
 
 .workspace-main {
   display: grid;
   gap: 18px;
+  min-width: 0;
 }
 
 .learning-canvas,
 .first-run-panel,
 .studio-dock,
+.workflow-rail,
 .evidence-layer,
 .entry-panel,
 .state-panel,
@@ -372,10 +375,166 @@ a {
   box-shadow: var(--shadow);
   backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
+  min-width: 0;
 }
 
 .learning-canvas {
   padding: 22px;
+}
+
+.workflow-rail {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.74fr) minmax(0, 1.26fr);
+  gap: 18px;
+  padding: 18px;
+  min-width: 0;
+}
+
+.workflow-rail-copy,
+.section-heading-line > div {
+  min-width: 0;
+}
+
+.workflow-rail-copy h2 {
+  margin: 0;
+  font-size: clamp(1.18rem, 1.8vw, 1.55rem);
+  line-height: 1.2;
+}
+
+.workflow-rail-copy p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  line-height: 1.68;
+}
+
+.workflow-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.workflow-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 86px;
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+}
+
+.workflow-icon,
+.state-panel-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.workflow-step.completed .workflow-icon,
+.workflow-step.active .workflow-icon,
+.workspace-state-panel.low_evidence .state-panel-icon,
+.workspace-state-panel.demo_fallback .state-panel-icon {
+  color: var(--accent-strong);
+}
+
+.workflow-step.failed .workflow-icon,
+.workspace-state-panel.error .state-panel-icon {
+  color: var(--coral);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .workflow-step.active .workflow-icon {
+    animation: workflow-spin 1.2s linear infinite;
+  }
+}
+
+@keyframes workflow-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.workflow-step-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.workflow-step-body small {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-progress {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+}
+
+.workflow-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-strong);
+}
+
+.workflow-step.failed .workflow-progress span {
+  background: var(--coral);
+}
+
+.workspace-state-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(160px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.workspace-state-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-height: 112px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-strong) 82%, transparent);
+  min-width: 0;
+}
+
+.workspace-state-panel strong,
+.workspace-state-panel small {
+  display: block;
+}
+
+.workspace-state-panel small {
+  margin-top: 4px;
+  color: var(--text-muted);
+  line-height: 1.48;
+}
+
+.workspace-state-panel button {
+  grid-column: 1 / -1;
+  justify-self: start;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .canvas-header {
@@ -383,6 +542,11 @@ a {
   align-items: start;
   justify-content: space-between;
   gap: 18px;
+  min-width: 0;
+}
+
+.canvas-header > div {
+  min-width: 0;
 }
 
 .canvas-header h2,
@@ -572,6 +736,8 @@ a {
   margin-top: 16px;
   overflow-x: auto;
   padding-bottom: 2px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .studio-item {
@@ -909,6 +1075,7 @@ a {
   display: grid;
   grid-template-columns: repeat(5, minmax(130px, 1fr));
   gap: 10px;
+  margin-top: 14px;
 }
 
 .process-step {
@@ -1013,6 +1180,7 @@ a {
   .entry-panel,
   .state-panel,
   .page-workbench,
+  .workflow-rail,
   .command-bar,
   .preview-canvas,
   .preview-note {
@@ -1049,6 +1217,11 @@ a {
 
   .process-lane {
     grid-template-columns: repeat(3, minmax(130px, 1fr));
+  }
+
+  .workflow-rail,
+  .workspace-state-strip {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1109,7 +1282,7 @@ a {
   }
 
   .knowledge-node {
-    left: 50% !important;
+    left: 0 !important;
     position: relative;
     top: auto !important;
     width: 100%;
@@ -1177,5 +1350,14 @@ a {
 
   .process-lane {
     grid-template-columns: 1fr;
+  }
+
+  .workflow-step {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .workflow-progress {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 }

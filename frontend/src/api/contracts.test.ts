@@ -1,0 +1,96 @@
+import { describe, expect, it } from "vitest";
+
+import { AGENT_ENDPOINTS } from "./agents";
+import { AUTH_ENDPOINTS, login } from "./auth";
+import { apiClient } from "./client";
+import { COURSE_ENDPOINTS } from "./courses";
+import { DASHBOARD_ENDPOINTS } from "./dashboard";
+import { DEMO_ENDPOINTS } from "./demo";
+import { MATERIAL_ENDPOINTS } from "./materials";
+import { PATH_ENDPOINTS } from "./paths";
+import { PRACTICE_ENDPOINTS } from "./practice";
+import { PROFILE_ENDPOINTS } from "./profiles";
+import { REPORT_ENDPOINTS } from "./reports";
+import { RESOURCE_ENDPOINTS } from "./resources";
+import { SETTINGS_ENDPOINTS } from "./settings";
+import { TUTOR_ENDPOINTS } from "./tutor";
+
+describe("frontend API contracts", () => {
+  it("uses the documented API v1 base path", () => {
+    expect(apiClient.defaults.baseURL).toBe("/api/v1");
+  });
+
+  it("keeps route constants aligned with docs/API.md", () => {
+    expect(AUTH_ENDPOINTS.login).toBe("/auth/login");
+    expect(AUTH_ENDPOINTS.me).toBe("/auth/me");
+    expect(DASHBOARD_ENDPOINTS.summary).toBe("/dashboard/summary");
+    expect(PROFILE_ENDPOINTS.chat).toBe("/profiles/chat");
+    expect(COURSE_ENDPOINTS.fromMaterials).toBe("/courses/from-materials");
+    expect(COURSE_ENDPOINTS.masteryMap(7)).toBe("/courses/7/mastery-map");
+    expect(MATERIAL_ENDPOINTS.upload).toBe("/materials/upload");
+    expect(MATERIAL_ENDPOINTS.progress(3)).toBe("/materials/3/progress");
+    expect(RESOURCE_ENDPOINTS.generate).toBe("/resources/generate");
+    expect(AGENT_ENDPOINTS.trace("trace_demo")).toBe("/agents/traces/trace_demo");
+    expect(PATH_ENDPOINTS.updateTask(9)).toBe("/paths/tasks/9");
+    expect(TUTOR_ENDPOINTS.message(4)).toBe("/tutor/sessions/4/messages");
+    expect(PRACTICE_ENDPOINTS.answers(8)).toBe("/practice/sessions/8/answers");
+    expect(REPORT_ENDPOINTS.latest).toBe("/reports/latest");
+    expect(DEMO_ENDPOINTS.reset).toBe("/demo/reset");
+    expect(SETTINGS_ENDPOINTS.testModel).toBe("/settings/model/test");
+  });
+
+  it("posts login requests through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
+      });
+
+      return {
+        data: {
+          data: {
+            access_token: "jwt-token",
+            token_type: "bearer",
+            user: {
+              id: 1,
+              email: "demo@edunova.local",
+              display_name: "演示学生",
+              role: "student"
+            }
+          },
+          trace_id: "trace_test"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const response = await login({
+        email: "demo@edunova.local",
+        password: "Demo123456"
+      });
+
+      expect(calls).toEqual([
+        {
+          url: AUTH_ENDPOINTS.login,
+          method: "post",
+          data: {
+            email: "demo@edunova.local",
+            password: "Demo123456"
+          }
+        }
+      ]);
+      expect(response.data.access_token).toBe("jwt-token");
+      expect(response.data.user.display_name).toBe("演示学生");
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+});

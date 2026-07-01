@@ -4,7 +4,7 @@
 
 ## 1. 当前部署范围
 
-本文档记录 EduNova 的部署方式。当前已覆盖工程骨架、核心数据表迁移、人工智能导论内置课程包导入命令和 Phase 3A 前端本地开发/构建：
+本文档记录 EduNova 的部署方式。当前已覆盖工程骨架、核心数据表迁移、人工智能导论内置课程包导入命令和 Phase 3 前端本地开发/构建：
 
 - FastAPI backend。
 - PostgreSQL + pgvector。
@@ -15,6 +15,7 @@
 - 人工智能导论内置课程包导入命令。
 - React + TypeScript + Vite 前端本地开发服务器。
 - 前端 lint、Vitest 和生产构建命令。
+- 前端 API 合同模块，默认请求基础路径 `/api/v1`。
 
 以下能力还未接入当前部署：
 
@@ -163,7 +164,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 10. `frontend` 可执行 `pnpm lint`、`pnpm test` 和 `pnpm build`。
 11. 停止服务后本地 Git 状态不出现运行产物。
 
-当前本机已验证后端与数据库基础验收项，并验证第二条迁移可以 downgrade/upgrade 往返。Phase 3A 已验证前端 lint、Vitest 和 Vite build。
+当前本机已验证后端与数据库基础验收项，并验证第二条迁移可以 downgrade/upgrade 往返。Phase 3 已验证前端 lint、Vitest 和 Vite build，覆盖学习空间壳子、API 合同和上传建课状态模型。
 
 ## 8. 前端本地运行
 
@@ -191,7 +192,7 @@ pnpm dev
 http://127.0.0.1:5173
 ```
 
-当前前端使用本地预览会话和静态演示数据，不要求后端认证接口已经可用。
+当前前端使用本地预览会话和静态演示数据，不要求后端认证接口已经可用。前端业务接口合同默认指向 `/api/v1`，真实联调时需要后端按 `docs/API.md` 暴露对应路由。
 
 ## 9. 后续部署计划
 

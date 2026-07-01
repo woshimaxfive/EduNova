@@ -2,11 +2,17 @@ import { CommandBar } from "../components/command/CommandBar";
 import { EvidenceLayer } from "../components/evidence/EvidenceLayer";
 import { LearningCanvas } from "../components/canvas/LearningCanvas";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
+import { WorkflowStatusRail } from "../components/states/WorkflowStatusRail";
+import { WorkspaceStateStrip } from "../components/states/WorkspaceStateStrip";
 import { StudioDock } from "../components/studio/StudioDock";
 import { demoLearningSpace } from "../data/demoLearningSpace";
 import { FirstRunGuide } from "../features/onboarding/FirstRunGuide";
+import { buildMaterialLifecycle, getWorkspaceStatePanels } from "../features/workspace/workflowState";
 
 export function LearningSpacePage() {
+  const materialLifecycle = buildMaterialLifecycle("embedding", 74);
+  const workspaceStatePanels = getWorkspaceStatePanels();
+
   return (
     <LearningSpaceShell>
       <section className="workspace-hero">
@@ -23,6 +29,12 @@ export function LearningSpacePage() {
       <div className="workspace-grid">
         <div className="workspace-main">
           <LearningCanvas snapshot={demoLearningSpace} />
+          <WorkflowStatusRail
+            title="资料正在变成课程"
+            description="上传、解析、生成课程、切片、索引和路径规划都在同一条进度轨道中呈现。"
+            stages={materialLifecycle}
+          />
+          <WorkspaceStateStrip panels={workspaceStatePanels} />
           <FirstRunGuide />
           <StudioDock outputs={demoLearningSpace.studioOutputs} />
         </div>

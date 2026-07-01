@@ -1,6 +1,7 @@
 .superpowers/
 .agents/
 .codex/
+.codegraph/
 .worktrees/
 
 # Python

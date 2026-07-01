@@ -33,7 +33,7 @@ EduNova 的设计参考赛题原文和多个开源项目，但不直接照搬代
 
 | 参考方向 | 借鉴点 | EduNova 的取舍 |
 | --- | --- | --- |
-| ChatGPT | 对话式主入口、工作区协作 | 底部 AI 命令栏成为主操作入口 |
+| ChatGPT | 对话式主入口、工作区协作 | AI 输入区成为主操作入口，可位于中心或底部 |
 | NotebookLM | 资料源、AI 问答、Studio 输出 | 借鉴 Sources + Studio 结构，改造成课程学习闭环 |
 | Apple / Google / Xiaomi | 内容优先、轻材质、表达性动效、流动空间感 | 华丽但克制，避免满屏光效和装饰性粒子 |
 | Mobbin / Figma 模板 | 真实产品流、教育和 AI 交互细节 | 只借鉴结构和流程，不复制商业模板视觉与素材 |
@@ -54,7 +54,7 @@ EduNova 的差异化目标：
 
 | 模块 | 第一版能力 |
 | --- | --- |
-| AI 学习空间 | 展示画像摘要、当前课程、知识画布、今日任务、最近资源、学习进度、Studio 输出和证据层 |
+| AI 学习空间 | 首页以 AI 对话、主页历史、资料库和最近课程为主；课程空间再展示画像摘要、知识画布、今日任务、学习进度、Studio 输出和证据层 |
 | 对话式画像 | 通过自然语言问答构建 6-8 维画像，并支持随学习记录更新 |
 | 知识库/RAG | 内置人工智能导论课程知识库，并支持用户上传资料入库 |
 | 上传资料建课 | 上传 PPTX/PDF/DOCX/Markdown/TXT，解析并生成个人课程 |
@@ -89,7 +89,7 @@ EduNova 的差异化目标：
 | 教师布置任务 | `learning_tasks` 保留 `created_by`、`source_type` |
 | 管理后台 | 保留知识库导入、Agent 日志、系统配置的轻量入口 |
 | 家长端 | 评估报告独立存储，后续可加只读授权关系 |
-| 多课程扩展 | 第一版主线是人工智能导论，但所有资源绑定 `course_id` |
+| 多课程扩展 | 第一版主线是人工智能导论；课程内资源绑定 `course_id`，用户资料库资料先绑定 `user_id`，再加入一个或多个课程 |
 
 产品体验上学生端优先；工程结构上保留多用户、多课程、角色权限、日志审计和资源归属。
 
@@ -235,14 +235,15 @@ ReviewAgent 审核事实性、安全性、完整性
 
 正式前端是 AI 学习空间，不是普通后台页面。Phase 3 详细设计基线见 `docs/UI_UX_DESIGN.md`，路由、登录注册、Demo 入口和首次进入流程见 `docs/FRONTEND_ROUTING_DESIGN.md`。
 
-主界面结构：
+2026-07-01 Phase 3 重新收束后，主界面结构改为：
 
 ```text
 顶部轻导航
-中央学习画布
-底部 AI 命令栏
-Studio 输出 Dock
-右侧可滑出证据层
+中央 AI 学习对话入口
+左侧或收起态主页历史
+右侧或抽屉式资料库轻入口
+下方最近课程 / 最近学习空间
+回答下方可展开引用、学习路径建议和 Agent 过程
 ```
 
 明确不采用：
@@ -260,9 +261,10 @@ Studio 输出 Dock
 | 页面或区域 | 作用 |
 | --- | --- |
 | 登录/注册 | 学生账号进入系统 |
-| 学习空间 | 总览画像、课程、知识点、任务、路径、资料源和薄弱点 |
-| AI 命令栏 | 通过自然语言触发上传建课、资源生成、错题解释、复习规划和报告整理 |
-| 资料库 | 管理内置课程和用户上传资料，展示解析状态和引用覆盖 |
+| 学习主页 | 总 AI 学习入口，承载主页历史、资料选择、上传、生成课程和最近课程 |
+| 课程空间 | 承载某一课程内的对话、课程资料、学习画布、路径、练习、资源和证据层 |
+| AI 输入区 | 通过自然语言触发上传建课、资源生成、错题解释、复习规划和报告整理 |
+| 资料库 | 管理独立资料，支持作为主页对话参考、加入课程或生成课程 |
 | Studio | 生成和查看讲解、练习、思维导图、复盘报告、PPT 大纲等资源 |
 | 证据层 | 展示引用来源、Agent 轨迹、ReviewAgent 结论、低依据提示和质量评分 |
 | 对话式画像 | 和 EduNova 对话，生成或更新学习画像 |
@@ -298,7 +300,9 @@ Demo 体验入口清晰可见
 | users | 用户账号，第一版主要是学生 |
 | courses | 课程，包含内置课程和上传资料生成的课程 |
 | course_enrollments | 用户与课程关系，第一版用于个人课程，后续支持班级 |
-| course_materials | 用户上传的 PPT/PDF/DOCX/TXT 等资料 |
+| materials | 用户独立资料库中的 PPT/PDF/DOCX/TXT 等资料，后续新增 |
+| course_materials | 当前 Phase 2 已落地的课程资料表，后续逐步迁移 |
+| course_material_links | 课程与独立资料的关联表，支持同一资料加入多个课程，后续新增 |
 | knowledge_chunks | 文档切片和向量索引，用于 RAG |
 | student_profiles | 学习画像 |
 | profile_events | 画像变更日志 |
@@ -319,7 +323,10 @@ Demo 体验入口清晰可见
 users.role
 courses.owner_id
 courses.visibility
-course_materials.course_id
+materials.user_id
+course_material_links.course_id
+course_material_links.material_id
+course_materials.course_id  当前 Phase 2 课程资料表字段，后续由 course_material_links 承担多课程关联
 knowledge_chunks.course_id
 generated_resources.course_id
 generated_resources.source_material_ids
@@ -343,7 +350,7 @@ assessment_reports.course_id
 7. 学习节奏
 8. 动机与兴趣
 
-所有数据都绑定 `user_id`，所有课程内容都绑定 `course_id`，所有 AI 输出都能追溯来源，所有 Agent 执行都留下日志。
+所有用户私有数据都绑定 `user_id`，所有课程内内容都绑定 `course_id`，主页对话和独立资料库可以先不绑定课程；所有 AI 输出都能追溯来源，所有 Agent 执行都留下日志。
 
 ## 9. 上传资料自动建课
 
@@ -916,7 +923,7 @@ Agent 协作轨迹
 | UI 来不及 | 优先学生 AI 学习空间主链路 |
 | 答辩压力大 | 同步维护 `docs/DEFENSE_QA.md` |
 | API 成本高 | 用户级 Key、系统 Key 限额、Redis 限流 |
-| 数据串用 | 所有数据按 `user_id` 和 `course_id` 隔离 |
+| 数据串用 | 用户私有数据按 `user_id` 隔离，课程内数据按 `user_id` 和 `course_id` 隔离 |
 
 ## 15. 设计结论
 
@@ -931,4 +938,4 @@ EduNova 第一版的正式基线是：
 + 可部署、可开源、可答辩解释
 ```
 
-当前实施计划、工程骨架、核心课程数据和 Phase 3 前端学习空间收口已经推进完成。后续继续按实施计划进入真实注册登录、上传建课、RAG、多智能体资源生成和学习闭环。
+当前实施计划、工程骨架、核心课程数据和 Phase 3 前端候选壳子已经推进完成。2026-07-01 后首页方向重定向为 AI 对话主页、独立资料库和课程空间，后续继续按该方向进入真实注册登录、上传建课、RAG、多智能体资源生成和学习闭环。

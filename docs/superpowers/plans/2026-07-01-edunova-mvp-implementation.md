@@ -17,9 +17,9 @@
 - [ ] 不复制参考项目代码；只借鉴产品结构、功能边界和答辩表达，并在 `docs/OPEN_SOURCE_NOTICE.md` 标注参考项目名称、来源、协议情况。
 - [ ] 每天结束必须有可运行版本；若 AI 服务不可用，Demo Mode 使用明确标记的 fallback 数据保证演示不中断。
 - [ ] 每个 AI 生成结果必须绑定 `trace_id`、`citation_refs`、`review_status`、`confidence_score` 中的关键字段。
-- [ ] 所有核心数据绑定 `user_id` 与 `course_id`，避免多人部署后数据串用。
+- [ ] 所有用户私有数据绑定 `user_id`；课程内数据绑定 `user_id` 与 `course_id`；主页会话和独立资料库允许先不绑定课程，避免多人部署后数据串用。
 - [ ] 第一版只做学生端主线和轻量系统设置；不建设完整教师端、家长端、班级运营后台、支付、真实视频生成、扫描 OCR、移动端。
-- [ ] Phase 3 前端必须遵守 `docs/UI_UX_DESIGN.md`：不采用固定左侧后台菜单和卡片堆，首屏使用学习画布、AI 命令栏、Studio 和证据层。
+- [ ] Phase 3 前端必须遵守 `docs/UI_UX_DESIGN.md`：不采用固定左侧后台菜单和卡片堆，首页重定向为 AI 对话主页、独立资料库轻入口、最近课程和课程空间入口。
 - [ ] Phase 3 路由与入口必须遵守 `docs/FRONTEND_ROUTING_DESIGN.md`：登录、注册、Demo、首次进入和路由保护先搭稳。
 - [ ] 每个阶段提交一次小而清晰的 commit；提交前运行本阶段列出的检查命令。
 
@@ -299,7 +299,9 @@ export.py
 users: id, email, hashed_password, display_name, role, created_at, updated_at
 courses: id, owner_id, title, description, subject, source_type, visibility, status, created_at
 course_enrollments: id, user_id, course_id, role, progress_percent, created_at
-course_materials: id, user_id, course_id, filename, content_type, storage_path, parse_status, extracted_text, metadata_json, created_at
+materials: id, user_id, filename, content_type, storage_path, parse_status, extracted_text, metadata_json, created_at
+course_material_links: id, course_id, material_id, added_by, created_at
+course_materials: id, user_id, course_id, filename, content_type, storage_path, parse_status, extracted_text, metadata_json, created_at  # 当前 Phase 2 课程资料表，后续迁移到 materials + course_material_links
 knowledge_points: id, course_id, title, summary, chapter, order_index, difficulty, prerequisites_json
 knowledge_chunks: id, course_id, material_id, knowledge_point_id, content, page_number, section_title, embedding, metadata_json
 student_profiles: id, user_id, profile_json, version, updated_at
@@ -313,7 +315,7 @@ practice_sessions: id, user_id, course_id, title, status, score, started_at, fin
 practice_answers: id, session_id, user_id, knowledge_point_id, question_json, answer_text, is_correct, score, feedback, created_at
 assessment_reports: id, user_id, course_id, report_json, mastery_json, weakness_json, evidence_refs, created_at
 weakness_review_queue: id, user_id, course_id, knowledge_point_id, weakness_reason, priority, recommended_resource_ids, next_review_at, status
-chat_sessions: id, user_id, course_id, title, mode, created_at
+chat_sessions: id, user_id, scope, course_id, title, mode, created_at
 chat_messages: id, session_id, user_id, role, content, citation_refs, trace_id, created_at
 model_settings: id, user_id, provider, base_url, encrypted_api_key, chat_model, embedding_model, is_default, created_at
 learning_export_jobs: id, user_id, course_id, status, export_type, output_path, created_at, finished_at
@@ -435,12 +437,13 @@ SettingsPage.tsx
 - [x] Design direction:
 
 ```text
-AI learning operating system for students
+AI conversation-first learning home for students
 Top lightweight navigation
-Central learning canvas
-Bottom AI command bar
-NotebookLM-like Studio dock
-Slide-out evidence layer for citations and Agent traces
+Central AI learning input
+Home conversation history
+Independent material library entry
+Recent courses / recent learning spaces
+Course spaces for learning canvas, Studio, citations and Agent traces
 Quiet material depth with restrained motion
 No marketing landing page
 No decorative gradient orbs
@@ -458,6 +461,7 @@ No KPI card wall
 /demo -> DemoEntryPage
 /app -> LearningSpacePage
 /app/library -> LibraryPage
+/app/courses/:courseId -> CourseSpacePage
 /app/studio -> StudioPage
 /app/profile -> ProfilePage
 /app/tutor -> TutorPage
@@ -472,7 +476,7 @@ No KPI card wall
 ```text
 Login page includes normal login, register link and demo experience entry.
 Register page collects nickname, email, password and password confirmation only.
-FirstRunGuide appears when user has no profile or selected course.
+FirstRunGuide appears when user has no home history, uploaded material, recent course or profile.
 ProtectedRoute redirects unauthenticated `/app/*` users to `/login`.
 PublicOnlyRoute redirects authenticated users away from `/login` and `/register`.
 ```
@@ -500,7 +504,8 @@ Current Phase 3.1 implementation note:
 - `markmap-viewer` in the initial plan was corrected to the actual npm package `markmap-view`.
 - Routes, public/protected guards, local preview auth store, API client, login/register/Demo pages, learning-space shell, top navigation, learning canvas, command bar, Studio Dock, evidence layer, Agent timeline, first-run guide and placeholder student pages are implemented.
 - Phase 3D/3E added frontend API contract modules, upload-to-course workflow state, empty/loading/error/low-evidence/demo-fallback state panels and page-level tests.
-- Phase 3 closure redesign applies the skill-based direction `Productivity Tool + AI-Native UI + Knowledge Graph + Process Map`, replacing the five-card status feel with a learning operating system canvas, process rail, status signals and dark Studio Dock.
+- Phase 3 closure redesign first produced the skill-based direction `Productivity Tool + AI-Native UI + Knowledge Graph + Process Map`, replacing the five-card status feel with a learning operating system canvas, process rail, status signals and dark Studio Dock.
+- 2026-07-01 later redirected the homepage target to an AI conversation-first learning home with independent material library and course spaces; the existing learning canvas, Studio Dock and evidence layer should be reused inside course space or answer expansion instead of dominating `/app`.
 - Browser visual checks covered `/app` at 1440x900, 1366x768 and 390x844 with no horizontal overflow and fixed bottom command bar positioning.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
 - Real backend auth, `/dashboard/summary`, upload/RAG/AI data and final browser E2E remain later-phase work.
@@ -660,7 +665,7 @@ GET /materials/{material_id}
 GET /materials/{material_id}/progress
 ```
 
-- [ ] Store uploaded files under `storage/uploads/{user_id}/{course_id}/` and keep `storage/` ignored by Git.
+- [ ] Store uploaded files under `storage/uploads/{user_id}/library/`; course-derived chunks and generated outputs use course-scoped paths after material is linked or used to generate a course. Keep `storage/` ignored by Git.
 - [ ] Progress states:
 
 ```text
@@ -710,8 +715,8 @@ exam-oriented points
 ```
 
 - [ ] Use LLM when configured; use deterministic fallback extractor when Demo Mode is enabled or provider health check fails.
-- [ ] Add `POST /courses/from-materials` and `GET /courses/{course_id}/overview`.
-- [ ] Library upload flow shows progress steps and generated course overview.
+- [ ] Add `POST /courses/from-materials`、`GET /courses/{course_id}/overview` and `POST /courses/{course_id}/materials`.
+- [ ] Library upload flow shows independent material progress, optional course linking and generated course overview.
 - [ ] Tests cover fallback extractor and API response.
 - [ ] Commit:
 

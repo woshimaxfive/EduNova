@@ -218,19 +218,17 @@ Authorization: Bearer <token>
 
 ### GET `/dashboard/summary`
 
-用途：获取学习空间首屏总览。该接口服务 Phase 3 的学习画布、AI 命令栏推荐、Studio 输出区和证据层入口。
+用途：获取 AI 学习主页首屏总览。Phase 3 重定向后，该接口服务主页历史对话、大输入框建议、资料库轻入口和最近课程，不再默认绑定某一门课程。
 
 响应包含：
 
 - 画像摘要。
-- 当前课程。
-- 今日任务。
-- 最近资源。
-- 薄弱点。
-- Agent 轨迹。
-- 学习画布节点。
-- 资料源簇。
-- Studio 输出摘要。
+- 主页最近对话。
+- 最近课程或最近学习空间。
+- 资料库摘要。
+- 输入框快捷建议。
+- 可选的当前上下文资料。
+- 可选的最近资源。
 - AI 命令建议。
 - 证据层摘要。
 
@@ -243,26 +241,17 @@ Authorization: Bearer <token>
       "knowledge_foundation": "机器学习入门",
       "learning_goal": "期末前掌握神经网络"
     },
-    "current_course": {
-      "id": 1,
-      "title": "人工智能导论",
-      "progress_percent": 35
+    "recent_conversations": [],
+    "recent_courses": [],
+    "material_library_summary": {
+      "material_count": 2,
+      "unassigned_count": 1
     },
-    "today_tasks": [],
     "recent_resources": [],
-    "weak_points": [],
-    "latest_agent_logs": [],
-    "learning_canvas": {
-      "focus_title": "反向传播与链式法则",
-      "nodes": [],
-      "edges": []
-    },
-    "source_cluster": [],
-    "studio_outputs": [],
     "command_suggestions": [
-      "根据当前薄弱点生成 7 天复习计划",
-      "解释我为什么链式法则总错",
-      "基于课程资料生成 10 道练习题"
+      "上传资料，开始和你的课程对话",
+      "选择资料并生成课程",
+      "总结我最近上传的资料"
     ],
     "evidence_summary": {
       "citation_count": 0,
@@ -358,13 +347,13 @@ Authorization: Bearer <token>
 
 ### POST `/materials/upload`
 
-用途：上传课程资料。
+用途：上传资料到个人资料库。资料可以暂不属于任何课程，后续可作为主页对话参考、加入已有课程或用于生成新课程。
 
 请求类型：`multipart/form-data`
 
 字段：
 
-- `course_id`：可选，不传时可创建新课程。
+- `course_id`：可选。传入时表示上传后同时加入该课程；不传时仅进入个人资料库。
 - `file`：上传文件。
 
 支持类型：
@@ -381,7 +370,7 @@ Authorization: Bearer <token>
 {
   "data": {
     "material_id": 1,
-    "course_id": 1,
+    "course_id": null,
     "filename": "ai-notes.md",
     "parse_status": "uploaded"
   },
@@ -392,6 +381,27 @@ Authorization: Bearer <token>
 ### GET `/materials/{material_id}`
 
 用途：查看资料详情。
+
+### GET `/materials`
+
+用途：查看个人资料库。支持筛选未归属课程资料、某课程已关联资料、最近上传资料。
+
+建议查询参数：
+
+- `course_id`：可选，传入时查看某课程资料。
+- `unassigned`：可选，查看未加入任何课程的资料。
+
+### POST `/courses/{course_id}/materials`
+
+用途：把资料库中的一个或多个资料加入已有课程。实现时应优先使用关联关系，不复制原文件。
+
+请求：
+
+```json
+{
+  "material_ids": [1, 2]
+}
+```
 
 ### GET `/materials/{material_id}/progress`
 
@@ -412,7 +422,7 @@ Authorization: Bearer <token>
 
 ### POST `/courses/from-materials`
 
-用途：根据一个或多个资料生成课程。
+用途：根据资料库中的一个或多个资料生成课程。
 
 请求：
 
@@ -592,21 +602,39 @@ Authorization: Bearer <token>
 
 ### POST `/tutor/sessions`
 
-用途：创建辅导会话。
+用途：创建 AI 学习会话。Phase 3 重定向后，会话分为主页会话和课程会话。
 
 请求：
 
 ```json
 {
+  "scope": "course",
   "course_id": 1,
   "mode": "socratic",
   "title": "反向传播答疑"
 }
 ```
 
+主页会话示例：
+
+```json
+{
+  "scope": "home",
+  "course_id": null,
+  "mode": "chat",
+  "title": "帮我整理这份期末资料"
+}
+```
+
+规则：
+
+- `scope=home` 时 `course_id` 可以为空。
+- `scope=course` 时必须传 `course_id`。
+- 主页会话可以后续移入课程，移入后应从主页历史中消失或标记为已归档。
+
 ### GET `/tutor/sessions`
 
-用途：查看会话列表。
+用途：查看会话列表。支持按 `scope` 和 `course_id` 筛选主页历史或课程内历史。
 
 ### GET `/tutor/sessions/{session_id}`
 

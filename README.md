@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前已完成前期基础建设、后端最小骨架、核心课程数据基础和 Phase 3 前端学习空间收口。前端已从“静态壳子”推进到具备学习操作系统画布、AI 命令栏、Studio Dock、证据层、上传建课进度轨道、状态信号层和 API 合同模块的可扩展基础。核心原则仍然是先把主链路地基打稳，再逐步接入真实注册登录、上传建课、RAG、多智能体和学习评估。
+当前已完成前期基础建设、后端最小骨架、核心课程数据基础和 Phase 3 前端候选壳子。前端已从“静态壳子”推进到具备学习画布、AI 命令栏、Studio Dock、证据层、上传建课进度轨道、状态信号层和 API 合同模块的可扩展基础。2026-07-01 后首页方向已重定向为 AI 对话主页、独立资料库和课程空间，核心原则仍然是先把主链路地基打稳，再逐步接入真实注册登录、上传建课、RAG、多智能体和学习评估。
 
 ## 文档入口
 
@@ -61,9 +61,9 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 当前 Phase 2 数据与课程基础建设已完成到内置人工智能导论课程包。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查、Docker Compose 草案、SQLAlchemy 数据库入口、Alembic 迁移基线、pgvector 扩展迁移、第一批核心业务表和人工智能导论内置课程包已经实现。
 
-Phase 3 前端学习空间已经收口：`frontend/` 使用 React、TypeScript、Vite、Tailwind CSS v4、React Router、Zustand、React Query、Motion、Radix、React Flow、ECharts、Mermaid、Markmap、Vitest 和 ESLint。当前已实现登录页、注册页、Demo 入口、受保护应用路由、顶部轻导航、学习操作系统画布、底部 AI 命令栏、Studio 输出区、证据层、Agent 轨迹、首次进入引导和多个学生端页面占位。
+Phase 3 前端候选壳子已经收口：`frontend/` 使用 React、TypeScript、Vite、Tailwind CSS v4、React Router、Zustand、React Query、Motion、Radix、React Flow、ECharts、Mermaid、Markmap、Vitest 和 ESLint。当前已实现登录页、注册页、Demo 入口、受保护应用路由、顶部轻导航、学习画布、底部 AI 命令栏、Studio 输出区、证据层、Agent 轨迹、首次进入引导和多个学生端页面占位。
 
-本轮补齐了前端 API 合同模块、学习空间状态设计和 Phase 3 收口重设计：`frontend/src/api/` 已按 `docs/API.md` 拆出 auth、courses、materials、profiles、resources、paths、tutor、practice、reports、demo、settings 等模块，Axios 默认对齐 `/api/v1`；学习空间和资料库已展示上传资料变成课程的阶段进度、空状态、加载状态、错误恢复、低依据提示和 Demo 兜底标记。收口版已从五张并排状态卡片调整为“学习操作系统画布 + 流程轨道 + 状态信号层”，避免普通后台和卡片墙观感。当前登录、注册和 Demo 仍使用本地预览状态，尚未接入真实后端认证；AI/RAG、真实上传资料、资源生成、报告和多智能体真实任务仍属于后续 Phase 4 以后实现阶段。
+本轮补齐了前端 API 合同模块、学习空间状态设计和 Phase 3 收口重设计：`frontend/src/api/` 已按 `docs/API.md` 拆出 auth、courses、materials、profiles、resources、paths、tutor、practice、reports、demo、settings 等模块，Axios 默认对齐 `/api/v1`；学习空间和资料库已展示上传资料变成课程的阶段进度、空状态、加载状态、错误恢复、低依据提示和 Demo 兜底标记。上一版收口候选已从五张并排状态卡片调整为“学习操作系统画布 + 流程轨道 + 状态信号层”，可作为课程空间素材；下一步 `/app` 首页按 AI 对话主页、主页历史、资料库轻入口、最近课程和生成课程浮层重做。当前登录、注册和 Demo 仍使用本地预览状态，尚未接入真实后端认证；AI/RAG、真实上传资料、资源生成、报告和多智能体真实任务仍属于后续 Phase 4 以后实现阶段。
 
 ## 本地后端验证
 

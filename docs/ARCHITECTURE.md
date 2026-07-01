@@ -48,7 +48,7 @@ Nginx
 
 前端使用 React + TypeScript + Vite，定位为学生 AI 学习空间。具体设计基线见 [UI_UX_DESIGN.md](UI_UX_DESIGN.md)，入口与路由设计见 [FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)。
 
-第一版前端不采用固定左侧后台菜单，不把首屏做成卡片堆，而采用“轻导航 + 学习画布 + AI 命令栏 + Studio + 证据层”的结构。
+第一版前端不采用固定左侧后台菜单，不把首屏做成卡片堆。2026-07-01 重定向后，首页采用“总 AI 学习对话入口 + 独立资料库轻入口 + 最近课程”的结构；学习画布、路径、Studio 和证据层进入课程空间或 AI 回答后的可展开区域。
 
 目录规划：
 
@@ -64,14 +64,14 @@ frontend/src/
 └── visualizations/   学习画布、图谱、雷达图和思维导图
 ```
 
-首屏结构：
+首页首屏结构：
 
 ```text
-顶部轻导航
-中央学习画布
-底部 AI 命令栏
-Studio 输出 Dock
-右侧可滑出证据层
+左侧或折叠区：主页历史对话
+中央：大输入框，支持上传资料、选择资料、生成课程
+右侧或抽屉：资料库轻入口
+下方：最近课程 / 最近学习空间
+回答下方：引用来源、学习路径建议、Agent 过程，可展开
 ```
 
 核心前端模块：
@@ -79,9 +79,11 @@ Studio 输出 Dock
 | 模块 | 作用 |
 | --- | --- |
 | `TopNavigation` | 课程切换、学习空间、资料库、Studio、报告、上传、搜索和用户入口 |
-| `LearningCanvas` | 展示课程焦点、知识点网络、学习路径节点、资料流入和薄弱点 |
-| `CommandBar` | 自然语言主入口，触发上传建课、资源生成、AI 辅导、复习规划和报告 |
-| `SourceCluster` | 展示资料源、解析状态和引用覆盖度 |
+| `HomeChat` | 总 AI 学习主页，对话可以独立存在，也可以移入某一课程 |
+| `CommandBar` | 自然语言主入口，触发上传资料、选择资料、生成课程、基于资料问答和保存回答 |
+| `MaterialContextPanel` | 轻量资料上下文，连接独立资料库、主页对话和课程资料 |
+| `LearningCanvas` | 课程内可视化模块，展示课程焦点、知识点网络、学习路径节点、资料流入和薄弱点 |
+| `SourceCluster` | 课程内展示资料源、解析状态和引用覆盖度 |
 | `StudioDock` | 展示讲解、练习、思维导图、复盘报告、PPT 大纲等生成产物 |
 | `EvidenceLayer` | 展示引用来源、Agent 轨迹、ReviewAgent 结果、低依据提示和质量评分 |
 | `AgentTimeline` | 展示多智能体步骤、耗时、状态和失败节点 |
@@ -92,8 +94,9 @@ Studio 输出 Dock
 | 页面 | 作用 |
 | --- | --- |
 | 登录/注册 | 进入系统 |
-| 学习空间 | 第一屏主体验，承载学习画布、AI 命令栏、Studio 和证据层 |
-| 资料库 | 查看内置课程、上传资料、解析状态和资料来源 |
+| 学习主页 | 第一屏主体验，承载主页历史对话、大输入框、资料选择和最近课程 |
+| 资料库 | 管理独立资料、上传资料、选择资料、加入课程和生成课程 |
+| 课程空间 | 后续新增，承载课程内历史对话、课程资料、学习画布、Studio、证据层和学习闭环 |
 | Studio | 查看和管理生成的学习资源 |
 | 报告 | 查看画像、掌握度、薄弱点、学习报告和导出入口 |
 | 设置 | 配置模型 Provider、个人信息和导出数据 |
@@ -103,7 +106,7 @@ Studio 输出 Dock
 | 路由组 | 路径 |
 | --- | --- |
 | 公开入口 | `/`、`/login`、`/register`、`/demo` |
-| 应用区 | `/app`、`/app/library`、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` |
+| 应用区 | `/app`、`/app/library`、`/app/courses/:courseId`、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` |
 | 兜底 | `*` |
 
 路由保护：
@@ -142,13 +145,13 @@ Studio 输出 Dock
 | `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、profiles、resources、agents、paths、tutor、practice、reports、demo、settings |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和学习空间状态面板的纯状态模型 |
 | `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、Studio、画像、辅导、练习、报告、设置和 404 |
-| `frontend/src/components` | 顶部轻导航、学习空间壳子、学习画布、资料源簇、AI 命令栏、Studio Dock、证据层、Agent 轨迹、上传建课状态轨道和学习空间状态条 |
+| `frontend/src/components` | 顶部轻导航、学习空间壳子、学习画布、资料源簇、AI 命令栏、Studio Dock、证据层、Agent 轨迹、上传建课状态轨道和学习空间状态条；后续需补 AI 对话主页、主页历史、资料库轻入口、最近课程和生成课程浮层 |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、深色模式、reduced motion 和 reduced transparency 基础 |
 
 当前限制：
 
 - Phase 3A 登录、注册和 Demo 只用于本地预览，不代表后端认证已经完成。
-- 学习空间使用 `demoLearningSpace` 静态数据，后续由 `/dashboard/summary` 和课程相关接口替换。
+- 当前学习空间候选壳子使用 `demoLearningSpace` 静态数据；重定向后的首页由 `/dashboard/summary`、主页会话、资料库和最近课程接口替换。
 - 上传建课状态轨道和状态条当前使用前端样例状态，后续由 `/materials/{material_id}/progress`、`/courses/from-materials` 和长任务接口驱动。
 - React Flow、ECharts、Mermaid 和 Markmap 已作为依赖准备，复杂图谱和可视化在后续阶段逐步接入。
 
@@ -219,7 +222,9 @@ backend/app/
 
 - 用户数据必须绑定 `user_id`。
 - 课程内容必须绑定 `course_id`。
-- 上传资料必须绑定 `user_id` 和 `course_id`。
+- 上传资料必须绑定 `user_id`。
+- Phase 3 重定向后，上传资料不应强制绑定 `course_id`；资料可以独立存在于资料库，也可以通过关联表加入一个或多个课程。
+- 主页对话不强制绑定 `course_id`，课程内对话必须绑定 `course_id`。
 - AI 生成结果必须绑定 `trace_id`。
 - 对外返回数据前必须验证当前用户是否有访问权限。
 

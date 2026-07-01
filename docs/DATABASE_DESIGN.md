@@ -9,7 +9,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 设计原则：
 
 1. 所有用户私有数据绑定 `user_id`。
-2. 所有课程相关数据绑定 `course_id`。
+2. 所有课程内学习数据绑定 `course_id`，但用户资料库资料可以先只绑定 `user_id`，再通过关联表加入课程。
 3. 所有 AI 任务绑定 `trace_id`。
 4. 生成内容必须可追溯引用来源。
 5. JSON 字段用于保存灵活 AI 结构，但核心查询字段保持结构化。
@@ -128,6 +128,16 @@ erDiagram
 
 用途：保存上传资料和解析结果。
 
+当前已落地的 Phase 2 表结构把资料直接绑定到课程，`course_id` 为必填。Phase 3 重定向后，产品规则调整为“资料库独立于课程，资料可以加入一个或多个课程”。因此后续进入资料库和生成课程真实实现前，需要做一次兼容迁移：
+
+```text
+materials              独立资料库，绑定 user_id，不强制绑定 course_id
+course_material_links  课程与资料的关联表，支持同一资料加入多个课程
+knowledge_chunks       仍绑定 course_id，同时引用 material_id
+```
+
+在迁移完成前，当前 `course_materials` 可继续服务内置课程和早期上传建课测试，但不能作为最终资料库模型。
+
 字段：
 
 | 字段 | 类型 | 说明 |
@@ -142,6 +152,43 @@ erDiagram
 | `extracted_text` | text | 提取文本 |
 | `metadata_json` | jsonb | 页码、标题、字数等元数据 |
 | `created_at` | timestamptz | 创建时间 |
+
+### 4.4.1 后续目标表：`materials`
+
+用途：保存用户上传到资料库的原始资料和解析结果。
+
+字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | bigint | 主键 |
+| `user_id` | bigint | 上传者 |
+| `filename` | varchar | 原文件名 |
+| `content_type` | varchar | 文件类型 |
+| `storage_path` | text | 文件存储路径 |
+| `parse_status` | varchar | 解析状态 |
+| `extracted_text` | text | 提取文本 |
+| `metadata_json` | jsonb | 页码、标题、字数等元数据 |
+| `created_at` | timestamptz | 创建时间 |
+
+### 4.4.2 后续目标表：`course_material_links`
+
+用途：记录资料与课程的关联，支持同一资料进入多个课程。
+
+字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | bigint | 主键 |
+| `course_id` | bigint | 课程 |
+| `material_id` | bigint | 资料 |
+| `added_by_user_id` | bigint | 添加者 |
+| `usage_type` | varchar | `reference`、`course_source`、`exam_review` 等 |
+| `created_at` | timestamptz | 创建时间 |
+
+唯一约束：
+
+- `course_id + material_id` 唯一。
 
 ### 4.5 `knowledge_points`
 
@@ -396,13 +443,21 @@ erDiagram
 
 用途：保存 AI 辅导会话。
 
+Phase 3 重定向后，会话需要区分主页会话和课程会话：
+
+- 主页会话：`scope=home`，`course_id` 可以为空。
+- 课程会话：`scope=course`，`course_id` 必填。
+- 主页会话可以移入课程，移入后可设置 `archived_from_home=true` 或记录迁移事件。
+
 `chat_sessions`：
 
 - `id`。
 - `user_id`。
-- `course_id`。
+- `scope`。
+- `course_id`，主页会话可为空。
 - `title`。
 - `mode`。
+- `archived_from_home`。
 - `created_at`。
 
 `chat_messages`：
@@ -507,7 +562,9 @@ erDiagram
 - `users.email` 唯一索引。
 - `course_enrollments(user_id, course_id)` 唯一索引。
 - `courses.owner_id`。
-- `course_materials(user_id, course_id)`。
+- `course_materials(user_id, course_id)`，用于当前 Phase 2 已落地的课程资料表。
+- 后续资料库迁移后新增 `materials(user_id, status, created_at)`。
+- 后续资料库迁移后新增 `course_material_links(course_id, material_id)` 唯一索引。
 - `knowledge_points(course_id)`。
 - `knowledge_chunks(course_id)`。
 - `knowledge_chunks(knowledge_point_id)`。
@@ -519,7 +576,7 @@ erDiagram
 - `practice_sessions(user_id, course_id)`。
 - `assessment_reports(user_id, course_id)`。
 - `weakness_review_queue(user_id, course_id, status)`。
-- `chat_sessions(user_id, course_id)`。
+- `chat_sessions(user_id, scope, course_id)`，支持主页会话和课程会话分开查询。
 
 ## 7. 数据隔离规则
 
@@ -578,11 +635,12 @@ Demo 数据要求：
 3. pgvector 扩展可通过迁移启用。
 4. 所有核心表可通过迁移创建。
 5. 内置人工智能导论课程可导入。
-6. 上传资料能写入课程、材料、知识点和知识切片。
-7. RAG 检索能读取向量数据。
-8. 资源、报告、对话都能追溯用户、课程和 trace。
-9. 两个不同用户的数据互不可见。
-10. Demo 数据可重置且不污染普通用户数据。
+6. 当前内置课程资料能写入课程、材料、知识点和知识切片。
+7. 后续资料库迁移后，上传资料能先进入用户资料库，再选择加入课程或生成课程。
+8. RAG 检索能读取向量数据。
+9. 资源、报告、课程内对话都能追溯用户、课程和 trace；主页对话能追溯用户和 trace。
+10. 两个不同用户的数据互不可见。
+11. Demo 数据可重置且不污染普通用户数据。
 
 当前已验证：
 

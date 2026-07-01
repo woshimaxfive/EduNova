@@ -186,11 +186,11 @@ Authorization: Bearer <token>
 
 用途：退出登录。第一版前端清理 token，后端返回成功。
 
-## 5. Dashboard 接口
+## 5. Learning Space Summary 接口
 
 ### GET `/dashboard/summary`
 
-用途：获取学生工作台总览。
+用途：获取学习空间首屏总览。该接口服务 Phase 3 的学习画布、AI 命令栏推荐、Studio 输出区和证据层入口。
 
 响应包含：
 
@@ -200,6 +200,11 @@ Authorization: Bearer <token>
 - 最近资源。
 - 薄弱点。
 - Agent 轨迹。
+- 学习画布节点。
+- 资料源簇。
+- Studio 输出摘要。
+- AI 命令建议。
+- 证据层摘要。
 
 响应示例：
 
@@ -218,7 +223,24 @@ Authorization: Bearer <token>
     "today_tasks": [],
     "recent_resources": [],
     "weak_points": [],
-    "latest_agent_logs": []
+    "latest_agent_logs": [],
+    "learning_canvas": {
+      "focus_title": "反向传播与链式法则",
+      "nodes": [],
+      "edges": []
+    },
+    "source_cluster": [],
+    "studio_outputs": [],
+    "command_suggestions": [
+      "根据当前薄弱点生成 7 天复习计划",
+      "解释我为什么链式法则总错",
+      "基于课程资料生成 10 道练习题"
+    ],
+    "evidence_summary": {
+      "citation_count": 0,
+      "latest_trace_id": null,
+      "low_evidence_count": 0
+    }
   },
   "trace_id": "trace_20260701_004"
 }

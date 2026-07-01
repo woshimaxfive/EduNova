@@ -6,9 +6,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 2026-07-14 前完成 EduNova 可运行第一版：学生注册登录、对话画像、上传资料建课、RAG 引用问答、多智能体生成 5 类资源、学习路径、练习评估、可视化工作台、Agent 轨迹、Demo Mode、Docker Compose、核心文档。2026-07-15 到 2026-07-20 完成测试说明、开发说明、部署说明、PPT、演示视频和提交包。
-**Architecture:** React + TypeScript 学生工作台通过 HTTP/SSE 调用 FastAPI；FastAPI 以 service 层承载课程、画像、建课、RAG、资源、路径、评估等业务；LangGraph 编排 ProfileAgent、DiagnosisAgent、CourseBuilderAgent、RetrieverAgent、ResourceAgent、PathAgent、TutorAgent、AssessmentAgent、ReviewAgent；PostgreSQL + pgvector 保存业务数据、知识切片和向量；Redis 保存任务进度、限流和 Demo 缓存；Nginx 提供部署入口。
-**Tech Stack:** Python 3.12.10, FastAPI, Pydantic, SQLAlchemy, Alembic, LangGraph, LangChain, PostgreSQL, pgvector, Redis, JWT, bcrypt, python-pptx, pypdf, python-docx, React, TypeScript, Vite, Tailwind CSS, Ant Design, ECharts, Mermaid, Markmap, pytest, Vitest, Playwright, Docker Compose, Nginx.
+**Goal:** 在 2026-07-14 前完成 EduNova 可运行第一版：学生注册登录、对话画像、上传资料建课、RAG 引用问答、多智能体生成 5 类资源、学习路径、练习评估、可视化 AI 学习空间、Agent 轨迹、Demo Mode、Docker Compose、核心文档。2026-07-15 到 2026-07-20 完成测试说明、开发说明、部署说明、PPT、演示视频和提交包。
+**Architecture:** React + TypeScript 学生 AI 学习空间通过 HTTP/SSE 调用 FastAPI；FastAPI 以 service 层承载课程、画像、建课、RAG、资源、路径、评估等业务；LangGraph 编排 ProfileAgent、DiagnosisAgent、CourseBuilderAgent、RetrieverAgent、ResourceAgent、PathAgent、TutorAgent、AssessmentAgent、ReviewAgent；PostgreSQL + pgvector 保存业务数据、知识切片和向量；Redis 保存任务进度、限流和 Demo 缓存；Nginx 提供部署入口。
+**Tech Stack:** Python 3.12.10, FastAPI, Pydantic, SQLAlchemy, Alembic, LangGraph, LangChain, PostgreSQL, pgvector, Redis, JWT, bcrypt, python-pptx, pypdf, python-docx, React, TypeScript, Vite, Tailwind CSS, Radix UI / shadcn/ui 按需组件, Motion, React Flow, ECharts, Mermaid, Markmap, pytest, Vitest, Playwright, Docker Compose, Nginx.
 ---
 
 ## Ground Rules
@@ -19,6 +19,7 @@
 - [ ] 每个 AI 生成结果必须绑定 `trace_id`、`citation_refs`、`review_status`、`confidence_score` 中的关键字段。
 - [ ] 所有核心数据绑定 `user_id` 与 `course_id`，避免多人部署后数据串用。
 - [ ] 第一版只做学生端主线和轻量系统设置；不建设完整教师端、家长端、班级运营后台、支付、真实视频生成、扫描 OCR、移动端。
+- [ ] Phase 3 前端必须遵守 `docs/UI_UX_DESIGN.md`：不采用固定左侧后台菜单和卡片堆，首屏使用学习画布、AI 命令栏、Studio 和证据层。
 - [ ] 每个阶段提交一次小而清晰的 commit；提交前运行本阶段列出的检查命令。
 
 ## Target Repository Structure
@@ -386,21 +387,26 @@ git commit -m "feat(data): seed artificial intelligence intro course"
 pnpm create vite frontend --template react-ts
 cd frontend
 pnpm install
-pnpm add antd @ant-design/icons @tanstack/react-query axios zustand react-router-dom echarts mermaid markmap-lib markmap-viewer clsx dayjs
+pnpm add @radix-ui/react-dialog @radix-ui/react-dropdown-menu @radix-ui/react-popover @radix-ui/react-tabs @tanstack/react-query axios zustand react-router-dom motion @xyflow/react echarts mermaid markmap-lib markmap-viewer clsx dayjs
 pnpm add -D tailwindcss postcss autoprefixer vitest @testing-library/react @testing-library/jest-dom @playwright/test
 pnpm exec tailwindcss init -p
 cd ..
 ```
 
 - [ ] Configure Tailwind in `frontend/tailwind.config.js` and import styles in `frontend/src/styles/global.css`.
-- [ ] Create app shell:
+- [ ] Create app shell based on `docs/UI_UX_DESIGN.md`:
 
 ```text
 frontend/src/app/App.tsx
 frontend/src/app/routes.tsx
-frontend/src/components/layout/AppShell.tsx
-frontend/src/components/layout/AgentTracePanel.tsx
-frontend/src/components/layout/TopBar.tsx
+frontend/src/components/layout/LearningSpaceShell.tsx
+frontend/src/components/layout/TopNavigation.tsx
+frontend/src/components/command/CommandBar.tsx
+frontend/src/components/canvas/LearningCanvas.tsx
+frontend/src/components/canvas/SourceCluster.tsx
+frontend/src/components/studio/StudioDock.tsx
+frontend/src/components/evidence/EvidenceLayer.tsx
+frontend/src/components/evidence/AgentTimeline.tsx
 frontend/src/stores/authStore.ts
 frontend/src/api/client.ts
 ```
@@ -410,29 +416,31 @@ frontend/src/api/client.ts
 ```text
 LoginPage.tsx
 RegisterPage.tsx
-DashboardPage.tsx
+LearningSpacePage.tsx
+LibraryPage.tsx
+StudioPage.tsx
+ReportPage.tsx
 ProfilePage.tsx
-CoursesPage.tsx
-UploadCoursePage.tsx
-ResourceLabPage.tsx
-LearningPathPage.tsx
 TutorPage.tsx
 PracticePage.tsx
-ReportPage.tsx
 SettingsPage.tsx
 ```
 
 - [ ] Design direction:
 
 ```text
-Quiet AI study workspace
-Left navigation with icons
-Dense but clear dashboard
-Right Agent timeline
-Cards only for repeated resources and tool panels
+AI learning operating system for students
+Top lightweight navigation
+Central learning canvas
+Bottom AI command bar
+NotebookLM-like Studio dock
+Slide-out evidence layer for citations and Agent traces
+Quiet material depth with restrained motion
 No marketing landing page
 No decorative gradient orbs
 No giant hero section
+No fixed left admin sidebar
+No KPI card wall
 ```
 
 - [ ] Verify:
@@ -480,7 +488,7 @@ git add frontend
 git commit -m "feat(frontend): add API client contracts"
 ```
 
-## Phase 4: Authentication and Student Dashboard
+## Phase 4: Authentication and Student Learning Space
 
 ### Task 4.1: Backend Auth
 
@@ -527,19 +535,21 @@ git add backend
 git commit -m "feat(auth): add student authentication"
 ```
 
-### Task 4.2: Frontend Auth and Dashboard
+### Task 4.2: Frontend Auth and Learning Space
 
 - [ ] Connect Login and Register pages to backend.
 - [ ] Protect student workspace routes.
-- [ ] Dashboard shows:
+- [ ] LearningSpace page shows:
 
 ```text
 profile summary
 current course
 today tasks
 recent resources
-mastery radar backed by `/dashboard/summary` response data
-agent timeline from latest logs
+learning canvas backed by `/dashboard/summary` response data
+AI command suggestions
+Studio output summary
+evidence layer entry with latest citations and Agent trace
 ```
 
 - [ ] Backend adds:
@@ -560,14 +570,14 @@ pnpm dev --host 127.0.0.1 --port 5173
 Manual acceptance:
 
 ```text
-register -> login -> dashboard visible -> logout -> protected page redirects to login
+register -> login -> learning space visible -> logout -> protected page redirects to login
 ```
 
 - [ ] Commit:
 
 ```powershell
 git add backend frontend
-git commit -m "feat(workspace): connect login and dashboard"
+git commit -m "feat(workspace): connect login and learning space"
 ```
 
 ## Phase 5: Upload Materials and Build Course
@@ -651,7 +661,7 @@ exam-oriented points
 
 - [ ] Use LLM when configured; use deterministic fallback extractor when Demo Mode is enabled or provider health check fails.
 - [ ] Add `POST /courses/from-materials` and `GET /courses/{course_id}/overview`.
-- [ ] UploadCourse page shows progress steps and generated course overview.
+- [ ] Library upload flow shows progress steps and generated course overview.
 - [ ] Tests cover fallback extractor and API response.
 - [ ] Commit:
 
@@ -821,7 +831,7 @@ profile -> retrieve -> diagnosis -> resource -> review -> persist
 GET /agents/traces/{trace_id}
 ```
 
-- [ ] Frontend AgentTracePanel renders status, duration, citation count and review result.
+- [ ] Frontend EvidenceLayer and AgentTimeline render status, duration, citation count and review result.
 - [ ] Tests:
 
 ```text
@@ -867,12 +877,12 @@ difficulty
 ```
 
 - [ ] Persist `generated_resources` and `resource_quality_scores`.
-- [ ] ResourceLab page lets user select course, knowledge point and resource types; displays generated resource cards with citations, confidence, review status and quality scores.
+- [ ] Studio page lets user select course, knowledge point and resource types; displays generated resource outputs with citations, confidence, review status and quality scores.
 - [ ] Tests:
 
 ```text
 backend/tests/test_resource_generation.py
-frontend/src/pages/ResourceLabPage.test.tsx
+frontend/src/pages/StudioPage.test.tsx
 ```
 
 - [ ] Commit:
@@ -1065,7 +1075,7 @@ easy_mistake_warnings
 recommended_resources
 ```
 
-- [ ] Add sprint mode entry on Dashboard and LearningPath page.
+- [ ] Add sprint mode entry on LearningSpace and LearningPath page.
 - [ ] Commit:
 
 ```powershell
@@ -1094,7 +1104,7 @@ priority_order
 citations
 ```
 
-- [ ] UploadCourse page allows selecting multiple materials for comparison.
+- [ ] Library upload flow allows selecting multiple materials for comparison.
 - [ ] Tests:
 
 ```text
@@ -1133,7 +1143,7 @@ GET /demo/status
 - [ ] Verify full demo chain:
 
 ```text
-demo login -> dashboard -> profile -> upload course sample -> generate resources -> path -> tutor -> practice -> report -> agent trace
+demo login -> learning space -> profile -> upload course sample -> generate resources -> path -> tutor -> practice -> report -> agent trace
 ```
 
 - [ ] Commit:
@@ -1269,7 +1279,7 @@ docker compose up --build
 ```text
 open login page
 use demo account
-dashboard loads
+learning space loads
 profile radar renders
 course list renders
 upload sample material and see progress
@@ -1287,7 +1297,7 @@ export Markdown dossier
 - [ ] Save screenshots under `docs/evidence/`:
 
 ```text
-dashboard.png
+learning-space.png
 upload-course.png
 resource-generation.png
 agent-trace.png
@@ -1329,7 +1339,7 @@ git commit -m "docs: add browser acceptance evidence"
 
 ```text
 0:00-0:30 项目定位
-0:30-1:10 登录与工作台
+0:30-1:10 登录与学习空间
 1:10-2:00 对话画像
 2:00-3:00 上传资料建课
 3:00-4:00 资源生成与 Agent 轨迹
@@ -1386,9 +1396,9 @@ git tag edunova-initial-submission-2026-07-20
 | --- | --- | --- |
 | 不少于 6 维对话画像 | 8 维 `student_profiles.profile_json` + `profile_events` | Profile page + tests |
 | 多智能体架构 | LangGraph + 9 agents + `agent_run_logs` | Agent trace panel + architecture doc |
-| 至少 5 类资源 | Doc, MindMap, Quiz, Code, Slide | ResourceLab page + resource tests |
+| 至少 5 类资源 | Doc, MindMap, Quiz, Code, Slide | Studio page + resource tests |
 | 学习路径规划 | PathAgent + `learning_paths` + `learning_tasks` | LearningPath page |
-| 资源精准推送 | profile + mastery + resource quality scores | Dashboard recommendations |
+| 资源精准推送 | profile + mastery + resource quality scores | LearningSpace recommendations |
 | 智能辅导 | RAG Tutor + Socratic mode + citations | Tutor page |
 | 学习效果评估 | practice, mastery, weakness queue, reports | Practice and Report pages |
 | 防幻觉 | citations, ReviewAgent, confidence, low-evidence warning | Tutor/resources UI |
@@ -1403,7 +1413,7 @@ git tag edunova-initial-submission-2026-07-20
 | --- | --- | --- |
 | 2026-07-01 | Repo baseline, scripts, backend skeleton, Docker draft | docs/chore/feat backend foundation |
 | 2026-07-02 | Data model, migrations, AI intro seed course | feat data schema |
-| 2026-07-03 | Frontend shell, auth, dashboard | feat workspace |
+| 2026-07-03 | Frontend learning space shell and auth | feat workspace |
 | 2026-07-04 | Upload parsing and CourseBuilderAgent | feat materials/courses |
 | 2026-07-05 | Provider abstraction, embeddings, RAG citations | feat ai/rag |
 | 2026-07-06 | Conversational profile | feat profile |

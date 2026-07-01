@@ -1,6 +1,6 @@
 # EduNova
 
-EduNova 是面向高校学生的 AI 个性化学习工作台，目标是参加第十五届中国软件杯 A3 赛题“基于大模型的个性化资源生成与学习多智能体系统开发”。
+EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第十五届中国软件杯 A3 赛题“基于大模型的个性化资源生成与学习多智能体系统开发”。
 
 第一版聚焦学生个人学习闭环：
 
@@ -20,6 +20,7 @@ EduNova 是面向高校学生的 AI 个性化学习工作台，目标是参加�
 | [赛题原文](docs/软件杯A3赛题.txt) | A3 赛题要求 |
 | [仓库规则](AGENTS.md) | 编码、文档同步、Git、密钥和完成定义 |
 | [产品设计](docs/superpowers/specs/2026-07-01-edunova-product-design.md) | EduNova 做什么 |
+| [前端与交互设计基线](docs/UI_UX_DESIGN.md) | Phase 3 前端设计方向、页面结构和验收标准 |
 | [实施计划](docs/superpowers/plans/2026-07-01-edunova-mvp-implementation.md) | EduNova 怎么开发 |
 | [中文阅读版](docs/superpowers/plans/2026-07-01-edunova-mvp-implementation-中文阅读版.md) | 实施计划中文导读 |
 | [需求规格](docs/REQUIREMENTS.md) | 功能范围和验收标准 |
@@ -57,7 +58,9 @@ EduNova 是面向高校学生的 AI 个性化学习工作台，目标是参加�
 
 ## 开发状态
 
-当前正在进行 Phase 2 数据与课程基础建设。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查、Docker Compose 草案、SQLAlchemy 数据库入口、Alembic 迁移基线、pgvector 扩展迁移、第一批核心业务表和人工智能导论内置课程包已经实现。前端和 AI/RAG 能力属于后续阶段。
+当前 Phase 2 数据与课程基础建设已完成到内置人工智能导论课程包。FastAPI 最小应用、`/api/health` 健康检查、pytest 测试、编码检查、Docker Compose 草案、SQLAlchemy 数据库入口、Alembic 迁移基线、pgvector 扩展迁移、第一批核心业务表和人工智能导论内置课程包已经实现。
+
+Phase 3 进入前端前，已先补充 [前端与交互设计基线](docs/UI_UX_DESIGN.md)：EduNova 正式前端不采用固定左侧后台菜单和卡片堆，而采用“顶部轻导航 + 中央学习画布 + 底部 AI 命令栏 + Studio 输出区 + 可滑出证据层”的 AI 学习空间结构。前端和 AI/RAG 真实能力仍属于后续实现阶段。
 
 ## 本地后端验证
 

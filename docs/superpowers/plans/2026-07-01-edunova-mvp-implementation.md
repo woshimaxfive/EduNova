@@ -509,7 +509,7 @@ Current Phase 3.1 implementation note:
 - P3 completion added `/app/courses/:courseId` as a protected static/semi-static course space with course chat, course history, knowledge canvas, today's tasks, Studio output, citations and Agent trace; real backend data remains Phase 4+.
 - P3.6 added structured skeletons for library, Studio, profile, tutor, practice, reports and settings pages; tests now lock their material, generation, profile, tutoring, practice, report and settings regions so they do not regress into placeholder pages.
 - P3.7 added local interaction feedback for the main visible buttons: home composer, material drawer selection, course answer expansion, knowledge-node detail, tutor mode, practice submission, library citations, settings save, Studio/profile/report actions and top search now show explicit demo-state feedback until real APIs replace those handlers.
-- P3.8 exposes all primary student routes in the top and mobile navigation: learning space, library, Studio, profile, tutor, practice, reports and settings.
+- P3.8 now uses layered route discovery: top and mobile navigation expose learning space, library and Studio; the personal menu exposes profile, reports and settings; course space exposes tutor, practice and reports as contextual learning actions.
 - Browser visual checks covered P3R3 `/app` at desktop and mobile widths with no horizontal overflow; the material-library drawer and course generation dialog open and remain readable.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
 - Real backend auth, `/dashboard/summary`, upload/RAG/AI data and final browser E2E remain later-phase work.

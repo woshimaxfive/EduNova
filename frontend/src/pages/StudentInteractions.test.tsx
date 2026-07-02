@@ -4,6 +4,7 @@ import { type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
+import { PATHS } from "../app/routePaths";
 import { CourseSpacePage } from "./CourseSpacePage";
 import { LearningSpacePage } from "./LearningSpacePage";
 import { LibraryPage } from "./LibraryPage";
@@ -61,6 +62,21 @@ describe("student interaction affordances", () => {
     await user.click(screen.getByRole("button", { name: "监督学习，当前焦点" }));
 
     expect(screen.getByRole("region", { name: "当前知识点详情" })).toHaveTextContent("监督学习");
+  });
+
+  it("keeps tutoring practice and reports as course-context actions", () => {
+    renderPage(<CourseSpacePage />);
+
+    const courseActions = screen.getByRole("navigation", { name: "课程行动入口" });
+    const expectedActions = [
+      ["进入 AI 辅导", PATHS.tutor],
+      ["开始练习", PATHS.practice],
+      ["查看学习报告", PATHS.reports]
+    ] as const;
+
+    for (const [label, path] of expectedActions) {
+      expect(within(courseActions).getByRole("link", { name: label })).toHaveAttribute("href", path);
+    }
   });
 
   it("switches tutor modes and provides feedback for tutor actions", async () => {

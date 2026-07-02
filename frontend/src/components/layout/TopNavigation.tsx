@@ -2,10 +2,8 @@ import {
   BookOpen,
   Brain,
   ChartLineUp,
-  ChatCircleText,
   GearSix,
   House,
-  ListChecks,
   MagnifyingGlass,
   Notebook,
   SignOut,
@@ -14,6 +12,7 @@ import {
   UploadSimple,
   UserCircle
 } from "@phosphor-icons/react";
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 import { PATHS } from "../../app/routePaths";
@@ -21,21 +20,23 @@ import { ActionNotice } from "../feedback/ActionNotice";
 import { useActionNotice } from "../feedback/useActionNotice";
 import { useAuthStore } from "../../features/auth/authStore";
 
-const navItems = [
+const primaryNavItems = [
   { label: "学习空间", to: PATHS.app, icon: House },
   { label: "资料库", to: PATHS.library, icon: BookOpen },
-  { label: "Studio", to: PATHS.studio, icon: Sparkle },
-  { label: "画像", to: PATHS.profile, icon: Brain },
-  { label: "辅导", to: PATHS.tutor, icon: ChatCircleText },
-  { label: "练习", to: PATHS.practice, icon: ListChecks },
-  { label: "报告", to: PATHS.reports, icon: ChartLineUp },
-  { label: "设置", to: PATHS.settings, icon: GearSix }
+  { label: "Studio", to: PATHS.studio, icon: Sparkle }
+];
+
+const personalMenuItems = [
+  { label: "学习画像", to: PATHS.profile, icon: Brain },
+  { label: "学习报告", to: PATHS.reports, icon: ChartLineUp },
+  { label: "系统设置", to: PATHS.settings, icon: GearSix }
 ];
 
 export function TopNavigation() {
   const navigate = useNavigate();
   const clearSession = useAuthStore((state) => state.clearSession);
   const user = useAuthStore((state) => state.user);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const { notice, showNotice } = useActionNotice();
 
   function logout() {
@@ -52,7 +53,7 @@ export function TopNavigation() {
         <span>EduNova</span>
       </NavLink>
       <nav className="nav-links" aria-label="应用导航">
-        {navItems.map((item) => {
+        {primaryNavItems.map((item) => {
           const Icon = item.icon;
           return (
             <NavLink
@@ -74,9 +75,32 @@ export function TopNavigation() {
         <NavLink className="icon-button" to={PATHS.library} aria-label="上传资料">
           <UploadSimple size={18} />
         </NavLink>
-        <div className="user-chip" aria-label="当前用户">
-          <UserCircle size={20} weight="duotone" aria-hidden="true" />
-          <span>{user?.displayName ?? "学生"}</span>
+        <div className="user-menu-shell">
+          <button
+            className="user-chip"
+            type="button"
+            aria-label="打开个人菜单"
+            aria-haspopup="menu"
+            aria-expanded={isUserMenuOpen}
+            onClick={() => setIsUserMenuOpen((open) => !open)}
+          >
+            <UserCircle size={20} weight="duotone" aria-hidden="true" />
+            <span className="user-chip-name">{user?.displayName ?? "学生"}</span>
+          </button>
+          {isUserMenuOpen ? (
+            <nav className="user-menu-popover" role="menu" aria-label="个人菜单">
+              {personalMenuItems.map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <NavLink key={item.to} to={item.to} role="menuitem" onClick={() => setIsUserMenuOpen(false)}>
+                    <Icon size={17} weight="duotone" aria-hidden="true" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                );
+              })}
+            </nav>
+          ) : null}
         </div>
         <button className="icon-button" type="button" aria-label="退出登录" onClick={logout}>
           <SignOut size={18} />
@@ -84,7 +108,7 @@ export function TopNavigation() {
       </div>
       <ActionNotice notice={notice} className="nav-action-notice" />
       <nav className="mobile-route-strip" aria-label="移动导航">
-        {navItems.map((item) => (
+        {primaryNavItems.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.to === PATHS.app}>
             {item.label}
           </NavLink>

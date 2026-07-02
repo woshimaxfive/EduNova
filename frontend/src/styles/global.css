@@ -161,6 +161,7 @@ a {
 .nav-link,
 .nav-actions,
 .user-chip,
+.user-menu-popover a,
 .entry-brand,
 .section-heading-line,
 .course-focus,
@@ -285,6 +286,44 @@ a {
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   color: var(--text-muted);
+  background: var(--surface-strong);
+}
+
+.user-menu-shell {
+  position: relative;
+}
+
+.user-chip {
+  cursor: pointer;
+}
+
+.user-menu-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 10;
+  display: grid;
+  width: 168px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.user-menu-popover a {
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 12px;
+  color: var(--text-muted);
+}
+
+.user-menu-popover a:hover,
+.user-menu-popover a[aria-current="page"] {
+  color: var(--text);
   background: var(--surface-strong);
 }
 
@@ -1121,6 +1160,36 @@ a {
   color: var(--accent-strong);
 }
 
+.course-action-links {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.course-action-links a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.58);
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.course-action-links a:hover {
+  color: var(--accent-strong);
+  border-color: rgba(15, 143, 122, 0.34);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
 .command-zone {
   position: fixed;
   right: max(16px, calc((100vw - 1420px) / 2));
@@ -1918,8 +1987,17 @@ a {
     padding: 10px;
   }
 
-  .nav-actions .icon-button,
+  .nav-actions .icon-button {
+    display: none;
+  }
+
   .user-chip {
+    width: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .user-chip-name {
     display: none;
   }
 

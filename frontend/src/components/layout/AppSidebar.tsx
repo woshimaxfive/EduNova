@@ -27,6 +27,7 @@ export type SidebarConversation = {
 type AppSidebarProps = {
   isCollapsed: boolean;
   conversations?: SidebarConversation[];
+  activeConversationId?: string | null;
   onToggleCollapsed: () => void;
   onNewChat?: () => void;
   onSearchHistory?: () => void;
@@ -36,6 +37,7 @@ type AppSidebarProps = {
 export function AppSidebar({
   isCollapsed,
   conversations = [],
+  activeConversationId,
   onToggleCollapsed,
   onNewChat,
   onSearchHistory,
@@ -119,7 +121,13 @@ export function AppSidebar({
       <div className="home-thread-list">
         {conversations.length > 0 ? (
           conversations.map((conversation) => (
-            <button className="home-thread" key={conversation.id} type="button" onClick={() => onSelectConversation?.(conversation)}>
+            <button
+              className={activeConversationId === conversation.id ? "home-thread active" : "home-thread"}
+              key={conversation.id}
+              type="button"
+              aria-pressed={activeConversationId === conversation.id}
+              onClick={() => onSelectConversation?.(conversation)}
+            >
               <strong>{conversation.title}</strong>
               <small>{conversation.meta}</small>
             </button>

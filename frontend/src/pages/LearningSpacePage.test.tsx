@@ -104,8 +104,32 @@ describe("LearningSpacePage", () => {
 
     expect(within(thread).getByText("期末复习怎么安排？")).toBeInTheDocument();
     expect(within(thread).getByText(/可以先把资料按章节和题型拆开/)).toBeInTheDocument();
+    expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("来源准备");
     expect(screen.getByRole("region", { name: "底部学习输入" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /期末复习怎么安排/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).not.toBeInTheDocument();
+  });
+
+  it("lets the home answer reveal sources, path, and thinking details", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <LearningSpacePage />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole("button", { name: "把反向传播讲到我能做题" }));
+    expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("把反向传播讲到我能做题");
+
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    await user.click(screen.getByRole("button", { name: "学习路径" }));
+
+    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("先用 10 分钟补概念");
+
+    await user.click(screen.getByRole("button", { name: "思考过程" }));
+
+    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("处理摘要");
   });
 
   it("keeps blank starter accounts empty until they upload their own material", async () => {

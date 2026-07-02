@@ -87,12 +87,18 @@ type HomeMessage = {
   content: string;
 };
 
+type HomeAnswerPanel = "sources" | "path" | "thinking";
+
+const suggestedPrompts = ["帮我制定 7 天期末复习计划", "把反向传播讲到我能做题", "根据资料生成一门冲刺课"];
+
 export function LearningSpacePage() {
   const user = useAuthStore((state) => state.user);
   const hasStarterContent = user?.starterMode !== "blank";
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
+  const [homeThreads, setHomeThreads] = useState(() => (hasStarterContent ? homeConversations : []));
+  const [activeHomeThreadId, setActiveHomeThreadId] = useState<string | null>(hasStarterContent ? homeConversations[0]?.id ?? null : null);
   const [materials, setMaterials] = useState<LibraryMaterial[]>(() => (hasStarterContent ? initialLibraryMaterials : []));
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
@@ -100,6 +106,7 @@ export function LearningSpacePage() {
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isDeepThinkingEnabled, setIsDeepThinkingEnabled] = useState(false);
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
+  const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>("sources");
   const { notice, showNotice } = useActionNotice();
   const hasHomeThread = messages.length > 0;
 
@@ -164,6 +171,8 @@ export function LearningSpacePage() {
 
   function handleSendQuestion() {
     const question = prompt.trim();
+    const timestamp = Date.now();
+    const nextThreadId = `home-thread-${timestamp}`;
 
     if (!question) {
       showNotice("先输入一个学习问题。", "warning");
@@ -173,16 +182,18 @@ export function LearningSpacePage() {
     setMessages((current) => [
       ...current,
       {
-        id: `user-${Date.now()}`,
+        id: `user-${timestamp}`,
         role: "user",
         content: question
       },
       {
-        id: `assistant-${Date.now()}`,
+        id: `assistant-${timestamp}`,
         role: "assistant",
         content: "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。"
       }
     ]);
+    setHomeThreads((current) => [{ id: nextThreadId, title: question, meta: "刚刚" }, ...current]);
+    setActiveHomeThreadId(nextThreadId);
     setPrompt("");
     showNotice("已生成回答。", "success");
   }
@@ -204,15 +215,32 @@ export function LearningSpacePage() {
         </div>
         <AppSidebar
           isCollapsed={isHistoryCollapsed}
-          conversations={hasStarterContent ? homeConversations : []}
+          conversations={homeThreads}
+          activeConversationId={activeHomeThreadId}
           onToggleCollapsed={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
           onNewChat={() => {
             setPrompt("");
             setMessages([]);
+            setActiveHomeThreadId(null);
             showNotice("已新建一条主页独立对话。", "success");
           }}
           onSearchHistory={() => showNotice("可以从左侧最近对话继续。")}
-          onSelectConversation={(conversation) => showNotice(`已切换到「${conversation.title}」。`)}
+          onSelectConversation={(conversation) => {
+            setActiveHomeThreadId(conversation.id);
+            setMessages([
+              {
+                id: `${conversation.id}-user`,
+                role: "user",
+                content: conversation.title
+              },
+              {
+                id: `${conversation.id}-assistant`,
+                role: "assistant",
+                content: "我把这段历史对话调出来了。你可以继续追问，也可以把它移入某门课程。"
+              }
+            ]);
+            showNotice(`已切换到「${conversation.title}」。`);
+          }}
         />
 
         <section className={hasHomeThread ? "home-chat-stage chat-active" : "home-chat-stage"} aria-label="AI 学习入口">
@@ -222,6 +250,14 @@ export function LearningSpacePage() {
                 <article className={`home-message ${message.role}`} key={message.id}>
                   {message.role === "assistant" ? <span className="message-thinking">已思考若干秒</span> : null}
                   <p>{message.content}</p>
+                  {message.role === "assistant" ? (
+                    <HomeAnswerInsights
+                      activePanel={activeAnswerPanel}
+                      selectedMaterialCount={selectedMaterialIds.length}
+                      isWebSearchEnabled={isWebSearchEnabled}
+                      onChangePanel={setActiveAnswerPanel}
+                    />
+                  ) : null}
                 </article>
               ))}
             </section>
@@ -311,6 +347,16 @@ export function LearningSpacePage() {
             </div>
           </section>
 
+          {!hasHomeThread ? (
+            <div className="home-prompt-row" aria-label="快捷学习建议">
+              {suggestedPrompts.map((suggestion) => (
+                <button key={suggestion} type="button" onClick={() => setPrompt(suggestion)}>
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           {selectedMaterialIds.length > 0 || isWebSearchEnabled ? (
             <div className="selected-materials-note">
               <LinkSimple size={16} weight="duotone" aria-hidden="true" />
@@ -377,6 +423,71 @@ export function LearningSpacePage() {
         />
       ) : null}
     </LearningSpaceShell>
+  );
+}
+
+type HomeAnswerInsightsProps = {
+  activePanel: HomeAnswerPanel;
+  selectedMaterialCount: number;
+  isWebSearchEnabled: boolean;
+  onChangePanel: (panel: HomeAnswerPanel) => void;
+};
+
+function HomeAnswerInsights({ activePanel, selectedMaterialCount, isWebSearchEnabled, onChangePanel }: HomeAnswerInsightsProps) {
+  const sourceText =
+    selectedMaterialCount > 0
+      ? `本次回答参考了 ${selectedMaterialCount} 份已选资料${isWebSearchEnabled ? "，并补充联网搜索线索" : ""}。`
+      : isWebSearchEnabled
+        ? "本次回答会优先显示联网来源，资料库内容未被选入。"
+        : "未选择资料时，回答先使用通用学习策略；选择资料后会显示更具体的引用。";
+
+  return (
+    <section className="home-answer-insights" aria-label="回答附加信息">
+      <div className="answer-insight-tabs" aria-label="回答展开入口">
+        <button className={activePanel === "sources" ? "active" : ""} type="button" aria-pressed={activePanel === "sources"} onClick={() => onChangePanel("sources")}>
+          <LinkSimple size={16} weight="duotone" aria-hidden="true" />
+          <span>来源</span>
+        </button>
+        <button className={activePanel === "path" ? "active" : ""} type="button" aria-pressed={activePanel === "path"} onClick={() => onChangePanel("path")}>
+          <BookOpen size={16} weight="duotone" aria-hidden="true" />
+          <span>学习路径</span>
+        </button>
+        <button className={activePanel === "thinking" ? "active" : ""} type="button" aria-pressed={activePanel === "thinking"} onClick={() => onChangePanel("thinking")}>
+          <Sparkle size={16} weight="duotone" aria-hidden="true" />
+          <span>思考过程</span>
+        </button>
+      </div>
+
+      <div className="answer-insight-panel" role="region" aria-label="回答展开详情">
+        {activePanel === "sources" ? (
+          <>
+            <span className="insight-mark">
+              <CheckCircle size={16} weight="fill" aria-hidden="true" />
+              来源准备
+            </span>
+            <p>{sourceText}</p>
+          </>
+        ) : null}
+        {activePanel === "path" ? (
+          <>
+            <span className="insight-mark">
+              <BookOpen size={16} weight="fill" aria-hidden="true" />
+              下一步
+            </span>
+            <p>先用 10 分钟补概念，再做 3 道同类题，最后把错因写回画像和复习队列。</p>
+          </>
+        ) : null}
+        {activePanel === "thinking" ? (
+          <>
+            <span className="insight-mark">
+              <Sparkle size={16} weight="fill" aria-hidden="true" />
+              处理摘要
+            </span>
+            <p>已按“目标识别、资料线索、复习动作”整理，真实 Agent 接入后会替换为可追踪执行记录。</p>
+          </>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

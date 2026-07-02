@@ -66,7 +66,7 @@ export function LearningCanvas({ snapshot }: LearningCanvasProps) {
           <span>{statusLabel[selectedNode.status]}</span>
           <strong>{selectedNode.title}</strong>
           <p>
-            {selectedNode.chapter} 会被用于课程对话、练习生成和掌握度更新。后续接入真实图谱后，这里会显示先修关系和证据来源。
+            {selectedNode.chapter} 会用于课程对话、练习生成和掌握度更新。
           </p>
         </section>
       ) : null}

@@ -20,11 +20,7 @@ export function WorkspaceStateStrip({ panels }: WorkspaceStateStripProps) {
   const { notice, showNotice } = useActionNotice();
 
   return (
-    <section className="workspace-state-strip" aria-label="学习空间状态设计">
-      <div className="state-strip-heading">
-        <span>状态信号</span>
-        <strong>把异常、低依据和演示来源放在画布旁边，不做卡片墙。</strong>
-      </div>
+    <section className="workspace-state-strip" aria-label="状态信号">
       {panels.map((panel) => {
         const Icon = stateIcons[panel.kind];
 
@@ -40,7 +36,7 @@ export function WorkspaceStateStrip({ panels }: WorkspaceStateStripProps) {
             <button
               type="button"
               aria-label={`${panel.title}：${panel.actionLabel}`}
-              onClick={() => showNotice(`已选择「${panel.title}」处理入口，真实任务接入后会打开对应流程。`)}
+              onClick={() => showNotice(`已选择「${panel.title}」。`)}
             >
               {panel.actionLabel}
             </button>

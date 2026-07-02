@@ -15,13 +15,12 @@ export function TutorPage() {
   const { notice, showNotice } = useActionNotice();
 
   return (
-    <PageFrame title="围绕课程资料追问" description="直接解释、苏格拉底追问和考前冲刺会共用同一套引用机制。">
+    <PageFrame title="AI 辅导" description="基于课程资料继续追问。">
       <div className="student-workspace tutor-workspace">
         <section className="student-panel tutor-dialog" role="region" aria-label="AI 辅导对话">
           <div className="student-panel-heading">
             <div>
-              <p className="section-kicker">AI 辅导</p>
-              <h2>像聊天一样追问，像课堂一样留痕</h2>
+              <h2>继续追问</h2>
             </div>
           </div>
           <div className="tutor-shell">
@@ -31,7 +30,7 @@ export function TutorPage() {
               <span>因为每一层参数对最终损失的影响都要沿计算图逐层传回。先把复合函数拆成局部梯度，再沿路径相乘。</span>
             </div>
             <div className="answer-action-row" aria-label="回答附加信息">
-              <button type="button" onClick={() => showNotice("已展开回答来源，真实检索接入后会显示具体片段。")}>
+              <button type="button" onClick={() => showNotice("已展开回答来源。")}>
                 <ShieldCheck size={17} weight="duotone" aria-hidden="true" />
                 <span>查看来源</span>
               </button>
@@ -77,7 +76,6 @@ export function TutorPage() {
           <section className="student-panel citation-panel" role="region" aria-label="引用来源">
             <div className="student-panel-heading compact">
               <div>
-                <p className="section-kicker">引用来源</p>
                 <h2>回答来源</h2>
               </div>
               <MagnifyingGlass size={18} weight="duotone" aria-hidden="true" />

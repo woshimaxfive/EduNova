@@ -24,7 +24,7 @@ const initialLibraryFiles: LibraryFile[] = [
     title: "AI 导论讲义",
     category: "document",
     extension: "DOCX",
-    detail: "12 个知识点 · 已解析",
+    detail: "12 个知识点",
     modified: "今天",
     size: "1.2 MB",
     parseStatus: "completed"
@@ -34,7 +34,7 @@ const initialLibraryFiles: LibraryFile[] = [
     title: "期末复习题样例",
     category: "document",
     extension: "MD",
-    detail: "24 道练习 · 已解析",
+    detail: "24 道练习",
     modified: "昨天",
     size: "68 KB",
     parseStatus: "completed"
@@ -72,7 +72,7 @@ function inferLibraryFile(file: File): LibraryFile {
     title: file.name,
     category: isImage ? "image" : "document",
     extension,
-    detail: isImage ? "图片资料 · 等待提取说明" : "刚刚上传 · 等待解析",
+    detail: isImage ? "图片资料" : "等待解析",
     modified: "刚刚",
     size: formatFileSize(file.size),
     parseStatus: "processing"
@@ -124,7 +124,7 @@ export function LibraryPage() {
 
   return (
     <>
-      <PageFrame title="资料库" description="课件、电子书、期末题和课程资料都先进入这里，再决定用于对话、加入课程或生成新课程。">
+      <PageFrame title="资料库" description="上传资料，搜索引用，也可以生成课程。">
         <section className="library-file-shell" role="region" aria-label="文件库">
           <div className="library-command-row">
             <input
@@ -198,8 +198,7 @@ export function LibraryPage() {
             <section className="material-action-feedback" role="region" aria-label="资料动作反馈">
               <strong>{activeMaterial.title}</strong>
               <p>
-                {activeMaterial.detail}，当前状态：
-                {activeMaterial.parseStatus === "completed" ? "已完成解析" : "正在处理"}。后续接入真实引用接口后会显示片段、页码和置信度。
+                {activeMaterial.parseStatus === "completed" ? "已完成解析" : "正在处理"}。完成后可查看片段、页码和置信度。
               </p>
             </section>
           ) : null}
@@ -242,9 +241,8 @@ function LibraryCourseDialog({ materials, selectedMaterialIds, onToggleMaterial,
           <X size={18} aria-hidden="true" />
         </button>
         <div className="dialog-copy">
-          <p className="section-kicker">生成课程</p>
           <h2 id="library-course-dialog-title">从资料生成课程</h2>
-          <p>这个浮层不会替换资料库。先选择资料，再让 EduNova 生成课程目录、知识点和第一轮复习任务。</p>
+          <p>选择资料，生成目录、知识点和复习任务。</p>
         </div>
         <div className="library-course-materials">
           {materials.map((material) => (

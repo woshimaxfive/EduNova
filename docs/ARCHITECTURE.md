@@ -147,7 +147,7 @@ frontend/src/
 | `frontend/src/features/auth/authStore.ts` | Zustand 登录态，本地预览 token 和用户信息 |
 | `frontend/src/api/client.ts` | Axios 客户端，默认基础路径 `/api/v1`，自动附加 token，401 清理登录态并返回登录页 |
 | `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、profiles、resources、agents、paths、tutor、practice、reports、demo、settings |
-| `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和学习空间状态面板的纯状态模型 |
+| `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和短状态信号的纯状态模型 |
 | `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、资源工坊、画像、辅导、练习、报告、设置和 404；学生端核心页面已从占位页补成可扩展工作区骨架 |
 | `frontend/src/components` | `AppSidebar`、学习空间壳子、学习画布、资料源簇、AI 命令栏、资源输出区、证据层、Agent 轨迹、上传建课状态轨道、学习空间状态条和统一 `ActionNotice` 反馈层；`/app` 首页已补 GPT 式贴边侧栏、可收起历史、侧栏账号入口、AI 对话主页、输入区资料库浮层入口、文件上传入口、最近学习轻量列表、发送后对话态和生成课程浮层，`/app/library` 已改为文件库式资料管理页，`/app/courses/:courseId` 已组合课程空间静态壳子，资料库、课程空间、资源工坊、画像、辅导、练习、报告和设置复用同一贴边工作区视觉体系 |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、深色模式、reduced motion 和 reduced transparency 基础 |

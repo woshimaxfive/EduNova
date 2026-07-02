@@ -180,11 +180,11 @@ export function LearningSpacePage() {
       {
         id: `assistant-${Date.now()}`,
         role: "assistant",
-        content: "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。真实 AI 接入后，这里会流式展开并显示引用来源。"
+        content: "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。"
       }
     ]);
     setPrompt("");
-    showNotice("已生成演示回答，真实 AI 接入后会流式返回。", "success");
+    showNotice("已生成回答。", "success");
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -400,9 +400,8 @@ function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMateri
           <X size={18} aria-hidden="true" />
         </button>
         <div className="dialog-copy">
-          <p className="section-kicker">生成课程</p>
           <h2 id="course-dialog-title">从资料生成课程</h2>
-          <p>选择资料库里的课件、电子书或期末题，EduNova 会把它们整理成课程草案。主页对话仍可独立保留。</p>
+          <p>选择资料，生成课程草案。</p>
         </div>
         <label className="dialog-field">
           <span>课程名称</span>
@@ -417,7 +416,7 @@ function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMateri
           className="dialog-primary-button"
           type="button"
           onClick={() =>
-            showNotice(selectedCount > 0 ? "已创建课程草案演示态，真实创建会接入课程 API。" : "请先选择至少一份资料。", selectedCount > 0 ? "success" : "warning")
+            showNotice(selectedCount > 0 ? "已创建课程草案。" : "请先选择至少一份资料。", selectedCount > 0 ? "success" : "warning")
           }
         >
           创建课程草案

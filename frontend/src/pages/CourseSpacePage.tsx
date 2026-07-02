@@ -9,7 +9,7 @@ import {
   Target
 } from "@phosphor-icons/react";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
 import { LearningCanvas } from "../components/canvas/LearningCanvas";
@@ -34,7 +34,6 @@ const courseActionLinks = [
 type AnswerPanelKind = "citations" | "path" | "agent";
 
 export function CourseSpacePage() {
-  const { courseId } = useParams();
   const [activeThread, setActiveThread] = useState(courseThreads[0]);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<AnswerPanelKind>("citations");
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
@@ -69,9 +68,8 @@ export function CourseSpacePage() {
                 <span>回到学习主页</span>
               </Link>
               <div className="course-space-title">
-                <p className="section-kicker">课程空间 · {courseId ?? "course-ai"}</p>
                 <h1>{snapshot.currentCourse.title}</h1>
-                <p>{snapshot.currentCourse.description} 这里承载课程内对话、资料、路径、引用、Agent 轨迹和资源输出。</p>
+                <p>{snapshot.currentCourse.description} 课程对话、资料、路径和引用都在这里。</p>
               </div>
               <dl className="course-space-metrics" aria-label="课程状态">
                 <div>
@@ -96,8 +94,7 @@ export function CourseSpacePage() {
                     <ChatCircleText size={20} weight="duotone" />
                   </span>
                   <div>
-                    <p className="section-kicker">课程对话</p>
-                    <h2>围绕这门课继续问</h2>
+                    <h2>继续问</h2>
                   </div>
                 </div>
 
@@ -118,10 +115,7 @@ export function CourseSpacePage() {
                 <article className="course-answer">
                   <p className="course-answer-label">AI 辅导回答</p>
                   <h2>监督学习先抓住“数据、目标、泛化”三件事</h2>
-                  <p>
-                    先用课程资料里的例子区分训练集和测试集，再把过拟合、泛化误差和正则化连起来。回答下方保留引用、路径建议和
-                    Agent 过程，后续接入真实 RAG 后这里会替换为流式回答。
-                  </p>
+                  <p>先区分训练集和测试集，再把过拟合、泛化误差和正则化连起来。</p>
                   <div className="answer-action-row" aria-label="回答展开入口">
                     <button
                       className={activeAnswerPanel === "citations" ? "active" : ""}
@@ -171,8 +165,7 @@ export function CourseSpacePage() {
                     <CheckCircle size={20} weight="duotone" />
                   </span>
                   <div>
-                    <p className="section-kicker">今日建议</p>
-                    <h2>下一步学习</h2>
+                    <h2>下一步</h2>
                   </div>
                 </div>
                 <ol className="course-task-list" aria-label="课程任务">
@@ -237,7 +230,7 @@ function AnswerDetailPanel({ activePanel }: AnswerDetailPanelProps) {
   return (
     <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
       <strong>引用来源</strong>
-      <p>AI 导论内置讲义和期末复习题样例会作为回答依据，真实 RAG 接入后会显示页码、片段和置信度。</p>
+      <p>AI 导论内置讲义和期末复习题样例会作为回答依据。</p>
     </section>
   );
 }

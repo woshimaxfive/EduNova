@@ -62,31 +62,31 @@ const workspaceStatePanels: WorkspaceStatePanel[] = [
   {
     kind: "empty",
     title: "空状态",
-    description: "还没有课程上下文时，学生可以从内置课程、上传资料或画像对话开始。",
+    description: "从课程、资料或画像开始。",
     actionLabel: "选择开始方式"
   },
   {
     kind: "loading",
     title: "加载状态",
-    description: "长任务显示具体阶段和进度，避免学生面对普通转圈等待。",
+    description: "显示阶段和进度。",
     actionLabel: "查看进度"
   },
   {
     kind: "error",
     title: "错误恢复",
-    description: "上传或生成失败时保留原因摘要，并给出重试、换格式或稍后再试。",
+    description: "保留原因并给出下一步。",
     actionLabel: "恢复任务"
   },
   {
     kind: "low_evidence",
     title: "低依据提示",
-    description: "资料不足时明确标记低依据，不把扩展内容伪装成课程结论。",
+    description: "资料不足时明确标记。",
     actionLabel: "补充资料"
   },
   {
     kind: "demo_fallback",
     title: "演示兜底内容",
-    description: "演示数据和 fallback 输出必须标记来源，保证比赛演示可复现。",
+    description: "演示来源清晰可见。",
     actionLabel: "查看标记"
   }
 ];

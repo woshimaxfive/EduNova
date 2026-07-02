@@ -53,7 +53,7 @@ describe("student interaction affordances", () => {
 
     expect(screen.getByRole("button", { name: "联网搜索" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "深度思考" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("status")).toHaveTextContent("已生成演示回答");
+    expect(screen.getByRole("status")).toHaveTextContent("已生成回答");
   });
 
   it("opens course answer detail panels instead of leaving action buttons inert", async () => {
@@ -129,7 +129,7 @@ describe("student interaction affordances", () => {
     await user.type(screen.getByRole("textbox", { name: "作答区" }), "需要把局部梯度沿计算图传回参数。");
     await user.click(screen.getByRole("button", { name: "提交答案" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("已提交演示答案");
+    expect(screen.getByRole("status")).toHaveTextContent("已提交答案");
   });
 
   it("shows feedback for library and settings actions that await real APIs", async () => {

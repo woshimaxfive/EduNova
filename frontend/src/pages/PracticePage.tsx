@@ -17,16 +17,15 @@ export function PracticePage() {
       return;
     }
 
-    showNotice("已提交演示答案，真实批改接口接入后会更新掌握度。", "success");
+    showNotice("已提交答案。", "success");
   }
 
   return (
-    <PageFrame title="用题目反推薄弱点" description="作答、批改、错因和复习队列会和知识画布同步。">
+    <PageFrame title="练习" description="作答后查看反馈和复习队列。">
       <div className="student-workspace practice-workspace">
         <section className="student-panel practice-question" role="region" aria-label="练习作答">
           <div className="student-panel-heading">
             <div>
-              <p className="section-kicker">练习</p>
               <h2>递进题 1 / 8</h2>
             </div>
             <span className="panel-count">监督学习</span>
@@ -42,7 +41,7 @@ export function PracticePage() {
               aria-label="作答区"
               value={answer}
               onChange={(event) => setAnswer(event.target.value)}
-              placeholder="写下你的推导过程，系统会先看思路再给答案。"
+              placeholder="写下你的推导过程。"
             />
           </label>
           <button className="primary-action" type="button" onClick={submitAnswer}>
@@ -72,7 +71,6 @@ export function PracticePage() {
           <section className="student-panel review-queue" role="region" aria-label="薄弱点复习队列">
             <div className="student-panel-heading compact">
               <div>
-                <p className="section-kicker">复习队列</p>
                 <h2>下一组复习</h2>
               </div>
             </div>

@@ -17,12 +17,11 @@ export function ProfilePage() {
   const { notice, showNotice } = useActionNotice();
 
   return (
-    <PageFrame title="用聊天建立学习画像" description="目标、基础、偏好、薄弱点和学习节奏会随着证据持续更新。">
+    <PageFrame title="学习画像" description="目标、基础和薄弱点会随学习更新。">
       <div className="student-workspace profile-workspace">
         <section className="student-panel profile-summary" role="region" aria-label="学习画像">
           <div className="student-panel-heading">
             <div>
-              <p className="section-kicker">学习画像</p>
               <h2>当前画像</h2>
             </div>
             <span className="profile-score">
@@ -49,8 +48,7 @@ export function ProfilePage() {
           <section className="student-panel evidence-summary" role="region" aria-label="画像证据">
             <div className="student-panel-heading compact">
               <div>
-                <p className="section-kicker">画像证据</p>
-                <h2>为什么这样判断</h2>
+                <h2>判断依据</h2>
               </div>
             </div>
             <ul className="evidence-list">
@@ -66,8 +64,8 @@ export function ProfilePage() {
           <section className="student-panel profile-dialog-entry" role="region" aria-label="画像对话入口">
             <ChatCircleText size={24} weight="duotone" aria-hidden="true" />
             <div>
-              <strong>先问 2 到 3 个问题，再生成初始画像。</strong>
-              <p>后续练习和错因会继续修正画像，不需要一次性填完问卷。</p>
+              <strong>回答几个问题，生成初始画像。</strong>
+              <p>练习和错因会持续修正画像。</p>
             </div>
             <div className="profile-prompt-strip">
               <Compass size={17} weight="duotone" aria-hidden="true" />

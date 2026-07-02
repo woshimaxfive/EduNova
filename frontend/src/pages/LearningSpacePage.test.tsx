@@ -110,6 +110,36 @@ describe("LearningSpacePage", () => {
     expect(screen.queryByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).not.toBeInTheDocument();
   });
 
+  it("keeps follow-up questions inside the active home thread", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <LearningSpacePage />
+      </MemoryRouter>
+    );
+
+    const historyRail = screen.getByRole("region", { name: "历史对话" });
+    const initialThreadCount = historyRail.querySelectorAll("button[aria-pressed]").length;
+    const input = screen.getByRole("textbox", { name: "学习问题输入" });
+
+    await user.type(input, "第一轮复习怎么开始？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    const firstQuestionThread = within(historyRail).getByRole("button", { name: /第一轮复习怎么开始/ });
+
+    expect(firstQuestionThread).toHaveAttribute("aria-pressed", "true");
+    expect(historyRail.querySelectorAll("button[aria-pressed]")).toHaveLength(initialThreadCount + 1);
+
+    await user.type(input, "那第二步做什么？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(within(screen.getByRole("region", { name: "主页对话" })).getByText("那第二步做什么？")).toBeInTheDocument();
+    expect(firstQuestionThread).toHaveAttribute("aria-pressed", "true");
+    expect(within(historyRail).queryByRole("button", { name: /那第二步做什么/ })).not.toBeInTheDocument();
+    expect(historyRail.querySelectorAll("button[aria-pressed]")).toHaveLength(initialThreadCount + 1);
+  });
+
   it("lets the home answer reveal sources, path, and thinking details", async () => {
     const user = userEvent.setup();
 

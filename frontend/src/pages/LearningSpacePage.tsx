@@ -98,7 +98,7 @@ export function LearningSpacePage() {
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
   const [homeThreads, setHomeThreads] = useState(() => (hasStarterContent ? homeConversations : []));
-  const [activeHomeThreadId, setActiveHomeThreadId] = useState<string | null>(hasStarterContent ? homeConversations[0]?.id ?? null : null);
+  const [activeHomeThreadId, setActiveHomeThreadId] = useState<string | null>(null);
   const [materials, setMaterials] = useState<LibraryMaterial[]>(() => (hasStarterContent ? initialLibraryMaterials : []));
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
@@ -172,7 +172,8 @@ export function LearningSpacePage() {
   function handleSendQuestion() {
     const question = prompt.trim();
     const timestamp = Date.now();
-    const nextThreadId = `home-thread-${timestamp}`;
+    const shouldCreateThread = !activeHomeThreadId || messages.length === 0;
+    const nextThreadId = shouldCreateThread ? `home-thread-${timestamp}` : activeHomeThreadId;
 
     if (!question) {
       showNotice("先输入一个学习问题。", "warning");
@@ -192,7 +193,13 @@ export function LearningSpacePage() {
         content: "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。"
       }
     ]);
-    setHomeThreads((current) => [{ id: nextThreadId, title: question, meta: "刚刚" }, ...current]);
+    setHomeThreads((current) => {
+      if (shouldCreateThread) {
+        return [{ id: nextThreadId, title: question, meta: "刚刚" }, ...current];
+      }
+
+      return current.map((thread) => (thread.id === nextThreadId ? { ...thread, meta: "刚刚" } : thread));
+    });
     setActiveHomeThreadId(nextThreadId);
     setPrompt("");
     showNotice("已生成回答。", "success");
@@ -270,6 +277,18 @@ export function LearningSpacePage() {
               </h1>
             </div>
           )}
+
+          {selectedMaterialIds.length > 0 || isWebSearchEnabled ? (
+            <div className="selected-materials-note">
+              <LinkSimple size={16} weight="duotone" aria-hidden="true" />
+              <span>
+                {selectedMaterialIds.length > 0
+                  ? `已选择 ${selectedMaterialIds.length} 份资料${isWebSearchEnabled ? "，联网搜索已开" : ""}。`
+                  : "联网搜索已开。"}
+              </span>
+            </div>
+          ) : null}
+          <ActionNotice notice={notice} className="home-action-notice" />
 
           <section className={hasHomeThread ? "composer-frame docked" : "composer-frame"} aria-label={hasHomeThread ? "底部学习输入" : "学习输入区"}>
             <div className="conversation-composer">
@@ -356,18 +375,6 @@ export function LearningSpacePage() {
               ))}
             </div>
           ) : null}
-
-          {selectedMaterialIds.length > 0 || isWebSearchEnabled ? (
-            <div className="selected-materials-note">
-              <LinkSimple size={16} weight="duotone" aria-hidden="true" />
-              <span>
-                {selectedMaterialIds.length > 0
-                  ? `已选择 ${selectedMaterialIds.length} 份资料${isWebSearchEnabled ? "，联网搜索已开" : ""}。`
-                  : "联网搜索已开。"}
-              </span>
-            </div>
-          ) : null}
-          <ActionNotice notice={notice} className="home-action-notice" />
 
           {!hasHomeThread && hasStarterContent ? (
             <section className="recent-course-strip" aria-label="最近学习">

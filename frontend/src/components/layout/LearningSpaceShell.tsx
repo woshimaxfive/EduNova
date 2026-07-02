@@ -9,7 +9,7 @@ type LearningSpaceShellProps = PropsWithChildren<{
 
 export function LearningSpaceShell({ children, hideTopNavigation = false }: LearningSpaceShellProps) {
   return (
-    <div className="app-surface">
+    <div className={hideTopNavigation ? "app-surface edge-app-surface" : "app-surface"}>
       <div className="ambient-layer" aria-hidden="true" />
       {hideTopNavigation ? null : <TopNavigation />}
       <motion.main

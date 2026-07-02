@@ -8,13 +8,12 @@ import { homeConversations } from "../data/demoConversations";
 import { useAuthStore } from "../features/auth/authStore";
 
 type PageFrameProps = {
-  kicker: string;
   title: string;
   description: string;
   children: ReactNode;
 };
 
-export function PageFrame({ kicker, title, description, children }: PageFrameProps) {
+export function PageFrame({ title, description, children }: PageFrameProps) {
   const user = useAuthStore((state) => state.user);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const { notice, showNotice } = useActionNotice();
@@ -39,7 +38,6 @@ export function PageFrame({ kicker, title, description, children }: PageFramePro
         <section className="route-main-surface">
           <section className="workspace-hero slim">
             <div>
-              <p className="section-kicker">{kicker}</p>
               <h1>{title}</h1>
               <p>{description}</p>
             </div>

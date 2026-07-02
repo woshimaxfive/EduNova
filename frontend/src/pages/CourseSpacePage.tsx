@@ -71,7 +71,7 @@ export function CourseSpacePage() {
               <div className="course-space-title">
                 <p className="section-kicker">课程空间 · {courseId ?? "course-ai"}</p>
                 <h1>{snapshot.currentCourse.title}</h1>
-                <p>{snapshot.currentCourse.description} 这里承载课程内对话、资料、路径、引用、Agent 轨迹和 Studio 输出。</p>
+                <p>{snapshot.currentCourse.description} 这里承载课程内对话、资料、路径、引用、Agent 轨迹和资源输出。</p>
               </div>
               <dl className="course-space-metrics" aria-label="课程状态">
                 <div>

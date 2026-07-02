@@ -6,7 +6,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 2026-07-14 前完成 EduNova 可运行第一版：学生注册登录、对话画像、上传资料建课、RAG 引用问答、多智能体生成 5 类资源、学习路径、练习评估、可视化 AI 学习空间、Agent 轨迹、Demo Mode、Docker Compose、核心文档。2026-07-15 到 2026-07-20 完成测试说明、开发说明、部署说明、PPT、演示视频和提交包。
+**Goal:** 在 2026-07-14 前完成 EduNova 可运行第一版：学生注册登录、对话画像、上传资料建课、RAG 引用问答、多智能体生成 5 类资源、学习路径、练习评估、可视化 AI 学习空间、Agent 轨迹、演示模式、Docker Compose、核心文档。2026-07-15 到 2026-07-20 完成测试说明、开发说明、部署说明、PPT、演示视频和提交包。
 **Architecture:** React + TypeScript 学生 AI 学习空间通过 HTTP/SSE 调用 FastAPI；FastAPI 以 service 层承载课程、画像、建课、RAG、资源、路径、评估等业务；LangGraph 编排 ProfileAgent、DiagnosisAgent、CourseBuilderAgent、RetrieverAgent、ResourceAgent、PathAgent、TutorAgent、AssessmentAgent、ReviewAgent；PostgreSQL + pgvector 保存业务数据、知识切片和向量；Redis 保存任务进度、限流和 Demo 缓存；Nginx 提供部署入口。
 **Tech Stack:** Python 3.12.10, FastAPI, Pydantic, SQLAlchemy, Alembic, LangGraph, LangChain, PostgreSQL, pgvector, Redis, JWT, bcrypt, python-pptx, pypdf, python-docx, React, TypeScript, Vite, Tailwind CSS, Radix UI / shadcn/ui 按需组件, Motion, React Flow, ECharts, Mermaid, Markmap, pytest, Vitest, Playwright, Docker Compose, Nginx.
 ---
@@ -15,7 +15,7 @@
 
 - [ ] 所有新增文本文件使用 UTF-8 无 BOM；中文直接写入，不使用 `\uXXXX`。
 - [ ] 不复制参考项目代码；只借鉴产品结构、功能边界和答辩表达，并在 `docs/OPEN_SOURCE_NOTICE.md` 标注参考项目名称、来源、协议情况。
-- [ ] 每天结束必须有可运行版本；若 AI 服务不可用，Demo Mode 使用明确标记的 fallback 数据保证演示不中断。
+- [ ] 每天结束必须有可运行版本；若 AI 服务不可用，演示模式使用明确标记的 fallback 数据保证演示不中断。
 - [ ] 每个 AI 生成结果必须绑定 `trace_id`、`citation_refs`、`review_status`、`confidence_score` 中的关键字段。
 - [ ] 所有用户私有数据绑定 `user_id`；课程内数据绑定 `user_id` 与 `course_id`；主页会话和独立资料库允许先不绑定课程，避免多人部署后数据串用。
 - [ ] 第一版只做学生端主线和轻量系统设置；不建设完整教师端、家长端、班级运营后台、支付、真实视频生成、扫描 OCR、移动端。
@@ -409,7 +409,7 @@ frontend/src/components/layout/AppSidebar.tsx
 frontend/src/components/command/CommandBar.tsx
 frontend/src/components/canvas/LearningCanvas.tsx
 frontend/src/components/canvas/SourceCluster.tsx
-frontend/src/components/studio/StudioDock.tsx
+frontend/src/components/资源工坊/StudioDock.tsx
 frontend/src/components/evidence/EvidenceLayer.tsx
 frontend/src/components/evidence/AgentTimeline.tsx
 frontend/src/features/auth/authStore.ts
@@ -443,7 +443,7 @@ Central AI learning input
 Home conversation history
 Independent material library entry
 Recent courses / recent learning spaces
-Course spaces for learning canvas, Studio, citations and Agent traces
+Course spaces for learning canvas, 资源工坊, citations and Agent traces
 Quiet material depth with restrained motion
 No marketing landing page
 No decorative gradient orbs
@@ -504,12 +504,12 @@ Current Phase 3.1 implementation note:
 - `markmap-viewer` in the initial plan was corrected to the actual npm package `markmap-view`.
 - Routes, public/protected guards, local preview auth store, API client, login/register/Demo pages, learning-space shell, top navigation, AI conversation-first home, home history, material library entry, recent courses, course generation dialog, first-run guide and student core page skeletons are implemented.
 - Phase 3D/3E added frontend API contract modules, upload-to-course workflow state, empty/loading/error/low-evidence/demo-fallback state panels and page-level tests.
-- Phase 3 closure redesign first produced the skill-based direction `Productivity Tool + AI-Native UI + Knowledge Graph + Process Map`, replacing the five-card status feel with a learning operating system canvas, process rail, status signals and dark Studio Dock.
-- 2026-07-01 P3R3 implemented the AI conversation-first learning home with history, centered learning input, material-library drawer entry, semantic recent-learning list, restrained learning-signal background and course generation dialog; the existing learning canvas, Studio Dock and evidence layer should be reused inside course space or answer expansion instead of dominating `/app`.
-- P3 completion added `/app/courses/:courseId` as a protected static/semi-static course space with course chat, course history, knowledge canvas, today's tasks, Studio output, citations and Agent trace; real backend data remains Phase 4+.
-- P3.6 added structured skeletons for library, Studio, profile, tutor, practice, reports and settings pages; tests now lock their material, generation, profile, tutoring, practice, report and settings regions so they do not regress into placeholder pages.
-- P3.7 added local interaction feedback for the main visible buttons: home composer, material drawer selection, course answer expansion, knowledge-node detail, tutor mode, practice submission, library citations, settings save, Studio/profile/report actions and top search now show explicit demo-state feedback until real APIs replace those handlers.
-- P3.8 now uses layered route discovery: top and mobile navigation expose learning space, library and Studio; the personal menu exposes profile, reports and settings; course space exposes tutor, practice and reports as contextual learning actions.
+- Phase 3 closure redesign first produced the skill-based direction `Productivity Tool + AI-Native UI + Knowledge Graph + Process Map`, replacing the five-card status feel with a learning operating system canvas, process rail, status signals and dark 资源输出区.
+- 2026-07-01 P3R3 implemented the AI conversation-first learning home with history, centered learning input, material-library drawer entry, semantic recent-learning list, restrained learning-signal background and course generation dialog; the existing learning canvas, 资源输出区 and evidence layer should be reused inside course space or answer expansion instead of dominating `/app`.
+- P3 completion added `/app/courses/:courseId` as a protected static/semi-static course space with course chat, course history, knowledge canvas, today's tasks, resource output, citations and Agent trace; real backend data remains Phase 4+.
+- P3.6 added structured skeletons for library, 资源工坊, profile, tutor, practice, reports and settings pages; tests now lock their material, generation, profile, tutoring, practice, report and settings regions so they do not regress into placeholder pages.
+- P3.7 added local interaction feedback for the main visible buttons: home composer, material drawer selection, course answer expansion, knowledge-node detail, tutor mode, practice submission, library citations, settings save, 资源工坊/profile/report actions and top search now show explicit demo-state feedback until real APIs replace those handlers.
+- P3.8 now uses layered route discovery: top and mobile navigation expose learning space, library and 资源工坊; the personal menu exposes profile, reports and settings; course space exposes tutor, practice and reports as contextual learning actions.
 - The `/app` home shell now follows the user-provided ChatGPT references: the home sidebar is flush with the left browser edge, can collapse to an icon rail, the initial composer is smaller, and the first sent question moves the page into a chat thread with the composer docked near the bottom.
 - Browser visual checks covered P3R3 `/app` at desktop and mobile widths with no horizontal overflow; the material-library drawer and course generation dialog open and remain readable.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
@@ -537,7 +537,7 @@ frontend/src/api/settings.ts
 - [x] Configure Axios to attach JWT and handle 401 by returning to login.
 - [x] Add Vitest tests for auth store token persistence, API client base URL and key API route constants.
 - [x] Add Phase 3D state tests for upload-to-course workflow status and fallback state panels.
-- [x] Connect the state layer to LearningSpace, Library and Studio surfaces without introducing a fixed left admin dashboard.
+- [x] Connect the state layer to LearningSpace, Library and resource-workshop surfaces without introducing a fixed left admin dashboard.
 - [ ] Commit:
 
 ```powershell
@@ -608,7 +608,7 @@ today tasks
 recent resources
 learning canvas backed by `/dashboard/summary` response data
 AI command suggestions
-Studio output summary
+Resource output summary
 evidence layer entry with latest citations and Agent trace
 ```
 
@@ -719,7 +719,7 @@ key difficulties
 exam-oriented points
 ```
 
-- [ ] Use LLM when configured; use deterministic fallback extractor when Demo Mode is enabled or provider health check fails.
+- [ ] Use LLM when configured; use deterministic fallback extractor when 演示模式 is enabled or provider health check fails.
 - [ ] Add `POST /courses/from-materials`、`GET /courses/{course_id}/overview` and `POST /courses/{course_id}/materials`.
 - [ ] Library upload flow shows independent material progress, optional course linking and generated course overview.
 - [ ] Tests cover fallback extractor and API response.
@@ -782,7 +782,7 @@ backend/app/rag/retriever.py
 backend/app/rag/citation.py
 ```
 
-- [ ] Use pgvector for configured embeddings; use deterministic hashed vectors for tests and Demo Mode fallback.
+- [ ] Use pgvector for configured embeddings; use deterministic hashed vectors for tests and 演示模式 fallback.
 - [ ] Add endpoints:
 
 ```text
@@ -937,7 +937,7 @@ difficulty
 ```
 
 - [ ] Persist `generated_resources` and `resource_quality_scores`.
-- [ ] Studio page lets user select course, knowledge point and resource types; displays generated resource outputs with citations, confidence, review status and quality scores.
+- [ ] resource-workshop page lets user select course, knowledge point and resource types; displays generated resource outputs with citations, confidence, review status and quality scores.
 - [ ] Tests:
 
 ```text
@@ -1178,9 +1178,9 @@ git add backend frontend
 git commit -m "feat(materials): extract exam points from compared materials"
 ```
 
-## Phase 12: Demo Mode, Export and Open Source Readiness
+## Phase 12: 演示模式, Export and Open Source Readiness
 
-### Task 12.1: Demo Mode
+### Task 12.1: 演示模式
 
 - [ ] Create demo account seeding:
 
@@ -1456,7 +1456,7 @@ git tag edunova-initial-submission-2026-07-20
 | --- | --- | --- |
 | 不少于 6 维对话画像 | 8 维 `student_profiles.profile_json` + `profile_events` | Profile page + tests |
 | 多智能体架构 | LangGraph + 9 agents + `agent_run_logs` | Agent trace panel + architecture doc |
-| 至少 5 类资源 | Doc, MindMap, Quiz, Code, Slide | Studio page + resource tests |
+| 至少 5 类资源 | Doc, MindMap, Quiz, Code, Slide | resource-workshop page + resource tests |
 | 学习路径规划 | PathAgent + `learning_paths` + `learning_tasks` | LearningPath page |
 | 资源精准推送 | profile + mastery + resource quality scores | LearningSpace recommendations |
 | 智能辅导 | RAG Tutor + Socratic mode + citations | Tutor page |
@@ -1482,7 +1482,7 @@ git tag edunova-initial-submission-2026-07-20
 | 2026-07-09 | Tutor with RAG, Socratic mode | feat tutor |
 | 2026-07-10 | Practice, assessment, learning report | feat assessment |
 | 2026-07-11 | Exam sprint, material comparison, export | feat exam/export |
-| 2026-07-12 | Demo Mode, visual polish, docs first pass | feat demo/docs |
+| 2026-07-12 | 演示模式, visual polish, docs first pass | feat demo/docs |
 | 2026-07-13 | Docker acceptance, tests, browser evidence | test/docs evidence |
 | 2026-07-14 | Freeze feature scope, fix defects, lock runnable build | chore freeze |
 | 2026-07-15 | Development report and test report | docs reports |
@@ -1498,14 +1498,14 @@ git tag edunova-initial-submission-2026-07-20
 2. Finish upload parsing before RAG, because RAG needs course chunks and citations.
 3. Finish provider abstraction before agent generation, because every agent depends on the same model contract.
 4. Finish Agent logs before polishing UI, because trace visibility is a core competition proof.
-5. Keep Demo Mode integrated from Phase 5 onward, so every feature can be shown even when model APIs are unstable.
+5. Keep 演示模式 integrated from Phase 5 onward, so every feature can be shown even when model APIs are unstable.
 
 ## Self-Review Checklist
 
 - [ ] The plan covers all basic赛题 requirements and both optional bonus features.
 - [ ] The plan maps each major feature to concrete files, APIs, tests and commits.
 - [ ] The plan keeps the first version student-first and avoids full teacher/classroom/admin scope.
-- [ ] The plan includes upload-to-course, RAG citation, ReviewAgent, Agent trace, Demo Mode and Docker deployment.
+- [ ] The plan includes upload-to-course, RAG citation, ReviewAgent, Agent trace, 演示模式 and Docker deployment.
 - [ ] The plan includes documentation, PPT, video and submission package work.
 - [ ] The plan avoids untracked secrets and requires `.env.example` instead of real `.env`.
 - [ ] The plan respects UTF-8 no BOM and Chinese literal output requirements.

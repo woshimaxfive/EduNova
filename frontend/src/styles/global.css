@@ -3120,6 +3120,13 @@ a {
   background: rgba(16, 24, 32, 0.06);
 }
 
+.home-sidebar-nav a.active,
+.home-account-link.active {
+  color: var(--accent-strong);
+  background: rgba(8, 127, 115, 0.1);
+  box-shadow: inset 3px 0 0 rgba(8, 127, 115, 0.52);
+}
+
 .home-sidebar-nav {
   display: grid;
   gap: 2px;
@@ -4272,7 +4279,8 @@ a {
 }
 
 .route-main-surface .workspace-hero h1 {
-  font-size: clamp(2rem, 3vw, 3.5rem);
+  margin-top: 0;
+  font-size: clamp(1.9rem, 2.8vw, 3.2rem);
 }
 
 .route-main-surface .page-workbench {

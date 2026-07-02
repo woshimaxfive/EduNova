@@ -400,7 +400,7 @@ function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMateri
           <X size={18} aria-hidden="true" />
         </button>
         <div className="dialog-copy">
-          <p className="section-kicker">Course builder</p>
+          <p className="section-kicker">生成课程</p>
           <h2 id="course-dialog-title">从资料生成课程</h2>
           <p>选择资料库里的课件、电子书或期末题，EduNova 会把它们整理成课程草案。主页对话仍可独立保留。</p>
         </div>

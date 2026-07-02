@@ -17,12 +17,12 @@ export function ProfilePage() {
   const { notice, showNotice } = useActionNotice();
 
   return (
-    <PageFrame kicker="对话画像" title="用聊天建立学习画像" description="目标、基础、偏好、薄弱点和学习节奏会随着证据持续更新。">
+    <PageFrame title="用聊天建立学习画像" description="目标、基础、偏好、薄弱点和学习节奏会随着证据持续更新。">
       <div className="student-workspace profile-workspace">
         <section className="student-panel profile-summary" role="region" aria-label="学习画像">
           <div className="student-panel-heading">
             <div>
-              <p className="section-kicker">Profile</p>
+              <p className="section-kicker">学习画像</p>
               <h2>当前画像</h2>
             </div>
             <span className="profile-score">
@@ -49,7 +49,7 @@ export function ProfilePage() {
           <section className="student-panel evidence-summary" role="region" aria-label="画像证据">
             <div className="student-panel-heading compact">
               <div>
-                <p className="section-kicker">Evidence</p>
+                <p className="section-kicker">画像证据</p>
                 <h2>为什么这样判断</h2>
               </div>
             </div>

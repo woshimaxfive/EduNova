@@ -15,6 +15,10 @@ function renderPage(page: ReactNode) {
   render(<MemoryRouter>{page}</MemoryRouter>);
 }
 
+function renderRoutePage(page: ReactNode, path: string) {
+  render(<MemoryRouter initialEntries={[path]}>{page}</MemoryRouter>);
+}
+
 describe("student core pages", () => {
   it("renders the material library as a source workspace", () => {
     renderPage(<LibraryPage />);
@@ -34,10 +38,10 @@ describe("student core pages", () => {
   it("renders studio as a generated-resource workspace", () => {
     renderPage(<StudioPage />);
 
-    expect(screen.getByRole("heading", { name: "把知识点生成可学习资源" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "资源工坊" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "资源生成工作台" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "生成队列" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Studio 生成区" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "资源生成区" })).toBeInTheDocument();
   });
 
   it("renders the learning profile workspace", () => {
@@ -91,13 +95,14 @@ describe("student core pages", () => {
   });
 
   it("keeps secondary routes inside the same edge workspace shell as the home page", () => {
-    renderPage(<SettingsPage />);
+    renderRoutePage(<SettingsPage />, "/app/settings");
 
     const historyRail = screen.getByRole("region", { name: "历史对话" });
 
     expect(within(historyRail).getByRole("link", { name: "资料库" })).toHaveAttribute("href", "/app/library");
     expect(within(historyRail).getByRole("link", { name: "个人资料" })).toHaveAttribute("href", "/app/profile");
     expect(within(historyRail).getByRole("link", { name: "设置" })).toHaveAttribute("href", "/app/settings");
+    expect(within(historyRail).getByRole("link", { name: "设置" })).toHaveAttribute("aria-current", "page");
     expect(within(historyRail).getByRole("button", { name: /神经网络反向传播怎么复习/ })).toBeInTheDocument();
     expect(within(historyRail).queryByText("还没有历史对话")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "应用导航" })).not.toBeInTheDocument();

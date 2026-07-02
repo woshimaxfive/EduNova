@@ -14,12 +14,12 @@ export function ReportsPage() {
   const { notice, showNotice } = useActionNotice();
 
   return (
-    <PageFrame kicker="学习报告" title="让推荐原因可解释" description="掌握度、画像变化、错因和 Agent 证据会进入学习档案。">
+    <PageFrame title="让推荐原因可解释" description="掌握度、画像变化、错因和 Agent 证据会进入学习档案。">
       <div className="student-workspace reports-workspace">
         <section className="student-panel mastery-map" role="region" aria-label="掌握度地图">
           <div className="student-panel-heading">
             <div>
-              <p className="section-kicker">Mastery</p>
+              <p className="section-kicker">掌握度</p>
               <h2>知识掌握度</h2>
             </div>
             <ChartLineUp size={24} weight="duotone" aria-hidden="true" />
@@ -61,7 +61,7 @@ export function ReportsPage() {
 
         <aside className="student-panel export-panel" role="region" aria-label="导出学习档案">
           <div>
-            <p className="section-kicker">Archive</p>
+            <p className="section-kicker">学习档案</p>
             <h2>给答辩和复盘留证据</h2>
             <p>导出内容默认只包含学习过程、引用来源和掌握度，不包含真实密钥或隐私原文。</p>
           </div>

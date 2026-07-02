@@ -18,7 +18,7 @@ describe("TopNavigation", () => {
     const expectedRoutes = [
       ["学习空间", PATHS.app],
       ["资料库", PATHS.library],
-      ["Studio", PATHS.studio]
+      ["资源工坊", PATHS.studio]
     ] as const;
 
     for (const [label, path] of expectedRoutes) {

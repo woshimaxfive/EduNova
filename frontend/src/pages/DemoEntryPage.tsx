@@ -21,7 +21,7 @@ export function DemoEntryPage() {
   return (
     <main className="entry-page demo-entry">
       <section className="entry-panel compact">
-        <p className="section-kicker">Demo Mode</p>
+        <p className="section-kicker">演示模式</p>
         <h1>准备演示学习空间</h1>
         <p>演示账号会进入人工智能导论课程，并使用明确标记的样例数据。</p>
         <button className="primary-button" type="button" onClick={start} disabled={isLoading}>

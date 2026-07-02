@@ -124,7 +124,7 @@ export function LibraryPage() {
 
   return (
     <>
-      <PageFrame kicker="资料库" title="资料库" description="课件、电子书、期末题和课程资料都先进入这里，再决定用于对话、加入课程或生成新课程。">
+      <PageFrame title="资料库" description="课件、电子书、期末题和课程资料都先进入这里，再决定用于对话、加入课程或生成新课程。">
         <section className="library-file-shell" role="region" aria-label="文件库">
           <div className="library-command-row">
             <input
@@ -242,7 +242,7 @@ function LibraryCourseDialog({ materials, selectedMaterialIds, onToggleMaterial,
           <X size={18} aria-hidden="true" />
         </button>
         <div className="dialog-copy">
-          <p className="section-kicker">Course builder</p>
+          <p className="section-kicker">生成课程</p>
           <h2 id="library-course-dialog-title">从资料生成课程</h2>
           <p>这个浮层不会替换资料库。先选择资料，再让 EduNova 生成课程目录、知识点和第一轮复习任务。</p>
         </div>

@@ -15,12 +15,12 @@ export function TutorPage() {
   const { notice, showNotice } = useActionNotice();
 
   return (
-    <PageFrame kicker="AI 辅导" title="围绕课程资料追问" description="直接解释、苏格拉底追问和考前冲刺会共用同一套引用机制。">
+    <PageFrame title="围绕课程资料追问" description="直接解释、苏格拉底追问和考前冲刺会共用同一套引用机制。">
       <div className="student-workspace tutor-workspace">
         <section className="student-panel tutor-dialog" role="region" aria-label="AI 辅导对话">
           <div className="student-panel-heading">
             <div>
-              <p className="section-kicker">Tutor</p>
+              <p className="section-kicker">AI 辅导</p>
               <h2>像聊天一样追问，像课堂一样留痕</h2>
             </div>
           </div>
@@ -77,7 +77,7 @@ export function TutorPage() {
           <section className="student-panel citation-panel" role="region" aria-label="引用来源">
             <div className="student-panel-heading compact">
               <div>
-                <p className="section-kicker">Sources</p>
+                <p className="section-kicker">引用来源</p>
                 <h2>回答来源</h2>
               </div>
               <MagnifyingGlass size={18} weight="duotone" aria-hidden="true" />

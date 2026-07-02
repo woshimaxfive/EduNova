@@ -15,11 +15,11 @@ export function StudioPage() {
   const { notice, showNotice } = useActionNotice();
 
   return (
-    <PageFrame kicker="Studio" title="把知识点生成可学习资源" description="讲解、练习、思维导图、复盘报告和 PPT 大纲会绑定引用与审核状态。">
+    <PageFrame title="资源工坊" description="把知识点生成讲解、练习、思维导图、复盘报告和 PPT 大纲，并绑定引用与审核状态。">
       <section className="student-panel studio-workbench" role="region" aria-label="资源生成工作台">
         <div className="student-panel-heading">
           <div>
-            <p className="section-kicker">Studio Queue</p>
+            <p className="section-kicker">生成队列</p>
             <h2>先选知识点，再决定生成什么</h2>
           </div>
           <button className="primary-action" type="button" onClick={() => showNotice("已加入资源生成演示队列，真实任务 API 接入后会显示进度。", "success")}>

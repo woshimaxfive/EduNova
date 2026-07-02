@@ -12,13 +12,13 @@ export function StudioDock({ outputs }: StudioDockProps) {
   const { notice, showNotice } = useActionNotice();
 
   return (
-    <section className="studio-dock" role="region" aria-label="Studio 生成区">
+    <section className="studio-dock" role="region" aria-label="资源生成区">
       <div className="section-heading-line">
         <div>
-          <p className="section-kicker">Studio</p>
+          <p className="section-kicker">资源工坊</p>
           <h2>资源生成工作台</h2>
         </div>
-        <button className="soft-button" type="button" onClick={() => showNotice("资源生成会在 Studio 任务 API 接入后开放。")}>
+        <button className="soft-button" type="button" onClick={() => showNotice("资源生成会在任务 API 接入后开放。")}>
           <Sparkle size={17} weight="fill" aria-hidden="true" />
           <span>生成资源</span>
         </button>

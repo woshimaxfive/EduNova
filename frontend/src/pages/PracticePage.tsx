@@ -21,12 +21,12 @@ export function PracticePage() {
   }
 
   return (
-    <PageFrame kicker="练习评估" title="用题目反推薄弱点" description="作答、批改、错因和复习队列会和知识画布同步。">
+    <PageFrame title="用题目反推薄弱点" description="作答、批改、错因和复习队列会和知识画布同步。">
       <div className="student-workspace practice-workspace">
         <section className="student-panel practice-question" role="region" aria-label="练习作答">
           <div className="student-panel-heading">
             <div>
-              <p className="section-kicker">Practice</p>
+              <p className="section-kicker">练习</p>
               <h2>递进题 1 / 8</h2>
             </div>
             <span className="panel-count">监督学习</span>
@@ -72,7 +72,7 @@ export function PracticePage() {
           <section className="student-panel review-queue" role="region" aria-label="薄弱点复习队列">
             <div className="student-panel-heading compact">
               <div>
-                <p className="section-kicker">Review</p>
+                <p className="section-kicker">复习队列</p>
                 <h2>下一组复习</h2>
               </div>
             </div>

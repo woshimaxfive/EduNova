@@ -23,7 +23,7 @@ import { useAuthStore } from "../../features/auth/authStore";
 const primaryNavItems = [
   { label: "学习空间", to: PATHS.app, icon: House },
   { label: "资料库", to: PATHS.library, icon: BookOpen },
-  { label: "Studio", to: PATHS.studio, icon: Sparkle }
+  { label: "资源工坊", to: PATHS.studio, icon: Sparkle }
 ];
 
 const personalMenuItems = [

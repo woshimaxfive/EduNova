@@ -1,9 +1,8 @@
-import { ArrowRight, PlayCircle, ShieldCheck, Sparkle } from "@phosphor-icons/react";
+import { ArrowRight, BookOpen, ShieldCheck, Sparkle } from "@phosphor-icons/react";
 import { type FormEvent, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
-import { startDemoSession } from "../features/demo/demoApi";
 import { useAuthStore } from "../features/auth/authStore";
 
 type LocationState = {
@@ -18,7 +17,6 @@ export function LoginPage() {
   const setSession = useAuthStore((state) => state.setSession);
   const [email, setEmail] = useState("demo@edunova.local");
   const [password, setPassword] = useState("Demo123456");
-  const [isPreparingDemo, setIsPreparingDemo] = useState(false);
   const from = (location.state as LocationState | null)?.from?.pathname ?? PATHS.app;
 
   function completeLogin() {
@@ -28,7 +26,8 @@ export function LoginPage() {
         id: 1,
         email,
         displayName: "演示学生",
-        role: "student"
+        role: "student",
+        starterMode: "ai_intro"
       }
     });
     navigate(from, { replace: true });
@@ -39,15 +38,8 @@ export function LoginPage() {
     completeLogin();
   }
 
-  async function handleDemo() {
-    setIsPreparingDemo(true);
-    const session = await startDemoSession();
-    setSession(session);
-    navigate(PATHS.app, { replace: true });
-  }
-
   return (
-    <main className="entry-page">
+    <main className="entry-page auth-entry-page">
       <div className="ambient-layer" aria-hidden="true" />
       <section className="entry-preview" aria-label="学习空间预览">
         <div className="brand-mark entry-brand">
@@ -62,13 +54,17 @@ export function LoginPage() {
         </div>
         <div className="preview-note">
           <ShieldCheck size={22} weight="duotone" aria-hidden="true" />
-          <span>引用、Agent 轨迹和资源审核会在学习时一起留下证据。</span>
+          <span>登录只回到你的学习空间。是否带示例课程，由注册时自己选择。</span>
+        </div>
+        <div className="preview-note secondary">
+          <BookOpen size={22} weight="duotone" aria-hidden="true" />
+          <span>人工智能导论示例课程会作为可复制模板，不与其他用户共享修改。</span>
         </div>
       </section>
       <section className="entry-panel" aria-label="登录">
         <p className="section-kicker">学生入口</p>
-        <h1>进入你的 AI 学习空间</h1>
-        <p>把课程资料、知识路径、练习评估和 AI 辅导放在同一个学习空间里。</p>
+        <h1>进入你的学习空间</h1>
+        <p>继续使用自己的资料、课程和对话。新账号可以在注册时选择空白开始，或带一门人工智能导论示例课程。</p>
         <form className="entry-form" onSubmit={handleSubmit}>
           <label>
             邮箱
@@ -92,10 +88,6 @@ export function LoginPage() {
             <ArrowRight size={18} aria-hidden="true" />
           </button>
         </form>
-        <button className="demo-button" type="button" onClick={handleDemo} disabled={isPreparingDemo}>
-          <PlayCircle size={20} weight="duotone" aria-hidden="true" />
-          <span>{isPreparingDemo ? "正在准备演示学习空间" : "体验演示学生"}</span>
-        </button>
         <p className="entry-switch">
           还没有账号？ <Link to={PATHS.register}>创建学生账号</Link>
         </p>

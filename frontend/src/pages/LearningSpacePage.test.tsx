@@ -1,11 +1,17 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
+import { useAuthStore } from "../features/auth/authStore";
 import { LearningSpacePage } from "./LearningSpacePage";
 
 describe("LearningSpacePage", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useAuthStore.getState().clearSession();
+  });
+
   it("renders a calm ChatGPT-style learning home without dashboard rails", () => {
     render(
       <MemoryRouter>
@@ -100,6 +106,34 @@ describe("LearningSpacePage", () => {
     expect(within(thread).getByText(/可以先把资料按章节和题型拆开/)).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "底部学习输入" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).not.toBeInTheDocument();
+  });
+
+  it("keeps blank starter accounts empty until they upload their own material", async () => {
+    const user = userEvent.setup();
+
+    useAuthStore.getState().setSession({
+      token: "blank-token",
+      user: {
+        id: 3,
+        email: "blank@edunova.local",
+        displayName: "空白学习者",
+        role: "student",
+        starterMode: "blank"
+      }
+    });
+
+    render(
+      <MemoryRouter>
+        <LearningSpacePage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("还没有课程")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /人工智能导论/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "打开资料库" }));
+
+    expect(screen.getByRole("dialog", { name: "学习资料库" })).toHaveTextContent("资料库还是空的");
   });
 
   it("sends with Enter and keeps Shift Enter as a line break", async () => {

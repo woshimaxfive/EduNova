@@ -1,29 +1,22 @@
 import {
   ArrowRight,
   BookOpen,
-  CaretLeft,
-  CaretRight,
   ChatCircleText,
   CheckCircle,
-  ClockCounterClockwise,
   FileArrowUp,
-  GearSix,
   LinkSimple,
   MagnifyingGlass,
   Microphone,
-  Plus,
-  SignOut,
   Sparkle,
-  Student,
-  UserCircle,
   X
 } from "@phosphor-icons/react";
 import { type ChangeEvent, type KeyboardEvent, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
-import { buildCoursePath, PATHS } from "../app/routePaths";
+import { buildCoursePath } from "../app/routePaths";
 import { ActionNotice } from "../components/feedback/ActionNotice";
 import { useActionNotice } from "../components/feedback/useActionNotice";
+import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { useAuthStore } from "../features/auth/authStore";
 
@@ -112,13 +105,12 @@ type HomeMessage = {
 };
 
 export function LearningSpacePage() {
-  const navigate = useNavigate();
-  const clearSession = useAuthStore((state) => state.clearSession);
   const user = useAuthStore((state) => state.user);
+  const hasStarterContent = user?.starterMode !== "blank";
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
-  const [materials, setMaterials] = useState<LibraryMaterial[]>(initialLibraryMaterials);
+  const [materials, setMaterials] = useState<LibraryMaterial[]>(() => (hasStarterContent ? initialLibraryMaterials : []));
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
@@ -136,11 +128,6 @@ export function LearningSpacePage() {
   function openCourseGeneration() {
     setIsCourseDialogOpen(true);
     showNotice("已打开从资料生成课程面板。");
-  }
-
-  function logout() {
-    clearSession();
-    navigate(PATHS.login);
   }
 
   function formatFileSize(size: number) {
@@ -232,92 +219,18 @@ export function LearningSpacePage() {
           <span />
           <span />
         </div>
-        <section className="home-history-rail" aria-label="历史对话" data-collapsed={isHistoryCollapsed ? "true" : "false"}>
-          <div className="home-sidebar-brand">
-            <Link className="brand-mark home-brand" to={PATHS.app} aria-label="EduNova 首页">
-              <span className="brand-symbol" aria-hidden="true">
-                <Student size={22} weight="duotone" />
-              </span>
-              <span className="home-sidebar-label">EduNova</span>
-            </Link>
-            <button
-              className="sidebar-collapse-button"
-              type="button"
-              aria-label={isHistoryCollapsed ? "展开侧栏" : "收起侧栏"}
-              aria-expanded={!isHistoryCollapsed}
-              onClick={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
-            >
-              {isHistoryCollapsed ? <CaretRight size={17} weight="bold" aria-hidden="true" /> : <CaretLeft size={17} weight="bold" aria-hidden="true" />}
-            </button>
-          </div>
-
-          <nav className="home-sidebar-nav" aria-label="主页导航">
-            <Link to={PATHS.library}>
-              <BookOpen size={18} weight="duotone" aria-hidden="true" />
-              <span>资料库</span>
-            </Link>
-            <Link to={PATHS.studio}>
-              <Sparkle size={18} weight="duotone" aria-hidden="true" />
-              <span>Studio</span>
-            </Link>
-          </nav>
-
-          <button
-            className="new-chat-button"
-            type="button"
-            onClick={() => {
-              setPrompt("");
-              setMessages([]);
-              showNotice("已新建一条主页独立对话。", "success");
-            }}
-          >
-            <Plus size={17} weight="bold" aria-hidden="true" />
-            <span>新建对话</span>
-          </button>
-          <button
-            className="history-search-button"
-            type="button"
-            onClick={() => showNotice("历史搜索会在对话索引接口接入后开放。")}
-          >
-            <MagnifyingGlass size={16} weight="duotone" aria-hidden="true" />
-            <span>搜索历史</span>
-          </button>
-          <div className="home-rail-heading">
-            <span>最近</span>
-            <ClockCounterClockwise size={18} weight="duotone" aria-hidden="true" />
-          </div>
-          <div className="home-thread-list">
-            {homeConversations.map((conversation) => (
-              <button
-                className="home-thread"
-                key={conversation.id}
-                type="button"
-                onClick={() => showNotice(`已切换到「${conversation.title}」演示对话。`)}
-              >
-                <strong>{conversation.title}</strong>
-                <small>{conversation.meta}</small>
-              </button>
-            ))}
-          </div>
-          <div className="home-account-section" aria-label="账号入口">
-            <Link className="home-account-link" to={PATHS.profile}>
-              <UserCircle size={18} weight="duotone" aria-hidden="true" />
-              <span>个人资料</span>
-            </Link>
-            <Link className="home-account-link" to={PATHS.settings}>
-              <GearSix size={18} weight="duotone" aria-hidden="true" />
-              <span>设置</span>
-            </Link>
-            <button className="home-account-link" type="button" onClick={logout}>
-              <SignOut size={18} weight="duotone" aria-hidden="true" />
-              <span>退出登录</span>
-            </button>
-            <div className="home-user-mini">
-              <span>{user?.displayName?.slice(0, 1) ?? "学"}</span>
-              <strong>{user?.displayName ?? "演示学生"}</strong>
-            </div>
-          </div>
-        </section>
+        <AppSidebar
+          isCollapsed={isHistoryCollapsed}
+          conversations={hasStarterContent ? homeConversations : []}
+          onToggleCollapsed={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
+          onNewChat={() => {
+            setPrompt("");
+            setMessages([]);
+            showNotice("已新建一条主页独立对话。", "success");
+          }}
+          onSearchHistory={() => showNotice("历史搜索会在对话索引接口接入后开放。")}
+          onSelectConversation={(conversation) => showNotice(`已切换到「${conversation.title}」演示对话。`)}
+        />
 
         <section className={hasHomeThread ? "home-chat-stage chat-active" : "home-chat-stage"} aria-label="AI 学习入口">
           {hasHomeThread ? (
@@ -426,7 +339,7 @@ export function LearningSpacePage() {
           </div>
           <ActionNotice notice={notice} className="home-action-notice" />
 
-          {!hasHomeThread ? (
+          {!hasHomeThread && hasStarterContent ? (
             <section className="recent-course-strip" aria-label="最近学习">
               <div className="recent-course-heading">
                 <span>最近学习</span>
@@ -449,6 +362,12 @@ export function LearningSpacePage() {
                   </li>
                 ))}
               </ul>
+            </section>
+          ) : null}
+          {!hasHomeThread && !hasStarterContent ? (
+            <section className="recent-course-strip empty" aria-label="最近学习">
+              <strong>还没有课程</strong>
+              <p>上传老师课件、电子书或期末题后，可以先直接提问，也可以从资料生成第一门课程。</p>
             </section>
           ) : null}
         </section>
@@ -589,6 +508,7 @@ function MaterialFileList({ materials, selectedMaterialIds, onToggleMaterial }: 
         <span>修改时间</span>
         <span>大小</span>
       </div>
+      {materials.length === 0 ? <p className="material-file-empty">资料库还是空的，先上传一份课件或试卷。</p> : null}
       {materials.map((material) => {
         const isSelected = selectedMaterialIds.includes(material.id);
 

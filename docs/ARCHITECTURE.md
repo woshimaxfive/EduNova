@@ -48,7 +48,7 @@ Nginx
 
 前端使用 React + TypeScript + Vite，定位为学生 AI 学习空间。具体设计基线见 [UI_UX_DESIGN.md](UI_UX_DESIGN.md)，入口与路由设计见 [FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)。
 
-第一版前端不采用后台管理式左侧菜单，不把首屏做成卡片堆。2026-07-02 P3 精修后，首页采用“贴左边缘主页侧栏 + 可收起历史对话 + 侧栏账号入口 + 中心 AI 学习入口 + 输入区资料库浮层按钮 + 最近学习轻量列表”的结构；发送主页问题后进入对话态，输入区移动到下方，靠近 ChatGPT 的对话工作方式。主页输入框已具备文件上传入口、资料库选择、生成课程入口、联网搜索激活态、深度思考激活态、语音入口和 Enter 发送/Shift+Enter 换行的前端行为。课程空间采用“课程内对话 + 今日任务 + 知识画布 + Studio + 证据层 + Agent 轨迹”的静态/半静态壳子；资料库已调整为文件库式页面，Studio、学习画像、AI 辅导、练习、报告和设置已补学生端核心页面骨架。P3.8 之后应用入口采用分层导航：课程页和功能页顶部一级只放学习空间、资料库和 Studio，学习画像、报告和设置放入个人菜单，AI 辅导、练习和报告也可从课程空间行动入口进入；`/app` 主页自身的贴边侧栏底部也提供个人资料、设置和退出登录入口。后续由真实课程、资料、RAG、画像、练习评估、报告和 Agent 数据驱动。
+第一版前端不采用后台管理式左侧菜单，不把首屏做成卡片堆。2026-07-02 P3 精修后，首页采用“贴左边缘主页侧栏 + 可收起历史对话 + 侧栏账号入口 + 中心 AI 学习入口 + 输入区资料库浮层按钮 + 最近学习轻量列表”的结构；发送主页问题后进入对话态，输入区移动到下方，靠近 ChatGPT 的对话工作方式。主页输入框已具备文件上传入口、资料库选择、生成课程入口、联网搜索激活态、深度思考激活态、语音入口和 Enter 发送/Shift+Enter 换行的前端行为。课程空间采用“课程内对话 + 今日任务 + 知识画布 + Studio + 证据层 + Agent 轨迹”的静态/半静态壳子；资料库已调整为文件库式页面，Studio、学习画像、AI 辅导、练习、报告和设置已补学生端核心页面骨架。P3.9 之后受保护应用区统一使用 `AppSidebar` 贴边工作区外壳：资料库、课程空间、Studio、画像、AI 辅导、练习、报告和设置不再保留旧顶部导航；个人资料、设置和退出登录固定在侧栏底部；AI 辅导、练习和报告也可从课程空间行动入口进入。注册页通过 `starter_mode` 决定是否复制人工智能导论示例课程，登录页不提供共享演示学生按钮。后续由真实课程、资料、RAG、画像、练习评估、报告和 Agent 数据驱动。
 
 目录规划：
 
@@ -79,7 +79,7 @@ frontend/src/
 
 | 模块 | 作用 |
 | --- | --- |
-| `TopNavigation` | 一级入口只保留学习空间、资料库和 Studio；搜索、上传、个人菜单承接全局辅助操作 |
+| `AppSidebar` | 受保护应用区统一贴边工作区侧栏，承载资料库、Studio、主页历史、个人资料、设置、退出登录和收起控制 |
 | `HomeChat` | 总 AI 学习主页，对话可以独立存在，也可以移入某一课程 |
 | `CommandBar` | 自然语言主入口，触发上传资料、选择资料、生成课程、基于资料问答和保存回答 |
 | `MaterialContextPanel` | 轻量资料上下文，连接独立资料库、主页对话和课程资料 |
@@ -118,7 +118,7 @@ frontend/src/
 - `ProtectedRoute` 统一保护 `/app/*`。
 - `PublicOnlyRoute` 处理已登录用户访问 `/login` 和 `/register`。
 - API client 收到 401 后清理登录态并跳回 `/login`。
-- Demo 入口由独立 service 管理，Phase 3A 使用本地预览会话，Phase 4 后接入 `/demo/status` 和 `/demo/reset`，避免登录页堆业务逻辑。
+- 后续 Demo 入口由独立 service 管理，Phase 3A 使用本地预览会话，Phase 4 后接入 `/demo/status` 和 `/demo/reset`，避免登录页重新堆共享演示账号逻辑。
 
 前端状态分工：
 
@@ -149,12 +149,12 @@ frontend/src/
 | `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、profiles、resources、agents、paths、tutor、practice、reports、demo、settings |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和学习空间状态面板的纯状态模型 |
 | `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、Studio、画像、辅导、练习、报告、设置和 404；学生端核心页面已从占位页补成可扩展工作区骨架 |
-| `frontend/src/components` | 顶部轻导航、学习空间壳子、学习画布、资料源簇、AI 命令栏、Studio Dock、证据层、Agent 轨迹、上传建课状态轨道、学习空间状态条和统一 `ActionNotice` 反馈层；`/app` 首页已补 GPT 式贴边侧栏、可收起历史、侧栏账号入口、AI 对话主页、输入区资料库浮层入口、文件上传入口、最近学习轻量列表、发送后对话态和生成课程浮层，`/app/library` 已改为文件库式资料管理页，`/app/courses/:courseId` 已组合课程空间静态壳子，核心页面复用同一视觉和状态体系 |
+| `frontend/src/components` | `AppSidebar`、学习空间壳子、学习画布、资料源簇、AI 命令栏、Studio Dock、证据层、Agent 轨迹、上传建课状态轨道、学习空间状态条和统一 `ActionNotice` 反馈层；`/app` 首页已补 GPT 式贴边侧栏、可收起历史、侧栏账号入口、AI 对话主页、输入区资料库浮层入口、文件上传入口、最近学习轻量列表、发送后对话态和生成课程浮层，`/app/library` 已改为文件库式资料管理页，`/app/courses/:courseId` 已组合课程空间静态壳子，资料库、课程空间、Studio、画像、辅导、练习、报告和设置复用同一贴边工作区视觉体系 |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、深色模式、reduced motion 和 reduced transparency 基础 |
 
 当前限制：
 
-- Phase 3A 登录、注册和 Demo 只用于本地预览，不代表后端认证已经完成。
+- Phase 3A 登录和注册只用于本地预览，不代表后端认证已经完成；注册 starter mode 已进入前端会话模型，后续后端需要落入注册接口和用户初始化流程。
 - 当前 `/app` AI 对话主页使用前端样例主页会话、资料库和最近课程数据；后续由 `/dashboard/summary`、主页会话、资料库和最近课程接口替换。
 - 当前 `/app/courses/:courseId` 课程空间使用前端样例课程、知识点、资料、引用和 Agent 轨迹数据；后续由课程详情、RAG、资源生成和 Agent 日志接口替换。
 - 当前资料库、Studio、画像、辅导、练习、报告和设置页面使用前端样例数据；后续由资料、画像、RAG、练习评估、掌握度报告和设置接口替换。

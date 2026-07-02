@@ -12,6 +12,7 @@ export type RegisterRequest = {
   email: string;
   password: string;
   display_name: string;
+  starter_mode?: "blank" | "ai_intro";
 };
 
 export type LoginRequest = {

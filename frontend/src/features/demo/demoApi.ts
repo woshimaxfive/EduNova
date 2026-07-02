@@ -7,7 +7,8 @@ export async function startDemoSession(): Promise<AuthSession> {
       id: 1,
       email: "demo@edunova.local",
       displayName: "演示学生",
-      role: "student"
+      role: "student",
+      starterMode: "ai_intro"
     }
   };
 }

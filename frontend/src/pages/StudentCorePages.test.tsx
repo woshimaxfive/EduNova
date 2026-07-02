@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -19,6 +19,7 @@ describe("student core pages", () => {
   it("renders the material library as a source workspace", () => {
     renderPage(<LibraryPage />);
 
+    expect(screen.getByRole("region", { name: "历史对话" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "资料库" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "文件库" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "搜索资料" })).toBeInTheDocument();
@@ -84,5 +85,16 @@ describe("student core pages", () => {
     expect(screen.getByRole("region", { name: "隐私与数据" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "账号设置" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存设置" })).toBeInTheDocument();
+  });
+
+  it("keeps secondary routes inside the same edge workspace shell as the home page", () => {
+    renderPage(<SettingsPage />);
+
+    const historyRail = screen.getByRole("region", { name: "历史对话" });
+
+    expect(within(historyRail).getByRole("link", { name: "资料库" })).toHaveAttribute("href", "/app/library");
+    expect(within(historyRail).getByRole("link", { name: "个人资料" })).toHaveAttribute("href", "/app/profile");
+    expect(within(historyRail).getByRole("link", { name: "设置" })).toHaveAttribute("href", "/app/settings");
+    expect(screen.queryByRole("navigation", { name: "应用导航" })).not.toBeInTheDocument();
   });
 });

@@ -143,9 +143,17 @@ Authorization: Bearer <token>
 {
   "email": "student@example.com",
   "password": "Password123",
-  "display_name": "小新"
+  "display_name": "小新",
+  "starter_mode": "ai_intro"
 }
 ```
+
+`starter_mode` 用于决定新账号首次进入学习空间时是否带示例内容：
+
+- `blank`：空白开始，不自动创建内置课程、资料和主页历史。
+- `ai_intro`：复制“人工智能导论”示例课程、示例资料和必要的最近学习入口到当前用户空间。
+
+如果前端没有传入，后端默认按 `ai_intro` 处理，保证比赛演示和初次试用有可见主链路。该字段不能指向共享演示账号，也不能复用其他用户资料。
 
 响应：
 
@@ -155,7 +163,8 @@ Authorization: Bearer <token>
     "id": 1,
     "email": "student@example.com",
     "display_name": "小新",
-    "role": "student"
+    "role": "student",
+    "starter_mode": "ai_intro"
   },
   "trace_id": "trace_20260701_001"
 }
@@ -185,7 +194,8 @@ Authorization: Bearer <token>
       "id": 1,
       "email": "student@example.com",
       "display_name": "小新",
-      "role": "student"
+      "role": "student",
+      "starter_mode": "ai_intro"
     }
   },
   "trace_id": "trace_20260701_002"
@@ -204,7 +214,8 @@ Authorization: Bearer <token>
     "id": 1,
     "email": "student@example.com",
     "display_name": "小新",
-    "role": "student"
+    "role": "student",
+    "starter_mode": "ai_intro"
   },
   "trace_id": "trace_20260701_003"
 }

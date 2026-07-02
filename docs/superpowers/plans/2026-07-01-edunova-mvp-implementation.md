@@ -405,7 +405,7 @@ frontend/src/app/routePaths.ts
 frontend/src/app/ProtectedRoute.tsx
 frontend/src/app/PublicOnlyRoute.tsx
 frontend/src/components/layout/LearningSpaceShell.tsx
-frontend/src/components/layout/TopNavigation.tsx
+frontend/src/components/layout/AppSidebar.tsx
 frontend/src/components/command/CommandBar.tsx
 frontend/src/components/canvas/LearningCanvas.tsx
 frontend/src/components/canvas/SourceCluster.tsx

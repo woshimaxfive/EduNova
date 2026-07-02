@@ -89,6 +89,19 @@ describe("student interaction affordances", () => {
     }
   });
 
+  it("uses the shared sidebar history to switch the course thread", async () => {
+    const user = userEvent.setup();
+
+    renderPage(<CourseSpacePage />);
+
+    const historyRail = screen.getByRole("region", { name: "历史对话" });
+    const courseThreadList = screen.getByLabelText("课程内历史对话");
+
+    await user.click(within(historyRail).getByRole("button", { name: /解释泛化能力和过拟合的区别/ }));
+
+    expect(within(courseThreadList).getByRole("button", { name: "解释泛化能力和过拟合的区别" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("switches tutor modes and provides feedback for tutor actions", async () => {
     const user = userEvent.setup();
 

@@ -7,6 +7,7 @@ export type StudentUser = {
   email: string;
   displayName: string;
   role: "student" | "admin";
+  starterMode?: "blank" | "ai_intro";
 };
 
 export type AuthSession = {

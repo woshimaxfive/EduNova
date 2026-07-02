@@ -89,6 +89,24 @@ describe("LearningSpacePage", () => {
     expect(within(historyRail).queryByRole("button", { name: /神经网络反向传播怎么复习/ })).not.toBeInTheDocument();
   });
 
+  it("filters materials inside the home library drawer", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <LearningSpacePage />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole("button", { name: "打开资料库" }));
+
+    const dialog = screen.getByRole("dialog", { name: "资料库" });
+    await user.type(within(dialog).getByRole("textbox", { name: "搜索资料" }), "期末");
+
+    expect(within(dialog).getByRole("button", { name: /期末复习题 2025/ })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /神经网络课堂讲义/ })).not.toBeInTheDocument();
+  });
+
   it("collapses the edge history sidebar without leaving the learning home", async () => {
     const user = userEvent.setup();
 

@@ -10,7 +10,7 @@ import {
   Sparkle,
   X
 } from "@phosphor-icons/react";
-import { type ChangeEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { buildCoursePath } from "../app/routePaths";
@@ -539,7 +539,6 @@ function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMateri
         </button>
         <div className="dialog-copy">
           <h2 id="course-dialog-title">从资料生成课程</h2>
-          <p>选资料，生成课程草案。</p>
         </div>
         <label className="dialog-field">
           <span>课程名称</span>
@@ -574,6 +573,18 @@ type MaterialLibraryDrawerProps = CourseGenerationDialogProps & {
 
 function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMaterial, onOpenCourseGeneration, onClose, showNotice }: MaterialLibraryDrawerProps) {
   const selectedCount = selectedMaterialIds.length;
+  const [searchTerm, setSearchTerm] = useState("");
+  const visibleMaterials = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return materials;
+    }
+
+    return materials.filter((material) =>
+      `${material.title} ${material.type} ${material.detail}`.toLowerCase().includes(normalizedSearch)
+    );
+  }, [materials, searchTerm]);
 
   return (
     <div className="course-dialog-backdrop">
@@ -583,19 +594,23 @@ function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMateria
         </button>
         <div className="dialog-copy">
           <h2 id="library-dialog-title">资料库</h2>
-          <p>点选后作为本次回答参考。</p>
         </div>
         <div className="file-library-toolbar">
           <label className="file-search-field">
             <MagnifyingGlass size={17} weight="duotone" aria-hidden="true" />
-            <input aria-label="搜索资料" placeholder="搜索资料" />
+            <input aria-label="搜索资料" placeholder="搜索资料" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} />
           </label>
           <button type="button" onClick={onOpenCourseGeneration}>
             <Sparkle size={17} weight="duotone" aria-hidden="true" />
             <span>生成课程</span>
           </button>
         </div>
-        <MaterialFileList materials={materials} selectedMaterialIds={selectedMaterialIds} onToggleMaterial={onToggleMaterial} />
+        <MaterialFileList
+          materials={visibleMaterials}
+          selectedMaterialIds={selectedMaterialIds}
+          onToggleMaterial={onToggleMaterial}
+          emptyText={materials.length === 0 ? undefined : "没有匹配的资料。"}
+        />
         <div className="library-dialog-footer">
           <span>{selectedCount > 0 ? `已选择 ${selectedCount} 份资料` : "当前未选择资料"}</span>
           <button
@@ -617,9 +632,10 @@ type MaterialFileListProps = {
   materials: LibraryMaterial[];
   selectedMaterialIds: string[];
   onToggleMaterial: (materialId: string) => void;
+  emptyText?: string;
 };
 
-function MaterialFileList({ materials, selectedMaterialIds, onToggleMaterial }: MaterialFileListProps) {
+function MaterialFileList({ materials, selectedMaterialIds, onToggleMaterial, emptyText = "资料库还是空的，先上传一份课件或试卷。" }: MaterialFileListProps) {
   return (
     <div className="material-file-list" role="list" aria-label="资料库文件列表">
       <div className="material-file-header" aria-hidden="true">
@@ -627,7 +643,7 @@ function MaterialFileList({ materials, selectedMaterialIds, onToggleMaterial }: 
         <span>修改时间</span>
         <span>大小</span>
       </div>
-      {materials.length === 0 ? <p className="material-file-empty">资料库还是空的，先上传一份课件或试卷。</p> : null}
+      {materials.length === 0 ? <p className="material-file-empty">{emptyText}</p> : null}
       {materials.map((material) => {
         const isSelected = selectedMaterialIds.includes(material.id);
 

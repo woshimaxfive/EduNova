@@ -28,7 +28,7 @@ describe("student core pages", () => {
     expect(screen.getByRole("region", { name: "文件库" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "搜索资料" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "上传资料" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "从资料生成课程" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成课程" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "文档" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "图片" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "课程内置" })).not.toBeInTheDocument();

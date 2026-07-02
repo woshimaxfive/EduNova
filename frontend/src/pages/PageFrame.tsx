@@ -1,5 +1,7 @@
 import { type ReactNode, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
+import { PATHS } from "../app/routePaths";
 import { ActionNotice } from "../components/feedback/ActionNotice";
 import { useActionNotice } from "../components/feedback/useActionNotice";
 import { AppSidebar } from "../components/layout/AppSidebar";
@@ -13,7 +15,8 @@ type PageFrameProps = {
   children: ReactNode;
 };
 
-export function PageFrame({ title, description, children }: PageFrameProps) {
+export function PageFrame({ title, children }: PageFrameProps) {
+  const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const { notice, showNotice } = useActionNotice();
@@ -31,17 +34,14 @@ export function PageFrame({ title, description, children }: PageFrameProps) {
           isCollapsed={isHistoryCollapsed}
           conversations={conversations}
           onToggleCollapsed={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
-          onNewChat={() => showNotice("已准备新建主页对话。", "success")}
+          onNewChat={() => navigate(PATHS.app)}
           onSearchHistory={() => showNotice("可以从左侧最近对话继续。")}
           onSelectConversation={(conversation) => showNotice(`已定位到「${conversation.title}」。`, "success")}
         />
         <section className="route-main-surface">
-          <section className="workspace-hero slim">
-            <div>
-              <h1>{title}</h1>
-              <p>{description}</p>
-            </div>
-          </section>
+          <header className="route-titlebar">
+            <h1>{title}</h1>
+          </header>
           <section className="page-workbench">{children}</section>
           <ActionNotice notice={notice} className="route-action-notice" />
         </section>

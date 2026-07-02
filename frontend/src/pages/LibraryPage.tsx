@@ -86,7 +86,7 @@ export function LibraryPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeMaterial, setActiveMaterial] = useState<LibraryFile | null>(null);
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
-  const [courseMaterialIds, setCourseMaterialIds] = useState<string[]>(() => initialLibraryFiles.map((file) => file.id));
+  const [courseMaterialIds, setCourseMaterialIds] = useState<string[]>([]);
   const { notice, showNotice } = useActionNotice();
   const filteredFiles = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -113,7 +113,6 @@ export function LibraryPage() {
 
     const uploadedFile = inferLibraryFile(file);
     setFiles((current) => [uploadedFile, ...current]);
-    setCourseMaterialIds((current) => [uploadedFile.id, ...current]);
     showNotice(`${file.name} 已上传到资料库。`, "success");
     event.target.value = "";
   }
@@ -145,7 +144,7 @@ export function LibraryPage() {
             </button>
             <button className="library-action-button primary" type="button" onClick={() => setIsCourseDialogOpen(true)}>
               <Sparkle size={18} weight="duotone" aria-hidden="true" />
-              <span>从资料生成课程</span>
+              <span>生成课程</span>
             </button>
           </div>
 

@@ -1725,10 +1725,10 @@ a {
 
 .library-file-shell {
   display: grid;
-  gap: 14px;
-  width: min(960px, 100%);
+  gap: 12px;
+  width: min(940px, 100%);
   margin: 0 auto;
-  padding: 2px 0 22px;
+  padding: 0 0 22px;
 }
 
 .library-command-row,
@@ -1742,10 +1742,11 @@ a {
 }
 
 .library-command-row {
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 0 14px;
-  border-bottom: 1px solid rgba(16, 24, 32, 0.08);
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  gap: 12px;
+  padding: 6px 0 14px;
+  border-bottom: 1px solid rgba(16, 24, 32, 0.07);
 }
 
 .file-search-field {
@@ -1777,7 +1778,7 @@ a {
   border: 1px solid rgba(16, 24, 32, 0.1);
   border-radius: 999px;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.46);
   backdrop-filter: blur(16px);
   font-weight: 820;
 }
@@ -1790,8 +1791,8 @@ a {
 .library-action-button.primary {
   color: #ffffff;
   border-color: transparent;
-  background: rgba(16, 24, 32, 0.94);
-  box-shadow: 0 12px 28px rgba(16, 24, 32, 0.14);
+  background: rgba(16, 24, 32, 0.92);
+  box-shadow: 0 14px 34px rgba(16, 24, 32, 0.13);
 }
 
 .library-filter-row {
@@ -1817,8 +1818,8 @@ a {
 .library-file-table {
   display: grid;
   overflow: hidden;
-  border-top: 1px solid rgba(16, 24, 32, 0.08);
-  border-bottom: 1px solid rgba(16, 24, 32, 0.08);
+  border-top: 1px solid rgba(16, 24, 32, 0.07);
+  border-bottom: 1px solid rgba(16, 24, 32, 0.07);
   background: transparent;
 }
 
@@ -1843,9 +1844,9 @@ a {
   width: 100%;
   min-width: 0;
   min-height: 70px;
-  padding: 10px 12px;
+  padding: 10px 8px;
   border: 0;
-  border-top: 1px solid rgba(16, 24, 32, 0.08);
+  border-top: 1px solid rgba(16, 24, 32, 0.07);
   color: var(--text);
   text-align: left;
   background: transparent;
@@ -1853,7 +1854,7 @@ a {
 
 .library-file-row:hover {
   color: var(--accent-strong);
-  background: rgba(8, 127, 115, 0.055);
+  background: rgba(8, 127, 115, 0.048);
 }
 
 .library-file-icon,
@@ -3353,8 +3354,11 @@ a {
 .home-sidebar-nav a.active,
 .home-account-link.active {
   color: var(--accent-strong);
-  background: rgba(8, 127, 115, 0.1);
-  box-shadow: inset 3px 0 0 rgba(8, 127, 115, 0.52);
+  background: rgba(8, 127, 115, 0.12);
+  box-shadow:
+    inset 3px 0 0 rgba(8, 127, 115, 0.58),
+    0 10px 26px rgba(8, 127, 115, 0.07);
+  font-weight: 840;
 }
 
 .home-sidebar-nav {
@@ -3496,8 +3500,10 @@ a {
 }
 
 .home-thread.active {
-  background: rgba(8, 127, 115, 0.1);
-  box-shadow: inset 3px 0 0 rgba(8, 127, 115, 0.52);
+  background: rgba(8, 127, 115, 0.12);
+  box-shadow:
+    inset 3px 0 0 rgba(8, 127, 115, 0.58),
+    0 10px 26px rgba(8, 127, 115, 0.07);
 }
 
 .home-thread.active strong {
@@ -4014,9 +4020,9 @@ a {
   display: grid;
   place-items: center;
   padding: 18px;
-  background: rgba(16, 24, 32, 0.42);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(16, 24, 32, 0.34);
+  backdrop-filter: blur(18px) saturate(118%);
+  -webkit-backdrop-filter: blur(18px) saturate(118%);
 }
 
 .course-dialog,
@@ -4025,16 +4031,22 @@ a {
   gap: 16px;
   width: min(620px, 100%);
   padding: 26px;
-  border: 1px solid rgba(255, 255, 255, 0.56);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 16px;
+  background: rgba(250, 253, 252, 0.88);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 34px 96px rgba(16, 24, 32, 0.22);
+    0 34px 96px rgba(16, 24, 32, 0.18);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
 }
 
 .material-drawer {
-  width: min(520px, 100%);
+  width: min(720px, 100%);
+}
+
+.library-course-dialog {
+  width: min(720px, 100%);
 }
 
 .course-dialog-close {
@@ -4054,7 +4066,7 @@ a {
 
 .dialog-copy h2 {
   margin: 0;
-  font-size: 1.45rem;
+  font-size: 1.38rem;
   line-height: 1.2;
 }
 
@@ -4170,9 +4182,11 @@ a {
 .material-file-list {
   display: grid;
   gap: 0;
-  max-height: min(42vh, 390px);
+  max-height: min(48vh, 430px);
   overflow: auto;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid rgba(16, 24, 32, 0.08);
+  border-bottom: 1px solid rgba(16, 24, 32, 0.08);
+  scrollbar-gutter: stable;
 }
 
 .material-file-header,
@@ -4185,7 +4199,7 @@ a {
 
 .material-file-header {
   grid-template-columns: minmax(0, 1fr) 92px 78px 22px;
-  padding: 9px 0;
+  padding: 9px 8px;
   color: var(--text-muted);
   font-size: 0.8rem;
   font-weight: 780;
@@ -4204,12 +4218,13 @@ a {
 }
 
 .material-file-row:hover {
-  background: rgba(8, 127, 115, 0.04);
+  background: rgba(8, 127, 115, 0.045);
 }
 
 .material-file-row.selected {
   color: var(--accent-strong);
-  background: rgba(8, 127, 115, 0.08);
+  background: rgba(8, 127, 115, 0.09);
+  box-shadow: inset 3px 0 0 rgba(8, 127, 115, 0.5);
 }
 
 .material-file-type {
@@ -4675,7 +4690,9 @@ a {
   grid-template-columns: 264px minmax(0, 1fr);
   width: 100%;
   min-width: 0;
-  min-height: 100dvh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   background:
     linear-gradient(90deg, rgba(8, 127, 115, 0.045), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.7), transparent 42%);
@@ -4703,19 +4720,26 @@ a {
   z-index: 1;
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 14px;
   min-width: 0;
-  padding: clamp(22px, 3.4vw, 52px) clamp(18px, 4vw, 64px) 86px;
+  height: 100dvh;
+  min-height: 0;
+  padding: clamp(20px, 3vw, 42px) clamp(18px, 4vw, 64px) 76px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
-.route-main-surface .workspace-hero {
+.route-titlebar {
   width: min(1080px, 100%);
   margin: 0 auto;
 }
 
-.route-main-surface .workspace-hero h1 {
-  margin-top: 0;
-  font-size: clamp(1.9rem, 2.8vw, 3.2rem);
+.route-titlebar h1 {
+  margin: 0;
+  font-size: clamp(1.62rem, 2vw, 2.3rem);
+  line-height: 1.1;
+  letter-spacing: 0;
 }
 
 .route-main-surface .page-workbench {
@@ -4870,6 +4894,9 @@ a {
   .app-workspace-layout,
   .app-workspace-layout.history-collapsed {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
   }
 
   .app-workspace-layout .home-history-rail {
@@ -4881,11 +4908,22 @@ a {
 
   .route-main-surface {
     order: 1;
+    height: auto;
+    min-height: auto;
+    overflow: visible;
     padding: 18px 14px 36px;
   }
 }
 
 @media (max-width: 560px) {
+  .library-command-row {
+    grid-template-columns: 1fr;
+  }
+
+  .library-action-button {
+    width: 100%;
+  }
+
   .starter-mode-option {
     grid-template-columns: auto minmax(0, 1fr);
   }

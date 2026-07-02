@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ReactNode } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
 import { PATHS } from "../app/routePaths";
@@ -221,17 +221,17 @@ describe("student interaction affordances", () => {
 
     expect(screen.getByRole("region", { name: "资料动作反馈" })).toHaveTextContent("AI 导论讲义");
 
-    await user.click(screen.getByRole("button", { name: "从资料生成课程" }));
+    await user.click(screen.getByRole("button", { name: "生成课程" }));
 
     const courseDialog = screen.getByRole("dialog", { name: "从资料生成课程" });
     expect(courseDialog).toBeInTheDocument();
     const courseMaterial = within(courseDialog).getByRole("button", { name: /AI 导论讲义/ });
 
-    expect(courseMaterial).toHaveAttribute("aria-pressed", "true");
+    expect(courseMaterial).toHaveAttribute("aria-pressed", "false");
 
     await user.click(courseMaterial);
 
-    expect(courseMaterial).toHaveAttribute("aria-pressed", "false");
+    expect(courseMaterial).toHaveAttribute("aria-pressed", "true");
 
     renderPage(<SettingsPage />);
 
@@ -243,5 +243,27 @@ describe("student interaction affordances", () => {
     await user.click(screen.getByRole("button", { name: "保存设置" }));
 
     expect(within(settingsRegion).getByRole("status")).toHaveTextContent("冲刺学生 的设置已保存");
+  });
+
+  it("keeps route pages in the home shell with active navigation and a working new chat action", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={[PATHS.library]}>
+        <Routes>
+          <Route path={PATHS.app} element={<LearningSpacePage />} />
+          <Route path={PATHS.library} element={<LibraryPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const historyRail = screen.getByRole("region", { name: "历史对话" });
+
+    expect(within(historyRail).getByRole("link", { name: "资料库" })).toHaveClass("active");
+    expect(screen.queryByText("上传资料，搜索引用，也可以生成课程。")).not.toBeInTheDocument();
+
+    await user.click(within(historyRail).getByRole("button", { name: "新建对话" }));
+
+    expect(screen.getByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
   });
 });

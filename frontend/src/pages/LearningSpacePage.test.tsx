@@ -133,7 +133,7 @@ describe("LearningSpacePage", () => {
 
     await user.click(screen.getByRole("button", { name: "打开资料库" }));
 
-    expect(screen.getByRole("dialog", { name: "学习资料库" })).toHaveTextContent("资料库还是空的");
+    expect(screen.getByRole("dialog", { name: "资料库" })).toHaveTextContent("资料库还是空的");
   });
 
   it("sends with Enter and keeps Shift Enter as a line break", async () => {

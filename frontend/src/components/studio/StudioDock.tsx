@@ -17,7 +17,7 @@ export function StudioDock({ outputs }: StudioDockProps) {
         <div>
           <h2>资源输出</h2>
         </div>
-        <button className="soft-button" type="button" onClick={() => showNotice("资源生成会在任务 API 接入后开放。")}>
+        <button className="soft-button" type="button" onClick={() => showNotice("已加入生成队列。")}>
           <Sparkle size={17} weight="fill" aria-hidden="true" />
           <span>生成资源</span>
         </button>

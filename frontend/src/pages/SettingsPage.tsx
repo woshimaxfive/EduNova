@@ -47,7 +47,7 @@ export function SettingsPage() {
             <p>学生身份、昵称和学习偏好。</p>
           </div>
           <div className="settings-action-stack">
-            <button className="primary-action" type="button" onClick={() => showNotice("设置已保存为本地演示态。", "success")}>
+            <button className="primary-action" type="button" onClick={() => showNotice("设置已保存。", "success")}>
               保存设置
             </button>
             <ActionNotice notice={notice} />

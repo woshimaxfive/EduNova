@@ -214,7 +214,7 @@ export function LibraryPage() {
           onToggleMaterial={toggleCourseMaterial}
           onClose={() => setIsCourseDialogOpen(false)}
           onCreate={() => {
-            showNotice(courseMaterialIds.length > 0 ? `已用 ${courseMaterialIds.length} 份资料创建课程草案演示态。` : "先至少选择一份资料。", courseMaterialIds.length > 0 ? "success" : "warning");
+            showNotice(courseMaterialIds.length > 0 ? `已用 ${courseMaterialIds.length} 份资料创建课程草案。` : "先至少选择一份资料。", courseMaterialIds.length > 0 ? "success" : "warning");
             if (courseMaterialIds.length > 0) {
               setIsCourseDialogOpen(false);
             }

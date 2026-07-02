@@ -31,9 +31,9 @@ export function PageFrame({ title, description, children }: PageFrameProps) {
           isCollapsed={isHistoryCollapsed}
           conversations={conversations}
           onToggleCollapsed={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
-          onNewChat={() => showNotice("已准备新建一条主页独立对话，回到学习主页后可以继续输入。", "success")}
-          onSearchHistory={() => showNotice("历史搜索会在对话索引接口接入后开放。")}
-          onSelectConversation={(conversation) => showNotice(`已定位到主页历史「${conversation.title}」。课程内历史会在课程空间单独显示。`, "success")}
+          onNewChat={() => showNotice("已准备新建主页对话。", "success")}
+          onSearchHistory={() => showNotice("可以从左侧最近对话继续。")}
+          onSelectConversation={(conversation) => showNotice(`已定位到「${conversation.title}」。`, "success")}
         />
         <section className="route-main-surface">
           <section className="workspace-hero slim">

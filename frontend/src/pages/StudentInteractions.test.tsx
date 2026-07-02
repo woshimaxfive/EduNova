@@ -29,7 +29,7 @@ describe("student interaction affordances", () => {
 
     await user.click(screen.getByRole("button", { name: "打开资料库" }));
 
-    expect(screen.getByRole("dialog", { name: "学习资料库" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "资料库" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /数据结构期末题.pdf/ })).toBeInTheDocument();
 
     const material = screen.getByRole("button", { name: /神经网络课堂讲义/ });
@@ -114,7 +114,7 @@ describe("student interaction affordances", () => {
 
     await user.click(screen.getByRole("button", { name: "深度思考" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("已切换到深度思考演示态");
+    expect(screen.getByRole("status")).toHaveTextContent("深度思考已开启");
   });
 
   it("validates and acknowledges practice submissions", async () => {
@@ -171,6 +171,6 @@ describe("student interaction affordances", () => {
     await user.click(screen.getByRole("button", { name: "保存设置" }));
 
     const settingsRegion = screen.getByRole("region", { name: "账号设置" });
-    expect(within(settingsRegion).getByRole("status")).toHaveTextContent("设置已保存为本地演示态");
+    expect(within(settingsRegion).getByRole("status")).toHaveTextContent("设置已保存");
   });
 });

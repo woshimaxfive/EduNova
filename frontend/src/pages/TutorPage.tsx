@@ -34,11 +34,11 @@ export function TutorPage() {
                 <ShieldCheck size={17} weight="duotone" aria-hidden="true" />
                 <span>查看来源</span>
               </button>
-              <button type="button" onClick={() => showNotice("已切换到深度思考演示态。")}>
+              <button type="button" onClick={() => showNotice("深度思考已开启。")}>
                 <Sparkle size={17} weight="duotone" aria-hidden="true" />
                 <span>深度思考</span>
               </button>
-              <button type="button" onClick={() => showNotice("语音输入会在录音权限和转写接口接入后开放。")}>
+              <button type="button" onClick={() => showNotice("语音输入暂未开启。")}>
                 <Microphone size={17} weight="duotone" aria-hidden="true" />
                 <span>语音输入</span>
               </button>

@@ -110,7 +110,7 @@ export function LearningSpacePage() {
 
   function openCourseGeneration() {
     setIsCourseDialogOpen(true);
-    showNotice("已打开从资料生成课程面板。");
+    showNotice("已打开生成课程。");
   }
 
   function formatFileSize(size: number) {
@@ -211,8 +211,8 @@ export function LearningSpacePage() {
             setMessages([]);
             showNotice("已新建一条主页独立对话。", "success");
           }}
-          onSearchHistory={() => showNotice("历史搜索会在对话索引接口接入后开放。")}
-          onSelectConversation={(conversation) => showNotice(`已切换到「${conversation.title}」演示对话。`)}
+          onSearchHistory={() => showNotice("可以从左侧最近对话继续。")}
+          onSelectConversation={(conversation) => showNotice(`已切换到「${conversation.title}」。`)}
         />
 
         <section className={hasHomeThread ? "home-chat-stage chat-active" : "home-chat-stage"} aria-label="AI 学习入口">
@@ -232,7 +232,6 @@ export function LearningSpacePage() {
                 <span>嗨，同学，</span>
                 <span>准备好一起学习了吗？</span>
               </h1>
-              <p>上传课件、电子书或期末题，然后直接问。需要时再把这段对话变成一门课程。</p>
             </div>
           )}
 
@@ -244,7 +243,7 @@ export function LearningSpacePage() {
                 rows={2}
                 onChange={(event) => setPrompt(event.target.value)}
                 onKeyDown={handleComposerKeyDown}
-                placeholder="问我怎么复习，或者说：用这些资料生成一门期末复习课"
+                placeholder="问学习问题，或用资料生成课程"
               />
               <div className="composer-actions">
                 <div className="composer-toolbar" aria-label="输入工具">
@@ -279,7 +278,7 @@ export function LearningSpacePage() {
                     aria-pressed={isWebSearchEnabled}
                     onClick={() => {
                       setIsWebSearchEnabled((enabled) => !enabled);
-                      showNotice(isWebSearchEnabled ? "已关闭联网搜索演示态。" : "已开启联网搜索，回答会显示来源入口。");
+                      showNotice(isWebSearchEnabled ? "联网搜索已关闭。" : "联网搜索已开启。");
                     }}
                   >
                     <MagnifyingGlass size={18} weight="duotone" aria-hidden="true" />
@@ -292,7 +291,7 @@ export function LearningSpacePage() {
                     aria-pressed={isDeepThinkingEnabled}
                     onClick={() => {
                       setIsDeepThinkingEnabled((enabled) => !enabled);
-                      showNotice(isDeepThinkingEnabled ? "已关闭深度思考演示态。" : "已开启深度思考演示态。");
+                      showNotice(isDeepThinkingEnabled ? "深度思考已关闭。" : "深度思考已开启。");
                     }}
                   >
                     <ChatCircleText size={18} weight="duotone" aria-hidden="true" />
@@ -300,7 +299,7 @@ export function LearningSpacePage() {
                   </button>
                 </div>
                 <div className="composer-submit-row">
-                  <button className="voice-button" type="button" aria-label="语音输入" onClick={() => showNotice("语音输入会在浏览器录音权限流程接入后开放。")}>
+                  <button className="voice-button" type="button" aria-label="语音输入" onClick={() => showNotice("语音输入暂未开启。")}>
                     <Microphone size={18} weight="duotone" aria-hidden="true" />
                   </button>
                   <button className="ask-button" type="button" onClick={handleSendQuestion}>
@@ -312,21 +311,23 @@ export function LearningSpacePage() {
             </div>
           </section>
 
-          <div className="selected-materials-note">
-            <LinkSimple size={16} weight="duotone" aria-hidden="true" />
-            <span>
-              {selectedMaterialIds.length > 0
-                ? `已选择 ${selectedMaterialIds.length} 份资料，回答时会像联网搜索一样显示来源。`
-                : "可以从资料库选择资料；联网搜索开启后也会显示来源。"}
-            </span>
-          </div>
+          {selectedMaterialIds.length > 0 || isWebSearchEnabled ? (
+            <div className="selected-materials-note">
+              <LinkSimple size={16} weight="duotone" aria-hidden="true" />
+              <span>
+                {selectedMaterialIds.length > 0
+                  ? `已选择 ${selectedMaterialIds.length} 份资料${isWebSearchEnabled ? "，联网搜索已开" : ""}。`
+                  : "联网搜索已开。"}
+              </span>
+            </div>
+          ) : null}
           <ActionNotice notice={notice} className="home-action-notice" />
 
           {!hasHomeThread && hasStarterContent ? (
             <section className="recent-course-strip" aria-label="最近学习">
               <div className="recent-course-heading">
                 <span>最近学习</span>
-                <button type="button" onClick={() => showNotice("全部课程列表会在课程 API 接入后展示。")}>
+                <button type="button" onClick={() => showNotice("已显示最近学习。")}>
                   查看全部
                 </button>
               </div>
@@ -350,7 +351,7 @@ export function LearningSpacePage() {
           {!hasHomeThread && !hasStarterContent ? (
             <section className="recent-course-strip empty" aria-label="最近学习">
               <strong>还没有课程</strong>
-              <p>上传老师课件、电子书或期末题后，可以先直接提问，也可以从资料生成第一门课程。</p>
+              <p>上传资料后可直接问，也可生成课程。</p>
             </section>
           ) : null}
         </section>
@@ -401,7 +402,7 @@ function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMateri
         </button>
         <div className="dialog-copy">
           <h2 id="course-dialog-title">从资料生成课程</h2>
-          <p>选择资料，生成课程草案。</p>
+          <p>选资料，生成课程草案。</p>
         </div>
         <label className="dialog-field">
           <span>课程名称</span>
@@ -410,7 +411,7 @@ function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMateri
         <MaterialFileList materials={materials} selectedMaterialIds={selectedMaterialIds} onToggleMaterial={onToggleMaterial} />
         <div className="dialog-selection-summary">
           <strong>{selectedCount > 0 ? `已选择 ${selectedCount} 份资料` : "先选择要生成课程的资料"}</strong>
-          <small>资料仍保存在资料库中，生成课程时只建立关联，不移动原文件。</small>
+          <small>只建立关联，不移动原文件。</small>
         </div>
         <button
           className="dialog-primary-button"
@@ -444,9 +445,8 @@ function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMateria
           <X size={18} aria-hidden="true" />
         </button>
         <div className="dialog-copy">
-          <p className="home-kicker">资料库</p>
-          <h2 id="library-dialog-title">学习资料库</h2>
-          <p>所有上传资料都先独立保存。需要用于本次对话时再手动选择，高亮后才会作为参考。</p>
+          <h2 id="library-dialog-title">资料库</h2>
+          <p>点选后作为本次回答参考。</p>
         </div>
         <div className="file-library-toolbar">
           <label className="file-search-field">

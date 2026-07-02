@@ -19,12 +19,12 @@ describe("student core pages", () => {
   it("renders the material library as a source workspace", () => {
     renderPage(<LibraryPage />);
 
-    expect(screen.getByRole("heading", { name: "课程资料进入学习空间" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "资料列表" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "资料操作" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "课程归属" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "资料库" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "文件库" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "搜索资料" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "上传资料" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成课程" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "从资料生成课程" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /AI 导论内置讲义/ })).toBeInTheDocument();
   });
 
   it("renders studio as a generated-resource workspace", () => {

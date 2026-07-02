@@ -22,16 +22,24 @@ describe("student interaction affordances", () => {
 
     renderPage(<LearningSpacePage />);
 
-    await user.click(screen.getByRole("button", { name: "上传资料" }));
+    const uploadedFile = new File(["demo"], "数据结构期末题.pdf", { type: "application/pdf" });
+    await user.upload(screen.getByLabelText("上传资料文件"), uploadedFile);
 
-    expect(screen.getByRole("dialog", { name: "资料库" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已打开资料库");
+    expect(screen.getByRole("status")).toHaveTextContent("数据结构期末题.pdf 已上传到资料库");
+
+    await user.click(screen.getByRole("button", { name: "打开资料库" }));
+
+    expect(screen.getByRole("dialog", { name: "学习资料库" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /数据结构期末题.pdf/ })).toBeInTheDocument();
 
     const material = screen.getByRole("button", { name: /神经网络课堂讲义/ });
+
+    expect(material).toHaveAttribute("aria-pressed", "false");
+
     await user.click(material);
 
     expect(material).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("status")).toHaveTextContent("已选择 3 份资料");
+    expect(screen.getByRole("status")).toHaveTextContent("已选择 1 份资料");
 
     await user.click(screen.getByRole("button", { name: "关闭资料库" }));
     await user.click(screen.getByRole("button", { name: "发送" }));
@@ -39,9 +47,11 @@ describe("student interaction affordances", () => {
     expect(screen.getByRole("status")).toHaveTextContent("先输入一个学习问题");
 
     await user.type(screen.getByRole("textbox", { name: "学习问题输入" }), "监督学习怎么复习？");
+    await user.click(screen.getByRole("button", { name: "联网搜索" }));
     await user.click(screen.getByRole("button", { name: "深度思考" }));
     await user.click(screen.getByRole("button", { name: "发送" }));
 
+    expect(screen.getByRole("button", { name: "联网搜索" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "深度思考" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("status")).toHaveTextContent("已生成演示回答");
   });
@@ -118,9 +128,13 @@ describe("student interaction affordances", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("真实上传会在资料解析接口接入后开放");
 
-    await user.click(screen.getAllByRole("button", { name: "查看引用" })[0]);
+    await user.click(screen.getByRole("button", { name: /AI 导论内置讲义/ }));
 
     expect(screen.getByRole("region", { name: "资料动作反馈" })).toHaveTextContent("AI 导论内置讲义");
+
+    await user.click(screen.getByRole("button", { name: "从资料生成课程" }));
+
+    expect(screen.getByRole("dialog", { name: "从资料生成课程" })).toBeInTheDocument();
 
     renderPage(<SettingsPage />);
 

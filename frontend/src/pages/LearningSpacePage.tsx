@@ -7,22 +7,25 @@ import {
   CheckCircle,
   ClockCounterClockwise,
   FileArrowUp,
-  FolderOpen,
+  GearSix,
   LinkSimple,
   MagnifyingGlass,
   Microphone,
   Plus,
+  SignOut,
   Sparkle,
   Student,
+  UserCircle,
   X
 } from "@phosphor-icons/react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { type ChangeEvent, type KeyboardEvent, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 import { buildCoursePath, PATHS } from "../app/routePaths";
 import { ActionNotice } from "../components/feedback/ActionNotice";
 import { useActionNotice } from "../components/feedback/useActionNotice";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
+import { useAuthStore } from "../features/auth/authStore";
 
 const homeConversations = [
   {
@@ -42,27 +45,39 @@ const homeConversations = [
   }
 ];
 
-const libraryMaterials = [
+type LibraryMaterial = {
+  id: string;
+  title: string;
+  type: string;
+  detail: string;
+  modified: string;
+  size: string;
+};
+
+const initialLibraryMaterials: LibraryMaterial[] = [
   {
     id: "mat-1",
     title: "人工智能导论课件",
     type: "PPTX",
     detail: "42 页 · 已解析",
-    selected: true
+    modified: "今天",
+    size: "4.8 MB"
   },
   {
     id: "mat-2",
     title: "期末复习题 2025",
     type: "PDF",
     detail: "18 道题 · 已切片",
-    selected: true
+    modified: "昨天",
+    size: "1.6 MB"
   },
   {
     id: "mat-3",
     title: "神经网络课堂讲义",
     type: "DOCX",
     detail: "7 个章节 · 可加入课程",
-    selected: true
+    modified: "周一",
+    size: "820 KB"
   }
 ];
 
@@ -97,18 +112,84 @@ type HomeMessage = {
 };
 
 export function LearningSpacePage() {
+  const navigate = useNavigate();
+  const clearSession = useAuthStore((state) => state.clearSession);
+  const user = useAuthStore((state) => state.user);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
+  const [materials, setMaterials] = useState<LibraryMaterial[]>(initialLibraryMaterials);
+  const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isDeepThinkingEnabled, setIsDeepThinkingEnabled] = useState(false);
+  const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
   const { notice, showNotice } = useActionNotice();
   const hasHomeThread = messages.length > 0;
 
   function openLibrary(message = "已打开资料库。") {
     setIsLibraryOpen(true);
     showNotice(message);
+  }
+
+  function openCourseGeneration() {
+    setIsCourseDialogOpen(true);
+    showNotice("已打开从资料生成课程面板。");
+  }
+
+  function logout() {
+    clearSession();
+    navigate(PATHS.login);
+  }
+
+  function formatFileSize(size: number) {
+    if (size >= 1024 * 1024) {
+      return `${(size / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    if (size >= 1024) {
+      return `${Math.ceil(size / 1024)} KB`;
+    }
+
+    return `${size} B`;
+  }
+
+  function inferMaterialType(fileName: string) {
+    const extension = fileName.split(".").pop()?.toUpperCase();
+
+    return extension && extension.length <= 5 ? extension : "FILE";
+  }
+
+  function handleUploadFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const uploadedMaterial: LibraryMaterial = {
+      id: `upload-${Date.now()}`,
+      title: file.name,
+      type: inferMaterialType(file.name),
+      detail: "刚刚上传 · 等待解析",
+      modified: "刚刚",
+      size: formatFileSize(file.size)
+    };
+
+    setMaterials((current) => [uploadedMaterial, ...current]);
+    showNotice(`${file.name} 已上传到资料库。`, "success");
+    event.target.value = "";
+  }
+
+  function toggleMaterialSelection(materialId: string) {
+    setSelectedMaterialIds((current) => {
+      const next = current.includes(materialId) ? current.filter((id) => id !== materialId) : [...current, materialId];
+
+      showNotice(next.length > 0 ? `已选择 ${next.length} 份资料。` : "已清空本次参考资料。", next.length > 0 ? "success" : "info");
+
+      return next;
+    });
   }
 
   function handleSendQuestion() {
@@ -134,6 +215,13 @@ export function LearningSpacePage() {
     ]);
     setPrompt("");
     showNotice("已生成演示回答，真实 AI 接入后会流式返回。", "success");
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      handleSendQuestion();
+    }
   }
 
   return (
@@ -164,10 +252,6 @@ export function LearningSpacePage() {
           </div>
 
           <nav className="home-sidebar-nav" aria-label="主页导航">
-            <Link to={PATHS.app}>
-              <ChatCircleText size={18} weight="duotone" aria-hidden="true" />
-              <span>学习空间</span>
-            </Link>
             <Link to={PATHS.library}>
               <BookOpen size={18} weight="duotone" aria-hidden="true" />
               <span>资料库</span>
@@ -215,6 +299,24 @@ export function LearningSpacePage() {
               </button>
             ))}
           </div>
+          <div className="home-account-section" aria-label="账号入口">
+            <Link className="home-account-link" to={PATHS.profile}>
+              <UserCircle size={18} weight="duotone" aria-hidden="true" />
+              <span>个人资料</span>
+            </Link>
+            <Link className="home-account-link" to={PATHS.settings}>
+              <GearSix size={18} weight="duotone" aria-hidden="true" />
+              <span>设置</span>
+            </Link>
+            <button className="home-account-link" type="button" onClick={logout}>
+              <SignOut size={18} weight="duotone" aria-hidden="true" />
+              <span>退出登录</span>
+            </button>
+            <div className="home-user-mini">
+              <span>{user?.displayName?.slice(0, 1) ?? "学"}</span>
+              <strong>{user?.displayName ?? "演示学生"}</strong>
+            </div>
+          </div>
         </section>
 
         <section className={hasHomeThread ? "home-chat-stage chat-active" : "home-chat-stage"} aria-label="AI 学习入口">
@@ -245,36 +347,44 @@ export function LearningSpacePage() {
                 value={prompt}
                 rows={2}
                 onChange={(event) => setPrompt(event.target.value)}
+                onKeyDown={handleComposerKeyDown}
                 placeholder="问我怎么复习，或者说：用这些资料生成一门期末复习课"
               />
               <div className="composer-actions">
                 <div className="composer-toolbar" aria-label="输入工具">
+                  <input
+                    ref={uploadInputRef}
+                    className="visually-hidden"
+                    type="file"
+                    aria-label="上传资料文件"
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg"
+                    onChange={handleUploadFile}
+                  />
                   <button
                     type="button"
                     aria-label="上传资料"
-                    onClick={() => openLibrary("已打开资料库，真实上传会在资料解析接口接入后开放。")}
+                    onClick={() => uploadInputRef.current?.click()}
                   >
                     <FileArrowUp size={18} weight="duotone" aria-hidden="true" />
                     <span>上传</span>
                   </button>
                   <button type="button" aria-label="打开资料库" onClick={() => openLibrary()}>
-                    <FolderOpen size={18} weight="duotone" aria-hidden="true" />
+                    <BookOpen size={18} weight="duotone" aria-hidden="true" />
                     <span>资料库</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsCourseDialogOpen(true);
-                      showNotice("已打开生成课程面板。");
-                    }}
-                  >
+                  <button type="button" onClick={openCourseGeneration}>
                     <Sparkle size={18} weight="duotone" aria-hidden="true" />
                     <span>生成课程</span>
                   </button>
                   <button
+                    className={isWebSearchEnabled ? "active" : ""}
                     type="button"
                     aria-label="联网搜索"
-                    onClick={() => showNotice("联网搜索会作为可选增强接入，第一版先保留引用来源机制。")}
+                    aria-pressed={isWebSearchEnabled}
+                    onClick={() => {
+                      setIsWebSearchEnabled((enabled) => !enabled);
+                      showNotice(isWebSearchEnabled ? "已关闭联网搜索演示态。" : "已开启联网搜索，回答会显示来源入口。");
+                    }}
                   >
                     <MagnifyingGlass size={18} weight="duotone" aria-hidden="true" />
                     <span>搜索</span>
@@ -292,22 +402,27 @@ export function LearningSpacePage() {
                     <ChatCircleText size={18} weight="duotone" aria-hidden="true" />
                     <span>思考</span>
                   </button>
-                  <button type="button" aria-label="语音输入" onClick={() => showNotice("语音输入会在浏览器录音权限流程接入后开放。")}>
+                </div>
+                <div className="composer-submit-row">
+                  <button className="voice-button" type="button" aria-label="语音输入" onClick={() => showNotice("语音输入会在浏览器录音权限流程接入后开放。")}>
                     <Microphone size={18} weight="duotone" aria-hidden="true" />
-                    <span>语音</span>
+                  </button>
+                  <button className="ask-button" type="button" onClick={handleSendQuestion}>
+                    <ArrowRight size={18} weight="bold" aria-hidden="true" />
+                    <span>发送</span>
                   </button>
                 </div>
-                <button className="ask-button" type="button" onClick={handleSendQuestion}>
-                  <ArrowRight size={18} weight="bold" aria-hidden="true" />
-                  <span>发送</span>
-                </button>
               </div>
             </div>
           </section>
 
           <div className="selected-materials-note">
             <LinkSimple size={16} weight="duotone" aria-hidden="true" />
-            <span>已准备 3 份资料，回答时会像联网搜索一样显示来源。</span>
+            <span>
+              {selectedMaterialIds.length > 0
+                ? `已选择 ${selectedMaterialIds.length} 份资料，回答时会像联网搜索一样显示来源。`
+                : "可以从资料库选择资料；联网搜索开启后也会显示来源。"}
+            </span>
           </div>
           <ActionNotice notice={notice} className="home-action-notice" />
 
@@ -339,9 +454,24 @@ export function LearningSpacePage() {
         </section>
       </div>
 
-      {isCourseDialogOpen ? <CourseGenerationDialog onClose={() => setIsCourseDialogOpen(false)} showNotice={showNotice} /> : null}
       {isLibraryOpen ? (
-        <MaterialLibraryDrawer onClose={() => setIsLibraryOpen(false)} onSelectMaterials={(count) => showNotice(`已选择 ${count} 份资料。`, "success")} />
+        <MaterialLibraryDrawer
+          materials={materials}
+          selectedMaterialIds={selectedMaterialIds}
+          onToggleMaterial={toggleMaterialSelection}
+          onOpenCourseGeneration={openCourseGeneration}
+          onClose={() => setIsLibraryOpen(false)}
+          showNotice={showNotice}
+        />
+      ) : null}
+      {isCourseDialogOpen ? (
+        <CourseGenerationDialog
+          materials={materials}
+          selectedMaterialIds={selectedMaterialIds}
+          onToggleMaterial={toggleMaterialSelection}
+          onClose={() => setIsCourseDialogOpen(false)}
+          showNotice={showNotice}
+        />
       ) : null}
     </LearningSpaceShell>
   );
@@ -352,10 +482,15 @@ type CourseGenerationDialogProps = {
 };
 
 type CourseGenerationDialogWithNoticeProps = CourseGenerationDialogProps & {
+  materials: LibraryMaterial[];
+  selectedMaterialIds: string[];
+  onToggleMaterial: (materialId: string) => void;
   showNotice: (message: string, tone?: "info" | "success" | "warning") => void;
 };
 
-function CourseGenerationDialog({ onClose, showNotice }: CourseGenerationDialogWithNoticeProps) {
+function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMaterial, onClose, showNotice }: CourseGenerationDialogWithNoticeProps) {
+  const selectedCount = selectedMaterialIds.length;
+
   return (
     <div className="course-dialog-backdrop">
       <section className="course-dialog" role="dialog" aria-modal="true" aria-labelledby="course-dialog-title">
@@ -363,27 +498,26 @@ function CourseGenerationDialog({ onClose, showNotice }: CourseGenerationDialogW
           <X size={18} aria-hidden="true" />
         </button>
         <div className="dialog-copy">
-          <p className="section-kicker">生成课程</p>
-          <h2 id="course-dialog-title">生成课程</h2>
-          <p>这一步会把主页资料整理成课程空间。主页对话可以移入课程，也可以继续独立保留。</p>
+          <p className="section-kicker">Course builder</p>
+          <h2 id="course-dialog-title">从资料生成课程</h2>
+          <p>选择资料库里的课件、电子书或期末题，EduNova 会把它们整理成课程草案。主页对话仍可独立保留。</p>
         </div>
         <label className="dialog-field">
           <span>课程名称</span>
           <input aria-label="课程名称" defaultValue="人工智能导论期末复习" />
         </label>
-        <div className="dialog-materials">
-          <div>
-            <strong>已选择 3 份资料</strong>
-            <small>课件、讲义和期末题会先进入资料库，再关联到新课程。</small>
-          </div>
-          {libraryMaterials.map((material) => (
-            <span key={material.id}>
-              <CheckCircle size={16} weight="duotone" aria-hidden="true" />
-              {material.title}
-            </span>
-          ))}
+        <MaterialFileList materials={materials} selectedMaterialIds={selectedMaterialIds} onToggleMaterial={onToggleMaterial} />
+        <div className="dialog-selection-summary">
+          <strong>{selectedCount > 0 ? `已选择 ${selectedCount} 份资料` : "先选择要生成课程的资料"}</strong>
+          <small>资料仍保存在资料库中，生成课程时只建立关联，不移动原文件。</small>
         </div>
-        <button className="dialog-primary-button" type="button" onClick={() => showNotice("已创建课程草案演示态，真实创建会接入课程 API。", "success")}>
+        <button
+          className="dialog-primary-button"
+          type="button"
+          onClick={() =>
+            showNotice(selectedCount > 0 ? "已创建课程草案演示态，真实创建会接入课程 API。" : "请先选择至少一份资料。", selectedCount > 0 ? "success" : "warning")
+          }
+        >
           创建课程草案
         </button>
       </section>
@@ -392,39 +526,91 @@ function CourseGenerationDialog({ onClose, showNotice }: CourseGenerationDialogW
 }
 
 type MaterialLibraryDrawerProps = CourseGenerationDialogProps & {
-  onSelectMaterials: (count: number) => void;
+  materials: LibraryMaterial[];
+  selectedMaterialIds: string[];
+  onToggleMaterial: (materialId: string) => void;
+  onOpenCourseGeneration: () => void;
+  showNotice: (message: string, tone?: "info" | "success" | "warning") => void;
 };
 
-function MaterialLibraryDrawer({ onClose, onSelectMaterials }: MaterialLibraryDrawerProps) {
-  const selectedCount = libraryMaterials.filter((material) => material.selected).length;
+function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMaterial, onOpenCourseGeneration, onClose, showNotice }: MaterialLibraryDrawerProps) {
+  const selectedCount = selectedMaterialIds.length;
 
   return (
     <div className="course-dialog-backdrop">
-      <section className="material-drawer" role="dialog" aria-modal="true" aria-label="资料库">
+      <section className="material-drawer" role="dialog" aria-modal="true" aria-labelledby="library-dialog-title">
         <button className="course-dialog-close" type="button" aria-label="关闭资料库" onClick={onClose}>
           <X size={18} aria-hidden="true" />
         </button>
         <div className="dialog-copy">
           <p className="home-kicker">资料库</p>
-          <h2 id="library-dialog-title">选择本次对话参考</h2>
-          <p>资料独立保存在资料库里。可以先用于主页问答，也可以稍后加入某门课程。</p>
+          <h2 id="library-dialog-title">学习资料库</h2>
+          <p>所有上传资料都先独立保存。需要用于本次对话时再手动选择，高亮后才会作为参考。</p>
         </div>
-        <div className="material-stack">
-          {libraryMaterials.map((material) => (
-            <button
-              className={material.selected ? "material-chip selected" : "material-chip"}
-              key={material.id}
-              type="button"
-              aria-pressed={material.selected}
-              onClick={() => onSelectMaterials(selectedCount)}
-            >
-              <span>{material.type}</span>
-              <strong>{material.title}</strong>
-              <small>{material.detail}</small>
-            </button>
-          ))}
+        <div className="file-library-toolbar">
+          <label className="file-search-field">
+            <MagnifyingGlass size={17} weight="duotone" aria-hidden="true" />
+            <input aria-label="搜索资料" placeholder="搜索资料" />
+          </label>
+          <button type="button" onClick={onOpenCourseGeneration}>
+            <Sparkle size={17} weight="duotone" aria-hidden="true" />
+            <span>生成课程</span>
+          </button>
+        </div>
+        <MaterialFileList materials={materials} selectedMaterialIds={selectedMaterialIds} onToggleMaterial={onToggleMaterial} />
+        <div className="library-dialog-footer">
+          <span>{selectedCount > 0 ? `已选择 ${selectedCount} 份资料` : "当前未选择资料"}</span>
+          <button
+            className="dialog-primary-button"
+            type="button"
+            onClick={() =>
+              showNotice(selectedCount > 0 ? `本次对话将参考 ${selectedCount} 份资料。` : "先点选资料，再作为对话参考。", selectedCount > 0 ? "success" : "warning")
+            }
+          >
+            作为本次对话参考
+          </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+type MaterialFileListProps = {
+  materials: LibraryMaterial[];
+  selectedMaterialIds: string[];
+  onToggleMaterial: (materialId: string) => void;
+};
+
+function MaterialFileList({ materials, selectedMaterialIds, onToggleMaterial }: MaterialFileListProps) {
+  return (
+    <div className="material-file-list" role="list" aria-label="资料库文件列表">
+      <div className="material-file-header" aria-hidden="true">
+        <span>名称</span>
+        <span>修改时间</span>
+        <span>大小</span>
+      </div>
+      {materials.map((material) => {
+        const isSelected = selectedMaterialIds.includes(material.id);
+
+        return (
+          <button
+            className={isSelected ? "material-file-row selected" : "material-file-row"}
+            key={material.id}
+            type="button"
+            aria-pressed={isSelected}
+            onClick={() => onToggleMaterial(material.id)}
+          >
+            <span className="material-file-type">{material.type}</span>
+            <span className="material-file-main">
+              <strong>{material.title}</strong>
+              <small>{material.detail}</small>
+            </span>
+            <span className="material-file-meta">{material.modified}</span>
+            <span className="material-file-meta">{material.size}</span>
+            {isSelected ? <CheckCircle size={18} weight="duotone" aria-hidden="true" /> : null}
+          </button>
+        );
+      })}
     </div>
   );
 }

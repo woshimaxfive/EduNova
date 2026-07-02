@@ -7,6 +7,7 @@ export const PATHS = {
   library: "/app/library",
   courses: "/app/courses",
   courseDetail: "/app/courses/:courseId",
+  designLab: "/app/design-lab",
   studio: "/app/studio",
   profile: "/app/profile",
   tutor: "/app/tutor",

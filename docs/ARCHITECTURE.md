@@ -109,7 +109,7 @@ frontend/src/
 | 路由组 | 路径 |
 | --- | --- |
 | 公开入口 | `/`、`/login`、`/register`、`/demo` |
-| 应用区 | `/app`、`/app/library`、`/app/courses/:courseId`、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` |
+| 应用区 | `/app`、`/app/library`、`/app/courses/:courseId`、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings`、`/app/design-lab` |
 | 兜底 | `*` |
 
 路由保护：
@@ -147,7 +147,7 @@ frontend/src/
 | `frontend/src/api/client.ts` | Axios 客户端，默认基础路径 `/api/v1`，自动附加 token，401 清理登录态并返回登录页 |
 | `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、profiles、resources、agents、paths、tutor、practice、reports、demo、settings |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和学习空间状态面板的纯状态模型 |
-| `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、Studio、画像、辅导、练习、报告、设置和 404；学生端核心页面已从占位页补成可扩展工作区骨架 |
+| `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、Studio、画像、辅导、练习、报告、设置、Design Lab 和 404；学生端核心页面已从占位页补成可扩展工作区骨架，Design Lab 仅用于开发期手动调参 |
 | `frontend/src/components` | 顶部轻导航、学习空间壳子、学习画布、资料源簇、AI 命令栏、Studio Dock、证据层、Agent 轨迹、上传建课状态轨道、学习空间状态条和统一 `ActionNotice` 反馈层；`/app` 首页已补 AI 对话主页、历史对话、输入区资料库浮层入口、最近学习轻量列表和生成课程浮层，`/app/courses/:courseId` 已组合课程空间静态壳子，核心页面复用同一视觉和状态体系 |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、深色模式、reduced motion 和 reduced transparency 基础 |
 
@@ -158,6 +158,7 @@ frontend/src/
 - 当前 `/app/courses/:courseId` 课程空间使用前端样例课程、知识点、资料、引用和 Agent 轨迹数据；后续由课程详情、RAG、资源生成和 Agent 日志接口替换。
 - 当前资料库、Studio、画像、辅导、练习、报告和设置页面使用前端样例数据；后续由资料、画像、RAG、练习评估、掌握度报告和设置接口替换。
 - 当前 P3.7 按钮反馈使用 React 本地状态和 `ActionNotice`，用于固定前端交互边界；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
+- 当前 `/app/design-lab` 是受保护的开发辅助页，用于手动调整主页骨架参数并导出 JSON 配置，不写入后端、不进入顶部一级导航，也不作为正式学生端功能。
 - 上传建课状态轨道和状态条当前使用前端样例状态，后续由 `/materials/{material_id}/progress`、`/courses/from-materials` 和长任务接口驱动。
 - React Flow、ECharts、Mermaid 和 Markmap 已作为依赖准备，复杂图谱和可视化在后续阶段逐步接入。
 

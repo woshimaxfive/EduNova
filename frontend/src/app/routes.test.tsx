@@ -69,4 +69,25 @@ describe("EduNova routes", () => {
     expect(screen.getByRole("region", { name: "证据与 Agent 轨迹" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Studio 生成区" })).toBeInTheDocument();
   });
+
+  it("renders the protected design lab for an authenticated student", async () => {
+    useAuthStore.getState().setSession({
+      token: "demo-token",
+      user: {
+        id: 1,
+        email: "demo@edunova.local",
+        displayName: "演示学生",
+        role: "student"
+      }
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/app/design-lab"]}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: "Design Lab v0" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "主页调参控制台" })).toBeInTheDocument();
+  });
 });

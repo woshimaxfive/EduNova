@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  ArrowRight,
   ChartLineUp,
   ChatCircleText,
   CheckCircle,
@@ -8,12 +9,14 @@ import {
   Sparkle,
   Target
 } from "@phosphor-icons/react";
-import { useState } from "react";
+import { type KeyboardEvent, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
 import { LearningCanvas } from "../components/canvas/LearningCanvas";
 import { EvidenceLayer } from "../components/evidence/EvidenceLayer";
+import { ActionNotice } from "../components/feedback/ActionNotice";
+import { useActionNotice } from "../components/feedback/useActionNotice";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { StudioDock } from "../components/studio/StudioDock";
@@ -32,11 +35,20 @@ const courseActionLinks = [
 ];
 
 type AnswerPanelKind = "citations" | "path" | "agent";
+type CourseMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
 
 export function CourseSpacePage() {
+  const [threads, setThreads] = useState(courseThreads);
   const [activeThread, setActiveThread] = useState(courseThreads[0]);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<AnswerPanelKind>("citations");
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+  const [coursePrompt, setCoursePrompt] = useState("");
+  const [courseMessages, setCourseMessages] = useState<CourseMessage[]>([]);
+  const { notice, showNotice } = useActionNotice();
   const snapshot = demoLearningSpace;
   const canvasSnapshot = {
     ...snapshot,
@@ -45,6 +57,35 @@ export function CourseSpacePage() {
       title: `${snapshot.currentCourse.title}知识画布`
     }
   };
+
+  function sendCourseQuestion() {
+    const question = coursePrompt.trim();
+
+    if (!question) {
+      showNotice("先输入课程问题。", "warning");
+      return;
+    }
+
+    const assistantAnswer =
+      "我会按课程资料回答：先定位相关知识点，再给出复习顺序、引用来源和下一步练习。";
+
+    setCourseMessages((current) => [
+      ...current,
+      { id: `course-user-${Date.now()}`, role: "user", content: question },
+      { id: `course-assistant-${Date.now()}`, role: "assistant", content: assistantAnswer }
+    ]);
+    setThreads((current) => (current.includes(question) ? current : [question, ...current]));
+    setActiveThread(question);
+    setCoursePrompt("");
+    showNotice("已生成课程回答。", "success");
+  }
+
+  function handleCourseComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      sendCourseQuestion();
+    }
+  }
 
   return (
     <LearningSpaceShell hideTopNavigation>
@@ -56,7 +97,7 @@ export function CourseSpacePage() {
         </div>
         <AppSidebar
           isCollapsed={isHistoryCollapsed}
-          conversations={courseThreads.map((title, index) => ({ id: `course-thread-${index}`, title, meta: "课程内" }))}
+          conversations={threads.map((title, index) => ({ id: `course-thread-${index}`, title, meta: "课程内" }))}
           onToggleCollapsed={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
           onSelectConversation={(conversation) => setActiveThread(conversation.title)}
         />
@@ -99,7 +140,7 @@ export function CourseSpacePage() {
                 </div>
 
                 <div className="course-thread-list" aria-label="课程内历史对话">
-                  {courseThreads.map((thread) => (
+                  {threads.map((thread) => (
                     <button
                       className={activeThread === thread ? "active" : ""}
                       type="button"
@@ -153,10 +194,32 @@ export function CourseSpacePage() {
                   </div>
                 </article>
 
-                <label className="course-composer">
-                  <span>课程问题输入</span>
-                  <textarea rows={3} placeholder="继续问这门课，例如：给我生成监督学习 10 分钟复习路线" />
-                </label>
+                {courseMessages.length > 0 ? (
+                  <section className="course-message-stack" aria-label="课程即时对话">
+                    {courseMessages.map((message) => (
+                      <article className={`course-message ${message.role}`} key={message.id}>
+                        <p>{message.content}</p>
+                      </article>
+                    ))}
+                  </section>
+                ) : null}
+
+                <div className="course-composer">
+                  <label htmlFor="course-question-input">课程问题输入</label>
+                  <textarea
+                    id="course-question-input"
+                    rows={3}
+                    value={coursePrompt}
+                    onChange={(event) => setCoursePrompt(event.target.value)}
+                    onKeyDown={handleCourseComposerKeyDown}
+                    placeholder="继续问这门课，例如：给我生成监督学习 10 分钟复习路线"
+                  />
+                  <button className="course-send-button" type="button" onClick={sendCourseQuestion}>
+                    <ArrowRight size={17} weight="bold" aria-hidden="true" />
+                    <span>发送</span>
+                  </button>
+                </div>
+                <ActionNotice notice={notice} />
               </section>
 
               <aside className="course-context-panel" aria-label="课程学习上下文">

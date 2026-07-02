@@ -14,6 +14,8 @@ import {
 import { Link, NavLink, useNavigate } from "react-router-dom";
 
 import { PATHS } from "../../app/routePaths";
+import { ActionNotice } from "../feedback/ActionNotice";
+import { useActionNotice } from "../feedback/useActionNotice";
 import { useAuthStore } from "../../features/auth/authStore";
 
 export type SidebarConversation = {
@@ -42,10 +44,29 @@ export function AppSidebar({
   const navigate = useNavigate();
   const clearSession = useAuthStore((state) => state.clearSession);
   const user = useAuthStore((state) => state.user);
+  const { notice, showNotice } = useActionNotice();
 
   function logout() {
     clearSession();
     navigate(PATHS.login);
+  }
+
+  function handleNewChat() {
+    if (onNewChat) {
+      onNewChat();
+      return;
+    }
+
+    navigate(PATHS.app);
+  }
+
+  function handleSearchHistory() {
+    if (onSearchHistory) {
+      onSearchHistory();
+      return;
+    }
+
+    showNotice("历史搜索会在会话索引接入后开放。");
   }
 
   const sidebarLinkClassName = ({ isActive }: { isActive: boolean }) => (isActive ? "active" : undefined);
@@ -82,14 +103,15 @@ export function AppSidebar({
         </NavLink>
       </nav>
 
-      <button className="new-chat-button" type="button" onClick={onNewChat}>
+      <button className="new-chat-button" type="button" onClick={handleNewChat}>
         <Plus size={17} weight="bold" aria-hidden="true" />
         <span>新建对话</span>
       </button>
-      <button className="history-search-button" type="button" onClick={onSearchHistory}>
+      <button className="history-search-button" type="button" onClick={handleSearchHistory}>
         <MagnifyingGlass size={16} weight="duotone" aria-hidden="true" />
         <span>搜索历史</span>
       </button>
+      <ActionNotice notice={notice} className="sidebar-action-notice" />
       <div className="home-rail-heading">
         <span>最近</span>
         <ClockCounterClockwise size={18} weight="duotone" aria-hidden="true" />

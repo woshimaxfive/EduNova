@@ -6,10 +6,12 @@ import { type StudioOutput } from "../../types/api";
 
 type StudioDockProps = {
   outputs: StudioOutput[];
+  onGenerate?: () => void;
 };
 
-export function StudioDock({ outputs }: StudioDockProps) {
+export function StudioDock({ outputs, onGenerate }: StudioDockProps) {
   const { notice, showNotice } = useActionNotice();
+  const handleGenerate = onGenerate ?? (() => showNotice("已加入生成队列。"));
 
   return (
     <section className="studio-dock" role="region" aria-label="资源生成区">
@@ -17,7 +19,7 @@ export function StudioDock({ outputs }: StudioDockProps) {
         <div>
           <h2>资源输出</h2>
         </div>
-        <button className="soft-button" type="button" onClick={() => showNotice("已加入生成队列。")}>
+        <button className="soft-button" type="button" onClick={handleGenerate}>
           <Sparkle size={17} weight="fill" aria-hidden="true" />
           <span>生成资源</span>
         </button>

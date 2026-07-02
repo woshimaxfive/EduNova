@@ -9,6 +9,8 @@ const reviewItems = ["链式法则应用", "计算图局部梯度", "反向传�
 
 export function PracticePage() {
   const [answer, setAnswer] = useState("");
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [attemptCount, setAttemptCount] = useState(0);
   const { notice, showNotice } = useActionNotice();
 
   function submitAnswer() {
@@ -17,6 +19,8 @@ export function PracticePage() {
       return;
     }
 
+    setHasSubmitted(true);
+    setAttemptCount((current) => current + 1);
     showNotice("已提交答案。", "success");
   }
 
@@ -55,15 +59,15 @@ export function PracticePage() {
             <div className="feedback-status">
               <WarningCircle size={22} weight="duotone" aria-hidden="true" />
               <span>
-                <strong>薄弱点：链式法则应用</strong>
-                <small>建议先复习计算图，再完成 8 道递进题。</small>
+                <strong>{hasSubmitted ? "本次批改：关键概念已覆盖" : "薄弱点：链式法则应用"}</strong>
+                <small>{hasSubmitted ? "还需要补一句“复合函数对参数的影响由局部梯度相乘得到”。" : "建议先复习计算图，再完成 8 道递进题。"}</small>
               </span>
             </div>
             <div className="feedback-status mastered">
               <CheckCircle size={22} weight="duotone" aria-hidden="true" />
               <span>
                 <strong>已掌握：人工智能概述</strong>
-                <small>可以进入搜索和知识表示章节。</small>
+                <small>{hasSubmitted ? `已记录第 ${attemptCount} 次作答。` : "可以进入搜索和知识表示章节。"}</small>
               </span>
             </div>
           </section>
@@ -75,10 +79,10 @@ export function PracticePage() {
               </div>
             </div>
             <ol>
-              {reviewItems.map((item) => (
-                <li key={item}>
+              {reviewItems.map((item, index) => (
+                <li className={hasSubmitted && index === 0 ? "active" : ""} key={item}>
                   <ListChecks size={17} weight="duotone" aria-hidden="true" />
-                  <span>{item}</span>
+                  <span>{hasSubmitted && index === 0 ? `${item} · 下一题` : item}</span>
                 </li>
               ))}
             </ol>

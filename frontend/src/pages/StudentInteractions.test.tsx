@@ -9,7 +9,10 @@ import { CourseSpacePage } from "./CourseSpacePage";
 import { LearningSpacePage } from "./LearningSpacePage";
 import { LibraryPage } from "./LibraryPage";
 import { PracticePage } from "./PracticePage";
+import { ProfilePage } from "./ProfilePage";
+import { ReportsPage } from "./ReportsPage";
 import { SettingsPage } from "./SettingsPage";
+import { StudioPage } from "./StudioPage";
 import { TutorPage } from "./TutorPage";
 
 function renderPage(page: ReactNode) {
@@ -89,6 +92,22 @@ describe("student interaction affordances", () => {
     }
   });
 
+  it("sends course-local questions with Enter and adds them to the course history", async () => {
+    const user = userEvent.setup();
+
+    renderPage(<CourseSpacePage />);
+
+    const courseInput = screen.getByRole("textbox", { name: "课程问题输入" });
+
+    await user.type(courseInput, "给我一个十分钟复习计划{enter}");
+
+    expect(courseInput).toHaveValue("");
+    expect(screen.getByRole("status")).toHaveTextContent("已生成课程回答");
+    expect(screen.getByRole("region", { name: "课程即时对话" })).toHaveTextContent("给我一个十分钟复习计划");
+    expect(screen.getByRole("region", { name: "课程即时对话" })).toHaveTextContent("我会按课程资料回答");
+    expect(screen.getByRole("region", { name: "历史对话" })).toHaveTextContent("给我一个十分钟复习计划");
+  });
+
   it("uses the shared sidebar history to switch the course thread", async () => {
     const user = userEvent.setup();
 
@@ -130,6 +149,54 @@ describe("student interaction affordances", () => {
     await user.click(screen.getByRole("button", { name: "提交答案" }));
 
     expect(screen.getByRole("status")).toHaveTextContent("已提交答案");
+    expect(screen.getByRole("region", { name: "批改反馈" })).toHaveTextContent("本次批改");
+    expect(screen.getByRole("region", { name: "薄弱点复习队列" })).toHaveTextContent("下一题");
+  });
+
+  it("generates studio resources into the local queue and output track", async () => {
+    const user = userEvent.setup();
+
+    renderPage(<StudioPage />);
+
+    await user.selectOptions(screen.getByLabelText("知识点"), "反向传播");
+    await user.click(screen.getByRole("button", { name: "练习" }));
+    await user.click(screen.getAllByRole("button", { name: "生成资源" })[0]);
+
+    expect(screen.getByRole("status")).toHaveTextContent("已生成「反向传播练习」任务");
+    expect(screen.getByRole("region", { name: "生成队列" })).toHaveTextContent("反向传播练习");
+    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("反向传播练习");
+  });
+
+  it("updates profile goals and evidence from local form input", async () => {
+    const user = userEvent.setup();
+
+    renderPage(<ProfilePage />);
+
+    await user.click(screen.getByRole("button", { name: "更新目标" }));
+    await user.clear(screen.getByRole("textbox", { name: "学习目标" }));
+    await user.type(screen.getByRole("textbox", { name: "学习目标" }), "两周冲刺软件杯演示");
+    await user.click(screen.getByRole("button", { name: "保存目标" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("学习目标已更新");
+    expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("目标更新：两周冲刺软件杯演示");
+
+    await user.type(screen.getByRole("textbox", { name: "画像问题回答" }), "最担心反向传播推导。");
+    await user.click(screen.getByRole("button", { name: "更新画像" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("画像证据已更新");
+    expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("画像对话：最担心反向传播推导。");
+  });
+
+  it("prepares the report export state before real file generation is connected", async () => {
+    const user = userEvent.setup();
+
+    renderPage(<ReportsPage />);
+
+    await user.click(screen.getByRole("button", { name: "导出档案" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("学习档案已准备好");
+    expect(screen.getByRole("region", { name: "学习报告" })).toHaveTextContent("已整理画像、错因、引用和复习建议");
+    expect(screen.getByRole("region", { name: "导出学习档案" })).toHaveTextContent("已生成 1 份学习档案");
   });
 
   it("shows feedback for library and settings actions that await real APIs", async () => {
@@ -168,9 +235,13 @@ describe("student interaction affordances", () => {
 
     renderPage(<SettingsPage />);
 
+    const settingsRegion = screen.getByRole("region", { name: "账号设置" });
+
+    await user.clear(within(settingsRegion).getByLabelText("昵称"));
+    await user.type(within(settingsRegion).getByLabelText("昵称"), "冲刺学生");
+    await user.selectOptions(screen.getByLabelText("供应商"), "DeepSeek");
     await user.click(screen.getByRole("button", { name: "保存设置" }));
 
-    const settingsRegion = screen.getByRole("region", { name: "账号设置" });
-    expect(within(settingsRegion).getByRole("status")).toHaveTextContent("设置已保存");
+    expect(within(settingsRegion).getByRole("status")).toHaveTextContent("冲刺学生 的设置已保存");
   });
 });

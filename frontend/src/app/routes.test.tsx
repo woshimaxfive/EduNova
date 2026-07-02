@@ -70,7 +70,7 @@ describe("EduNova routes", () => {
     expect(screen.getByRole("region", { name: "Studio 生成区" })).toBeInTheDocument();
   });
 
-  it("renders the protected design lab for an authenticated student", async () => {
+  it("treats the retired design lab route as not found", async () => {
     useAuthStore.getState().setSession({
       token: "demo-token",
       user: {
@@ -87,7 +87,7 @@ describe("EduNova routes", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole("heading", { name: "Design Lab v0" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "主页调参控制台" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "没有找到这个学习入口" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "回到学习空间" })).toBeInTheDocument();
   });
 });

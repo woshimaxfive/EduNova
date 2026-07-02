@@ -5,7 +5,6 @@ import { ProtectedRoute } from "./ProtectedRoute";
 import { PublicOnlyRoute } from "./PublicOnlyRoute";
 import { PATHS } from "./routePaths";
 import { useAuthStore } from "../features/auth/authStore";
-import { DesignLabPage } from "../pages/DesignLabPage";
 import { DemoEntryPage } from "../pages/DemoEntryPage";
 import { LibraryPage } from "../pages/LibraryPage";
 import { LearningSpacePage } from "../pages/LearningSpacePage";
@@ -50,7 +49,6 @@ export function AppRoutes() {
       <Route path={PATHS.app} element={protectedPage(<LearningSpacePage />)} />
       <Route path={PATHS.library} element={protectedPage(<LibraryPage />)} />
       <Route path={PATHS.courseDetail} element={protectedPage(lazyPage(<CourseSpacePage />))} />
-      <Route path={PATHS.designLab} element={protectedPage(<DesignLabPage />)} />
       <Route path={PATHS.studio} element={protectedPage(<StudioPage />)} />
       <Route path={PATHS.profile} element={protectedPage(<ProfilePage />)} />
       <Route path={PATHS.tutor} element={protectedPage(<TutorPage />)} />

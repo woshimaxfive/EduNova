@@ -11,6 +11,7 @@ import {
   Student,
   UserCircle
 } from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 
 import { PATHS } from "../../app/routePaths";
@@ -47,6 +48,25 @@ export function AppSidebar({
   const clearSession = useAuthStore((state) => state.clearSession);
   const user = useAuthStore((state) => state.user);
   const { notice, showNotice } = useActionNotice();
+  const [isHistorySearchOpen, setIsHistorySearchOpen] = useState(false);
+  const [historySearchTerm, setHistorySearchTerm] = useState("");
+  const historySearchInputRef = useRef<HTMLInputElement | null>(null);
+  const trimmedHistorySearchTerm = historySearchTerm.trim().toLowerCase();
+  const visibleConversations = useMemo(
+    () =>
+      trimmedHistorySearchTerm
+        ? conversations.filter((conversation) =>
+            `${conversation.title} ${conversation.meta}`.toLowerCase().includes(trimmedHistorySearchTerm)
+          )
+        : conversations,
+    [conversations, trimmedHistorySearchTerm]
+  );
+
+  useEffect(() => {
+    if (isHistorySearchOpen && !isCollapsed) {
+      historySearchInputRef.current?.focus();
+    }
+  }, [isHistorySearchOpen, isCollapsed]);
 
   function logout() {
     clearSession();
@@ -54,6 +74,9 @@ export function AppSidebar({
   }
 
   function handleNewChat() {
+    setHistorySearchTerm("");
+    setIsHistorySearchOpen(false);
+
     if (onNewChat) {
       onNewChat();
       return;
@@ -63,12 +86,14 @@ export function AppSidebar({
   }
 
   function handleSearchHistory() {
+    setIsHistorySearchOpen(true);
+
     if (onSearchHistory) {
       onSearchHistory();
       return;
     }
 
-    showNotice("历史搜索会在会话索引接入后开放。");
+    showNotice("输入关键词筛选历史。");
   }
 
   const sidebarLinkClassName = ({ isActive }: { isActive: boolean }) => (isActive ? "active" : undefined);
@@ -109,18 +134,43 @@ export function AppSidebar({
         <Plus size={17} weight="bold" aria-hidden="true" />
         <span>新建对话</span>
       </button>
-      <button className="history-search-button" type="button" onClick={handleSearchHistory}>
+      <button
+        className={isHistorySearchOpen ? "history-search-button active" : "history-search-button"}
+        type="button"
+        aria-expanded={isHistorySearchOpen}
+        onClick={handleSearchHistory}
+      >
         <MagnifyingGlass size={16} weight="duotone" aria-hidden="true" />
         <span>搜索历史</span>
       </button>
+      {isHistorySearchOpen && !isCollapsed ? (
+        <label className="history-search-field">
+          <MagnifyingGlass size={15} weight="duotone" aria-hidden="true" />
+          <span className="visually-hidden">搜索历史关键词</span>
+          <input
+            ref={historySearchInputRef}
+            type="search"
+            aria-label="搜索历史关键词"
+            value={historySearchTerm}
+            placeholder="输入关键词"
+            onChange={(event) => setHistorySearchTerm(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setHistorySearchTerm("");
+                setIsHistorySearchOpen(false);
+              }
+            }}
+          />
+        </label>
+      ) : null}
       <ActionNotice notice={notice} className="sidebar-action-notice" />
       <div className="home-rail-heading">
         <span>最近</span>
         <ClockCounterClockwise size={18} weight="duotone" aria-hidden="true" />
       </div>
       <div className="home-thread-list">
-        {conversations.length > 0 ? (
-          conversations.map((conversation) => (
+        {visibleConversations.length > 0 ? (
+          visibleConversations.map((conversation) => (
             <button
               className={activeConversationId === conversation.id ? "home-thread active" : "home-thread"}
               key={conversation.id}
@@ -133,7 +183,7 @@ export function AppSidebar({
             </button>
           ))
         ) : (
-          <p className="home-thread-empty">还没有历史对话</p>
+          <p className="home-thread-empty">{conversations.length > 0 ? "没有匹配的历史" : "还没有历史对话"}</p>
         )}
       </div>
       <div className="home-account-section" aria-label="账号入口">

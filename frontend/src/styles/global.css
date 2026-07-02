@@ -3407,6 +3407,7 @@ a {
 .home-rail-heading,
 .new-chat-button,
 .history-search-button,
+.history-search-field,
 .home-thread,
 .composer-toolbar,
 .composer-actions,
@@ -3437,24 +3438,61 @@ a {
   color: var(--text);
   background: transparent;
   transition:
+    color 0.2s ease,
     background 0.2s ease,
     transform 0.2s ease;
 }
 
 .new-chat-button {
-  background: rgba(255, 255, 255, 0.66);
-  box-shadow: 0 10px 28px rgba(16, 24, 32, 0.06);
+  color: var(--text-muted);
 }
 
 .history-search-button {
   color: var(--text-muted);
 }
 
+.history-search-button.active {
+  color: var(--accent-strong);
+  background: rgba(8, 127, 115, 0.1);
+}
+
 .new-chat-button:hover,
 .history-search-button:hover,
 .home-thread:hover {
+  color: var(--text);
   background: rgba(255, 255, 255, 0.82);
   transform: translateY(-1px);
+}
+
+.history-search-field {
+  gap: 7px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgba(16, 24, 32, 0.08);
+  border-radius: 9px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.history-search-field:focus-within {
+  border-color: rgba(8, 127, 115, 0.24);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 0 0 3px rgba(8, 127, 115, 0.08);
+}
+
+.history-search-field input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+  font-size: 0.88rem;
+}
+
+.history-search-field input::placeholder {
+  color: rgba(98, 112, 109, 0.82);
 }
 
 .home-thread.active {
@@ -3583,6 +3621,10 @@ a {
   grid-template-rows: minmax(0, 1fr) auto auto auto;
   gap: 12px;
   padding-top: 28px;
+  padding-bottom: 172px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .home-hero-copy {
@@ -3624,12 +3666,19 @@ a {
 }
 
 .composer-frame.docked {
-  position: relative;
-  bottom: auto;
+  position: fixed;
+  left: calc(50% + 132px);
+  bottom: 22px;
   z-index: 2;
   align-self: end;
-  width: min(760px, 100%);
+  width: min(760px, calc(100vw - 312px));
   margin-top: 0;
+  transform: translateX(-50%);
+}
+
+.learning-home.history-collapsed .composer-frame.docked {
+  left: calc(50% + 34px);
+  width: min(760px, calc(100vw - 116px));
 }
 
 .conversation-composer {
@@ -3754,10 +3803,8 @@ a {
   width: min(760px, 100%);
   min-height: 0;
   margin: 0 auto;
-  padding: 8px 4px 20px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  padding: 8px 4px 24px;
+  overflow: visible;
 }
 
 .home-message {
@@ -4216,10 +4263,10 @@ a {
 }
 
 @media (prefers-color-scheme: dark) {
-  .new-chat-button,
   .home-thread:hover,
   .home-thread.active,
   .home-history-rail,
+  .history-search-field,
   .conversation-composer,
   .recent-course,
   .answer-insight-tabs button,
@@ -4232,6 +4279,10 @@ a {
   .library-action-button,
   .library-course-materials button {
     background: rgba(32, 42, 39, 0.78);
+  }
+
+  .history-search-field:focus-within {
+    background: rgba(32, 42, 39, 0.92);
   }
 
   .library-file-row:hover,
@@ -4334,6 +4385,7 @@ a {
   .home-chat-stage.chat-active {
     min-height: calc(100dvh - 110px);
     padding-top: 24px;
+    padding-bottom: 12px;
   }
 
   .home-history-rail {
@@ -4366,6 +4418,15 @@ a {
 
   .conversation-composer textarea {
     min-height: 64px;
+  }
+
+  .composer-frame.docked,
+  .learning-home.history-collapsed .composer-frame.docked {
+    position: sticky;
+    left: auto;
+    bottom: 12px;
+    width: min(760px, 100%);
+    transform: none;
   }
 
   .composer-actions {

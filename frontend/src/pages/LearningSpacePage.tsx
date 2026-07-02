@@ -10,7 +10,7 @@ import {
   Sparkle,
   X
 } from "@phosphor-icons/react";
-import { type ChangeEvent, type KeyboardEvent, useRef, useState } from "react";
+import { type ChangeEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { buildCoursePath } from "../app/routePaths";
@@ -95,6 +95,7 @@ export function LearningSpacePage() {
   const user = useAuthStore((state) => state.user);
   const hasStarterContent = user?.starterMode !== "blank";
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const homeChatStageRef = useRef<HTMLElement | null>(null);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
   const [homeThreads, setHomeThreads] = useState(() => (hasStarterContent ? homeConversations : []));
@@ -109,6 +110,20 @@ export function LearningSpacePage() {
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>("sources");
   const { notice, showNotice } = useActionNotice();
   const hasHomeThread = messages.length > 0;
+
+  useEffect(() => {
+    if (!hasHomeThread) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      const stage = homeChatStageRef.current;
+
+      if (stage) {
+        stage.scrollTop = stage.scrollHeight;
+      }
+    });
+  }, [hasHomeThread, messages.length]);
 
   function openLibrary(message = "已打开资料库。") {
     setIsLibraryOpen(true);
@@ -250,7 +265,11 @@ export function LearningSpacePage() {
           }}
         />
 
-        <section className={hasHomeThread ? "home-chat-stage chat-active" : "home-chat-stage"} aria-label="AI 学习入口">
+        <section
+          ref={homeChatStageRef}
+          className={hasHomeThread ? "home-chat-stage chat-active" : "home-chat-stage"}
+          aria-label="AI 学习入口"
+        >
           {hasHomeThread ? (
             <section className="home-thread-stage" aria-label="主页对话">
               {messages.map((message) => (

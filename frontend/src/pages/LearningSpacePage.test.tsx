@@ -68,6 +68,27 @@ describe("LearningSpacePage", () => {
     expect(within(historyRail).getByRole("button", { name: "退出登录" })).toBeInTheDocument();
   });
 
+  it("filters history from the sidebar search", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <LearningSpacePage />
+      </MemoryRouter>
+    );
+
+    const historyRail = screen.getByRole("region", { name: "历史对话" });
+
+    await user.click(within(historyRail).getByRole("button", { name: "搜索历史" }));
+
+    const searchInput = within(historyRail).getByRole("searchbox", { name: "搜索历史关键词" });
+
+    await user.type(searchInput, "期末");
+
+    expect(within(historyRail).getByRole("button", { name: /把期末题按知识点分组/ })).toBeInTheDocument();
+    expect(within(historyRail).queryByRole("button", { name: /神经网络反向传播怎么复习/ })).not.toBeInTheDocument();
+  });
+
   it("collapses the edge history sidebar without leaving the learning home", async () => {
     const user = userEvent.setup();
 

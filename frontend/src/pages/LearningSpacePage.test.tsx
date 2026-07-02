@@ -43,4 +43,44 @@ describe("LearningSpacePage", () => {
     expect(within(dialog).getByRole("textbox", { name: "课程名称" })).toHaveValue("人工智能导论期末复习");
     expect(within(dialog).getByText("已选择 3 份资料")).toBeInTheDocument();
   });
+
+  it("collapses the edge history sidebar without leaving the learning home", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <LearningSpacePage />
+      </MemoryRouter>
+    );
+
+    const historyRail = screen.getByRole("region", { name: "历史对话" });
+
+    expect(historyRail).toHaveAttribute("data-collapsed", "false");
+
+    await user.click(screen.getByRole("button", { name: "收起侧栏" }));
+
+    expect(historyRail).toHaveAttribute("data-collapsed", "true");
+    expect(screen.getByRole("button", { name: "展开侧栏" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "AI 学习入口" })).toBeInTheDocument();
+  });
+
+  it("moves into a chat thread after the first home question", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <LearningSpacePage />
+      </MemoryRouter>
+    );
+
+    await user.type(screen.getByRole("textbox", { name: "学习问题输入" }), "期末复习怎么安排？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    const thread = screen.getByRole("region", { name: "主页对话" });
+
+    expect(within(thread).getByText("期末复习怎么安排？")).toBeInTheDocument();
+    expect(within(thread).getByText(/可以先把资料按章节和题型拆开/)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "底部学习输入" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).not.toBeInTheDocument();
+  });
 });

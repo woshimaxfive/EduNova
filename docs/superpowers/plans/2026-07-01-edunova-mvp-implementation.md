@@ -19,7 +19,7 @@
 - [ ] 每个 AI 生成结果必须绑定 `trace_id`、`citation_refs`、`review_status`、`confidence_score` 中的关键字段。
 - [ ] 所有用户私有数据绑定 `user_id`；课程内数据绑定 `user_id` 与 `course_id`；主页会话和独立资料库允许先不绑定课程，避免多人部署后数据串用。
 - [ ] 第一版只做学生端主线和轻量系统设置；不建设完整教师端、家长端、班级运营后台、支付、真实视频生成、扫描 OCR、移动端。
-- [ ] Phase 3 前端必须遵守 `docs/UI_UX_DESIGN.md`：不采用固定左侧后台菜单和卡片堆，首页重定向为 AI 对话主页、输入区资料库浮层入口、最近学习轻量列表和课程空间入口。
+- [ ] Phase 3 前端必须遵守 `docs/UI_UX_DESIGN.md`：不采用固定左侧后台菜单和卡片堆，首页重定向为 AI 对话主页、贴边可收起历史侧栏、输入区资料库浮层入口、发送后底部输入区、最近学习轻量列表和课程空间入口。
 - [ ] Phase 3 路由与入口必须遵守 `docs/FRONTEND_ROUTING_DESIGN.md`：登录、注册、Demo、首次进入和路由保护先搭稳。
 - [ ] 每个阶段提交一次小而清晰的 commit；提交前运行本阶段列出的检查命令。
 
@@ -510,6 +510,7 @@ Current Phase 3.1 implementation note:
 - P3.6 added structured skeletons for library, Studio, profile, tutor, practice, reports and settings pages; tests now lock their material, generation, profile, tutoring, practice, report and settings regions so they do not regress into placeholder pages.
 - P3.7 added local interaction feedback for the main visible buttons: home composer, material drawer selection, course answer expansion, knowledge-node detail, tutor mode, practice submission, library citations, settings save, Studio/profile/report actions and top search now show explicit demo-state feedback until real APIs replace those handlers.
 - P3.8 now uses layered route discovery: top and mobile navigation expose learning space, library and Studio; the personal menu exposes profile, reports and settings; course space exposes tutor, practice and reports as contextual learning actions.
+- The `/app` home shell now follows the user-provided ChatGPT references: the home sidebar is flush with the left browser edge, can collapse to an icon rail, the initial composer is smaller, and the first sent question moves the page into a chat thread with the composer docked near the bottom.
 - Browser visual checks covered P3R3 `/app` at desktop and mobile widths with no horizontal overflow; the material-library drawer and course generation dialog open and remain readable.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
 - Real backend auth, `/dashboard/summary`, upload/RAG/AI data and final browser E2E remain later-phase work.

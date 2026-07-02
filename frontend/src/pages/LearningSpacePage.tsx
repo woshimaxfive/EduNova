@@ -1,6 +1,8 @@
 import {
   ArrowRight,
   BookOpen,
+  CaretLeft,
+  CaretRight,
   ChatCircleText,
   CheckCircle,
   ClockCounterClockwise,
@@ -11,12 +13,13 @@ import {
   Microphone,
   Plus,
   Sparkle,
+  Student,
   X
 } from "@phosphor-icons/react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import { buildCoursePath } from "../app/routePaths";
+import { buildCoursePath, PATHS } from "../app/routePaths";
 import { ActionNotice } from "../components/feedback/ActionNotice";
 import { useActionNotice } from "../components/feedback/useActionNotice";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
@@ -87,12 +90,21 @@ const recentCourses = [
   }
 ];
 
+type HomeMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
+
 export function LearningSpacePage() {
   const [prompt, setPrompt] = useState("");
+  const [messages, setMessages] = useState<HomeMessage[]>([]);
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isDeepThinkingEnabled, setIsDeepThinkingEnabled] = useState(false);
   const { notice, showNotice } = useActionNotice();
+  const hasHomeThread = messages.length > 0;
 
   function openLibrary(message = "已打开资料库。") {
     setIsLibraryOpen(true);
@@ -100,32 +112,78 @@ export function LearningSpacePage() {
   }
 
   function handleSendQuestion() {
-    if (!prompt.trim()) {
+    const question = prompt.trim();
+
+    if (!question) {
       showNotice("先输入一个学习问题。", "warning");
       return;
     }
 
+    setMessages((current) => [
+      ...current,
+      {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: question
+      },
+      {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。真实 AI 接入后，这里会流式展开并显示引用来源。"
+      }
+    ]);
+    setPrompt("");
     showNotice("已生成演示回答，真实 AI 接入后会流式返回。", "success");
   }
 
   return (
-    <LearningSpaceShell>
-      <div className="learning-home">
+    <LearningSpaceShell hideTopNavigation>
+      <div className={["learning-home", isHistoryCollapsed ? "history-collapsed" : "", hasHomeThread ? "chat-active" : ""].filter(Boolean).join(" ")}>
         <div className="learning-signal" aria-hidden="true">
           <span />
           <span />
           <span />
         </div>
-        <section className="home-history-rail" aria-label="历史对话">
-          <div className="home-rail-heading">
-            <span>历史对话</span>
-            <ClockCounterClockwise size={18} weight="duotone" aria-hidden="true" />
+        <section className="home-history-rail" aria-label="历史对话" data-collapsed={isHistoryCollapsed ? "true" : "false"}>
+          <div className="home-sidebar-brand">
+            <Link className="brand-mark home-brand" to={PATHS.app} aria-label="EduNova 首页">
+              <span className="brand-symbol" aria-hidden="true">
+                <Student size={22} weight="duotone" />
+              </span>
+              <span className="home-sidebar-label">EduNova</span>
+            </Link>
+            <button
+              className="sidebar-collapse-button"
+              type="button"
+              aria-label={isHistoryCollapsed ? "展开侧栏" : "收起侧栏"}
+              aria-expanded={!isHistoryCollapsed}
+              onClick={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
+            >
+              {isHistoryCollapsed ? <CaretRight size={17} weight="bold" aria-hidden="true" /> : <CaretLeft size={17} weight="bold" aria-hidden="true" />}
+            </button>
           </div>
+
+          <nav className="home-sidebar-nav" aria-label="主页导航">
+            <Link to={PATHS.app}>
+              <ChatCircleText size={18} weight="duotone" aria-hidden="true" />
+              <span>学习空间</span>
+            </Link>
+            <Link to={PATHS.library}>
+              <BookOpen size={18} weight="duotone" aria-hidden="true" />
+              <span>资料库</span>
+            </Link>
+            <Link to={PATHS.studio}>
+              <Sparkle size={18} weight="duotone" aria-hidden="true" />
+              <span>Studio</span>
+            </Link>
+          </nav>
+
           <button
             className="new-chat-button"
             type="button"
             onClick={() => {
               setPrompt("");
+              setMessages([]);
               showNotice("已新建一条主页独立对话。", "success");
             }}
           >
@@ -140,6 +198,10 @@ export function LearningSpacePage() {
             <MagnifyingGlass size={16} weight="duotone" aria-hidden="true" />
             <span>搜索历史</span>
           </button>
+          <div className="home-rail-heading">
+            <span>最近</span>
+            <ClockCounterClockwise size={18} weight="duotone" aria-hidden="true" />
+          </div>
           <div className="home-thread-list">
             {homeConversations.map((conversation) => (
               <button
@@ -155,80 +217,93 @@ export function LearningSpacePage() {
           </div>
         </section>
 
-        <section className="home-chat-stage" aria-label="AI 学习入口">
-          <div className="home-hero-copy">
-            <p className="home-kicker">EduNova</p>
-            <h1>
-              <span>嗨，同学，</span>
-              <span>准备好一起学习了吗？</span>
-            </h1>
-            <p>上传课件、电子书或期末题，然后直接问。需要时再把这段对话变成一门课程。</p>
-          </div>
+        <section className={hasHomeThread ? "home-chat-stage chat-active" : "home-chat-stage"} aria-label="AI 学习入口">
+          {hasHomeThread ? (
+            <section className="home-thread-stage" aria-label="主页对话">
+              {messages.map((message) => (
+                <article className={`home-message ${message.role}`} key={message.id}>
+                  {message.role === "assistant" ? <span className="message-thinking">已思考若干秒</span> : null}
+                  <p>{message.content}</p>
+                </article>
+              ))}
+            </section>
+          ) : (
+            <div className="home-hero-copy">
+              <p className="home-kicker">EduNova</p>
+              <h1>
+                <span>嗨，同学，</span>
+                <span>准备好一起学习了吗？</span>
+              </h1>
+              <p>上传课件、电子书或期末题，然后直接问。需要时再把这段对话变成一门课程。</p>
+            </div>
+          )}
 
-          <div className="conversation-composer">
-            <textarea
-              aria-label="学习问题输入"
-              value={prompt}
-              rows={3}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder="问我怎么复习，或者说：用这些资料生成一门期末复习课"
-            />
-            <div className="composer-actions">
-              <div className="composer-toolbar" aria-label="输入工具">
-                <button
-                  type="button"
-                  aria-label="上传资料"
-                  onClick={() => openLibrary("已打开资料库，真实上传会在资料解析接口接入后开放。")}
-                >
-                  <FileArrowUp size={18} weight="duotone" aria-hidden="true" />
-                  <span>上传</span>
-                </button>
-                <button type="button" aria-label="打开资料库" onClick={() => openLibrary()}>
-                  <FolderOpen size={18} weight="duotone" aria-hidden="true" />
-                  <span>资料库</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsCourseDialogOpen(true);
-                    showNotice("已打开生成课程面板。");
-                  }}
-                >
-                  <Sparkle size={18} weight="duotone" aria-hidden="true" />
-                  <span>生成课程</span>
-                </button>
-                <button
-                  type="button"
-                  aria-label="联网搜索"
-                  onClick={() => showNotice("联网搜索会作为可选增强接入，第一版先保留引用来源机制。")}
-                >
-                  <MagnifyingGlass size={18} weight="duotone" aria-hidden="true" />
-                  <span>搜索</span>
-                </button>
-                <button
-                  className={isDeepThinkingEnabled ? "active" : ""}
-                  type="button"
-                  aria-label="深度思考"
-                  aria-pressed={isDeepThinkingEnabled}
-                  onClick={() => {
-                    setIsDeepThinkingEnabled((enabled) => !enabled);
-                    showNotice(isDeepThinkingEnabled ? "已关闭深度思考演示态。" : "已开启深度思考演示态。");
-                  }}
-                >
-                  <ChatCircleText size={18} weight="duotone" aria-hidden="true" />
-                  <span>思考</span>
-                </button>
-                <button type="button" aria-label="语音输入" onClick={() => showNotice("语音输入会在浏览器录音权限流程接入后开放。")}>
-                  <Microphone size={18} weight="duotone" aria-hidden="true" />
-                  <span>语音</span>
+          <section className={hasHomeThread ? "composer-frame docked" : "composer-frame"} aria-label={hasHomeThread ? "底部学习输入" : "学习输入区"}>
+            <div className="conversation-composer">
+              <textarea
+                aria-label="学习问题输入"
+                value={prompt}
+                rows={2}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder="问我怎么复习，或者说：用这些资料生成一门期末复习课"
+              />
+              <div className="composer-actions">
+                <div className="composer-toolbar" aria-label="输入工具">
+                  <button
+                    type="button"
+                    aria-label="上传资料"
+                    onClick={() => openLibrary("已打开资料库，真实上传会在资料解析接口接入后开放。")}
+                  >
+                    <FileArrowUp size={18} weight="duotone" aria-hidden="true" />
+                    <span>上传</span>
+                  </button>
+                  <button type="button" aria-label="打开资料库" onClick={() => openLibrary()}>
+                    <FolderOpen size={18} weight="duotone" aria-hidden="true" />
+                    <span>资料库</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCourseDialogOpen(true);
+                      showNotice("已打开生成课程面板。");
+                    }}
+                  >
+                    <Sparkle size={18} weight="duotone" aria-hidden="true" />
+                    <span>生成课程</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="联网搜索"
+                    onClick={() => showNotice("联网搜索会作为可选增强接入，第一版先保留引用来源机制。")}
+                  >
+                    <MagnifyingGlass size={18} weight="duotone" aria-hidden="true" />
+                    <span>搜索</span>
+                  </button>
+                  <button
+                    className={isDeepThinkingEnabled ? "active" : ""}
+                    type="button"
+                    aria-label="深度思考"
+                    aria-pressed={isDeepThinkingEnabled}
+                    onClick={() => {
+                      setIsDeepThinkingEnabled((enabled) => !enabled);
+                      showNotice(isDeepThinkingEnabled ? "已关闭深度思考演示态。" : "已开启深度思考演示态。");
+                    }}
+                  >
+                    <ChatCircleText size={18} weight="duotone" aria-hidden="true" />
+                    <span>思考</span>
+                  </button>
+                  <button type="button" aria-label="语音输入" onClick={() => showNotice("语音输入会在浏览器录音权限流程接入后开放。")}>
+                    <Microphone size={18} weight="duotone" aria-hidden="true" />
+                    <span>语音</span>
+                  </button>
+                </div>
+                <button className="ask-button" type="button" onClick={handleSendQuestion}>
+                  <ArrowRight size={18} weight="bold" aria-hidden="true" />
+                  <span>发送</span>
                 </button>
               </div>
-              <button className="ask-button" type="button" onClick={handleSendQuestion}>
-                <ArrowRight size={18} weight="bold" aria-hidden="true" />
-                <span>发送</span>
-              </button>
             </div>
-          </div>
+          </section>
 
           <div className="selected-materials-note">
             <LinkSimple size={16} weight="duotone" aria-hidden="true" />
@@ -236,29 +311,31 @@ export function LearningSpacePage() {
           </div>
           <ActionNotice notice={notice} className="home-action-notice" />
 
-          <section className="recent-course-strip" aria-label="最近学习">
-            <div className="recent-course-heading">
-              <span>最近学习</span>
-              <button type="button" onClick={() => showNotice("全部课程列表会在课程 API 接入后展示。")}>
-                查看全部
-              </button>
-            </div>
-            <ul className="recent-course-list" aria-label="最近学习列表">
-              {recentCourses.map((course) => (
-                <li key={course.id}>
-                  <Link className="recent-course" to={buildCoursePath(course.id)}>
-                    <BookOpen size={18} weight="duotone" aria-hidden="true" />
-                    <span>
-                      <strong>{course.title}</strong>
-                      <small>{course.focus}</small>
-                    </span>
-                    <em>{course.progress}</em>
-                    <span className="course-next">{course.next}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
+          {!hasHomeThread ? (
+            <section className="recent-course-strip" aria-label="最近学习">
+              <div className="recent-course-heading">
+                <span>最近学习</span>
+                <button type="button" onClick={() => showNotice("全部课程列表会在课程 API 接入后展示。")}>
+                  查看全部
+                </button>
+              </div>
+              <ul className="recent-course-list" aria-label="最近学习列表">
+                {recentCourses.map((course) => (
+                  <li key={course.id}>
+                    <Link className="recent-course" to={buildCoursePath(course.id)}>
+                      <BookOpen size={18} weight="duotone" aria-hidden="true" />
+                      <span>
+                        <strong>{course.title}</strong>
+                        <small>{course.focus}</small>
+                      </span>
+                      <em>{course.progress}</em>
+                      <span className="course-next">{course.next}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </section>
       </div>
 

@@ -3,13 +3,17 @@ import { type PropsWithChildren } from "react";
 
 import { TopNavigation } from "./TopNavigation";
 
-export function LearningSpaceShell({ children }: PropsWithChildren) {
+type LearningSpaceShellProps = PropsWithChildren<{
+  hideTopNavigation?: boolean;
+}>;
+
+export function LearningSpaceShell({ children, hideTopNavigation = false }: LearningSpaceShellProps) {
   return (
     <div className="app-surface">
       <div className="ambient-layer" aria-hidden="true" />
-      <TopNavigation />
+      {hideTopNavigation ? null : <TopNavigation />}
       <motion.main
-        className="learning-shell"
+        className={hideTopNavigation ? "learning-shell edge-shell" : "learning-shell"}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}

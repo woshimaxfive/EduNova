@@ -1652,9 +1652,10 @@ a {
 
 .library-file-shell {
   display: grid;
-  gap: 16px;
-  width: min(980px, 100%);
+  gap: 14px;
+  width: min(960px, 100%);
   margin: 0 auto;
+  padding: 2px 0 22px;
 }
 
 .library-command-row,
@@ -1668,8 +1669,10 @@ a {
 }
 
 .library-command-row {
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 10px;
+  padding: 8px 0 14px;
+  border-bottom: 1px solid rgba(16, 24, 32, 0.08);
 }
 
 .file-search-field {
@@ -1677,10 +1680,11 @@ a {
   min-width: min(320px, 100%);
   min-height: 40px;
   padding: 0 12px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(16, 24, 32, 0.1);
   border-radius: 999px;
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.48);
+  backdrop-filter: blur(16px);
 }
 
 .file-search-field input {
@@ -1697,21 +1701,29 @@ a {
   gap: 8px;
   min-height: 40px;
   padding: 0 14px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(16, 24, 32, 0.1);
   border-radius: 999px;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(16px);
   font-weight: 820;
+}
+
+.library-action-button:hover {
+  border-color: rgba(8, 127, 115, 0.24);
+  background: rgba(240, 250, 248, 0.76);
 }
 
 .library-action-button.primary {
   color: #ffffff;
   border-color: transparent;
-  background: #101820;
+  background: rgba(16, 24, 32, 0.94);
+  box-shadow: 0 12px 28px rgba(16, 24, 32, 0.14);
 }
 
 .library-filter-row {
   gap: 6px;
+  padding: 2px 0 6px;
 }
 
 .library-filter-row button {
@@ -1725,13 +1737,16 @@ a {
 }
 
 .library-filter-row button.active {
-  color: var(--text);
-  background: rgba(16, 24, 32, 0.06);
+  color: var(--accent-strong);
+  background: rgba(8, 127, 115, 0.09);
 }
 
 .library-file-table {
   display: grid;
-  border-top: 1px solid var(--line);
+  overflow: hidden;
+  border-top: 1px solid rgba(16, 24, 32, 0.08);
+  border-bottom: 1px solid rgba(16, 24, 32, 0.08);
+  background: transparent;
 }
 
 .library-file-header {
@@ -1755,7 +1770,7 @@ a {
   width: 100%;
   min-width: 0;
   min-height: 70px;
-  padding: 10px 0;
+  padding: 10px 12px;
   border: 0;
   border-top: 1px solid rgba(16, 24, 32, 0.08);
   color: var(--text);
@@ -1765,7 +1780,7 @@ a {
 
 .library-file-row:hover {
   color: var(--accent-strong);
-  background: rgba(8, 127, 115, 0.04);
+  background: rgba(8, 127, 115, 0.055);
 }
 
 .library-file-icon,
@@ -1781,6 +1796,11 @@ a {
   border-radius: 8px;
   color: var(--accent-strong);
   background: rgba(8, 127, 115, 0.09);
+}
+
+.library-file-icon[data-category="image"] {
+  color: #5266b4;
+  background: rgba(82, 102, 180, 0.1);
 }
 
 .library-file-main {
@@ -1801,6 +1821,12 @@ a {
   color: var(--text-muted);
 }
 
+.library-file-empty {
+  margin: 0;
+  padding: 20px 12px;
+  color: var(--text-muted);
+}
+
 .library-course-materials {
   display: grid;
   gap: 8px;
@@ -1818,6 +1844,11 @@ a {
   color: var(--text);
   text-align: left;
   background: rgba(255, 255, 255, 0.72);
+}
+
+.library-course-materials button.active {
+  border-color: rgba(8, 127, 115, 0.32);
+  background: rgba(8, 127, 115, 0.1);
 }
 
 .library-course-materials button span {
@@ -4241,7 +4272,7 @@ a {
 }
 
 .route-main-surface .workspace-hero h1 {
-  font-size: clamp(2rem, 3.7vw, 4.2rem);
+  font-size: clamp(2rem, 3vw, 3.5rem);
 }
 
 .route-main-surface .page-workbench {
@@ -4255,9 +4286,14 @@ a {
 
 .route-main-surface .student-panel,
 .route-main-surface .library-file-shell {
-  background: rgba(255, 255, 255, 0.64);
+  background: rgba(255, 255, 255, 0.38);
   backdrop-filter: blur(18px);
-  box-shadow: 0 18px 50px rgba(16, 24, 32, 0.06);
+  box-shadow: 0 18px 50px rgba(16, 24, 32, 0.045);
+}
+
+.route-main-surface .library-file-shell {
+  background: transparent;
+  box-shadow: none;
 }
 
 .course-route-surface {

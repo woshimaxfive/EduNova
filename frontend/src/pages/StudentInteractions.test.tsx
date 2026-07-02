@@ -137,17 +137,34 @@ describe("student interaction affordances", () => {
 
     renderPage(<LibraryPage />);
 
-    await user.click(screen.getByRole("button", { name: "上传资料" }));
+    const uploadedFile = new File(["demo"], "课堂截图.png", { type: "image/png" });
+    await user.upload(screen.getByLabelText("上传资料文件"), uploadedFile);
 
-    expect(screen.getByRole("status")).toHaveTextContent("真实上传会在资料解析接口接入后开放");
+    expect(screen.getByRole("status")).toHaveTextContent("课堂截图.png 已上传到资料库");
+    expect(screen.getByRole("button", { name: /课堂截图.png/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /AI 导论内置讲义/ }));
+    await user.click(screen.getByRole("button", { name: "图片" }));
 
-    expect(screen.getByRole("region", { name: "资料动作反馈" })).toHaveTextContent("AI 导论内置讲义");
+    expect(screen.getByRole("button", { name: "图片" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /课堂截图.png/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /AI 导论讲义/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "全部" }));
+    await user.click(screen.getByRole("button", { name: /AI 导论讲义/ }));
+
+    expect(screen.getByRole("region", { name: "资料动作反馈" })).toHaveTextContent("AI 导论讲义");
 
     await user.click(screen.getByRole("button", { name: "从资料生成课程" }));
 
-    expect(screen.getByRole("dialog", { name: "从资料生成课程" })).toBeInTheDocument();
+    const courseDialog = screen.getByRole("dialog", { name: "从资料生成课程" });
+    expect(courseDialog).toBeInTheDocument();
+    const courseMaterial = within(courseDialog).getByRole("button", { name: /AI 导论讲义/ });
+
+    expect(courseMaterial).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(courseMaterial);
+
+    expect(courseMaterial).toHaveAttribute("aria-pressed", "false");
 
     renderPage(<SettingsPage />);
 

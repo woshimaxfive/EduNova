@@ -18,25 +18,8 @@ import { ActionNotice } from "../components/feedback/ActionNotice";
 import { useActionNotice } from "../components/feedback/useActionNotice";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
+import { homeConversations } from "../data/demoConversations";
 import { useAuthStore } from "../features/auth/authStore";
-
-const homeConversations = [
-  {
-    id: "home-1",
-    title: "神经网络反向传播怎么复习",
-    meta: "18 分钟前"
-  },
-  {
-    id: "home-2",
-    title: "把期末题按知识点分组",
-    meta: "昨晚"
-  },
-  {
-    id: "home-3",
-    title: "我适合先刷题还是先补概念",
-    meta: "周一"
-  }
-];
 
 type LibraryMaterial = {
   id: string;

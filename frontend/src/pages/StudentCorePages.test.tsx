@@ -25,7 +25,10 @@ describe("student core pages", () => {
     expect(screen.getByRole("textbox", { name: "搜索资料" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "上传资料" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "从资料生成课程" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /AI 导论内置讲义/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "文档" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "图片" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "课程内置" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /AI 导论讲义/ })).toBeInTheDocument();
   });
 
   it("renders studio as a generated-resource workspace", () => {
@@ -95,6 +98,8 @@ describe("student core pages", () => {
     expect(within(historyRail).getByRole("link", { name: "资料库" })).toHaveAttribute("href", "/app/library");
     expect(within(historyRail).getByRole("link", { name: "个人资料" })).toHaveAttribute("href", "/app/profile");
     expect(within(historyRail).getByRole("link", { name: "设置" })).toHaveAttribute("href", "/app/settings");
+    expect(within(historyRail).getByRole("button", { name: /神经网络反向传播怎么复习/ })).toBeInTheDocument();
+    expect(within(historyRail).queryByText("还没有历史对话")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "应用导航" })).not.toBeInTheDocument();
   });
 });

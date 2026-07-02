@@ -217,7 +217,6 @@ export function LearningSpacePage() {
     });
     setActiveHomeThreadId(nextThreadId);
     setPrompt("");
-    showNotice("已生成回答。", "success");
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -246,7 +245,6 @@ export function LearningSpacePage() {
             setActiveHomeThreadId(null);
             showNotice("已新建一条主页独立对话。", "success");
           }}
-          onSearchHistory={() => showNotice("可以从左侧最近对话继续。")}
           onSelectConversation={(conversation) => {
             setActiveHomeThreadId(conversation.id);
             setMessages([

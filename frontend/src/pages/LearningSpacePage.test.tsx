@@ -68,7 +68,7 @@ describe("LearningSpacePage", () => {
     expect(within(historyRail).getByRole("button", { name: "退出登录" })).toBeInTheDocument();
   });
 
-  it("filters history from the sidebar search", async () => {
+  it("opens history search as an overlay without squeezing the sidebar", async () => {
     const user = userEvent.setup();
 
     render(
@@ -81,12 +81,15 @@ describe("LearningSpacePage", () => {
 
     await user.click(within(historyRail).getByRole("button", { name: "搜索历史" }));
 
-    const searchInput = within(historyRail).getByRole("searchbox", { name: "搜索历史关键词" });
+    const searchDialog = screen.getByRole("dialog", { name: "搜索历史" });
+    const searchInput = within(searchDialog).getByRole("searchbox", { name: "搜索历史关键词" });
 
     await user.type(searchInput, "期末");
 
-    expect(within(historyRail).getByRole("button", { name: /把期末题按知识点分组/ })).toBeInTheDocument();
-    expect(within(historyRail).queryByRole("button", { name: /神经网络反向传播怎么复习/ })).not.toBeInTheDocument();
+    expect(within(historyRail).queryByRole("searchbox", { name: "搜索历史关键词" })).not.toBeInTheDocument();
+    expect(within(historyRail).getByRole("button", { name: /神经网络反向传播怎么复习/ })).toBeInTheDocument();
+    expect(within(searchDialog).getByRole("button", { name: /把期末题按知识点分组/ })).toBeInTheDocument();
+    expect(within(searchDialog).queryByRole("button", { name: /神经网络反向传播怎么复习/ })).not.toBeInTheDocument();
   });
 
   it("filters materials inside the home library drawer", async () => {
@@ -146,6 +149,7 @@ describe("LearningSpacePage", () => {
     expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("来源准备");
     expect(screen.getByRole("region", { name: "底部学习输入" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /期末复习怎么安排/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("已生成回答。")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).not.toBeInTheDocument();
   });
 

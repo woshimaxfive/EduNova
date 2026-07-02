@@ -56,7 +56,8 @@ describe("student interaction affordances", () => {
 
     expect(screen.getByRole("button", { name: "联网搜索" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "深度思考" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("status")).toHaveTextContent("已生成回答");
+    expect(screen.queryByText("已生成回答。")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "主页对话" })).toHaveTextContent("监督学习怎么复习？");
   });
 
   it("opens course answer detail panels instead of leaving action buttons inert", async () => {

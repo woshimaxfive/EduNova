@@ -35,7 +35,6 @@ export function PageFrame({ title, children }: PageFrameProps) {
           conversations={conversations}
           onToggleCollapsed={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
           onNewChat={() => navigate(PATHS.app)}
-          onSearchHistory={() => showNotice("可以从左侧最近对话继续。")}
           onSelectConversation={(conversation) => showNotice(`已定位到「${conversation.title}」。`, "success")}
         />
         <section className="route-main-surface">

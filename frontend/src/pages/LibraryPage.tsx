@@ -233,6 +233,8 @@ type LibraryCourseDialogProps = {
 };
 
 function LibraryCourseDialog({ materials, selectedMaterialIds, onToggleMaterial, onClose, onCreate }: LibraryCourseDialogProps) {
+  const selectedCount = selectedMaterialIds.length;
+
   return (
     <div className="course-dialog-backdrop">
       <section className="course-dialog library-course-dialog" role="dialog" aria-modal="true" aria-labelledby="library-course-dialog-title">
@@ -252,7 +254,7 @@ function LibraryCourseDialog({ materials, selectedMaterialIds, onToggleMaterial,
             </button>
           ))}
         </div>
-        <button className="dialog-primary-button" type="button" onClick={onCreate}>
+        <button className={selectedCount > 0 ? "dialog-primary-button" : "dialog-primary-button disabled"} type="button" disabled={selectedCount === 0} onClick={onCreate}>
           创建课程草案
         </button>
       </section>

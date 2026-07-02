@@ -34,6 +34,7 @@ describe("student interaction affordances", () => {
 
     expect(screen.getByRole("dialog", { name: "资料库" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /数据结构期末题.pdf/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "作为本次对话参考" })).toBeDisabled();
 
     const material = screen.getByRole("button", { name: /神经网络课堂讲义/ });
 
@@ -43,6 +44,7 @@ describe("student interaction affordances", () => {
 
     expect(material).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("status")).toHaveTextContent("已选择 1 份资料");
+    expect(screen.getByRole("button", { name: "作为本次对话参考" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "关闭资料库" }));
     await user.click(screen.getByRole("button", { name: "发送" }));
@@ -229,10 +231,12 @@ describe("student interaction affordances", () => {
     const courseMaterial = within(courseDialog).getByRole("button", { name: /AI 导论讲义/ });
 
     expect(courseMaterial).toHaveAttribute("aria-pressed", "false");
+    expect(within(courseDialog).getByRole("button", { name: "创建课程草案" })).toBeDisabled();
 
     await user.click(courseMaterial);
 
     expect(courseMaterial).toHaveAttribute("aria-pressed", "true");
+    expect(within(courseDialog).getByRole("button", { name: "创建课程草案" })).toBeEnabled();
 
     renderPage(<SettingsPage />);
 

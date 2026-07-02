@@ -160,6 +160,7 @@ export function AppSidebar({
                 className={activeConversationId === conversation.id ? "home-thread active" : "home-thread"}
                 key={conversation.id}
                 type="button"
+                aria-current={activeConversationId === conversation.id ? "page" : undefined}
                 aria-pressed={activeConversationId === conversation.id}
                 onClick={() => onSelectConversation?.(conversation)}
               >
@@ -232,6 +233,7 @@ export function AppSidebar({
                     className="history-search-result"
                     key={conversation.id}
                     type="button"
+                    aria-label={`${conversation.title}，${conversation.meta}`}
                     onClick={() => selectSearchConversation(conversation)}
                   >
                     <ChatCircle size={18} weight="duotone" aria-hidden="true" />

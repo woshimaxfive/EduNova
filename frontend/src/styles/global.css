@@ -3934,7 +3934,7 @@ a {
 }
 
 .ask-button:hover,
-.dialog-primary-button:hover,
+.dialog-primary-button:not(:disabled):hover,
 .recent-course:hover {
   transform: translateY(-1px);
 }
@@ -3996,29 +3996,29 @@ a {
 
 .home-answer-insights {
   display: grid;
-  gap: 8px;
-  width: min(620px, 100%);
-  margin-top: 4px;
+  gap: 6px;
+  width: min(560px, 100%);
+  margin-top: 2px;
 }
 
 .answer-insight-tabs {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 .answer-insight-tabs button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 0 9px;
-  border: 1px solid rgba(16, 24, 32, 0.08);
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(16, 24, 32, 0.06);
   border-radius: 999px;
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.55);
-  font-size: 0.86rem;
-  font-weight: 760;
+  color: rgba(98, 112, 109, 0.88);
+  background: rgba(255, 255, 255, 0.38);
+  font-size: 0.82rem;
+  font-weight: 720;
   transition:
     color 0.2s ease,
     border-color 0.2s ease,
@@ -4029,19 +4029,21 @@ a {
 .answer-insight-tabs button:hover,
 .answer-insight-tabs button.active {
   color: var(--accent-strong);
-  border-color: rgba(8, 127, 115, 0.24);
-  background: rgba(8, 127, 115, 0.09);
+  border-color: rgba(8, 127, 115, 0.18);
+  background: rgba(8, 127, 115, 0.075);
   transform: translateY(-1px);
 }
 
 .answer-insight-panel {
   display: grid;
   gap: 6px;
-  max-width: 620px;
-  padding: 10px 12px;
-  border-left: 2px solid rgba(8, 127, 115, 0.34);
+  max-width: 560px;
+  padding: 9px 11px;
+  border: 1px solid rgba(8, 127, 115, 0.12);
+  border-radius: 12px;
   color: var(--text-muted);
-  background: linear-gradient(90deg, rgba(8, 127, 115, 0.08), rgba(255, 255, 255, 0.28));
+  background: rgba(255, 255, 255, 0.44);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
 }
 
 .answer-insight-panel p {
@@ -4425,6 +4427,21 @@ a {
 
 .dialog-primary-button {
   justify-self: end;
+}
+
+.dialog-primary-button:disabled,
+.dialog-primary-button.disabled {
+  cursor: not-allowed;
+  color: rgba(98, 112, 109, 0.78);
+  border-color: rgba(16, 24, 32, 0.08);
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: none;
+}
+
+.dialog-primary-button.secondary:disabled,
+.dialog-primary-button.secondary.disabled {
+  color: rgba(98, 112, 109, 0.82);
+  background: transparent;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -4921,9 +4938,12 @@ a {
 
 .route-main-surface .student-panel,
 .route-main-surface .library-file-shell {
-  background: rgba(255, 255, 255, 0.38);
+  border-color: rgba(16, 24, 32, 0.055);
+  background: rgba(255, 255, 255, 0.28);
   backdrop-filter: blur(18px);
-  box-shadow: 0 18px 50px rgba(16, 24, 32, 0.045);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 12px 34px rgba(16, 24, 32, 0.032);
 }
 
 .route-main-surface .library-file-shell {

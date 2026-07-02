@@ -49,6 +49,7 @@ describe("LearningSpacePage", () => {
     expect(within(dialog).getByRole("textbox", { name: "课程名称" })).toHaveValue("人工智能导论期末复习");
     expect(within(dialog).getByRole("button", { name: /人工智能导论课件/ })).toHaveAttribute("aria-pressed", "false");
     expect(within(dialog).getByText("先选择要生成课程的资料")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "创建课程草案" })).toBeDisabled();
   });
 
   it("keeps the edge rail focused on chat history and account actions", () => {
@@ -146,7 +147,9 @@ describe("LearningSpacePage", () => {
 
     expect(within(thread).getByText("期末复习怎么安排？")).toBeInTheDocument();
     expect(within(thread).getByText(/可以先把资料按章节和题型拆开/)).toBeInTheDocument();
-    expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("来源准备");
+    expect(within(thread).queryByRole("region", { name: "回答展开详情" })).not.toBeInTheDocument();
+    await user.click(within(thread).getByRole("button", { name: "来源" }));
+    expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("来源");
     expect(screen.getByRole("region", { name: "底部学习输入" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /期末复习怎么安排/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("已生成回答。")).not.toBeInTheDocument();
@@ -203,6 +206,41 @@ describe("LearningSpacePage", () => {
     await user.click(screen.getByRole("button", { name: "思考过程" }));
 
     expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("处理摘要");
+  });
+
+  it("moves from the library drawer to course generation as a single dialog", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <LearningSpacePage />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole("button", { name: "打开资料库" }));
+
+    const libraryDialog = screen.getByRole("dialog", { name: "资料库" });
+    const attachButton = within(libraryDialog).getByRole("button", { name: "作为本次对话参考" });
+
+    expect(attachButton).toBeDisabled();
+
+    await user.click(within(libraryDialog).getByRole("button", { name: /人工智能导论课件/ }));
+
+    expect(attachButton).toBeEnabled();
+
+    await user.click(within(libraryDialog).getByRole("button", { name: "生成课程" }));
+
+    const courseDialog = screen.getByRole("dialog", { name: "从资料生成课程" });
+
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.queryByRole("dialog", { name: "资料库" })).not.toBeInTheDocument();
+    expect(within(courseDialog).getByText("已选择 1 份资料")).toBeInTheDocument();
+    expect(within(courseDialog).getByRole("button", { name: "创建课程草案" })).toBeEnabled();
+
+    await user.click(within(courseDialog).getByRole("button", { name: "创建课程草案" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("已用 1 份资料创建课程草案");
   });
 
   it("keeps blank starter accounts empty until they upload their own material", async () => {

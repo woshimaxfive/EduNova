@@ -511,6 +511,7 @@ Current Phase 3.1 implementation note:
 - P3.7 added local interaction feedback for the main visible buttons: home composer, material drawer selection, course answer expansion, knowledge-node detail, tutor mode, practice submission, library citations, settings save, 资源工坊/profile/report actions and top search now show explicit demo-state feedback until real APIs replace those handlers.
 - P3.8 now uses layered route discovery: top and mobile navigation expose learning space, library and 资源工坊; the personal menu exposes profile, reports and settings; course space exposes tutor, practice and reports as contextual learning actions.
 - The `/app` home shell now follows the user-provided ChatGPT references: the home sidebar is flush with the left browser edge, can collapse to an icon rail, the initial composer is smaller, and the first sent question moves the page into a chat thread with the composer docked near the bottom.
+- P3.15 tightened the frontend usability baseline: answer insights are collapsed by default, material actions are disabled until the user selects files, library-to-course generation uses a single overlay, and 资源工坊 keeps one primary generate action.
 - Browser visual checks covered P3R3 `/app` at desktop and mobile widths with no horizontal overflow; the material-library drawer and course generation dialog open and remain readable.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
 - Real backend auth, `/dashboard/summary`, upload/RAG/AI data and final browser E2E remain later-phase work.

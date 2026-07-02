@@ -108,6 +108,7 @@ export function LearningSpacePage() {
   const [isDeepThinkingEnabled, setIsDeepThinkingEnabled] = useState(false);
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>("sources");
+  const [expandedAnswerId, setExpandedAnswerId] = useState<string | null>(null);
   const { notice, showNotice } = useActionNotice();
   const hasHomeThread = messages.length > 0;
 
@@ -131,6 +132,7 @@ export function LearningSpacePage() {
   }
 
   function openCourseGeneration() {
+    setIsLibraryOpen(false);
     setIsCourseDialogOpen(true);
     showNotice("已打开生成课程。");
   }
@@ -226,6 +228,17 @@ export function LearningSpacePage() {
     }
   }
 
+  function createCourseDraft(selectedCount: number) {
+    if (selectedCount === 0) {
+      showNotice("请先选择至少一份资料。", "warning");
+      return;
+    }
+
+    setIsCourseDialogOpen(false);
+    setIsLibraryOpen(false);
+    showNotice(`已用 ${selectedCount} 份资料创建课程草案，可在最近学习继续完善。`, "success");
+  }
+
   return (
     <LearningSpaceShell hideTopNavigation>
       <div className={["learning-home", isHistoryCollapsed ? "history-collapsed" : "", hasHomeThread ? "chat-active" : ""].filter(Boolean).join(" ")}>
@@ -276,10 +289,13 @@ export function LearningSpacePage() {
                   <p>{message.content}</p>
                   {message.role === "assistant" ? (
                     <HomeAnswerInsights
+                      messageId={message.id}
                       activePanel={activeAnswerPanel}
+                      expandedAnswerId={expandedAnswerId}
                       selectedMaterialCount={selectedMaterialIds.length}
                       isWebSearchEnabled={isWebSearchEnabled}
                       onChangePanel={setActiveAnswerPanel}
+                      onSetExpandedAnswer={setExpandedAnswerId}
                     />
                   ) : null}
                 </article>
@@ -443,7 +459,7 @@ export function LearningSpacePage() {
           selectedMaterialIds={selectedMaterialIds}
           onToggleMaterial={toggleMaterialSelection}
           onClose={() => setIsCourseDialogOpen(false)}
-          showNotice={showNotice}
+          onCreate={createCourseDraft}
         />
       ) : null}
     </LearningSpaceShell>
@@ -451,13 +467,31 @@ export function LearningSpacePage() {
 }
 
 type HomeAnswerInsightsProps = {
+  messageId: string;
   activePanel: HomeAnswerPanel;
+  expandedAnswerId: string | null;
   selectedMaterialCount: number;
   isWebSearchEnabled: boolean;
   onChangePanel: (panel: HomeAnswerPanel) => void;
+  onSetExpandedAnswer: (messageId: string | null) => void;
 };
 
-function HomeAnswerInsights({ activePanel, selectedMaterialCount, isWebSearchEnabled, onChangePanel }: HomeAnswerInsightsProps) {
+function HomeAnswerInsights({
+  messageId,
+  activePanel,
+  expandedAnswerId,
+  selectedMaterialCount,
+  isWebSearchEnabled,
+  onChangePanel,
+  onSetExpandedAnswer
+}: HomeAnswerInsightsProps) {
+  const isExpanded = expandedAnswerId === messageId;
+  const handleInsightClick = (panel: HomeAnswerPanel) => {
+    const shouldCollapse = isExpanded && activePanel === panel;
+
+    onChangePanel(panel);
+    onSetExpandedAnswer(shouldCollapse ? null : messageId);
+  };
   const sourceText =
     selectedMaterialCount > 0
       ? `本次回答参考了 ${selectedMaterialCount} 份已选资料${isWebSearchEnabled ? "，并补充联网搜索线索" : ""}。`
@@ -468,49 +502,69 @@ function HomeAnswerInsights({ activePanel, selectedMaterialCount, isWebSearchEna
   return (
     <section className="home-answer-insights" aria-label="回答附加信息">
       <div className="answer-insight-tabs" aria-label="回答展开入口">
-        <button className={activePanel === "sources" ? "active" : ""} type="button" aria-pressed={activePanel === "sources"} onClick={() => onChangePanel("sources")}>
+        <button
+          className={isExpanded && activePanel === "sources" ? "active" : ""}
+          type="button"
+          aria-expanded={isExpanded && activePanel === "sources"}
+          aria-pressed={isExpanded && activePanel === "sources"}
+          onClick={() => handleInsightClick("sources")}
+        >
           <LinkSimple size={16} weight="duotone" aria-hidden="true" />
           <span>来源</span>
         </button>
-        <button className={activePanel === "path" ? "active" : ""} type="button" aria-pressed={activePanel === "path"} onClick={() => onChangePanel("path")}>
+        <button
+          className={isExpanded && activePanel === "path" ? "active" : ""}
+          type="button"
+          aria-expanded={isExpanded && activePanel === "path"}
+          aria-pressed={isExpanded && activePanel === "path"}
+          onClick={() => handleInsightClick("path")}
+        >
           <BookOpen size={16} weight="duotone" aria-hidden="true" />
           <span>学习路径</span>
         </button>
-        <button className={activePanel === "thinking" ? "active" : ""} type="button" aria-pressed={activePanel === "thinking"} onClick={() => onChangePanel("thinking")}>
+        <button
+          className={isExpanded && activePanel === "thinking" ? "active" : ""}
+          type="button"
+          aria-expanded={isExpanded && activePanel === "thinking"}
+          aria-pressed={isExpanded && activePanel === "thinking"}
+          onClick={() => handleInsightClick("thinking")}
+        >
           <Sparkle size={16} weight="duotone" aria-hidden="true" />
           <span>思考过程</span>
         </button>
       </div>
 
-      <div className="answer-insight-panel" role="region" aria-label="回答展开详情">
-        {activePanel === "sources" ? (
-          <>
-            <span className="insight-mark">
-              <CheckCircle size={16} weight="fill" aria-hidden="true" />
-              来源准备
-            </span>
-            <p>{sourceText}</p>
-          </>
-        ) : null}
-        {activePanel === "path" ? (
-          <>
-            <span className="insight-mark">
-              <BookOpen size={16} weight="fill" aria-hidden="true" />
-              下一步
-            </span>
-            <p>先用 10 分钟补概念，再做 3 道同类题，最后把错因写回画像和复习队列。</p>
-          </>
-        ) : null}
-        {activePanel === "thinking" ? (
-          <>
-            <span className="insight-mark">
-              <Sparkle size={16} weight="fill" aria-hidden="true" />
-              处理摘要
-            </span>
-            <p>已按“目标识别、资料线索、复习动作”整理，真实 Agent 接入后会替换为可追踪执行记录。</p>
-          </>
-        ) : null}
-      </div>
+      {isExpanded ? (
+        <div className="answer-insight-panel" role="region" aria-label="回答展开详情">
+          {activePanel === "sources" ? (
+            <>
+              <span className="insight-mark">
+                <CheckCircle size={16} weight="fill" aria-hidden="true" />
+                来源
+              </span>
+              <p>{sourceText}</p>
+            </>
+          ) : null}
+          {activePanel === "path" ? (
+            <>
+              <span className="insight-mark">
+                <BookOpen size={16} weight="fill" aria-hidden="true" />
+                下一步
+              </span>
+              <p>先用 10 分钟补概念，再做 3 道同类题，最后把错因写回画像和复习队列。</p>
+            </>
+          ) : null}
+          {activePanel === "thinking" ? (
+            <>
+              <span className="insight-mark">
+                <Sparkle size={16} weight="fill" aria-hidden="true" />
+                处理摘要
+              </span>
+              <p>已按“目标识别、资料线索、复习动作”整理，真实 Agent 接入后会替换为可追踪执行记录。</p>
+            </>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -523,10 +577,10 @@ type CourseGenerationDialogWithNoticeProps = CourseGenerationDialogProps & {
   materials: LibraryMaterial[];
   selectedMaterialIds: string[];
   onToggleMaterial: (materialId: string) => void;
-  showNotice: (message: string, tone?: "info" | "success" | "warning") => void;
+  onCreate: (selectedCount: number) => void;
 };
 
-function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMaterial, onClose, showNotice }: CourseGenerationDialogWithNoticeProps) {
+function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMaterial, onClose, onCreate }: CourseGenerationDialogWithNoticeProps) {
   const selectedCount = selectedMaterialIds.length;
 
   return (
@@ -548,11 +602,10 @@ function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMateri
           <small>只建立关联，不移动原文件。</small>
         </div>
         <button
-          className="dialog-primary-button"
+          className={selectedCount > 0 ? "dialog-primary-button" : "dialog-primary-button disabled"}
           type="button"
-          onClick={() =>
-            showNotice(selectedCount > 0 ? "已创建课程草案。" : "请先选择至少一份资料。", selectedCount > 0 ? "success" : "warning")
-          }
+          disabled={selectedCount === 0}
+          onClick={() => onCreate(selectedCount)}
         >
           创建课程草案
         </button>
@@ -612,8 +665,9 @@ function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMateria
         <div className="library-dialog-footer">
           <span>{selectedCount > 0 ? `已选择 ${selectedCount} 份资料` : "当前未选择资料"}</span>
           <button
-            className="dialog-primary-button"
+            className={selectedCount > 0 ? "dialog-primary-button" : "dialog-primary-button secondary disabled"}
             type="button"
+            disabled={selectedCount === 0}
             onClick={() =>
               showNotice(selectedCount > 0 ? `本次对话将参考 ${selectedCount} 份资料。` : "先点选资料，再作为对话参考。", selectedCount > 0 ? "success" : "warning")
             }

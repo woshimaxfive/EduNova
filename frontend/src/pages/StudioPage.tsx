@@ -109,7 +109,7 @@ export function StudioPage() {
         </section>
       </section>
 
-      <StudioDock outputs={outputs} onGenerate={generateResource} />
+      <StudioDock outputs={outputs} onGenerate={generateResource} showGenerateAction={false} />
     </PageFrame>
   );
 }

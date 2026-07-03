@@ -158,7 +158,8 @@ frontend/src/
 
 - Phase 4.1 已完成真实注册、登录、读取当前用户和退出闭环；注册 starter mode 已落入后端注册接口和用户初始化流程。
 - Phase 4.2 已完成受保护的 `/dashboard/summary` 首页总览；当前 `/app` 左侧主页历史、最近课程、主页资料库浮层资料和 blank/ai_intro 空状态来自当前登录用户的真实 summary，不再使用前端假课程、假资料和假历史伪装真实数据。
-- 当前 `/app` 主页消息发送、资料上传持久化、资料库完整列表和生成课程仍使用前端本地交互；后续由主页会话、资料库、上传解析和课程生成接口替换。
+- Phase 4.3 已完成受保护的 `/tutor/sessions` 主页会话与消息持久化；当前 `/app` 首次发送会创建 home session，连续追问复用当前 session，点击左侧历史会从后端读取真实 messages，刷新后历史由 `/dashboard/summary` 保留。
+- 当前 `/app` 资料上传持久化、资料库完整列表和生成课程仍使用前端本地交互；后续由资料库、上传解析和课程生成接口替换。主页 assistant 回复仍是模板占位，真实 AI/RAG 后续接入。
 - 当前 `/app/courses/:courseId` 课程空间使用前端样例课程、知识点、资料、引用和 Agent 轨迹数据；后续由课程详情、RAG、资源生成和 Agent 日志接口替换。
 - 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面使用前端样例数据；后续由资料、画像、RAG、练习评估、掌握度报告和设置接口替换。
 - 当前 P3.7 按钮反馈使用 React 本地状态和 `ActionNotice`，用于固定前端交互边界；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
@@ -194,6 +195,8 @@ backend/app/
 | `backend/app/models` | 用户、课程、资料、知识点、知识切片核心模型，以及画像、路径、资源、Agent 轨迹、练习、报告、对话和模型设置基础模型 |
 | `backend/app/data/builtin_courses` | 内置课程包数据 |
 | `backend/app/services/course_seed.py` | 内置课程导入服务 |
+| `backend/app/services/tutor.py` | 主页/课程会话服务，负责当前用户会话创建、列表、详情、追加消息和模板回复写入 |
+| `backend/app/api/v1/tutor.py` | `/api/v1/tutor/sessions` 受保护会话接口 |
 | `backend/migrations` | Alembic 迁移环境、pgvector 扩展迁移、核心学习表迁移和学习闭环表迁移 |
 
 分层职责：

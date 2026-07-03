@@ -10,12 +10,19 @@ import {
   Sparkle,
   X
 } from "@phosphor-icons/react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { buildCoursePath } from "../app/routePaths";
 import { getDashboardSummary, type DashboardMaterial } from "../api/dashboard";
+import {
+  createTutorSession,
+  getTutorSession,
+  sendTutorMessage,
+  type TutorMessage,
+  type TutorSessionSummary
+} from "../api/tutor";
 import { ActionNotice } from "../components/feedback/ActionNotice";
 import { useActionNotice } from "../components/feedback/useActionNotice";
 import { AppSidebar } from "../components/layout/AppSidebar";
@@ -36,12 +43,14 @@ const fallbackSuggestedPrompts = ["帮我制定 7 天期末复习计划", "把�
 
 export function LearningSpacePage() {
   const token = useAuthStore((state) => state.token);
+  const queryClient = useQueryClient();
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const homeChatStageRef = useRef<HTMLElement | null>(null);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
   const [localHomeThreads, setLocalHomeThreads] = useState<DashboardSummaryThread[]>([]);
   const [activeHomeThreadId, setActiveHomeThreadId] = useState<string | null>(null);
+  const [isSendingQuestion, setIsSendingQuestion] = useState(false);
   const [uploadedMaterials, setUploadedMaterials] = useState<LibraryMaterial[]>([]);
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
@@ -161,44 +170,94 @@ export function LearningSpacePage() {
     });
   }
 
-  function handleSendQuestion() {
+  function buildHomeSessionTitle(question: string) {
+    return Array.from(question).slice(0, 30).join("");
+  }
+
+  function mapTutorMessages(apiMessages: TutorMessage[]) {
+    return apiMessages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      content: message.content
+    }));
+  }
+
+  function toHomeThread(session: TutorSessionSummary): DashboardSummaryThread {
+    return {
+      id: session.id,
+      title: session.title,
+      meta: "刚刚"
+    };
+  }
+
+  function upsertHomeThread(session: TutorSessionSummary) {
+    setLocalHomeThreads((current) => {
+      const nextThread = toHomeThread(session);
+
+      return [nextThread, ...current.filter((thread) => thread.id !== nextThread.id)];
+    });
+  }
+
+  async function handleSendQuestion() {
     const question = prompt.trim();
-    const timestamp = Date.now();
-    const shouldCreateThread = !activeHomeThreadId || messages.length === 0;
-    const nextThreadId = shouldCreateThread ? `home-thread-${timestamp}` : activeHomeThreadId;
 
     if (!question) {
       showNotice("先输入一个学习问题。", "warning");
       return;
     }
 
-    setMessages((current) => [
-      ...current,
-      {
-        id: `user-${timestamp}`,
-        role: "user",
-        content: question
-      },
-      {
-        id: `assistant-${timestamp}`,
-        role: "assistant",
-        content: "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。"
-      }
-    ]);
-    setLocalHomeThreads((current) => {
-      const title = shouldCreateThread ? question : (homeThreads.find((thread) => thread.id === nextThreadId)?.title ?? question);
-      const nextThread = { id: nextThreadId, title, meta: "刚刚" };
+    if (isSendingQuestion) {
+      return;
+    }
 
-      return [nextThread, ...current.filter((thread) => thread.id !== nextThreadId)];
-    });
-    setActiveHomeThreadId(nextThreadId);
-    setPrompt("");
+    setIsSendingQuestion(true);
+
+    try {
+      let sessionId = activeHomeThreadId;
+
+      if (!sessionId) {
+        const created = await createTutorSession({
+          scope: "home",
+          course_id: null,
+          mode: "chat",
+          title: buildHomeSessionTitle(question)
+        });
+        sessionId = created.data.id;
+        setActiveHomeThreadId(sessionId);
+      }
+
+      const detail = await sendTutorMessage(sessionId, { message: question });
+
+      setMessages(mapTutorMessages(detail.data.messages));
+      setActiveHomeThreadId(detail.data.session.id);
+      upsertHomeThread(detail.data.session);
+      setPrompt("");
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+    } catch {
+      showNotice("消息发送失败，请稍后再试。", "warning");
+    } finally {
+      setIsSendingQuestion(false);
+    }
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      handleSendQuestion();
+      void handleSendQuestion();
+    }
+  }
+
+  async function selectHomeConversation(conversation: DashboardSummaryThread) {
+    setActiveHomeThreadId(conversation.id);
+
+    try {
+      const detail = await getTutorSession(conversation.id);
+
+      setMessages(mapTutorMessages(detail.data.messages));
+      upsertHomeThread(detail.data.session);
+      showNotice(`已切换到「${detail.data.session.title}」。`);
+    } catch {
+      showNotice("历史对话读取失败，请稍后再试。", "warning");
     }
   }
 
@@ -232,22 +291,7 @@ export function LearningSpacePage() {
             setActiveHomeThreadId(null);
             showNotice("已新建一条主页独立对话。", "success");
           }}
-          onSelectConversation={(conversation) => {
-            setActiveHomeThreadId(conversation.id);
-            setMessages([
-              {
-                id: `${conversation.id}-user`,
-                role: "user",
-                content: conversation.title
-              },
-              {
-                id: `${conversation.id}-assistant`,
-                role: "assistant",
-                content: "我把这段历史对话调出来了。你可以继续追问，也可以把它移入某门课程。"
-              }
-            ]);
-            showNotice(`已切换到「${conversation.title}」。`);
-          }}
+          onSelectConversation={(conversation) => void selectHomeConversation(conversation)}
         />
 
         <section
@@ -364,7 +408,7 @@ export function LearningSpacePage() {
                   <button className="voice-button" type="button" aria-label="语音输入" onClick={() => showNotice("语音输入暂未开启。")}>
                     <Microphone size={18} weight="duotone" aria-hidden="true" />
                   </button>
-                  <button className="ask-button" type="button" onClick={handleSendQuestion}>
+                  <button className="ask-button" type="button" disabled={isSendingQuestion} onClick={() => void handleSendQuestion()}>
                     <ArrowRight size={18} weight="bold" aria-hidden="true" />
                     <span>发送</span>
                   </button>

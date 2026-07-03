@@ -6,6 +6,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { PATHS } from "../app/routePaths";
+import { apiClient } from "../api/client";
+import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
 import { CourseSpacePage } from "./CourseSpacePage";
 import { LearningSpacePage } from "./LearningSpacePage";
@@ -16,6 +18,8 @@ import { ReportsPage } from "./ReportsPage";
 import { SettingsPage } from "./SettingsPage";
 import { StudioPage } from "./StudioPage";
 import { TutorPage } from "./TutorPage";
+
+let previousAdapter = apiClient.defaults.adapter;
 
 function renderWithProviders(ui: ReactNode) {
   const queryClient = new QueryClient({
@@ -35,16 +39,86 @@ function renderPage(page: ReactNode) {
 
 describe("student interaction affordances", () => {
   beforeEach(() => {
+    previousAdapter = apiClient.defaults.adapter;
     localStorage.clear();
     useAuthStore.getState().clearSession();
   });
 
   afterEach(() => {
+    apiClient.defaults.adapter = previousAdapter;
     useAuthStore.getState().clearSession();
   });
 
   it("turns the home composer buttons into visible demo-state feedback", async () => {
     const user = userEvent.setup();
+    const session = {
+      id: "701",
+      scope: "home",
+      course_id: null,
+      title: "监督学习怎么复习？",
+      mode: "chat",
+      archived_from_home: false,
+      created_at: "2026-07-03T12:00:00Z",
+      updated_at: "2026-07-03T12:01:00Z"
+    };
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+
+      if (url === TUTOR_ENDPOINTS.sessions && method === "post") {
+        return {
+          data: { data: session, trace_id: "trace_interaction_create" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === TUTOR_ENDPOINTS.message(session.id) && method === "post") {
+        return {
+          data: {
+            data: {
+              session,
+              messages: [
+                {
+                  id: "701-u1",
+                  session_id: session.id,
+                  role: "user",
+                  content: "监督学习怎么复习？",
+                  citation_json: [],
+                  trace_id: null,
+                  created_at: "2026-07-03T12:00:30Z"
+                },
+                {
+                  id: "701-a1",
+                  session_id: session.id,
+                  role: "assistant",
+                  content: "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。",
+                  citation_json: [],
+                  trace_id: null,
+                  created_at: "2026-07-03T12:01:00Z"
+                }
+              ]
+            },
+            trace_id: "trace_interaction_message"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_interaction_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
 
     renderPage(<LearningSpacePage />);
 

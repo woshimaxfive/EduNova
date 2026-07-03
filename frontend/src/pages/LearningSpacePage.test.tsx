@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { apiClient } from "../api/client";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
+import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
 import { LearningSpacePage } from "./LearningSpacePage";
 
@@ -19,7 +20,7 @@ const starterSummary: DashboardSummary = {
   },
   recent_conversations: [
     {
-      id: "chat-101",
+      id: "501",
       title: "接口里的主页历史",
       meta: "刚刚",
       scope: "home",
@@ -119,7 +120,51 @@ const materialRichSummary: DashboardSummary = {
 
 let previousAdapter = apiClient.defaults.adapter;
 
-function renderWithDashboardSummary(summary: DashboardSummary = starterSummary) {
+type ApiCall = {
+  method: string;
+  url: string;
+  payload: unknown;
+};
+
+type TutorMockOptions = {
+  failMessageSend?: boolean;
+  historyDetail?: unknown;
+};
+
+function parsePayload(data: unknown) {
+  if (typeof data !== "string") {
+    return data;
+  }
+
+  try {
+    return JSON.parse(data);
+  } catch {
+    return data;
+  }
+}
+
+function makeSessionDetail(sessionId: string, title: string, messages: Array<{ id: string; role: "user" | "assistant"; content: string }>) {
+  return {
+    session: {
+      id: sessionId,
+      scope: "home",
+      course_id: null,
+      title,
+      mode: "chat",
+      archived_from_home: false,
+      created_at: "2026-07-03T12:00:00Z",
+      updated_at: "2026-07-03T12:01:00Z"
+    },
+    messages: messages.map((message, index) => ({
+      ...message,
+      citation_json: [],
+      trace_id: null,
+      created_at: `2026-07-03T12:0${index}:00Z`
+    }))
+  };
+}
+
+function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, tutorOptions: TutorMockOptions = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -127,15 +172,103 @@ function renderWithDashboardSummary(summary: DashboardSummary = starterSummary) 
       }
     }
   });
-  const calls: string[] = [];
+  const calls: ApiCall[] = [];
+  const sentMessages: Array<{ id: string; role: "user" | "assistant"; content: string }> = [];
+  const createdSession = {
+    id: "501",
+    scope: "home",
+    course_id: null,
+    title: "主页第一问",
+    mode: "chat",
+    archived_from_home: false,
+    created_at: "2026-07-03T12:00:00Z",
+    updated_at: "2026-07-03T12:00:00Z"
+  };
 
   apiClient.defaults.adapter = async (config) => {
-    calls.push(config.url ?? "");
+    const method = (config.method ?? "get").toLowerCase();
+    const url = config.url ?? "";
+    const payload = parsePayload(config.data);
+    calls.push({ method, url, payload });
+
+    if (url === DASHBOARD_ENDPOINTS.summary) {
+      return {
+        data: {
+          data: summary,
+          trace_id: "trace_dashboard_test"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (url === TUTOR_ENDPOINTS.sessions && method === "post") {
+      const title = typeof payload === "object" && payload !== null && "title" in payload ? String(payload.title) : "主页第一问";
+      createdSession.title = title;
+
+      return {
+        data: {
+          data: createdSession,
+          trace_id: "trace_session_create_test"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (url === TUTOR_ENDPOINTS.detail(501) && method === "get") {
+      return {
+        data: {
+          data:
+            tutorOptions.historyDetail ??
+            makeSessionDetail("501", "接口里的主页历史", [
+              { id: "m1", role: "user", content: "后端保存的问题" },
+              { id: "m2", role: "assistant", content: "后端保存的回答" }
+            ]),
+          trace_id: "trace_session_detail_test"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (url === TUTOR_ENDPOINTS.message(501) && method === "post") {
+      if (tutorOptions.failMessageSend) {
+        throw new Error("send failed");
+      }
+
+      const message = typeof payload === "object" && payload !== null && "message" in payload ? String(payload.message) : "";
+      sentMessages.push(
+        { id: `u-${sentMessages.length + 1}`, role: "user", content: message },
+        {
+          id: `a-${sentMessages.length + 2}`,
+          role: "assistant",
+          content: "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。"
+        }
+      );
+
+      return {
+        data: {
+          data: makeSessionDetail("501", createdSession.title, sentMessages),
+          trace_id: "trace_message_test"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
 
     return {
       data: {
-        data: summary,
-        trace_id: "trace_dashboard_test"
+        data: {},
+        trace_id: "trace_default_test"
       },
       status: 200,
       statusText: "OK",
@@ -184,7 +317,7 @@ describe("LearningSpacePage", () => {
     expect(await screen.findByRole("link", { name: /真实机器学习课/ })).toHaveAttribute("href", "/app/courses/101");
     expect(screen.getByRole("button", { name: /接口里的主页历史/ })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Python 基础补齐/ })).not.toBeInTheDocument();
-    expect(calls).toContain(DASHBOARD_ENDPOINTS.summary);
+    expect(calls.map((call) => call.url)).toContain(DASHBOARD_ENDPOINTS.summary);
   });
 
   it("keeps blank dashboard summaries free of static materials and starter history", async () => {
@@ -199,7 +332,7 @@ describe("LearningSpacePage", () => {
 
     expect(screen.getByRole("dialog", { name: "资料库" })).toHaveTextContent("资料库还是空的");
     expect(screen.queryByRole("button", { name: /神经网络课堂讲义/ })).not.toBeInTheDocument();
-    expect(calls).toContain(DASHBOARD_ENDPOINTS.summary);
+    expect(calls.map((call) => call.url)).toContain(DASHBOARD_ENDPOINTS.summary);
   });
 
   it("renders a calm ChatGPT-style learning home without dashboard rails", async () => {
@@ -318,6 +451,65 @@ describe("LearningSpacePage", () => {
     expect(screen.getByRole("button", { name: /期末复习怎么安排/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("已生成回答。")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).not.toBeInTheDocument();
+  });
+
+  it("creates a persistent home session before the first send and reuses it for follow-ups", async () => {
+    const user = userEvent.setup();
+
+    const { calls } = renderWithDashboardSummary(blankSummary);
+    const input = screen.getByRole("textbox", { name: "学习问题输入" });
+
+    await user.type(input, "第一轮复习怎么开始？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(await screen.findAllByText("第一轮复习怎么开始？")).not.toHaveLength(0);
+
+    await user.type(input, "那第二步做什么？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(await screen.findByText("那第二步做什么？")).toBeInTheDocument();
+
+    const createCalls = calls.filter((call) => call.method === "post" && call.url === TUTOR_ENDPOINTS.sessions);
+    const messageCalls = calls.filter((call) => call.method === "post" && call.url === TUTOR_ENDPOINTS.message(501));
+
+    expect(createCalls).toHaveLength(1);
+    expect(createCalls[0].payload).toMatchObject({
+      scope: "home",
+      course_id: null,
+      mode: "chat",
+      title: "第一轮复习怎么开始？"
+    });
+    expect(messageCalls).toHaveLength(2);
+    expect(messageCalls[0].payload).toMatchObject({ message: "第一轮复习怎么开始？" });
+    expect(messageCalls[1].payload).toMatchObject({ message: "那第二步做什么？" });
+  });
+
+  it("loads persisted messages when selecting a home history thread", async () => {
+    const user = userEvent.setup();
+
+    const { calls } = renderWithDashboardSummary(starterSummary);
+
+    await user.click(await screen.findByRole("button", { name: /接口里的主页历史/ }));
+
+    const thread = await screen.findByRole("region", { name: "主页对话" });
+
+    expect(within(thread).getByText("后端保存的问题")).toBeInTheDocument();
+    expect(within(thread).getByText("后端保存的回答")).toBeInTheDocument();
+    expect(calls).toContainEqual(expect.objectContaining({ method: "get", url: TUTOR_ENDPOINTS.detail(501) }));
+  });
+
+  it("keeps the typed question when persistent message sending fails", async () => {
+    const user = userEvent.setup();
+
+    renderWithDashboardSummary(blankSummary, { failMessageSend: true });
+
+    const input = screen.getByRole("textbox", { name: "学习问题输入" });
+    await user.type(input, "这次发送会失败吗？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("消息发送失败，请稍后再试。");
+    expect(input).toHaveValue("这次发送会失败吗？");
+    expect(screen.queryByRole("region", { name: "主页对话" })).not.toBeInTheDocument();
   });
 
   it("keeps follow-up questions inside the active home thread", async () => {

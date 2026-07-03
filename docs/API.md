@@ -669,7 +669,7 @@ Authorization: Bearer <token>
 
 ### POST `/tutor/sessions`
 
-用途：创建 AI 学习会话。Phase 3 重定向后，会话分为主页会话和课程会话。
+用途：创建 AI 学习会话。Phase 3 重定向后，会话分为主页会话和课程会话。Phase 4.3 已实现该接口，必须携带 JWT，只能创建当前登录用户自己的会话。
 
 请求：
 
@@ -695,21 +695,77 @@ Authorization: Bearer <token>
 
 规则：
 
-- `scope=home` 时 `course_id` 可以为空。
+- `scope=home` 时 `course_id` 必须为空，当前 `/app` 首页首次发送会先创建主页会话。
 - `scope=course` 时必须传 `course_id`。
+- `scope=course` 当前只做后端基础校验和预留，课程空间前端真实接入放后续阶段。
+- 会话标题由前端用第一条问题截取生成，也可以由调用方显式传入。
 - 主页会话可以后续移入课程，移入后应从主页历史中消失或标记为已归档。
+
+响应：
+
+```json
+{
+  "data": {
+    "id": "12",
+    "scope": "home",
+    "course_id": null,
+    "title": "帮我整理这份期末资料",
+    "mode": "chat",
+    "archived_from_home": false,
+    "created_at": "2026-07-03T08:00:00Z",
+    "updated_at": "2026-07-03T08:00:00Z"
+  },
+  "trace_id": "trace_xxx"
+}
+```
 
 ### GET `/tutor/sessions`
 
-用途：查看会话列表。支持按 `scope` 和 `course_id` 筛选主页历史或课程内历史。
+用途：查看会话列表。支持按 `scope` 和 `course_id` 筛选主页历史或课程内历史。Phase 4.3 已接入 `scope=home`，用于左侧主页历史；只返回当前用户自己的会话。
+
+查询参数：
+
+- `scope`：`home` 或 `course`，默认 `home`。
+- `course_id`：课程会话筛选参数，主页历史不传。
 
 ### GET `/tutor/sessions/{session_id}`
 
-用途：查看会话详情。
+用途：查看会话详情。Phase 4.3 已用于点击左侧主页历史后恢复该会话真实消息列表。只能访问当前用户自己的会话。
+
+响应：
+
+```json
+{
+  "data": {
+    "session": {
+      "id": "12",
+      "scope": "home",
+      "course_id": null,
+      "title": "帮我整理这份期末资料",
+      "mode": "chat",
+      "archived_from_home": false,
+      "created_at": "2026-07-03T08:00:00Z",
+      "updated_at": "2026-07-03T08:03:00Z"
+    },
+    "messages": [
+      {
+        "id": "21",
+        "session_id": "12",
+        "role": "user",
+        "content": "为什么反向传播要用链式法则？",
+        "citation_json": [],
+        "trace_id": null,
+        "created_at": "2026-07-03T08:01:00Z"
+      }
+    ]
+  },
+  "trace_id": "trace_xxx"
+}
+```
 
 ### POST `/tutor/sessions/{session_id}/messages`
 
-用途：发送问题并获取回答。
+用途：发送问题并获取回答。Phase 4.3 已实现持久化闭环：写入一条 `user` 消息，并同步写入一条模板 `assistant` 回复。当前不调用真实大模型、不做 RAG、不做联网搜索。
 
 请求：
 
@@ -719,11 +775,11 @@ Authorization: Bearer <token>
 }
 ```
 
-响应包含回答、引用、低依据标记和 trace_id。
+当前响应返回完整会话详情。模板 assistant 回复的 `citation_json=[]`、`trace_id=null`；后续接入真实 RAG/AI 后再返回真实引用、低依据标记和 agent trace。
 
 ### GET `/tutor/sessions/{session_id}/stream`
 
-用途：SSE 流式返回回答。第一版可在普通接口稳定后接入。
+用途：SSE 流式返回回答。当前未实现，第一版可在普通消息接口和真实 AI/RAG 稳定后接入。
 
 ## 14. Practice 与 Report 接口
 

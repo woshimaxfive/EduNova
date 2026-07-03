@@ -4,23 +4,25 @@
 
 ## 1. 当前阶段
 
-Phase 5.2 已完成第一版课程知识库检索地基：
+Phase 5.2 已完成第一版课程知识库检索地基，Phase 5.3 已把检索结果接入课程会话引用持久化：
 
 - 已生成课程中的 `knowledge_chunks` 可以通过 `POST /api/v1/rag/search` 检索。
 - 检索只在当前登录用户自己的课程内进行。
 - 返回结果包含知识切片、课程资料、知识点、章节和匹配分数。
-- 课程空间发送课程问题时，会先调用真实检索接口，并在回答下方展示真实引用片段。
+- 课程空间发送课程问题时，会通过课程会话调用真实检索，并把引用写入 assistant 消息的 `citation_json`。
+- 刷新课程页或点击课程内历史后，前端从 `/tutor/sessions/{session_id}` 恢复消息和引用。
 
 本阶段不接真实大模型，不生成最终 AI 回答，不做 embedding，不做向量召回。
 
 ## 2. 数据来源
 
-Phase 5.2 只读取现有数据表：
+Phase 5.2 到 Phase 5.3 只读取或复用现有数据表：
 
 - `courses`：确认课程属于当前用户。
 - `course_materials`：提供资料标题和资料来源。
 - `knowledge_points`：提供知识点和章节上下文。
 - `knowledge_chunks`：提供可检索文本切片。
+- `chat_sessions`、`chat_messages`：保存课程会话消息和 assistant `citation_json`。
 
 本阶段不新增数据库迁移，`knowledge_chunks.embedding` 继续允许为空。
 
@@ -92,4 +94,4 @@ Phase 6 再进入真实 RAG 生成：
 - 让 AI 回答基于检索结果生成，并保留引用。
 - 加入低依据提示和 ReviewAgent 审核。
 
-Phase 5.2 的目标是让引用链路先真实存在，避免后续 AI 回答变成无来源的文本生成。
+Phase 5.2 的目标是让引用链路先真实存在，避免后续 AI 回答变成无来源的文本生成。Phase 5.3 则把这条引用链保存到课程会话里，保证刷新页面、切换课程历史后引用仍然可追溯。

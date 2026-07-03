@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,6 +11,8 @@ from backend.app.schemas.tutor import TutorSessionDetail, TutorSessionSummary, s
 
 
 TEMPLATE_ASSISTANT_REPLY = "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。"
+COURSE_ASSISTANT_REPLY_WITH_CITATIONS = "我先从课程资料里找到了相关依据。下面保留真实引用片段，后续接入大模型后会基于这些来源生成完整回答。"
+COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS = "我先检查了课程资料，但还没有足够依据支撑这个问题。"
 
 
 class InvalidSessionScopeError(ValueError):
@@ -54,6 +56,11 @@ class TutorSessionRepository(Protocol):
         ...
 
     def rollback(self) -> None:
+        ...
+
+
+class CourseCitationSearcher(Protocol):
+    def search(self, user: User, course_id: int, query: str, top_k: int) -> Any:
         ...
 
 
@@ -128,8 +135,13 @@ class SqlAlchemyTutorSessionRepository:
 
 
 class TutorSessionService:
-    def __init__(self, repository: TutorSessionRepository) -> None:
+    def __init__(
+        self,
+        repository: TutorSessionRepository,
+        course_citation_searcher: CourseCitationSearcher | None = None,
+    ) -> None:
         self.repository = repository
+        self.course_citation_searcher = course_citation_searcher
 
     def create_session(
         self,
@@ -196,12 +208,14 @@ class TutorSessionService:
             citation_json=[],
             trace_id=None,
         )
+        citation_json = self._search_course_citations(user=user, session=session, message_text=message_text)
+        assistant_reply = self._build_assistant_reply(session=session, citation_json=citation_json)
         assistant_message = ChatMessage(
             session_id=session.id,
             user_id=user.id,
             role="assistant",
-            content=TEMPLATE_ASSISTANT_REPLY,
-            citation_json=[],
+            content=assistant_reply,
+            citation_json=citation_json,
             trace_id=None,
         )
 
@@ -216,6 +230,47 @@ class TutorSessionService:
             raise
 
         return session_detail_to_api(session, self.repository.list_messages(session.id))
+
+    def _search_course_citations(self, user: User, session: ChatSession, message_text: str) -> list[dict[str, Any]]:
+        if session.scope != "course" or session.course_id is None or self.course_citation_searcher is None:
+            return []
+
+        result = self.course_citation_searcher.search(
+            user=user,
+            course_id=session.course_id,
+            query=message_text,
+            top_k=5,
+        )
+        return [self._citation_to_dict(item) for item in result.results]
+
+    @staticmethod
+    def _citation_to_dict(item: Any) -> dict[str, Any]:
+        if hasattr(item, "model_dump"):
+            return item.model_dump()
+        if isinstance(item, dict):
+            return item
+        return {
+            key: getattr(item, key)
+            for key in (
+                "chunk_id",
+                "course_id",
+                "material_id",
+                "knowledge_point_id",
+                "content",
+                "source_title",
+                "page_number",
+                "section_title",
+                "score",
+            )
+        }
+
+    @staticmethod
+    def _build_assistant_reply(session: ChatSession, citation_json: list[dict[str, Any]]) -> str:
+        if session.scope != "course":
+            return TEMPLATE_ASSISTANT_REPLY
+        if citation_json:
+            return COURSE_ASSISTANT_REPLY_WITH_CITATIONS
+        return COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS
 
     def _get_session_for_user(self, user_id: int, session_id: int) -> ChatSession:
         session = self.repository.get_session_for_user(session_id=session_id, user_id=user_id)

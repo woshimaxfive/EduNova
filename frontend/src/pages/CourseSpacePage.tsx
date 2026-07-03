@@ -10,13 +10,21 @@ import {
   Sparkle,
   Target
 } from "@phosphor-icons/react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type KeyboardEvent, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
 import { getCourse, getCourseOverview, getKnowledgePoints, type ApiCourseKnowledgePoint } from "../api/courses";
-import { searchRag, type RagSearchResultItem } from "../api/rag";
+import { type RagSearchResultItem } from "../api/rag";
+import {
+  createTutorSession,
+  getTutorSession,
+  listTutorSessions,
+  sendTutorMessage,
+  type TutorMessage,
+  type TutorSessionSummary
+} from "../api/tutor";
 import { LearningCanvas } from "../components/canvas/LearningCanvas";
 import { EvidenceLayer } from "../components/evidence/EvidenceLayer";
 import { ActionNotice } from "../components/feedback/ActionNotice";
@@ -115,10 +123,33 @@ type CourseMessage = {
   citations?: RagSearchResultItem[];
 };
 
+function courseQuestionTitle(question: string) {
+  const normalized = question.trim();
+  return normalized.length > 30 ? `${normalized.slice(0, 30)}...` : normalized;
+}
+
+function mapTutorMessagesToCourseMessages(messages: TutorMessage[]): CourseMessage[] {
+  return messages.map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    citations: message.role === "assistant" ? message.citation_json : undefined
+  }));
+}
+
+function mapCourseSessionsToConversations(sessions: TutorSessionSummary[]) {
+  return sessions.map((session) => ({
+    id: session.id,
+    title: session.title,
+    meta: "课程内"
+  }));
+}
+
 export function CourseSpacePage() {
   const { courseId } = useParams();
   const numericCourseId = courseId ? Number.parseInt(courseId, 10) : Number.NaN;
   const hasRealCourseId = Number.isFinite(numericCourseId);
+  const queryClient = useQueryClient();
   const courseQuery = useQuery({
     queryKey: ["courses", "detail", numericCourseId],
     queryFn: () => getCourse(numericCourseId),
@@ -137,8 +168,15 @@ export function CourseSpacePage() {
     enabled: hasRealCourseId,
     staleTime: 30_000
   });
+  const courseSessionsQuery = useQuery({
+    queryKey: ["tutor", "sessions", "course", numericCourseId],
+    queryFn: () => listTutorSessions("course", numericCourseId),
+    enabled: hasRealCourseId,
+    staleTime: 10_000
+  });
   const [threads, setThreads] = useState(courseThreads);
   const [activeThread, setActiveThread] = useState(courseThreads[0]);
+  const [activeCourseSessionId, setActiveCourseSessionId] = useState<string | null>(null);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<AnswerPanelKind>("citations");
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [coursePrompt, setCoursePrompt] = useState("");
@@ -152,6 +190,31 @@ export function CourseSpacePage() {
     [knowledgePointsQuery.data?.data]
   );
   const overviewMaterials = courseOverviewQuery.data?.data.materials ?? [];
+  const courseSessions = Array.isArray(courseSessionsQuery.data?.data) ? courseSessionsQuery.data.data : [];
+  const latestCourseSessionId = courseSessions[0]?.id ?? null;
+  const selectedCourseSessionId = hasRealCourseId ? (activeCourseSessionId ?? latestCourseSessionId) : null;
+  const activeCourseSessionQuery = useQuery({
+    queryKey: ["tutor", "session", selectedCourseSessionId],
+    queryFn: () => getTutorSession(selectedCourseSessionId ?? ""),
+    enabled: hasRealCourseId && Boolean(selectedCourseSessionId),
+    staleTime: 5_000
+  });
+  const sidebarConversations = hasRealCourseId
+    ? mapCourseSessionsToConversations(courseSessions)
+    : threads.map((title, index) => ({ id: `course-thread-${index}`, title, meta: "课程内" }));
+  const activeCourseSessionDetail = activeCourseSessionQuery.data?.data;
+  const activeCourseSessionDetailId = activeCourseSessionDetail?.session?.id ?? null;
+  const persistedCourseMessages = useMemo(() => {
+    if (!hasRealCourseId || activeCourseSessionDetailId !== selectedCourseSessionId) {
+      return [];
+    }
+
+    return mapTutorMessagesToCourseMessages(activeCourseSessionDetail?.messages ?? []);
+  }, [activeCourseSessionDetail?.messages, activeCourseSessionDetailId, hasRealCourseId, selectedCourseSessionId]);
+  const displayedCourseMessages =
+    hasRealCourseId && selectedCourseSessionId && activeCourseSessionDetailId === selectedCourseSessionId
+      ? persistedCourseMessages
+      : courseMessages;
   const courseSummary = apiCourse
     ? {
         id: Number.parseInt(apiCourse.id, 10),
@@ -175,7 +238,7 @@ export function CourseSpacePage() {
             coverageLabel: `${apiCourse.knowledge_point_count} 个知识点`
           }))
         : snapshot.materials;
-  const latestAssistantWithRetrieval = [...courseMessages].reverse().find((message) => message.role === "assistant" && message.citations !== undefined);
+  const latestAssistantWithRetrieval = [...displayedCourseMessages].reverse().find((message) => message.role === "assistant" && message.citations !== undefined);
   const latestRagResults = latestAssistantWithRetrieval?.citations ?? [];
   const hasRetrievalResult = Boolean(latestAssistantWithRetrieval);
   const evidenceCitations = apiCourse ? mapRagResultsToCitations(latestRagResults) : snapshot.citations;
@@ -211,7 +274,16 @@ export function CourseSpacePage() {
   const materialCount = apiCourse?.material_count ?? snapshot.materials.length;
   const knowledgePointCount = apiCourse?.knowledge_point_count ?? snapshot.knowledgeNodes.length;
 
-  function appendCourseMessages(question: string, assistantAnswer: string, citations?: RagSearchResultItem[]) {
+  function selectCourseConversation(sessionId: string) {
+    if (!hasRealCourseId) {
+      return;
+    }
+
+    setActiveCourseSessionId(sessionId);
+    setCourseMessages([]);
+  }
+
+  function appendDemoCourseMessages(question: string, assistantAnswer: string, citations?: RagSearchResultItem[]) {
     const timestamp = Date.now();
     setCourseMessages((current) => [
       ...current,
@@ -235,7 +307,7 @@ export function CourseSpacePage() {
     }
 
     if (!hasRealCourseId) {
-      appendCourseMessages(question, "我会按课程资料回答：先定位相关知识点，再给出复习顺序、引用来源和下一步练习。");
+      appendDemoCourseMessages(question, "我会按课程资料回答：先定位相关知识点，再给出复习顺序、引用来源和下一步练习。");
       setCoursePrompt("");
       showNotice("已生成课程回答。", "success");
       return;
@@ -244,22 +316,32 @@ export function CourseSpacePage() {
     setIsSearchingCourse(true);
 
     try {
-      const searchResult = await searchRag({
-        course_id: numericCourseId,
-        query: question,
-        top_k: 5
-      });
-      const citations = searchResult.data.results;
-      const assistantAnswer =
-        citations.length > 0
-          ? "我先从课程资料里找到了相关依据。下面保留真实引用片段，后续接入大模型后会基于这些来源生成完整回答。"
-          : "我先检查了课程资料，但还没有足够依据支撑这个问题。";
+      let sessionId = activeCourseSessionId ?? latestCourseSessionId;
 
-      appendCourseMessages(question, assistantAnswer, citations);
+      if (!sessionId) {
+        const createdSession = await createTutorSession({
+          scope: "course",
+          course_id: numericCourseId,
+          mode: "chat",
+          title: courseQuestionTitle(question)
+        });
+        sessionId = createdSession.data.id;
+        setActiveCourseSessionId(sessionId);
+      }
+
+      const detail = await sendTutorMessage(sessionId, { message: question });
+      const messages = mapTutorMessagesToCourseMessages(detail.data.messages);
+      const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+      const citationCount = latestAssistant?.citations?.length ?? 0;
+
+      setActiveCourseSessionId(detail.data.session.id);
+      setCourseMessages(messages);
       setCoursePrompt("");
-      showNotice(citations.length > 0 ? "已检索课程引用。" : "课程资料依据不足。", citations.length > 0 ? "success" : "warning");
+      queryClient.setQueryData(["tutor", "session", detail.data.session.id], detail);
+      void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
+      showNotice(citationCount > 0 ? "已保存课程回答和引用。" : "课程资料依据不足。", citationCount > 0 ? "success" : "warning");
     } catch {
-      showNotice("课程检索失败，请稍后重试。", "warning");
+      showNotice("课程会话保存失败，请稍后重试。", "warning");
     } finally {
       setIsSearchingCourse(false);
     }
@@ -282,9 +364,12 @@ export function CourseSpacePage() {
         </div>
         <AppSidebar
           isCollapsed={isHistoryCollapsed}
-          conversations={threads.map((title, index) => ({ id: `course-thread-${index}`, title, meta: "课程内" }))}
+          conversations={sidebarConversations}
+          activeConversationId={hasRealCourseId ? selectedCourseSessionId : sidebarConversations.find((conversation) => conversation.title === activeThread)?.id}
           onToggleCollapsed={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
-          onSelectConversation={(conversation) => setActiveThread(conversation.title)}
+          onSelectConversation={(conversation) =>
+            hasRealCourseId ? void selectCourseConversation(conversation.id) : setActiveThread(conversation.title)
+          }
         />
         <section className="route-main-surface course-route-surface">
           <div className="course-space">
@@ -325,17 +410,35 @@ export function CourseSpacePage() {
                 </div>
 
                 <div className="course-thread-list" aria-label="课程内历史对话">
-                  {threads.map((thread) => (
-                    <button
-                      className={activeThread === thread ? "active" : ""}
-                      type="button"
-                      key={thread}
-                      aria-pressed={activeThread === thread}
-                      onClick={() => setActiveThread(thread)}
-                    >
-                      {thread}
-                    </button>
-                  ))}
+                  {hasRealCourseId ? (
+                    courseSessions.length > 0 ? (
+                      courseSessions.map((session) => (
+                        <button
+                          className={selectedCourseSessionId === session.id ? "active" : ""}
+                          type="button"
+                          key={session.id}
+                          aria-pressed={selectedCourseSessionId === session.id}
+                          onClick={() => void selectCourseConversation(session.id)}
+                        >
+                          {session.title}
+                        </button>
+                      ))
+                    ) : (
+                      <p className="course-thread-empty">还没有课程对话</p>
+                    )
+                  ) : (
+                    threads.map((thread) => (
+                      <button
+                        className={activeThread === thread ? "active" : ""}
+                        type="button"
+                        key={thread}
+                        aria-pressed={activeThread === thread}
+                        onClick={() => setActiveThread(thread)}
+                      >
+                        {thread}
+                      </button>
+                    ))
+                  )}
                 </div>
 
                 <article className="course-answer">
@@ -384,9 +487,9 @@ export function CourseSpacePage() {
                   </div>
                 </article>
 
-                {courseMessages.length > 0 ? (
+                {displayedCourseMessages.length > 0 ? (
                   <section className="course-message-stack" aria-label="课程即时对话">
-                    {courseMessages.map((message) => (
+                    {displayedCourseMessages.map((message) => (
                       <article className={`course-message ${message.role}`} key={message.id}>
                         <p>{message.content}</p>
                         {message.role === "assistant" && message.citations !== undefined ? (
@@ -409,7 +512,7 @@ export function CourseSpacePage() {
                   />
                   <button className="course-send-button" type="button" disabled={isSearchingCourse} onClick={() => void sendCourseQuestion()}>
                     <ArrowRight size={17} weight="bold" aria-hidden="true" />
-                    <span>{isSearchingCourse ? "检索中" : "发送"}</span>
+                    <span>{isSearchingCourse ? "保存中" : "发送"}</span>
                   </button>
                 </div>
                 <ActionNotice notice={notice} />

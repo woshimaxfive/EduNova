@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import { type ApiEnvelope } from "../types/api";
+import { type RagSearchResultItem } from "./rag";
 
 export const TUTOR_ENDPOINTS = {
   sessions: "/tutor/sessions",
@@ -33,12 +34,14 @@ export type TutorSessionSummary = {
   updated_at: string;
 };
 
+export type TutorCitation = RagSearchResultItem;
+
 export type TutorMessage = {
   id: string;
   session_id: string;
   role: "user" | "assistant";
   content: string;
-  citation_json: unknown[];
+  citation_json: TutorCitation[];
   trace_id: string | null;
   created_at: string;
 };
@@ -53,9 +56,11 @@ export async function createTutorSession(payload: CreateTutorSessionRequest) {
   return response.data;
 }
 
-export async function listTutorSessions(scope: TutorSessionScope = "home") {
+export async function listTutorSessions(scope: TutorSessionScope = "home", courseId?: number | null) {
+  const params = courseId === undefined || courseId === null ? { scope } : { scope, course_id: courseId };
+
   const response = await apiClient.get<ApiEnvelope<TutorSessionSummary[]>>(TUTOR_ENDPOINTS.sessions, {
-    params: { scope }
+    params
   });
   return response.data;
 }

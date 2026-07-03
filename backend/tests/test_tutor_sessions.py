@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -96,6 +97,23 @@ class FakeTutorRepository:
 
     def rollback(self) -> None:
         self.rolled_back = True
+
+
+@dataclass
+class FakeCourseCitationSearcher:
+    results: list[dict[str, Any]] = field(default_factory=list)
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def search(self, user: User, course_id: int, query: str, top_k: int) -> SimpleNamespace:
+        self.calls.append(
+            {
+                "user_id": user.id,
+                "course_id": course_id,
+                "query": query,
+                "top_k": top_k,
+            }
+        )
+        return SimpleNamespace(results=[SimpleNamespace(**item) for item in self.results])
 
 
 @dataclass
@@ -207,6 +225,86 @@ def test_append_message_writes_user_and_template_assistant_messages_in_order() -
     assert detail["messages"][1]["trace_id"] is None
     assert detail["session"]["updated_at"] > detail["session"]["created_at"]
     assert repo.committed is True
+
+
+def test_append_course_message_persists_real_citations_from_course_knowledge() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    citation_searcher = FakeCourseCitationSearcher(
+        results=[
+            {
+                "chunk_id": 501,
+                "course_id": 7,
+                "material_id": 301,
+                "knowledge_point_id": 401,
+                "content": "启发式搜索利用启发函数估计路径代价。",
+                "source_title": "人工智能导论讲义.md",
+                "page_number": None,
+                "section_title": "启发式搜索",
+                "score": 9.5,
+            }
+        ]
+    )
+    service = module.TutorSessionService(repo, course_citation_searcher=citation_searcher)
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+
+    detail = as_dict(service.append_message(user=user, session_id=session.id, content="启发式搜索怎么复习？"))
+
+    assert citation_searcher.calls == [
+        {
+            "user_id": 1,
+            "course_id": 7,
+            "query": "启发式搜索怎么复习？",
+            "top_k": 5,
+        }
+    ]
+    assert [message["role"] for message in detail["messages"]] == ["user", "assistant"]
+    assert "课程资料里找到了相关依据" in detail["messages"][1]["content"]
+    assert detail["messages"][1]["citation_json"][0]["chunk_id"] == 501
+    assert detail["messages"][1]["citation_json"][0]["source_title"] == "人工智能导论讲义.md"
+
+
+def test_append_course_message_records_insufficient_evidence_without_fabricated_citations() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    service = module.TutorSessionService(repo, course_citation_searcher=FakeCourseCitationSearcher(results=[]))
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+
+    detail = as_dict(service.append_message(user=user, session_id=session.id, content="量子通信怎么复习？"))
+
+    assert "还没有足够依据" in detail["messages"][1]["content"]
+    assert detail["messages"][1]["citation_json"] == []
+
+
+def test_append_home_message_keeps_template_reply_and_does_not_call_course_searcher() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    citation_searcher = FakeCourseCitationSearcher(
+        results=[
+            {
+                "chunk_id": 501,
+                "course_id": 7,
+                "material_id": 301,
+                "knowledge_point_id": 401,
+                "content": "不应该用于主页会话。",
+                "source_title": "课程资料.md",
+                "page_number": None,
+                "section_title": "课程切片",
+                "score": 9.5,
+            }
+        ]
+    )
+    service = module.TutorSessionService(repo, course_citation_searcher=citation_searcher)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="主页答疑")
+
+    detail = as_dict(service.append_message(user=user, session_id=session.id, content="主页怎么复习？"))
+
+    assert citation_searcher.calls == []
+    assert "可以先把资料按章节和题型拆开" in detail["messages"][1]["content"]
+    assert detail["messages"][1]["citation_json"] == []
 
 
 def test_get_session_and_append_message_reject_other_users_session() -> None:

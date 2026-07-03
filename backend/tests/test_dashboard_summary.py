@@ -223,7 +223,8 @@ def test_ai_intro_user_summary_uses_current_user_course_and_material() -> None:
 
     summary = as_dict(
         module.DashboardService(
-            FakeDashboardRepository(courses=[course], materials=[material], linked_material_ids={201})
+            FakeDashboardRepository(courses=[course], materials=[material], linked_material_ids={201}),
+            now=NOW,
         ).build_summary(user)
     )
 
@@ -312,7 +313,8 @@ def test_dashboard_summary_uses_real_progress_profile_conversations_and_resource
                 enrollments=[enrollment],
                 conversations=[conversation],
                 resources=[resource],
-            )
+            ),
+            now=NOW,
         ).build_summary(user)
     )
 

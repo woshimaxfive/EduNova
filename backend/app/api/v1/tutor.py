@@ -7,6 +7,7 @@ from backend.app.api.v1.deps import get_current_user
 from backend.app.db.session import get_db_session
 from backend.app.models import User
 from backend.app.schemas.tutor import CreateTutorSessionRequest, SendTutorMessageRequest
+from backend.app.services.rag import RagService, SqlAlchemyRagRepository
 from backend.app.services.tutor import (
     EmptyMessageError,
     InvalidSessionScopeError,
@@ -20,7 +21,10 @@ router = APIRouter(prefix="/tutor", tags=["tutor"])
 
 
 def get_tutor_session_service(db=Depends(get_db_session)) -> TutorSessionService:
-    return TutorSessionService(SqlAlchemyTutorSessionRepository(db))
+    return TutorSessionService(
+        SqlAlchemyTutorSessionRepository(db),
+        course_citation_searcher=RagService(SqlAlchemyRagRepository(db)),
+    )
 
 
 @router.post("/sessions")

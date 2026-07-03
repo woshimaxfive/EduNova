@@ -822,7 +822,7 @@ Authorization: Bearer <token>
 
 ### POST `/tutor/sessions`
 
-用途：创建 AI 学习会话。Phase 3 重定向后，会话分为主页会话和课程会话。Phase 4.3 已实现该接口，必须携带 JWT，只能创建当前登录用户自己的会话。
+用途：创建 AI 学习会话。Phase 3 重定向后，会话分为主页会话和课程会话。Phase 4.3 已实现主页会话，Phase 5.3 已把课程会话接入课程空间；必须携带 JWT，只能创建当前登录用户自己的会话。
 
 请求：
 
@@ -849,8 +849,8 @@ Authorization: Bearer <token>
 规则：
 
 - `scope=home` 时 `course_id` 必须为空，当前 `/app` 首页首次发送会先创建主页会话。
-- `scope=course` 时必须传 `course_id`。
-- `scope=course` 当前只做后端基础校验和预留，课程空间前端真实接入放后续阶段。
+- `scope=course` 时必须传 `course_id`，且课程必须属于当前登录用户。
+- `scope=course` 已用于 `/app/courses/:courseId`，课程空间首次提问会先创建课程会话，连续追问复用当前课程会话。
 - 会话标题由前端用第一条问题截取生成，也可以由调用方显式传入。
 - 主页会话可以后续移入课程，移入后应从主页历史中消失或标记为已归档。
 
@@ -874,7 +874,7 @@ Authorization: Bearer <token>
 
 ### GET `/tutor/sessions`
 
-用途：查看会话列表。支持按 `scope` 和 `course_id` 筛选主页历史或课程内历史。Phase 4.3 已接入 `scope=home`，用于左侧主页历史；只返回当前用户自己的会话。
+用途：查看会话列表。支持按 `scope` 和 `course_id` 筛选主页历史或课程内历史。Phase 4.3 已接入 `scope=home`，用于左侧主页历史；Phase 5.3 已接入 `scope=course&course_id=...`，用于课程空间侧栏和课程内历史；只返回当前用户自己的会话。
 
 查询参数：
 
@@ -883,7 +883,7 @@ Authorization: Bearer <token>
 
 ### GET `/tutor/sessions/{session_id}`
 
-用途：查看会话详情。Phase 4.3 已用于点击左侧主页历史后恢复该会话真实消息列表。只能访问当前用户自己的会话。
+用途：查看会话详情。Phase 4.3 已用于点击左侧主页历史后恢复主页消息列表；Phase 5.3 已用于点击课程内历史后恢复课程消息和 `citation_json` 引用。只能访问当前用户自己的会话。
 
 响应：
 
@@ -918,7 +918,7 @@ Authorization: Bearer <token>
 
 ### POST `/tutor/sessions/{session_id}/messages`
 
-用途：发送问题并获取回答。Phase 4.3 已实现持久化闭环：写入一条 `user` 消息，并同步写入一条模板 `assistant` 回复。当前不调用真实大模型、不做 RAG、不做联网搜索。
+用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条模板 `assistant` 回复。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用关键词 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。当前仍不调用真实大模型、不做 embedding、不做联网搜索。
 
 请求：
 
@@ -928,7 +928,21 @@ Authorization: Bearer <token>
 }
 ```
 
-当前响应返回完整会话详情。模板 assistant 回复的 `citation_json=[]`、`trace_id=null`；后续接入真实 RAG/AI 后再返回真实引用、低依据标记和 agent trace。
+当前响应返回完整会话详情。
+
+主页会话规则：
+
+- assistant 回复仍是模板占位。
+- `citation_json=[]`、`trace_id=null`。
+- 不调用课程 RAG，避免影响主页历史行为。
+
+课程会话规则：
+
+- 命中课程知识切片时，assistant `citation_json` 采用 `/rag/search` 的结果字段结构：`chunk_id`、`course_id`、`material_id`、`knowledge_point_id`、`content`、`source_title`、`page_number`、`section_title`、`score`。
+- 无命中时 `citation_json=[]`，assistant 内容提示“资料依据不足”，前端不得伪造引用。
+- 课程空间刷新后，前端通过 `GET /tutor/sessions/{session_id}` 恢复消息和引用。
+
+真实 AI 生成、向量召回、低依据评分和 agent trace 仍在后续阶段接入。
 
 ### GET `/tutor/sessions/{session_id}/stream`
 

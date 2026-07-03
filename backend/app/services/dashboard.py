@@ -138,8 +138,9 @@ class SqlAlchemyDashboardRepository:
 
 
 class DashboardService:
-    def __init__(self, repository: DashboardRepository) -> None:
+    def __init__(self, repository: DashboardRepository, now: datetime | None = None) -> None:
         self.repository = repository
+        self.now = now
 
     def build_summary(self, user: User) -> DashboardSummary:
         profile = self.repository.get_profile(user.id)
@@ -220,15 +221,14 @@ class DashboardService:
         normalized = progress.quantize(Decimal("1")) if progress == progress.to_integral() else progress.normalize()
         return f"{normalized}%"
 
-    @staticmethod
-    def _build_material(material: Material) -> DashboardMaterial:
+    def _build_material(self, material: Material) -> DashboardMaterial:
         metadata = material.metadata_json or {}
         return DashboardMaterial(
             id=str(material.id),
             title=material.filename,
             type=DashboardService._material_type(material),
             detail=DashboardService._parse_status_label(material.parse_status),
-            modified=DashboardService._date_label(material.created_at),
+            modified=self._date_label(material.created_at),
             size=str(metadata.get("size_label") or metadata.get("size") or ""),
         )
 
@@ -326,12 +326,11 @@ class DashboardService:
             action_label="继续学习",
         )
 
-    @staticmethod
-    def _relative_label(value: datetime | None) -> str:
+    def _relative_label(self, value: datetime | None) -> str:
         if value is None:
             return "刚刚"
 
-        current = datetime.now(UTC)
+        current = self._current_time()
         comparable = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
         delta = current - comparable
 
@@ -343,18 +342,21 @@ class DashboardService:
             return "昨天"
         return comparable.strftime("%m-%d")
 
-    @staticmethod
-    def _date_label(value: datetime | None) -> str:
+    def _date_label(self, value: datetime | None) -> str:
         if value is None:
             return "今天"
 
-        current = datetime.now(UTC)
+        current = self._current_time()
         comparable = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
         if comparable.date() == current.date():
             return "今天"
         if (current.date() - comparable.date()).days == 1:
             return "昨天"
         return comparable.strftime("%m-%d")
+
+    def _current_time(self) -> datetime:
+        current = self.now or datetime.now(UTC)
+        return current if current.tzinfo is not None else current.replace(tzinfo=UTC)
 
     @staticmethod
     def _iso_timestamp(value: datetime | None) -> str:

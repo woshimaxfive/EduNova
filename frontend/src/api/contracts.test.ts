@@ -14,7 +14,7 @@ import { PROFILE_ENDPOINTS } from "./profiles";
 import { REPORT_ENDPOINTS } from "./reports";
 import { RESOURCE_ENDPOINTS } from "./resources";
 import { SETTINGS_ENDPOINTS } from "./settings";
-import { TUTOR_ENDPOINTS } from "./tutor";
+import { listTutorSessions, TUTOR_ENDPOINTS } from "./tutor";
 
 describe("frontend API contracts", () => {
   it("uses the documented API v1 base path", () => {
@@ -143,6 +143,48 @@ describe("frontend API contracts", () => {
         }
       ]);
       expect(response.data.results).toEqual([]);
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("lists course tutor sessions with course_id through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; params?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        params: config.params
+      });
+
+      return {
+        data: {
+          data: [],
+          trace_id: "trace_tutor_course_sessions"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const response = await listTutorSessions("course", 7);
+
+      expect(calls).toEqual([
+        {
+          url: TUTOR_ENDPOINTS.sessions,
+          method: "get",
+          params: {
+            scope: "course",
+            course_id: 7
+          }
+        }
+      ]);
+      expect(response.data).toEqual([]);
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

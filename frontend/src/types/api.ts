@@ -3,6 +3,7 @@ export type ApiUser = {
   email: string;
   display_name: string;
   role: "student" | "admin";
+  starter_mode: "blank" | "ai_intro";
 };
 
 export type ApiEnvelope<T> = {

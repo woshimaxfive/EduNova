@@ -80,6 +80,7 @@ erDiagram
 | `hashed_password` | varchar | 加密密码 |
 | `display_name` | varchar | 显示名称 |
 | `role` | varchar | `student` 或 `admin` |
+| `starter_mode` | varchar | 注册初始化方式，`blank` 或 `ai_intro` |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -87,6 +88,7 @@ erDiagram
 
 - `email` 唯一。
 - 第一版默认 `role=student`。
+- 旧用户迁移默认 `starter_mode=blank`；新注册未传时由服务层按 `ai_intro` 处理。
 
 ### 4.2 `courses`
 
@@ -594,9 +596,9 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 注册新账号时，系统通过 `starter_mode` 决定是否初始化示例内容：
 
 - `blank`：不创建内置课程副本、示例资料和示例历史。
-- `ai_intro`：把系统内置“人工智能导论”课程、示例资料和必要的最近学习入口复制或关联到当前用户空间。
+- `ai_intro`：把系统内置“人工智能导论”课程、示例资料、知识点和知识切片复制到当前用户空间。
 
-`starter_mode` 只影响当前用户初始化，不等同于共享演示账号，也不能让多个真实用户共用同一份可写学习记录。
+`starter_mode` 只影响当前用户初始化，不等同于共享演示账号，也不能让多个真实用户共用同一份可写学习记录。当前实现中，`ai_intro` 不创建主页历史、画像、练习或最近学习记录；这些数据后续由真实使用行为生成。
 
 演示模式后续如启用，可使用固定演示账号：
 
@@ -627,6 +629,7 @@ Demo 数据要求：
 7. pgvector 扩展由首条迁移 `20260701_0001_enable_pgvector.py` 启用。
 8. 第一批核心业务表由迁移 `20260701_0002_create_core_learning_tables.py` 创建。
 9. 学习闭环基础表由迁移 `20260701_0003_create_learning_closure_tables.py` 创建。
+10. 用户注册初始化方式由迁移 `20260701_0004_add_user_starter_mode.py` 创建。
 
 当前迁移命令：
 
@@ -657,5 +660,6 @@ Demo 数据要求：
 - `knowledge_chunks.embedding` 使用 `vector(1536)`。
 - `knowledge_chunks.embedding` 已建立 `ivfflat` 向量索引。
 - 第二条迁移已完成 downgrade/upgrade 往返验证。
+- `users.starter_mode` 已进入模型和迁移合同，旧用户默认 `blank`。
 - 人工智能导论内置课程包可导入，包含 12 个知识点和 24 个基础资料切片。
 - 内置课程导入具备幂等性，重复执行不会创建重复课程。

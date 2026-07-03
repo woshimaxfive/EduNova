@@ -502,7 +502,7 @@ Current Phase 3.1 implementation note:
 
 - `frontend/` has been created with React, TypeScript, Vite, Tailwind CSS v4, React Router, Zustand, React Query, Motion, Radix, React Flow, ECharts, Mermaid, Markmap, Vitest and ESLint.
 - `markmap-viewer` in the initial plan was corrected to the actual npm package `markmap-view`.
-- Routes, public/protected guards, local preview auth store, API client, login/register/Demo pages, learning-space shell, top navigation, AI conversation-first home, home history, material library entry, recent courses, course generation dialog, first-run guide and student core page skeletons are implemented.
+- Routes, public/protected guards, real auth store session, API client, login/register/Demo pages, learning-space shell, top navigation, AI conversation-first home, home history, material library entry, recent courses, course generation dialog, first-run guide and student core page skeletons are implemented.
 - Phase 3D/3E added frontend API contract modules, upload-to-course workflow state, empty/loading/error/low-evidence/demo-fallback state panels and page-level tests.
 - Phase 3 closure redesign first produced the skill-based direction `Productivity Tool + AI-Native UI + Knowledge Graph + Process Map`, replacing the five-card status feel with a learning operating system canvas, process rail, status signals and dark 资源输出区.
 - 2026-07-01 P3R3 implemented the AI conversation-first learning home with history, centered learning input, material-library drawer entry, semantic recent-learning list, restrained learning-signal background and course generation dialog; the existing learning canvas, 资源输出区 and evidence layer should be reused inside course space or answer expansion instead of dominating `/app`.
@@ -514,7 +514,7 @@ Current Phase 3.1 implementation note:
 - P3.15 tightened the frontend usability baseline: answer insights are collapsed by default, material actions are disabled until the user selects files, library-to-course generation uses a single overlay, and 资源工坊 keeps one primary generate action.
 - Browser visual checks covered P3R3 `/app` at desktop and mobile widths with no horizontal overflow; the material-library drawer and course generation dialog open and remain readable.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
-- Real backend auth, `/dashboard/summary`, upload/RAG/AI data and final browser E2E remain later-phase work.
+- `/dashboard/summary`, upload/RAG/AI data and final browser E2E remain later-phase work; real backend auth has entered Phase 4.1.
 
 ### Task 3.2: Add Frontend Data Contracts
 
@@ -550,8 +550,8 @@ git commit -m "feat(frontend): add API client contracts"
 
 ### Task 4.1: Backend Auth
 
-- [ ] Implement `backend/app/core/security.py` with password hashing, JWT creation, JWT parsing and current user dependency.
-- [ ] Implement `backend/app/api/v1/auth.py`:
+- [x] Implement `backend/app/core/security.py` with password hashing, JWT creation, JWT parsing and current user dependency.
+- [x] Implement `backend/app/api/v1/auth.py`:
 
 ```text
 POST /auth/register
@@ -560,7 +560,7 @@ GET /auth/me
 POST /auth/logout
 ```
 
-- [ ] Validation:
+- [x] Validation:
 
 ```text
 email must be valid
@@ -569,7 +569,7 @@ role defaults to student
 duplicate email returns 409
 ```
 
-- [ ] Tests:
+- [x] Tests:
 
 ```text
 backend/tests/test_auth.py
@@ -580,7 +580,7 @@ reject wrong password
 read current user
 ```
 
-- [ ] Verify:
+- [x] Verify:
 
 ```powershell
 .\.venv\Scripts\python -m pytest backend\tests\test_auth.py
@@ -595,9 +595,9 @@ git commit -m "feat(auth): add student authentication"
 
 ### Task 4.2: Frontend Auth and Learning Space
 
-- [ ] Connect Login and Register pages to backend.
-- [ ] Protect student learning-space routes.
-- [ ] Implement route return after login for users redirected from `/app/*`.
+- [x] Connect Login and Register pages to backend.
+- [x] Protect student learning-space routes.
+- [x] Implement route return after login for users redirected from `/app/*`.
 - [ ] Connect Demo entry to `/demo/status` and `/demo/reset`.
 - [ ] Show FirstRunGuide for new accounts without profile or selected course.
 - [ ] LearningSpace page shows:

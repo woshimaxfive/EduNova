@@ -1517,6 +1517,12 @@ a {
   color: var(--coral) !important;
 }
 
+.form-info {
+  margin: -4px 0 0 !important;
+  color: var(--accent-strong) !important;
+  font-weight: 700;
+}
+
 .page-workbench {
   display: grid;
   gap: 18px;

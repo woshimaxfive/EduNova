@@ -11,6 +11,9 @@ class Settings(BaseSettings):
         "postgresql+psycopg://edunova:edunova_dev_password@localhost:5432/edunova"
     )
     redis_url: str = "redis://localhost:6379/0"
+    jwt_secret: str = "change-this-local-development-secret"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 1440
 
     model_config = SettingsConfigDict(
         env_file=".env",

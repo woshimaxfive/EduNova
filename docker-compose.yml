@@ -38,6 +38,9 @@ services:
       APP_DEBUG: ${APP_DEBUG:-true}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-edunova}:${POSTGRES_PASSWORD:-edunova_dev_password}@postgres:5432/${POSTGRES_DB:-edunova}
       REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change-this-local-development-secret}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:

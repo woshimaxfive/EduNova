@@ -42,11 +42,11 @@ def _build_extracted_text(package: dict = BUILTIN_AI_INTRO_COURSE) -> str:
 
 
 def build_builtin_ai_intro_course_graph(
-    system_user: User,
+    owner_user: User,
     package: dict = BUILTIN_AI_INTRO_COURSE,
 ) -> Course:
     course = Course(
-        owner=system_user,
+        owner=owner_user,
         title=package["title"],
         description=package["description"],
         subject=package["subject"],
@@ -56,7 +56,7 @@ def build_builtin_ai_intro_course_graph(
     )
     material_data = package["material"]
     material = CourseMaterial(
-        user=system_user,
+        user=owner_user,
         course=course,
         filename=material_data["filename"],
         content_type=material_data["content_type"],

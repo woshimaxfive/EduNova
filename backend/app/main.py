@@ -1,10 +1,15 @@
 from fastapi import FastAPI
 
+from backend.app.api.errors import ApiError, api_error_handler
+from backend.app.api.v1.router import api_router
+
 
 def create_app() -> FastAPI:
     application = FastAPI(
         title="EduNova",
     )
+    application.add_exception_handler(ApiError, api_error_handler)
+    application.include_router(api_router, prefix="/api/v1")
 
     @application.get("/api/health", tags=["health"])
     async def health() -> dict[str, str]:

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { mapApiUserToStudentUser } from "./authMappers";
 import { AUTH_STORAGE_KEY, useAuthStore } from "./authStore";
 
 describe("authStore", () => {
@@ -23,6 +24,24 @@ describe("authStore", () => {
     expect(JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) ?? "{}")).toMatchObject({
       token: "demo-token",
       user: { displayName: "演示学生" }
+    });
+  });
+
+  it("maps backend auth users into the frontend session shape", () => {
+    expect(
+      mapApiUserToStudentUser({
+        id: 12,
+        email: "student@edunova.local",
+        display_name: "真实学生",
+        role: "student",
+        starter_mode: "ai_intro"
+      })
+    ).toEqual({
+      id: 12,
+      email: "student@edunova.local",
+      displayName: "真实学生",
+      role: "student",
+      starterMode: "ai_intro"
     });
   });
 });

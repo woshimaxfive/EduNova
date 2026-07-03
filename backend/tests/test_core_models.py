@@ -36,6 +36,8 @@ def test_users_table_contract() -> None:
     assert table.c.email.nullable is False
     assert table.c.hashed_password.nullable is False
     assert table.c.role.default.arg == "student"
+    assert table.c.starter_mode.default.arg == "blank"
+    assert table.c.starter_mode.nullable is False
 
 
 def test_course_enrollment_has_user_course_unique_constraint() -> None:

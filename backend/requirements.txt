@@ -5,3 +5,5 @@ pydantic-settings
 psycopg[binary]
 SQLAlchemy
 pgvector
+bcrypt
+PyJWT

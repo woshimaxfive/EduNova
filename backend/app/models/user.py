@@ -19,6 +19,11 @@ class User(IdMixin, TimestampMixin, Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="student")
+    starter_mode: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="blank",
+    )
 
     owned_courses: Mapped[list["Course"]] = relationship(
         back_populates="owner",

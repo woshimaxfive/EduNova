@@ -2,13 +2,17 @@ import { ArrowRight, BookOpen, ShieldCheck, Sparkle } from "@phosphor-icons/reac
 import { type FormEvent, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
+import { login } from "../api/auth";
+import { getApiErrorMessage } from "../api/errors";
 import { PATHS } from "../app/routePaths";
+import { mapApiUserToStudentUser } from "../features/auth/authMappers";
 import { useAuthStore } from "../features/auth/authStore";
 
 type LocationState = {
   from?: {
     pathname?: string;
   };
+  notice?: string;
 };
 
 export function LoginPage() {
@@ -17,25 +21,29 @@ export function LoginPage() {
   const setSession = useAuthStore((state) => state.setSession);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const from = (location.state as LocationState | null)?.from?.pathname ?? PATHS.app;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formMessage, setFormMessage] = useState("");
+  const locationState = location.state as LocationState | null;
+  const from = locationState?.from?.pathname ?? PATHS.app;
+  const notice = locationState?.notice;
 
-  function completeLogin() {
-    setSession({
-      token: "local-preview-token",
-      user: {
-        id: 1,
-        email,
-        displayName: "演示学生",
-        role: "student",
-        starterMode: "ai_intro"
-      }
-    });
-    navigate(from, { replace: true });
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    completeLogin();
+    setFormMessage("");
+    setIsSubmitting(true);
+
+    try {
+      const response = await login({ email, password });
+      setSession({
+        token: response.data.access_token,
+        user: mapApiUserToStudentUser(response.data.user)
+      });
+      navigate(from, { replace: true });
+    } catch (error) {
+      setFormMessage(getApiErrorMessage(error, "登录失败，请检查邮箱和密码。"));
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -66,6 +74,8 @@ export function LoginPage() {
         <h1>进入你的学习空间</h1>
         <p>继续使用自己的资料、课程和对话。新账号可以在注册时选择空白开始，或带一门人工智能导论示例课程。</p>
         <form className="entry-form" onSubmit={handleSubmit}>
+          {notice ? <p className="form-info">{notice}</p> : null}
+          {formMessage ? <p className="form-error" role="alert">{formMessage}</p> : null}
           <label>
             邮箱
             <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" />
@@ -83,8 +93,8 @@ export function LoginPage() {
             <input type="checkbox" defaultChecked />
             <span>记住登录状态</span>
           </label>
-          <button className="primary-button" type="submit">
-            <span>登录</span>
+          <button className="primary-button" type="submit" disabled={isSubmitting}>
+            <span>{isSubmitting ? "登录中" : "登录"}</span>
             <ArrowRight size={18} aria-hidden="true" />
           </button>
         </form>

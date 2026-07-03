@@ -242,11 +242,12 @@ EduNova 标识
 
 ### 6.3 注册成功后
 
-注册成功后直接登录，并进入 AI 学习主页：
+注册成功后直接登录，并进入 AI 学习主页。注册接口只返回用户对象，前端随后调用登录接口拿到 JWT：
 
 ```text
 注册成功
--> 自动写入 token
+-> 自动调用登录接口
+-> 写入 token
 -> 进入 `/app`
 -> 根据 starter_mode 显示空状态或人工智能导论示例课程
 ```
@@ -300,7 +301,7 @@ EduNova 标识
 -> 选择“带一个示例课程开始”
 -> 系统复制人工智能导论示例课程到当前用户空间
 -> 进入 `/app`
--> 最近学习显示人工智能导论，资料库显示对应示例资料
+-> 后续真实主页和资料库接口接入后显示对应课程与资料
 ```
 
 后续如保留独立 `/demo` 路由，必须满足：
@@ -469,16 +470,16 @@ Phase 5 以后：
 
 ## 15. 当前实现状态
 
-Phase 3 当前已在 `frontend/` 中实现：
+当前已在 `frontend/` 中实现：
 
 - `/` 根据本地登录态跳转 `/login` 或 `/app`。
 - `/login`、`/register` 已有页面；`/demo` 保留为后续演示路由，不作为登录页主入口。
 - `/app/*` 使用 `ProtectedRoute` 保护，未登录会回到 `/login`。
 - 已登录用户访问 `/login` 或 `/register` 会通过 `PublicOnlyRoute` 回到 `/app`。
-- `authStore` 使用 Zustand 保存本地预览 token 和用户信息。
+- `authStore` 使用 Zustand 保存真实 JWT token 和用户信息。
 - API client 默认基础路径为 `/api/v1`，会自动附加 Bearer token；接口返回 401 时清理登录态，如果用户位于 `/app/*`，会返回 `/login`。
 - `frontend/src/api/` 已按业务域拆分 auth、courses、materials、profiles、resources、paths、tutor、practice、reports、demo、settings 等合同模块，路径与 `docs/API.md` 对齐。
-- 登录和注册当前只用于前端预览，未接真实 `/auth/register`、`/auth/login` 和 `/auth/me`；注册页已支持 `starter_mode` 预览逻辑。
+- Phase 4.1 已接真实 `/auth/register`、`/auth/login`、`/auth/me` 和 `/auth/logout`；注册页会提交 `starter_mode`，注册成功后自动调用登录接口写入 session。
 - `FirstRunGuide` 已作为学习空间中的轻量引导占位，真实触发条件需要 Phase 4 根据画像和课程上下文接入。
 - `/app` 已重做为总 AI 对话主页，包含贴边可收起主页历史、侧栏账号入口、中心 AI 学习入口、输入区资料库按钮、文件上传入口、最近学习轻量列表、发送后主页对话态和生成课程浮层。
 - P3.9 已把 `/app/library`、`/app/courses/:courseId`、资源工坊、画像、辅导、练习、报告和设置统一到同一套贴边工作区外壳，不再保留旧顶部导航。

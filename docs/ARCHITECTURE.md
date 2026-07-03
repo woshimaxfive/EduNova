@@ -119,7 +119,7 @@ frontend/src/
 - `ProtectedRoute` 统一保护 `/app/*`。
 - `PublicOnlyRoute` 处理已登录用户访问 `/login` 和 `/register`。
 - API client 收到 401 后清理登录态并跳回 `/login`。
-- 后续 Demo 入口由独立 service 管理，Phase 3A 使用本地预览会话，Phase 4 后接入 `/demo/status` 和 `/demo/reset`，避免登录页重新堆共享演示账号逻辑。
+- 后续 Demo 入口由独立 service 管理，避免登录页重新堆共享演示账号逻辑。
 
 前端状态分工：
 
@@ -145,7 +145,8 @@ frontend/src/
 | --- | --- |
 | `frontend/package.json` | pnpm、Vite、TypeScript、React、Tailwind CSS v4、Vitest、ESLint 依赖和脚本 |
 | `frontend/src/app` | `App`、`AppProviders`、集中路由、路由常量、`ProtectedRoute`、`PublicOnlyRoute` |
-| `frontend/src/features/auth/authStore.ts` | Zustand 登录态，本地预览 token 和用户信息 |
+| `frontend/src/features/auth/authStore.ts` | Zustand 登录态，保存真实 JWT token 和当前用户信息 |
+| `frontend/src/features/auth/authMappers.ts` | 把后端 `display_name`、`starter_mode` 映射成前端 `displayName`、`starterMode` |
 | `frontend/src/api/client.ts` | Axios 客户端，默认基础路径 `/api/v1`，自动附加 token，401 清理登录态并返回登录页 |
 | `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、profiles、resources、agents、paths、tutor、practice、reports、demo、settings |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和短状态信号的纯状态模型 |
@@ -155,7 +156,7 @@ frontend/src/
 
 当前限制：
 
-- Phase 3A 登录和注册只用于本地预览，不代表后端认证已经完成；注册 starter mode 已进入前端会话模型，后续后端需要落入注册接口和用户初始化流程。
+- Phase 4.1 已完成真实注册、登录、读取当前用户和退出闭环；注册 starter mode 已落入后端注册接口和用户初始化流程。
 - 当前 `/app` AI 对话主页使用前端样例主页会话、资料库和最近课程数据；后续由 `/dashboard/summary`、主页会话、资料库和最近课程接口替换。
 - 当前 `/app/courses/:courseId` 课程空间使用前端样例课程、知识点、资料、引用和 Agent 轨迹数据；后续由课程详情、RAG、资源生成和 Agent 日志接口替换。
 - 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面使用前端样例数据；后续由资料、画像、RAG、练习评估、掌握度报告和设置接口替换。

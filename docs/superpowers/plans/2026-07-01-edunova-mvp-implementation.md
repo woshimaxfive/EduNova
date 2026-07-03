@@ -121,7 +121,7 @@ rg --files
 
 - [ ] Add `docs/软件杯A3赛题.txt` to Git if it is the official local copy the user wants versioned.
 - [ ] Keep `.superpowers/`, `.agents/`, `.codex/`, virtual environments, Node modules, caches, logs and local uploads ignored.
-- [ ] Commit:
+- [x] Commit:
 
 ```powershell
 git add docs/软件杯A3赛题.txt .gitignore .gitattributes docs/superpowers/specs/2026-07-01-edunova-product-design.md docs/superpowers/plans/2026-07-01-edunova-mvp-implementation.md

@@ -10,7 +10,7 @@ import { getWorkspaceStatePanels } from "../features/workspace/workflowState";
 import { type StudioOutput } from "../types/api";
 import { PageFrame } from "./PageFrame";
 
-const resourceTypes: StudioOutput["resourceType"][] = ["讲解", "练习", "思维导图", "复盘报告", "PPT 大纲"];
+const resourceTypes: StudioOutput["resourceType"][] = ["讲解", "练习", "思维导图", "代码实操", "PPT 大纲"];
 const knowledgeOptions = ["监督学习", "反向传播", "神经网络", "搜索与知识表示"];
 
 const initialQueue = [
@@ -51,7 +51,7 @@ export function StudioPage() {
   }
 
   return (
-    <PageFrame title="资源工坊" description="生成讲解、练习、导图和复盘。">
+    <PageFrame title="资源工坊">
       <section className="student-panel studio-workbench" role="region" aria-label="资源生成工作台">
         <div className="student-panel-heading">
           <div>

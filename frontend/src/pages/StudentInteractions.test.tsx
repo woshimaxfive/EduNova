@@ -74,6 +74,8 @@ describe("student interaction affordances", () => {
     await user.click(screen.getByRole("button", { name: "Agent 过程" }));
 
     expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("RetrieverAgent");
+    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("PathAgent");
+    expect(screen.getByRole("region", { name: "回答展开详情" })).not.toHaveTextContent("PlannerAgent");
 
     await user.click(screen.getByRole("button", { name: "监督学习，当前焦点" }));
 
@@ -212,6 +214,8 @@ describe("student interaction affordances", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("课堂截图.png 已上传到资料库");
     expect(screen.getByRole("button", { name: /课堂截图.png/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /课堂截图.png/ })).toHaveTextContent("仅入库，暂不做 OCR");
+    expect(screen.queryByText("等待提取说明")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "图片" }));
 

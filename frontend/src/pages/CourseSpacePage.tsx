@@ -285,7 +285,7 @@ function AnswerDetailPanel({ activePanel }: AnswerDetailPanelProps) {
     return (
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
         <strong>Agent 过程</strong>
-        <p>RetrieverAgent 先检索课程资料，PlannerAgent 生成复习顺序，TutorAgent 再把结论写成可追问回答。</p>
+        <p>RetrieverAgent 先检索课程资料，PathAgent 生成复习顺序，TutorAgent 再把结论写成可追问回答。</p>
       </section>
     );
   }

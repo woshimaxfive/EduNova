@@ -17,7 +17,7 @@ export function SettingsPage() {
   }
 
   return (
-    <PageFrame title="设置" description="账号、模型和隐私边界。">
+    <PageFrame title="设置">
       <div className="settings-workspace">
         <section className="student-panel settings-section" role="region" aria-label="模型设置">
           <div className="settings-section-icon" aria-hidden="true">

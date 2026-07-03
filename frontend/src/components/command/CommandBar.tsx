@@ -7,7 +7,7 @@ import { useActionNotice } from "../feedback/useActionNotice";
 const suggestions = [
   "根据反向传播给我出 10 道期末题",
   "解释我为什么链式法则总错",
-  "把今天的学习整理成复盘报告"
+  "生成一个 Python 代码实操案例"
 ];
 
 export function CommandBar() {

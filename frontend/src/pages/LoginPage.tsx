@@ -15,8 +15,8 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const setSession = useAuthStore((state) => state.setSession);
-  const [email, setEmail] = useState("demo@edunova.local");
-  const [password, setPassword] = useState("Demo123456");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const from = (location.state as LocationState | null)?.from?.pathname ?? PATHS.app;
 
   function completeLogin() {

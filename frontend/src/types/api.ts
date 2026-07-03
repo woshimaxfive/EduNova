@@ -84,7 +84,7 @@ export type LearningTask = {
 export type StudioOutput = {
   id: number;
   title: string;
-  resourceType: "讲解" | "练习" | "思维导图" | "复盘报告" | "PPT 大纲";
+  resourceType: "讲解" | "练习" | "思维导图" | "代码实操" | "PPT 大纲";
   reviewStatus: "待生成" | "审核中" | "可使用" | "低依据";
 };
 

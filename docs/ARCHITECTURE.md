@@ -85,7 +85,7 @@ frontend/src/
 | `MaterialContextPanel` | 轻量资料上下文，连接独立资料库、主页对话和课程资料 |
 | `LearningCanvas` | 课程内可视化模块，展示课程焦点、知识点网络、学习路径节点、资料流入和薄弱点 |
 | `SourceCluster` | 课程内展示资料源、解析状态和引用覆盖度 |
-| `StudioDock` | 展示讲解、练习、思维导图、复盘报告、PPT 大纲等生成产物 |
+| `StudioDock` | 展示讲解、练习、思维导图、代码实操、PPT 大纲等生成产物 |
 | `EvidenceLayer` | 展示引用来源、Agent 轨迹、ReviewAgent 结果、低依据提示和质量评分 |
 | `AgentTimeline` | 展示多智能体步骤、耗时、状态和失败节点 |
 | `MasteryVisual` | 展示画像雷达、知识点掌握状态和薄弱点复习队列 |

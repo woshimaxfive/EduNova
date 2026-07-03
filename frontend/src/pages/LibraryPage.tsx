@@ -44,7 +44,7 @@ const initialLibraryFiles: LibraryFile[] = [
     title: "神经网络课堂板书",
     category: "image",
     extension: "PNG",
-    detail: "图片资料 · 等待提取说明",
+    detail: "仅入库，暂不做 OCR",
     modified: "周一",
     size: "540 KB",
     parseStatus: "processing"
@@ -72,7 +72,7 @@ function inferLibraryFile(file: File): LibraryFile {
     title: file.name,
     category: isImage ? "image" : "document",
     extension,
-    detail: isImage ? "图片资料" : "等待解析",
+    detail: isImage ? "仅入库，暂不做 OCR" : "等待解析",
     modified: "刚刚",
     size: formatFileSize(file.size),
     parseStatus: "processing"
@@ -123,7 +123,7 @@ export function LibraryPage() {
 
   return (
     <>
-      <PageFrame title="资料库" description="上传资料，搜索引用，也可以生成课程。">
+      <PageFrame title="资料库">
         <section className="library-file-shell" role="region" aria-label="文件库">
           <div className="library-command-row">
             <input
@@ -183,7 +183,7 @@ export function LibraryPage() {
                 <span className="library-file-main">
                   <strong>{material.title}</strong>
                   <small>
-                    {material.extension} · {material.detail} · {material.parseStatus === "completed" ? "已解析" : "解析中"}
+                    {material.extension} · {material.detail} · {material.parseStatus === "completed" ? "已解析" : material.category === "image" ? "已入库" : "解析中"}
                   </small>
                 </span>
                 <span>{material.modified}</span>
@@ -197,7 +197,9 @@ export function LibraryPage() {
             <section className="material-action-feedback" role="region" aria-label="资料动作反馈">
               <strong>{activeMaterial.title}</strong>
               <p>
-                {activeMaterial.parseStatus === "completed" ? "已完成解析" : "正在处理"}。完成后可查看片段、页码和置信度。
+                {activeMaterial.category === "image"
+                  ? "已入库。第一版不做图片 OCR，可作为资料附件保存。"
+                  : `${activeMaterial.parseStatus === "completed" ? "已完成解析" : "正在处理"}。完成后可查看片段、页码和置信度。`}
               </p>
             </section>
           ) : null}

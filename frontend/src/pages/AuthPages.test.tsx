@@ -23,6 +23,9 @@ describe("auth entry pages", () => {
     expect(screen.getByRole("heading", { name: "进入你的学习空间" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "创建学生账号" })).toHaveAttribute("href", "/register");
     expect(screen.queryByRole("button", { name: /演示学生/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "邮箱" })).toHaveValue("");
+    expect(screen.getByLabelText("密码")).toHaveValue("");
+    expect(screen.queryByDisplayValue("demo@edunova.local")).not.toBeInTheDocument();
   });
 
   it("lets registration choose blank or the built-in AI intro starter course", async () => {

@@ -53,7 +53,7 @@ export function ProfilePage() {
   }
 
   return (
-    <PageFrame title="学习画像" description="目标、基础和薄弱点会随学习更新。">
+    <PageFrame title="学习画像">
       <div className="student-workspace profile-workspace">
         <section className="student-panel profile-summary" role="region" aria-label="学习画像">
           <div className="student-panel-heading">

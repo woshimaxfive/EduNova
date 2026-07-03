@@ -23,7 +23,7 @@ export function ReportsPage() {
   }
 
   return (
-    <PageFrame title="学习报告" description="用掌握度和证据解释学习变化。">
+    <PageFrame title="学习报告">
       <div className="student-workspace reports-workspace">
         <section className="student-panel mastery-map" role="region" aria-label="掌握度地图">
           <div className="student-panel-heading">

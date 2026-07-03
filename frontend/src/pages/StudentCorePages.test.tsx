@@ -42,6 +42,8 @@ describe("student core pages", () => {
     expect(screen.getByRole("region", { name: "资源生成工作台" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "生成队列" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "资源生成区" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "代码实操" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "复盘报告" })).not.toBeInTheDocument();
   });
 
   it("renders the learning profile workspace", () => {

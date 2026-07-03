@@ -15,7 +15,7 @@ export function TutorPage() {
   const { notice, showNotice } = useActionNotice();
 
   return (
-    <PageFrame title="AI 辅导" description="基于课程资料继续追问。">
+    <PageFrame title="AI 辅导">
       <div className="student-workspace tutor-workspace">
         <section className="student-panel tutor-dialog" role="region" aria-label="AI 辅导对话">
           <div className="student-panel-heading">

@@ -155,6 +155,12 @@ export function LearningSpacePage() {
     return extension && extension.length <= 5 ? extension : "FILE";
   }
 
+  function isImageMaterial(file: File) {
+    const extension = file.name.split(".").pop()?.toUpperCase();
+
+    return file.type.startsWith("image/") || ["PNG", "JPG", "JPEG", "WEBP"].includes(extension ?? "");
+  }
+
   function handleUploadFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
@@ -166,7 +172,7 @@ export function LearningSpacePage() {
       id: `upload-${Date.now()}`,
       title: file.name,
       type: inferMaterialType(file.name),
-      detail: "刚刚上传 · 等待解析",
+      detail: isImageMaterial(file) ? "刚刚上传 · 仅入库，暂不做 OCR" : "刚刚上传 · 等待解析",
       modified: "刚刚",
       size: formatFileSize(file.size)
     };

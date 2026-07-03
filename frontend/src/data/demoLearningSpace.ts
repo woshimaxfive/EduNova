@@ -41,7 +41,7 @@ export const demoLearningSpace: LearningSpaceSnapshot = {
     { id: 1, title: "监督学习个性化讲解", resourceType: "讲解", reviewStatus: "可使用" },
     { id: 2, title: "反向传播薄弱点练习", resourceType: "练习", reviewStatus: "审核中" },
     { id: 3, title: "神经网络知识图谱", resourceType: "思维导图", reviewStatus: "待生成" },
-    { id: 4, title: "今日学习复盘", resourceType: "复盘报告", reviewStatus: "低依据" },
+    { id: 4, title: "Python 代码实操案例", resourceType: "代码实操", reviewStatus: "低依据" },
     { id: 5, title: "期末冲刺讲稿", resourceType: "PPT 大纲", reviewStatus: "待生成" }
   ],
   citations: [

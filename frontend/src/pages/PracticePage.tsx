@@ -25,7 +25,7 @@ export function PracticePage() {
   }
 
   return (
-    <PageFrame title="练习" description="作答后查看反馈和复习队列。">
+    <PageFrame title="练习">
       <div className="student-workspace practice-workspace">
         <section className="student-panel practice-question" role="region" aria-label="练习作答">
           <div className="student-panel-heading">

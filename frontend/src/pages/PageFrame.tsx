@@ -11,7 +11,6 @@ import { useAuthStore } from "../features/auth/authStore";
 
 type PageFrameProps = {
   title: string;
-  description: string;
   children: ReactNode;
 };
 

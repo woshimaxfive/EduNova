@@ -4,25 +4,29 @@
 
 ## 1. 当前阶段
 
-Phase 5.2 已完成第一版课程知识库检索地基，Phase 5.3 已把检索结果接入课程会话引用持久化：
+Phase 5.2 已完成第一版课程知识库检索地基，Phase 5.3 已把检索结果接入课程会话引用持久化，Phase 6.1 已把命中引用的课程会话接入非流式真实模型回答：
 
 - 已生成课程中的 `knowledge_chunks` 可以通过 `POST /api/v1/rag/search` 检索。
 - 检索只在当前登录用户自己的课程内进行。
 - 返回结果包含知识切片、课程资料、知识点、章节和匹配分数。
 - 课程空间发送课程问题时，会通过课程会话调用真实检索，并把引用写入 assistant 消息的 `citation_json`。
 - 刷新课程页或点击课程内历史后，前端从 `/tutor/sessions/{session_id}` 恢复消息和引用。
+- 当课程问题命中引用且模型配置可用时，后端使用 OpenAI-compatible Chat Completions 基于引用生成回答，并保存到 assistant `content`。
+- 当课程问题无引用时，不调用模型，继续返回资料依据不足。
+- 当有引用但模型未配置时，保留引用并提示“已找到资料依据，但当前未配置可用模型。”
 
-本阶段不接真实大模型，不生成最终 AI 回答，不做 embedding，不做向量召回。
+本阶段已接非流式真实模型回答，但仍不做 embedding、不做向量召回、不做流式输出。
 
 ## 2. 数据来源
 
-Phase 5.2 到 Phase 5.3 只读取或复用现有数据表：
+Phase 5.2 到 Phase 6.1 只读取或复用现有数据表：
 
 - `courses`：确认课程属于当前用户。
 - `course_materials`：提供资料标题和资料来源。
 - `knowledge_points`：提供知识点和章节上下文。
 - `knowledge_chunks`：提供可检索文本切片。
 - `chat_sessions`、`chat_messages`：保存课程会话消息和 assistant `citation_json`。
+- `model_settings`：保存用户自己的 OpenAI-compatible 模型配置和加密 Key。
 
 本阶段不新增数据库迁移，`knowledge_chunks.embedding` 继续允许为空。
 
@@ -83,15 +87,24 @@ Authorization: Bearer <token>
 }
 ```
 
-## 5. 后续演进
+## 5. 课程 RAG 回答生成
 
-Phase 6 再进入真实 RAG 生成：
+Phase 6.1 的课程回答生成规则：
 
-- 接模型 Provider。
+- 只在 `scope=course` 会话中启用，不影响主页 `scope=home` 会话。
+- 先检索课程 `knowledge_chunks`，再决定是否调用模型。
+- prompt 只允许基于引用回答，要求说明依据，不允许编造资料外内容。
+- assistant `content` 保存模型返回文本，`citation_json` 保留检索引用，`trace_id` 记录本次模型调用。
+- 模型不可用、超时、鉴权失败、非 JSON 或空内容时返回可恢复错误，前端保留输入，不写入半截 assistant 消息。
+
+## 6. 后续演进
+
+Phase 6 后续继续演进：
+
 - 为知识切片生成 embedding。
 - 使用 pgvector 做向量召回。
 - 将关键词召回和向量召回融合。
-- 让 AI 回答基于检索结果生成，并保留引用。
+- 支持流式输出。
 - 加入低依据提示和 ReviewAgent 审核。
 
-Phase 5.2 的目标是让引用链路先真实存在，避免后续 AI 回答变成无来源的文本生成。Phase 5.3 则把这条引用链保存到课程会话里，保证刷新页面、切换课程历史后引用仍然可追溯。
+Phase 5.2 的目标是让引用链路先真实存在，避免后续 AI 回答变成无来源的文本生成。Phase 5.3 则把这条引用链保存到课程会话里，保证刷新页面、切换课程历史后引用仍然可追溯。Phase 6.1 在此基础上接入真实模型，但继续把引用作为回答前提。

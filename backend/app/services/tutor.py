@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -13,6 +14,7 @@ from backend.app.schemas.tutor import TutorSessionDetail, TutorSessionSummary, s
 TEMPLATE_ASSISTANT_REPLY = "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。"
 COURSE_ASSISTANT_REPLY_WITH_CITATIONS = "我先从课程资料里找到了相关依据。下面保留真实引用片段，后续接入大模型后会基于这些来源生成完整回答。"
 COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS = "我先检查了课程资料，但还没有足够依据支撑这个问题。"
+COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED = "已找到资料依据，但当前未配置可用模型。"
 
 
 class InvalidSessionScopeError(ValueError):
@@ -62,6 +64,17 @@ class TutorSessionRepository(Protocol):
 class CourseCitationSearcher(Protocol):
     def search(self, user: User, course_id: int, query: str, top_k: int) -> Any:
         ...
+
+
+class CourseAnswerGenerator(Protocol):
+    def generate(self, user: User, question: str, citations: list[dict[str, Any]]) -> Any:
+        ...
+
+
+@dataclass(frozen=True)
+class GeneratedAnswer:
+    content: str
+    trace_id: str | None
 
 
 class SqlAlchemyTutorSessionRepository:
@@ -139,9 +152,11 @@ class TutorSessionService:
         self,
         repository: TutorSessionRepository,
         course_citation_searcher: CourseCitationSearcher | None = None,
+        course_answer_generator: CourseAnswerGenerator | None = None,
     ) -> None:
         self.repository = repository
         self.course_citation_searcher = course_citation_searcher
+        self.course_answer_generator = course_answer_generator
 
     def create_session(
         self,
@@ -209,14 +224,20 @@ class TutorSessionService:
             trace_id=None,
         )
         citation_json = self._search_course_citations(user=user, session=session, message_text=message_text)
-        assistant_reply = self._build_assistant_reply(session=session, citation_json=citation_json)
+        generated_answer = self._generate_course_answer(
+            user=user,
+            session=session,
+            message_text=message_text,
+            citation_json=citation_json,
+        )
+        assistant_reply = generated_answer.content or self._build_assistant_reply(session=session, citation_json=citation_json)
         assistant_message = ChatMessage(
             session_id=session.id,
             user_id=user.id,
             role="assistant",
             content=assistant_reply,
             citation_json=citation_json,
-            trace_id=None,
+            trace_id=generated_answer.trace_id,
         )
 
         try:
@@ -230,6 +251,24 @@ class TutorSessionService:
             raise
 
         return session_detail_to_api(session, self.repository.list_messages(session.id))
+
+    def _generate_course_answer(
+        self,
+        user: User,
+        session: ChatSession,
+        message_text: str,
+        citation_json: list[dict[str, Any]],
+    ) -> GeneratedAnswer:
+        if session.scope != "course" or not citation_json:
+            return GeneratedAnswer(content="", trace_id=None)
+        if self.course_answer_generator is None:
+            return GeneratedAnswer(content=COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED, trace_id=None)
+
+        answer = self.course_answer_generator.generate(user=user, question=message_text, citations=citation_json)
+        return GeneratedAnswer(
+            content=str(getattr(answer, "content", "") or ""),
+            trace_id=getattr(answer, "trace_id", None),
+        )
 
     def _search_course_citations(self, user: User, session: ChatSession, message_text: str) -> list[dict[str, Any]]:
         if session.scope != "course" or session.course_id is None or self.course_citation_searcher is None:
@@ -269,7 +308,7 @@ class TutorSessionService:
         if session.scope != "course":
             return TEMPLATE_ASSISTANT_REPLY
         if citation_json:
-            return COURSE_ASSISTANT_REPLY_WITH_CITATIONS
+            return COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED
         return COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS
 
     def _get_session_for_user(self, user_id: int, session_id: int) -> ChatSession:

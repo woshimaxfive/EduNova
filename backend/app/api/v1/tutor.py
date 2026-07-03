@@ -4,9 +4,13 @@ from fastapi import APIRouter, Depends, Query, status
 
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
+from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.models import User
+from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.tutor import CreateTutorSessionRequest, SendTutorMessageRequest
+from backend.app.services.course_answers import CourseAnswerGenerationError, CourseAnswerService
+from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 from backend.app.services.rag import RagService, SqlAlchemyRagRepository
 from backend.app.services.tutor import (
     EmptyMessageError,
@@ -21,9 +25,15 @@ router = APIRouter(prefix="/tutor", tags=["tutor"])
 
 
 def get_tutor_session_service(db=Depends(get_db_session)) -> TutorSessionService:
+    model_settings_service = ModelSettingsService(
+        repository=SqlAlchemyModelSettingsRepository(db),
+        settings=get_settings(),
+        provider=OpenAICompatibleChatProvider(),
+    )
     return TutorSessionService(
         SqlAlchemyTutorSessionRepository(db),
         course_citation_searcher=RagService(SqlAlchemyRagRepository(db)),
+        course_answer_generator=CourseAnswerService(model_settings_service),
     )
 
 
@@ -97,6 +107,12 @@ def get_session(
             status_code=status.HTTP_404_NOT_FOUND,
             code="NOT_FOUND",
             message="会话不存在或无权访问。",
+        ) from exc
+    except CourseAnswerGenerationError as exc:
+        raise ApiError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="MODEL_PROVIDER_ERROR",
+            message=str(exc),
         ) from exc
 
     return api_response(detail.model_dump())

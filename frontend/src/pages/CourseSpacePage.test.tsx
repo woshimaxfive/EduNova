@@ -113,7 +113,7 @@ function renderCoursePage(options: CoursePageOptions = {}) {
   const defaultSendDetail = makeDetail(
     createdSession,
     "启发式搜索怎么复习？",
-    "我先从课程资料里找到了相关依据。下面保留真实引用片段，后续接入大模型后会基于这些来源生成完整回答。"
+    "模型回答：启发式搜索复习时先理解启发函数，再对比 A* 的实际代价和预估代价。"
   );
 
   apiClient.defaults.adapter = async (config) => {
@@ -341,6 +341,7 @@ describe("CourseSpacePage course tutor sessions", () => {
       })
     );
     expect(await screen.findAllByText("人工智能导论讲义.md")).not.toHaveLength(0);
+    expect(screen.getByText(/模型回答：启发式搜索复习/)).toBeInTheDocument();
     expect(screen.getAllByText("启发式搜索")).not.toHaveLength(0);
     expect(screen.getByText(/启发函数估计路径代价/)).toBeInTheDocument();
   });
@@ -400,7 +401,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     await user.type(input, "这次保存会失败吗？");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("课程会话保存失败，请稍后重试。");
+    expect(await screen.findByRole("status")).toHaveTextContent("模型暂不可用，请检查设置或稍后重试。");
     expect(input).toHaveValue("这次保存会失败吗？");
     expect(screen.queryByRole("region", { name: "课程即时对话" })).not.toBeInTheDocument();
   });

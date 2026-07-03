@@ -341,7 +341,7 @@ export function CourseSpacePage() {
       void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
       showNotice(citationCount > 0 ? "已保存课程回答和引用。" : "课程资料依据不足。", citationCount > 0 ? "success" : "warning");
     } catch {
-      showNotice("课程会话保存失败，请稍后重试。", "warning");
+      showNotice("模型暂不可用，请检查设置或稍后重试。", "warning");
     } finally {
       setIsSearchingCourse(false);
     }

@@ -1746,6 +1746,32 @@ a {
   background: var(--accent-strong);
 }
 
+.secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.62);
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.secondary-action:hover {
+  border-color: rgba(8, 127, 115, 0.3);
+  color: var(--accent-strong);
+  background: var(--surface-strong);
+}
+
 .library-file-shell {
   display: grid;
   gap: 12px;
@@ -2039,6 +2065,7 @@ a {
 
 .studio-control-grid select,
 .settings-form-row select,
+.settings-form-row input,
 .settings-inline-input input,
 .inline-edit-row input,
 .profile-answer-box textarea {
@@ -2061,6 +2088,7 @@ a {
 
 .studio-control-grid select:focus,
 .settings-form-row select:focus,
+.settings-form-row input:focus,
 .settings-inline-input input:focus,
 .inline-edit-row input:focus,
 .profile-answer-box textarea:focus {
@@ -2478,6 +2506,17 @@ a {
 
 .settings-form-row label {
   min-width: 148px;
+}
+
+.settings-model-grid label {
+  min-width: min(260px, 100%);
+}
+
+.settings-model-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .settings-toggle {

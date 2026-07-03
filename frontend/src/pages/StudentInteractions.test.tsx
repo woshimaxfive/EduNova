@@ -10,6 +10,7 @@ import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
+import { SETTINGS_ENDPOINTS, type ModelSettingsSummary } from "../api/settings";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
 import { CourseSpacePage } from "./CourseSpacePage";
@@ -491,7 +492,7 @@ describe("student interaction affordances", () => {
     expect(screen.getByRole("region", { name: "导出学习档案" })).toHaveTextContent("已生成 1 份学习档案");
   });
 
-  it("shows feedback for library and settings actions that await real APIs", async () => {
+  it("shows feedback for library actions that await real APIs", async () => {
     const user = userEvent.setup();
     let materials: MaterialListItem[] = [
       {
@@ -613,16 +614,120 @@ describe("student interaction affordances", () => {
     expect(courseMaterial).toHaveAttribute("aria-pressed", "true");
     expect(within(courseDialog).getByRole("button", { name: "生成课程" })).toBeEnabled();
 
+  });
+
+  it("loads saves and tests real model settings without leaking the raw API key", async () => {
+    const user = userEvent.setup();
+    let settingsSummary: ModelSettingsSummary = {
+      source: "system",
+      provider: "openai_compatible",
+      base_url: "https://system-model.example.local/v1",
+      chat_model: "system-chat",
+      embedding_model: "system-embedding",
+      has_api_key: true,
+      api_key_masked: "sk-s...cret",
+      can_use_model: true
+    };
+    const calls: Array<{ method: string; url: string; payload: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+      const payload = parsePayload(config.data);
+      calls.push({ method, url, payload });
+
+      if (url === SETTINGS_ENDPOINTS.model && method === "get") {
+        return {
+          data: { data: settingsSummary, trace_id: "trace_settings_get" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === SETTINGS_ENDPOINTS.model && method === "put") {
+        settingsSummary = {
+          source: "user",
+          provider: "openai_compatible",
+          base_url: "https://api.deepseek.com/v1",
+          chat_model: "deepseek-chat",
+          embedding_model: "bge-m3",
+          has_api_key: true,
+          api_key_masked: "sk-u...cret",
+          can_use_model: true
+        };
+
+        return {
+          data: { data: settingsSummary, trace_id: "trace_settings_put" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === SETTINGS_ENDPOINTS.testModel && method === "post") {
+        return {
+          data: {
+            data: {
+              ok: true,
+              source: settingsSummary.source,
+              chat_model: settingsSummary.chat_model,
+              message: "模型连接成功。"
+            },
+            trace_id: "trace_settings_test"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_settings_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
     renderPage(<SettingsPage />);
 
-    const settingsRegion = screen.getByRole("region", { name: "账号设置" });
+    expect(await screen.findByText("服务器配置")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("https://system-model.example.local/v1")).toBeInTheDocument();
+    expect(screen.getByText("sk-s...cret")).toBeInTheDocument();
+    expect(screen.queryByText("sk-••••••••")).not.toBeInTheDocument();
 
-    await user.clear(within(settingsRegion).getByLabelText("昵称"));
-    await user.type(within(settingsRegion).getByLabelText("昵称"), "冲刺学生");
-    await user.selectOptions(screen.getByLabelText("供应商"), "DeepSeek");
-    await user.click(screen.getByRole("button", { name: "保存设置" }));
+    await user.clear(screen.getByRole("textbox", { name: "Base URL" }));
+    await user.type(screen.getByRole("textbox", { name: "Base URL" }), "https://api.deepseek.com/v1");
+    await user.type(screen.getByLabelText("API Key"), "sk-user-secret");
+    await user.clear(screen.getByRole("textbox", { name: "聊天模型" }));
+    await user.type(screen.getByRole("textbox", { name: "聊天模型" }), "deepseek-chat");
+    await user.clear(screen.getByRole("textbox", { name: "向量模型" }));
+    await user.type(screen.getByRole("textbox", { name: "向量模型" }), "bge-m3");
+    await user.click(screen.getByRole("button", { name: "保存模型配置" }));
 
-    expect(within(settingsRegion).getByRole("status")).toHaveTextContent("冲刺学生 的设置已保存");
+    expect(await screen.findByRole("status")).toHaveTextContent("模型配置已保存");
+    expect(screen.getByText("个人配置")).toBeInTheDocument();
+    expect(screen.queryByText("sk-user-secret")).not.toBeInTheDocument();
+    expect(calls).toContainEqual({
+      method: "put",
+      url: SETTINGS_ENDPOINTS.model,
+      payload: {
+        provider: "openai_compatible",
+        base_url: "https://api.deepseek.com/v1",
+        api_key: "sk-user-secret",
+        chat_model: "deepseek-chat",
+        embedding_model: "bge-m3"
+      }
+    });
+
+    await user.click(screen.getByRole("button", { name: "测试连接" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("模型连接成功");
   });
 
   it("creates a real course from the library page and enters the new course", async () => {

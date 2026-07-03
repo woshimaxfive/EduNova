@@ -112,6 +112,7 @@ Authorization: Bearer <token>
 | `VALIDATION_ERROR` | 422 | 参数校验失败 |
 | `DUPLICATE_RESOURCE` | 409 | 重复资源 |
 | `UNSUPPORTED_FILE_TYPE` | 400 | 不支持的文件类型 |
+| `CONFIGURATION_ERROR` | 500 | 服务端配置缺失或不可用 |
 | `MODEL_PROVIDER_ERROR` | 502 | 模型服务异常 |
 | `INSUFFICIENT_EVIDENCE` | 200 | 资料依据不足，正常返回但标记低依据 |
 | `TASK_FAILED` | 500 | 长任务失败 |
@@ -918,7 +919,7 @@ Authorization: Bearer <token>
 
 ### POST `/tutor/sessions/{session_id}/messages`
 
-用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条模板 `assistant` 回复。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用关键词 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。当前仍不调用真实大模型、不做 embedding、不做联网搜索。
+用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条模板 `assistant` 回复。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用关键词 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。Phase 6.1 后，课程会话在命中引用且模型配置可用时，会通过 OpenAI-compatible Chat Completions 生成非流式真实回答；主页 `scope=home` 仍保持模板回复，不调用模型。
 
 请求：
 
@@ -935,14 +936,18 @@ Authorization: Bearer <token>
 - assistant 回复仍是模板占位。
 - `citation_json=[]`、`trace_id=null`。
 - 不调用课程 RAG，避免影响主页历史行为。
+- Phase 6.1 不让主页会话调用模型，避免没有课程引用时伪装成真实 RAG 回答。
 
 课程会话规则：
 
 - 命中课程知识切片时，assistant `citation_json` 采用 `/rag/search` 的结果字段结构：`chunk_id`、`course_id`、`material_id`、`knowledge_point_id`、`content`、`source_title`、`page_number`、`section_title`、`score`。
 - 无命中时 `citation_json=[]`，assistant 内容提示“资料依据不足”，前端不得伪造引用。
+- 有命中且可解析模型配置时，assistant `content` 保存模型基于引用生成的回答，`trace_id` 写入本次模型调用 trace。
+- 有命中但无可用模型配置时，assistant 保存“已找到资料依据，但当前未配置可用模型。”，引用仍保留。
+- 模型调用超时、鉴权失败、非 JSON 或空内容时返回 `MODEL_PROVIDER_ERROR`，前端保留输入，不写入半截 assistant 消息。
 - 课程空间刷新后，前端通过 `GET /tutor/sessions/{session_id}` 恢复消息和引用。
 
-真实 AI 生成、向量召回、低依据评分和 agent trace 仍在后续阶段接入。
+流式输出、embedding、向量召回、低依据评分和完整 agent trace 仍在后续阶段接入。
 
 ### GET `/tutor/sessions/{session_id}/stream`
 
@@ -1079,11 +1084,29 @@ Authorization: Bearer <token>
 
 ### GET `/settings/model`
 
-用途：获取当前模型设置。
+用途：获取当前模型设置摘要。Phase 6.1 已实现，必须携带 JWT。解析优先级为当前用户有效配置优先，其次使用 `.env` 中的系统模型配置；如果两者都不可用，返回 `source=none` 和 `can_use_model=false`。响应不会返回明文 API Key。
+
+响应：
+
+```json
+{
+  "data": {
+    "source": "user",
+    "provider": "openai_compatible",
+    "base_url": "https://api.example.com/v1",
+    "chat_model": "gpt-4.1-mini",
+    "embedding_model": "text-embedding-3-small",
+    "has_api_key": true,
+    "api_key_masked": "sk-u...cret",
+    "can_use_model": true
+  },
+  "trace_id": "trace_settings_001"
+}
+```
 
 ### PUT `/settings/model`
 
-用途：保存模型设置。
+用途：保存当前用户自己的 OpenAI-compatible 模型设置。Phase 6.1 已实现。用户 API Key 使用 Fernet 加密后写入 `model_settings.api_key_ciphertext`；没有 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，保存非空 Key 返回 `CONFIGURATION_ERROR`。`api_key` 为空字符串或缺省时保留原密钥。
 
 请求：
 
@@ -1097,11 +1120,27 @@ Authorization: Bearer <token>
 }
 ```
 
-响应不返回明文 API Key，只返回脱敏结果。
+响应同 `GET /settings/model`，不返回明文 API Key。
 
 ### POST `/settings/model/test`
 
-用途：测试模型连通性。
+用途：测试模型连通性。Phase 6.1 已实现。后端使用当前解析出的配置发送极短 Chat Completions 测试请求，成功或失败都只返回摘要，不记录完整 Key、完整 prompt 或上传资料原文。
+
+响应：
+
+```json
+{
+  "data": {
+    "ok": true,
+    "source": "user",
+    "chat_model": "gpt-4.1-mini",
+    "message": "模型连接成功。"
+  },
+  "trace_id": "trace_settings_002"
+}
+```
+
+模型 Provider 第一版只支持 OpenAI-compatible Chat Completions，目标接口为 `{base_url}/chat/completions`。接口形态参考 OpenAI 官方 Chat Completions API：https://platform.openai.com/docs/api-reference/chat/create 。
 
 ## 20. API 验收标准
 

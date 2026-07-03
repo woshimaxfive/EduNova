@@ -117,6 +117,26 @@ class FakeCourseCitationSearcher:
 
 
 @dataclass
+class FakeCourseAnswerGenerator:
+    content: str = "模型回答：启发式搜索要先理解启发函数，再练 A 星算法。"
+    trace_id: str | None = "trace_model_test"
+    should_raise: Exception | None = None
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def generate(self, user: User, question: str, citations: list[dict[str, Any]]) -> SimpleNamespace:
+        self.calls.append(
+            {
+                "user_id": user.id,
+                "question": question,
+                "citations": citations,
+            }
+        )
+        if self.should_raise is not None:
+            raise self.should_raise
+        return SimpleNamespace(content=self.content, trace_id=self.trace_id)
+
+
+@dataclass
 class TokenAuthRepository:
     user: User
 
@@ -246,7 +266,12 @@ def test_append_course_message_persists_real_citations_from_course_knowledge() -
             }
         ]
     )
-    service = module.TutorSessionService(repo, course_citation_searcher=citation_searcher)
+    answer_generator = FakeCourseAnswerGenerator()
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=citation_searcher,
+        course_answer_generator=answer_generator,
+    )
     session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
 
     detail = as_dict(service.append_message(user=user, session_id=session.id, content="启发式搜索怎么复习？"))
@@ -259,21 +284,47 @@ def test_append_course_message_persists_real_citations_from_course_knowledge() -
             "top_k": 5,
         }
     ]
+    assert answer_generator.calls == [
+        {
+            "user_id": 1,
+            "question": "启发式搜索怎么复习？",
+            "citations": [
+                {
+                    "chunk_id": 501,
+                    "course_id": 7,
+                    "material_id": 301,
+                    "knowledge_point_id": 401,
+                    "content": "启发式搜索利用启发函数估计路径代价。",
+                    "source_title": "人工智能导论讲义.md",
+                    "page_number": None,
+                    "section_title": "启发式搜索",
+                    "score": 9.5,
+                }
+            ],
+        }
+    ]
     assert [message["role"] for message in detail["messages"]] == ["user", "assistant"]
-    assert "课程资料里找到了相关依据" in detail["messages"][1]["content"]
+    assert detail["messages"][1]["content"] == "模型回答：启发式搜索要先理解启发函数，再练 A 星算法。"
     assert detail["messages"][1]["citation_json"][0]["chunk_id"] == 501
     assert detail["messages"][1]["citation_json"][0]["source_title"] == "人工智能导论讲义.md"
+    assert detail["messages"][1]["trace_id"] == "trace_model_test"
 
 
 def test_append_course_message_records_insufficient_evidence_without_fabricated_citations() -> None:
     module = load_tutor_module()
     user = make_user(1)
     repo = FakeTutorRepository(allowed_course_ids={7})
-    service = module.TutorSessionService(repo, course_citation_searcher=FakeCourseCitationSearcher(results=[]))
+    answer_generator = FakeCourseAnswerGenerator()
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=FakeCourseCitationSearcher(results=[]),
+        course_answer_generator=answer_generator,
+    )
     session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
 
     detail = as_dict(service.append_message(user=user, session_id=session.id, content="量子通信怎么复习？"))
 
+    assert answer_generator.calls == []
     assert "还没有足够依据" in detail["messages"][1]["content"]
     assert detail["messages"][1]["citation_json"] == []
 
@@ -297,14 +348,91 @@ def test_append_home_message_keeps_template_reply_and_does_not_call_course_searc
             }
         ]
     )
-    service = module.TutorSessionService(repo, course_citation_searcher=citation_searcher)
+    answer_generator = FakeCourseAnswerGenerator()
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=citation_searcher,
+        course_answer_generator=answer_generator,
+    )
     session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="主页答疑")
 
     detail = as_dict(service.append_message(user=user, session_id=session.id, content="主页怎么复习？"))
 
     assert citation_searcher.calls == []
+    assert answer_generator.calls == []
     assert "可以先把资料按章节和题型拆开" in detail["messages"][1]["content"]
     assert detail["messages"][1]["citation_json"] == []
+
+
+def test_append_course_message_with_citations_and_missing_model_config_saves_clear_prompt() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    citation_searcher = FakeCourseCitationSearcher(
+        results=[
+            {
+                "chunk_id": 501,
+                "course_id": 7,
+                "material_id": 301,
+                "knowledge_point_id": 401,
+                "content": "启发式搜索利用启发函数估计路径代价。",
+                "source_title": "人工智能导论讲义.md",
+                "page_number": None,
+                "section_title": "启发式搜索",
+                "score": 9.5,
+            }
+        ]
+    )
+    answer_generator = FakeCourseAnswerGenerator(content="已找到资料依据，但当前未配置可用模型。", trace_id=None)
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=citation_searcher,
+        course_answer_generator=answer_generator,
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+
+    detail = as_dict(service.append_message(user=user, session_id=session.id, content="启发式搜索怎么复习？"))
+
+    assert "当前未配置可用模型" in detail["messages"][1]["content"]
+    assert detail["messages"][1]["citation_json"][0]["chunk_id"] == 501
+    assert detail["messages"][1]["trace_id"] is None
+
+
+def test_append_course_message_model_failure_rolls_back_without_half_messages() -> None:
+    module = load_tutor_module()
+    answer_module = importlib.import_module("backend.app.services.course_answers")
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    citation_searcher = FakeCourseCitationSearcher(
+        results=[
+            {
+                "chunk_id": 501,
+                "course_id": 7,
+                "material_id": 301,
+                "knowledge_point_id": 401,
+                "content": "启发式搜索利用启发函数估计路径代价。",
+                "source_title": "人工智能导论讲义.md",
+                "page_number": None,
+                "section_title": "启发式搜索",
+                "score": 9.5,
+            }
+        ]
+    )
+    answer_generator = FakeCourseAnswerGenerator(
+        should_raise=answer_module.CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。")
+    )
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=citation_searcher,
+        course_answer_generator=answer_generator,
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+
+    with pytest.raises(answer_module.CourseAnswerGenerationError):
+        service.append_message(user=user, session_id=session.id, content="启发式搜索怎么复习？")
+
+    assert repo.messages == []
+    assert repo.rolled_back is False
 
 
 def test_get_session_and_append_message_reject_other_users_session() -> None:

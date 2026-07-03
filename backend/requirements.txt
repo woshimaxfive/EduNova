@@ -8,3 +8,5 @@ pgvector
 bcrypt
 PyJWT
 python-multipart
+httpx
+cryptography

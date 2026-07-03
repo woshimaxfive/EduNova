@@ -13,7 +13,7 @@ import { RAG_ENDPOINTS, searchRag } from "./rag";
 import { PROFILE_ENDPOINTS } from "./profiles";
 import { REPORT_ENDPOINTS } from "./reports";
 import { RESOURCE_ENDPOINTS } from "./resources";
-import { SETTINGS_ENDPOINTS } from "./settings";
+import { getModelSettings, saveModelSettings, SETTINGS_ENDPOINTS, testModelSettings } from "./settings";
 import { listTutorSessions, TUTOR_ENDPOINTS } from "./tutor";
 
 describe("frontend API contracts", () => {
@@ -185,6 +185,88 @@ describe("frontend API contracts", () => {
         }
       ]);
       expect(response.data).toEqual([]);
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("uses typed model settings API requests through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
+      });
+
+      return {
+        data: {
+          data:
+            config.method === "post"
+              ? {
+                  ok: true,
+                  source: "user",
+                  chat_model: "deepseek-chat",
+                  message: "模型连接成功。"
+                }
+              : {
+                  source: "user",
+                  provider: "openai_compatible",
+                  base_url: "https://api.deepseek.com/v1",
+                  chat_model: "deepseek-chat",
+                  embedding_model: "bge-m3",
+                  has_api_key: true,
+                  api_key_masked: "sk-u...cret",
+                  can_use_model: true
+                },
+          trace_id: "trace_settings_contract"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const summary = await getModelSettings();
+      const saved = await saveModelSettings({
+        provider: "openai_compatible",
+        base_url: "https://api.deepseek.com/v1",
+        api_key: "sk-user-secret",
+        chat_model: "deepseek-chat",
+        embedding_model: "bge-m3"
+      });
+      const tested = await testModelSettings();
+
+      expect(calls).toEqual([
+        {
+          url: SETTINGS_ENDPOINTS.model,
+          method: "get",
+          data: undefined
+        },
+        {
+          url: SETTINGS_ENDPOINTS.model,
+          method: "put",
+          data: {
+            provider: "openai_compatible",
+            base_url: "https://api.deepseek.com/v1",
+            api_key: "sk-user-secret",
+            chat_model: "deepseek-chat",
+            embedding_model: "bge-m3"
+          }
+        },
+        {
+          url: SETTINGS_ENDPOINTS.testModel,
+          method: "post",
+          data: undefined
+        }
+      ]);
+      expect(summary.data.source).toBe("user");
+      expect(saved.data.api_key_masked).toBe("sk-u...cret");
+      expect(tested.data.ok).toBe(true);
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

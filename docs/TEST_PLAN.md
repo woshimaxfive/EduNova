@@ -6,7 +6,7 @@
 
 EduNova 的测试目标不是只证明代码能运行，而是证明系统满足赛题要求、适合比赛演示、能够后续开源部署，并且关键 AI 输出具有可解释性和可信度。
 
-本文档是全项目测试计划。除“当前自动化验证入口”一节外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前阶段已经全部实现。当前已验收 FastAPI 最小骨架、`/api/health`、pytest、ruff、编码检查、Docker Compose 配置、PostgreSQL、Redis、backend 三服务真实启动健康检查、frontend 与 Nginx 服务配置、SQLAlchemy 数据库入口、Alembic 迁移环境、pgvector 扩展迁移、第一批核心业务表迁移、学习闭环基础表迁移、`users.starter_mode` 迁移、独立资料库迁移、人工智能导论内置课程包导入，以及 Phase 3 前端工程骨架、路由保护、登录入口、注册 starter mode、AI 对话主页、贴边可收起历史侧栏、侧栏账号入口、发送后主页对话态、底部学习输入区、输入区资料库浮层入口、文件上传入口、联网搜索激活态、Enter 发送、最近学习轻量列表、文件库式资料库、课程空间真实入口、独立学习路径页、学生端核心页面骨架、统一贴边工作区外壳、生成课程浮层、上传建课状态轨道、学习空间短状态信号、界面文案减法、本地交互反馈、P3.11 前端本地功能闭环、P3.13 路由与资料库精修、P3.15 可用性收口、P3.16 Phase 4 前口径对齐、Phase 4.1 真实注册登录认证闭环、Phase 4.2 `/dashboard/summary` 首页真实总览、Phase 4.3 `/tutor/sessions` 主页会话和消息持久化、Phase 4.4 `/materials` 真实资料库上传与列表闭环、Phase 5.1 `/courses/from-materials` 真实规则建课闭环、Phase 5.2 `/rag/search` 课程知识库检索引用、Phase 5.3 课程空间会话与引用持久化、前端 API 合同模块、前端 lint、Vitest 和生产构建。
+本文档是全项目测试计划。除“当前自动化验证入口”一节外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前阶段已经全部实现。当前已验收 FastAPI 最小骨架、`/api/health`、pytest、ruff、编码检查、Docker Compose 配置、PostgreSQL、Redis、backend 三服务真实启动健康检查、frontend 与 Nginx 服务配置、SQLAlchemy 数据库入口、Alembic 迁移环境、pgvector 扩展迁移、第一批核心业务表迁移、学习闭环基础表迁移、`users.starter_mode` 迁移、独立资料库迁移、人工智能导论内置课程包导入，以及 Phase 3 前端工程骨架、路由保护、登录入口、注册 starter mode、AI 对话主页、贴边可收起历史侧栏、侧栏账号入口、发送后主页对话态、底部学习输入区、输入区资料库浮层入口、文件上传入口、联网搜索激活态、Enter 发送、最近学习轻量列表、文件库式资料库、课程空间真实入口、独立学习路径页、学生端核心页面骨架、统一贴边工作区外壳、生成课程浮层、上传建课状态轨道、学习空间短状态信号、界面文案减法、本地交互反馈、P3.11 前端本地功能闭环、P3.13 路由与资料库精修、P3.15 可用性收口、P3.16 Phase 4 前口径对齐、Phase 4.1 真实注册登录认证闭环、Phase 4.2 `/dashboard/summary` 首页真实总览、Phase 4.3 `/tutor/sessions` 主页会话和消息持久化、Phase 4.4 `/materials` 真实资料库上传与列表闭环、Phase 5.1 `/courses/from-materials` 真实规则建课闭环、Phase 5.2 `/rag/search` 课程知识库检索引用、Phase 5.3 课程空间会话与引用持久化、Phase 6.1 `/settings/model` 模型配置和非流式真实课程 RAG 回答、前端 API 合同模块、前端 lint、Vitest 和生产构建。
 
 测试需要覆盖以下问题：
 
@@ -133,9 +133,10 @@ cd ..
 | `/materials/upload`、`/materials`、`/materials/{material_id}`、`/materials/{material_id}/progress`、`/courses/{course_id}/materials` | 无 token 401、当前用户隔离、TXT/Markdown 轻解析、图片仅入库且不 OCR、不支持扩展名、大小限制、未归属筛选、课程关联唯一性、进度状态稳定 |
 | `/courses/from-materials`、`/courses`、`/courses/{course_id}`、`/courses/{course_id}/overview`、`/courses/{course_id}/knowledge-points` | 无 token 401、当前用户隔离、TXT/Markdown 资料生成课程、Markdown 标题生成知识点、无标题 TXT 分段生成知识点、拒绝未解析资料和非文本资料、创建 Course/Enrollment/CourseMaterial/CourseMaterialLink/KnowledgePoint/KnowledgeChunk、课程列表和详情只返回当前用户课程 |
 | `/rag/search` | 检索结果、引用字段 |
+| `/settings/model`、`/settings/model/test` | 无 token 401、服务器配置摘要不泄露明文 Key、用户配置加密保存、空 `api_key` 保留原密钥、缺少加密 Key 返回配置错误、连接测试成功/失败稳定返回 |
 | `/resources/generate` | 5 类资源、trace_id、审核状态 |
 | `/paths/generate` | 学习路径、任务列表、推荐理由 |
-| `/tutor/sessions` | 无 token 401、创建 home session、课程 session 校验、当前用户隔离、发送消息写入 user 和模板 assistant、详情按时间返回 messages、列表只返回当前用户当前 scope；Phase 5.3 起课程 session 发送命中问题时 assistant `citation_json` 写入真实 chunk/source/section/score，无命中时为空引用且提示资料依据不足，主页 session 不触发课程检索 |
+| `/tutor/sessions` | 无 token 401、创建 home session、课程 session 校验、当前用户隔离、发送消息写入 user 和模板 assistant、详情按时间返回 messages、列表只返回当前用户当前 scope；Phase 5.3 起课程 session 发送命中问题时 assistant `citation_json` 写入真实 chunk/source/section/score，无命中时为空引用且提示资料依据不足，主页 session 不触发课程检索；Phase 6.1 起课程命中引用且模型可用时 assistant 内容来自模型、`trace_id` 非空，模型未配置时保留引用并提示未配置，模型失败时不写入半截 assistant |
 | `/practice/sessions` | 出题、提交答案、批改 |
 | `/reports/generate` | 学习报告、证据来源 |
 | `/demo/reset` | 演示数据重置 |
@@ -569,7 +570,8 @@ cd ..
 | Phase 5.1 | 已上传 TXT/Markdown 资料能生成真实课程结构，课程空间能读取真实标题和知识点 |
 | Phase 5.2 | 课程知识库检索能从当前用户课程 `knowledge_chunks` 返回真实引用，课程空间能展示资料来源和片段依据 |
 | Phase 5.3 | 课程空间会话能创建、复用、列出、读取和持久化消息；assistant `citation_json` 保存真实引用，刷新和点击课程内历史后仍能恢复消息与引用 |
-| Phase 6 | 模型 Provider、embedding、向量召回和真实 RAG 回答 |
+| Phase 6.1 | 模型设置接口、用户 Key 加密保存、OpenAI-compatible Provider、课程命中引用后的非流式真实 RAG 回答和未配置/失败提示 |
+| Phase 6 后续 | 流式输出、embedding、向量召回和 ReviewAgent 审核 |
 | Phase 7 | 对话生成 8 维画像和画像事件 |
 | Phase 8 | 生成 5 类资源并显示 Agent 轨迹 |
 | Phase 9 | 学习路径、掌握度图、复习队列可用 |
@@ -620,6 +622,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - 认证测试覆盖 bcrypt 密码哈希、JWT 生成解析、注册、登录、重复邮箱、弱密码、错误密码、无 token `/auth/me`、退出和 `ai_intro` starter 课程图复制。
 - 首页总览测试覆盖无 token `/dashboard/summary` 返回 401、授权路由返回当前用户 summary、blank 用户空状态、ai_intro 用户课程和资料、真实进度/画像/主页历史/资源摘要，以及 summary 服务只请求当前用户数据。
 - Tutor 会话测试覆盖无 token `/tutor/sessions` 返回 401、创建 home session、课程 session 缺少 `course_id` 校验、多用户隔离、追加消息写入 user 和模板 assistant、详情按时间返回 messages、列表只返回当前用户当前 scope；Phase 5.3 起还覆盖课程会话发送命中问题后写入真实 `citation_json`、无命中写入空引用和资料不足提示、主页会话不调用课程检索。
+- 模型设置测试覆盖 `/settings/model` 无 token 401、服务器配置摘要不泄露明文 Key、用户配置加密保存、空 `api_key` 保留原密钥、缺少 `MODEL_SETTINGS_ENCRYPTION_KEY` 时拒绝保存用户 Key、连接测试 fake Provider 成功、Provider 超时/401/非 JSON/空内容稳定错误，以及课程会话模型回答、模型未配置和模型失败回滚。
 - 课程生成测试覆盖无 token 访问课程接口返回 401、TXT/Markdown 资料生成课程、Markdown 标题知识点、无标题 TXT 分段知识点、多用户资料隔离、拒绝未解析和非文本资料、课程列表/详情/概览/知识点只返回当前用户课程。
 - Phase 0 到 Phase 3 补完测试覆盖学习闭环表 metadata、第三条迁移文件、frontend/nginx Compose 服务和学习路径路由。
 - 后端 ruff 检查。
@@ -634,6 +637,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 5.1 前端测试覆盖主页资料库浮层调用 `/courses/from-materials` 后跳转新课程、资料库页调用同一建课接口、API 错误时保留选择，以及课程空间通过 `/courses/{course_id}` 和 `/knowledge-points` 渲染真实标题、资料数和知识点。
 - Phase 5.2 前端测试覆盖 `rag.ts` API 合同、课程空间发送问题调用 `/rag/search`、命中时显示真实引用来源和片段、无命中时显示资料不足、检索失败时保留输入。
 - Phase 5.3 前端测试覆盖课程页加载 `scope=course&course_id=...` 会话列表、首次发送创建课程会话再发送消息、连续发送复用当前课程会话、点击课程内历史恢复真实 messages 和引用、无依据回答显示资料不足、发送失败保留输入。
+- Phase 6.1 前端测试覆盖 `settings.ts` 类型化 API 合同、设置页服务器/个人/未配置状态渲染、保存模型配置、连接测试成功/失败反馈、不显示固定假 Key、课程空间渲染后端返回的模型回答和真实引用、模型失败时保留输入。
 - 路由测试覆盖 `/app/courses/:courseId` 课程空间壳子，确认课程对话空间、知识画布、证据与 Agent 轨迹和资源生成区可见；覆盖 `/app/path` 学习路径页，确认学习路径、阶段任务和路径依据可见。
 - 学生核心页面测试覆盖文件库式资料库、文档/图片筛选、真实资料列表、资源工坊、学习画像、AI 辅导、练习、报告和设置页面的核心区域。
 - P3.7/P3.14/Phase 4.4 交互测试覆盖主页上传资料文件、资料库默认未选中与点选高亮、联网搜索激活态、发送后进入主页对话且不显示持久“已生成回答”状态条、课程回答展开、知识点详情、AI 辅导模式切换、练习提交校验、资料库上传、文档/图片筛选、生成课程资料选择、资料库引用反馈和设置保存反馈；Phase 4.4 起资料库上传和列表断言真实 `/materials` 调用。
@@ -659,8 +663,9 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 5.1 Codex 内置浏览器验收已覆盖注册 `ai_intro` 后 `/app` 显示当前用户自己的内置课程和资料；主页生成课程浮层默认未选中且主按钮禁用，点选已解析 Markdown 后调用真实 `/courses/from-materials` 并跳转 `/app/courses/{course_id}`；课程空间读取真实标题、资料数、知识点数和知识画布；`/app/library` 的生成课程入口也能从同一资料创建新课程；390px 移动宽度无水平溢出；退出后访问课程路由回到 `/login`。
 - Phase 5.2 Codex 内置浏览器验收需要覆盖生成课程后进入课程空间，发送能命中资料的课程问题并看到真实引用；发送无关问题显示资料不足；桌面和 390px 移动宽度无水平溢出。
 - Phase 5.3 Codex 内置浏览器验收需要覆盖登录后进入已有课程，发送第一条课程问题后课程内历史新增，连续追问仍在同一课程历史中，刷新课程页后历史、消息和引用仍存在，点击课程历史能恢复消息和引用，无关问题显示资料依据不足，桌面和 390px 移动宽度无水平溢出且输入区不遮挡内容。
+- Phase 6.1 Codex 内置浏览器验收需要覆盖设置页模型配置状态、保存个人 OpenAI-compatible 配置、连接测试反馈、课程空间命中资料问题显示真实模型回答和真实引用、无依据问题不伪造引用；如果本地没有真实可用模型 Key，必须覆盖未配置提示，真实外部模型调用在配置 Key 后补做。
 - Docker Compose 配置校验。
-- 当前未接入真实 AI 生成、embedding/向量 RAG、OCR、PDF/PPT/DOCX 深度解析、多智能体、真实资源生成、真实练习评估、报告导出文件和完整浏览器 E2E；这些检查将在后续阶段加入。真实后端认证已经进入 Phase 4.1 验证范围，首页真实总览已经进入 Phase 4.2 验证范围，主页会话持久化已经进入 Phase 4.3 验证范围，真实资料库上传与列表已经进入 Phase 4.4 验证范围，真实 TXT/Markdown 规则建课已经进入 Phase 5.1 验证范围，课程知识库检索引用已经进入 Phase 5.2 验证范围，课程空间会话引用持久化已经进入 Phase 5.3 验证范围。
+- 当前未接入流式输出、embedding/向量 RAG、OCR、PDF/PPT/DOCX 深度解析、多智能体、真实资源生成、真实练习评估、报告导出文件和完整浏览器 E2E；这些检查将在后续阶段加入。真实后端认证已经进入 Phase 4.1 验证范围，首页真实总览已经进入 Phase 4.2 验证范围，主页会话持久化已经进入 Phase 4.3 验证范围，真实资料库上传与列表已经进入 Phase 4.4 验证范围，真实 TXT/Markdown 规则建课已经进入 Phase 5.1 验证范围，课程知识库检索引用已经进入 Phase 5.2 验证范围，课程空间会话引用持久化已经进入 Phase 5.3 验证范围，模型配置和非流式真实课程 RAG 回答已经进入 Phase 6.1 验证范围。
 
 统一验证脚本是日常轻量门禁，不会自动启动 Docker 容器。
 

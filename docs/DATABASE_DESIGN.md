@@ -494,7 +494,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 
 ### 4.19 `model_settings`
 
-用途：保存用户模型设置。
+用途：保存用户模型设置。Phase 6.1 已复用本表，不新增迁移；用户 API Key 使用 Fernet 加密后写入 `api_key_ciphertext`，系统 `.env` 模型配置不写入本表。
 
 字段：
 
@@ -516,6 +516,8 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - 不保存明文 Key。
 - 日志不记录 Key。
 - 前端只显示脱敏 Key。
+- `api_key` 为空字符串或请求缺省时，保存接口保留原密钥。
+- 缺少 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，不允许保存新的用户 Key。
 
 ### 4.20 `learning_export_jobs`
 
@@ -675,6 +677,7 @@ Demo 数据要求：
 10. 资源、报告、课程内对话都能追溯用户、课程和 trace；主页对话能追溯用户和 trace。
 11. 两个不同用户的数据互不可见。
 12. Demo 数据可重置且不污染普通用户数据。
+13. Phase 6.1 后，用户模型 Key 必须加密保存，读取设置只能返回来源、模型、脱敏 Key 和可用性；课程 RAG 回答的 `trace_id` 和 `citation_json` 必须可追溯。
 
 当前已验证：
 
@@ -689,3 +692,4 @@ Demo 数据要求：
 - Phase 4.2 首页总览服务已验证只请求当前用户数据：blank 用户返回空课程/空资料/空历史，ai_intro 用户返回自己空间中的人工智能导论课程和资料，已有进度时显示真实进度，没有进度时显示“未开始”。
 - Phase 4.4 资料库服务已验证上传、列表、详情、进度和加入课程都只访问当前用户数据；迁移 `0005` 会把旧 `course_materials` 兼容复制为 `materials` 与 `course_material_links`。
 - Phase 5.1 课程生成服务已验证 TXT/Markdown 资料能创建 `courses`、`course_enrollments`、`course_materials`、`course_material_links`、`knowledge_points` 和 `knowledge_chunks`；A 用户不能用 B 用户资料建课，也不能读取 B 用户课程。
+- Phase 6.1 模型设置服务已验证用户 API Key 不以明文进入数据库，空 `api_key` 保存会保留原密钥，缺少加密 Key 时拒绝保存用户 Key；课程会话命中引用且模型可用时，assistant 内容来自模型回答，`citation_json` 保留真实引用，`trace_id` 非空。

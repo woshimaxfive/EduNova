@@ -98,7 +98,7 @@ MODEL_SETTINGS_ENCRYPTION_KEY=replace-with-fernet-key
 MODEL_REQUEST_TIMEOUT_SECONDS=20
 ```
 
-`SYSTEM_MODEL_*` 是服务器统一兜底配置，用户自己的配置通过 `/settings/model` 保存到 `model_settings`。`MODEL_SETTINGS_ENCRYPTION_KEY` 必须使用 Fernet key，生产环境必须替换为不可公开的强随机值；没有该值时，后端拒绝保存用户 API Key。`.env.example` 只能保留占位值，不能提交真实模型 Key。
+`SYSTEM_MODEL_*` 是服务器统一兜底配置，用户自己的配置通过 `/settings/model` 保存到 `model_settings`。`MODEL_SETTINGS_ENCRYPTION_KEY` 必须使用 Fernet key，生产环境必须替换为不可公开的强随机值；没有该值时，后端拒绝保存用户 API Key。`.env.example` 只能保留占位值，不能提交真实模型 Key。比赛演示建议优先配置讯飞星火 Spark 的 OpenAI-compatible 地址 `https://spark-api-open.xf-yun.com/v1` 和对应聊天模型；真实密钥只放 `.env` 或用户加密配置中。
 
 ## 4. 启动最小服务
 

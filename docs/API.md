@@ -1084,7 +1084,7 @@ Authorization: Bearer <token>
 
 ### GET `/settings/model`
 
-用途：获取当前模型设置摘要。Phase 6.1 已实现，必须携带 JWT。解析优先级为当前用户有效配置优先，其次使用 `.env` 中的系统模型配置；如果两者都不可用，返回 `source=none` 和 `can_use_model=false`。响应不会返回明文 API Key。
+用途：获取当前模型设置摘要。Phase 6.1 已实现，必须携带 JWT。解析优先级为当前用户有效配置优先，其次使用 `.env` 中的系统模型配置；如果两者都不可用，返回 `source=none` 和 `can_use_model=false`。响应不会返回明文 API Key。前端 Provider 预设首位为讯飞星火 Spark，但后端协议仍统一保存为 `openai_compatible`。
 
 响应：
 
@@ -1095,7 +1095,7 @@ Authorization: Bearer <token>
     "provider": "openai_compatible",
     "base_url": "https://api.example.com/v1",
     "chat_model": "gpt-4.1-mini",
-    "embedding_model": "text-embedding-3-small",
+    "embedding_model": null,
     "has_api_key": true,
     "api_key_masked": "sk-u...cret",
     "can_use_model": true
@@ -1106,17 +1106,16 @@ Authorization: Bearer <token>
 
 ### PUT `/settings/model`
 
-用途：保存当前用户自己的 OpenAI-compatible 模型设置。Phase 6.1 已实现。用户 API Key 使用 Fernet 加密后写入 `model_settings.api_key_ciphertext`；没有 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，保存非空 Key 返回 `CONFIGURATION_ERROR`。`api_key` 为空字符串或缺省时保留原密钥。
+用途：保存当前用户自己的 OpenAI-compatible 模型设置。Phase 6.1 已实现。用户 API Key 使用 Fernet 加密后写入 `model_settings.api_key_ciphertext`；没有 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，保存非空 Key 返回 `CONFIGURATION_ERROR`。`api_key` 为空字符串或缺省时保留原密钥。`embedding_model` 当前可选，Phase 6.1 课程回答仍使用关键词引用，embedding/向量召回留到后续阶段。
 
 请求：
 
 ```json
 {
   "provider": "openai_compatible",
-  "base_url": "https://api.example.com/v1",
+  "base_url": "https://spark-api-open.xf-yun.com/v1",
   "api_key": "example-key",
-  "chat_model": "example-chat-model",
-  "embedding_model": "example-embedding-model"
+  "chat_model": "4.0Ultra"
 }
 ```
 
@@ -1140,7 +1139,7 @@ Authorization: Bearer <token>
 }
 ```
 
-模型 Provider 第一版只支持 OpenAI-compatible Chat Completions，目标接口为 `{base_url}/chat/completions`。接口形态参考 OpenAI 官方 Chat Completions API：https://platform.openai.com/docs/api-reference/chat/create 。
+模型 Provider 第一版只支持 OpenAI-compatible Chat Completions，目标接口为 `{base_url}/chat/completions`。讯飞星火 Spark 推荐 Base URL 为 `https://spark-api-open.xf-yun.com/v1`，可选聊天模型包括 `lite`、`generalv3`、`pro-128k`、`max-32k`、`4.0Ultra`。接口形态参考 OpenAI 官方 Chat Completions API：https://platform.openai.com/docs/api-reference/chat/create 。
 
 ## 20. API 验收标准
 

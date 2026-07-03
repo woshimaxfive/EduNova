@@ -48,7 +48,7 @@ Nginx
 
 前端使用 React + TypeScript + Vite，定位为学生 AI 学习空间。具体设计基线见 [UI_UX_DESIGN.md](UI_UX_DESIGN.md)，入口与路由设计见 [FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)。
 
-第一版前端不采用后台管理式左侧菜单，不把首屏做成卡片堆。2026-07-02 P3 精修后，首页采用“贴左边缘主页侧栏 + 可收起历史对话 + 侧栏账号入口 + 中心 AI 学习入口 + 输入区资料库浮层按钮 + 最近学习轻量列表”的结构；发送主页问题后进入对话态，输入区移动到下方，靠近 ChatGPT 的对话工作方式。主页输入框已具备文件上传入口、资料库选择、生成课程入口、联网搜索激活态、深度思考激活态、语音入口和 Enter 发送/Shift+Enter 换行的前端行为。课程空间采用“课程内对话 + 今日任务 + 知识画布 + 资源工坊 + 证据层 + Agent 轨迹”的壳子；独立 `/app/path` 学习路径页展示阶段任务、路径依据和下一步行动，但不放到首页抢主视觉；资料库已调整为文件库式页面，按文档/图片等文件类型筛选，视觉通过半透明、细分隔线和背景模糊融入页面。P3.13 后，普通路由只保留短标题，不展示重复说明句；普通路由侧栏高亮当前页面，“新建对话”回到 `/app`；资料库上传只入库，不自动加入生成课程选择，生成课程浮层默认未选中。P3.15 后，回答附加信息默认折叠，资料库和生成课程主操作在未选资料前禁用，从资料库进入生成课程时只保留一个上层浮层，资源工坊只保留一个主生成入口。P3.9 之后受保护应用区统一使用 `AppSidebar` 贴边工作区外壳：资料库、资源工坊、画像、AI 辅导、练习、报告和设置不再保留旧顶部导航，且普通路由侧栏显示主页全局历史；课程空间复用侧栏视觉，但显示课程内历史；个人资料、设置和退出登录固定在侧栏底部；AI 辅导、练习、学习路径和报告也可从课程空间行动入口或回答展开区进入。注册页通过 `starter_mode` 决定是否复制人工智能导论示例课程，登录页不提供共享演示学生按钮。Phase 4.4 后，主页上传和 `/app/library` 资料库列表已经接入真实 `/materials` 接口，资料保存到当前用户独立资料库；Phase 5.1 后，主页和资料库的生成课程浮层已经接入 `/courses/from-materials`，成功后进入真实课程空间，课程标题、资料数、知识点数和知识点列表来自课程接口；Phase 5.2 后，课程空间问题可以检索真实 `knowledge_chunks` 并展示资料来源和片段依据；Phase 5.3 后，课程空间问题通过 `scope=course` 会话持久化，assistant 消息保存 RAG 引用 `citation_json`，刷新和点击课程内历史都能恢复消息与引用；Phase 6.1 后，设置页真实读取、保存和测试模型配置，课程空间在有课程引用且模型可用时展示非流式真实模型回答。后续继续由画像、练习评估、报告、资源生成、流式输出和 Agent 数据驱动。
+第一版前端不采用后台管理式左侧菜单，不把首屏做成卡片堆。2026-07-02 P3 精修后，首页采用“贴左边缘主页侧栏 + 可收起历史对话 + 侧栏账号入口 + 中心 AI 学习入口 + 输入区资料库浮层按钮 + 最近学习轻量列表”的结构；发送主页问题后进入对话态，输入区移动到下方，靠近 ChatGPT 的对话工作方式。主页输入框已具备文件上传入口、资料库选择、生成课程入口、联网搜索激活态、深度思考激活态、语音入口和 Enter 发送/Shift+Enter 换行的前端行为。课程空间采用“课程内对话 + 今日任务 + 知识画布 + 资源工坊 + 证据层 + Agent 轨迹”的壳子；独立 `/app/path` 学习路径页展示阶段任务、路径依据和下一步行动，但不放到首页抢主视觉；资料库已调整为文件库式页面，按文档/图片等文件类型筛选，视觉通过半透明、细分隔线和背景模糊融入页面。P3.13 后，普通路由只保留短标题，不展示重复说明句；普通路由侧栏高亮当前页面，“新建对话”回到 `/app`；资料库上传只入库，不自动加入生成课程选择，生成课程浮层默认未选中。P3.15 后，回答附加信息默认折叠，资料库和生成课程主操作在未选资料前禁用，从资料库进入生成课程时只保留一个上层浮层，资源工坊只保留一个主生成入口。P3.9 之后受保护应用区统一使用 `AppSidebar` 贴边工作区外壳：资料库、资源工坊、画像、AI 辅导、练习、报告和设置不再保留旧顶部导航，且普通路由侧栏显示主页全局历史；课程空间复用侧栏视觉，但显示课程内历史；个人资料、设置和退出登录固定在侧栏底部；AI 辅导、练习、学习路径和报告也可从课程空间行动入口或回答展开区进入。注册页通过 `starter_mode` 决定是否复制人工智能导论示例课程，登录页不提供共享演示学生按钮。Phase 4.4 后，主页上传和 `/app/library` 资料库列表已经接入真实 `/materials` 接口，资料保存到当前用户独立资料库；Phase 5.1 后，主页和资料库的生成课程浮层已经接入 `/courses/from-materials`，成功后进入真实课程空间，课程标题、资料数、知识点数和知识点列表来自课程接口；Phase 5.2 后，课程空间问题可以检索真实 `knowledge_chunks` 并展示资料来源和片段依据；Phase 5.3 后，课程空间问题通过 `scope=course` 会话持久化，assistant 消息保存 RAG 引用 `citation_json`，刷新和点击课程内历史都能恢复消息与引用；Phase 6.1 后，设置页真实读取、保存和测试模型配置，并以讯飞星火 Spark 作为首位 Provider 预设，课程空间在有课程引用且模型可用时展示非流式真实模型回答。深度思考和联网搜索只属于对话输入区的运行期工具，不属于模型连接设置。后续继续由画像、练习评估、报告、资源生成、流式输出和 Agent 数据驱动。
 
 目录规划：
 
@@ -148,7 +148,7 @@ frontend/src/
 | `frontend/src/features/auth/authStore.ts` | Zustand 登录态，保存真实 JWT token 和当前用户信息 |
 | `frontend/src/features/auth/authMappers.ts` | 把后端 `display_name`、`starter_mode` 映射成前端 `displayName`、`starterMode` |
 | `frontend/src/api/client.ts` | Axios 客户端，默认基础路径 `/api/v1`，自动附加 token，401 清理登录态并返回登录页 |
-| `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、rag、profiles、resources、agents、paths、tutor、practice、reports、demo、settings；`materials.ts` 已接入上传、列表、详情、进度和课程关联，`courses.ts` 已接入课程列表、详情、概览、知识点和从资料生成课程，`rag.ts` 已接入课程知识库检索，`tutor.ts` 已接入主页和课程会话列表、详情、发送与引用持久化，`settings.ts` 已接入模型设置读取、保存和连接测试 |
+| `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、rag、profiles、resources、agents、paths、tutor、practice、reports、demo、settings；`materials.ts` 已接入上传、列表、详情、进度和课程关联，`courses.ts` 已接入课程列表、详情、概览、知识点和从资料生成课程，`rag.ts` 已接入课程知识库检索，`tutor.ts` 已接入主页和课程会话列表、详情、发送与引用持久化，`settings.ts` 已接入模型设置读取、保存和连接测试，向量模型字段当前可选 |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和短状态信号的纯状态模型 |
 | `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、学习路径、资源工坊、画像、辅导、练习、报告、设置和 404；学生端核心页面已从占位页补成可扩展工作区骨架 |
 | `frontend/src/components` | `AppSidebar`、学习空间壳子、学习画布、资料源簇、AI 命令栏、资源输出区、证据层、Agent 轨迹、上传建课状态轨道、学习空间状态条和统一 `ActionNotice` 反馈层；`/app` 首页已补 GPT 式贴边侧栏、可收起历史、侧栏账号入口、AI 对话主页、输入区资料库浮层入口、文件上传入口、最近学习轻量列表、发送后对话态和生成课程浮层，回答附加信息默认折叠；`/app/library` 已改为文件库式资料管理页，资料选择和生成课程主操作具备禁用态，资料库到生成课程只保留单一上层浮层；`/app/courses/:courseId` 已接入真实课程详情、知识点、课程知识库检索引用、课程会话历史和引用持久化，同时保留资源、路径、练习等课程空间预备交互；资料库、课程空间、资源工坊、画像、辅导、练习、报告和设置复用同一贴边工作区视觉体系；`PageFrame` 只承担普通路由外壳，不抢占内部内容区语义 |
@@ -390,7 +390,7 @@ PathAgent 生成初始路径
 
 ## 9. 模型 Provider 架构
 
-Provider 抽象能力：
+Provider 抽象目标能力：
 
 - `chat_completion`。
 - `stream_chat_completion`。
@@ -398,13 +398,13 @@ Provider 抽象能力：
 - `model_list`。
 - `health_check`。
 
-Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版。系统设置支持：
+Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版。设置页支持：
 
-- 供应商名称。
+- Provider 预设，首位为讯飞星火 Spark。
 - Base URL。
-- API Key。
+- API Key / APIPassword。
 - 聊天模型。
-- Embedding 模型。
+- 可选 Embedding 模型预留字段。
 - 连通性测试。
 
 配置解析优先级：
@@ -413,7 +413,7 @@ Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版。系统设置�
 当前用户有效配置 -> .env 的 SYSTEM_MODEL_* -> 未配置提示
 ```
 
-用户 API Key 使用 `MODEL_SETTINGS_ENCRYPTION_KEY` 派生的 Fernet 加密后保存到 `model_settings.api_key_ciphertext`。`GET /settings/model` 只返回来源、模型、脱敏 Key 和可用性，不返回明文 Key。
+用户 API Key 使用 `MODEL_SETTINGS_ENCRYPTION_KEY` 派生的 Fernet 加密后保存到 `model_settings.api_key_ciphertext`。`GET /settings/model` 只返回来源、模型、脱敏 Key 和可用性，不返回明文 Key。设置页 Provider 预设首位是讯飞星火 Spark，实际后端协议仍走 OpenAI-compatible Chat Completions；`embedding_model` 是后续向量召回预留字段，Phase 6.1 可为空。
 
 降级策略：
 

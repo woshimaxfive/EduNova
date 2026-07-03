@@ -2512,6 +2512,36 @@ a {
   min-width: min(260px, 100%);
 }
 
+.settings-provider-field {
+  flex: 1 1 320px;
+}
+
+.settings-provider-note {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin: 0 0 2px;
+  padding: 10px 12px;
+  border: 1px solid rgba(8, 127, 115, 0.14);
+  border-radius: 14px;
+  color: var(--text-muted);
+  background: rgba(228, 247, 244, 0.46);
+  font-size: 0.84rem;
+}
+
+.settings-provider-note strong {
+  color: var(--accent-strong);
+  font-weight: 860;
+}
+
+.settings-field-hint {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
 .settings-model-summary {
   display: flex;
   flex-wrap: wrap;

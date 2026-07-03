@@ -15,7 +15,7 @@ export type ModelSettingsRequest = {
   base_url: string;
   api_key?: string;
   chat_model: string;
-  embedding_model: string;
+  embedding_model?: string;
 };
 
 export type ModelSettingsSummary = {

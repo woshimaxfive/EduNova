@@ -616,7 +616,7 @@ describe("student interaction affordances", () => {
 
   });
 
-  it("loads saves and tests real model settings without leaking the raw API key", async () => {
+  it("loads saves and tests real model settings with Spark provider presets", async () => {
     const user = userEvent.setup();
     let settingsSummary: ModelSettingsSummary = {
       source: "system",
@@ -650,11 +650,11 @@ describe("student interaction affordances", () => {
         settingsSummary = {
           source: "user",
           provider: "openai_compatible",
-          base_url: "https://api.deepseek.com/v1",
-          chat_model: "deepseek-chat",
-          embedding_model: "bge-m3",
+          base_url: "https://spark-api-open.xf-yun.com/v1",
+          chat_model: "4.0Ultra",
+          embedding_model: null,
           has_api_key: true,
-          api_key_masked: "sk-u...cret",
+          api_key_masked: "sp-u...oken",
           can_use_model: true
         };
 
@@ -700,14 +700,19 @@ describe("student interaction affordances", () => {
     expect(screen.getByDisplayValue("https://system-model.example.local/v1")).toBeInTheDocument();
     expect(screen.getByText("sk-s...cret")).toBeInTheDocument();
     expect(screen.queryByText("sk-••••••••")).not.toBeInTheDocument();
+    expect(screen.queryByText("深度思考")).not.toBeInTheDocument();
+    expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();
 
-    await user.clear(screen.getByRole("textbox", { name: "Base URL" }));
-    await user.type(screen.getByRole("textbox", { name: "Base URL" }), "https://api.deepseek.com/v1");
-    await user.type(screen.getByLabelText("API Key"), "sk-user-secret");
-    await user.clear(screen.getByRole("textbox", { name: "聊天模型" }));
-    await user.type(screen.getByRole("textbox", { name: "聊天模型" }), "deepseek-chat");
-    await user.clear(screen.getByRole("textbox", { name: "向量模型" }));
-    await user.type(screen.getByRole("textbox", { name: "向量模型" }), "bge-m3");
+    const providerPreset = screen.getByRole("combobox", { name: "Provider 预设" });
+    expect(within(providerPreset).getAllByRole("option")[0]).toHaveTextContent("讯飞星火 Spark");
+
+    await user.selectOptions(providerPreset, "spark");
+
+    expect(screen.getByRole("textbox", { name: "Base URL" })).toHaveValue("https://spark-api-open.xf-yun.com/v1");
+    expect(screen.getByRole("textbox", { name: "聊天模型" })).toHaveValue("4.0Ultra");
+    expect(screen.getByText(/lite、generalv3、pro-128k、max-32k、4.0Ultra/)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("API Key / APIPassword"), "spark-user-token");
     await user.click(screen.getByRole("button", { name: "保存模型配置" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("模型配置已保存");
@@ -718,10 +723,9 @@ describe("student interaction affordances", () => {
       url: SETTINGS_ENDPOINTS.model,
       payload: {
         provider: "openai_compatible",
-        base_url: "https://api.deepseek.com/v1",
-        api_key: "sk-user-secret",
-        chat_model: "deepseek-chat",
-        embedding_model: "bge-m3"
+        base_url: "https://spark-api-open.xf-yun.com/v1",
+        api_key: "spark-user-token",
+        chat_model: "4.0Ultra"
       }
     });
 

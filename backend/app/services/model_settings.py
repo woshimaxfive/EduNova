@@ -49,7 +49,7 @@ class SaveModelSettingsRequest(BaseModel):
     base_url: str = Field(min_length=1, max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
     chat_model: str = Field(min_length=1, max_length=120)
-    embedding_model: str = Field(min_length=1, max_length=120)
+    embedding_model: str | None = Field(default=None, max_length=120)
 
     @field_validator("base_url", "api_key", "chat_model", "embedding_model", mode="before")
     @classmethod
@@ -132,7 +132,7 @@ class ModelSettingsService:
         setting.provider = self._normalize_provider(payload.provider)
         setting.base_url = payload.base_url
         setting.chat_model = payload.chat_model
-        setting.embedding_model = payload.embedding_model
+        setting.embedding_model = payload.embedding_model or None
 
         if payload.api_key:
             setting.api_key_ciphertext = self._encrypt_api_key(payload.api_key)

@@ -26,7 +26,7 @@ Phase 5.2 到 Phase 6.1 只读取或复用现有数据表：
 - `knowledge_points`：提供知识点和章节上下文。
 - `knowledge_chunks`：提供可检索文本切片。
 - `chat_sessions`、`chat_messages`：保存课程会话消息和 assistant `citation_json`。
-- `model_settings`：保存用户自己的 OpenAI-compatible 模型配置和加密 Key。
+- `model_settings`：保存用户自己的 OpenAI-compatible 模型配置和加密 Key；设置页首位预设为讯飞星火 Spark，但后端协议仍统一走 OpenAI-compatible。
 
 本阶段不新增数据库迁移，`knowledge_chunks.embedding` 继续允许为空。
 

@@ -152,6 +152,10 @@ describe("student core pages", () => {
     expect(screen.getByRole("region", { name: "模型设置" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "隐私与数据" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "账号设置" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Provider 预设" })).toBeInTheDocument();
+    expect(screen.getByText("讯飞星火 Spark")).toBeInTheDocument();
+    expect(screen.queryByText("深度思考")).not.toBeInTheDocument();
+    expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存设置" })).toBeInTheDocument();
   });
 

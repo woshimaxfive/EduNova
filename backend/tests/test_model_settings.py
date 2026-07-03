@@ -183,6 +183,27 @@ def test_save_user_model_settings_encrypts_key_and_user_config_wins() -> None:
     assert runtime.chat_model == "user-chat"
 
 
+def test_save_user_model_settings_allows_embedding_model_to_be_optional() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=FakeProvider())
+    request = module.SaveModelSettingsRequest(
+        provider="openai_compatible",
+        base_url="https://spark-api-open.xf-yun.com/v1",
+        api_key="spark-user-token",
+        chat_model="4.0Ultra",
+    )
+
+    summary = as_dict(service.save(user, request))
+    stored = repo.settings_by_user[user.id]
+
+    assert stored.embedding_model is None
+    assert summary["embedding_model"] is None
+    assert summary["base_url"] == "https://spark-api-open.xf-yun.com/v1"
+    assert summary["chat_model"] == "4.0Ultra"
+
+
 def test_save_empty_api_key_preserves_existing_encrypted_key() -> None:
     module = load_model_settings_module()
     user = make_user()

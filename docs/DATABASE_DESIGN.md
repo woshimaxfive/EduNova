@@ -502,12 +502,12 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 | --- | --- | --- |
 | `id` | bigint | 主键 |
 | `user_id` | bigint | 用户 |
-| `provider` | varchar | 模型供应商 |
-| `base_url` | text | 接口地址 |
+| `provider` | varchar | 模型协议供应商，当前统一为 `openai_compatible` |
+| `base_url` | text | OpenAI-compatible 接口地址，讯飞星火 Spark 推荐 `https://spark-api-open.xf-yun.com/v1` |
 | `api_key_ciphertext` | text | 加密后的 API Key |
 | `chat_model` | varchar | 聊天模型 |
-| `embedding_model` | varchar | 向量模型 |
-| `tool_flags_json` | jsonb | 工具开关 |
+| `embedding_model` | varchar | 可空向量模型，Phase 6.1 暂未启用 embedding |
+| `tool_flags_json` | jsonb | 预留工具标记，当前设置页不管理联网搜索或深度思考 |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -518,6 +518,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - 前端只显示脱敏 Key。
 - `api_key` 为空字符串或请求缺省时，保存接口保留原密钥。
 - 缺少 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，不允许保存新的用户 Key。
+- 设置页 Provider 预设首位为讯飞星火 Spark；该预设不新增表字段，只负责填充 OpenAI-compatible 连接参数。
 
 ### 4.20 `learning_export_jobs`
 

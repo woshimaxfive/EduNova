@@ -38,6 +38,9 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260701_0001_enable_pgvector.py`：启用 pgvector 扩展。
 - `backend/migrations/versions/20260701_0002_create_core_learning_tables.py`：创建用户、课程、选课、资料、知识点和知识切片表。
 - `backend/migrations/versions/20260701_0003_create_learning_closure_tables.py`：创建画像、学习路径、生成资源、Agent 轨迹、练习、报告、对话和模型设置基础表。
+- `backend/migrations/versions/20260701_0004_add_user_starter_mode.py`：创建注册初始化方式字段。
+
+Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有的 `users`、`student_profiles`、`courses`、`course_enrollments`、`course_materials`、`chat_sessions` 和 `generated_resources`，把它们整理为首页总览响应。
 
 ## 3. 核心关系图
 
@@ -663,3 +666,4 @@ Demo 数据要求：
 - `users.starter_mode` 已进入模型和迁移合同，旧用户默认 `blank`。
 - 人工智能导论内置课程包可导入，包含 12 个知识点和 24 个基础资料切片。
 - 内置课程导入具备幂等性，重复执行不会创建重复课程。
+- Phase 4.2 首页总览服务已验证只请求当前用户数据：blank 用户返回空课程/空资料/空历史，ai_intro 用户返回自己空间中的人工智能导论课程和资料，已有进度时显示真实进度，没有进度时显示“未开始”。

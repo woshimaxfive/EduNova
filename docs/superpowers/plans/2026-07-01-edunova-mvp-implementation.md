@@ -514,7 +514,7 @@ Current Phase 3.1 implementation note:
 - P3.15 tightened the frontend usability baseline: answer insights are collapsed by default, material actions are disabled until the user selects files, library-to-course generation uses a single overlay, and 资源工坊 keeps one primary generate action.
 - Browser visual checks covered P3R3 `/app` at desktop and mobile widths with no horizontal overflow; the material-library drawer and course generation dialog open and remain readable.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
-- `/dashboard/summary`, upload/RAG/AI data and final browser E2E remain later-phase work; real backend auth has entered Phase 4.1.
+- Phase 4.1 connected real backend auth; Phase 4.2 connected protected `/dashboard/summary` so `/app` home history, recent courses and material drawer data come from the current user summary. Upload parsing, home-message persistence, RAG, AI data and later browser E2E coverage remain later-phase work.
 
 ### Task 3.2: Add Frontend Data Contracts
 
@@ -600,20 +600,19 @@ git commit -m "feat(auth): add student authentication"
 - [x] Implement route return after login for users redirected from `/app/*`.
 - [ ] Connect Demo entry to `/demo/status` and `/demo/reset`.
 - [ ] Show FirstRunGuide for new accounts without profile or selected course.
-- [ ] LearningSpace page shows:
+- [x] LearningSpace page shows Phase 4.2 summary-backed:
 
 ```text
 profile summary
-current course
-today tasks
 recent resources
-learning canvas backed by `/dashboard/summary` response data
+recent courses backed by `/dashboard/summary` response data
+home conversations backed by `/dashboard/summary` response data
+material drawer backed by `/dashboard/summary` response data
 AI command suggestions
-Resource output summary
-evidence layer entry with latest citations and Agent trace
+evidence summary
 ```
 
-- [ ] Backend adds:
+- [x] Backend adds:
 
 ```text
 GET /dashboard/summary

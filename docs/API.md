@@ -242,7 +242,7 @@ Authorization: Bearer <token>
 
 ### GET `/dashboard/summary`
 
-用途：获取 AI 学习主页首屏总览。Phase 3R3 精修后，该接口服务贴边可收起历史侧栏、侧栏账号入口、输入框建议、发送后主页对话态、输入区资料库浮层入口、文件上传入口、联网搜索/深度思考工具状态和最近学习轻量列表，不再默认绑定某一门课程。
+用途：获取 AI 学习主页首屏总览。Phase 4.2 已实现该接口，要求携带 JWT，只读取当前登录用户自己的课程、课程资料、主页会话、画像和资源记录。该接口服务贴边可收起历史侧栏、侧栏账号入口、输入框建议、发送后主页对话态、输入区资料库浮层入口、文件上传入口、联网搜索/深度思考工具状态和最近学习轻量列表，不默认绑定某一门课程。
 
 响应包含：
 
@@ -250,11 +250,18 @@ Authorization: Bearer <token>
 - 主页最近对话。
 - 最近课程或最近学习空间。
 - 资料库摘要，默认不自动选中资料；前端点选后才作为本次对话参考。
+- 最近资料列表。
+- 最近资源列表。
 - 输入框快捷建议。
-- 可选的当前上下文资料。
-- 可选的最近资源。
-- AI 命令建议。
 - 证据层摘要。
+- 空状态类型和文案。
+
+阶段边界：
+
+- `blank` 注册用户返回空课程、空资料、空主页历史和 `empty_state.kind=blank`。
+- `ai_intro` 注册用户返回复制到该用户空间的人工智能导论课程和资料，不返回共享系统模板。
+- 课程进度只显示真实进度；没有进度记录时显示“未开始”，不使用前端写死的演示百分比。
+- 本接口不创建会话、不上传资料、不触发 AI/RAG，也不生成课程。
 
 响应示例：
 
@@ -262,25 +269,61 @@ Authorization: Bearer <token>
 {
   "data": {
     "profile_summary": {
+      "display_name": "小新",
+      "starter_mode": "ai_intro",
+      "has_profile": true,
       "knowledge_foundation": "机器学习入门",
       "learning_goal": "期末前掌握神经网络"
     },
-    "recent_conversations": [],
-    "recent_courses": [],
+    "recent_conversations": [
+      {
+        "id": "501",
+        "title": "期末复习怎么开始",
+        "meta": "刚刚",
+        "scope": "home",
+        "updated_at": "2026-07-03T11:57:00Z"
+      }
+    ],
+    "recent_courses": [
+      {
+        "id": "101",
+        "title": "人工智能导论",
+        "source_type": "builtin",
+        "progress_label": "未开始",
+        "focus": "人工智能",
+        "next": "开始学习"
+      }
+    ],
     "material_library_summary": {
-      "material_count": 2,
-      "unassigned_count": 1
+      "material_count": 1,
+      "unassigned_count": 0
     },
+    "recent_materials": [
+      {
+        "id": "201",
+        "title": "人工智能导论讲义.md",
+        "type": "MD",
+        "detail": "已解析",
+        "modified": "今天",
+        "size": "12 KB"
+      }
+    ],
     "recent_resources": [],
     "command_suggestions": [
-      "嗨，同学，准备好一起学习了吗？",
-      "选择资料并生成课程",
-      "总结我最近上传的资料"
+      "帮我复习人工智能导论",
+      "把反向传播讲到我能做题",
+      "用这些资料生成期末复习课"
     ],
     "evidence_summary": {
       "citation_count": 0,
       "latest_trace_id": null,
       "low_evidence_count": 0
+    },
+    "empty_state": {
+      "kind": "starter",
+      "title": "从人工智能导论开始",
+      "description": "内置课程已经进入你的个人空间，可以直接开始学习。",
+      "action_label": "开始学习"
     }
   },
   "trace_id": "trace_20260701_004"

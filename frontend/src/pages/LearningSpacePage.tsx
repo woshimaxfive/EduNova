@@ -10,76 +10,19 @@ import {
   Sparkle,
   X
 } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { type ChangeEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { buildCoursePath } from "../app/routePaths";
+import { getDashboardSummary, type DashboardMaterial } from "../api/dashboard";
 import { ActionNotice } from "../components/feedback/ActionNotice";
 import { useActionNotice } from "../components/feedback/useActionNotice";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
-import { homeConversations } from "../data/demoConversations";
 import { useAuthStore } from "../features/auth/authStore";
 
-type LibraryMaterial = {
-  id: string;
-  title: string;
-  type: string;
-  detail: string;
-  modified: string;
-  size: string;
-};
-
-const initialLibraryMaterials: LibraryMaterial[] = [
-  {
-    id: "mat-1",
-    title: "人工智能导论课件",
-    type: "PPTX",
-    detail: "42 页 · 已解析",
-    modified: "今天",
-    size: "4.8 MB"
-  },
-  {
-    id: "mat-2",
-    title: "期末复习题 2025",
-    type: "PDF",
-    detail: "18 道题 · 已切片",
-    modified: "昨天",
-    size: "1.6 MB"
-  },
-  {
-    id: "mat-3",
-    title: "神经网络课堂讲义",
-    type: "DOCX",
-    detail: "7 个章节 · 可加入课程",
-    modified: "周一",
-    size: "820 KB"
-  }
-];
-
-const recentCourses = [
-  {
-    id: "course-ai",
-    title: "人工智能导论",
-    progress: "47%",
-    focus: "监督学习与神经网络",
-    next: "继续复习"
-  },
-  {
-    id: "course-final",
-    title: "期末冲刺课",
-    progress: "草稿",
-    focus: "由 3 份资料生成",
-    next: "补章节"
-  },
-  {
-    id: "course-python",
-    title: "Python 基础补齐",
-    progress: "12%",
-    focus: "列表、函数、文件读取",
-    next: "做练习"
-  }
-];
+type LibraryMaterial = DashboardMaterial;
 
 type HomeMessage = {
   id: string;
@@ -89,18 +32,17 @@ type HomeMessage = {
 
 type HomeAnswerPanel = "sources" | "path" | "thinking";
 
-const suggestedPrompts = ["帮我制定 7 天期末复习计划", "把反向传播讲到我能做题", "根据资料生成一门冲刺课"];
+const fallbackSuggestedPrompts = ["帮我制定 7 天期末复习计划", "把反向传播讲到我能做题", "根据资料生成一门冲刺课"];
 
 export function LearningSpacePage() {
-  const user = useAuthStore((state) => state.user);
-  const hasStarterContent = user?.starterMode !== "blank";
+  const token = useAuthStore((state) => state.token);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const homeChatStageRef = useRef<HTMLElement | null>(null);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
-  const [homeThreads, setHomeThreads] = useState(() => (hasStarterContent ? homeConversations : []));
+  const [localHomeThreads, setLocalHomeThreads] = useState<DashboardSummaryThread[]>([]);
   const [activeHomeThreadId, setActiveHomeThreadId] = useState<string | null>(null);
-  const [materials, setMaterials] = useState<LibraryMaterial[]>(() => (hasStarterContent ? initialLibraryMaterials : []));
+  const [uploadedMaterials, setUploadedMaterials] = useState<LibraryMaterial[]>([]);
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
@@ -111,6 +53,33 @@ export function LearningSpacePage() {
   const [expandedAnswerId, setExpandedAnswerId] = useState<string | null>(null);
   const { notice, showNotice } = useActionNotice();
   const hasHomeThread = messages.length > 0;
+  const dashboardQuery = useQuery({
+    queryKey: ["dashboard", "summary"],
+    queryFn: getDashboardSummary,
+    enabled: Boolean(token),
+    staleTime: 30_000
+  });
+  const dashboardSummary = dashboardQuery.data?.data;
+  const recentCourses = dashboardSummary?.recent_courses ?? [];
+  const suggestedPrompts = dashboardSummary?.command_suggestions?.length ? dashboardSummary.command_suggestions : fallbackSuggestedPrompts;
+  const emptyState = dashboardSummary?.empty_state;
+  const summaryHomeThreads = useMemo(
+    () => dashboardSummary?.recent_conversations.map(({ id, title, meta }) => ({ id, title, meta })) ?? [],
+    [dashboardSummary?.recent_conversations]
+  );
+  const homeThreads = useMemo(() => {
+    const localIds = new Set(localHomeThreads.map((thread) => thread.id));
+
+    return [...localHomeThreads, ...summaryHomeThreads.filter((thread) => !localIds.has(thread.id))];
+  }, [localHomeThreads, summaryHomeThreads]);
+  const materials = useMemo(
+    () => [...uploadedMaterials, ...(dashboardSummary?.recent_materials ?? [])],
+    [uploadedMaterials, dashboardSummary?.recent_materials]
+  );
+  const effectiveSelectedMaterialIds = useMemo(
+    () => selectedMaterialIds.filter((materialId) => materials.some((material) => material.id === materialId)),
+    [materials, selectedMaterialIds]
+  );
 
   useEffect(() => {
     if (!hasHomeThread) {
@@ -177,7 +146,7 @@ export function LearningSpacePage() {
       size: formatFileSize(file.size)
     };
 
-    setMaterials((current) => [uploadedMaterial, ...current]);
+    setUploadedMaterials((current) => [uploadedMaterial, ...current]);
     showNotice(`${file.name} 已上传到资料库。`, "success");
     event.target.value = "";
   }
@@ -216,12 +185,11 @@ export function LearningSpacePage() {
         content: "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。"
       }
     ]);
-    setHomeThreads((current) => {
-      if (shouldCreateThread) {
-        return [{ id: nextThreadId, title: question, meta: "刚刚" }, ...current];
-      }
+    setLocalHomeThreads((current) => {
+      const title = shouldCreateThread ? question : (homeThreads.find((thread) => thread.id === nextThreadId)?.title ?? question);
+      const nextThread = { id: nextThreadId, title, meta: "刚刚" };
 
-      return current.map((thread) => (thread.id === nextThreadId ? { ...thread, meta: "刚刚" } : thread));
+      return [nextThread, ...current.filter((thread) => thread.id !== nextThreadId)];
     });
     setActiveHomeThreadId(nextThreadId);
     setPrompt("");
@@ -298,7 +266,7 @@ export function LearningSpacePage() {
                       messageId={message.id}
                       activePanel={activeAnswerPanel}
                       expandedAnswerId={expandedAnswerId}
-                      selectedMaterialCount={selectedMaterialIds.length}
+                      selectedMaterialCount={effectiveSelectedMaterialIds.length}
                       isWebSearchEnabled={isWebSearchEnabled}
                       onChangePanel={setActiveAnswerPanel}
                       onSetExpandedAnswer={setExpandedAnswerId}
@@ -317,12 +285,12 @@ export function LearningSpacePage() {
             </div>
           )}
 
-          {selectedMaterialIds.length > 0 || isWebSearchEnabled ? (
+          {effectiveSelectedMaterialIds.length > 0 || isWebSearchEnabled ? (
             <div className="selected-materials-note">
               <LinkSimple size={16} weight="duotone" aria-hidden="true" />
               <span>
-                {selectedMaterialIds.length > 0
-                  ? `已选择 ${selectedMaterialIds.length} 份资料${isWebSearchEnabled ? "，联网搜索已开" : ""}。`
+                {effectiveSelectedMaterialIds.length > 0
+                  ? `已选择 ${effectiveSelectedMaterialIds.length} 份资料${isWebSearchEnabled ? "，联网搜索已开" : ""}。`
                   : "联网搜索已开。"}
               </span>
             </div>
@@ -415,7 +383,19 @@ export function LearningSpacePage() {
             </div>
           ) : null}
 
-          {!hasHomeThread && hasStarterContent ? (
+          {!hasHomeThread && dashboardQuery.isLoading ? (
+            <section className="recent-course-strip empty" aria-label="最近学习">
+              <strong>正在读取学习空间</strong>
+              <p>我们正在加载你的课程、资料和主页历史。</p>
+            </section>
+          ) : null}
+          {!hasHomeThread && !dashboardQuery.isLoading && dashboardQuery.isError ? (
+            <section className="recent-course-strip empty" aria-label="最近学习">
+              <strong>学习空间暂时没有读取成功</strong>
+              <p>稍后刷新页面，或重新登录后再试。</p>
+            </section>
+          ) : null}
+          {!hasHomeThread && !dashboardQuery.isLoading && !dashboardQuery.isError && recentCourses.length > 0 ? (
             <section className="recent-course-strip" aria-label="最近学习">
               <div className="recent-course-heading">
                 <span>最近学习</span>
@@ -432,7 +412,7 @@ export function LearningSpacePage() {
                         <strong>{course.title}</strong>
                         <small>{course.focus}</small>
                       </span>
-                      <em>{course.progress}</em>
+                      <em>{course.progress_label}</em>
                       <span className="course-next">{course.next}</span>
                     </Link>
                   </li>
@@ -440,10 +420,10 @@ export function LearningSpacePage() {
               </ul>
             </section>
           ) : null}
-          {!hasHomeThread && !hasStarterContent ? (
+          {!hasHomeThread && !dashboardQuery.isLoading && !dashboardQuery.isError && recentCourses.length === 0 ? (
             <section className="recent-course-strip empty" aria-label="最近学习">
-              <strong>还没有课程</strong>
-              <p>上传资料后可直接问，也可生成课程。</p>
+              <strong>{emptyState?.title ?? "还没有课程"}</strong>
+              <p>{emptyState?.description ?? "上传资料后可直接问，也可生成课程。"}</p>
             </section>
           ) : null}
         </section>
@@ -452,7 +432,7 @@ export function LearningSpacePage() {
       {isLibraryOpen ? (
         <MaterialLibraryDrawer
           materials={materials}
-          selectedMaterialIds={selectedMaterialIds}
+          selectedMaterialIds={effectiveSelectedMaterialIds}
           onToggleMaterial={toggleMaterialSelection}
           onOpenCourseGeneration={openCourseGeneration}
           onClose={() => setIsLibraryOpen(false)}
@@ -462,7 +442,7 @@ export function LearningSpacePage() {
       {isCourseDialogOpen ? (
         <CourseGenerationDialog
           materials={materials}
-          selectedMaterialIds={selectedMaterialIds}
+          selectedMaterialIds={effectiveSelectedMaterialIds}
           onToggleMaterial={toggleMaterialSelection}
           onClose={() => setIsCourseDialogOpen(false)}
           onCreate={createCourseDraft}
@@ -471,6 +451,12 @@ export function LearningSpacePage() {
     </LearningSpaceShell>
   );
 }
+
+type DashboardSummaryThread = {
+  id: string;
+  title: string;
+  meta: string;
+};
 
 type HomeAnswerInsightsProps = {
   messageId: string;

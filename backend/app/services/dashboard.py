@@ -1,0 +1,358 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import Protocol
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from backend.app.models import (
+    ChatSession,
+    Course,
+    CourseEnrollment,
+    CourseMaterial,
+    GeneratedResource,
+    StudentProfile,
+    User,
+)
+from backend.app.schemas.dashboard import (
+    DashboardConversation,
+    DashboardCourse,
+    DashboardMaterial,
+    DashboardResource,
+    DashboardSummary,
+    EmptyState,
+    EvidenceSummary,
+    MaterialLibrarySummary,
+    ProfileSummary,
+)
+
+
+class DashboardRepository(Protocol):
+    def get_profile(self, user_id: int) -> StudentProfile | None: ...
+
+    def list_recent_courses(self, user_id: int, limit: int) -> list[Course]: ...
+
+    def list_course_enrollments(self, user_id: int, course_ids: list[int]) -> list[CourseEnrollment]: ...
+
+    def list_recent_materials(self, user_id: int, limit: int) -> list[CourseMaterial]: ...
+
+    def count_materials(self, user_id: int) -> int: ...
+
+    def count_unassigned_materials(self, user_id: int) -> int: ...
+
+    def list_recent_home_conversations(self, user_id: int, limit: int) -> list[ChatSession]: ...
+
+    def list_recent_resources(self, user_id: int, limit: int) -> list[GeneratedResource]: ...
+
+
+class SqlAlchemyDashboardRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def get_profile(self, user_id: int) -> StudentProfile | None:
+        return self.db.scalar(select(StudentProfile).where(StudentProfile.user_id == user_id))
+
+    def list_recent_courses(self, user_id: int, limit: int) -> list[Course]:
+        return list(
+            self.db.scalars(
+                select(Course)
+                .where(Course.owner_id == user_id)
+                .order_by(Course.updated_at.desc(), Course.id.desc())
+                .limit(limit)
+            )
+        )
+
+    def list_course_enrollments(self, user_id: int, course_ids: list[int]) -> list[CourseEnrollment]:
+        if not course_ids:
+            return []
+
+        return list(
+            self.db.scalars(
+                select(CourseEnrollment).where(
+                    CourseEnrollment.user_id == user_id,
+                    CourseEnrollment.course_id.in_(course_ids),
+                )
+            )
+        )
+
+    def list_recent_materials(self, user_id: int, limit: int) -> list[CourseMaterial]:
+        return list(
+            self.db.scalars(
+                select(CourseMaterial)
+                .where(CourseMaterial.user_id == user_id)
+                .order_by(CourseMaterial.created_at.desc(), CourseMaterial.id.desc())
+                .limit(limit)
+            )
+        )
+
+    def count_materials(self, user_id: int) -> int:
+        return int(
+            self.db.scalar(
+                select(func.count()).select_from(CourseMaterial).where(CourseMaterial.user_id == user_id)
+            )
+            or 0
+        )
+
+    def count_unassigned_materials(self, user_id: int) -> int:
+        return int(
+            self.db.scalar(
+                select(func.count())
+                .select_from(CourseMaterial)
+                .where(CourseMaterial.user_id == user_id, CourseMaterial.course_id.is_(None))
+            )
+            or 0
+        )
+
+    def list_recent_home_conversations(self, user_id: int, limit: int) -> list[ChatSession]:
+        return list(
+            self.db.scalars(
+                select(ChatSession)
+                .where(
+                    ChatSession.user_id == user_id,
+                    ChatSession.scope == "home",
+                    ChatSession.archived_from_home.is_(False),
+                )
+                .order_by(ChatSession.updated_at.desc(), ChatSession.id.desc())
+                .limit(limit)
+            )
+        )
+
+    def list_recent_resources(self, user_id: int, limit: int) -> list[GeneratedResource]:
+        return list(
+            self.db.scalars(
+                select(GeneratedResource)
+                .where(GeneratedResource.user_id == user_id)
+                .order_by(GeneratedResource.updated_at.desc(), GeneratedResource.id.desc())
+                .limit(limit)
+            )
+        )
+
+
+class DashboardService:
+    def __init__(self, repository: DashboardRepository) -> None:
+        self.repository = repository
+
+    def build_summary(self, user: User) -> DashboardSummary:
+        profile = self.repository.get_profile(user.id)
+        courses = self.repository.list_recent_courses(user.id, limit=3)
+        enrollments = self.repository.list_course_enrollments(
+            user.id,
+            [course.id for course in courses],
+        )
+        materials = self.repository.list_recent_materials(user.id, limit=5)
+        conversations = self.repository.list_recent_home_conversations(user.id, limit=12)
+        resources = self.repository.list_recent_resources(user.id, limit=3)
+
+        recent_courses = self._build_courses(courses, enrollments)
+        recent_materials = [self._build_material(material) for material in materials]
+        recent_resources = [self._build_resource(resource) for resource in resources]
+
+        return DashboardSummary(
+            profile_summary=self._build_profile(user, profile),
+            recent_conversations=[
+                DashboardConversation(
+                    id=str(conversation.id),
+                    title=conversation.title,
+                    meta=self._relative_label(conversation.updated_at),
+                    scope="home",
+                    updated_at=self._iso_timestamp(conversation.updated_at),
+                )
+                for conversation in conversations
+            ],
+            recent_courses=recent_courses,
+            material_library_summary=MaterialLibrarySummary(
+                material_count=self.repository.count_materials(user.id),
+                unassigned_count=self.repository.count_unassigned_materials(user.id),
+            ),
+            recent_materials=recent_materials,
+            recent_resources=recent_resources,
+            command_suggestions=self._build_command_suggestions(user, recent_courses, recent_materials),
+            evidence_summary=self._build_evidence_summary(resources),
+            empty_state=self._build_empty_state(user, recent_courses, conversations, recent_resources, profile),
+        )
+
+    @staticmethod
+    def _build_profile(user: User, profile: StudentProfile | None) -> ProfileSummary:
+        profile_json = profile.profile_json if profile is not None else {}
+        return ProfileSummary(
+            display_name=user.display_name,
+            starter_mode=user.starter_mode,
+            has_profile=profile is not None,
+            knowledge_foundation=profile_json.get("knowledge_foundation"),
+            learning_goal=profile_json.get("learning_goal"),
+        )
+
+    @staticmethod
+    def _build_courses(courses: list[Course], enrollments: list[CourseEnrollment]) -> list[DashboardCourse]:
+        enrollment_by_course_id = {enrollment.course_id: enrollment for enrollment in enrollments}
+        result: list[DashboardCourse] = []
+
+        for course in courses:
+            enrollment = enrollment_by_course_id.get(course.id)
+            progress = Decimal(enrollment.progress_percent) if enrollment is not None else Decimal("0")
+            result.append(
+                DashboardCourse(
+                    id=str(course.id),
+                    title=course.title,
+                    source_type=course.source_type,
+                    progress_label=DashboardService._progress_label(progress),
+                    focus=course.subject or course.description or "等待生成学习重点",
+                    next="继续学习" if progress > 0 else "开始学习",
+                )
+            )
+
+        return result
+
+    @staticmethod
+    def _progress_label(progress: Decimal) -> str:
+        if progress <= 0:
+            return "未开始"
+
+        normalized = progress.quantize(Decimal("1")) if progress == progress.to_integral() else progress.normalize()
+        return f"{normalized}%"
+
+    @staticmethod
+    def _build_material(material: CourseMaterial) -> DashboardMaterial:
+        metadata = material.metadata_json or {}
+        return DashboardMaterial(
+            id=str(material.id),
+            title=material.filename,
+            type=DashboardService._material_type(material),
+            detail=DashboardService._parse_status_label(material.parse_status),
+            modified=DashboardService._date_label(material.created_at),
+            size=str(metadata.get("size_label") or metadata.get("size") or ""),
+        )
+
+    @staticmethod
+    def _material_type(material: CourseMaterial) -> str:
+        extension = material.filename.rsplit(".", 1)[-1].upper() if "." in material.filename else ""
+        if extension and len(extension) <= 5:
+            return extension
+
+        if "/" in material.content_type:
+            return material.content_type.rsplit("/", 1)[-1].upper()[:5] or "FILE"
+
+        return "FILE"
+
+    @staticmethod
+    def _parse_status_label(parse_status: str) -> str:
+        labels = {
+            "completed": "已解析",
+            "uploaded": "等待解析",
+            "pending": "等待解析",
+            "parsing": "解析中",
+            "failed": "解析失败",
+        }
+        return labels.get(parse_status, parse_status)
+
+    @staticmethod
+    def _build_resource(resource: GeneratedResource) -> DashboardResource:
+        return DashboardResource(
+            id=str(resource.id),
+            title=resource.title,
+            resource_type=resource.resource_type,
+            status=resource.status,
+            course_id=str(resource.course_id) if resource.course_id is not None else None,
+            updated_at=DashboardService._iso_timestamp(resource.updated_at),
+        )
+
+    @staticmethod
+    def _build_command_suggestions(
+        user: User,
+        courses: list[DashboardCourse],
+        materials: list[DashboardMaterial],
+    ) -> list[str]:
+        if not courses and not materials:
+            return ["上传第一份资料", "先和 EduNova 聊聊我的学习情况", "用资料生成一门课程"]
+
+        if user.starter_mode == "ai_intro" and courses:
+            return ["帮我复习人工智能导论", "把反向传播讲到我能做题", "用这些资料生成期末复习课"]
+
+        return ["继续最近课程", "用我的资料生成一门课程", "先帮我拆解复习计划"]
+
+    @staticmethod
+    def _build_evidence_summary(resources: list[GeneratedResource]) -> EvidenceSummary:
+        citation_count = sum(len(resource.citation_json or []) for resource in resources)
+        low_evidence_count = len(
+            [
+                resource
+                for resource in resources
+                if resource.confidence_score is not None and Decimal(resource.confidence_score) < Decimal("0.60")
+            ]
+        )
+        return EvidenceSummary(
+            citation_count=citation_count,
+            latest_trace_id=None,
+            low_evidence_count=low_evidence_count,
+        )
+
+    @staticmethod
+    def _build_empty_state(
+        user: User,
+        courses: list[DashboardCourse],
+        conversations: list[ChatSession],
+        resources: list[DashboardResource],
+        profile: StudentProfile | None,
+    ) -> EmptyState:
+        if not courses and not conversations and not resources and profile is None:
+            return EmptyState(
+                kind="blank",
+                title="还没有课程",
+                description="上传资料后可直接问，也可生成课程。",
+                action_label="上传资料",
+            )
+
+        if user.starter_mode == "ai_intro" and courses and not conversations and not resources and profile is None:
+            return EmptyState(
+                kind="starter",
+                title="从人工智能导论开始",
+                description="内置课程已经进入你的个人空间，可以直接开始学习。",
+                action_label="开始学习",
+            )
+
+        return EmptyState(
+            kind="active",
+            title="继续学习",
+            description="从最近课程、资料或历史对话继续。",
+            action_label="继续学习",
+        )
+
+    @staticmethod
+    def _relative_label(value: datetime | None) -> str:
+        if value is None:
+            return "刚刚"
+
+        current = datetime.now(UTC)
+        comparable = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+        delta = current - comparable
+
+        if delta.total_seconds() < 3600:
+            return "刚刚"
+        if comparable.date() == current.date():
+            return "今天"
+        if (current.date() - comparable.date()).days == 1:
+            return "昨天"
+        return comparable.strftime("%m-%d")
+
+    @staticmethod
+    def _date_label(value: datetime | None) -> str:
+        if value is None:
+            return "今天"
+
+        current = datetime.now(UTC)
+        comparable = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+        if comparable.date() == current.date():
+            return "今天"
+        if (current.date() - comparable.date()).days == 1:
+            return "昨天"
+        return comparable.strftime("%m-%d")
+
+    @staticmethod
+    def _iso_timestamp(value: datetime | None) -> str:
+        timestamp = value or datetime.now(UTC)
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=UTC)
+        timestamp = timestamp.astimezone(UTC).replace(microsecond=0)
+        return timestamp.isoformat().replace("+00:00", "Z")

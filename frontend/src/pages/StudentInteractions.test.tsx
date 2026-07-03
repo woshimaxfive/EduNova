@@ -1,10 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { PATHS } from "../app/routePaths";
+import { useAuthStore } from "../features/auth/authStore";
 import { CourseSpacePage } from "./CourseSpacePage";
 import { LearningSpacePage } from "./LearningSpacePage";
 import { LibraryPage } from "./LibraryPage";
@@ -15,11 +17,32 @@ import { SettingsPage } from "./SettingsPage";
 import { StudioPage } from "./StudioPage";
 import { TutorPage } from "./TutorPage";
 
+function renderWithProviders(ui: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false
+      }
+    }
+  });
+
+  render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
+
 function renderPage(page: ReactNode) {
-  render(<MemoryRouter>{page}</MemoryRouter>);
+  renderWithProviders(<MemoryRouter>{page}</MemoryRouter>);
 }
 
 describe("student interaction affordances", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useAuthStore.getState().clearSession();
+  });
+
+  afterEach(() => {
+    useAuthStore.getState().clearSession();
+  });
+
   it("turns the home composer buttons into visible demo-state feedback", async () => {
     const user = userEvent.setup();
 
@@ -36,7 +59,7 @@ describe("student interaction affordances", () => {
     expect(screen.getByRole("button", { name: /数据结构期末题.pdf/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "作为本次对话参考" })).toBeDisabled();
 
-    const material = screen.getByRole("button", { name: /神经网络课堂讲义/ });
+    const material = screen.getByRole("button", { name: /数据结构期末题.pdf/ });
 
     expect(material).toHaveAttribute("aria-pressed", "false");
 
@@ -257,7 +280,7 @@ describe("student interaction affordances", () => {
   it("keeps route pages in the home shell with active navigation and a working new chat action", async () => {
     const user = userEvent.setup();
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={[PATHS.library]}>
         <Routes>
           <Route path={PATHS.app} element={<LearningSpacePage />} />

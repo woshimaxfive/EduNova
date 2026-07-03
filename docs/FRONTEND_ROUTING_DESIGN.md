@@ -453,6 +453,7 @@ Phase 3A：
 Phase 4：
 
 - 接入真实注册、登录、`/auth/me`、路由保护和登录态恢复。
+- Phase 4.2 已接入 `/dashboard/summary`，用于 `/app` 首页最近学习、主页历史、资料库浮层资料和空状态的真实读取。
 
 Phase 5 以后：
 
@@ -478,12 +479,13 @@ Phase 5 以后：
 - 已登录用户访问 `/login` 或 `/register` 会通过 `PublicOnlyRoute` 回到 `/app`。
 - `authStore` 使用 Zustand 保存真实 JWT token 和用户信息。
 - API client 默认基础路径为 `/api/v1`，会自动附加 Bearer token；接口返回 401 时清理登录态，如果用户位于 `/app/*`，会返回 `/login`。
-- `frontend/src/api/` 已按业务域拆分 auth、courses、materials、profiles、resources、paths、tutor、practice、reports、demo、settings 等合同模块，路径与 `docs/API.md` 对齐。
+- `frontend/src/api/` 已按业务域拆分 auth、dashboard、courses、materials、profiles、resources、paths、tutor、practice、reports、demo、settings 等合同模块，路径与 `docs/API.md` 对齐。
 - Phase 4.1 已接真实 `/auth/register`、`/auth/login`、`/auth/me` 和 `/auth/logout`；注册页会提交 `starter_mode`，注册成功后自动调用登录接口写入 session。
+- Phase 4.2 已接真实 `/dashboard/summary`；`LearningSpacePage` 使用 React Query 读取当前用户 summary，左侧主页历史、最近学习列表、主页资料库浮层资料和 blank/ai_intro 空状态不再来自前端静态 demo 数据。
 - `FirstRunGuide` 已作为学习空间中的轻量引导占位，真实触发条件需要 Phase 4 根据画像和课程上下文接入。
 - `/app` 已重做为总 AI 对话主页，包含贴边可收起主页历史、侧栏账号入口、中心 AI 学习入口、输入区资料库按钮、文件上传入口、最近学习轻量列表、发送后主页对话态和生成课程浮层。
 - P3.9 已把 `/app/library`、`/app/courses/:courseId`、资源工坊、画像、辅导、练习、报告和设置统一到同一套贴边工作区外壳，不再保留旧顶部导航。
-- 注册页选择 `blank` 时，进入 `/app` 后无内置课程、无内置资料和无历史对话；选择 `ai_intro` 时，进入后带人工智能导论示例课程和资料。
+- 注册页选择 `blank` 时，进入 `/app` 后 summary 返回无内置课程、无内置资料和无历史对话；选择 `ai_intro` 时，summary 返回复制到当前用户空间的人工智能导论示例课程和资料。
 - `/app/courses/:courseId` 已补课程空间静态/半静态壳子，展示课程内对话、今日任务、知识画布、资源输出区、引用来源和 Agent 轨迹。
 - `/app/path` 已补独立学习路径页，展示阶段任务、路径依据和下一步行动，并复用普通受保护路由的贴边工作区外壳；已用 Codex 内置浏览器复验桌面和 390px 移动宽度。
 - `/app/library` 已重做为文件库式资料库，包含搜索、文档/图片筛选、真实文件选择入口、文件行、查看引用和生成课程浮层；资料库视觉应融入背景，不使用突兀的硬白表格块。
@@ -503,7 +505,7 @@ Phase 5 以后：
 - 未登录访问 `/app/studio` 会跳到登录入口。
 - 已登录访问 `/login` 会回到学习空间。
 - 登录态会写入本地存储。
-- 学习空间页面测试已覆盖 AI 对话主页、贴边历史侧栏、侧栏收起、侧栏账号入口、历史搜索居中浮层、发送后主页对话态、底部学习输入区、发送成功不显示持久“已生成回答”状态条、Enter 发送和 Shift+Enter 换行、AI 学习入口、资料库按钮、语义化最近学习列表、最近课程链接、生成课程浮层，以及首页不再渲染资料库右栏和知识学习画布。
+- 学习空间页面测试已覆盖 AI 对话主页、贴边历史侧栏、侧栏收起、侧栏账号入口、历史搜索居中浮层、发送后主页对话态、底部学习输入区、发送成功不显示持久“已生成回答”状态条、Enter 发送和 Shift+Enter 换行、AI 学习入口、资料库按钮、语义化最近学习列表、最近课程链接、生成课程浮层，以及首页不再渲染资料库右栏和知识学习画布；Phase 4.2 起额外覆盖 `/dashboard/summary` 调用、接口课程渲染、接口主页历史渲染、接口资料库资料渲染和 blank summary 不显示静态 starter 数据。
 - 路由测试已覆盖已登录学生访问 `/app/courses/:courseId` 时能看到课程对话空间、知识画布、证据与 Agent 轨迹和资源生成区，也覆盖 `/app/path` 能看到学习路径、阶段任务和路径依据。
 - 学生核心页面测试已覆盖 `/app/library` 文件库、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` 对应的资料、生成、画像、辅导、练习、报告和设置区域。
 - P3.7 交互测试已覆盖主页资料上传、资料库默认未选中与点选高亮、联网搜索激活态、发送反馈、课程回答展开、知识画布节点详情、辅导模式切换、练习提交校验、资料引用反馈和设置保存反馈。

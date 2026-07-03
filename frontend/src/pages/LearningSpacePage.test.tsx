@@ -1,10 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { PATHS } from "../app/routePaths";
 import { apiClient } from "../api/client";
+import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
 import { MATERIAL_ENDPOINTS } from "../api/materials";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
@@ -266,6 +268,31 @@ function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, 
       };
     }
 
+    if (url === COURSE_ENDPOINTS.fromMaterials && method === "post") {
+      return {
+        data: {
+          data: {
+            course: {
+              id: "909",
+              title: "神经网络冲刺课",
+              description: "由 1 份资料生成",
+              source_type: "uploaded",
+              status: "ready",
+              knowledge_point_count: 3,
+              chunk_count: 8,
+              material_count: 1
+            },
+            knowledge_points: []
+          },
+          trace_id: "trace_course_create_test"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
     return {
       data: {
         data: {},
@@ -291,8 +318,11 @@ function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, 
 
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <LearningSpacePage />
+      <MemoryRouter initialEntries={[PATHS.app]}>
+        <Routes>
+          <Route path={PATHS.app} element={<LearningSpacePage />} />
+          <Route path={PATHS.courseDetail} element={<div>已进入生成课程</div>} />
+        </Routes>
       </MemoryRouter>
     </QueryClientProvider>
   );
@@ -366,7 +396,7 @@ describe("LearningSpacePage", () => {
     expect(within(dialog).getByRole("textbox", { name: "课程名称" })).toHaveValue("人工智能导论期末复习");
     expect(within(dialog).getByRole("button", { name: /真实资料讲义.md/ })).toHaveAttribute("aria-pressed", "false");
     expect(within(dialog).getByText("先选择要生成课程的资料")).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "创建课程草案" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "生成课程" })).toBeDisabled();
   });
 
   it("keeps the edge rail focused on chat history and account actions", () => {
@@ -561,10 +591,10 @@ describe("LearningSpacePage", () => {
     expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("处理摘要");
   });
 
-  it("moves from the library drawer to course generation as a single dialog", async () => {
+  it("creates a real course from the library drawer and enters the new course space", async () => {
     const user = userEvent.setup();
 
-    renderWithDashboardSummary();
+    const { calls } = renderWithDashboardSummary();
 
     await screen.findByRole("link", { name: /真实机器学习课/ });
     await user.click(screen.getByRole("button", { name: "打开资料库" }));
@@ -585,12 +615,21 @@ describe("LearningSpacePage", () => {
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(screen.queryByRole("dialog", { name: "资料库" })).not.toBeInTheDocument();
     expect(within(courseDialog).getByText("已选择 1 份资料")).toBeInTheDocument();
-    expect(within(courseDialog).getByRole("button", { name: "创建课程草案" })).toBeEnabled();
+    expect(within(courseDialog).getByRole("button", { name: "生成课程" })).toBeEnabled();
 
-    await user.click(within(courseDialog).getByRole("button", { name: "创建课程草案" }));
+    await user.click(within(courseDialog).getByRole("button", { name: "生成课程" }));
 
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已用 1 份资料创建课程草案");
+    expect(await screen.findByText("已进入生成课程")).toBeInTheDocument();
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        method: "post",
+        url: COURSE_ENDPOINTS.fromMaterials,
+        payload: {
+          material_ids: [201],
+          course_title: "人工智能导论期末复习"
+        }
+      })
+    );
   });
 
   it("keeps blank starter accounts empty until they upload their own material", async () => {

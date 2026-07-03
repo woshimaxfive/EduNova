@@ -48,7 +48,7 @@ Nginx
 
 前端使用 React + TypeScript + Vite，定位为学生 AI 学习空间。具体设计基线见 [UI_UX_DESIGN.md](UI_UX_DESIGN.md)，入口与路由设计见 [FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)。
 
-第一版前端不采用后台管理式左侧菜单，不把首屏做成卡片堆。2026-07-02 P3 精修后，首页采用“贴左边缘主页侧栏 + 可收起历史对话 + 侧栏账号入口 + 中心 AI 学习入口 + 输入区资料库浮层按钮 + 最近学习轻量列表”的结构；发送主页问题后进入对话态，输入区移动到下方，靠近 ChatGPT 的对话工作方式。主页输入框已具备文件上传入口、资料库选择、生成课程入口、联网搜索激活态、深度思考激活态、语音入口和 Enter 发送/Shift+Enter 换行的前端行为。课程空间采用“课程内对话 + 今日任务 + 知识画布 + 资源工坊 + 证据层 + Agent 轨迹”的静态/半静态壳子；独立 `/app/path` 学习路径页展示阶段任务、路径依据和下一步行动，但不放到首页抢主视觉；资料库已调整为文件库式页面，按文档/图片等文件类型筛选，视觉通过半透明、细分隔线和背景模糊融入页面。P3.13 后，普通路由只保留短标题，不展示重复说明句；普通路由侧栏高亮当前页面，“新建对话”回到 `/app`；资料库上传只入库，不自动加入生成课程选择，生成课程浮层默认未选中。P3.15 后，回答附加信息默认折叠，资料库和生成课程主操作在未选资料前禁用，从资料库进入生成课程时只保留一个上层浮层，资源工坊只保留一个主生成入口。P3.9 之后受保护应用区统一使用 `AppSidebar` 贴边工作区外壳：资料库、资源工坊、画像、AI 辅导、练习、报告和设置不再保留旧顶部导航，且普通路由侧栏显示主页全局历史；课程空间复用侧栏视觉，但显示课程内历史；个人资料、设置和退出登录固定在侧栏底部；AI 辅导、练习、学习路径和报告也可从课程空间行动入口或回答展开区进入。注册页通过 `starter_mode` 决定是否复制人工智能导论示例课程，登录页不提供共享演示学生按钮。Phase 4.4 后，主页上传和 `/app/library` 资料库列表已经接入真实 `/materials` 接口，资料保存到当前用户独立资料库；后续继续由真实课程、RAG、画像、练习评估、报告和 Agent 数据驱动。
+第一版前端不采用后台管理式左侧菜单，不把首屏做成卡片堆。2026-07-02 P3 精修后，首页采用“贴左边缘主页侧栏 + 可收起历史对话 + 侧栏账号入口 + 中心 AI 学习入口 + 输入区资料库浮层按钮 + 最近学习轻量列表”的结构；发送主页问题后进入对话态，输入区移动到下方，靠近 ChatGPT 的对话工作方式。主页输入框已具备文件上传入口、资料库选择、生成课程入口、联网搜索激活态、深度思考激活态、语音入口和 Enter 发送/Shift+Enter 换行的前端行为。课程空间采用“课程内对话 + 今日任务 + 知识画布 + 资源工坊 + 证据层 + Agent 轨迹”的壳子；独立 `/app/path` 学习路径页展示阶段任务、路径依据和下一步行动，但不放到首页抢主视觉；资料库已调整为文件库式页面，按文档/图片等文件类型筛选，视觉通过半透明、细分隔线和背景模糊融入页面。P3.13 后，普通路由只保留短标题，不展示重复说明句；普通路由侧栏高亮当前页面，“新建对话”回到 `/app`；资料库上传只入库，不自动加入生成课程选择，生成课程浮层默认未选中。P3.15 后，回答附加信息默认折叠，资料库和生成课程主操作在未选资料前禁用，从资料库进入生成课程时只保留一个上层浮层，资源工坊只保留一个主生成入口。P3.9 之后受保护应用区统一使用 `AppSidebar` 贴边工作区外壳：资料库、资源工坊、画像、AI 辅导、练习、报告和设置不再保留旧顶部导航，且普通路由侧栏显示主页全局历史；课程空间复用侧栏视觉，但显示课程内历史；个人资料、设置和退出登录固定在侧栏底部；AI 辅导、练习、学习路径和报告也可从课程空间行动入口或回答展开区进入。注册页通过 `starter_mode` 决定是否复制人工智能导论示例课程，登录页不提供共享演示学生按钮。Phase 4.4 后，主页上传和 `/app/library` 资料库列表已经接入真实 `/materials` 接口，资料保存到当前用户独立资料库；Phase 5.1 后，主页和资料库的生成课程浮层已经接入 `/courses/from-materials`，成功后进入真实课程空间，课程标题、资料数、知识点数和知识点列表来自课程接口；后续继续由真实 RAG、画像、练习评估、报告和 Agent 数据驱动。
 
 目录规划：
 
@@ -96,8 +96,8 @@ frontend/src/
 | --- | --- |
 | 登录/注册 | 进入系统 |
 | 学习主页 | 第一屏主体验，承载贴边可收起主页历史、侧栏账号入口、轻量输入框、发送后主页对话态、资料选择、文件上传和最近课程 |
-| 资料库 | 文件库式独立资料管理，支持真实上传、搜索、文档/图片筛选、查看详情反馈、作为主页参考和从资料生成课程预备浮层；生成课程以浮层覆盖当前页面 |
-| 课程空间 | 已补前端静态/半静态壳子，承载课程内历史对话、课程资料、学习画布、资源工坊、证据层、AI 辅导、练习和报告等学习闭环入口 |
+| 资料库 | 文件库式独立资料管理，支持真实上传、搜索、文档/图片筛选、查看详情反馈、作为主页参考和从 TXT/Markdown 资料生成真实课程；生成课程以浮层覆盖当前页面 |
+| 课程空间 | 已补课程详情真实读取，承载课程内历史对话、课程资料、知识点画布、资源工坊、证据层、AI 辅导、练习和报告等学习闭环入口 |
 | 学习路径 | 独立路径工作区，展示阶段任务、路径依据和下一步行动，后续接 `learning_paths` 与 `learning_tasks` |
 | 资源工坊 | 查看和管理生成的学习资源；当前已补资源生成工作台、生成队列和输出区 |
 | 画像 | 查看学习目标、基础、节奏、薄弱点和画像证据 |
@@ -148,10 +148,10 @@ frontend/src/
 | `frontend/src/features/auth/authStore.ts` | Zustand 登录态，保存真实 JWT token 和当前用户信息 |
 | `frontend/src/features/auth/authMappers.ts` | 把后端 `display_name`、`starter_mode` 映射成前端 `displayName`、`starterMode` |
 | `frontend/src/api/client.ts` | Axios 客户端，默认基础路径 `/api/v1`，自动附加 token，401 清理登录态并返回登录页 |
-| `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、profiles、resources、agents、paths、tutor、practice、reports、demo、settings；`materials.ts` 已接入上传、列表、详情、进度和课程关联 |
+| `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、profiles、resources、agents、paths、tutor、practice、reports、demo、settings；`materials.ts` 已接入上传、列表、详情、进度和课程关联，`courses.ts` 已接入课程列表、详情、概览、知识点和从资料生成课程 |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和短状态信号的纯状态模型 |
 | `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、学习路径、资源工坊、画像、辅导、练习、报告、设置和 404；学生端核心页面已从占位页补成可扩展工作区骨架 |
-| `frontend/src/components` | `AppSidebar`、学习空间壳子、学习画布、资料源簇、AI 命令栏、资源输出区、证据层、Agent 轨迹、上传建课状态轨道、学习空间状态条和统一 `ActionNotice` 反馈层；`/app` 首页已补 GPT 式贴边侧栏、可收起历史、侧栏账号入口、AI 对话主页、输入区资料库浮层入口、文件上传入口、最近学习轻量列表、发送后对话态和生成课程浮层，回答附加信息默认折叠；`/app/library` 已改为文件库式资料管理页，资料选择和生成课程主操作具备禁用态，资料库到生成课程只保留单一上层浮层；`/app/courses/:courseId` 已组合课程空间静态壳子，资料库、课程空间、资源工坊、画像、辅导、练习、报告和设置复用同一贴边工作区视觉体系；`PageFrame` 只承担普通路由外壳，不抢占内部内容区语义 |
+| `frontend/src/components` | `AppSidebar`、学习空间壳子、学习画布、资料源簇、AI 命令栏、资源输出区、证据层、Agent 轨迹、上传建课状态轨道、学习空间状态条和统一 `ActionNotice` 反馈层；`/app` 首页已补 GPT 式贴边侧栏、可收起历史、侧栏账号入口、AI 对话主页、输入区资料库浮层入口、文件上传入口、最近学习轻量列表、发送后对话态和生成课程浮层，回答附加信息默认折叠；`/app/library` 已改为文件库式资料管理页，资料选择和生成课程主操作具备禁用态，资料库到生成课程只保留单一上层浮层；`/app/courses/:courseId` 已接入真实课程详情和知识点，同时保留课程空间预备交互；资料库、课程空间、资源工坊、画像、辅导、练习、报告和设置复用同一贴边工作区视觉体系；`PageFrame` 只承担普通路由外壳，不抢占内部内容区语义 |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、深色模式、reduced motion 和 reduced transparency 基础 |
 
 当前限制：
@@ -160,8 +160,9 @@ frontend/src/
 - Phase 4.2 已完成受保护的 `/dashboard/summary` 首页总览；当前 `/app` 左侧主页历史、最近课程、主页资料库浮层资料和 blank/ai_intro 空状态来自当前登录用户的真实 summary，不再使用前端假课程、假资料和假历史伪装真实数据。
 - Phase 4.3 已完成受保护的 `/tutor/sessions` 主页会话与消息持久化；当前 `/app` 首次发送会创建 home session，连续追问复用当前 session，点击左侧历史会从后端读取真实 messages，刷新后历史由 `/dashboard/summary` 保留。
 - Phase 4.4 已完成受保护的 `/materials` 真实资料库闭环；当前 `/app` 上传资料会写入个人资料库并刷新 `/dashboard/summary`，`/app/library` 从 `/materials` 读取当前用户资料，支持文档/图片筛选、搜索、详情反馈和上传刷新。
-- 当前从资料生成课程仍是前端预备交互；主页 assistant 回复仍是模板占位，真实 AI/RAG、OCR、PDF/PPT/DOCX 深度解析和课程生成后续接入。
-- 当前 `/app/courses/:courseId` 课程空间使用前端样例课程、知识点、资料、引用和 Agent 轨迹数据；后续由课程详情、RAG、资源生成和 Agent 日志接口替换。
+- Phase 5.1 已完成受保护的 `/courses/from-materials` 规则建课闭环；当前 `/app` 和 `/app/library` 可用已解析 TXT/Markdown 资料生成课程，并跳转 `/app/courses/:courseId`。
+- 当前主页 assistant 回复仍是模板占位，真实 AI/RAG、OCR、PDF/PPT/DOCX 深度解析后续接入。
+- 当前 `/app/courses/:courseId` 课程空间标题、资料数、知识点数和知识点列表来自真实课程接口，课程对话、引用、资源和 Agent 轨迹仍使用前端预备交互；后续由 RAG、资源生成和 Agent 日志接口替换。
 - 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面使用前端样例数据；后续由资料、画像、RAG、练习评估、掌握度报告和设置接口替换。
 - 当前 P3.7 按钮反馈使用 React 本地状态和 `ActionNotice`，用于固定前端交互边界；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
 - 上传建课状态轨道和状态条当前使用前端样例状态，后续由 `/materials/{material_id}/progress`、`/courses/from-materials` 和长任务接口驱动。
@@ -198,8 +199,10 @@ backend/app/
 | `backend/app/services/course_seed.py` | 内置课程导入服务 |
 | `backend/app/services/tutor.py` | 主页/课程会话服务，负责当前用户会话创建、列表、详情、追加消息和模板回复写入 |
 | `backend/app/services/materials.py` | 个人资料库服务，负责上传保存、轻解析、列表、详情、进度和课程资料关联 |
+| `backend/app/services/courses.py` | 课程服务，负责 TXT/Markdown 规则建课、课程列表、详情、概览和知识点读取 |
 | `backend/app/api/v1/tutor.py` | `/api/v1/tutor/sessions` 受保护会话接口 |
 | `backend/app/api/v1/materials.py` | `/api/v1/materials/*` 和 `/api/v1/courses/{course_id}/materials` 受保护资料接口 |
+| `backend/app/api/v1/courses.py` | `/api/v1/courses/*` 和 `/api/v1/courses/from-materials` 受保护课程接口 |
 | `backend/migrations` | Alembic 迁移环境、pgvector 扩展迁移、核心学习表迁移、学习闭环表迁移和资料库兼容迁移 |
 
 分层职责：

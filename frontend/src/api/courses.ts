@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { type ApiEnvelope, type ApiListEnvelope, type CourseSummary } from "../types/api";
+import { type ApiEnvelope, type ApiListEnvelope } from "../types/api";
 
 export const COURSE_ENDPOINTS = {
   list: "/courses",
@@ -15,36 +15,71 @@ export type CreateCourseFromMaterialsRequest = {
   course_title: string;
 };
 
+export type ApiCourseSummary = {
+  id: string;
+  title: string;
+  description: string;
+  subject: string;
+  source_type: "builtin" | "uploaded" | "demo_fallback";
+  status: string;
+  progress_percent: number;
+  material_count: number;
+  knowledge_point_count: number;
+  chunk_count: number;
+};
+
+export type ApiCourseKnowledgePoint = {
+  id: string;
+  title: string;
+  chapter: string;
+  summary: string;
+  order: number;
+  mastery_level: "not_started" | "learning" | "weak" | "mastered";
+  chunk_count: number;
+};
+
+export type ApiCourseOverview = {
+  course: ApiCourseSummary;
+  knowledge_points: ApiCourseKnowledgePoint[];
+  material_count: number;
+  chunk_count: number;
+};
+
+export type CreateCourseFromMaterialsResult = {
+  course: ApiCourseSummary;
+  knowledge_points: ApiCourseKnowledgePoint[];
+};
+
 export async function listCourses(sourceType?: "builtin" | "uploaded") {
-  const response = await apiClient.get<ApiListEnvelope<CourseSummary>>(COURSE_ENDPOINTS.list, {
+  const response = await apiClient.get<ApiListEnvelope<ApiCourseSummary>>(COURSE_ENDPOINTS.list, {
     params: sourceType ? { source_type: sourceType } : undefined
   });
   return response.data;
 }
 
 export async function getCourse(courseId: number) {
-  const response = await apiClient.get<ApiEnvelope<CourseSummary>>(COURSE_ENDPOINTS.detail(courseId));
+  const response = await apiClient.get<ApiEnvelope<ApiCourseSummary>>(COURSE_ENDPOINTS.detail(courseId));
   return response.data;
 }
 
 export async function getCourseOverview(courseId: number) {
-  const response = await apiClient.get<ApiEnvelope<Record<string, unknown>>>(COURSE_ENDPOINTS.overview(courseId));
+  const response = await apiClient.get<ApiEnvelope<ApiCourseOverview>>(COURSE_ENDPOINTS.overview(courseId));
   return response.data;
 }
 
 export async function getKnowledgePoints(courseId: number) {
-  const response = await apiClient.get<ApiEnvelope<Record<string, unknown>[]>>(
-    COURSE_ENDPOINTS.knowledgePoints(courseId)
-  );
+  const response = await apiClient.get<ApiEnvelope<ApiCourseKnowledgePoint[]>>(COURSE_ENDPOINTS.knowledgePoints(courseId));
   return response.data;
 }
 
 export async function getMasteryMap(courseId: number) {
-  const response = await apiClient.get<ApiEnvelope<Record<string, unknown>>>(COURSE_ENDPOINTS.masteryMap(courseId));
+  const response = await apiClient.get<ApiEnvelope<{ course_id: string; points: ApiCourseKnowledgePoint[] }>>(
+    COURSE_ENDPOINTS.masteryMap(courseId)
+  );
   return response.data;
 }
 
 export async function createCourseFromMaterials(payload: CreateCourseFromMaterialsRequest) {
-  const response = await apiClient.post<ApiEnvelope<Record<string, unknown>>>(COURSE_ENDPOINTS.fromMaterials, payload);
+  const response = await apiClient.post<ApiEnvelope<CreateCourseFromMaterialsResult>>(COURSE_ENDPOINTS.fromMaterials, payload);
   return response.data;
 }

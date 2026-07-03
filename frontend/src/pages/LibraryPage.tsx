@@ -1,7 +1,11 @@
 import { BookOpen, FileArrowUp, Image, MagnifyingGlass, SealCheck, Sparkle, X } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
+import { buildCoursePath } from "../app/routePaths";
+import { createCourseFromMaterials } from "../api/courses";
+import { getApiErrorMessage } from "../api/errors";
 import { listMaterials, type MaterialListItem, uploadMaterial } from "../api/materials";
 import { ActionNotice } from "../components/feedback/ActionNotice";
 import { useActionNotice } from "../components/feedback/useActionNotice";
@@ -28,12 +32,15 @@ function buildStatusLabel(material: LibraryFile) {
 
 export function LibraryPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [activeFilter, setActiveFilter] = useState<LibraryFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeMaterial, setActiveMaterial] = useState<LibraryFile | null>(null);
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
   const [courseMaterialIds, setCourseMaterialIds] = useState<string[]>([]);
+  const [courseTitle, setCourseTitle] = useState("资料生成课程");
+  const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
   const { notice, showNotice } = useActionNotice();
   const materialsQuery = useQuery({
@@ -84,6 +91,42 @@ export function LibraryPage() {
 
   function toggleCourseMaterial(materialId: string) {
     setCourseMaterialIds((current) => (current.includes(materialId) ? current.filter((id) => id !== materialId) : [...current, materialId]));
+  }
+
+  async function handleCreateCourse() {
+    const selectedMaterialIdsAsNumbers = courseMaterialIds
+      .map((materialId) => Number.parseInt(materialId, 10))
+      .filter((materialId) => Number.isFinite(materialId));
+
+    if (selectedMaterialIdsAsNumbers.length === 0) {
+      showNotice("先至少选择一份资料。", "warning");
+      return;
+    }
+
+    if (isCreatingCourse) {
+      return;
+    }
+
+    setIsCreatingCourse(true);
+
+    try {
+      const created = await createCourseFromMaterials({
+        material_ids: selectedMaterialIdsAsNumbers,
+        course_title: courseTitle.trim()
+      });
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
+      ]);
+      setIsCourseDialogOpen(false);
+      showNotice(`已生成「${created.data.course.title}」。`, "success");
+      navigate(buildCoursePath(created.data.course.id));
+    } catch (error) {
+      showNotice(getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析的 TXT 或 Markdown 资料。"), "warning");
+    } finally {
+      setIsCreatingCourse(false);
+    }
   }
 
   return (
@@ -181,14 +224,12 @@ export function LibraryPage() {
         <LibraryCourseDialog
           materials={files}
           selectedMaterialIds={courseMaterialIds}
+          courseTitle={courseTitle}
+          isCreatingCourse={isCreatingCourse}
+          onCourseTitleChange={setCourseTitle}
           onToggleMaterial={toggleCourseMaterial}
           onClose={() => setIsCourseDialogOpen(false)}
-          onCreate={() => {
-            showNotice(courseMaterialIds.length > 0 ? `已用 ${courseMaterialIds.length} 份资料创建课程草案。` : "先至少选择一份资料。", courseMaterialIds.length > 0 ? "success" : "warning");
-            if (courseMaterialIds.length > 0) {
-              setIsCourseDialogOpen(false);
-            }
-          }}
+          onCreate={() => void handleCreateCourse()}
         />
       ) : null}
     </>
@@ -198,12 +239,24 @@ export function LibraryPage() {
 type LibraryCourseDialogProps = {
   materials: LibraryFile[];
   selectedMaterialIds: string[];
+  courseTitle: string;
+  isCreatingCourse: boolean;
+  onCourseTitleChange: (courseTitle: string) => void;
   onToggleMaterial: (materialId: string) => void;
   onClose: () => void;
   onCreate: () => void;
 };
 
-function LibraryCourseDialog({ materials, selectedMaterialIds, onToggleMaterial, onClose, onCreate }: LibraryCourseDialogProps) {
+function LibraryCourseDialog({
+  materials,
+  selectedMaterialIds,
+  courseTitle,
+  isCreatingCourse,
+  onCourseTitleChange,
+  onToggleMaterial,
+  onClose,
+  onCreate
+}: LibraryCourseDialogProps) {
   const selectedCount = selectedMaterialIds.length;
 
   return (
@@ -216,6 +269,10 @@ function LibraryCourseDialog({ materials, selectedMaterialIds, onToggleMaterial,
           <h2 id="library-course-dialog-title">从资料生成课程</h2>
           <p>选择资料，生成目录、知识点和复习任务。</p>
         </div>
+        <label className="dialog-field">
+          <span>课程名称</span>
+          <input aria-label="课程名称" value={courseTitle} onChange={(event) => onCourseTitleChange(event.target.value)} />
+        </label>
         <div className="library-course-materials">
           {materials.length === 0 ? <p className="library-file-empty">还没有可生成课程的资料。</p> : null}
           {materials.map((material) => (
@@ -226,8 +283,13 @@ function LibraryCourseDialog({ materials, selectedMaterialIds, onToggleMaterial,
             </button>
           ))}
         </div>
-        <button className={selectedCount > 0 ? "dialog-primary-button" : "dialog-primary-button disabled"} type="button" disabled={selectedCount === 0} onClick={onCreate}>
-          创建课程草案
+        <button
+          className={selectedCount > 0 ? "dialog-primary-button" : "dialog-primary-button disabled"}
+          type="button"
+          disabled={selectedCount === 0 || isCreatingCourse}
+          onClick={onCreate}
+        >
+          {isCreatingCourse ? "生成中" : "生成课程"}
         </button>
       </section>
     </div>

@@ -146,7 +146,7 @@ course_material_links  课程与资料的关联表，支持同一资料加入多
 knowledge_chunks       仍绑定 course_id，同时引用 material_id
 ```
 
-迁移后，`course_materials` 暂时保留，用于兼容内置课程和已有 `knowledge_chunks.material_id` 关系；新上传资料写入 `materials`，加入课程时写入 `course_material_links`。
+迁移后，`course_materials` 暂时保留，用于兼容内置课程和已有 `knowledge_chunks.material_id` 关系；新上传资料写入 `materials`，加入课程时写入 `course_material_links`。Phase 5.1 从 TXT/Markdown 资料生成课程时，会为新课程创建兼容旧链路的 `course_materials` 副本，同时用 `course_material_links.usage_type=course_source` 关联原个人资料库资料，保证后续 RAG 可以沿 `knowledge_chunks -> course_materials` 接入。
 
 字段：
 
@@ -216,7 +216,7 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 
 ### 4.5 `knowledge_points`
 
-用途：课程知识点。
+用途：课程知识点。Phase 5.1 规则建课会根据 Markdown 标题或 TXT 段落为当前用户课程生成知识点。
 
 字段：
 
@@ -233,7 +233,7 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 
 ### 4.6 `knowledge_chunks`
 
-用途：RAG 检索切片。
+用途：RAG 检索切片。Phase 5.1 会把 TXT/Markdown 资料按知识点切成文本片段写入本表，本轮 `embedding` 保持为空，后续 RAG 阶段再补向量化。
 
 字段：
 
@@ -651,6 +651,7 @@ Demo 数据要求：
 8. 第一批核心业务表由迁移 `20260701_0002_create_core_learning_tables.py` 创建。
 9. 学习闭环基础表由迁移 `20260701_0003_create_learning_closure_tables.py` 创建。
 10. 用户注册初始化方式由迁移 `20260701_0004_add_user_starter_mode.py` 创建。
+11. 独立资料库和课程资料关联由迁移 `20260703_0005_create_material_library.py` 创建。
 
 当前迁移命令：
 
@@ -668,11 +669,12 @@ Demo 数据要求：
 4. 所有核心表可通过迁移创建。
 5. 内置人工智能导论课程可导入。
 6. 当前内置课程资料能写入课程、材料、知识点和知识切片。
-7. Phase 4.4 后，上传资料能先进入用户资料库，再选择加入课程；从资料生成课程仍由后续阶段实现。
-8. RAG 检索能读取向量数据。
-9. 资源、报告、课程内对话都能追溯用户、课程和 trace；主页对话能追溯用户和 trace。
-10. 两个不同用户的数据互不可见。
-11. Demo 数据可重置且不污染普通用户数据。
+7. Phase 4.4 后，上传资料能先进入用户资料库，再选择加入课程。
+8. Phase 5.1 后，已解析 TXT/Markdown 资料能生成用户自己的课程、课程资料副本、资料关联、知识点和知识切片；非文本和未解析资料不得生成课程。
+9. RAG 检索能读取向量数据。
+10. 资源、报告、课程内对话都能追溯用户、课程和 trace；主页对话能追溯用户和 trace。
+11. 两个不同用户的数据互不可见。
+12. Demo 数据可重置且不污染普通用户数据。
 
 当前已验证：
 
@@ -686,3 +688,4 @@ Demo 数据要求：
 - 内置课程导入具备幂等性，重复执行不会创建重复课程。
 - Phase 4.2 首页总览服务已验证只请求当前用户数据：blank 用户返回空课程/空资料/空历史，ai_intro 用户返回自己空间中的人工智能导论课程和资料，已有进度时显示真实进度，没有进度时显示“未开始”。
 - Phase 4.4 资料库服务已验证上传、列表、详情、进度和加入课程都只访问当前用户数据；迁移 `0005` 会把旧 `course_materials` 兼容复制为 `materials` 与 `course_material_links`。
+- Phase 5.1 课程生成服务已验证 TXT/Markdown 资料能创建 `courses`、`course_enrollments`、`course_materials`、`course_material_links`、`knowledge_points` 和 `knowledge_chunks`；A 用户不能用 B 用户资料建课，也不能读取 B 用户课程。

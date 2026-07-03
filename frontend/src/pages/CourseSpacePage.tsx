@@ -10,10 +10,12 @@ import {
   Sparkle,
   Target
 } from "@phosphor-icons/react";
-import { type KeyboardEvent, useState } from "react";
-import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { type KeyboardEvent, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
+import { getCourse, getKnowledgePoints, type ApiCourseKnowledgePoint } from "../api/courses";
 import { LearningCanvas } from "../components/canvas/LearningCanvas";
 import { EvidenceLayer } from "../components/evidence/EvidenceLayer";
 import { ActionNotice } from "../components/feedback/ActionNotice";
@@ -36,6 +38,22 @@ const courseActionLinks = [
   { label: "查看学习报告", to: PATHS.reports, icon: ChartLineUp }
 ];
 
+function mapKnowledgePointsToNodes(points: ApiCourseKnowledgePoint[]) {
+  return points.map((point, index) => {
+    const column = index % 4;
+    const row = Math.floor(index / 4);
+
+    return {
+      id: point.id,
+      title: point.title,
+      chapter: point.chapter,
+      status: index === 0 ? ("focus" as const) : ("ready" as const),
+      x: 14 + column * 22,
+      y: 24 + row * 26
+    };
+  });
+}
+
 type AnswerPanelKind = "citations" | "path" | "agent";
 type CourseMessage = {
   id: string;
@@ -44,6 +62,21 @@ type CourseMessage = {
 };
 
 export function CourseSpacePage() {
+  const { courseId } = useParams();
+  const numericCourseId = courseId ? Number.parseInt(courseId, 10) : Number.NaN;
+  const hasRealCourseId = Number.isFinite(numericCourseId);
+  const courseQuery = useQuery({
+    queryKey: ["courses", "detail", numericCourseId],
+    queryFn: () => getCourse(numericCourseId),
+    enabled: hasRealCourseId,
+    staleTime: 30_000
+  });
+  const knowledgePointsQuery = useQuery({
+    queryKey: ["courses", "knowledge-points", numericCourseId],
+    queryFn: () => getKnowledgePoints(numericCourseId),
+    enabled: hasRealCourseId,
+    staleTime: 30_000
+  });
   const [threads, setThreads] = useState(courseThreads);
   const [activeThread, setActiveThread] = useState(courseThreads[0]);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<AnswerPanelKind>("citations");
@@ -52,13 +85,43 @@ export function CourseSpacePage() {
   const [courseMessages, setCourseMessages] = useState<CourseMessage[]>([]);
   const { notice, showNotice } = useActionNotice();
   const snapshot = demoLearningSpace;
+  const apiCourse = courseQuery.data?.data;
+  const apiKnowledgePoints = useMemo(
+    () => knowledgePointsQuery.data?.data ?? [],
+    [knowledgePointsQuery.data?.data]
+  );
+  const courseSummary = apiCourse
+    ? {
+        id: Number.parseInt(apiCourse.id, 10),
+        title: apiCourse.title,
+        description: apiCourse.description,
+        subject: apiCourse.subject,
+        sourceType: apiCourse.source_type,
+        progressPercent: apiCourse.progress_percent
+      }
+    : snapshot.currentCourse;
+  const knowledgeNodes = apiKnowledgePoints.length > 0 ? mapKnowledgePointsToNodes(apiKnowledgePoints) : snapshot.knowledgeNodes;
+  const sourceMaterials =
+    apiCourse && apiCourse.material_count > 0
+      ? Array.from({ length: apiCourse.material_count }, (_, index) => ({
+          id: index + 1,
+          title: `课程资料 ${index + 1}`,
+          type: "txt" as const,
+          parseStatus: "completed" as const,
+          coverageLabel: `${apiCourse.knowledge_point_count} 个知识点`
+        }))
+      : snapshot.materials;
   const canvasSnapshot = {
     ...snapshot,
     currentCourse: {
-      ...snapshot.currentCourse,
-      title: `${snapshot.currentCourse.title}知识画布`
-    }
+      ...courseSummary,
+      title: `${courseSummary.title}知识画布`
+    },
+    materials: sourceMaterials,
+    knowledgeNodes
   };
+  const materialCount = apiCourse?.material_count ?? snapshot.materials.length;
+  const knowledgePointCount = apiCourse?.knowledge_point_count ?? snapshot.knowledgeNodes.length;
 
   function sendCourseQuestion() {
     const question = coursePrompt.trim();
@@ -111,21 +174,21 @@ export function CourseSpacePage() {
                 <span>回到学习主页</span>
               </Link>
               <div className="course-space-title">
-                <h1>{snapshot.currentCourse.title}</h1>
-                <p>{snapshot.currentCourse.description} 课程对话、资料、路径和引用都在这里。</p>
+                <h1>{courseSummary.title}</h1>
+                <p>{courseSummary.description} 课程对话、资料、路径和引用都在这里。</p>
               </div>
               <dl className="course-space-metrics" aria-label="课程状态">
                 <div>
                   <dt>进度</dt>
-                  <dd>{snapshot.currentCourse.progressPercent}%</dd>
+                  <dd>{courseSummary.progressPercent}%</dd>
                 </div>
                 <div>
                   <dt>资料</dt>
-                  <dd>{snapshot.materials.length}</dd>
+                  <dd>{materialCount}</dd>
                 </div>
                 <div>
-                  <dt>引用</dt>
-                  <dd>{snapshot.citations.length}</dd>
+                  <dt>知识点</dt>
+                  <dd>{knowledgePointCount}</dd>
                 </div>
               </dl>
             </header>

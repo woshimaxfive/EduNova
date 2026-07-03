@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { PATHS } from "../app/routePaths";
 import { apiClient } from "../api/client";
+import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
@@ -37,6 +38,18 @@ function renderWithProviders(ui: ReactNode) {
 
 function renderPage(page: ReactNode) {
   renderWithProviders(<MemoryRouter>{page}</MemoryRouter>);
+}
+
+function parsePayload(data: unknown) {
+  if (typeof data !== "string") {
+    return data;
+  }
+
+  try {
+    return JSON.parse(data);
+  } catch {
+    return data;
+  }
 }
 
 describe("student interaction affordances", () => {
@@ -268,6 +281,92 @@ describe("student interaction affordances", () => {
     await user.click(screen.getByRole("button", { name: "监督学习，当前焦点" }));
 
     expect(screen.getByRole("region", { name: "当前知识点详情" })).toHaveTextContent("监督学习");
+  });
+
+  it("renders generated course detail and knowledge points from the course API", async () => {
+    apiClient.defaults.adapter = async (config) => {
+      const url = config.url ?? "";
+
+      if (url === COURSE_ENDPOINTS.detail(808)) {
+        return {
+          data: {
+            data: {
+              id: "808",
+              title: "机器学习期末复习",
+              description: "由 1 份资料生成",
+              subject: "自主学习",
+              source_type: "uploaded",
+              status: "ready",
+              progress_percent: 0,
+              material_count: 1,
+              knowledge_point_count: 2,
+              chunk_count: 5
+            },
+            trace_id: "trace_course_detail"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === COURSE_ENDPOINTS.knowledgePoints(808)) {
+        return {
+          data: {
+            data: [
+              {
+                id: "9001",
+                title: "梯度下降",
+                chapter: "优化方法",
+                summary: "理解梯度方向和学习率。",
+                order: 1,
+                mastery_level: "not_started",
+                chunk_count: 3
+              },
+              {
+                id: "9002",
+                title: "模型评估",
+                chapter: "评估指标",
+                summary: "区分训练集、验证集和测试集。",
+                order: 2,
+                mastery_level: "not_started",
+                chunk_count: 2
+              }
+            ],
+            trace_id: "trace_course_points"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_course_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/app/courses/808"]}>
+        <Routes>
+          <Route path={PATHS.courseDetail} element={<CourseSpacePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: "机器学习期末复习" })).toBeInTheDocument();
+    expect(screen.getByLabelText("课程状态")).toHaveTextContent("资料");
+    expect(screen.getByLabelText("课程状态")).toHaveTextContent("1");
+    expect(screen.getByLabelText("课程状态")).toHaveTextContent("知识点");
+    expect(screen.getByLabelText("课程状态")).toHaveTextContent("2");
+    expect(screen.getByText("梯度下降")).toBeInTheDocument();
+    expect(screen.getByText("模型评估")).toBeInTheDocument();
   });
 
   it("keeps tutoring practice and reports as course-context actions", () => {
@@ -507,12 +606,12 @@ describe("student interaction affordances", () => {
     const courseMaterial = within(courseDialog).getByRole("button", { name: /AI 导论讲义/ });
 
     expect(courseMaterial).toHaveAttribute("aria-pressed", "false");
-    expect(within(courseDialog).getByRole("button", { name: "创建课程草案" })).toBeDisabled();
+    expect(within(courseDialog).getByRole("button", { name: "生成课程" })).toBeDisabled();
 
     await user.click(courseMaterial);
 
     expect(courseMaterial).toHaveAttribute("aria-pressed", "true");
-    expect(within(courseDialog).getByRole("button", { name: "创建课程草案" })).toBeEnabled();
+    expect(within(courseDialog).getByRole("button", { name: "生成课程" })).toBeEnabled();
 
     renderPage(<SettingsPage />);
 
@@ -524,6 +623,116 @@ describe("student interaction affordances", () => {
     await user.click(screen.getByRole("button", { name: "保存设置" }));
 
     expect(within(settingsRegion).getByRole("status")).toHaveTextContent("冲刺学生 的设置已保存");
+  });
+
+  it("creates a real course from the library page and enters the new course", async () => {
+    const user = userEvent.setup();
+    const calls: Array<{ method: string; url: string; payload: unknown }> = [];
+    const materials: MaterialListItem[] = [
+      {
+        id: "302",
+        title: "期末复习题样例",
+        type: "MD",
+        detail: "已解析",
+        modified: "昨天",
+        size: "68 KB",
+        category: "document",
+        extension: "MD",
+        parse_status: "completed",
+        course_ids: []
+      }
+    ];
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+      calls.push({ method, url, payload: parsePayload(config.data) });
+
+      if (url === MATERIAL_ENDPOINTS.list && method === "get") {
+        return {
+          data: { data: materials, trace_id: "trace_library_materials" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === COURSE_ENDPOINTS.fromMaterials && method === "post") {
+        return {
+          data: {
+            data: {
+              course: {
+                id: "808",
+                title: "机器学习期末复习",
+                description: "由 1 份资料生成",
+                source_type: "uploaded",
+                status: "ready",
+                knowledge_point_count: 2,
+                chunk_count: 5,
+                material_count: 1
+              },
+              knowledge_points: []
+            },
+            trace_id: "trace_library_course"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_library_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    useAuthStore.getState().setSession({
+      token: "library-course-token",
+      user: {
+        id: 9,
+        email: "library@edunova.local",
+        displayName: "资料库学生",
+        role: "student",
+        starterMode: "blank"
+      }
+    });
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={[PATHS.library]}>
+        <Routes>
+          <Route path={PATHS.library} element={<LibraryPage />} />
+          <Route path={PATHS.courseDetail} element={<div>资料库建课已跳转</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("button", { name: /期末复习题样例/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "生成课程" }));
+
+    const dialog = screen.getByRole("dialog", { name: "从资料生成课程" });
+    await user.clear(within(dialog).getByRole("textbox", { name: "课程名称" }));
+    await user.type(within(dialog).getByRole("textbox", { name: "课程名称" }), "机器学习期末复习");
+    await user.click(within(dialog).getByRole("button", { name: /期末复习题样例/ }));
+    await user.click(within(dialog).getByRole("button", { name: "生成课程" }));
+
+    expect(await screen.findByText("资料库建课已跳转")).toBeInTheDocument();
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        method: "post",
+        url: COURSE_ENDPOINTS.fromMaterials,
+        payload: {
+          material_ids: [302],
+          course_title: "机器学习期末复习"
+        }
+      })
+    );
   });
 
   it("keeps route pages in the home shell with active navigation and a working new chat action", async () => {

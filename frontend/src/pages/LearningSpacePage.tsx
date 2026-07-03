@@ -12,10 +12,12 @@ import {
 } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { buildCoursePath } from "../app/routePaths";
+import { createCourseFromMaterials } from "../api/courses";
 import { getDashboardSummary, type DashboardMaterial } from "../api/dashboard";
+import { getApiErrorMessage } from "../api/errors";
 import { uploadMaterial } from "../api/materials";
 import {
   createTutorSession,
@@ -45,6 +47,7 @@ const fallbackSuggestedPrompts = ["帮我制定 7 天期末复习计划", "把�
 export function LearningSpacePage() {
   const token = useAuthStore((state) => state.token);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const homeChatStageRef = useRef<HTMLElement | null>(null);
   const [prompt, setPrompt] = useState("");
@@ -56,6 +59,7 @@ export function LearningSpacePage() {
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
+  const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isDeepThinkingEnabled, setIsDeepThinkingEnabled] = useState(false);
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
@@ -235,15 +239,38 @@ export function LearningSpacePage() {
     }
   }
 
-  function createCourseDraft(selectedCount: number) {
-    if (selectedCount === 0) {
+  async function createCourseFromSelectedMaterials(courseTitle: string) {
+    const selectedMaterialIdsAsNumbers = effectiveSelectedMaterialIds
+      .map((materialId) => Number.parseInt(materialId, 10))
+      .filter((materialId) => Number.isFinite(materialId));
+
+    if (selectedMaterialIdsAsNumbers.length === 0) {
       showNotice("请先选择至少一份资料。", "warning");
       return;
     }
 
-    setIsCourseDialogOpen(false);
-    setIsLibraryOpen(false);
-    showNotice(`已用 ${selectedCount} 份资料创建课程草案，可在最近学习继续完善。`, "success");
+    if (isCreatingCourse) {
+      return;
+    }
+
+    setIsCreatingCourse(true);
+
+    try {
+      const created = await createCourseFromMaterials({
+        material_ids: selectedMaterialIdsAsNumbers,
+        course_title: courseTitle.trim()
+      });
+
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      setIsCourseDialogOpen(false);
+      setIsLibraryOpen(false);
+      showNotice(`已生成「${created.data.course.title}」。`, "success");
+      navigate(buildCoursePath(created.data.course.id));
+    } catch (error) {
+      showNotice(getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析的 TXT 或 Markdown 资料。"), "warning");
+    } finally {
+      setIsCreatingCourse(false);
+    }
   }
 
   return (
@@ -464,7 +491,8 @@ export function LearningSpacePage() {
           selectedMaterialIds={effectiveSelectedMaterialIds}
           onToggleMaterial={toggleMaterialSelection}
           onClose={() => setIsCourseDialogOpen(false)}
-          onCreate={createCourseDraft}
+          onCreate={(courseTitle) => void createCourseFromSelectedMaterials(courseTitle)}
+          isCreatingCourse={isCreatingCourse}
         />
       ) : null}
     </LearningSpaceShell>
@@ -588,11 +616,20 @@ type CourseGenerationDialogWithNoticeProps = CourseGenerationDialogProps & {
   materials: LibraryMaterial[];
   selectedMaterialIds: string[];
   onToggleMaterial: (materialId: string) => void;
-  onCreate: (selectedCount: number) => void;
+  onCreate: (courseTitle: string) => void;
+  isCreatingCourse: boolean;
 };
 
-function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMaterial, onClose, onCreate }: CourseGenerationDialogWithNoticeProps) {
+function CourseGenerationDialog({
+  materials,
+  selectedMaterialIds,
+  onToggleMaterial,
+  onClose,
+  onCreate,
+  isCreatingCourse
+}: CourseGenerationDialogWithNoticeProps) {
   const selectedCount = selectedMaterialIds.length;
+  const [courseTitle, setCourseTitle] = useState("人工智能导论期末复习");
 
   return (
     <div className="course-dialog-backdrop">
@@ -605,7 +642,7 @@ function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMateri
         </div>
         <label className="dialog-field">
           <span>课程名称</span>
-          <input aria-label="课程名称" defaultValue="人工智能导论期末复习" />
+          <input aria-label="课程名称" value={courseTitle} onChange={(event) => setCourseTitle(event.target.value)} />
         </label>
         <MaterialFileList materials={materials} selectedMaterialIds={selectedMaterialIds} onToggleMaterial={onToggleMaterial} />
         <div className="dialog-selection-summary">
@@ -615,10 +652,10 @@ function CourseGenerationDialog({ materials, selectedMaterialIds, onToggleMateri
         <button
           className={selectedCount > 0 ? "dialog-primary-button" : "dialog-primary-button disabled"}
           type="button"
-          disabled={selectedCount === 0}
-          onClick={() => onCreate(selectedCount)}
+          disabled={selectedCount === 0 || isCreatingCourse}
+          onClick={() => onCreate(courseTitle)}
         >
-          创建课程草案
+          {isCreatingCourse ? "生成中" : "生成课程"}
         </button>
       </section>
     </div>

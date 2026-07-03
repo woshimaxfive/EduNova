@@ -381,27 +381,58 @@ Authorization: Bearer <token>
 
 ### GET `/courses`
 
-用途：获取我的课程列表。
+用途：获取我的课程列表。Phase 5.1 已实现，必须携带 JWT，只返回当前用户拥有或已加入的课程。
 
 查询参数：
 
 - `source_type`：`builtin`、`uploaded`。
 
+响应元素：
+
+```json
+{
+  "id": "101",
+  "title": "机器学习期末复习",
+  "description": "由 2 份资料生成",
+  "subject": "自主学习",
+  "source_type": "uploaded",
+  "status": "ready",
+  "progress_percent": 0,
+  "material_count": 2,
+  "knowledge_point_count": 6,
+  "chunk_count": 18
+}
+```
+
 ### GET `/courses/{course_id}`
 
-用途：获取课程详情。
+用途：获取课程详情。Phase 5.1 已实现，只允许访问当前用户自己的课程。
 
 ### GET `/courses/{course_id}/overview`
 
-用途：获取课程概览、章节和知识点。
+用途：获取课程概览、章节和知识点。Phase 5.1 已实现。
 
 ### GET `/courses/{course_id}/knowledge-points`
 
-用途：获取课程知识点。
+用途：获取课程知识点。Phase 5.1 已实现。
+
+响应元素：
+
+```json
+{
+  "id": "9001",
+  "title": "梯度下降",
+  "chapter": "优化方法",
+  "summary": "理解梯度方向和学习率。",
+  "order": 1,
+  "mastery_level": "not_started",
+  "chunk_count": 3
+}
+```
 
 ### GET `/courses/{course_id}/mastery-map`
 
-用途：获取知识点掌握地图。
+用途：获取知识点掌握地图。当前未实现，后续由掌握度和练习评估阶段接入。
 
 响应包含：
 
@@ -558,7 +589,7 @@ Authorization: Bearer <token>
 
 ### POST `/courses/from-materials`
 
-用途：根据资料库中的一个或多个资料生成课程。Phase 4.4 未实现，前端“从资料生成课程”仍是预备交互，真实建课放到后续阶段。
+用途：根据资料库中的一个或多个资料生成课程。Phase 5.1 已实现，必须携带 JWT。当前只支持当前用户个人资料库里 `parse_status=completed` 且已有 `extracted_text` 的 TXT/Markdown 资料；PDF/DOCX/PPTX/图片会返回 400，提示“当前仅支持已解析的 TXT/Markdown 生成课程”。
 
 请求：
 
@@ -568,6 +599,47 @@ Authorization: Bearer <token>
   "course_title": "机器学习期末复习"
 }
 ```
+
+响应：
+
+```json
+{
+  "data": {
+    "course": {
+      "id": "101",
+      "title": "机器学习期末复习",
+      "description": "由 2 份资料生成",
+      "subject": "自主学习",
+      "source_type": "uploaded",
+      "status": "ready",
+      "progress_percent": 0,
+      "material_count": 2,
+      "knowledge_point_count": 6,
+      "chunk_count": 18
+    },
+    "knowledge_points": [
+      {
+        "id": "9001",
+        "title": "第一章 绪论",
+        "chapter": "第一章 绪论",
+        "summary": "由资料内容生成的课程知识点摘要。",
+        "order": 1,
+        "mastery_level": "not_started",
+        "chunk_count": 3
+      }
+    ]
+  },
+  "trace_id": "trace_20260703_course_001"
+}
+```
+
+生成规则：
+
+- Markdown 的 `#`、`##`、`###` 标题优先生成章节和知识点。
+- TXT 无标题时按段落生成“第 1 部分 / 第 2 部分”等知识点。
+- 后端会创建 `Course`、`CourseEnrollment`、兼容旧链路的 `CourseMaterial`、`CourseMaterialLink`、`KnowledgePoint` 和 `KnowledgeChunk`。
+- 本轮 `knowledge_chunks.embedding=null`，真实向量化和 RAG 检索留到后续 Phase。
+- 前端 `/app` 主页资料库浮层和 `/app/library` 使用同一接口；成功后刷新 summary/materials 并跳转 `/app/courses/{course_id}`。
 
 ### POST `/materials/compare`
 

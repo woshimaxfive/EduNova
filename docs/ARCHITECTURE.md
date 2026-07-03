@@ -48,7 +48,7 @@ Nginx
 
 前端使用 React + TypeScript + Vite，定位为学生 AI 学习空间。具体设计基线见 [UI_UX_DESIGN.md](UI_UX_DESIGN.md)，入口与路由设计见 [FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)。
 
-第一版前端不采用后台管理式左侧菜单，不把首屏做成卡片堆。2026-07-02 P3 精修后，首页采用“贴左边缘主页侧栏 + 可收起历史对话 + 侧栏账号入口 + 中心 AI 学习入口 + 输入区资料库浮层按钮 + 最近学习轻量列表”的结构；发送主页问题后进入对话态，输入区移动到下方，靠近 ChatGPT 的对话工作方式。主页输入框已具备文件上传入口、资料库选择、生成课程入口、联网搜索激活态、深度思考激活态、语音入口和 Enter 发送/Shift+Enter 换行的前端行为。课程空间采用“课程内对话 + 今日任务 + 知识画布 + 资源工坊 + 证据层 + Agent 轨迹”的静态/半静态壳子；资料库已调整为文件库式页面，按文档/图片等文件类型筛选，视觉通过半透明、细分隔线和背景模糊融入页面。P3.13 后，普通路由只保留短标题，不展示重复说明句；普通路由侧栏高亮当前页面，“新建对话”回到 `/app`；资料库上传只入库，不自动加入生成课程选择，生成课程浮层默认未选中。P3.15 后，回答附加信息默认折叠，资料库和生成课程主操作在未选资料前禁用，从资料库进入生成课程时只保留一个上层浮层，资源工坊只保留一个主生成入口。P3.9 之后受保护应用区统一使用 `AppSidebar` 贴边工作区外壳：资料库、资源工坊、画像、AI 辅导、练习、报告和设置不再保留旧顶部导航，且普通路由侧栏显示主页全局历史；课程空间复用侧栏视觉，但显示课程内历史；个人资料、设置和退出登录固定在侧栏底部；AI 辅导、练习和报告也可从课程空间行动入口进入。注册页通过 `starter_mode` 决定是否复制人工智能导论示例课程，登录页不提供共享演示学生按钮。后续由真实课程、资料、RAG、画像、练习评估、报告和 Agent 数据驱动。
+第一版前端不采用后台管理式左侧菜单，不把首屏做成卡片堆。2026-07-02 P3 精修后，首页采用“贴左边缘主页侧栏 + 可收起历史对话 + 侧栏账号入口 + 中心 AI 学习入口 + 输入区资料库浮层按钮 + 最近学习轻量列表”的结构；发送主页问题后进入对话态，输入区移动到下方，靠近 ChatGPT 的对话工作方式。主页输入框已具备文件上传入口、资料库选择、生成课程入口、联网搜索激活态、深度思考激活态、语音入口和 Enter 发送/Shift+Enter 换行的前端行为。课程空间采用“课程内对话 + 今日任务 + 知识画布 + 资源工坊 + 证据层 + Agent 轨迹”的静态/半静态壳子；独立 `/app/path` 学习路径页展示阶段任务、路径依据和下一步行动，但不放到首页抢主视觉；资料库已调整为文件库式页面，按文档/图片等文件类型筛选，视觉通过半透明、细分隔线和背景模糊融入页面。P3.13 后，普通路由只保留短标题，不展示重复说明句；普通路由侧栏高亮当前页面，“新建对话”回到 `/app`；资料库上传只入库，不自动加入生成课程选择，生成课程浮层默认未选中。P3.15 后，回答附加信息默认折叠，资料库和生成课程主操作在未选资料前禁用，从资料库进入生成课程时只保留一个上层浮层，资源工坊只保留一个主生成入口。P3.9 之后受保护应用区统一使用 `AppSidebar` 贴边工作区外壳：资料库、资源工坊、画像、AI 辅导、练习、报告和设置不再保留旧顶部导航，且普通路由侧栏显示主页全局历史；课程空间复用侧栏视觉，但显示课程内历史；个人资料、设置和退出登录固定在侧栏底部；AI 辅导、练习、学习路径和报告也可从课程空间行动入口或回答展开区进入。注册页通过 `starter_mode` 决定是否复制人工智能导论示例课程，登录页不提供共享演示学生按钮。后续由真实课程、资料、RAG、画像、练习评估、报告和 Agent 数据驱动。
 
 目录规划：
 
@@ -98,6 +98,7 @@ frontend/src/
 | 学习主页 | 第一屏主体验，承载贴边可收起主页历史、侧栏账号入口、轻量输入框、发送后主页对话态、资料选择、文件上传和最近课程 |
 | 资料库 | 文件库式独立资料管理，支持搜索、上传、查看引用、作为主页参考和从资料生成课程；生成课程以浮层覆盖当前页面 |
 | 课程空间 | 已补前端静态/半静态壳子，承载课程内历史对话、课程资料、学习画布、资源工坊、证据层、AI 辅导、练习和报告等学习闭环入口 |
+| 学习路径 | 独立路径工作区，展示阶段任务、路径依据和下一步行动，后续接 `learning_paths` 与 `learning_tasks` |
 | 资源工坊 | 查看和管理生成的学习资源；当前已补资源生成工作台、生成队列和输出区 |
 | 画像 | 查看学习目标、基础、节奏、薄弱点和画像证据 |
 | AI 辅导 | 课程资料驱动的追问入口，展示辅导模式和引用来源 |
@@ -110,7 +111,7 @@ frontend/src/
 | 路由组 | 路径 |
 | --- | --- |
 | 公开入口 | `/`、`/login`、`/register`、`/demo` |
-| 应用区 | `/app`、`/app/library`、`/app/courses/:courseId`、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` |
+| 应用区 | `/app`、`/app/library`、`/app/path`、`/app/courses/:courseId`、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` |
 | 兜底 | `*` |
 
 路由保护：
@@ -148,7 +149,7 @@ frontend/src/
 | `frontend/src/api/client.ts` | Axios 客户端，默认基础路径 `/api/v1`，自动附加 token，401 清理登录态并返回登录页 |
 | `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、profiles、resources、agents、paths、tutor、practice、reports、demo、settings |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和短状态信号的纯状态模型 |
-| `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、资源工坊、画像、辅导、练习、报告、设置和 404；学生端核心页面已从占位页补成可扩展工作区骨架 |
+| `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、学习路径、资源工坊、画像、辅导、练习、报告、设置和 404；学生端核心页面已从占位页补成可扩展工作区骨架 |
 | `frontend/src/components` | `AppSidebar`、学习空间壳子、学习画布、资料源簇、AI 命令栏、资源输出区、证据层、Agent 轨迹、上传建课状态轨道、学习空间状态条和统一 `ActionNotice` 反馈层；`/app` 首页已补 GPT 式贴边侧栏、可收起历史、侧栏账号入口、AI 对话主页、输入区资料库浮层入口、文件上传入口、最近学习轻量列表、发送后对话态和生成课程浮层，回答附加信息默认折叠；`/app/library` 已改为文件库式资料管理页，资料选择和生成课程主操作具备禁用态，资料库到生成课程只保留单一上层浮层；`/app/courses/:courseId` 已组合课程空间静态壳子，资料库、课程空间、资源工坊、画像、辅导、练习、报告和设置复用同一贴边工作区视觉体系；`PageFrame` 只承担普通路由外壳，不抢占内部内容区语义 |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、深色模式、reduced motion 和 reduced transparency 基础 |
 
@@ -188,10 +189,10 @@ backend/app/
 | `backend/app/core/config.py` | 环境配置，读取 `DATABASE_URL` 和 `REDIS_URL` |
 | `backend/app/db/base.py` | SQLAlchemy Declarative Base |
 | `backend/app/db/session.py` | 数据库 engine、Session 工厂和依赖入口 |
-| `backend/app/models` | 用户、课程、资料、知识点、知识切片核心模型 |
+| `backend/app/models` | 用户、课程、资料、知识点、知识切片核心模型，以及画像、路径、资源、Agent 轨迹、练习、报告、对话和模型设置基础模型 |
 | `backend/app/data/builtin_courses` | 内置课程包数据 |
 | `backend/app/services/course_seed.py` | 内置课程导入服务 |
-| `backend/migrations` | Alembic 迁移环境和 pgvector 扩展迁移 |
+| `backend/migrations` | Alembic 迁移环境、pgvector 扩展迁移、核心学习表迁移和学习闭环表迁移 |
 
 分层职责：
 
@@ -410,17 +411,17 @@ Docker Compose 服务：
 
 | 服务 | 作用 |
 | --- | --- |
-| frontend | 构建前端静态资源 |
+| frontend | 构建并托管前端静态资源 |
 | backend | FastAPI 服务 |
 | postgres | PostgreSQL + pgvector |
 | redis | 任务进度、缓存、限流 |
-| nginx | 统一入口 |
+| nginx | 统一入口，`/api/` 转发后端，其余请求转发前端 |
 
 默认访问：
 
 ```text
-http://localhost
-http://localhost/api/health
+http://localhost:8080
+http://localhost:8080/api/health
 ```
 
 环境变量通过 `.env` 管理，仓库只提交 `.env.example`。

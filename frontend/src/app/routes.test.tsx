@@ -71,6 +71,29 @@ describe("EduNova routes", () => {
     expect(screen.getByRole("region", { name: "资源生成区" })).toBeInTheDocument();
   });
 
+  it("renders the protected learning path workspace for an authenticated student", async () => {
+    useAuthStore.getState().setSession({
+      token: "demo-token",
+      user: {
+        id: 1,
+        email: "demo@edunova.local",
+        displayName: "演示学生",
+        role: "student"
+      }
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/app/path"]}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: "学习路径" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "阶段任务" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "路径依据" })).toBeInTheDocument();
+    expect(screen.getByText("下一步行动")).toBeInTheDocument();
+  });
+
   it("treats the retired design lab route as not found", async () => {
     useAuthStore.getState().setSession({
       token: "demo-token",

@@ -1,0 +1,373 @@
+from __future__ import annotations
+
+from datetime import datetime
+from decimal import Decimal
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
+
+from backend.app.db.base import Base
+from backend.app.models.mixins import CreatedAtMixin, IdMixin, TimestampMixin
+
+
+class StudentProfile(IdMixin, TimestampMixin, Base):
+    __tablename__ = "student_profiles"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_student_profiles_user_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    profile_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    confidence_score: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        nullable=False,
+        default=0,
+    )
+    updated_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ProfileEvent(IdMixin, CreatedAtMixin, Base):
+    __tablename__ = "profile_events"
+    __table_args__ = (
+        Index("ix_profile_events_user_profile", "user_id", "profile_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    profile_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("student_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    dimension: Mapped[str] = mapped_column(String(80), nullable=False)
+    change_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class LearningPath(IdMixin, TimestampMixin, Base):
+    __tablename__ = "learning_paths"
+    __table_args__ = (
+        Index("ix_learning_paths_user_course_status", "user_id", "course_id", "status"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    goal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    plan_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class LearningTask(IdMixin, TimestampMixin, Base):
+    __tablename__ = "learning_tasks"
+    __table_args__ = (
+        Index("ix_learning_tasks_path_status", "path_id", "status"),
+        Index("ix_learning_tasks_user_course_status", "user_id", "course_id", "status"),
+    )
+
+    path_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("learning_paths.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    knowledge_point_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("knowledge_points.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    task_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recommended_resource_ids: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class GeneratedResource(IdMixin, TimestampMixin, Base):
+    __tablename__ = "generated_resources"
+    __table_args__ = (
+        Index("ix_generated_resources_user_course", "user_id", "course_id"),
+        Index("ix_generated_resources_status", "status"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    knowledge_point_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("knowledge_points.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resource_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    citation_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
+    review_status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    confidence_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+
+
+class ResourceQualityScore(IdMixin, CreatedAtMixin, Base):
+    __tablename__ = "resource_quality_scores"
+    __table_args__ = (
+        Index("ix_resource_quality_scores_resource", "resource_id"),
+    )
+
+    resource_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("generated_resources.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    score_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    score_value: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class AgentRunLog(IdMixin, CreatedAtMixin, Base):
+    __tablename__ = "agent_run_logs"
+    __table_args__ = (
+        Index("ix_agent_run_logs_trace_id", "trace_id"),
+        Index("ix_agent_run_logs_user_course", "user_id", "course_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("courses.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    trace_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    agent_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    step_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="queued")
+    input_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    output_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class PracticeSession(IdMixin, TimestampMixin, Base):
+    __tablename__ = "practice_sessions"
+    __table_args__ = (
+        Index("ix_practice_sessions_user_course", "user_id", "course_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
+    score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+
+
+class PracticeAnswer(IdMixin, CreatedAtMixin, Base):
+    __tablename__ = "practice_answers"
+    __table_args__ = (
+        Index("ix_practice_answers_session", "session_id"),
+    )
+
+    session_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("practice_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    question_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    answer_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    feedback_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+
+class AssessmentReport(IdMixin, CreatedAtMixin, Base):
+    __tablename__ = "assessment_reports"
+    __table_args__ = (
+        Index("ix_assessment_reports_user_course", "user_id", "course_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    practice_session_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("practice_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    report_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+
+
+class WeaknessReviewItem(IdMixin, TimestampMixin, Base):
+    __tablename__ = "weakness_review_queue"
+    __table_args__ = (
+        Index(
+            "ix_weakness_review_queue_user_course_status",
+            "user_id",
+            "course_id",
+            "status",
+        ),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    knowledge_point_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("knowledge_points.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    recommended_resource_ids: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+    )
+    next_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ChatSession(IdMixin, TimestampMixin, Base):
+    __tablename__ = "chat_sessions"
+    __table_args__ = (
+        Index("ix_chat_sessions_user_scope_course", "user_id", "scope", "course_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    scope: Mapped[str] = mapped_column(String(50), nullable=False, default="home")
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    mode: Mapped[str] = mapped_column(String(50), nullable=False, default="chat")
+    archived_from_home: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class ChatMessage(IdMixin, CreatedAtMixin, Base):
+    __tablename__ = "chat_messages"
+    __table_args__ = (
+        Index("ix_chat_messages_session_created", "session_id", "created_at"),
+    )
+
+    session_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    role: Mapped[str] = mapped_column(String(50), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    citation_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+
+class ModelSetting(IdMixin, TimestampMixin, Base):
+    __tablename__ = "model_settings"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_model_settings_user_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default="openai-compatible",
+    )
+    base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    api_key_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chat_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    tool_flags_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)

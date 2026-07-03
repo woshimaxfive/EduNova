@@ -4,6 +4,7 @@ import {
   ChartLineUp,
   ChatCircleText,
   CheckCircle,
+  Compass,
   FileText,
   ListChecks,
   Sparkle,
@@ -29,6 +30,7 @@ const courseThreads = [
 ];
 
 const courseActionLinks = [
+  { label: "查看学习路径", to: PATHS.path, icon: Compass },
   { label: "进入 AI 辅导", to: PATHS.tutor, icon: ChatCircleText },
   { label: "开始练习", to: PATHS.practice, icon: ListChecks },
   { label: "查看学习报告", to: PATHS.reports, icon: ChartLineUp }

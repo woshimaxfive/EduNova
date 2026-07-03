@@ -5,6 +5,7 @@ export const PATHS = {
   demo: "/demo",
   app: "/app",
   library: "/app/library",
+  path: "/app/path",
   courses: "/app/courses",
   courseDetail: "/app/courses/:courseId",
   studio: "/app/studio",

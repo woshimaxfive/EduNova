@@ -31,12 +31,13 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/app/core/config.py`：读取数据库和 Redis 配置。
 - `backend/app/db/base.py`：SQLAlchemy metadata 入口。
 - `backend/app/db/session.py`：engine 与 Session 工厂。
-- `backend/app/models`：第一批核心业务模型。
+- `backend/app/models`：核心业务模型和学习闭环基础模型。
 - `backend/app/data/builtin_courses/ai_intro.py`：人工智能导论内置课程包。
 - `backend/app/services/course_seed.py`：内置课程导入服务。
 - `backend/migrations`：Alembic 迁移目录。
 - `backend/migrations/versions/20260701_0001_enable_pgvector.py`：启用 pgvector 扩展。
 - `backend/migrations/versions/20260701_0002_create_core_learning_tables.py`：创建用户、课程、选课、资料、知识点和知识切片表。
+- `backend/migrations/versions/20260701_0003_create_learning_closure_tables.py`：创建画像、学习路径、生成资源、Agent 轨迹、练习、报告、对话和模型设置基础表。
 
 ## 3. 核心关系图
 
@@ -242,7 +243,9 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | `id` | bigint | 主键 |
 | `user_id` | bigint | 用户 |
 | `profile_json` | jsonb | 8 维画像 |
-| `version` | integer | 版本 |
+| `confidence_score` | numeric | 当前画像可信度 |
+| `updated_reason` | text | 最近一次更新原因摘要 |
+| `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
 ### 4.8 `profile_events`
@@ -255,11 +258,10 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | --- | --- | --- |
 | `id` | bigint | 主键 |
 | `user_id` | bigint | 用户 |
+| `profile_id` | bigint | 对应画像，可为空 |
 | `dimension` | varchar | 画像维度 |
-| `old_value` | text | 旧值 |
-| `new_value` | text | 新值 |
-| `reason` | text | 变化原因 |
-| `evidence_refs` | jsonb | 证据引用 |
+| `change_summary` | text | 变化摘要 |
+| `evidence_json` | jsonb | 证据引用和触发来源 |
 | `created_at` | timestamptz | 创建时间 |
 
 ### 4.9 `learning_paths`
@@ -274,6 +276,7 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | `user_id` | bigint | 用户 |
 | `course_id` | bigint | 课程 |
 | `title` | varchar | 路径标题 |
+| `goal` | text | 学习目标 |
 | `status` | varchar | 状态 |
 | `plan_json` | jsonb | 路径结构 |
 | `created_at` | timestamptz | 创建时间 |
@@ -294,11 +297,11 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | `knowledge_point_id` | bigint | 知识点 |
 | `title` | varchar | 任务标题 |
 | `task_type` | varchar | 讲解、练习、复习、冲刺 |
+| `reason` | text | 推荐理由 |
+| `recommended_resource_ids` | jsonb | 推荐资源 ID 列表 |
 | `status` | varchar | 未开始、进行中、完成 |
 | `due_at` | timestamptz | 建议完成时间 |
-| `source_type` | varchar | 系统生成、评估触发、冲刺触发 |
-| `evidence_refs` | jsonb | 推荐依据 |
-| `order_index` | integer | 排序 |
+| `next_review_at` | timestamptz | 下次复习时间 |
 
 ### 4.11 `generated_resources`
 
@@ -314,13 +317,13 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | `knowledge_point_id` | bigint | 知识点 |
 | `resource_type` | varchar | 资源类型 |
 | `title` | varchar | 标题 |
-| `content_markdown` | text | Markdown 内容 |
 | `content_json` | jsonb | 结构化内容 |
-| `citation_refs` | jsonb | 引用来源 |
+| `citation_json` | jsonb | 引用来源 |
+| `status` | varchar | 生成状态 |
 | `review_status` | varchar | 审核状态 |
 | `confidence_score` | numeric | 可信度 |
-| `trace_id` | varchar | Agent 任务编号 |
 | `created_at` | timestamptz | 创建时间 |
+| `updated_at` | timestamptz | 更新时间 |
 
 ### 4.12 `resource_quality_scores`
 
@@ -332,12 +335,10 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | --- | --- | --- |
 | `id` | bigint | 主键 |
 | `resource_id` | bigint | 资源 |
-| `source_match` | numeric | 资料匹配度 |
-| `profile_fit` | numeric | 画像适配度 |
-| `fact_confidence` | numeric | 事实可信度 |
-| `difficulty_fit` | numeric | 难度适配度 |
-| `completeness` | numeric | 完整度 |
-| `notes` | text | 评分说明 |
+| `score_name` | varchar | 评分项名称 |
+| `score_value` | numeric | 评分值 |
+| `rationale` | text | 评分说明 |
+| `created_at` | timestamptz | 创建时间 |
 
 ### 4.13 `agent_run_logs`
 
@@ -353,13 +354,11 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | `course_id` | bigint | 课程 |
 | `agent_name` | varchar | Agent 名称 |
 | `step_index` | integer | 步骤 |
+| `status` | varchar | 状态 |
 | `input_summary` | text | 输入摘要 |
 | `output_summary` | text | 输出摘要 |
 | `duration_ms` | integer | 耗时 |
-| `status` | varchar | 状态 |
-| `citation_refs` | jsonb | 引用 |
-| `review_status` | varchar | 审核状态 |
-| `error_message` | text | 错误摘要 |
+| `metadata_json` | jsonb | 安全摘要、引用摘要和补充元数据 |
 | `created_at` | timestamptz | 创建时间 |
 
 索引：
@@ -382,8 +381,8 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | `title` | varchar | 练习标题 |
 | `status` | varchar | 进行中、已完成 |
 | `score` | numeric | 得分 |
-| `started_at` | timestamptz | 开始时间 |
-| `finished_at` | timestamptz | 结束时间 |
+| `created_at` | timestamptz | 创建时间 |
+| `updated_at` | timestamptz | 更新时间 |
 
 ### 4.15 `practice_answers`
 
@@ -396,12 +395,10 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | `id` | bigint | 主键 |
 | `session_id` | bigint | 练习 |
 | `user_id` | bigint | 用户 |
-| `knowledge_point_id` | bigint | 知识点 |
 | `question_json` | jsonb | 题目 |
 | `answer_text` | text | 学生答案 |
 | `is_correct` | boolean | 是否正确 |
-| `score` | numeric | 单题得分 |
-| `feedback` | text | 解析 |
+| `feedback_json` | jsonb | 批改反馈 |
 | `created_at` | timestamptz | 创建时间 |
 
 ### 4.16 `assessment_reports`
@@ -415,10 +412,9 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | `id` | bigint | 主键 |
 | `user_id` | bigint | 用户 |
 | `course_id` | bigint | 课程 |
+| `practice_session_id` | bigint | 来源练习，可为空 |
 | `report_json` | jsonb | 报告内容 |
-| `mastery_json` | jsonb | 掌握度 |
-| `weakness_json` | jsonb | 薄弱点 |
-| `evidence_refs` | jsonb | 证据 |
+| `score` | numeric | 综合得分 |
 | `created_at` | timestamptz | 创建时间 |
 
 ### 4.17 `weakness_review_queue`
@@ -433,11 +429,13 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | `user_id` | bigint | 用户 |
 | `course_id` | bigint | 课程 |
 | `knowledge_point_id` | bigint | 薄弱知识点 |
-| `weakness_reason` | text | 原因 |
-| `priority` | integer | 优先级 |
+| `title` | varchar | 复习项标题 |
+| `source_type` | varchar | 来源类型 |
+| `status` | varchar | 待复习、进行中、完成 |
 | `recommended_resource_ids` | jsonb | 推荐资源 |
 | `next_review_at` | timestamptz | 下次复习时间 |
-| `status` | varchar | 待复习、进行中、完成 |
+| `created_at` | timestamptz | 创建时间 |
+| `updated_at` | timestamptz | 更新时间 |
 
 ### 4.18 `chat_sessions` 与 `chat_messages`
 
@@ -467,7 +465,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - `user_id`。
 - `role`。
 - `content`。
-- `citation_refs`。
+- `citation_json`。
 - `trace_id`。
 - `created_at`。
 
@@ -483,11 +481,12 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 | `user_id` | bigint | 用户 |
 | `provider` | varchar | 模型供应商 |
 | `base_url` | text | 接口地址 |
-| `encrypted_api_key` | text | 加密后的 API Key |
+| `api_key_ciphertext` | text | 加密后的 API Key |
 | `chat_model` | varchar | 聊天模型 |
 | `embedding_model` | varchar | 向量模型 |
-| `is_default` | boolean | 是否默认 |
+| `tool_flags_json` | jsonb | 工具开关 |
 | `created_at` | timestamptz | 创建时间 |
+| `updated_at` | timestamptz | 更新时间 |
 
 要求：
 
@@ -627,6 +626,7 @@ Demo 数据要求：
 6. 删除字段前先确认没有业务依赖。
 7. pgvector 扩展由首条迁移 `20260701_0001_enable_pgvector.py` 启用。
 8. 第一批核心业务表由迁移 `20260701_0002_create_core_learning_tables.py` 创建。
+9. 学习闭环基础表由迁移 `20260701_0003_create_learning_closure_tables.py` 创建。
 
 当前迁移命令：
 
@@ -653,6 +653,7 @@ Demo 数据要求：
 当前已验证：
 
 - Alembic 能创建 `users`、`courses`、`course_enrollments`、`course_materials`、`knowledge_points`、`knowledge_chunks`。
+- Alembic metadata 已注册并迁移创建 `student_profiles`、`profile_events`、`learning_paths`、`learning_tasks`、`generated_resources`、`resource_quality_scores`、`agent_run_logs`、`practice_sessions`、`practice_answers`、`assessment_reports`、`weakness_review_queue`、`chat_sessions`、`chat_messages` 和 `model_settings`。
 - `knowledge_chunks.embedding` 使用 `vector(1536)`。
 - `knowledge_chunks.embedding` 已建立 `ivfflat` 向量索引。
 - 第二条迁移已完成 downgrade/upgrade 往返验证。

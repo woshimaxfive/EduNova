@@ -252,11 +252,11 @@ git commit -m "feat(backend): scaffold FastAPI foundation"
 
 ### Task 1.2: Docker Infrastructure
 
-- [ ] Create `.env.example` with safe sample values and no real key.
-- [ ] Create `docker-compose.yml` with services `postgres`, `redis`, `backend`, `frontend`, `nginx`.
-- [ ] Configure PostgreSQL image to enable pgvector through migration, not through manual database steps.
-- [ ] Create `docker/backend.Dockerfile`, `docker/frontend.Dockerfile`, `docker/nginx.conf`.
-- [ ] Verify local dependencies first:
+- [x] Create `.env.example` with safe sample values and no real key.
+- [x] Create `docker-compose.yml` with services `postgres`, `redis`, `backend`, `frontend`, `nginx`.
+- [x] Configure PostgreSQL image to enable pgvector through migration, not through manual database steps.
+- [x] Create `docker/backend.Dockerfile`, `docker/frontend.Dockerfile`, `docker/nginx.conf`.
+- [x] Verify local dependencies first:
 
 ```powershell
 docker compose config

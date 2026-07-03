@@ -7,6 +7,7 @@ import { PATHS } from "./routePaths";
 import { useAuthStore } from "../features/auth/authStore";
 import { DemoEntryPage } from "../pages/DemoEntryPage";
 import { LibraryPage } from "../pages/LibraryPage";
+import { LearningPathPage } from "../pages/LearningPathPage";
 import { LearningSpacePage } from "../pages/LearningSpacePage";
 import { LoginPage } from "../pages/LoginPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
@@ -48,6 +49,7 @@ export function AppRoutes() {
       <Route path={PATHS.demo} element={publicPage(<DemoEntryPage />)} />
       <Route path={PATHS.app} element={protectedPage(<LearningSpacePage />)} />
       <Route path={PATHS.library} element={protectedPage(<LibraryPage />)} />
+      <Route path={PATHS.path} element={protectedPage(<LearningPathPage />)} />
       <Route path={PATHS.courseDetail} element={protectedPage(lazyPage(<CourseSpacePage />))} />
       <Route path={PATHS.studio} element={protectedPage(<StudioPage />)} />
       <Route path={PATHS.profile} element={protectedPage(<ProfilePage />)} />

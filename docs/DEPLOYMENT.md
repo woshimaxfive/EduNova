@@ -4,14 +4,16 @@
 
 ## 1. 当前部署范围
 
-本文档记录 EduNova 的部署方式。当前已覆盖工程骨架、核心数据表迁移、人工智能导论内置课程包导入命令和 Phase 3 前端本地开发/构建：
+本文档记录 EduNova 的部署方式。当前已覆盖工程骨架、核心数据表迁移、学习闭环表基础、人工智能导论内置课程包导入命令、Phase 3 前端本地开发/构建、前端静态服务和 Nginx 统一入口草案：
 
 - FastAPI backend。
 - PostgreSQL + pgvector。
 - Redis。
+- React 前端静态服务。
+- Nginx 统一入口。
 - Alembic 迁移。
 - pgvector 扩展初始化。
-- 用户、课程、选课、资料、知识点和知识切片表。
+- 用户、课程、选课、资料、知识点、知识切片、画像、学习路径、生成资源、Agent 轨迹、练习、报告、对话和模型设置表。
 - 人工智能导论内置课程包导入命令。
 - React + TypeScript + Vite 前端本地开发服务器。
 - 前端 lint、Vitest 和生产构建命令。
@@ -20,8 +22,6 @@
 
 以下能力还未接入当前部署：
 
-- Nginx。
-- Docker 前端静态服务。
 - AI/RAG、多智能体、上传资料和学习业务。
 
 这些能力会在后续阶段逐步加入，并同步更新本文档。
@@ -71,7 +71,7 @@ docker compose config
 构建并启动：
 
 ```powershell
-docker compose up --build -d postgres redis backend
+docker compose up --build -d
 ```
 
 查看服务：
@@ -84,6 +84,8 @@ docker compose ps
 
 ```text
 http://127.0.0.1:8000/api/health
+http://127.0.0.1:8080/health
+http://127.0.0.1:8080/api/health
 ```
 
 预期响应：
@@ -105,6 +107,8 @@ docker compose down
 | `postgres` | `pgvector/pgvector:pg16` | `5432` | PostgreSQL + pgvector |
 | `redis` | `redis:7-alpine` | `6379` | 缓存、进度和后续限流 |
 | `backend` | `docker/backend.Dockerfile` | `8000` | FastAPI 后端 |
+| `frontend` | `docker/frontend.Dockerfile` | 内部 `80` | Vite 生产构建后的静态前端，只供 Nginx 访问 |
+| `nginx` | `nginx:1.27-alpine` | `8080` | 统一入口，`/api/` 转发后端，其余转发前端 |
 
 如果本机端口已被占用，可以在 `.env` 中改为其他宿主机端口：
 
@@ -112,12 +116,15 @@ docker compose down
 POSTGRES_PORT=15432
 REDIS_PORT=16379
 BACKEND_PORT=18000
+NGINX_PORT=18080
 ```
+
+Docker 预览时外部统一访问 Nginx，前端容器不直接占用宿主机 `5173`，避免和 `pnpm dev` 的本地开发服务器冲突。
 
 Compose 未固定 `container_name`，同机多个 checkout 可以通过不同项目名和端口并存。需要显式指定项目名时可使用：
 
 ```powershell
-docker compose -p edunova-dev up --build -d postgres redis backend
+docker compose -p edunova-dev up --build -d
 ```
 
 ## 6. 数据库迁移
@@ -159,13 +166,16 @@ CREATE EXTENSION IF NOT EXISTS vector
 4. `backend` 服务健康。
 5. 浏览器或命令行访问 `/api/health` 返回预期 JSON。
 6. `alembic upgrade head` 能完成 pgvector 扩展迁移。
-7. `alembic upgrade head` 能创建第一批核心业务表。
+7. `alembic upgrade head` 能创建第一批核心业务表和学习闭环基础表。
 8. `python -m backend.app.cli seed-ai-intro` 能导入人工智能导论课程包。
 9. 重复执行导入命令不会创建重复课程。
 10. `frontend` 可执行 `pnpm lint`、`pnpm test` 和 `pnpm build`。
-11. 停止服务后本地 Git 状态不出现运行产物。
+11. `frontend` 静态服务和 `nginx` 统一入口能通过 Compose 配置校验。
+12. 停止服务后本地 Git 状态不出现运行产物。
 
-当前本机已验证后端与数据库基础验收项，并验证第二条迁移可以 downgrade/upgrade 往返。Phase 3 已验证前端 lint、Vitest 和 Vite build，覆盖 AI 对话主页、课程空间路由、学生端核心页面、学习空间路由、API 合同和上传建课状态模型；P3R3 对话主页已用本地浏览器检查桌面和移动宽度的 `/app` 首屏，无水平溢出，资料库浮层和生成课程浮层可打开且保持可读。P3.6 已用本地 Edge + Playwright 补充资料库、资源工坊、画像、辅导、练习、报告和设置在桌面与 390px 移动宽度下的可见性和无水平溢出检查。P3.8 已用 Edge + Playwright 检查分层导航：桌面顶部一级入口只保留学习空间、资料库和资源工坊，个人菜单可进入画像、报告和设置；390px 移动宽度无水平溢出；课程空间可见 AI 辅导、练习和报告行动入口。GPT 式主页壳和文件库式资料库已用 Edge + Playwright 检查：桌面端侧栏贴左边缘、可收起，侧栏个人资料/设置/退出可见，输入框宽度收窄，上传资料文件能进入本地演示资料库，资料默认未选中且点选后高亮，联网搜索可激活，Enter 发送后进入主页对话态并显示下方输入区；`/app/library` 的从资料生成课程浮层覆盖整个视口；390px 移动宽度无水平溢出。P3.9 已用 Edge + Playwright 复验登录页无共享演示学生按钮、注册页空白 starter mode、空白主页无内置课程和资料、资料库路由与课程空间路由复用贴边工作区侧栏、课程侧栏历史可切换当前线程，以及 390px 移动宽度无水平溢出。本轮又复验了资料库视觉和交互：普通路由侧栏显示主页全局历史，资料库去掉突兀硬白表格块，文档/图片筛选可用，上传资料进入列表，生成课程浮层内资料可选。P3.10 已完成界面文案减法，核心页面短标题、短说明和资源工坊短状态信号已通过测试与浏览器抽查；主页首屏解释句已移除，资料来源提示只在选择资料或开启联网后出现，并已在桌面和 390px 移动宽度下复验无水平溢出。P3.15 已用 Codex 内置浏览器复验：连续追问不重复新增历史，回答附加信息默认折叠且可展开/切换/收起，搜索历史浮层可过滤，资料库未选择资料时主按钮禁用，资料库到生成课程保持单一浮层，创建课程草案后关闭并反馈，资源工坊只保留一个生成资源按钮；390px 下 `/app` 和 `/app/library` 无水平溢出。P3.16 已用 Codex 内置浏览器复验：退出后登录页邮箱和密码为空且不显示 demo 邮箱；资源工坊五类资源为讲解、练习、思维导图、代码实操和 PPT 大纲；课程空间展开 Agent 过程后显示 PathAgent 且不显示 PlannerAgent；资料库图片资料显示“仅入库，暂不做 OCR”；390px 下 `/app/studio` 和 `/app/library` 无水平溢出。
+当前本机已验证后端与数据库基础验收项，并验证第二条迁移可以 downgrade/upgrade 往返。2026-07-03 已补第三条学习闭环迁移、frontend 静态服务 Dockerfile 和 Nginx 统一入口配置，并通过自动化测试确认 Compose 中存在 `frontend` 与 `nginx` 服务。Phase 3 已验证前端 lint、Vitest 和 Vite build，覆盖 AI 对话主页、课程空间路由、独立学习路径路由、学生端核心页面、学习空间路由、API 合同和上传建课状态模型；P3R3 对话主页已用本地浏览器检查桌面和移动宽度的 `/app` 首屏，无水平溢出，资料库浮层和生成课程浮层可打开且保持可读。P3.6 已用本地 Edge + Playwright 补充资料库、资源工坊、画像、辅导、练习、报告和设置在桌面与 390px 移动宽度下的可见性和无水平溢出检查。P3.8 已用 Edge + Playwright 检查分层导航：桌面顶部一级入口只保留学习空间、资料库和资源工坊，个人菜单可进入画像、报告和设置；390px 移动宽度无水平溢出；课程空间可见 AI 辅导、练习和报告行动入口。GPT 式主页壳和文件库式资料库已用 Edge + Playwright 检查：桌面端侧栏贴左边缘、可收起，侧栏个人资料/设置/退出可见，输入框宽度收窄，上传资料文件能进入本地演示资料库，资料默认未选中且点选后高亮，联网搜索可激活，Enter 发送后进入主页对话态并显示下方输入区；`/app/library` 的从资料生成课程浮层覆盖整个视口；390px 移动宽度无水平溢出。P3.9 已用 Edge + Playwright 复验登录页无共享演示学生按钮、注册页空白 starter mode、空白主页无内置课程和资料、资料库路由与课程空间路由复用贴边工作区侧栏、课程侧栏历史可切换当前线程，以及 390px 移动宽度无水平溢出。本轮又复验了资料库视觉和交互：普通路由侧栏显示主页全局历史，资料库去掉突兀硬白表格块，文档/图片筛选可用，上传资料进入列表，生成课程浮层内资料可选。P3.10 已完成界面文案减法，核心页面短标题、短说明和资源工坊短状态信号已通过测试与浏览器抽查；主页首屏解释句已移除，资料来源提示只在选择资料或开启联网后出现，并已在桌面和 390px 移动宽度下复验无水平溢出。P3.15 已用 Codex 内置浏览器复验：连续追问不重复新增历史，回答附加信息默认折叠且可展开/切换/收起，搜索历史浮层可过滤，资料库未选择资料时主按钮禁用，资料库到生成课程保持单一浮层，创建课程草案后关闭并反馈，资源工坊只保留一个生成资源按钮；390px 下 `/app` 和 `/app/library` 无水平溢出。P3.16 已用 Codex 内置浏览器复验：退出后登录页邮箱和密码为空且不显示 demo 邮箱；资源工坊五类资源为讲解、练习、思维导图、代码实操和 PPT 大纲；课程空间展开 Agent 过程后显示 PathAgent 且不显示 PlannerAgent；资料库图片资料显示“仅入库，暂不做 OCR”；390px 下 `/app/studio` 和 `/app/library` 无水平溢出。
+
+本轮 P0-P3 收尾又用 Codex 内置浏览器复验 `/app/path`：桌面端学习路径、阶段任务、路径依据、下一步行动和开始练习入口可见；390px 移动宽度无水平溢出。Docker 预览口径同步为外部统一访问 Nginx，前端容器仅在 Compose 网络内供 Nginx 访问。
 
 ## 8. 前端本地运行
 
@@ -200,7 +210,6 @@ http://127.0.0.1:5173
 后续阶段将补充：
 
 - 后端数据库连接检查。
-- Docker 前端构建和静态服务。
-- Nginx 统一入口。
+- Docker 五服务真实启动验收截图和公网部署说明。
 - 演示模式初始化命令。
 - 生产部署建议。

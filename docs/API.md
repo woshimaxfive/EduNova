@@ -660,7 +660,7 @@ Authorization: Bearer <token>
 
 ### POST `/rag/search`
 
-用途：检索课程知识库。
+用途：检索课程知识库。Phase 5.2 已实现，必须携带 JWT，只能检索当前用户自己的课程；当前使用确定性关键词评分，不调用大模型、不做 embedding、不做向量召回。
 
 请求：
 
@@ -677,6 +677,9 @@ Authorization: Bearer <token>
 ```json
 {
   "data": {
+    "course_id": 1,
+    "query": "启发式搜索和盲目搜索有什么区别？",
+    "top_k": 5,
     "results": [
       {
         "chunk_id": 1,
@@ -694,6 +697,15 @@ Authorization: Bearer <token>
   "trace_id": "trace_20260701_008"
 }
 ```
+
+规则：
+
+- `top_k` 范围为 1 到 10，默认 5。
+- 空 query 返回校验错误。
+- 无 token 返回 401。
+- 访问他人课程返回 404。
+- 无命中时 `results=[]`，前端必须显示资料不足，不得伪造引用。
+- 本阶段 `knowledge_chunks.embedding` 保持为空，真实向量化留到后续 Phase 6。
 
 ## 10. Resource 接口
 

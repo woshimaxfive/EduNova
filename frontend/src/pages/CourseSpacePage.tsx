@@ -15,7 +15,8 @@ import { type KeyboardEvent, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
-import { getCourse, getKnowledgePoints, type ApiCourseKnowledgePoint } from "../api/courses";
+import { getCourse, getCourseOverview, getKnowledgePoints, type ApiCourseKnowledgePoint } from "../api/courses";
+import { searchRag, type RagSearchResultItem } from "../api/rag";
 import { LearningCanvas } from "../components/canvas/LearningCanvas";
 import { EvidenceLayer } from "../components/evidence/EvidenceLayer";
 import { ActionNotice } from "../components/feedback/ActionNotice";
@@ -24,6 +25,7 @@ import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { StudioDock } from "../components/studio/StudioDock";
 import { demoLearningSpace } from "../data/demoLearningSpace";
+import { type AgentTraceEvent, type CitationRef } from "../types/api";
 
 const courseThreads = [
   "监督学习这一章怎么安排复习？",
@@ -54,11 +56,63 @@ function mapKnowledgePointsToNodes(points: ApiCourseKnowledgePoint[]) {
   });
 }
 
+function materialTypeFromTitle(title: string) {
+  const extension = title.split(".").pop()?.toLowerCase();
+
+  if (extension === "md" || extension === "markdown") {
+    return "markdown" as const;
+  }
+  if (extension === "txt") {
+    return "txt" as const;
+  }
+  if (extension === "pdf") {
+    return "pdf" as const;
+  }
+  if (extension === "pptx") {
+    return "pptx" as const;
+  }
+  if (extension === "docx") {
+    return "docx" as const;
+  }
+  return "txt" as const;
+}
+
+function confidenceFromScore(score: number): CitationRef["confidence"] {
+  if (score >= 6) {
+    return "high";
+  }
+  if (score >= 3) {
+    return "medium";
+  }
+  return "low";
+}
+
+function mapRagResultsToCitations(results: RagSearchResultItem[]): CitationRef[] {
+  return results.map((result) => ({
+    id: `chunk-${result.chunk_id}`,
+    sourceTitle: result.source_title,
+    sectionTitle: result.section_title ?? "课程切片",
+    pageNumber: result.page_number ?? undefined,
+    confidence: confidenceFromScore(result.score)
+  }));
+}
+
+function buildCourseMaterials(titles: string[], knowledgePointCount: number) {
+  return titles.map((title, index) => ({
+    id: index + 1,
+    title,
+    type: materialTypeFromTitle(title),
+    parseStatus: "completed" as const,
+    coverageLabel: `${knowledgePointCount} 个知识点`
+  }));
+}
+
 type AnswerPanelKind = "citations" | "path" | "agent";
 type CourseMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  citations?: RagSearchResultItem[];
 };
 
 export function CourseSpacePage() {
@@ -77,12 +131,19 @@ export function CourseSpacePage() {
     enabled: hasRealCourseId,
     staleTime: 30_000
   });
+  const courseOverviewQuery = useQuery({
+    queryKey: ["courses", "overview", numericCourseId],
+    queryFn: () => getCourseOverview(numericCourseId),
+    enabled: hasRealCourseId,
+    staleTime: 30_000
+  });
   const [threads, setThreads] = useState(courseThreads);
   const [activeThread, setActiveThread] = useState(courseThreads[0]);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<AnswerPanelKind>("citations");
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [coursePrompt, setCoursePrompt] = useState("");
   const [courseMessages, setCourseMessages] = useState<CourseMessage[]>([]);
+  const [isSearchingCourse, setIsSearchingCourse] = useState(false);
   const { notice, showNotice } = useActionNotice();
   const snapshot = demoLearningSpace;
   const apiCourse = courseQuery.data?.data;
@@ -90,6 +151,7 @@ export function CourseSpacePage() {
     () => knowledgePointsQuery.data?.data ?? [],
     [knowledgePointsQuery.data?.data]
   );
+  const overviewMaterials = courseOverviewQuery.data?.data.materials ?? [];
   const courseSummary = apiCourse
     ? {
         id: Number.parseInt(apiCourse.id, 10),
@@ -102,15 +164,26 @@ export function CourseSpacePage() {
     : snapshot.currentCourse;
   const knowledgeNodes = apiKnowledgePoints.length > 0 ? mapKnowledgePointsToNodes(apiKnowledgePoints) : snapshot.knowledgeNodes;
   const sourceMaterials =
-    apiCourse && apiCourse.material_count > 0
-      ? Array.from({ length: apiCourse.material_count }, (_, index) => ({
-          id: index + 1,
-          title: `课程资料 ${index + 1}`,
-          type: "txt" as const,
-          parseStatus: "completed" as const,
-          coverageLabel: `${apiCourse.knowledge_point_count} 个知识点`
-        }))
-      : snapshot.materials;
+    overviewMaterials.length > 0
+      ? buildCourseMaterials(overviewMaterials, apiCourse?.knowledge_point_count ?? apiKnowledgePoints.length)
+      : apiCourse && apiCourse.material_count > 0
+        ? Array.from({ length: apiCourse.material_count }, (_, index) => ({
+            id: index + 1,
+            title: `课程资料 ${index + 1}`,
+            type: "txt" as const,
+            parseStatus: "completed" as const,
+            coverageLabel: `${apiCourse.knowledge_point_count} 个知识点`
+          }))
+        : snapshot.materials;
+  const latestAssistantWithRetrieval = [...courseMessages].reverse().find((message) => message.role === "assistant" && message.citations !== undefined);
+  const latestRagResults = latestAssistantWithRetrieval?.citations ?? [];
+  const hasRetrievalResult = Boolean(latestAssistantWithRetrieval);
+  const evidenceCitations = apiCourse ? mapRagResultsToCitations(latestRagResults) : snapshot.citations;
+  const retrieverStatus: AgentTraceEvent["status"] = !hasRetrievalResult
+    ? "pending"
+    : latestRagResults.length === 0
+      ? "warning"
+      : "completed";
   const canvasSnapshot = {
     ...snapshot,
     currentCourse: {
@@ -120,10 +193,36 @@ export function CourseSpacePage() {
     materials: sourceMaterials,
     knowledgeNodes
   };
+  const evidenceSnapshot = {
+    ...canvasSnapshot,
+    citations: evidenceCitations,
+    agentTrace: apiCourse
+      ? [
+          {
+            id: "rag-retriever",
+            agentName: "RetrieverAgent",
+            summary: hasRetrievalResult ? `检索到 ${latestRagResults.length} 条课程切片引用` : "等待课程问题触发检索",
+            status: retrieverStatus,
+            durationMs: hasRetrievalResult ? 120 : undefined
+          }
+        ]
+      : snapshot.agentTrace
+  };
   const materialCount = apiCourse?.material_count ?? snapshot.materials.length;
   const knowledgePointCount = apiCourse?.knowledge_point_count ?? snapshot.knowledgeNodes.length;
 
-  function sendCourseQuestion() {
+  function appendCourseMessages(question: string, assistantAnswer: string, citations?: RagSearchResultItem[]) {
+    const timestamp = Date.now();
+    setCourseMessages((current) => [
+      ...current,
+      { id: `course-user-${timestamp}`, role: "user", content: question },
+      { id: `course-assistant-${timestamp}`, role: "assistant", content: assistantAnswer, citations }
+    ]);
+    setThreads((current) => (current.includes(question) ? current : [question, ...current]));
+    setActiveThread(question);
+  }
+
+  async function sendCourseQuestion() {
     const question = coursePrompt.trim();
 
     if (!question) {
@@ -131,24 +230,45 @@ export function CourseSpacePage() {
       return;
     }
 
-    const assistantAnswer =
-      "我会按课程资料回答：先定位相关知识点，再给出复习顺序、引用来源和下一步练习。";
+    if (isSearchingCourse) {
+      return;
+    }
 
-    setCourseMessages((current) => [
-      ...current,
-      { id: `course-user-${Date.now()}`, role: "user", content: question },
-      { id: `course-assistant-${Date.now()}`, role: "assistant", content: assistantAnswer }
-    ]);
-    setThreads((current) => (current.includes(question) ? current : [question, ...current]));
-    setActiveThread(question);
-    setCoursePrompt("");
-    showNotice("已生成课程回答。", "success");
+    if (!hasRealCourseId) {
+      appendCourseMessages(question, "我会按课程资料回答：先定位相关知识点，再给出复习顺序、引用来源和下一步练习。");
+      setCoursePrompt("");
+      showNotice("已生成课程回答。", "success");
+      return;
+    }
+
+    setIsSearchingCourse(true);
+
+    try {
+      const searchResult = await searchRag({
+        course_id: numericCourseId,
+        query: question,
+        top_k: 5
+      });
+      const citations = searchResult.data.results;
+      const assistantAnswer =
+        citations.length > 0
+          ? "我先从课程资料里找到了相关依据。下面保留真实引用片段，后续接入大模型后会基于这些来源生成完整回答。"
+          : "我先检查了课程资料，但还没有足够依据支撑这个问题。";
+
+      appendCourseMessages(question, assistantAnswer, citations);
+      setCoursePrompt("");
+      showNotice(citations.length > 0 ? "已检索课程引用。" : "课程资料依据不足。", citations.length > 0 ? "success" : "warning");
+    } catch {
+      showNotice("课程检索失败，请稍后重试。", "warning");
+    } finally {
+      setIsSearchingCourse(false);
+    }
   }
 
   function handleCourseComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      sendCourseQuestion();
+      void sendCourseQuestion();
     }
   }
 
@@ -251,11 +371,16 @@ export function CourseSpacePage() {
                       <span>Agent 过程</span>
                     </button>
                   </div>
-                  <AnswerDetailPanel activePanel={activeAnswerPanel} />
+                  <AnswerDetailPanel
+                    activePanel={activeAnswerPanel}
+                    citations={latestRagResults}
+                    hasRealCourse={Boolean(apiCourse)}
+                    hasSearched={hasRetrievalResult}
+                  />
                   <div className="answer-citation-strip" aria-label="回答引用预览">
-                    {snapshot.citations.map((citation) => (
-                      <span key={citation.id}>{citation.sourceTitle}</span>
-                    ))}
+                    {apiCourse
+                      ? latestRagResults.map((citation) => <span key={citation.chunk_id}>{citation.source_title}</span>)
+                      : snapshot.citations.map((citation) => <span key={citation.id}>{citation.sourceTitle}</span>)}
                   </div>
                 </article>
 
@@ -264,6 +389,9 @@ export function CourseSpacePage() {
                     {courseMessages.map((message) => (
                       <article className={`course-message ${message.role}`} key={message.id}>
                         <p>{message.content}</p>
+                        {message.role === "assistant" && message.citations !== undefined ? (
+                          <CourseMessageCitations citations={message.citations} />
+                        ) : null}
                       </article>
                     ))}
                   </section>
@@ -279,9 +407,9 @@ export function CourseSpacePage() {
                     onKeyDown={handleCourseComposerKeyDown}
                     placeholder="继续问这门课，例如：给我生成监督学习 10 分钟复习路线"
                   />
-                  <button className="course-send-button" type="button" onClick={sendCourseQuestion}>
+                  <button className="course-send-button" type="button" disabled={isSearchingCourse} onClick={() => void sendCourseQuestion()}>
                     <ArrowRight size={17} weight="bold" aria-hidden="true" />
-                    <span>发送</span>
+                    <span>{isSearchingCourse ? "检索中" : "发送"}</span>
                   </button>
                 </div>
                 <ActionNotice notice={notice} />
@@ -323,7 +451,7 @@ export function CourseSpacePage() {
 
             <div className="course-space-secondary">
               <StudioDock outputs={snapshot.studioOutputs} />
-              <EvidenceLayer snapshot={snapshot} />
+              <EvidenceLayer snapshot={evidenceSnapshot} />
             </div>
           </div>
         </section>
@@ -334,9 +462,39 @@ export function CourseSpacePage() {
 
 type AnswerDetailPanelProps = {
   activePanel: AnswerPanelKind;
+  citations: RagSearchResultItem[];
+  hasRealCourse: boolean;
+  hasSearched: boolean;
 };
 
-function AnswerDetailPanel({ activePanel }: AnswerDetailPanelProps) {
+function CourseMessageCitations({ citations }: { citations: RagSearchResultItem[] }) {
+  if (citations.length === 0) {
+    return (
+      <section className="answer-detail-panel course-message-citations" role="region" aria-label="课程回答引用">
+        <strong>引用来源</strong>
+        <p>当前课程资料里没有找到足够依据。</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="answer-detail-panel course-message-citations" role="region" aria-label="课程回答引用">
+      <strong>引用来源</strong>
+      <div className="citation-list">
+        {citations.map((citation) => (
+          <article key={citation.chunk_id} className="citation-item">
+            <strong>{citation.source_title}</strong>
+            <span>{citation.section_title ?? "课程切片"}</span>
+            <small>匹配度 {citation.score.toFixed(1)}</small>
+            <p>{citation.content}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AnswerDetailPanel({ activePanel, citations, hasRealCourse, hasSearched }: AnswerDetailPanelProps) {
   if (activePanel === "path") {
     return (
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
@@ -351,6 +509,41 @@ function AnswerDetailPanel({ activePanel }: AnswerDetailPanelProps) {
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
         <strong>Agent 过程</strong>
         <p>RetrieverAgent 先检索课程资料，PathAgent 生成复习顺序，TutorAgent 再把结论写成可追问回答。</p>
+      </section>
+    );
+  }
+
+  if (hasRealCourse) {
+    if (!hasSearched) {
+      return (
+        <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
+          <strong>引用来源</strong>
+          <p>发送课程问题后，会先从本课程知识切片中检索真实引用。</p>
+        </section>
+      );
+    }
+
+    if (citations.length === 0) {
+      return (
+        <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
+          <strong>引用来源</strong>
+          <p>当前课程资料里没有找到足够依据。</p>
+        </section>
+      );
+    }
+
+    return (
+      <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
+        <strong>引用来源</strong>
+        <div className="citation-list">
+          {citations.map((citation) => (
+            <article key={citation.chunk_id} className="citation-item">
+              <strong>{citation.source_title}</strong>
+              <span>{citation.section_title ?? "课程切片"}</span>
+              <small>匹配度 {citation.score.toFixed(1)}</small>
+            </article>
+          ))}
+        </div>
       </section>
     );
   }

@@ -40,8 +40,8 @@ export type ApiCourseKnowledgePoint = {
 
 export type ApiCourseOverview = {
   course: ApiCourseSummary;
+  materials: string[];
   knowledge_points: ApiCourseKnowledgePoint[];
-  material_count: number;
   chunk_count: number;
 };
 

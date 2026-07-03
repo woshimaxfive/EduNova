@@ -9,6 +9,7 @@ import { DEMO_ENDPOINTS } from "./demo";
 import { MATERIAL_ENDPOINTS } from "./materials";
 import { PATH_ENDPOINTS } from "./paths";
 import { PRACTICE_ENDPOINTS } from "./practice";
+import { RAG_ENDPOINTS, searchRag } from "./rag";
 import { PROFILE_ENDPOINTS } from "./profiles";
 import { REPORT_ENDPOINTS } from "./reports";
 import { RESOURCE_ENDPOINTS } from "./resources";
@@ -29,6 +30,7 @@ describe("frontend API contracts", () => {
     expect(COURSE_ENDPOINTS.masteryMap(7)).toBe("/courses/7/mastery-map");
     expect(MATERIAL_ENDPOINTS.upload).toBe("/materials/upload");
     expect(MATERIAL_ENDPOINTS.progress(3)).toBe("/materials/3/progress");
+    expect(RAG_ENDPOINTS.search).toBe("/rag/search");
     expect(RESOURCE_ENDPOINTS.generate).toBe("/resources/generate");
     expect(AGENT_ENDPOINTS.trace("trace_demo")).toBe("/agents/traces/trace_demo");
     expect(PATH_ENDPOINTS.updateTask(9)).toBe("/paths/tasks/9");
@@ -89,6 +91,58 @@ describe("frontend API contracts", () => {
       ]);
       expect(response.data.access_token).toBe("jwt-token");
       expect(response.data.user.display_name).toBe("演示学生");
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("posts RAG search requests through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
+      });
+
+      return {
+        data: {
+          data: {
+            course_id: 7,
+            query: "启发式搜索",
+            top_k: 5,
+            results: []
+          },
+          trace_id: "trace_rag_test"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const response = await searchRag({
+        course_id: 7,
+        query: "启发式搜索",
+        top_k: 5
+      });
+
+      expect(calls).toEqual([
+        {
+          url: RAG_ENDPOINTS.search,
+          method: "post",
+          data: {
+            course_id: 7,
+            query: "启发式搜索",
+            top_k: 5
+          }
+        }
+      ]);
+      expect(response.data.results).toEqual([]);
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

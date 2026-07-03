@@ -1163,6 +1163,21 @@ a {
   background: rgba(255, 255, 255, 0.62);
 }
 
+.course-message-citations {
+  width: min(560px, 100%);
+  margin-top: 10px;
+}
+
+.course-message-citations .citation-list {
+  margin-top: 4px;
+}
+
+.course-message-citations .citation-item p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  line-height: 1.58;
+}
+
 .course-composer textarea {
   width: 100%;
   min-height: 92px;

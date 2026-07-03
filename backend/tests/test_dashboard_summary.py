@@ -18,8 +18,8 @@ from backend.app.models import (
     ChatSession,
     Course,
     CourseEnrollment,
-    CourseMaterial,
     GeneratedResource,
+    Material,
     StudentProfile,
     User,
 )
@@ -41,7 +41,8 @@ class FakeDashboardRepository:
     profiles: dict[int, StudentProfile] = field(default_factory=dict)
     courses: list[Course] = field(default_factory=list)
     enrollments: list[CourseEnrollment] = field(default_factory=list)
-    materials: list[CourseMaterial] = field(default_factory=list)
+    materials: list[Material] = field(default_factory=list)
+    linked_material_ids: set[int] = field(default_factory=set)
     conversations: list[ChatSession] = field(default_factory=list)
     resources: list[GeneratedResource] = field(default_factory=list)
     requested_user_ids: list[int] = field(default_factory=list)
@@ -69,7 +70,7 @@ class FakeDashboardRepository:
             if enrollment.user_id == user_id and enrollment.course_id in course_ids
         ]
 
-    def list_recent_materials(self, user_id: int, limit: int) -> list[CourseMaterial]:
+    def list_recent_materials(self, user_id: int, limit: int) -> list[Material]:
         self._remember(user_id)
         return sorted(
             [material for material in self.materials if material.user_id == user_id],
@@ -87,7 +88,7 @@ class FakeDashboardRepository:
             [
                 material
                 for material in self.materials
-                if material.user_id == user_id and material.course_id is None
+                if material.user_id == user_id and material.id not in self.linked_material_ids
             ]
         )
 
@@ -209,10 +210,9 @@ def test_ai_intro_user_summary_uses_current_user_course_and_material() -> None:
     )
     course.created_at = NOW - timedelta(days=1)
     course.updated_at = NOW - timedelta(hours=2)
-    material = CourseMaterial(
+    material = Material(
         id=201,
         user_id=1,
-        course_id=101,
         filename="人工智能导论讲义.md",
         content_type="text/markdown",
         storage_path="starter/ai_intro.md",
@@ -223,7 +223,7 @@ def test_ai_intro_user_summary_uses_current_user_course_and_material() -> None:
 
     summary = as_dict(
         module.DashboardService(
-            FakeDashboardRepository(courses=[course], materials=[material])
+            FakeDashboardRepository(courses=[course], materials=[material], linked_material_ids={201})
         ).build_summary(user)
     )
 

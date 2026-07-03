@@ -514,7 +514,7 @@ Current Phase 3.1 implementation note:
 - P3.15 tightened the frontend usability baseline: answer insights are collapsed by default, material actions are disabled until the user selects files, library-to-course generation uses a single overlay, and 资源工坊 keeps one primary generate action.
 - Browser visual checks covered P3R3 `/app` at desktop and mobile widths with no horizontal overflow; the material-library drawer and course generation dialog open and remain readable.
 - Frontend `pnpm lint`, `pnpm test` and `pnpm build` pass before final repository-wide verification.
-- Phase 4.1 connected real backend auth; Phase 4.2 connected protected `/dashboard/summary` so `/app` home history, recent courses and material drawer data come from the current user summary. Upload parsing, home-message persistence, RAG, AI data and later browser E2E coverage remain later-phase work.
+- Phase 4.1 connected real backend auth; Phase 4.2 connected protected `/dashboard/summary` so `/app` home history, recent courses and material drawer data come from the current user summary; Phase 4.3 connected persisted home sessions and messages; Phase 4.4 connected real personal material upload and library list. Course generation from materials, RAG, AI data, OCR and deep PDF/PPT/DOCX parsing remain later-phase work.
 
 ### Task 3.2: Add Frontend Data Contracts
 
@@ -640,6 +640,30 @@ git add backend frontend
 git commit -m "feat(workspace): connect login and learning space"
 ```
 
+### Task 4.3: Home Sessions and Messages
+
+- [x] Implement protected `/tutor/sessions` endpoints for home sessions.
+- [x] Persist first send, follow-up messages, left-rail history switching and refresh retention.
+- [x] Keep assistant response as a template placeholder; real AI/RAG remains later.
+
+### Task 4.4: Personal Material Library Foundation
+
+- [x] Add `materials` and `course_material_links` with Alembic migration `0005`.
+- [x] Backfill existing `course_materials` into the new personal library shape.
+- [x] Implement protected material endpoints:
+
+```text
+POST /materials/upload
+GET /materials
+GET /materials/{material_id}
+GET /materials/{material_id}/progress
+POST /courses/{course_id}/materials
+```
+
+- [x] Store files under `MATERIAL_STORAGE_DIR` with user-isolated paths; keep uploads ignored by Git.
+- [x] Light-parse TXT/Markdown to `completed`; keep PDF/DOCX/PPTX/images as `uploaded`; images explicitly say no OCR.
+- [x] Connect `/app` upload and `/app/library` list/search/filter/detail to the real material APIs.
+
 ## Phase 5: Upload Materials and Build Course
 
 ### Task 5.1: Document Parsing Service
@@ -662,7 +686,7 @@ Markdown as structured headings
 TXT as plain text
 ```
 
-- [ ] Implement upload endpoint:
+- [x] Implement personal-library upload and progress foundation:
 
 ```text
 POST /materials/upload
@@ -670,7 +694,8 @@ GET /materials/{material_id}
 GET /materials/{material_id}/progress
 ```
 
-- [ ] Store uploaded files under `storage/uploads/{user_id}/library/`; course-derived chunks and generated outputs use course-scoped paths after material is linked or used to generate a course. Keep `storage/` ignored by Git.
+- [ ] Implement deep parsing and course generation on top of the Phase 4.4 material library.
+- [x] Store uploaded files under `MATERIAL_STORAGE_DIR` user-isolated paths; course-derived chunks and generated outputs use course-scoped paths after material is linked or used to generate a course. Keep runtime upload directories ignored by Git.
 - [ ] Progress states:
 
 ```text

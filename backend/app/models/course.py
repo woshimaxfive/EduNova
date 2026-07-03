@@ -12,6 +12,7 @@ from backend.app.models.mixins import CreatedAtMixin, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from backend.app.models.knowledge import KnowledgeChunk, KnowledgePoint
+    from backend.app.models.material import CourseMaterialLink
     from backend.app.models.user import User
 
 
@@ -45,6 +46,10 @@ class Course(IdMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
     )
     materials: Mapped[list["CourseMaterial"]] = relationship(
+        back_populates="course",
+        cascade="all, delete-orphan",
+    )
+    material_links: Mapped[list["CourseMaterialLink"]] = relationship(
         back_populates="course",
         cascade="all, delete-orphan",
     )

@@ -1,93 +1,47 @@
 import { BookOpen, FileArrowUp, Image, MagnifyingGlass, SealCheck, Sparkle, X } from "@phosphor-icons/react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
 
+import { listMaterials, type MaterialListItem, uploadMaterial } from "../api/materials";
 import { ActionNotice } from "../components/feedback/ActionNotice";
 import { useActionNotice } from "../components/feedback/useActionNotice";
 import { PageFrame } from "./PageFrame";
 
 type LibraryFilter = "all" | "document" | "image";
+type LibraryFile = MaterialListItem;
 
-type LibraryFile = {
-  id: string;
-  title: string;
-  category: Exclude<LibraryFilter, "all">;
-  extension: string;
-  detail: string;
-  modified: string;
-  size: string;
-  parseStatus: "completed" | "processing";
-};
-
-const initialLibraryFiles: LibraryFile[] = [
-  {
-    id: "material-ai-notes",
-    title: "AI 导论讲义",
-    category: "document",
-    extension: "DOCX",
-    detail: "12 个知识点",
-    modified: "今天",
-    size: "1.2 MB",
-    parseStatus: "completed"
-  },
-  {
-    id: "material-final-review",
-    title: "期末复习题样例",
-    category: "document",
-    extension: "MD",
-    detail: "24 道练习",
-    modified: "昨天",
-    size: "68 KB",
-    parseStatus: "completed"
-  },
-  {
-    id: "material-nn-board",
-    title: "神经网络课堂板书",
-    category: "image",
-    extension: "PNG",
-    detail: "仅入库，暂不做 OCR",
-    modified: "周一",
-    size: "540 KB",
-    parseStatus: "processing"
-  }
-];
-
-function formatFileSize(size: number) {
-  if (size >= 1024 * 1024) {
-    return `${(size / 1024 / 1024).toFixed(1)} MB`;
+function buildStatusLabel(material: LibraryFile) {
+  if (material.parse_status === "completed") {
+    return "已解析";
   }
 
-  if (size >= 1024) {
-    return `${Math.ceil(size / 1024)} KB`;
+  if (material.category === "image" || material.parse_status === "uploaded") {
+    return "已入库";
   }
 
-  return `${size} B`;
-}
+  if (material.parse_status === "failed") {
+    return "解析失败";
+  }
 
-function inferLibraryFile(file: File): LibraryFile {
-  const extension = file.name.split(".").pop()?.toUpperCase() ?? "FILE";
-  const isImage = file.type.startsWith("image/") || ["PNG", "JPG", "JPEG", "WEBP"].includes(extension);
-
-  return {
-    id: `upload-${Date.now()}`,
-    title: file.name,
-    category: isImage ? "image" : "document",
-    extension,
-    detail: isImage ? "仅入库，暂不做 OCR" : "等待解析",
-    modified: "刚刚",
-    size: formatFileSize(file.size),
-    parseStatus: "processing"
-  };
+  return "解析中";
 }
 
 export function LibraryPage() {
+  const queryClient = useQueryClient();
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
-  const [files, setFiles] = useState(initialLibraryFiles);
   const [activeFilter, setActiveFilter] = useState<LibraryFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeMaterial, setActiveMaterial] = useState<LibraryFile | null>(null);
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
   const [courseMaterialIds, setCourseMaterialIds] = useState<string[]>([]);
+  const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
   const { notice, showNotice } = useActionNotice();
+  const materialsQuery = useQuery({
+    queryKey: ["materials", "list"],
+    queryFn: () => listMaterials(),
+    staleTime: 30_000
+  });
+  const files = useMemo(() => materialsQuery.data?.data ?? [], [materialsQuery.data?.data]);
   const filteredFiles = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
@@ -104,17 +58,28 @@ export function LibraryPage() {
     showNotice(`已打开「${material.title}」的引用预览。`, "success");
   }
 
-  function handleUploadFile(event: ChangeEvent<HTMLInputElement>) {
+  async function handleUploadFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
     if (!file) {
       return;
     }
 
-    const uploadedFile = inferLibraryFile(file);
-    setFiles((current) => [uploadedFile, ...current]);
-    showNotice(`${file.name} 已上传到资料库。`, "success");
-    event.target.value = "";
+    setIsUploadingMaterial(true);
+
+    try {
+      await uploadMaterial({ file });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
+      ]);
+      showNotice(`${file.name} 已上传到资料库。`, "success");
+    } catch {
+      showNotice("资料上传失败，请稍后再试。", "warning");
+    } finally {
+      setIsUploadingMaterial(false);
+      event.target.value = "";
+    }
   }
 
   function toggleCourseMaterial(materialId: string) {
@@ -132,13 +97,13 @@ export function LibraryPage() {
               type="file"
               aria-label="上传资料文件"
               accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg,.webp"
-              onChange={handleUploadFile}
+              onChange={(event) => void handleUploadFile(event)}
             />
             <label className="file-search-field">
               <MagnifyingGlass size={17} weight="duotone" aria-hidden="true" />
               <input aria-label="搜索资料" placeholder="搜索资料" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} />
             </label>
-            <button className="library-action-button" type="button" onClick={() => uploadInputRef.current?.click()}>
+            <button className="library-action-button" type="button" disabled={isUploadingMaterial} onClick={() => uploadInputRef.current?.click()}>
               <FileArrowUp size={18} weight="duotone" aria-hidden="true" />
               <span>上传资料</span>
             </button>
@@ -175,22 +140,26 @@ export function LibraryPage() {
               <span>修改时间</span>
               <span>大小</span>
             </div>
-            {filteredFiles.map((material) => (
-              <button className="library-file-row" key={material.id} type="button" onClick={() => showMaterialCitation(material)}>
-                <span className="library-file-icon" data-category={material.category} aria-hidden="true">
-                  {material.category === "image" ? <Image size={18} weight="duotone" /> : material.parseStatus === "completed" ? <SealCheck size={18} weight="duotone" /> : <BookOpen size={18} weight="duotone" />}
-                </span>
-                <span className="library-file-main">
-                  <strong>{material.title}</strong>
-                  <small>
-                    {material.extension} · {material.detail} · {material.parseStatus === "completed" ? "已解析" : material.category === "image" ? "已入库" : "解析中"}
-                  </small>
-                </span>
-                <span>{material.modified}</span>
-                <span>{material.size}</span>
-              </button>
-            ))}
-            {filteredFiles.length === 0 ? <p className="library-file-empty">没有匹配的资料。</p> : null}
+            {materialsQuery.isLoading ? <p className="library-file-empty">正在读取资料库。</p> : null}
+            {!materialsQuery.isLoading && materialsQuery.isError ? <p className="library-file-empty">资料库暂时没有读取成功。</p> : null}
+            {!materialsQuery.isLoading && !materialsQuery.isError
+              ? filteredFiles.map((material) => (
+                  <button className="library-file-row" key={material.id} type="button" onClick={() => showMaterialCitation(material)}>
+                    <span className="library-file-icon" data-category={material.category} aria-hidden="true">
+                      {material.category === "image" ? <Image size={18} weight="duotone" /> : material.parse_status === "completed" ? <SealCheck size={18} weight="duotone" /> : <BookOpen size={18} weight="duotone" />}
+                    </span>
+                    <span className="library-file-main">
+                      <strong>{material.title}</strong>
+                      <small>
+                        {material.extension} · {material.detail} · {buildStatusLabel(material)}
+                      </small>
+                    </span>
+                    <span>{material.modified}</span>
+                    <span>{material.size}</span>
+                  </button>
+                ))
+              : null}
+            {!materialsQuery.isLoading && !materialsQuery.isError && filteredFiles.length === 0 ? <p className="library-file-empty">没有匹配的资料。</p> : null}
           </div>
 
           {activeMaterial ? (
@@ -199,7 +168,7 @@ export function LibraryPage() {
               <p>
                 {activeMaterial.category === "image"
                   ? "已入库。第一版不做图片 OCR，可作为资料附件保存。"
-                  : `${activeMaterial.parseStatus === "completed" ? "已完成解析" : "正在处理"}。完成后可查看片段、页码和置信度。`}
+                  : `${activeMaterial.parse_status === "completed" ? "已完成解析" : "正在处理"}。完成后可查看片段、页码和置信度。`}
               </p>
             </section>
           ) : null}
@@ -248,6 +217,7 @@ function LibraryCourseDialog({ materials, selectedMaterialIds, onToggleMaterial,
           <p>选择资料，生成目录、知识点和复习任务。</p>
         </div>
         <div className="library-course-materials">
+          {materials.length === 0 ? <p className="library-file-empty">还没有可生成课程的资料。</p> : null}
           {materials.map((material) => (
             <button className={selectedMaterialIds.includes(material.id) ? "active" : ""} key={material.id} type="button" aria-pressed={selectedMaterialIds.includes(material.id)} onClick={() => onToggleMaterial(material.id)}>
               <span>{material.extension}</span>

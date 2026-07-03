@@ -1,8 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { apiClient } from "../api/client";
+import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
 import { LibraryPage } from "./LibraryPage";
 import { PracticePage } from "./PracticePage";
 import { ProfilePage } from "./ProfilePage";
@@ -11,16 +14,72 @@ import { SettingsPage } from "./SettingsPage";
 import { StudioPage } from "./StudioPage";
 import { TutorPage } from "./TutorPage";
 
+let previousAdapter = apiClient.defaults.adapter;
+
+function renderWithProviders(ui: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false
+      }
+    }
+  });
+
+  render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
+
 function renderPage(page: ReactNode) {
-  render(<MemoryRouter>{page}</MemoryRouter>);
+  renderWithProviders(<MemoryRouter>{page}</MemoryRouter>);
 }
 
 function renderRoutePage(page: ReactNode, path: string) {
-  render(<MemoryRouter initialEntries={[path]}>{page}</MemoryRouter>);
+  renderWithProviders(<MemoryRouter initialEntries={[path]}>{page}</MemoryRouter>);
 }
 
 describe("student core pages", () => {
-  it("renders the material library as a source workspace", () => {
+  beforeEach(() => {
+    previousAdapter = apiClient.defaults.adapter;
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === MATERIAL_ENDPOINTS.list) {
+        const materials: MaterialListItem[] = [
+          {
+            id: "301",
+            title: "AI 导论讲义",
+            type: "DOCX",
+            detail: "12 个知识点",
+            modified: "今天",
+            size: "1.2 MB",
+            category: "document",
+            extension: "DOCX",
+            parse_status: "completed",
+            course_ids: ["101"]
+          }
+        ];
+
+        return {
+          data: { data: materials, trace_id: "trace_core_materials" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_core_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+  });
+
+  afterEach(() => {
+    apiClient.defaults.adapter = previousAdapter;
+  });
+
+  it("renders the material library as a source workspace", async () => {
     renderPage(<LibraryPage />);
 
     expect(screen.getByRole("region", { name: "历史对话" })).toBeInTheDocument();
@@ -32,7 +91,7 @@ describe("student core pages", () => {
     expect(screen.getByRole("button", { name: "文档" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "图片" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "课程内置" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /AI 导论讲义/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /AI 导论讲义/ })).toBeInTheDocument();
   });
 
   it("renders studio as a generated-resource workspace", () => {

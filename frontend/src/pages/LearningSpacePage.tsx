@@ -16,6 +16,7 @@ import { Link } from "react-router-dom";
 
 import { buildCoursePath } from "../app/routePaths";
 import { getDashboardSummary, type DashboardMaterial } from "../api/dashboard";
+import { uploadMaterial } from "../api/materials";
 import {
   createTutorSession,
   getTutorSession,
@@ -51,7 +52,7 @@ export function LearningSpacePage() {
   const [localHomeThreads, setLocalHomeThreads] = useState<DashboardSummaryThread[]>([]);
   const [activeHomeThreadId, setActiveHomeThreadId] = useState<string | null>(null);
   const [isSendingQuestion, setIsSendingQuestion] = useState(false);
-  const [uploadedMaterials, setUploadedMaterials] = useState<LibraryMaterial[]>([]);
+  const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
@@ -81,10 +82,7 @@ export function LearningSpacePage() {
 
     return [...localHomeThreads, ...summaryHomeThreads.filter((thread) => !localIds.has(thread.id))];
   }, [localHomeThreads, summaryHomeThreads]);
-  const materials = useMemo(
-    () => [...uploadedMaterials, ...(dashboardSummary?.recent_materials ?? [])],
-    [uploadedMaterials, dashboardSummary?.recent_materials]
-  );
+  const materials = useMemo(() => dashboardSummary?.recent_materials ?? [], [dashboardSummary?.recent_materials]);
   const effectiveSelectedMaterialIds = useMemo(
     () => selectedMaterialIds.filter((materialId) => materials.some((material) => material.id === materialId)),
     [materials, selectedMaterialIds]
@@ -115,49 +113,25 @@ export function LearningSpacePage() {
     showNotice("已打开生成课程。");
   }
 
-  function formatFileSize(size: number) {
-    if (size >= 1024 * 1024) {
-      return `${(size / 1024 / 1024).toFixed(1)} MB`;
-    }
-
-    if (size >= 1024) {
-      return `${Math.ceil(size / 1024)} KB`;
-    }
-
-    return `${size} B`;
-  }
-
-  function inferMaterialType(fileName: string) {
-    const extension = fileName.split(".").pop()?.toUpperCase();
-
-    return extension && extension.length <= 5 ? extension : "FILE";
-  }
-
-  function isImageMaterial(file: File) {
-    const extension = file.name.split(".").pop()?.toUpperCase();
-
-    return file.type.startsWith("image/") || ["PNG", "JPG", "JPEG", "WEBP"].includes(extension ?? "");
-  }
-
-  function handleUploadFile(event: ChangeEvent<HTMLInputElement>) {
+  async function handleUploadFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
     if (!file) {
       return;
     }
 
-    const uploadedMaterial: LibraryMaterial = {
-      id: `upload-${Date.now()}`,
-      title: file.name,
-      type: inferMaterialType(file.name),
-      detail: isImageMaterial(file) ? "刚刚上传 · 仅入库，暂不做 OCR" : "刚刚上传 · 等待解析",
-      modified: "刚刚",
-      size: formatFileSize(file.size)
-    };
+    setIsUploadingMaterial(true);
 
-    setUploadedMaterials((current) => [uploadedMaterial, ...current]);
-    showNotice(`${file.name} 已上传到资料库。`, "success");
-    event.target.value = "";
+    try {
+      await uploadMaterial({ file });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      showNotice(`${file.name} 已上传到资料库。`, "success");
+      event.target.value = "";
+    } catch {
+      showNotice("资料上传失败，请稍后再试。", "warning");
+    } finally {
+      setIsUploadingMaterial(false);
+    }
   }
 
   function toggleMaterialSelection(materialId: string) {
@@ -359,11 +333,12 @@ export function LearningSpacePage() {
                     type="file"
                     aria-label="上传资料文件"
                     accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg"
-                    onChange={handleUploadFile}
+                    onChange={(event) => void handleUploadFile(event)}
                   />
                   <button
                     type="button"
                     aria-label="上传资料"
+                    disabled={isUploadingMaterial}
                     onClick={() => uploadInputRef.current?.click()}
                   >
                     <FileArrowUp size={18} weight="duotone" aria-hidden="true" />

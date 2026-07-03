@@ -242,7 +242,7 @@ Authorization: Bearer <token>
 
 ### GET `/dashboard/summary`
 
-用途：获取 AI 学习主页首屏总览。Phase 4.2 已实现该接口，要求携带 JWT，只读取当前登录用户自己的课程、课程资料、主页会话、画像和资源记录。该接口服务贴边可收起历史侧栏、侧栏账号入口、输入框建议、发送后主页对话态、输入区资料库浮层入口、文件上传入口、联网搜索/深度思考工具状态和最近学习轻量列表，不默认绑定某一门课程。
+用途：获取 AI 学习主页首屏总览。Phase 4.2 已实现该接口，要求携带 JWT，只读取当前登录用户自己的课程、个人资料库资料、主页会话、画像和资源记录。Phase 4.4 后，主页资料库浮层和资料库摘要读取独立 `materials` 表，不再读取前端静态资料。该接口服务贴边可收起历史侧栏、侧栏账号入口、输入框建议、发送后主页对话态、输入区资料库浮层入口、文件上传入口、联网搜索/深度思考工具状态和最近学习轻量列表，不默认绑定某一门课程。
 
 响应包含：
 
@@ -414,7 +414,7 @@ Authorization: Bearer <token>
 
 ### POST `/materials/upload`
 
-用途：上传资料到个人资料库。资料可以暂不属于任何课程，后续可作为主页对话参考、加入已有课程或用于生成新课程。
+用途：上传资料到当前登录用户的个人资料库。Phase 4.4 已实现，必须携带 JWT。资料可以暂不属于任何课程，也可以在上传时通过 `course_id` 加入当前用户自己的课程；后续可作为主页对话参考、加入已有课程或用于生成新课程。
 
 请求类型：`multipart/form-data`
 
@@ -425,42 +425,98 @@ Authorization: Bearer <token>
 
 支持类型：
 
-- PDF。
-- PPTX。
-- DOCX。
-- Markdown。
-- TXT。
+- TXT、Markdown：轻解析为 `completed`，保存原文到 `extracted_text`。
+- PDF、DOC、DOCX、PPT、PPTX：仅入库为 `uploaded`，暂不做正文解析。
+- PNG、JPG、JPEG、WEBP：仅入库为 `uploaded`，提示“仅入库，暂不做 OCR”。
 
 响应：
 
 ```json
 {
   "data": {
+    "id": "1",
     "material_id": 1,
     "course_id": null,
     "filename": "ai-notes.md",
-    "parse_status": "uploaded"
+    "title": "ai-notes.md",
+    "type": "MD",
+    "detail": "已解析",
+    "modified": "刚刚",
+    "size": "2 KB",
+    "parse_status": "completed"
   },
   "trace_id": "trace_20260701_006"
 }
 ```
 
+边界：
+
+- 单文件大小受 `MATERIAL_MAX_UPLOAD_MB` 限制，默认 25 MB。
+- 文件保存到 `MATERIAL_STORAGE_DIR` 下的用户隔离目录，数据库只保存相对路径。
+- 不支持的扩展名返回 400。
+- `course_id` 不属于当前用户时返回 404 或 403。
+
 ### GET `/materials/{material_id}`
 
-用途：查看资料详情。
+用途：查看当前用户资料详情。只能访问自己的资料。
+
+响应：
+
+```json
+{
+  "data": {
+    "id": "1",
+    "title": "ai-notes.md",
+    "type": "MD",
+    "detail": "已解析",
+    "modified": "今天",
+    "size": "2 KB",
+    "category": "document",
+    "extension": "MD",
+    "parse_status": "completed",
+    "course_ids": [],
+    "filename": "ai-notes.md",
+    "content_type": "text/markdown",
+    "extracted_text_preview": "第一章 人工智能导论..."
+  },
+  "trace_id": "trace_20260701_007"
+}
+```
 
 ### GET `/materials`
 
-用途：查看个人资料库。支持筛选未归属课程资料、某课程已关联资料、最近上传资料。前端当前采用文件库式列表，后续接口应返回文件名、类型、更新时间、大小、解析状态、课程归属和可引用摘要。
+用途：查看当前用户个人资料库。Phase 4.4 已实现，支持筛选未归属课程资料、某课程已关联资料和最近上传资料。`/app/library` 通过该接口渲染文件库式列表；主页资料库浮层通过 `/dashboard/summary.recent_materials` 渲染最近资料。
 
-建议查询参数：
+查询参数：
 
 - `course_id`：可选，传入时查看某课程资料。
 - `unassigned`：可选，查看未加入任何课程的资料。
 
+响应：
+
+```json
+{
+  "data": [
+    {
+      "id": "1",
+      "title": "ai-notes.md",
+      "type": "MD",
+      "detail": "已解析",
+      "modified": "今天",
+      "size": "2 KB",
+      "category": "document",
+      "extension": "MD",
+      "parse_status": "completed",
+      "course_ids": []
+    }
+  ],
+  "trace_id": "trace_20260701_008"
+}
+```
+
 ### POST `/courses/{course_id}/materials`
 
-用途：把资料库中的一个或多个资料加入已有课程。实现时应优先使用关联关系，不复制原文件。
+用途：把资料库中的一个或多个资料加入当前用户已有课程。Phase 4.4 已实现，使用 `course_material_links` 关联关系，不复制原文件；重复关联不会重复插入。
 
 请求：
 
@@ -470,26 +526,39 @@ Authorization: Bearer <token>
 }
 ```
 
+响应：
+
+```json
+{
+  "data": {
+    "course_id": "1",
+    "material_ids": ["1", "2"],
+    "attached_count": 2
+  },
+  "trace_id": "trace_20260701_009"
+}
+```
+
 ### GET `/materials/{material_id}/progress`
 
-用途：查看资料解析和建课进度。
+用途：查看资料解析进度。Phase 4.4 只返回资料入库/轻解析状态，不返回真实建课进度。
 
 响应：
 
 ```json
 {
   "data": {
-    "status": "chunking",
-    "progress_percent": 60,
-    "message": "正在切分知识片段"
+    "status": "completed",
+    "progress_percent": 100,
+    "message": "资料已完成轻解析"
   },
-  "trace_id": "trace_20260701_007"
+  "trace_id": "trace_20260701_010"
 }
 ```
 
 ### POST `/courses/from-materials`
 
-用途：根据资料库中的一个或多个资料生成课程。
+用途：根据资料库中的一个或多个资料生成课程。Phase 4.4 未实现，前端“从资料生成课程”仍是预备交互，真实建课放到后续阶段。
 
 请求：
 
@@ -502,7 +571,7 @@ Authorization: Bearer <token>
 
 ### POST `/materials/compare`
 
-用途：对比多份资料并提炼考点。
+用途：对比多份资料并提炼考点。Phase 4.4 未实现。
 
 请求：
 

@@ -25,6 +25,7 @@ build/
 !.env.example
 uploads/
 storage/
+var/uploads/
 *.db
 
 # Logs

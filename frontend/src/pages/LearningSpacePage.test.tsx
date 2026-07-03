@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { apiClient } from "../api/client";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
+import { MATERIAL_ENDPOINTS } from "../api/materials";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
 import { LearningSpacePage } from "./LearningSpacePage";
@@ -603,6 +604,114 @@ describe("LearningSpacePage", () => {
     await user.click(screen.getByRole("button", { name: "打开资料库" }));
 
     expect(screen.getByRole("dialog", { name: "资料库" })).toHaveTextContent("资料库还是空的");
+  });
+
+  it("uploads home materials through the materials API and refreshes dashboard materials", async () => {
+    const user = userEvent.setup();
+    const calls: ApiCall[] = [];
+    let uploaded = false;
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+      calls.push({ method, url, payload: config.data });
+
+      if (url === DASHBOARD_ENDPOINTS.summary) {
+        return {
+          data: {
+            data: uploaded
+              ? {
+                  ...blankSummary,
+                  material_library_summary: { material_count: 1, unassigned_count: 1 },
+                  recent_materials: [
+                    {
+                      id: "901",
+                      title: "真实上传资料.txt",
+                      type: "TXT",
+                      detail: "已解析",
+                      modified: "今天",
+                      size: "14 B"
+                    }
+                  ]
+                }
+              : blankSummary,
+            trace_id: "trace_dashboard_after_upload"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === MATERIAL_ENDPOINTS.upload && method === "post") {
+        uploaded = true;
+        return {
+          data: {
+            data: {
+              id: "901",
+              material_id: 901,
+              course_id: null,
+              filename: "真实上传资料.txt",
+              title: "真实上传资料.txt",
+              type: "TXT",
+              detail: "已解析",
+              modified: "今天",
+              size: "14 B",
+              parse_status: "completed"
+            },
+            trace_id: "trace_material_upload"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    useAuthStore.getState().setSession({
+      token: "material-upload-token",
+      user: {
+        id: 1,
+        email: "student@edunova.local",
+        displayName: "资料学生",
+        role: "student",
+        starterMode: "blank"
+      }
+    });
+
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: {
+              queries: { retry: false }
+            }
+          })
+        }
+      >
+        <MemoryRouter>
+          <LearningSpacePage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await screen.findByText("还没有课程");
+    await user.upload(screen.getByLabelText("上传资料文件"), new File(["反向传播资料"], "真实上传资料.txt", { type: "text/plain" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("真实上传资料.txt 已上传到资料库");
+    expect(calls.filter((call) => call.method === "post" && call.url === MATERIAL_ENDPOINTS.upload)).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "打开资料库" }));
+    expect(screen.getByRole("dialog", { name: "资料库" })).toHaveTextContent("真实上传资料.txt");
   });
 
   it("sends with Enter and keeps Shift Enter as a line break", async () => {

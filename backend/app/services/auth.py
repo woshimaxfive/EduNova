@@ -14,7 +14,7 @@ from backend.app.core.security import (
     verify_password,
 )
 from backend.app.data.builtin_courses.ai_intro import BUILTIN_AI_INTRO_COURSE
-from backend.app.models import Course, User
+from backend.app.models import Course, CourseMaterialLink, Material, User
 from backend.app.services.course_seed import build_builtin_ai_intro_course_graph
 
 
@@ -53,6 +53,12 @@ class AuthRepository(Protocol):
         ...
 
     def add_course(self, course: Course) -> None:
+        ...
+
+    def add_material(self, material: Material) -> None:
+        ...
+
+    def add_course_material_link(self, link: CourseMaterialLink) -> None:
         ...
 
     def flush(self) -> None:
@@ -97,6 +103,12 @@ class SqlAlchemyAuthRepository:
 
     def add_course(self, course: Course) -> None:
         self.db.add(course)
+
+    def add_material(self, material: Material) -> None:
+        self.db.add(material)
+
+    def add_course_material_link(self, link: CourseMaterialLink) -> None:
+        self.db.add(link)
 
     def flush(self) -> None:
         self.db.flush()
@@ -207,6 +219,31 @@ class AuthService:
                 "source": "starter_copy",
             }
         self.repository.add_course(course)
+        self.repository.flush()
+        for course_material in course.materials:
+            library_material = Material(
+                user_id=user.id,
+                filename=course_material.filename,
+                content_type=course_material.content_type,
+                storage_path=course_material.storage_path,
+                parse_status=course_material.parse_status,
+                extracted_text=course_material.extracted_text,
+                metadata_json={
+                    **course_material.metadata_json,
+                    "owner_scope": "registered_user",
+                    "legacy_course_material_id": course_material.id,
+                },
+            )
+            self.repository.add_material(library_material)
+            self.repository.flush()
+            self.repository.add_course_material_link(
+                CourseMaterialLink(
+                    course_id=course.id,
+                    material_id=library_material.id,
+                    added_by_user_id=user.id,
+                    usage_type="course_source",
+                )
+            )
         self.repository.flush()
         return course
 

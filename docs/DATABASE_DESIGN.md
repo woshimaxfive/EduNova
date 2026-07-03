@@ -39,8 +39,9 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260701_0002_create_core_learning_tables.py`：创建用户、课程、选课、资料、知识点和知识切片表。
 - `backend/migrations/versions/20260701_0003_create_learning_closure_tables.py`：创建画像、学习路径、生成资源、Agent 轨迹、练习、报告、对话和模型设置基础表。
 - `backend/migrations/versions/20260701_0004_add_user_starter_mode.py`：创建注册初始化方式字段。
+- `backend/migrations/versions/20260703_0005_create_material_library.py`：创建独立个人资料库 `materials` 和课程资料关联表 `course_material_links`，并从旧 `course_materials` 兼容回填。
 
-Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有的 `users`、`student_profiles`、`courses`、`course_enrollments`、`course_materials`、`chat_sessions` 和 `generated_resources`，把它们整理为首页总览响应。
+Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
 ## 3. 核心关系图
 
@@ -49,6 +50,9 @@ erDiagram
     users ||--o{ course_enrollments : enrolls
     users ||--o{ courses : owns
     courses ||--o{ course_materials : has
+    users ||--o{ materials : uploads
+    courses ||--o{ course_material_links : links
+    materials ||--o{ course_material_links : joins
     courses ||--o{ knowledge_points : contains
     courses ||--o{ knowledge_chunks : indexes
     users ||--o{ student_profiles : has
@@ -132,9 +136,9 @@ erDiagram
 
 ### 4.4 `course_materials`
 
-用途：保存上传资料和解析结果。
+用途：保存早期课程资料和内置课程知识切片来源。
 
-当前已落地的 Phase 2 表结构把资料直接绑定到课程，`course_id` 为必填。Phase 3 重定向后，产品规则调整为“资料库独立于课程，资料可以加入一个或多个课程”。因此后续进入资料库和生成课程真实实现前，需要做一次兼容迁移：
+当前已落地的 Phase 2 表结构把资料直接绑定到课程，`course_id` 为必填。Phase 3 重定向后，产品规则调整为“资料库独立于课程，资料可以加入一个或多个课程”。Phase 4.4 已完成兼容迁移：
 
 ```text
 materials              独立资料库，绑定 user_id，不强制绑定 course_id
@@ -142,7 +146,7 @@ course_material_links  课程与资料的关联表，支持同一资料加入多
 knowledge_chunks       仍绑定 course_id，同时引用 material_id
 ```
 
-在迁移完成前，当前 `course_materials` 可继续服务内置课程和早期上传建课测试，但不能作为最终资料库模型。
+迁移后，`course_materials` 暂时保留，用于兼容内置课程和已有 `knowledge_chunks.material_id` 关系；新上传资料写入 `materials`，加入课程时写入 `course_material_links`。
 
 字段：
 
@@ -159,9 +163,9 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | `metadata_json` | jsonb | 页码、标题、字数等元数据 |
 | `created_at` | timestamptz | 创建时间 |
 
-### 4.4.1 后续目标表：`materials`
+### 4.4.1 `materials`
 
-用途：保存用户上传到资料库的原始资料和解析结果。
+用途：保存用户上传到个人资料库的原始资料和解析结果。Phase 4.4 已落地；`.txt`、`.md` 会轻解析为 `completed`，PDF/DOCX/PPTX/图片先保存为 `uploaded`，图片不做 OCR。
 
 字段：
 
@@ -176,8 +180,14 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | `extracted_text` | text | 提取文本 |
 | `metadata_json` | jsonb | 页码、标题、字数等元数据 |
 | `created_at` | timestamptz | 创建时间 |
+| `updated_at` | timestamptz | 更新时间 |
 
-### 4.4.2 后续目标表：`course_material_links`
+约束与索引：
+
+- `user_id` 外键指向 `users.id`。
+- `ix_materials_user_status_created(user_id, parse_status, created_at)` 支持用户资料库列表和状态筛选。
+
+### 4.4.2 `course_material_links`
 
 用途：记录资料与课程的关联，支持同一资料进入多个课程。
 
@@ -195,6 +205,14 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 唯一约束：
 
 - `course_id + material_id` 唯一。
+
+约束与索引：
+
+- `course_id` 外键指向 `courses.id`。
+- `material_id` 外键指向 `materials.id`。
+- `added_by_user_id` 外键指向 `users.id`。
+- `ix_course_material_links_course(course_id)`。
+- `ix_course_material_links_material(material_id)`。
 
 ### 4.5 `knowledge_points`
 
@@ -567,8 +585,8 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - `course_enrollments(user_id, course_id)` 唯一索引。
 - `courses.owner_id`。
 - `course_materials(user_id, course_id)`，用于当前 Phase 2 已落地的课程资料表。
-- 后续资料库迁移后新增 `materials(user_id, status, created_at)`。
-- 后续资料库迁移后新增 `course_material_links(course_id, material_id)` 唯一索引。
+- `materials(user_id, parse_status, created_at)`，用于当前用户资料库列表和状态筛选。
+- `course_material_links(course_id, material_id)` 唯一索引，用于避免同一资料重复加入同一课程。
 - `knowledge_points(course_id)`。
 - `knowledge_chunks(course_id)`。
 - `knowledge_chunks(knowledge_point_id)`。
@@ -650,7 +668,7 @@ Demo 数据要求：
 4. 所有核心表可通过迁移创建。
 5. 内置人工智能导论课程可导入。
 6. 当前内置课程资料能写入课程、材料、知识点和知识切片。
-7. 后续资料库迁移后，上传资料能先进入用户资料库，再选择加入课程或生成课程。
+7. Phase 4.4 后，上传资料能先进入用户资料库，再选择加入课程；从资料生成课程仍由后续阶段实现。
 8. RAG 检索能读取向量数据。
 9. 资源、报告、课程内对话都能追溯用户、课程和 trace；主页对话能追溯用户和 trace。
 10. 两个不同用户的数据互不可见。
@@ -658,7 +676,7 @@ Demo 数据要求：
 
 当前已验证：
 
-- Alembic 能创建 `users`、`courses`、`course_enrollments`、`course_materials`、`knowledge_points`、`knowledge_chunks`。
+- Alembic 能创建 `users`、`courses`、`course_enrollments`、`course_materials`、`materials`、`course_material_links`、`knowledge_points`、`knowledge_chunks`。
 - Alembic metadata 已注册并迁移创建 `student_profiles`、`profile_events`、`learning_paths`、`learning_tasks`、`generated_resources`、`resource_quality_scores`、`agent_run_logs`、`practice_sessions`、`practice_answers`、`assessment_reports`、`weakness_review_queue`、`chat_sessions`、`chat_messages` 和 `model_settings`。
 - `knowledge_chunks.embedding` 使用 `vector(1536)`。
 - `knowledge_chunks.embedding` 已建立 `ivfflat` 向量索引。
@@ -667,3 +685,4 @@ Demo 数据要求：
 - 人工智能导论内置课程包可导入，包含 12 个知识点和 24 个基础资料切片。
 - 内置课程导入具备幂等性，重复执行不会创建重复课程。
 - Phase 4.2 首页总览服务已验证只请求当前用户数据：blank 用户返回空课程/空资料/空历史，ai_intro 用户返回自己空间中的人工智能导论课程和资料，已有进度时显示真实进度，没有进度时显示“未开始”。
+- Phase 4.4 资料库服务已验证上传、列表、详情、进度和加入课程都只访问当前用户数据；迁移 `0005` 会把旧 `course_materials` 兼容复制为 `materials` 与 `course_material_links`。

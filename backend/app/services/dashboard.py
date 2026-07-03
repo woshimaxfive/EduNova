@@ -11,8 +11,8 @@ from backend.app.models import (
     ChatSession,
     Course,
     CourseEnrollment,
-    CourseMaterial,
     GeneratedResource,
+    Material,
     StudentProfile,
     User,
 )
@@ -36,7 +36,7 @@ class DashboardRepository(Protocol):
 
     def list_course_enrollments(self, user_id: int, course_ids: list[int]) -> list[CourseEnrollment]: ...
 
-    def list_recent_materials(self, user_id: int, limit: int) -> list[CourseMaterial]: ...
+    def list_recent_materials(self, user_id: int, limit: int) -> list[Material]: ...
 
     def count_materials(self, user_id: int) -> int: ...
 
@@ -77,12 +77,12 @@ class SqlAlchemyDashboardRepository:
             )
         )
 
-    def list_recent_materials(self, user_id: int, limit: int) -> list[CourseMaterial]:
+    def list_recent_materials(self, user_id: int, limit: int) -> list[Material]:
         return list(
             self.db.scalars(
-                select(CourseMaterial)
-                .where(CourseMaterial.user_id == user_id)
-                .order_by(CourseMaterial.created_at.desc(), CourseMaterial.id.desc())
+                select(Material)
+                .where(Material.user_id == user_id)
+                .order_by(Material.created_at.desc(), Material.id.desc())
                 .limit(limit)
             )
         )
@@ -90,17 +90,24 @@ class SqlAlchemyDashboardRepository:
     def count_materials(self, user_id: int) -> int:
         return int(
             self.db.scalar(
-                select(func.count()).select_from(CourseMaterial).where(CourseMaterial.user_id == user_id)
+                select(func.count()).select_from(Material).where(Material.user_id == user_id)
             )
             or 0
         )
 
     def count_unassigned_materials(self, user_id: int) -> int:
+        from backend.app.models import CourseMaterialLink
+
         return int(
             self.db.scalar(
                 select(func.count())
-                .select_from(CourseMaterial)
-                .where(CourseMaterial.user_id == user_id, CourseMaterial.course_id.is_(None))
+                .select_from(Material)
+                .where(
+                    Material.user_id == user_id,
+                    ~select(CourseMaterialLink.id)
+                    .where(CourseMaterialLink.material_id == Material.id)
+                    .exists(),
+                )
             )
             or 0
         )
@@ -214,7 +221,7 @@ class DashboardService:
         return f"{normalized}%"
 
     @staticmethod
-    def _build_material(material: CourseMaterial) -> DashboardMaterial:
+    def _build_material(material: Material) -> DashboardMaterial:
         metadata = material.metadata_json or {}
         return DashboardMaterial(
             id=str(material.id),
@@ -226,7 +233,7 @@ class DashboardService:
         )
 
     @staticmethod
-    def _material_type(material: CourseMaterial) -> str:
+    def _material_type(material: Material) -> str:
         extension = material.filename.rsplit(".", 1)[-1].upper() if "." in material.filename else ""
         if extension and len(extension) <= 5:
             return extension

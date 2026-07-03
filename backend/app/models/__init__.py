@@ -16,6 +16,7 @@ from backend.app.models.learning import (
     StudentProfile,
     WeaknessReviewItem,
 )
+from backend.app.models.material import CourseMaterialLink, Material
 from backend.app.models.user import User
 
 __all__ = [
@@ -26,11 +27,13 @@ __all__ = [
     "Course",
     "CourseEnrollment",
     "CourseMaterial",
+    "CourseMaterialLink",
     "GeneratedResource",
     "KnowledgeChunk",
     "KnowledgePoint",
     "LearningPath",
     "LearningTask",
+    "Material",
     "ModelSetting",
     "PracticeAnswer",
     "PracticeSession",

@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { PATHS } from "../app/routePaths";
 import { apiClient } from "../api/client";
+import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
+import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
 import { CourseSpacePage } from "./CourseSpacePage";
@@ -61,10 +63,60 @@ describe("student interaction affordances", () => {
       created_at: "2026-07-03T12:00:00Z",
       updated_at: "2026-07-03T12:01:00Z"
     };
+    let uploadedMaterial: DashboardSummary["recent_materials"][number] | null = null;
+    const dashboardSummary: DashboardSummary = {
+      profile_summary: {
+        display_name: "交互学生",
+        starter_mode: "blank",
+        has_profile: false,
+        knowledge_foundation: null,
+        learning_goal: null
+      },
+      recent_conversations: [],
+      recent_courses: [],
+      material_library_summary: {
+        material_count: 0,
+        unassigned_count: 0
+      },
+      recent_materials: [],
+      recent_resources: [],
+      command_suggestions: [],
+      evidence_summary: {
+        citation_count: 0,
+        latest_trace_id: null,
+        low_evidence_count: 0
+      },
+      empty_state: {
+        kind: "blank",
+        title: "还没有课程",
+        description: "上传资料后可直接问，也可生成课程。",
+        action_label: "上传资料"
+      }
+    };
 
     apiClient.defaults.adapter = async (config) => {
       const method = (config.method ?? "get").toLowerCase();
       const url = config.url ?? "";
+
+      if (url === DASHBOARD_ENDPOINTS.summary) {
+        return {
+          data: {
+            data: {
+              ...dashboardSummary,
+              material_library_summary: {
+                material_count: uploadedMaterial ? 1 : 0,
+                unassigned_count: uploadedMaterial ? 1 : 0
+              },
+              recent_materials: uploadedMaterial ? [uploadedMaterial] : []
+            },
+            trace_id: "trace_interaction_dashboard"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
 
       if (url === TUTOR_ENDPOINTS.sessions && method === "post") {
         return {
@@ -111,6 +163,34 @@ describe("student interaction affordances", () => {
         };
       }
 
+      if (url === MATERIAL_ENDPOINTS.upload && method === "post") {
+        uploadedMaterial = {
+          id: "801",
+          title: "数据结构期末题.pdf",
+          type: "PDF",
+          detail: "已入库",
+          modified: "今天",
+          size: "4 B"
+        };
+
+        return {
+          data: {
+            data: {
+              ...uploadedMaterial,
+              material_id: 801,
+              course_id: null,
+              filename: uploadedMaterial.title,
+              parse_status: "uploaded"
+            },
+            trace_id: "trace_interaction_material_upload"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
       return {
         data: { data: {}, trace_id: "trace_interaction_default" },
         status: 200,
@@ -119,6 +199,17 @@ describe("student interaction affordances", () => {
         config
       };
     };
+
+    useAuthStore.getState().setSession({
+      token: "interaction-token",
+      user: {
+        id: 7,
+        email: "interaction@edunova.local",
+        displayName: "交互学生",
+        role: "student",
+        starterMode: "blank"
+      }
+    });
 
     renderPage(<LearningSpacePage />);
 
@@ -303,16 +394,100 @@ describe("student interaction affordances", () => {
 
   it("shows feedback for library and settings actions that await real APIs", async () => {
     const user = userEvent.setup();
+    let materials: MaterialListItem[] = [
+      {
+        id: "301",
+        title: "AI 导论讲义",
+        type: "DOCX",
+        detail: "已解析",
+        modified: "今天",
+        size: "1.2 MB",
+        category: "document",
+        extension: "DOCX",
+        parse_status: "completed",
+        course_ids: ["101"]
+      },
+      {
+        id: "302",
+        title: "期末复习题样例",
+        type: "MD",
+        detail: "已解析",
+        modified: "昨天",
+        size: "68 KB",
+        category: "document",
+        extension: "MD",
+        parse_status: "completed",
+        course_ids: []
+      }
+    ];
+    const calls: Array<{ method: string; url: string }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+      calls.push({ method, url });
+
+      if (url === MATERIAL_ENDPOINTS.list && method === "get") {
+        return {
+          data: { data: materials, trace_id: "trace_materials_list" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === MATERIAL_ENDPOINTS.upload && method === "post") {
+        const uploaded = {
+          id: "303",
+          title: "课堂截图.png",
+          type: "PNG",
+          detail: "仅入库，暂不做 OCR",
+          modified: "今天",
+          size: "4 B",
+          category: "image",
+          extension: "PNG",
+          parse_status: "uploaded",
+          course_ids: []
+        } satisfies MaterialListItem;
+        materials = [uploaded, ...materials];
+        return {
+          data: {
+            data: {
+              ...uploaded,
+              material_id: 303,
+              course_id: null,
+              filename: uploaded.title
+            },
+            trace_id: "trace_material_upload"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
 
     renderPage(<LibraryPage />);
 
+    expect(await screen.findByRole("button", { name: /AI 导论讲义/ })).toBeInTheDocument();
     const uploadedFile = new File(["demo"], "课堂截图.png", { type: "image/png" });
     await user.upload(screen.getByLabelText("上传资料文件"), uploadedFile);
 
-    expect(screen.getByRole("status")).toHaveTextContent("课堂截图.png 已上传到资料库");
-    expect(screen.getByRole("button", { name: /课堂截图.png/ })).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("课堂截图.png 已上传到资料库");
+    expect(await screen.findByRole("button", { name: /课堂截图.png/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /课堂截图.png/ })).toHaveTextContent("仅入库，暂不做 OCR");
     expect(screen.queryByText("等待提取说明")).not.toBeInTheDocument();
+    expect(calls).toContainEqual({ method: "post", url: MATERIAL_ENDPOINTS.upload });
 
     await user.click(screen.getByRole("button", { name: "图片" }));
 

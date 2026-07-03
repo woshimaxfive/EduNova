@@ -15,7 +15,7 @@ from backend.app.core.security import (
     verify_password,
 )
 from backend.app.main import create_app
-from backend.app.models import Course, User
+from backend.app.models import Course, CourseMaterialLink, Material, User
 from backend.app.services.auth import (
     AuthService,
     DuplicateEmailError,
@@ -32,8 +32,12 @@ class InMemoryAuthRepository:
     users_by_email: dict[str, User] = field(default_factory=dict)
     users_by_id: dict[int, User] = field(default_factory=dict)
     courses: list[Course] = field(default_factory=list)
+    materials: list[Material] = field(default_factory=list)
+    material_links: list[CourseMaterialLink] = field(default_factory=list)
     next_user_id: int = 1
     next_course_id: int = 1
+    next_material_id: int = 1
+    next_material_link_id: int = 1
 
     def get_user_by_email(self, email: str) -> User | None:
         return self.users_by_email.get(email)
@@ -60,7 +64,20 @@ class InMemoryAuthRepository:
     def add_course(self, course: Course) -> None:
         course.id = self.next_course_id
         self.next_course_id += 1
+        for material in course.materials:
+            if material.id is None:
+                material.id = len(self.materials) + len(course.materials)
         self.courses.append(course)
+
+    def add_material(self, material: Material) -> None:
+        material.id = self.next_material_id
+        self.next_material_id += 1
+        self.materials.append(material)
+
+    def add_course_material_link(self, link: CourseMaterialLink) -> None:
+        link.id = self.next_material_link_id
+        self.next_material_link_id += 1
+        self.material_links.append(link)
 
     def flush(self) -> None:
         return None
@@ -136,6 +153,12 @@ def test_register_ai_intro_copies_course_graph_to_current_user() -> None:
     assert course.knowledge_points
     assert course.knowledge_chunks
     assert all(chunk.course is course for chunk in course.knowledge_chunks)
+    assert len(repo.materials) == 1
+    assert repo.materials[0].user_id == user.id
+    assert repo.materials[0].filename == course.materials[0].filename
+    assert len(repo.material_links) == 1
+    assert repo.material_links[0].course_id == course.id
+    assert repo.material_links[0].material_id == repo.materials[0].id
 
 
 def test_register_rejects_duplicate_email_and_weak_password() -> None:

@@ -7,3 +7,4 @@ SQLAlchemy
 pgvector
 bcrypt
 PyJWT
+python-multipart

@@ -3,9 +3,11 @@ import { type ApiEnvelope, type MaterialProgressStatus } from "../types/api";
 
 export const MATERIAL_ENDPOINTS = {
   upload: "/materials/upload",
+  list: "/materials",
   detail: (materialId: number) => `/materials/${materialId}`,
   progress: (materialId: number) => `/materials/${materialId}/progress`,
-  compare: "/materials/compare"
+  compare: "/materials/compare",
+  attachToCourse: (courseId: number) => `/courses/${courseId}/materials`
 } as const;
 
 export type UploadMaterialRequest = {
@@ -14,10 +16,35 @@ export type UploadMaterialRequest = {
 };
 
 export type UploadMaterialResult = {
+  id: string;
   material_id: number;
-  course_id: number;
+  course_id: number | null;
   filename: string;
+  title: string;
+  type: string;
+  detail: string;
+  modified: string;
+  size: string;
   parse_status: MaterialProgressStatus;
+};
+
+export type MaterialListItem = {
+  id: string;
+  title: string;
+  type: string;
+  detail: string;
+  modified: string;
+  size: string;
+  category: "document" | "image";
+  extension: string;
+  parse_status: MaterialProgressStatus;
+  course_ids: string[];
+};
+
+export type MaterialDetail = MaterialListItem & {
+  filename: string;
+  content_type: string;
+  extracted_text_preview: string | null;
 };
 
 export type MaterialProgress = {
@@ -31,6 +58,16 @@ export type CompareMaterialsRequest = {
   material_ids: number[];
 };
 
+export type AttachCourseMaterialsRequest = {
+  material_ids: number[];
+};
+
+export type AttachCourseMaterialsResult = {
+  course_id: string;
+  material_ids: string[];
+  attached_count: number;
+};
+
 export async function uploadMaterial(payload: UploadMaterialRequest) {
   const formData = new FormData();
   formData.append("file", payload.file);
@@ -42,8 +79,18 @@ export async function uploadMaterial(payload: UploadMaterialRequest) {
   return response.data;
 }
 
+export async function listMaterials(params?: { courseId?: number; unassigned?: boolean }) {
+  const response = await apiClient.get<ApiEnvelope<MaterialListItem[]>>(MATERIAL_ENDPOINTS.list, {
+    params: {
+      course_id: params?.courseId,
+      unassigned: params?.unassigned
+    }
+  });
+  return response.data;
+}
+
 export async function getMaterial(materialId: number) {
-  const response = await apiClient.get<ApiEnvelope<Record<string, unknown>>>(MATERIAL_ENDPOINTS.detail(materialId));
+  const response = await apiClient.get<ApiEnvelope<MaterialDetail>>(MATERIAL_ENDPOINTS.detail(materialId));
   return response.data;
 }
 
@@ -53,6 +100,11 @@ export async function getMaterialProgress(materialId: number) {
 }
 
 export async function compareMaterials(payload: CompareMaterialsRequest) {
-  const response = await apiClient.post<ApiEnvelope<Record<string, unknown>>>(MATERIAL_ENDPOINTS.compare, payload);
+  const response = await apiClient.post<ApiEnvelope<{ course_id: string; material_ids: string[] }>>(MATERIAL_ENDPOINTS.compare, payload);
+  return response.data;
+}
+
+export async function attachCourseMaterials(courseId: number, payload: AttachCourseMaterialsRequest) {
+  const response = await apiClient.post<ApiEnvelope<AttachCourseMaterialsResult>>(MATERIAL_ENDPOINTS.attachToCourse(courseId), payload);
   return response.data;
 }

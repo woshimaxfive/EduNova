@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-this-local-development-secret"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
+    material_storage_dir: str = "var/uploads/materials"
+    material_max_upload_mb: int = 25
 
     model_config = SettingsConfigDict(
         env_file=".env",

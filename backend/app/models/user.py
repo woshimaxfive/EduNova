@@ -10,6 +10,7 @@ from backend.app.models.mixins import IdMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from backend.app.models.course import Course, CourseEnrollment, CourseMaterial
+    from backend.app.models.material import CourseMaterialLink, Material
 
 
 class User(IdMixin, TimestampMixin, Base):
@@ -35,5 +36,13 @@ class User(IdMixin, TimestampMixin, Base):
     )
     materials: Mapped[list["CourseMaterial"]] = relationship(
         back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    library_materials: Mapped[list["Material"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    material_links: Mapped[list["CourseMaterialLink"]] = relationship(
+        back_populates="added_by_user",
         cascade="all, delete-orphan",
     )

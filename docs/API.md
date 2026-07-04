@@ -919,7 +919,7 @@ Authorization: Bearer <token>
 
 ### POST `/tutor/sessions/{session_id}/messages`
 
-用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条模板 `assistant` 回复。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用关键词 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。Phase 6.1 后，课程会话在命中引用且模型配置可用时，会通过 OpenAI-compatible Chat Completions 生成非流式真实回答；主页 `scope=home` 仍保持模板回复，不调用模型。
+用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条模板 `assistant` 回复。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用关键词 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。Phase 6.1 后，课程会话在命中引用且模型配置可用时，会通过 OpenAI-compatible Chat Completions 生成非流式真实回答；主页 `scope=home` 仍保持模板回复，不调用模型。Phase 6.3 后，课程空间前端默认优先使用流式接口，本接口保留为兼容路径和自动化测试路径。
 
 请求：
 
@@ -944,14 +944,56 @@ Authorization: Bearer <token>
 - 无命中时 `citation_json=[]`，assistant 内容提示“资料依据不足”，前端不得伪造引用。
 - 有命中且可解析模型配置时，assistant `content` 保存模型基于引用生成的回答，`trace_id` 写入本次模型调用 trace。
 - 有命中但无可用模型配置时，assistant 保存“已找到资料依据，但当前未配置可用模型。”，引用仍保留。
-- 模型调用超时、鉴权失败、非 JSON 或空内容时返回 `MODEL_PROVIDER_ERROR`，前端保留输入，不写入半截 assistant 消息。
+- 模型调用超时、鉴权失败、非 JSON、空内容或流式中途失败时返回 `MODEL_PROVIDER_ERROR`，前端保留输入，不写入半截 assistant 消息。
 - 课程空间刷新后，前端通过 `GET /tutor/sessions/{session_id}` 恢复消息和引用。
 
-流式输出、embedding、向量召回、低依据评分和完整 agent trace 仍在后续阶段接入。
+embedding、向量召回、低依据评分和完整 agent trace 仍在后续阶段接入。
 
-### GET `/tutor/sessions/{session_id}/stream`
+### POST `/tutor/sessions/{session_id}/messages/stream`
 
-用途：SSE 流式返回回答。当前未实现，第一版可在普通消息接口和真实 AI/RAG 稳定后接入。
+用途：SSE 流式返回课程空间回答。Phase 6.3 已实现，必须携带 JWT，只允许 `scope=course` 会话调用；主页 `scope=home` 调用返回 400。请求体沿用普通消息接口：
+
+```json
+{
+  "message": "启发式搜索怎么复习？"
+}
+```
+
+响应类型：
+
+```text
+Content-Type: text/event-stream
+```
+
+事件顺序：
+
+```text
+event: metadata
+data: {"session_id":"12","trace_id":"trace_xxx","citation_count":2,"used_model":true}
+
+event: token
+data: {"content":"可以先从启发函数的作用看起。"}
+
+event: done
+data: {"session":{},"messages":[]}
+```
+
+错误事件：
+
+```text
+event: error
+data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查设置或稍后重试。"}
+```
+
+流式规则：
+
+- 后端先检索课程知识切片，再决定是否调用模型。
+- 无引用时不调用模型，流式返回“资料依据不足”，并持久化 user 消息和 assistant 提示，`citation_json=[]`。
+- 有引用但未配置可用模型时不调用外部模型，流式返回未配置提示，仍持久化真实引用。
+- 有引用且模型可用时，Provider 以 `stream=true` 调用 `{base_url}/chat/completions`，逐段解析 `data: {...}` 和 `[DONE]`。
+- 只有流式成功完成后，后端才持久化 user 消息、完整 assistant 回答、真实引用和 `trace_id`。
+- 模型流式中途失败时只发送 `error` 事件，不写入半截 assistant；前端必须保留输入并提示用户检查设置或稍后重试。
+- `done` 事件返回最终 `TutorSessionDetail`，前端用它替换临时流式状态并刷新课程历史。
 
 ## 14. Practice 与 Report 接口
 

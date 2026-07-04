@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any, Iterator, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.models import ChatMessage, ChatSession, Course, CourseEnrollment, User
 from backend.app.schemas.tutor import TutorSessionDetail, TutorSessionSummary, session_detail_to_api, session_to_summary
+from backend.app.services.course_answers import CourseAnswerGenerationError
 
 
 TEMPLATE_ASSISTANT_REPLY = "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。"
@@ -68,6 +69,9 @@ class CourseCitationSearcher(Protocol):
 
 class CourseAnswerGenerator(Protocol):
     def generate(self, user: User, question: str, citations: list[dict[str, Any]]) -> Any:
+        ...
+
+    def stream(self, user: User, question: str, citations: list[dict[str, Any]]) -> Any:
         ...
 
 
@@ -215,14 +219,6 @@ class TutorSessionService:
             raise EmptyMessageError("消息不能为空。")
 
         session = self._get_session_for_user(user.id, session_id)
-        user_message = ChatMessage(
-            session_id=session.id,
-            user_id=user.id,
-            role="user",
-            content=message_text,
-            citation_json=[],
-            trace_id=None,
-        )
         citation_json = self._search_course_citations(user=user, session=session, message_text=message_text)
         generated_answer = self._generate_course_answer(
             user=user,
@@ -231,26 +227,121 @@ class TutorSessionService:
             citation_json=citation_json,
         )
         assistant_reply = generated_answer.content or self._build_assistant_reply(session=session, citation_json=citation_json)
-        assistant_message = ChatMessage(
-            session_id=session.id,
-            user_id=user.id,
-            role="assistant",
-            content=assistant_reply,
+        return self._persist_message_pair(
+            user=user,
+            session=session,
+            message_text=message_text,
+            assistant_reply=assistant_reply,
             citation_json=citation_json,
             trace_id=generated_answer.trace_id,
         )
 
-        try:
-            self.repository.add_message(user_message)
-            self.repository.add_message(assistant_message)
-            self.repository.touch_session(session)
-            self.repository.flush()
-            self.repository.commit()
-        except Exception:
-            self.repository.rollback()
-            raise
+    def stream_message(self, user: User, session_id: int, content: str) -> Iterator[dict[str, Any]]:
+        message_text = content.strip()
+        if not message_text:
+            raise EmptyMessageError("消息不能为空。")
 
-        return session_detail_to_api(session, self.repository.list_messages(session.id))
+        session = self._get_session_for_user(user.id, session_id)
+        if session.scope != "course":
+            raise InvalidSessionScopeError("只有课程会话支持流式回答。")
+
+        citation_json = self._search_course_citations(user=user, session=session, message_text=message_text)
+        return self._stream_course_response(
+            user=user,
+            session=session,
+            message_text=message_text,
+            citation_json=citation_json,
+        )
+
+    def _stream_course_response(
+        self,
+        user: User,
+        session: ChatSession,
+        message_text: str,
+        citation_json: list[dict[str, Any]],
+    ) -> Iterator[dict[str, Any]]:
+        try:
+            if not citation_json:
+                assistant_reply = COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS
+                yield self._stream_event(
+                    "metadata",
+                    session_id=session.id,
+                    trace_id=None,
+                    citation_count=0,
+                    used_model=False,
+                )
+                yield {"event": "token", "data": {"content": assistant_reply}}
+                detail = self._persist_message_pair(
+                    user=user,
+                    session=session,
+                    message_text=message_text,
+                    assistant_reply=assistant_reply,
+                    citation_json=[],
+                    trace_id=None,
+                )
+                yield {"event": "done", "data": detail.model_dump()}
+                return
+
+            if self.course_answer_generator is None:
+                assistant_reply = COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED
+                yield self._stream_event(
+                    "metadata",
+                    session_id=session.id,
+                    trace_id=None,
+                    citation_count=len(citation_json),
+                    used_model=False,
+                )
+                yield {"event": "token", "data": {"content": assistant_reply}}
+                detail = self._persist_message_pair(
+                    user=user,
+                    session=session,
+                    message_text=message_text,
+                    assistant_reply=assistant_reply,
+                    citation_json=citation_json,
+                    trace_id=None,
+                )
+                yield {"event": "done", "data": detail.model_dump()}
+                return
+
+            stream_result = self.course_answer_generator.stream(user=user, question=message_text, citations=citation_json)
+            trace_id = getattr(stream_result, "trace_id", None)
+            used_model = bool(getattr(stream_result, "used_model", True))
+            yield self._stream_event(
+                "metadata",
+                session_id=session.id,
+                trace_id=trace_id,
+                citation_count=len(citation_json),
+                used_model=used_model,
+            )
+
+            answer_parts: list[str] = []
+            for token in getattr(stream_result, "tokens"):
+                if not isinstance(token, str) or not token:
+                    continue
+                answer_parts.append(token)
+                yield {"event": "token", "data": {"content": token}}
+
+            assistant_reply = "".join(answer_parts).strip()
+            if not assistant_reply:
+                raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。")
+
+            detail = self._persist_message_pair(
+                user=user,
+                session=session,
+                message_text=message_text,
+                assistant_reply=assistant_reply,
+                citation_json=citation_json,
+                trace_id=trace_id,
+            )
+            yield {"event": "done", "data": detail.model_dump()}
+        except CourseAnswerGenerationError:
+            yield {
+                "event": "error",
+                "data": {
+                    "code": "MODEL_PROVIDER_ERROR",
+                    "message": "模型暂不可用，请检查设置或稍后重试。",
+                },
+            }
 
     def _generate_course_answer(
         self,
@@ -269,6 +360,62 @@ class TutorSessionService:
             content=str(getattr(answer, "content", "") or ""),
             trace_id=getattr(answer, "trace_id", None),
         )
+
+    def _persist_message_pair(
+        self,
+        user: User,
+        session: ChatSession,
+        message_text: str,
+        assistant_reply: str,
+        citation_json: list[dict[str, Any]],
+        trace_id: str | None,
+    ) -> TutorSessionDetail:
+        user_message = ChatMessage(
+            session_id=session.id,
+            user_id=user.id,
+            role="user",
+            content=message_text,
+            citation_json=[],
+            trace_id=None,
+        )
+        assistant_message = ChatMessage(
+            session_id=session.id,
+            user_id=user.id,
+            role="assistant",
+            content=assistant_reply,
+            citation_json=citation_json,
+            trace_id=trace_id,
+        )
+
+        try:
+            self.repository.add_message(user_message)
+            self.repository.add_message(assistant_message)
+            self.repository.touch_session(session)
+            self.repository.flush()
+            self.repository.commit()
+        except Exception:
+            self.repository.rollback()
+            raise
+
+        return session_detail_to_api(session, self.repository.list_messages(session.id))
+
+    @staticmethod
+    def _stream_event(
+        event: str,
+        session_id: int,
+        trace_id: str | None,
+        citation_count: int,
+        used_model: bool,
+    ) -> dict[str, Any]:
+        return {
+            "event": event,
+            "data": {
+                "session_id": str(session_id),
+                "trace_id": trace_id,
+                "citation_count": citation_count,
+                "used_model": used_model,
+            },
+        }
 
     def _search_course_citations(self, user: User, session: ChatSession, message_text: str) -> list[dict[str, Any]]:
         if session.scope != "course" or session.course_id is None or self.course_citation_searcher is None:

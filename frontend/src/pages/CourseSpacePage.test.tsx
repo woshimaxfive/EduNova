@@ -1,9 +1,9 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PATHS } from "../app/routePaths";
 import { apiClient } from "../api/client";
@@ -12,6 +12,7 @@ import { TUTOR_ENDPOINTS, type TutorCitation, type TutorSessionDetail, type Tuto
 import { CourseSpacePage } from "./CourseSpacePage";
 
 let previousAdapter = apiClient.defaults.adapter;
+const previousFetch = globalThis.fetch;
 
 type ApiCall = {
   method: string;
@@ -25,6 +26,14 @@ type CoursePageOptions = {
   sendDetail?: TutorSessionDetail;
   historyDetail?: TutorSessionDetail;
   failSend?: boolean;
+  streamEvents?: Array<{ event: string; data: unknown }>;
+  controlledStream?: boolean;
+};
+
+type FetchCall = {
+  url: string;
+  method: string;
+  payload: unknown;
 };
 
 const citationItem: TutorCitation = {
@@ -95,6 +104,20 @@ function makeDetail(
   };
 }
 
+function createSseStream(events: Array<{ event: string; data: unknown }>) {
+  const encoder = new TextEncoder();
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(encoder.encode(`event: ${event.event}\n`));
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event.data)}\n\n`));
+      }
+      controller.close();
+    }
+  });
+}
+
 function renderWithProviders(ui: ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -109,6 +132,9 @@ function renderWithProviders(ui: ReactNode) {
 
 function renderCoursePage(options: CoursePageOptions = {}) {
   const calls: ApiCall[] = [];
+  const fetchCalls: FetchCall[] = [];
+  let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  const encoder = new TextEncoder();
   const createdSession = makeSession("901", "启发式搜索怎么复习？");
   const defaultSendDetail = makeDetail(
     createdSession,
@@ -227,23 +253,6 @@ function renderCoursePage(options: CoursePageOptions = {}) {
       };
     }
 
-    if (url === TUTOR_ENDPOINTS.message(createdSession.id) && method === "post") {
-      if (options.failSend) {
-        throw new Error("send failed");
-      }
-
-      return {
-        data: {
-          data: options.sendDetail ?? defaultSendDetail,
-          trace_id: "trace_send_course_message"
-        },
-        status: 200,
-        statusText: "OK",
-        headers: {},
-        config
-      };
-    }
-
     if (url === TUTOR_ENDPOINTS.detail("777") && method === "get") {
       return {
         data: {
@@ -273,6 +282,57 @@ function renderCoursePage(options: CoursePageOptions = {}) {
     };
   };
 
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const rawBody = typeof init?.body === "string" ? init.body : "";
+    const payload = rawBody ? JSON.parse(rawBody) : null;
+    fetchCalls.push({ url, method: init?.method ?? "GET", payload });
+
+    if (options.failSend) {
+      return new Response(
+        createSseStream([
+          {
+            event: "error",
+            data: {
+              code: "MODEL_PROVIDER_ERROR",
+              message: "模型暂不可用，请检查设置或稍后重试。"
+            }
+          }
+        ]),
+        { status: 200, headers: { "content-type": "text/event-stream" } }
+      );
+    }
+
+    if (options.controlledStream) {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          streamController = controller;
+        }
+      });
+      return new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } });
+    }
+
+    return new Response(
+      createSseStream(
+        options.streamEvents ?? [
+          {
+            event: "metadata",
+            data: {
+              session_id: createdSession.id,
+              trace_id: "trace_stream_course_message",
+              citation_count: 1,
+              used_model: true
+            }
+          },
+          { event: "token", data: { content: "模型回答：启发式搜索复习" } },
+          { event: "token", data: { content: "时先理解启发函数。" } },
+          { event: "done", data: options.sendDetail ?? defaultSendDetail }
+        ]
+      ),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    );
+  });
+
   renderWithProviders(
     <MemoryRouter initialEntries={["/app/courses/808"]}>
       <Routes>
@@ -281,7 +341,19 @@ function renderCoursePage(options: CoursePageOptions = {}) {
     </MemoryRouter>
   );
 
-  return { calls };
+  function emitStreamEvent(event: string, data: unknown) {
+    if (streamController === null) {
+      throw new Error("stream controller is not ready");
+    }
+    streamController.enqueue(encoder.encode(`event: ${event}\n`));
+    streamController.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+  }
+
+  function closeStream() {
+    streamController?.close();
+  }
+
+  return { calls, fetchCalls, emitStreamEvent, closeStream };
 }
 
 describe("CourseSpacePage course tutor sessions", () => {
@@ -292,6 +364,7 @@ describe("CourseSpacePage course tutor sessions", () => {
 
   afterEach(() => {
     apiClient.defaults.adapter = previousAdapter;
+    globalThis.fetch = previousFetch;
   });
 
   it("loads course-scoped tutor sessions for the current course", async () => {
@@ -313,7 +386,7 @@ describe("CourseSpacePage course tutor sessions", () => {
 
   it("creates a course session before sending the first course question and renders persisted citations", async () => {
     const user = userEvent.setup();
-    const { calls } = renderCoursePage();
+    const { calls, fetchCalls } = renderCoursePage();
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
     await user.type(screen.getByRole("textbox", { name: "课程问题输入" }), "启发式搜索怎么复习？");
@@ -331,15 +404,17 @@ describe("CourseSpacePage course tutor sessions", () => {
         }
       })
     );
-    expect(calls).toContainEqual(
-      expect.objectContaining({
-        method: "post",
-        url: TUTOR_ENDPOINTS.message("901"),
-        payload: {
-          message: "启发式搜索怎么复习？"
-        }
-      })
-    );
+    await waitFor(() => {
+      expect(fetchCalls).toContainEqual(
+        expect.objectContaining({
+          method: "POST",
+          url: `/api/v1${TUTOR_ENDPOINTS.stream("901")}`,
+          payload: {
+            message: "启发式搜索怎么复习？"
+          }
+        })
+      );
+    });
     expect(await screen.findAllByText("人工智能导论讲义.md")).not.toHaveLength(0);
     expect(screen.getByText(/模型回答：启发式搜索复习/)).toBeInTheDocument();
     expect(screen.getAllByText("启发式搜索")).not.toHaveLength(0);
@@ -348,7 +423,7 @@ describe("CourseSpacePage course tutor sessions", () => {
 
   it("reuses the active course session for follow-up questions", async () => {
     const user = userEvent.setup();
-    const { calls } = renderCoursePage();
+    const { calls, fetchCalls } = renderCoursePage();
 
     const input = await screen.findByRole("textbox", { name: "课程问题输入" });
     await user.type(input, "启发式搜索怎么复习？");
@@ -358,7 +433,35 @@ describe("CourseSpacePage course tutor sessions", () => {
     await user.click(screen.getByRole("button", { name: "发送" }));
 
     expect(calls.filter((call) => call.method === "post" && call.url === TUTOR_ENDPOINTS.sessions)).toHaveLength(1);
-    expect(calls.filter((call) => call.method === "post" && call.url === TUTOR_ENDPOINTS.message("901"))).toHaveLength(2);
+    await waitFor(() => {
+      expect(fetchCalls.filter((call) => call.url === `/api/v1${TUTOR_ENDPOINTS.stream("901")}`)).toHaveLength(2);
+    });
+  });
+
+  it("renders streamed answer tokens before replacing them with persisted messages", async () => {
+    const user = userEvent.setup();
+    const { emitStreamEvent, closeStream } = renderCoursePage({ controlledStream: true });
+
+    await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await user.type(screen.getByRole("textbox", { name: "课程问题输入" }), "启发式搜索怎么复习？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    emitStreamEvent("metadata", {
+      session_id: "901",
+      trace_id: "trace_stream_course_message",
+      citation_count: 1,
+      used_model: true
+    });
+    emitStreamEvent("token", { content: "模型回答：" });
+
+    expect(await screen.findByText("模型回答：")).toBeInTheDocument();
+
+    emitStreamEvent("token", { content: "先看启发函数。" });
+    emitStreamEvent("done", makeDetail(makeSession("901", "启发式搜索怎么复习？"), "启发式搜索怎么复习？", "持久化后的完整回答。", [citationItem]));
+    closeStream();
+
+    expect(await screen.findByText("持久化后的完整回答。")).toBeInTheDocument();
+    expect(screen.queryByText("模型回答：先看启发函数。")).not.toBeInTheDocument();
   });
 
   it("loads persisted messages and citations when selecting course history", async () => {

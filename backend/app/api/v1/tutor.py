@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import StreamingResponse
 
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
@@ -139,5 +142,53 @@ def send_message(
             code="NOT_FOUND",
             message="会话不存在或无权访问。",
         ) from exc
+    except CourseAnswerGenerationError as exc:
+        raise ApiError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="MODEL_PROVIDER_ERROR",
+            message=str(exc),
+        ) from exc
 
     return api_response(detail.model_dump())
+
+
+@router.post("/sessions/{session_id}/messages/stream")
+def stream_message(
+    session_id: int,
+    payload: SendTutorMessageRequest,
+    current_user: User = Depends(get_current_user),
+    service: TutorSessionService = Depends(get_tutor_session_service),
+) -> StreamingResponse:
+    try:
+        events = service.stream_message(user=current_user, session_id=session_id, content=payload.message)
+    except EmptyMessageError as exc:
+        raise ApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="VALIDATION_ERROR",
+            message=str(exc),
+        ) from exc
+    except InvalidSessionScopeError as exc:
+        raise ApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="VALIDATION_ERROR",
+            message=str(exc),
+        ) from exc
+    except SessionNotFoundError as exc:
+        raise ApiError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="NOT_FOUND",
+            message="会话不存在或无权访问。",
+        ) from exc
+
+    def encode_events():
+        for event in events:
+            event_name = str(event.get("event") or "message")
+            data = event.get("data", {})
+            yield f"event: {event_name}\n"
+            yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        encode_events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )

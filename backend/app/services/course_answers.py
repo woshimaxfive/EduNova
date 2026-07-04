@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterator
 
 from backend.app.api.errors import make_trace_id
 from backend.app.models import User
@@ -23,6 +23,13 @@ class CourseAnswerGeneration:
     trace_id: str | None
 
 
+@dataclass(frozen=True)
+class CourseAnswerStream:
+    tokens: Iterator[str]
+    trace_id: str | None
+    used_model: bool
+
+
 class CourseAnswerService:
     def __init__(self, model_settings_service: ModelSettingsService) -> None:
         self.model_settings_service = model_settings_service
@@ -41,6 +48,35 @@ class CourseAnswerService:
             raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
 
         return CourseAnswerGeneration(content=content, trace_id=trace_id)
+
+    def stream(self, user: User, question: str, citations: list[dict[str, Any]]) -> CourseAnswerStream:
+        if not citations:
+            return CourseAnswerStream(
+                tokens=iter(["我先检查了课程资料，但还没有足够依据支撑这个问题。"]),
+                trace_id=None,
+                used_model=False,
+            )
+
+        trace_id = make_trace_id()
+        messages = self._build_messages(question=question, citations=citations)
+        try:
+            tokens = self.model_settings_service.chat_completion_stream(user=user, messages=messages)
+        except ModelNotConfiguredError:
+            return CourseAnswerStream(
+                tokens=iter([MODEL_NOT_CONFIGURED_MESSAGE]),
+                trace_id=None,
+                used_model=False,
+            )
+        except ModelProviderError as exc:
+            raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
+
+        def guarded_tokens() -> Iterator[str]:
+            try:
+                yield from tokens
+            except ModelProviderError as exc:
+                raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
+
+        return CourseAnswerStream(tokens=guarded_tokens(), trace_id=trace_id, used_model=True)
 
     @staticmethod
     def _build_messages(question: str, citations: list[dict[str, Any]]) -> list[dict[str, str]]:

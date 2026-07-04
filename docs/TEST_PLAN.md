@@ -6,7 +6,7 @@
 
 EduNova 的测试目标不是只证明代码能运行，而是证明系统满足赛题要求、适合比赛演示、能够后续开源部署，并且关键 AI 输出具有可解释性和可信度。
 
-本文档是全项目测试计划。除“当前自动化验证入口”一节外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前阶段已经全部实现。当前已验收 FastAPI 最小骨架、`/api/health`、pytest、ruff、编码检查、Docker Compose 配置、PostgreSQL、Redis、backend 三服务真实启动健康检查、frontend 与 Nginx 服务配置、SQLAlchemy 数据库入口、Alembic 迁移环境、pgvector 扩展迁移、第一批核心业务表迁移、学习闭环基础表迁移、`users.starter_mode` 迁移、独立资料库迁移、人工智能导论内置课程包导入，以及 Phase 3 前端工程骨架、路由保护、登录入口、注册 starter mode、AI 对话主页、贴边可收起历史侧栏、侧栏账号入口、发送后主页对话态、底部学习输入区、输入区资料库浮层入口、文件上传入口、联网搜索激活态、Enter 发送、最近学习轻量列表、文件库式资料库、课程空间真实入口、独立学习路径页、学生端核心页面骨架、统一贴边工作区外壳、生成课程浮层、上传建课状态轨道、学习空间短状态信号、界面文案减法、本地交互反馈、P3.11 前端本地功能闭环、P3.13 路由与资料库精修、P3.15 可用性收口、P3.16 Phase 4 前口径对齐、Phase 4.1 真实注册登录认证闭环、Phase 4.2 `/dashboard/summary` 首页真实总览、Phase 4.3 `/tutor/sessions` 主页会话和消息持久化、Phase 4.4 `/materials` 真实资料库上传与列表闭环、Phase 5.1 `/courses/from-materials` 真实规则建课闭环、Phase 5.2 `/rag/search` 课程知识库检索引用、Phase 5.3 课程空间会话与引用持久化、Phase 6.1 `/settings/model` 模型配置和非流式真实课程 RAG 回答、Phase 6.2 `/settings/model/configs` 多模型配置隔离、前端 API 合同模块、前端 lint、Vitest 和生产构建。
+本文档是全项目测试计划。除“当前自动化验证入口”一节外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前阶段已经全部实现。当前已验收 FastAPI 最小骨架、`/api/health`、pytest、ruff、编码检查、Docker Compose 配置、PostgreSQL、Redis、backend 三服务真实启动健康检查、frontend 与 Nginx 服务配置、SQLAlchemy 数据库入口、Alembic 迁移环境、pgvector 扩展迁移、第一批核心业务表迁移、学习闭环基础表迁移、`users.starter_mode` 迁移、独立资料库迁移、人工智能导论内置课程包导入，以及 Phase 3 前端工程骨架、路由保护、登录入口、注册 starter mode、AI 对话主页、贴边可收起历史侧栏、侧栏账号入口、发送后主页对话态、底部学习输入区、输入区资料库浮层入口、文件上传入口、联网搜索激活态、Enter 发送、最近学习轻量列表、文件库式资料库、课程空间真实入口、独立学习路径页、学生端核心页面骨架、统一贴边工作区外壳、生成课程浮层、上传建课状态轨道、学习空间短状态信号、界面文案减法、本地交互反馈、P3.11 前端本地功能闭环、P3.13 路由与资料库精修、P3.15 可用性收口、P3.16 Phase 4 前口径对齐、Phase 4.1 真实注册登录认证闭环、Phase 4.2 `/dashboard/summary` 首页真实总览、Phase 4.3 `/tutor/sessions` 主页会话和消息持久化、Phase 4.4 `/materials` 真实资料库上传与列表闭环、Phase 5.1 `/courses/from-materials` 真实规则建课闭环、Phase 5.2 `/rag/search` 课程知识库检索引用、Phase 5.3 课程空间会话与引用持久化、Phase 6.1 `/settings/model` 模型配置和非流式真实课程 RAG 回答、Phase 6.2 `/settings/model/configs` 多模型配置隔离、Phase 6.3 `/tutor/sessions/{session_id}/messages/stream` 课程问答流式输出、前端 API 合同模块、前端 lint、Vitest 和生产构建。
 
 测试需要覆盖以下问题：
 
@@ -136,7 +136,7 @@ cd ..
 | `/settings/model`、`/settings/model/test`、`/settings/model/configs` | 无 token 401、服务器配置摘要不泄露明文 Key、旧兼容接口仍读取/更新默认配置、多配置列表只返回当前用户配置、创建/更新/删除/设默认/指定测试隔离正确、用户配置加密保存、空 `api_key` 保留原密钥、缺少加密 Key 返回配置错误、本地 Provider 可无真实 Key、连接测试成功/失败稳定返回且写入脱敏测试状态 |
 | `/resources/generate` | 5 类资源、trace_id、审核状态 |
 | `/paths/generate` | 学习路径、任务列表、推荐理由 |
-| `/tutor/sessions` | 无 token 401、创建 home session、课程 session 校验、当前用户隔离、发送消息写入 user 和模板 assistant、详情按时间返回 messages、列表只返回当前用户当前 scope；Phase 5.3 起课程 session 发送命中问题时 assistant `citation_json` 写入真实 chunk/source/section/score，无命中时为空引用且提示资料依据不足，主页 session 不触发课程检索；Phase 6.1 起课程命中引用且模型可用时 assistant 内容来自模型、`trace_id` 非空，模型未配置时保留引用并提示未配置，模型失败时不写入半截 assistant |
+| `/tutor/sessions` | 无 token 401、创建 home session、课程 session 校验、当前用户隔离、发送消息写入 user 和模板 assistant、详情按时间返回 messages、列表只返回当前用户当前 scope；Phase 5.3 起课程 session 发送命中问题时 assistant `citation_json` 写入真实 chunk/source/section/score，无命中时为空引用且提示资料依据不足，主页 session 不触发课程检索；Phase 6.1 起课程命中引用且模型可用时 assistant 内容来自模型、`trace_id` 非空，模型未配置时保留引用并提示未配置，模型失败时不写入半截 assistant；Phase 6.3 起 `/tutor/sessions/{session_id}/messages/stream` 覆盖无 token 401、home session 400、`metadata/token/done/error` SSE 顺序、无引用不调用模型、未配置保留引用、流式失败不落半截消息和旧普通发送接口不回归 |
 | `/practice/sessions` | 出题、提交答案、批改 |
 | `/reports/generate` | 学习报告、证据来源 |
 | `/demo/reset` | 演示数据重置 |
@@ -573,7 +573,8 @@ cd ..
 | Phase 5.3 | 课程空间会话能创建、复用、列出、读取和持久化消息；assistant `citation_json` 保存真实引用，刷新和点击课程内历史后仍能恢复消息与引用 |
 | Phase 6.1 | 模型设置接口、用户 Key 加密保存、OpenAI-compatible Provider、讯飞星火首位 Provider 预设、课程命中引用后的非流式真实 RAG 回答和未配置/失败提示 |
 | Phase 6.2 | 模型配置收敛与多配置管理：同一用户多套模型配置独立保存、独立加密、独立测试、选择默认使用；Provider 列表收敛为国内常用服务和本地部署入口，模型名与鉴权方式已按官方文档确认 |
-| Phase 6 后续 | 流式输出、embedding、向量召回和 ReviewAgent 审核 |
+| Phase 6.3 | 课程问答流式输出：课程空间优先走 SSE，token 分片渲染，done 后恢复持久化消息和引用，error 时保留输入且不写半截 assistant |
+| Phase 6 后续 | embedding、向量召回和 ReviewAgent 审核 |
 | Phase 7 | 对话生成 8 维画像和画像事件 |
 | Phase 8 | 生成 5 类资源并显示 Agent 轨迹 |
 | Phase 9 | 学习路径、掌握度图、复习队列可用 |
@@ -641,6 +642,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 5.3 前端测试覆盖课程页加载 `scope=course&course_id=...` 会话列表、首次发送创建课程会话再发送消息、连续发送复用当前课程会话、点击课程内历史恢复真实 messages 和引用、无依据回答显示资料不足、发送失败保留输入。
 - Phase 6.1 前端测试覆盖 `settings.ts` 类型化 API 合同、设置页服务器/个人/未配置状态渲染、讯飞星火 Spark 首位 Provider 预设、保存模型配置、连接测试成功/失败反馈、不显示固定假 Key、不在设置页显示深度思考/联网搜索、课程空间渲染后端返回的模型回答和真实引用、模型失败时保留输入。
 - Phase 6.2 前端测试覆盖多套模型配置列表、创建配置、默认配置切换、删除配置、不同 Provider 的 Key 脱敏展示、指定配置连接测试、切换 Provider 不误用旧 Key，以及国内常用 Provider 和本地兼容服务的预设顺序与默认值；前端 API 合同测试覆盖新增 configs 路径、创建、更新、设默认、测试和删除函数。
+- Phase 6.3 前端测试覆盖课程页首次发送先创建课程会话再调用 stream endpoint、连续追问不重复创建会话、token 分片逐步显示、done 后渲染持久化消息和真实引用、stream error 时保留输入并显示模型暂不可用提示。
 - 路由测试覆盖 `/app/courses/:courseId` 课程空间壳子，确认课程对话空间、知识画布、证据与 Agent 轨迹和资源生成区可见；覆盖 `/app/path` 学习路径页，确认学习路径、阶段任务和路径依据可见。
 - 学生核心页面测试覆盖文件库式资料库、文档/图片筛选、真实资料列表、资源工坊、学习画像、AI 辅导、练习、报告和设置页面的核心区域。
 - P3.7/P3.14/Phase 4.4 交互测试覆盖主页上传资料文件、资料库默认未选中与点选高亮、联网搜索激活态、发送后进入主页对话且不显示持久“已生成回答”状态条、课程回答展开、知识点详情、AI 辅导模式切换、练习提交校验、资料库上传、文档/图片筛选、生成课程资料选择、资料库引用反馈和设置保存反馈；Phase 4.4 起资料库上传和列表断言真实 `/materials` 调用。
@@ -668,8 +670,9 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 5.3 浏览器验收需要优先使用 `agent-browser` 覆盖登录后进入已有课程，发送第一条课程问题后课程内历史新增，连续追问仍在同一课程历史中，刷新课程页后历史、消息和引用仍存在，点击课程历史能恢复消息和引用，无关问题显示资料依据不足，桌面和 390px 移动宽度无水平溢出且输入区不遮挡内容。
 - Phase 6.1 浏览器验收需要优先使用 `agent-browser` 覆盖设置页模型配置状态、讯飞星火 Spark 首位 Provider 预设、保存个人 OpenAI-compatible 配置、连接测试反馈、设置页无深度思考/联网搜索开关、课程空间命中资料问题显示真实模型回答和真实引用、无依据问题不伪造引用；如果本地没有真实可用模型 Key，必须覆盖未配置提示，真实外部模型调用在配置 Key 后补做。
 - Phase 6.2 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/settings` 桌面和 390px：配置列表可见、新建 Spark Lite 配置、本地 Provider 可保存、切换默认、测试连接、删除配置、OpenRouter 不可见、设置页无水平溢出；课程空间回答应继续使用当前用户默认模型配置。
+- Phase 6.3 浏览器验收需要优先使用 `agent-browser` 覆盖课程空间桌面和 390px：发送命中资料问题时 assistant 内容逐步出现或未配置提示通过流式路径出现，done 后刷新仍能恢复消息和引用；无依据问题不伪造引用；输入区不遮挡内容，页面无水平溢出。
 - Docker Compose 配置校验。
-- 当前未接入流式输出、embedding/向量 RAG、OCR、PDF/PPT/DOCX 深度解析、多智能体、真实资源生成、真实练习评估、报告导出文件和完整浏览器 E2E；这些检查将在后续阶段加入。真实后端认证已经进入 Phase 4.1 验证范围，首页真实总览已经进入 Phase 4.2 验证范围，主页会话持久化已经进入 Phase 4.3 验证范围，真实资料库上传与列表已经进入 Phase 4.4 验证范围，真实 TXT/Markdown 规则建课已经进入 Phase 5.1 验证范围，课程知识库检索引用已经进入 Phase 5.2 验证范围，课程空间会话引用持久化已经进入 Phase 5.3 验证范围，模型配置和非流式真实课程 RAG 回答已经进入 Phase 6.1 验证范围，多模型配置隔离已经进入 Phase 6.2 验证范围。
+- 当前未接入 embedding/向量 RAG、OCR、PDF/PPT/DOCX 深度解析、多智能体、真实资源生成、真实练习评估、报告导出文件和完整浏览器 E2E；这些检查将在后续阶段加入。真实后端认证已经进入 Phase 4.1 验证范围，首页真实总览已经进入 Phase 4.2 验证范围，主页会话持久化已经进入 Phase 4.3 验证范围，真实资料库上传与列表已经进入 Phase 4.4 验证范围，真实 TXT/Markdown 规则建课已经进入 Phase 5.1 验证范围，课程知识库检索引用已经进入 Phase 5.2 验证范围，课程空间会话引用持久化已经进入 Phase 5.3 验证范围，模型配置和非流式真实课程 RAG 回答已经进入 Phase 6.1 验证范围，多模型配置隔离已经进入 Phase 6.2 验证范围，课程问答流式输出已经进入 Phase 6.3 验证范围。
 
 统一验证脚本是日常轻量门禁，不会自动启动 Docker 容器。
 

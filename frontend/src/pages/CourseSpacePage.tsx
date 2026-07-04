@@ -21,7 +21,7 @@ import {
   createTutorSession,
   getTutorSession,
   listTutorSessions,
-  sendTutorMessage,
+  streamTutorMessage,
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
@@ -181,6 +181,7 @@ export function CourseSpacePage() {
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [coursePrompt, setCoursePrompt] = useState("");
   const [courseMessages, setCourseMessages] = useState<CourseMessage[]>([]);
+  const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [isSearchingCourse, setIsSearchingCourse] = useState(false);
   const { notice, showNotice } = useActionNotice();
   const snapshot = demoLearningSpace;
@@ -212,9 +213,11 @@ export function CourseSpacePage() {
     return mapTutorMessagesToCourseMessages(activeCourseSessionDetail?.messages ?? []);
   }, [activeCourseSessionDetail?.messages, activeCourseSessionDetailId, hasRealCourseId, selectedCourseSessionId]);
   const displayedCourseMessages =
-    hasRealCourseId && selectedCourseSessionId && activeCourseSessionDetailId === selectedCourseSessionId
-      ? persistedCourseMessages
-      : courseMessages;
+    streamingSessionId !== null
+      ? courseMessages
+      : hasRealCourseId && selectedCourseSessionId && activeCourseSessionDetailId === selectedCourseSessionId
+        ? persistedCourseMessages
+        : courseMessages;
   const courseSummary = apiCourse
     ? {
         id: Number.parseInt(apiCourse.id, 10),
@@ -280,6 +283,7 @@ export function CourseSpacePage() {
     }
 
     setActiveCourseSessionId(sessionId);
+    setStreamingSessionId(null);
     setCourseMessages([]);
   }
 
@@ -314,6 +318,7 @@ export function CourseSpacePage() {
     }
 
     setIsSearchingCourse(true);
+    const previousMessages = displayedCourseMessages;
 
     try {
       let sessionId = activeCourseSessionId ?? latestCourseSessionId;
@@ -326,21 +331,42 @@ export function CourseSpacePage() {
           title: courseQuestionTitle(question)
         });
         sessionId = createdSession.data.id;
-        setActiveCourseSessionId(sessionId);
       }
 
-      const detail = await sendTutorMessage(sessionId, { message: question });
-      const messages = mapTutorMessagesToCourseMessages(detail.data.messages);
+      setActiveCourseSessionId(sessionId);
+      setStreamingSessionId(sessionId);
+      const timestamp = Date.now();
+      const assistantMessageId = `course-assistant-stream-${timestamp}`;
+      const optimisticMessages: CourseMessage[] = [
+        ...previousMessages,
+        { id: `course-user-stream-${timestamp}`, role: "user", content: question },
+        { id: assistantMessageId, role: "assistant", content: "", citations: [] }
+      ];
+      setCourseMessages(optimisticMessages);
+
+      const detail = await streamTutorMessage(sessionId, { message: question }, {
+        onToken: (content) => {
+          setCourseMessages((current) =>
+            current.map((message) =>
+              message.id === assistantMessageId ? { ...message, content: `${message.content}${content}` } : message
+            )
+          );
+        }
+      });
+      const messages = mapTutorMessagesToCourseMessages(detail.messages);
       const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
       const citationCount = latestAssistant?.citations?.length ?? 0;
 
-      setActiveCourseSessionId(detail.data.session.id);
+      setActiveCourseSessionId(detail.session.id);
       setCourseMessages(messages);
+      setStreamingSessionId(null);
       setCoursePrompt("");
-      queryClient.setQueryData(["tutor", "session", detail.data.session.id], detail);
+      queryClient.setQueryData(["tutor", "session", detail.session.id], { data: detail, trace_id: null });
       void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
       showNotice(citationCount > 0 ? "已保存课程回答和引用。" : "课程资料依据不足。", citationCount > 0 ? "success" : "warning");
     } catch {
+      setCourseMessages(previousMessages);
+      setStreamingSessionId(null);
       showNotice("模型暂不可用，请检查设置或稍后重试。", "warning");
     } finally {
       setIsSearchingCourse(false);

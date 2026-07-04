@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal, Protocol
+from typing import Iterator, Literal, Protocol
 
 from cryptography.fernet import Fernet, InvalidToken
 from pydantic import BaseModel, Field, field_validator
@@ -57,6 +57,13 @@ class ModelChatProvider(Protocol):
         messages: list[dict[str, str]],
         timeout_seconds: float,
     ) -> str: ...
+
+    def chat_completion_stream(
+        self,
+        config: OpenAICompatibleConfig,
+        messages: list[dict[str, str]],
+        timeout_seconds: float,
+    ) -> Iterator[str]: ...
 
 
 class SaveModelSettingsRequest(BaseModel):
@@ -347,6 +354,20 @@ class ModelSettingsService:
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
             raise ModelNotConfiguredError(MODEL_NOT_CONFIGURED_MESSAGE)
         return self.provider.chat_completion(
+            config=OpenAICompatibleConfig(
+                base_url=runtime.base_url,
+                api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+                chat_model=runtime.chat_model,
+            ),
+            messages=messages,
+            timeout_seconds=self.settings.model_request_timeout_seconds,
+        )
+
+    def chat_completion_stream(self, user: User, messages: list[dict[str, str]]) -> Iterator[str]:
+        runtime = self.resolve_runtime_config(user)
+        if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
+            raise ModelNotConfiguredError(MODEL_NOT_CONFIGURED_MESSAGE)
+        return self.provider.chat_completion_stream(
             config=OpenAICompatibleConfig(
                 base_url=runtime.base_url,
                 api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,

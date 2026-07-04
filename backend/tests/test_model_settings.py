@@ -544,6 +544,43 @@ def test_openai_compatible_provider_posts_chat_completions_and_reads_content() -
     assert requests[0].read()
 
 
+def test_openai_compatible_provider_streams_chat_completion_deltas() -> None:
+    provider_module = load_openai_provider_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            content=(
+                'data: {"choices":[{"delta":{"content":"第一段"}}]}\n\n'
+                'data: {"choices":[{"delta":{"content":"第二段"}}]}\n\n'
+                "data: [DONE]\n\n"
+            ).encode("utf-8"),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = provider_module.OpenAICompatibleChatProvider(transport=httpx.MockTransport(handler))
+    config = provider_module.OpenAICompatibleConfig(
+        base_url="https://model.example.local/v1",
+        api_key="sk-user-secret",
+        chat_model="user-chat",
+    )
+
+    chunks = list(
+        provider.chat_completion_stream(
+            config=config,
+            messages=[{"role": "user", "content": "请回答"}],
+            timeout_seconds=3.0,
+        )
+    )
+
+    assert chunks == ["第一段", "第二段"]
+    assert str(requests[0].url) == "https://model.example.local/v1/chat/completions"
+    assert requests[0].headers["authorization"] == "Bearer sk-user-secret"
+    assert b'"stream":true' in requests[0].read().replace(b" ", b"")
+
+
 @pytest.mark.parametrize(
     ("response", "expected_message"),
     [

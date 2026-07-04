@@ -2,8 +2,15 @@
 .venv
 venv
 node_modules
+**/node_modules
 dist
+**/dist
 build
+**/build
+.vite
+**/.vite
+.vite-temp
+**/.vite-temp
 .pytest_cache
 .ruff_cache
 .mypy_cache
@@ -17,6 +24,8 @@ build
 storage
 uploads
 logs
+output
 *.log
 __pycache__
+**/__pycache__
 *.pyc

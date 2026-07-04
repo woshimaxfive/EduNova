@@ -145,6 +145,8 @@ docker compose config
 docker compose up --build -d
 ```
 
+Compose 构建上下文会排除本地依赖和运行产物，包括 `node_modules`、`dist`、`.vite`、`.vite-temp`、`build`、`output`、缓存目录和日志文件。前端镜像必须在容器内重新安装依赖并完成生产构建，不能复用本机 `frontend/node_modules`。
+
 查看服务：
 
 ```powershell
@@ -208,11 +210,18 @@ docker compose -p edunova-dev up --build -d
 | `backend/migrations/env.py` | 从应用配置读取 `DATABASE_URL` |
 | `backend/migrations/versions` | 迁移脚本目录 |
 
-启动 PostgreSQL 后执行：
+本地开发只启动 PostgreSQL 和 Redis 时，可以使用本地虚拟环境执行：
 
 ```powershell
 docker compose up -d postgres redis
 .\.venv\Scripts\python -m alembic upgrade head
+```
+
+完整 Docker 栈启动后，也可以直接在后端容器中执行。后端镜像已复制 `alembic.ini`，容器工作目录为 `/app`：
+
+```powershell
+docker compose exec -T backend python -m alembic upgrade head
+docker compose exec -T backend python -m alembic current
 ```
 
 当前首条迁移会执行：
@@ -227,6 +236,12 @@ CREATE EXTENSION IF NOT EXISTS vector
 .\.venv\Scripts\python -m backend.app.cli seed-ai-intro
 ```
 
+完整 Docker 栈中可以改用：
+
+```powershell
+docker compose exec -T backend python -m backend.app.cli seed-ai-intro
+```
+
 ## 7. 当前验收标准
 
 当前基础部署验收标准：
@@ -236,8 +251,8 @@ CREATE EXTENSION IF NOT EXISTS vector
 3. `redis` 服务健康。
 4. `backend` 服务健康。
 5. 浏览器或命令行访问 `/api/health` 返回预期 JSON。
-6. `alembic upgrade head` 能完成 pgvector 扩展迁移。
-7. `alembic upgrade head` 能创建第一批核心业务表和学习闭环基础表。
+6. 本地或后端容器内 `alembic upgrade head` 能完成 pgvector 扩展迁移。
+7. 本地或后端容器内 `alembic upgrade head` 能创建第一批核心业务表和学习闭环基础表。
 8. `python -m backend.app.cli seed-ai-intro` 能导入人工智能导论课程包。
 9. 重复执行导入命令不会创建重复课程。
 10. `frontend` 可执行 `pnpm lint`、`pnpm test` 和 `pnpm build`。

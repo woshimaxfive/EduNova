@@ -730,10 +730,12 @@ Docker Compose 阶段验收命令：
 ```powershell
 docker compose config
 docker compose up --build -d
-.\.venv\Scripts\python -m alembic upgrade head
-.\.venv\Scripts\python -m backend.app.cli seed-ai-intro
+docker compose exec -T backend python -m alembic upgrade head
+docker compose exec -T backend python -m alembic current
+docker compose exec -T backend python -m backend.app.cli seed-ai-intro
 docker compose ps
 Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/health" -Method Get
+Invoke-RestMethod -Uri "http://127.0.0.1:8080/api/health" -Method Get
 docker compose down
 ```
 

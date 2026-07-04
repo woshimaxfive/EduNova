@@ -180,6 +180,8 @@ docker compose config
 docker compose up --build -d
 ```
 
+Docker 构建上下文会忽略本地 `node_modules`、`dist`、`.vite`、`output` 等运行产物，避免把本机依赖复制进 Linux 镜像。
+
 停止：
 
 ```powershell
@@ -205,10 +207,22 @@ docker compose up -d postgres redis
 .\.venv\Scripts\python -m alembic upgrade head
 ```
 
+如果已经启动完整 Docker 栈，也可以直接在后端容器中执行迁移：
+
+```powershell
+docker compose exec -T backend python -m alembic upgrade head
+```
+
 导入内置课程包：
 
 ```powershell
 .\.venv\Scripts\python -m backend.app.cli seed-ai-intro
+```
+
+完整 Docker 栈中可以改用：
+
+```powershell
+docker compose exec -T backend python -m backend.app.cli seed-ai-intro
 ```
 
 内置课程包包含 12 个知识点和 24 个基础资料切片，覆盖搜索、知识表示、机器学习、神经网络、自然语言处理、计算机视觉、多智能体和 AI 伦理安全。

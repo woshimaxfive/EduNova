@@ -72,6 +72,7 @@
 | RAG | 混合检索、引用字段和检索状态已接入 |
 | 模型 | OpenAI-compatible chat、stream、embeddings 已接入 |
 | 学习画像 | `profiles` router 已接入，复用 `student_profiles` 和 `profile_events`；Phase 7.2 明确不为每门课复制完整画像 |
+| Docker | Compose 五服务可按默认端口启动；后端容器已支持 Alembic 配置读取；前端镜像构建不复用本机 `node_modules` |
 | 安全 | 用户数据隔离、Key 加密、脱敏返回和上传目录忽略已接入 |
 
 当前后端已挂载的业务 router 是 `auth`、`dashboard`、`courses`、`materials`、`profiles`、`rag`、`settings` 和 `tutor`。`resources`、`agents`、`paths`、`practice`、`reports` 和 `demo` 仍只是前端 API 常量与后续接口设计，不属于当前已实现后端能力。

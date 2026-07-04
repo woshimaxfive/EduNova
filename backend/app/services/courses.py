@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -71,6 +71,12 @@ class CourseRepository(Protocol):
     def rollback(self) -> None: ...
 
     def refresh(self, instance: object) -> None: ...
+
+
+class CourseEmbeddingService(Protocol):
+    def embed_texts(self, user: User, texts: list[str]) -> Any: ...
+
+    def apply_embeddings(self, user: User, chunks: list[KnowledgeChunk]) -> Any: ...
 
 
 class SqlAlchemyCourseRepository:
@@ -162,8 +168,9 @@ class CourseService:
     text_extensions = {".txt", ".md", ".markdown"}
     chunk_size = 900
 
-    def __init__(self, repository: CourseRepository) -> None:
+    def __init__(self, repository: CourseRepository, embedding_service: CourseEmbeddingService | None = None) -> None:
         self.repository = repository
+        self.embedding_service = embedding_service
 
     def create_course_from_materials(
         self,
@@ -220,6 +227,7 @@ class CourseService:
                 knowledge_points,
                 knowledge_chunks,
             )
+            self._best_effort_embed_chunks(user, knowledge_chunks)
             self.repository.commit()
             self.repository.refresh(created)
         except Exception:
@@ -367,6 +375,35 @@ class CourseService:
                     )
                 )
         return chunks
+
+    def _best_effort_embed_chunks(self, user: User, chunks: list[KnowledgeChunk]) -> None:
+        if self.embedding_service is None or not chunks:
+            return
+        try:
+            apply_embeddings = getattr(self.embedding_service, "apply_embeddings", None)
+            if callable(apply_embeddings):
+                apply_embeddings(user, chunks)
+                return
+
+            batch = self.embedding_service.embed_texts(user, [chunk.content for chunk in chunks])
+            vectors = list(getattr(batch, "vectors", []))
+            if len(vectors) != len(chunks):
+                return
+            source = str(getattr(batch, "source", "unknown"))
+            model = str(getattr(batch, "model", "unknown"))
+            dimension = int(getattr(batch, "dimension", 1536))
+            for chunk, vector in zip(chunks, vectors, strict=True):
+                if len(vector) != dimension:
+                    continue
+                chunk.embedding = vector
+                chunk.metadata_json = {
+                    **(chunk.metadata_json or {}),
+                    "embedding_source": source,
+                    "embedding_model": model,
+                    "embedding_dimension": dimension,
+                }
+        except Exception:
+            return
 
     def _require_course(self, user: User, course_id: int) -> Course:
         course = self.repository.get_course_for_user(user.id, course_id)

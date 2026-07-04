@@ -129,6 +129,27 @@ class FakeProvider:
             raise self.should_raise
         return self.content
 
+    def embed_texts(
+        self,
+        config: Any,
+        texts: list[str],
+        timeout_seconds: float,
+        dimensions: int = 1536,
+    ) -> list[list[float]]:
+        if self.calls is None:
+            self.calls = []
+        self.calls.append(
+            {
+                "config": config,
+                "texts": texts,
+                "timeout_seconds": timeout_seconds,
+                "dimensions": dimensions,
+            }
+        )
+        if self.should_raise is not None:
+            raise self.should_raise
+        return [[1.0, 0.0, 0.0] + [0.0] * (dimensions - 3) for _ in texts]
+
 
 @dataclass
 class TokenAuthRepository:
@@ -579,6 +600,78 @@ def test_openai_compatible_provider_streams_chat_completion_deltas() -> None:
     assert str(requests[0].url) == "https://model.example.local/v1/chat/completions"
     assert requests[0].headers["authorization"] == "Bearer sk-user-secret"
     assert b'"stream":true' in requests[0].read().replace(b" ", b"")
+
+
+def test_openai_compatible_provider_creates_embeddings_and_retries_without_dimensions() -> None:
+    provider_module = load_openai_provider_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        payload = request.read()
+        if b'"dimensions"' in payload:
+            return httpx.Response(400, json={"error": {"message": "unsupported dimensions"}})
+        return httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "data": [
+                    {"object": "embedding", "index": 0, "embedding": [1.0, 0.0, 0.0] + [0.0] * 1533},
+                    {"object": "embedding", "index": 1, "embedding": [0.0, 1.0, 0.0] + [0.0] * 1533},
+                ],
+                "model": "text-embedding-v4",
+            },
+        )
+
+    provider = provider_module.OpenAICompatibleChatProvider(transport=httpx.MockTransport(handler))
+    config = provider_module.OpenAICompatibleEmbeddingConfig(
+        base_url="https://model.example.local/v1",
+        api_key="sk-user-secret",
+        embedding_model="text-embedding-v4",
+    )
+
+    vectors = provider.embed_texts(
+        config=config,
+        texts=["启发式搜索", "反向传播"],
+        timeout_seconds=3.0,
+        dimensions=1536,
+    )
+
+    assert len(vectors) == 2
+    assert len(vectors[0]) == 1536
+    assert str(requests[0].url) == "https://model.example.local/v1/embeddings"
+    assert b'"dimensions":1536' in requests[0].read().replace(b" ", b"")
+    assert b'"dimensions"' not in requests[1].read()
+    assert requests[1].headers["authorization"] == "Bearer sk-user-secret"
+
+
+def test_model_settings_service_uses_embedding_model_for_vectors() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    provider = FakeProvider()
+    service = module.ModelSettingsService(
+        repository=FakeModelSettingsRepository(settings_by_user={}),
+        settings=make_settings(),
+        provider=provider,
+    )
+    service.save(
+        user,
+        module.SaveModelSettingsRequest(
+            provider="openai_compatible",
+            base_url="https://model.example.local/v1",
+            api_key="sk-user-secret",
+            chat_model="user-chat",
+            embedding_model="text-embedding-v4",
+        ),
+    )
+
+    vectors = service.embedding_vectors(user, ["启发式搜索"], dimensions=1536)
+
+    assert len(vectors) == 1
+    assert len(vectors[0]) == 1536
+    assert provider.calls is not None
+    assert provider.calls[-1]["texts"] == ["启发式搜索"]
+    assert provider.calls[-1]["config"].embedding_model == "text-embedding-v4"
 
 
 @pytest.mark.parametrize(

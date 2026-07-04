@@ -27,6 +27,10 @@ class RagSearchResultItem(BaseModel):
     page_number: int | None
     section_title: str | None
     score: float
+    keyword_score: float = 0.0
+    vector_score: float = 0.0
+    retrieval_source: str = "keyword"
+    embedding_status: str = "unavailable"
 
 
 class RagSearchResponse(BaseModel):
@@ -34,3 +38,5 @@ class RagSearchResponse(BaseModel):
     query: str
     top_k: int
     results: list[RagSearchResultItem]
+    retrieval_mode: str = "keyword"
+    embedding_status: str = "unavailable"

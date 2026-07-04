@@ -148,10 +148,10 @@ frontend/src/
 | `frontend/src/features/auth/authStore.ts` | Zustand 登录态，保存真实 JWT token 和当前用户信息 |
 | `frontend/src/features/auth/authMappers.ts` | 把后端 `display_name`、`starter_mode` 映射成前端 `displayName`、`starterMode` |
 | `frontend/src/api/client.ts` | Axios 客户端，默认基础路径 `/api/v1`，自动附加 token，401 清理登录态并返回登录页 |
-| `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、rag、profiles、resources、agents、paths、tutor、practice、reports、demo、settings；`materials.ts` 已接入上传、列表、详情、进度和课程关联，`courses.ts` 已接入课程列表、详情、概览、知识点和从资料生成课程，`rag.ts` 已接入课程知识库检索，`tutor.ts` 已接入主页和课程会话列表、详情、发送、引用持久化和课程消息 SSE 流式读取，`settings.ts` 已接入模型设置读取、保存和连接测试，向量模型字段当前可选 |
+| `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，覆盖 auth、dashboard、courses、materials、rag、profiles、resources、agents、paths、tutor、practice、reports、demo、settings；`materials.ts` 已接入上传、列表、详情、进度和课程关联，`courses.ts` 已接入课程列表、详情、概览、知识点和从资料生成课程，`rag.ts` 已接入课程知识库混合检索字段，`tutor.ts` 已接入主页和课程会话列表、详情、发送、引用持久化和课程消息 SSE 流式读取，`settings.ts` 已接入模型设置读取、保存和连接测试，向量模型字段已在 Phase 6.4 用于 OpenAI-compatible embeddings |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和短状态信号的纯状态模型 |
 | `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、学习路径、资源工坊、画像、辅导、练习、报告、设置和 404；学生端核心页面已从占位页补成可扩展工作区骨架 |
-| `frontend/src/components` | `AppSidebar`、学习空间壳子、学习画布、资料源簇、AI 命令栏、资源输出区、证据层、Agent 轨迹、上传建课状态轨道、学习空间状态条和统一 `ActionNotice` 反馈层；`/app` 首页已补 GPT 式贴边侧栏、可收起历史、侧栏账号入口、AI 对话主页、输入区资料库浮层入口、文件上传入口、最近学习轻量列表、发送后对话态和生成课程浮层，回答附加信息默认折叠；`/app/library` 已改为文件库式资料管理页，资料选择和生成课程主操作具备禁用态，资料库到生成课程只保留单一上层浮层；`/app/courses/:courseId` 已接入真实课程详情、知识点、课程知识库检索引用、课程会话历史和引用持久化，同时保留资源、路径、练习等课程空间预备交互；资料库、课程空间、资源工坊、画像、辅导、练习、报告和设置复用同一贴边工作区视觉体系；`PageFrame` 只承担普通路由外壳，不抢占内部内容区语义 |
+| `frontend/src/components` | `AppSidebar`、学习空间壳子、学习画布、资料源簇、AI 命令栏、资源输出区、证据层、Agent 轨迹、上传建课状态轨道、学习空间状态条和统一 `ActionNotice` 反馈层；`/app` 首页已补 GPT 式贴边侧栏、可收起历史、侧栏账号入口、AI 对话主页、输入区资料库浮层入口、文件上传入口、最近学习轻量列表、发送后对话态和生成课程浮层，回答附加信息默认折叠；`/app/library` 已改为文件库式资料管理页，资料选择和生成课程主操作具备禁用态，资料库到生成课程只保留单一上层浮层；`/app/courses/:courseId` 已接入真实课程详情、知识点、课程知识库检索引用、课程会话历史和引用持久化，引用区会展示混合检索、关键词检索和本地向量 fallback 状态，同时保留资源、路径、练习等课程空间预备交互；资料库、课程空间、资源工坊、画像、辅导、练习、报告和设置复用同一贴边工作区视觉体系；`PageFrame` 只承担普通路由外壳，不抢占内部内容区语义 |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、深色模式、reduced motion 和 reduced transparency 基础 |
 
 当前限制：
@@ -161,10 +161,10 @@ frontend/src/
 - Phase 4.3 已完成受保护的 `/tutor/sessions` 主页会话与消息持久化；当前 `/app` 首次发送会创建 home session，连续追问复用当前 session，点击左侧历史会从后端读取真实 messages，刷新后历史由 `/dashboard/summary` 保留。
 - Phase 4.4 已完成受保护的 `/materials` 真实资料库闭环；当前 `/app` 上传资料会写入个人资料库并刷新 `/dashboard/summary`，`/app/library` 从 `/materials` 读取当前用户资料，支持文档/图片筛选、搜索、详情反馈和上传刷新。
 - Phase 5.1 已完成受保护的 `/courses/from-materials` 规则建课闭环；当前 `/app` 和 `/app/library` 可用已解析 TXT/Markdown 资料生成课程，并跳转 `/app/courses/:courseId`。
-- Phase 5.2 已完成受保护的 `/rag/search` 课程知识库检索；当前 `/app/courses/:courseId` 的课程会话发送会通过后端调用关键词检索，并把真实资料、章节和切片引用保存到 assistant 消息。
+- Phase 5.2 已完成受保护的 `/rag/search` 课程知识库检索；Phase 6.4 后检索会优先融合关键词分数和向量分数，并把真实资料、章节、切片引用和检索状态保存到 assistant 消息。
 - Phase 5.3 已完成课程空间 `scope=course` 会话持久化；课程侧栏历史来自 `/tutor/sessions?scope=course&course_id=...`，点击历史会恢复真实 messages 和 `citation_json`。
 - 当前主页 assistant 回复仍是模板占位，不调用模型。
-- 当前 `/app/courses/:courseId` 课程空间标题、资料数、知识点数、知识点列表、课程历史、课程消息和课程引用来自真实接口；Phase 6.1 起命中引用且模型配置可用时，课程 assistant 内容来自真实 OpenAI-compatible 模型回答；Phase 6.2 起运行时使用当前用户默认模型配置；Phase 6.3 起课程页优先使用 `fetch` + `ReadableStream` 消费 SSE，并在 `done` 后用持久化消息替换临时流式状态。资源和 Agent 轨迹仍使用前端预备交互，后续由资源生成和 Agent 日志接口替换。
+- 当前 `/app/courses/:courseId` 课程空间标题、资料数、知识点数、知识点列表、课程历史、课程消息和课程引用来自真实接口；Phase 6.1 起命中引用且模型配置可用时，课程 assistant 内容来自真实 OpenAI-compatible 模型回答；Phase 6.2 起运行时使用当前用户默认模型配置；Phase 6.3 起课程页优先使用 `fetch` + `ReadableStream` 消费 SSE，并在 `done` 后用持久化消息替换临时流式状态；Phase 6.4 起课程引用来自混合检索，缺少外部 embedding 配置时显式显示本地 fallback。资源和 Agent 轨迹仍使用前端预备交互，后续由资源生成和 Agent 日志接口替换。
 - 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面使用前端样例数据；后续由资料、画像、RAG、练习评估、掌握度报告和设置接口替换。
 - 当前 P3.7 按钮反馈使用 React 本地状态和 `ActionNotice`，用于固定前端交互边界；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
 - 上传建课状态轨道和状态条当前使用前端样例状态，后续由 `/materials/{material_id}/progress`、`/courses/from-materials` 和长任务接口驱动。
@@ -199,16 +199,17 @@ backend/app/
 | `backend/app/models` | 用户、课程、资料、知识点、知识切片核心模型，以及画像、路径、资源、Agent 轨迹、练习、报告、对话和模型设置基础模型 |
 | `backend/app/data/builtin_courses` | 内置课程包数据 |
 | `backend/app/services/course_seed.py` | 内置课程导入服务 |
-| `backend/app/services/tutor.py` | 主页/课程会话服务，负责当前用户会话创建、列表、详情、追加消息、主页模板回复写入、课程会话关键词检索引用持久化、非流式课程回答生成编排，以及 Phase 6.3 的课程消息流式输出和完成后持久化 |
-| `backend/app/services/model_settings.py` | 模型设置服务，负责用户多模型配置、系统兜底配置解析、Fernet 加密保存用户 Key、脱敏摘要、连接测试、默认配置切换和运行时配置优先级 |
+| `backend/app/services/tutor.py` | 主页/课程会话服务，负责当前用户会话创建、列表、详情、追加消息、主页模板回复写入、课程会话混合检索引用持久化、非流式课程回答生成编排，以及 Phase 6.3 的课程消息流式输出和完成后持久化 |
+| `backend/app/services/model_settings.py` | 模型设置服务，负责用户多模型配置、系统兜底配置解析、Fernet 加密保存用户 Key、脱敏摘要、连接测试、默认配置切换、聊天模型和 embedding 模型运行时配置优先级 |
+| `backend/app/services/embeddings.py` | Embedding 服务，负责 OpenAI-compatible `/embeddings` 调用编排、本地 `local-hash-1536` fallback、知识切片向量写入和 metadata 标记 |
 | `backend/app/services/course_answers.py` | 课程回答服务，负责基于课程引用构造受控 prompt、调用非流式或流式模型 Provider、处理未配置和模型失败 |
 | `backend/app/services/materials.py` | 个人资料库服务，负责上传保存、轻解析、列表、详情、进度和课程资料关联 |
-| `backend/app/services/courses.py` | 课程服务，负责 TXT/Markdown 规则建课、课程列表、详情、概览和知识点读取 |
+| `backend/app/services/courses.py` | 课程服务，负责 TXT/Markdown 规则建课、课程列表、详情、概览、知识点读取和课程生成后的 best-effort 向量补齐 |
 | `backend/app/api/v1/tutor.py` | `/api/v1/tutor/sessions` 受保护会话接口 |
 | `backend/app/api/v1/materials.py` | `/api/v1/materials/*` 和 `/api/v1/courses/{course_id}/materials` 受保护资料接口 |
 | `backend/app/api/v1/courses.py` | `/api/v1/courses/*` 和 `/api/v1/courses/from-materials` 受保护课程接口 |
 | `backend/app/api/v1/settings.py` | `/api/v1/settings/model` 和 `/api/v1/settings/model/test` 受保护模型设置接口 |
-| `backend/app/providers/openai_compatible.py` | OpenAI-compatible Chat Completions Provider，目标接口 `{base_url}/chat/completions` |
+| `backend/app/providers/openai_compatible.py` | OpenAI-compatible Provider，支持 `{base_url}/chat/completions` 非流式/流式回答和 `{base_url}/embeddings` 1536 维向量请求 |
 | `backend/migrations` | Alembic 迁移环境、pgvector 扩展迁移、核心学习表迁移、学习闭环表迁移和资料库兼容迁移 |
 
 分层职责：
@@ -310,15 +311,11 @@ DocumentParser 文本提取
   ↓
 ChunkingService 知识切片
   ↓
-Phase 5.2 KeywordRetriever 关键词检索
+Phase 6.4 EmbeddingService 写入或补齐 1536 维向量
+  ↓
+HybridRetriever 关键词 + 向量混合检索
   ↓
 Phase 5.3 课程会话保存 assistant 引用
-  ↓
-EmbeddingService 向量化
-  ↓
-pgvector 存储
-  ↓
-Retriever 检索相关片段
   ↓
 生成回答或资源
   ↓
@@ -333,8 +330,9 @@ ReviewAgent 审核
 - Phase 5.3 已让课程会话发送消息时复用该检索结果，并把引用写入 `chat_messages.citation_json`。
 - Phase 6.1 已让课程会话在有引用且模型配置可用时调用 OpenAI-compatible Chat Completions 生成非流式回答，并把模型内容保存到 `chat_messages.content`，引用继续保存在 `citation_json`。
 - Phase 6.3 已新增课程消息流式路径：后端通过 `event: metadata/token/done/error` 输出 SSE，完成后一次性持久化完整 assistant；失败时不保存半截内容。
-- 当前不生成 embedding，不做向量召回，不写入新表。
-- 后续再接 `EmbeddingService`、pgvector 向量召回和 ReviewAgent。
+- Phase 6.4 已新增 `EmbeddingService`：优先使用当前用户默认配置或服务器兜底的 OpenAI-compatible `/embeddings`，缺少配置时使用显式 `local-hash-1536` 本地 fallback；课程生成后 best-effort 写入向量，RAG 搜索时懒加载补齐。
+- Phase 6.4 已把 RAG 检索升级为 `keyword_score + vector_score` 混合排序，API 和前端引用区会展示 `retrieval_mode`、`embedding_status`、`retrieval_source` 等轻量状态。
+- 后续再接数据库侧近邻召回、批量重建任务、讯飞原生 2560 维 Embedding 专项和 ReviewAgent。
 
 可信机制：
 
@@ -399,14 +397,14 @@ Provider 抽象目标能力：
 - `model_list`。
 - `health_check`。
 
-Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已实现 OpenAI-compatible streaming 解析，Provider 会在请求 `{base_url}/chat/completions` 时附带 `stream=true` 并解析 `data: {...}` 和 `[DONE]`。Phase 6.2 已把设置页从一人一套配置升级为“配置列表 + 当前编辑面板”。设置页支持：
+Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已实现 OpenAI-compatible streaming 解析，Provider 会在请求 `{base_url}/chat/completions` 时附带 `stream=true` 并解析 `data: {...}` 和 `[DONE]`。Phase 6.4 已实现 OpenAI-compatible embeddings：请求 `{base_url}/embeddings` 时携带 `input`、`model` 和 `dimensions=1536`，若服务不支持 `dimensions` 会重试一次不带该字段，返回向量长度不等于 1536 时拒绝写入。Phase 6.2 已把设置页从一人一套配置升级为“配置列表 + 当前编辑面板”。设置页支持：
 
 - 多套用户个人配置，互相隔离保存和测试。
 - Provider 预设，首位为讯飞星火 Spark，OpenRouter 不再作为可见预设。
 - Base URL。
 - API Key / APIPassword。
 - 回答模型。
-- 可选 Embedding 模型预留字段，折叠在高级项中。
+- Embedding 模型字段，折叠在高级项中；Phase 6.4 起用于课程知识库向量化，缺省时自动使用显式本地 fallback。
 - 指定配置的连通性测试。
 - 默认配置选择。
 
@@ -416,7 +414,7 @@ Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已
 当前用户默认有效配置 -> .env 的 SYSTEM_MODEL_* -> 未配置提示
 ```
 
-用户 API Key 使用 `MODEL_SETTINGS_ENCRYPTION_KEY` 派生的 Fernet 加密后保存到 `model_settings.api_key_ciphertext`。每条用户配置单独保存密钥密文、测试状态和默认标记；`GET /settings/model/configs` 只返回配置摘要、脱敏 Key、服务器兜底摘要和默认配置 id，不返回明文 Key。旧 `/settings/model` 仍作为兼容接口读取或更新当前默认配置。设置页 Provider 预设首位是讯飞星火 Spark，实际后端协议仍走 OpenAI-compatible Chat Completions；`embedding_model` 是后续向量召回预留字段，Phase 6.2 可为空。
+用户 API Key 使用 `MODEL_SETTINGS_ENCRYPTION_KEY` 派生的 Fernet 加密后保存到 `model_settings.api_key_ciphertext`。每条用户配置单独保存密钥密文、测试状态和默认标记；`GET /settings/model/configs` 只返回配置摘要、脱敏 Key、服务器兜底摘要和默认配置 id，不返回明文 Key。旧 `/settings/model` 仍作为兼容接口读取或更新当前默认配置。设置页 Provider 预设首位是讯飞星火 Spark，聊天实际走 OpenAI-compatible Chat Completions；embedding 实际走 OpenAI-compatible Embeddings。讯飞原生 Embeddingp/Embeddingq 因独立授权、签名鉴权和 2560 维输出，仍放到后续专项。
 
 降级策略：
 

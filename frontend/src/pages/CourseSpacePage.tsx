@@ -115,6 +115,29 @@ function buildCourseMaterials(titles: string[], knowledgePointCount: number) {
   }));
 }
 
+function retrievalSourceLabel(source?: string | null) {
+  if (source === "hybrid") {
+    return "混合检索";
+  }
+  if (source === "vector") {
+    return "向量检索";
+  }
+  return "关键词检索";
+}
+
+function embeddingStatusLabel(status?: string | null) {
+  if (status === "local_fallback") {
+    return "本地向量";
+  }
+  if (status === "completed") {
+    return "真实向量";
+  }
+  if (status === "provider_failed") {
+    return "关键词兜底";
+  }
+  return "关键词检索";
+}
+
 type AnswerPanelKind = "citations" | "path" | "agent";
 type CourseMessage = {
   id: string;
@@ -614,7 +637,11 @@ function CourseMessageCitations({ citations }: { citations: RagSearchResultItem[
           <article key={citation.chunk_id} className="citation-item">
             <strong>{citation.source_title}</strong>
             <span>{citation.section_title ?? "课程切片"}</span>
-            <small>匹配度 {citation.score.toFixed(1)}</small>
+            <small className="citation-meta">
+              <span>匹配度 {citation.score.toFixed(1)}</span>
+              <span>{retrievalSourceLabel(citation.retrieval_source)}</span>
+              <span>{embeddingStatusLabel(citation.embedding_status)}</span>
+            </small>
             <p>{citation.content}</p>
           </article>
         ))}
@@ -669,7 +696,11 @@ function AnswerDetailPanel({ activePanel, citations, hasRealCourse, hasSearched 
             <article key={citation.chunk_id} className="citation-item">
               <strong>{citation.source_title}</strong>
               <span>{citation.section_title ?? "课程切片"}</span>
-              <small>匹配度 {citation.score.toFixed(1)}</small>
+              <small className="citation-meta">
+                <span>匹配度 {citation.score.toFixed(1)}</span>
+                <span>{retrievalSourceLabel(citation.retrieval_source)}</span>
+                <span>{embeddingStatusLabel(citation.embedding_status)}</span>
+              </small>
             </article>
           ))}
         </div>

@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, Query
 
 from backend.app.api.errors import ApiError, api_response, make_trace_id
 from backend.app.api.v1.deps import get_current_user
+from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.models import User
+from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.courses import CreateCourseFromMaterialsRequest
 from backend.app.services.courses import (
     CourseGenerationError,
@@ -13,13 +15,23 @@ from backend.app.services.courses import (
     CourseService,
     SqlAlchemyCourseRepository,
 )
+from backend.app.services.embeddings import EmbeddingService
+from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
 
 def get_course_service(db=Depends(get_db_session)) -> CourseService:
-    return CourseService(SqlAlchemyCourseRepository(db))
+    model_settings_service = ModelSettingsService(
+        repository=SqlAlchemyModelSettingsRepository(db),
+        settings=get_settings(),
+        provider=OpenAICompatibleChatProvider(),
+    )
+    return CourseService(
+        SqlAlchemyCourseRepository(db),
+        embedding_service=EmbeddingService(model_settings_service),
+    )
 
 
 @router.get("")

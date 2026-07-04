@@ -639,7 +639,8 @@ Authorization: Bearer <token>
 - Markdown 的 `#`、`##`、`###` 标题优先生成章节和知识点。
 - TXT 无标题时按段落生成“第 1 部分 / 第 2 部分”等知识点。
 - 后端会创建 `Course`、`CourseEnrollment`、兼容旧链路的 `CourseMaterial`、`CourseMaterialLink`、`KnowledgePoint` 和 `KnowledgeChunk`。
-- 本轮 `knowledge_chunks.embedding=null`，真实向量化和 RAG 检索留到后续 Phase。
+- Phase 6.4 后，课程生成会 best-effort 为新 `KnowledgeChunk` 写入 1536 维 embedding；外部 embedding 失败不阻断建课，后续 `/rag/search` 会再尝试懒加载补齐。
+- `knowledge_chunks.metadata_json` 会记录 `embedding_source`、`embedding_model`、`embedding_dimension`、`embedded_at`，便于识别本地 fallback、过期模型和后续重建。
 - 前端 `/app` 主页资料库浮层和 `/app/library` 使用同一接口；成功后刷新 summary/materials 并跳转 `/app/courses/{course_id}`。
 
 ### POST `/materials/compare`
@@ -661,7 +662,7 @@ Authorization: Bearer <token>
 
 ### POST `/rag/search`
 
-用途：检索课程知识库。Phase 5.2 已实现，必须携带 JWT，只能检索当前用户自己的课程；当前使用确定性关键词评分，不调用大模型、不做 embedding、不做向量召回。
+用途：检索课程知识库。Phase 5.2 已实现受保护检索，Phase 6.4 已升级为关键词/向量混合召回。接口必须携带 JWT，只能检索当前用户自己的课程；检索本身不调用聊天大模型。
 
 请求：
 
@@ -681,6 +682,8 @@ Authorization: Bearer <token>
     "course_id": 1,
     "query": "启发式搜索和盲目搜索有什么区别？",
     "top_k": 5,
+    "retrieval_mode": "hybrid",
+    "embedding_status": "local_fallback",
     "results": [
       {
         "chunk_id": 1,
@@ -691,7 +694,11 @@ Authorization: Bearer <token>
         "source_title": "人工智能导论讲义",
         "page_number": 12,
         "section_title": "启发式搜索",
-        "score": 0.88
+        "score": 8.42,
+        "keyword_score": 4.2,
+        "vector_score": 4.22,
+        "retrieval_source": "hybrid",
+        "embedding_status": "local_fallback"
       }
     ]
   },
@@ -706,7 +713,10 @@ Authorization: Bearer <token>
 - 无 token 返回 401。
 - 访问他人课程返回 404。
 - 无命中时 `results=[]`，前端必须显示资料不足，不得伪造引用。
-- 本阶段 `knowledge_chunks.embedding` 保持为空，真实向量化留到后续 Phase 6。
+- Phase 6.4 后，后端会优先使用当前用户默认模型配置中的 `embedding_model` 调用 OpenAI-compatible `{base_url}/embeddings`，请求维度为 1536；如果服务不支持 `dimensions` 参数，会自动重试一次不带该字段。
+- 如果用户默认配置和服务器兜底都没有可用 embedding 模型，后端会使用显式标记的 `local-hash-1536` 确定性 fallback，保证开源和测试环境仍可检索；前端必须把它显示为本地 fallback，不能伪装成真实语义向量。
+- 外部 embedding 失败时不阻断问答，接口会退回关键词检索并通过 `embedding_status` 暴露状态。
+- 本轮不接讯飞原生 Embeddingp/Embeddingq；其独立授权、签名鉴权和 2560 维输出放到后续专项。
 
 ## 10. Resource 接口
 
@@ -919,7 +929,7 @@ Authorization: Bearer <token>
 
 ### POST `/tutor/sessions/{session_id}/messages`
 
-用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条模板 `assistant` 回复。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用关键词 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。Phase 6.1 后，课程会话在命中引用且模型配置可用时，会通过 OpenAI-compatible Chat Completions 生成非流式真实回答；主页 `scope=home` 仍保持模板回复，不调用模型。Phase 6.3 后，课程空间前端默认优先使用流式接口，本接口保留为兼容路径和自动化测试路径。
+用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条模板 `assistant` 回复。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。Phase 6.1 后，课程会话在命中引用且模型配置可用时，会通过 OpenAI-compatible Chat Completions 生成非流式真实回答；主页 `scope=home` 仍保持模板回复，不调用模型。Phase 6.3 后，课程空间前端默认优先使用流式接口，本接口保留为兼容路径和自动化测试路径。Phase 6.4 后，课程 RAG 默认使用关键词/向量混合检索，旧关键词字段继续兼容。
 
 请求：
 
@@ -940,14 +950,14 @@ Authorization: Bearer <token>
 
 课程会话规则：
 
-- 命中课程知识切片时，assistant `citation_json` 采用 `/rag/search` 的结果字段结构：`chunk_id`、`course_id`、`material_id`、`knowledge_point_id`、`content`、`source_title`、`page_number`、`section_title`、`score`。
+- 命中课程知识切片时，assistant `citation_json` 采用 `/rag/search` 的结果字段结构：`chunk_id`、`course_id`、`material_id`、`knowledge_point_id`、`content`、`source_title`、`page_number`、`section_title`、`score`；Phase 6.4 后可额外包含 `keyword_score`、`vector_score`、`retrieval_source`、`embedding_status`。
 - 无命中时 `citation_json=[]`，assistant 内容提示“资料依据不足”，前端不得伪造引用。
 - 有命中且可解析模型配置时，assistant `content` 保存模型基于引用生成的回答，`trace_id` 写入本次模型调用 trace。
 - 有命中但无可用模型配置时，assistant 保存“已找到资料依据，但当前未配置可用模型。”，引用仍保留。
 - 模型调用超时、鉴权失败、非 JSON、空内容或流式中途失败时返回 `MODEL_PROVIDER_ERROR`，前端保留输入，不写入半截 assistant 消息。
 - 课程空间刷新后，前端通过 `GET /tutor/sessions/{session_id}` 恢复消息和引用。
 
-embedding、向量召回、低依据评分和完整 agent trace 仍在后续阶段接入。
+低依据评分、完整 agent trace 和 ReviewAgent 仍在后续阶段接入；embedding 与混合召回已在 Phase 6.4 接入，讯飞原生 2560 维 Embedding 仍未接入。
 
 ### POST `/tutor/sessions/{session_id}/messages/stream`
 
@@ -987,7 +997,7 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 
 流式规则：
 
-- 后端先检索课程知识切片，再决定是否调用模型。
+- 后端先检索课程知识切片，再决定是否调用模型；Phase 6.4 后检索优先走混合召回，失败时退回关键词检索。
 - 无引用时不调用模型，流式返回“资料依据不足”，并持久化 user 消息和 assistant 提示，`citation_json=[]`。
 - 有引用但未配置可用模型时不调用外部模型，流式返回未配置提示，仍持久化真实引用。
 - 有引用且模型可用时，Provider 以 `stream=true` 调用 `{base_url}/chat/completions`，逐段解析 `data: {...}` 和 `[DONE]`。
@@ -1148,7 +1158,7 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 
 ### PUT `/settings/model`
 
-用途：保存当前用户默认 OpenAI-compatible 模型设置。Phase 6.2 后该接口作为兼容接口保留：如果当前用户已有默认配置，则更新默认配置；如果没有个人配置，则创建一条默认配置。用户 API Key 使用 Fernet 加密后写入 `model_settings.api_key_ciphertext`；没有 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，保存非空 Key 返回 `CONFIGURATION_ERROR`。`api_key` 为空字符串或缺省时保留原密钥。`embedding_model` 当前可选，Phase 6.2 仍不启用 embedding/向量召回。
+用途：保存当前用户默认 OpenAI-compatible 模型设置。Phase 6.2 后该接口作为兼容接口保留：如果当前用户已有默认配置，则更新默认配置；如果没有个人配置，则创建一条默认配置。用户 API Key 使用 Fernet 加密后写入 `model_settings.api_key_ciphertext`；没有 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，保存非空 Key 返回 `CONFIGURATION_ERROR`。`api_key` 为空字符串或缺省时保留原密钥。`embedding_model` 当前可选；Phase 6.4 后若填写则用于 OpenAI-compatible `{base_url}/embeddings`，若缺省则自动使用显式本地 fallback。
 
 请求：
 
@@ -1263,7 +1273,7 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 
 用途：删除当前用户自己的某条模型配置。删除默认配置后，后端会把剩余配置中最近更新的一条设为默认；没有个人配置时回退服务器配置。
 
-模型 Provider 第一版只支持 OpenAI-compatible Chat Completions，目标接口为 `{base_url}/chat/completions`。Phase 6.2 的可见预设收敛为：讯飞星火 Spark、DeepSeek、通义千问、Kimi、智谱 GLM、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio、自定义兼容服务；OpenRouter 不再作为可见预设。讯飞星火 Spark 推荐 Base URL 为 `https://spark-api-open.xf-yun.com/v1`，默认模型为 `lite`，可选聊天模型包括 `lite`、`generalv3`、`pro-128k`、`max-32k`、`4.0Ultra`。接口形态参考 OpenAI 官方 Chat Completions API：https://platform.openai.com/docs/api-reference/chat/create 。
+模型 Provider 第一版支持 OpenAI-compatible Chat Completions，目标接口为 `{base_url}/chat/completions`；Phase 6.4 起同一 Provider 增加 OpenAI-compatible Embeddings，目标接口为 `{base_url}/embeddings`。Phase 6.2 的可见预设收敛为：讯飞星火 Spark、DeepSeek、通义千问、Kimi、智谱 GLM、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio、自定义兼容服务；OpenRouter 不再作为可见预设。讯飞星火 Spark 推荐 Base URL 为 `https://spark-api-open.xf-yun.com/v1`，默认聊天模型为 `lite`，可选聊天模型包括 `lite`、`generalv3`、`pro-128k`、`max-32k`、`4.0Ultra`。讯飞原生 Embeddingp/Embeddingq 因为独立授权、签名鉴权和 2560 维输出，本轮不接入。接口形态参考 OpenAI 官方 Chat Completions 与 Embeddings API。
 
 ## 20. API 验收标准
 

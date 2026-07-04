@@ -4,9 +4,13 @@ from fastapi import APIRouter, Depends, status
 
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
+from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.models import User
+from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.rag import RagSearchRequest
+from backend.app.services.embeddings import EmbeddingService
+from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 from backend.app.services.rag import RagCourseNotFoundError, RagService, RagValidationError, SqlAlchemyRagRepository
 
 
@@ -14,7 +18,15 @@ router = APIRouter(prefix="/rag", tags=["rag"])
 
 
 def get_rag_service(db=Depends(get_db_session)) -> RagService:
-    return RagService(SqlAlchemyRagRepository(db))
+    model_settings_service = ModelSettingsService(
+        repository=SqlAlchemyModelSettingsRepository(db),
+        settings=get_settings(),
+        provider=OpenAICompatibleChatProvider(),
+    )
+    return RagService(
+        SqlAlchemyRagRepository(db),
+        embedding_service=EmbeddingService(model_settings_service),
+    )
 
 
 @router.post("/search")

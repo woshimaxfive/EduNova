@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
+from typing import Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.models import Course, KnowledgeChunk, User
 from backend.app.schemas.rag import RagSearchResponse, RagSearchResultItem
+from backend.app.services.embeddings import EMBEDDING_DIMENSION
 
 
 class RagCourseNotFoundError(Exception):
@@ -21,6 +24,18 @@ class RagValidationError(ValueError):
 class ScoredChunk:
     chunk: KnowledgeChunk
     score: float
+    keyword_score: float = 0.0
+    vector_score: float = 0.0
+    retrieval_source: str = "keyword"
+    embedding_status: str = "unavailable"
+
+
+class RagEmbeddingService(Protocol):
+    def embed_texts(self, user: User, texts: list[str]) -> Any: ...
+
+    def apply_embeddings(self, user: User, chunks: list[KnowledgeChunk]) -> Any: ...
+
+    def chunk_needs_embedding(self, user: User, chunk: KnowledgeChunk) -> bool: ...
 
 
 class SqlAlchemyRagRepository:
@@ -39,10 +54,18 @@ class SqlAlchemyRagRepository:
         )
         return list(self.db.scalars(statement))
 
+    def save_chunk_embeddings(self, chunks: list[KnowledgeChunk]) -> None:
+        for chunk in chunks:
+            self.db.add(chunk)
+        self.db.flush()
+
 
 class RagService:
-    def __init__(self, repository: SqlAlchemyRagRepository) -> None:
+    generic_terms = {"问题", "这个", "那个", "什么"}
+
+    def __init__(self, repository: SqlAlchemyRagRepository, embedding_service: RagEmbeddingService | None = None) -> None:
         self.repository = repository
+        self.embedding_service = embedding_service
 
     def search(self, user: User, course_id: int, query: str, top_k: int = 5) -> RagSearchResponse:
         cleaned_query = query.strip()
@@ -56,19 +79,138 @@ class RagService:
             raise RagCourseNotFoundError("课程不存在或无权访问。")
 
         terms = self._query_terms(cleaned_query)
-        scored_chunks = [
-            ScoredChunk(chunk=chunk, score=score)
-            for chunk in self.repository.list_searchable_chunks(course.id)
-            if (score := self._score_chunk(chunk, cleaned_query, terms)) > 0
-        ]
-        scored_chunks.sort(key=lambda item: (-item.score, item.chunk.id))
+        chunks = self.repository.list_searchable_chunks(course.id)
+        embedding_status = "unavailable"
+        retrieval_mode = "keyword"
+        if self.embedding_service is not None:
+            self._ensure_chunk_embeddings(user, chunks)
+        query_vector = self._query_embedding(user, cleaned_query)
+        if query_vector is not None:
+            embedding_status = query_vector["status"]
+            retrieval_mode = "hybrid"
+
+        scored_chunks = []
+        for chunk in chunks:
+            keyword_score = self._score_chunk(chunk, cleaned_query, terms)
+            vector_score = self._vector_score(query_vector["vector"], chunk.embedding) if query_vector is not None else 0.0
+            score = round(keyword_score + vector_score, 4)
+            if keyword_score <= 0 and vector_score < 0.25:
+                continue
+            scored_chunks.append(
+                ScoredChunk(
+                    chunk=chunk,
+                    score=score,
+                    keyword_score=keyword_score,
+                    vector_score=vector_score,
+                    retrieval_source=self._retrieval_source(keyword_score, vector_score),
+                    embedding_status=embedding_status,
+                )
+            )
+        scored_chunks.sort(key=lambda item: (-item.score, -item.vector_score, item.chunk.id))
 
         return RagSearchResponse(
             course_id=course.id,
             query=cleaned_query,
             top_k=top_k,
-            results=[self._build_result(item.chunk, item.score) for item in scored_chunks[:top_k]],
+            results=[
+                self._build_result(
+                    item.chunk,
+                    item.score,
+                    keyword_score=item.keyword_score,
+                    vector_score=item.vector_score,
+                    retrieval_source=item.retrieval_source,
+                    embedding_status=item.embedding_status,
+                )
+                for item in scored_chunks[:top_k]
+            ],
+            retrieval_mode=retrieval_mode,
+            embedding_status=embedding_status,
         )
+
+    def _query_embedding(self, user: User, query: str) -> dict[str, Any] | None:
+        if self.embedding_service is None:
+            return None
+        try:
+            batch = self.embedding_service.embed_texts(user, [query])
+        except Exception:
+            return None
+        vectors = list(getattr(batch, "vectors", []))
+        status = str(getattr(batch, "status", "unavailable"))
+        dimension = int(getattr(batch, "dimension", EMBEDDING_DIMENSION))
+        if len(vectors) != 1 or dimension != EMBEDDING_DIMENSION or not self._valid_vector(vectors[0]):
+            return None
+        return {"vector": vectors[0], "status": status}
+
+    def _ensure_chunk_embeddings(self, user: User, chunks: list[KnowledgeChunk]) -> None:
+        if self.embedding_service is None or not chunks:
+            return
+        try:
+            needs_embedding = getattr(self.embedding_service, "chunk_needs_embedding", None)
+            if callable(needs_embedding):
+                target_chunks = [chunk for chunk in chunks if needs_embedding(user, chunk)]
+            else:
+                target_chunks = [chunk for chunk in chunks if not self._valid_vector(chunk.embedding)]
+            if not target_chunks:
+                return
+
+            apply_embeddings = getattr(self.embedding_service, "apply_embeddings", None)
+            if callable(apply_embeddings):
+                batch = apply_embeddings(user, target_chunks)
+            else:
+                batch = self.embedding_service.embed_texts(user, [chunk.content for chunk in target_chunks])
+                self._apply_batch_to_chunks(batch, target_chunks)
+            vectors = list(getattr(batch, "vectors", []))
+            if len(vectors) == len(target_chunks):
+                self.repository.save_chunk_embeddings(target_chunks)
+        except Exception:
+            return
+
+    @staticmethod
+    def _apply_batch_to_chunks(batch: Any, chunks: list[KnowledgeChunk]) -> None:
+        vectors = list(getattr(batch, "vectors", []))
+        if len(vectors) != len(chunks):
+            return
+        source = str(getattr(batch, "source", "unknown"))
+        model = str(getattr(batch, "model", "unknown"))
+        dimension = int(getattr(batch, "dimension", EMBEDDING_DIMENSION))
+        for chunk, vector in zip(chunks, vectors, strict=True):
+            if len(vector) != dimension:
+                continue
+            chunk.embedding = vector
+            chunk.metadata_json = {
+                **(chunk.metadata_json or {}),
+                "embedding_source": source,
+                "embedding_model": model,
+                "embedding_dimension": dimension,
+            }
+
+    @staticmethod
+    def _valid_vector(vector: list[float] | None) -> bool:
+        return isinstance(vector, list) and len(vector) == EMBEDDING_DIMENSION
+
+    @classmethod
+    def _vector_score(cls, query_vector: list[float], chunk_vector: list[float] | None) -> float:
+        if not cls._valid_vector(chunk_vector):
+            return 0.0
+        similarity = cls._cosine_similarity(query_vector, chunk_vector)
+        return round(max(similarity, 0.0) * 6.0, 4)
+
+    @staticmethod
+    def _cosine_similarity(left: list[float], right: list[float]) -> float:
+        dot = sum(a * b for a, b in zip(left, right, strict=True))
+        left_norm = math.sqrt(sum(value * value for value in left))
+        right_norm = math.sqrt(sum(value * value for value in right))
+        if left_norm == 0 or right_norm == 0:
+            return 0.0
+        return dot / (left_norm * right_norm)
+
+    @staticmethod
+    def _retrieval_source(keyword_score: float, vector_score: float) -> str:
+        if keyword_score > 0 and vector_score > 0:
+            return "hybrid"
+        if vector_score > 0:
+            return "vector"
+        return "keyword"
 
     @classmethod
     def _query_terms(cls, query: str) -> list[str]:
@@ -76,12 +218,12 @@ class RagService:
         terms: list[str] = []
 
         for term in cls._split_terms(normalized):
-            if term not in terms:
+            if term not in cls.generic_terms and term not in terms:
                 terms.append(term)
             if cls._is_chinese_text(term):
                 for index in range(0, len(term) - 1):
                     bigram = term[index : index + 2]
-                    if bigram not in terms:
+                    if bigram not in cls.generic_terms and bigram not in terms:
                         terms.append(bigram)
         return terms
 
@@ -170,7 +312,14 @@ class RagService:
         return " ".join(parts).lower()
 
     @staticmethod
-    def _build_result(chunk: KnowledgeChunk, score: float) -> RagSearchResultItem:
+    def _build_result(
+        chunk: KnowledgeChunk,
+        score: float,
+        keyword_score: float = 0.0,
+        vector_score: float = 0.0,
+        retrieval_source: str = "keyword",
+        embedding_status: str = "unavailable",
+    ) -> RagSearchResultItem:
         source_title = ""
         if chunk.material is not None:
             source_title = chunk.material.filename
@@ -187,4 +336,8 @@ class RagService:
             page_number=chunk.page_number,
             section_title=chunk.section_title,
             score=score,
+            keyword_score=keyword_score,
+            vector_score=vector_score,
+            retrieval_source=retrieval_source,
+            embedding_status=embedding_status,
         )

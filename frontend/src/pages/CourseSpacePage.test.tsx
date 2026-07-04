@@ -45,7 +45,11 @@ const citationItem: TutorCitation = {
   source_title: "人工智能导论讲义.md",
   page_number: null,
   section_title: "启发式搜索",
-  score: 9.5
+  score: 9.5,
+  keyword_score: 3.5,
+  vector_score: 6,
+  retrieval_source: "hybrid",
+  embedding_status: "local_fallback"
 };
 
 function parsePayload(data: unknown) {
@@ -418,6 +422,8 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(await screen.findAllByText("人工智能导论讲义.md")).not.toHaveLength(0);
     expect(screen.getByText(/模型回答：启发式搜索复习/)).toBeInTheDocument();
     expect(screen.getAllByText("启发式搜索")).not.toHaveLength(0);
+    expect(screen.getAllByText("混合检索")).not.toHaveLength(0);
+    expect(screen.getAllByText("本地向量")).not.toHaveLength(0);
     expect(screen.getByText(/启发函数估计路径代价/)).toBeInTheDocument();
   });
 

@@ -435,8 +435,8 @@ class TutorSessionService:
             return item.model_dump()
         if isinstance(item, dict):
             return item
-        return {
-            key: getattr(item, key)
+        citation = {
+            key: getattr(item, key, None)
             for key in (
                 "chunk_id",
                 "course_id",
@@ -449,6 +449,11 @@ class TutorSessionService:
                 "score",
             )
         }
+        for key in ("keyword_score", "vector_score", "retrieval_source", "embedding_status"):
+            value = getattr(item, key, None)
+            if value is not None:
+                citation[key] = value
+        return citation
 
     @staticmethod
     def _build_assistant_reply(session: ChatSession, citation_json: list[dict[str, Any]]) -> str:

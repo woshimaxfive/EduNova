@@ -15,6 +15,7 @@ from backend.app.providers.openai_compatible import (
     ModelProviderError,
     OpenAICompatibleChatProvider,
     OpenAICompatibleConfig,
+    OpenAICompatibleEmbeddingConfig,
 )
 
 
@@ -64,6 +65,14 @@ class ModelChatProvider(Protocol):
         messages: list[dict[str, str]],
         timeout_seconds: float,
     ) -> Iterator[str]: ...
+
+    def embed_texts(
+        self,
+        config: OpenAICompatibleEmbeddingConfig,
+        texts: list[str],
+        timeout_seconds: float,
+        dimensions: int = 1536,
+    ) -> list[list[float]]: ...
 
 
 class SaveModelSettingsRequest(BaseModel):
@@ -349,6 +358,26 @@ class ModelSettingsService:
             can_use_model=False,
         )
 
+    def resolve_embedding_runtime_config(self, user: User) -> RuntimeModelConfig:
+        user_setting = self.repository.get_default_for_user(user.id)
+        if user_setting is not None:
+            user_runtime = self._embedding_runtime_from_user_setting(user_setting)
+            if user_runtime.can_use_model:
+                return user_runtime
+
+        system_runtime = self._embedding_runtime_from_system_settings()
+        if system_runtime.can_use_model:
+            return system_runtime
+        return RuntimeModelConfig(
+            source="none",
+            provider="openai_compatible",
+            base_url=None,
+            api_key=None,
+            chat_model=None,
+            embedding_model=None,
+            can_use_model=False,
+        )
+
     def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str:
         runtime = self.resolve_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
@@ -376,6 +405,24 @@ class ModelSettingsService:
             messages=messages,
             timeout_seconds=self.settings.model_request_timeout_seconds,
         )
+
+    def embedding_vectors(self, user: User, texts: list[str], dimensions: int = 1536) -> list[list[float]]:
+        runtime = self.resolve_embedding_runtime_config(user)
+        if not runtime.can_use_model or runtime.base_url is None or runtime.embedding_model is None:
+            raise ModelNotConfiguredError("当前未配置可用向量模型。")
+        vectors = self.provider.embed_texts(
+            config=OpenAICompatibleEmbeddingConfig(
+                base_url=runtime.base_url,
+                api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+                embedding_model=runtime.embedding_model,
+            ),
+            texts=texts,
+            timeout_seconds=self.settings.model_request_timeout_seconds,
+            dimensions=dimensions,
+        )
+        if len(vectors) != len(texts) or any(len(vector) != dimensions for vector in vectors):
+            raise ModelProviderError("模型服务返回了不匹配的向量维度。")
+        return vectors
 
     def test_connection(self, user: User) -> ModelConnectionTestResponse:
         setting = self.repository.get_default_for_user(user.id)
@@ -474,6 +521,41 @@ class ModelSettingsService:
                 base_url=self.settings.system_model_base_url,
                 api_key=api_key,
                 chat_model=self.settings.system_chat_model,
+            ),
+        )
+
+    def _embedding_runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
+        api_key = self._decrypt_api_key(setting.api_key_ciphertext)
+        return RuntimeModelConfig(
+            source="user",
+            provider=self._normalize_provider(setting.provider),
+            base_url=setting.base_url,
+            api_key=api_key,
+            chat_model=setting.chat_model,
+            embedding_model=setting.embedding_model,
+            can_use_model=self._can_use_embedding_model(
+                provider=setting.provider,
+                base_url=setting.base_url,
+                api_key=api_key,
+                embedding_model=setting.embedding_model,
+            ),
+            config_id=setting.id,
+        )
+
+    def _embedding_runtime_from_system_settings(self) -> RuntimeModelConfig:
+        api_key = self.settings.system_model_api_key.strip()
+        return RuntimeModelConfig(
+            source="system",
+            provider=self._normalize_provider(self.settings.system_model_provider),
+            base_url=self.settings.system_model_base_url.strip() or None,
+            api_key=api_key or None,
+            chat_model=self.settings.system_chat_model.strip() or None,
+            embedding_model=self.settings.system_embedding_model.strip() or None,
+            can_use_model=self._can_use_embedding_model(
+                provider=self.settings.system_model_provider,
+                base_url=self.settings.system_model_base_url,
+                api_key=api_key,
+                embedding_model=self.settings.system_embedding_model,
             ),
         )
 
@@ -590,6 +672,21 @@ class ModelSettingsService:
             and cls._is_real_value(base_url)
             and (cls._is_real_api_key(api_key) or cls._allows_empty_api_key(base_url))
             and cls._is_real_value(chat_model)
+        )
+
+    @classmethod
+    def _can_use_embedding_model(
+        cls,
+        provider: str | None,
+        base_url: str | None,
+        api_key: str | None,
+        embedding_model: str | None,
+    ) -> bool:
+        return (
+            cls._normalize_provider(provider or "") == "openai_compatible"
+            and cls._is_real_value(base_url)
+            and (cls._is_real_api_key(api_key) or cls._allows_empty_api_key(base_url))
+            and cls._is_real_value(embedding_model)
         )
 
     @staticmethod

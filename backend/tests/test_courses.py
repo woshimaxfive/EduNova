@@ -162,6 +162,29 @@ def make_service(repo: FakeCourseRepository) -> CourseService:
     return CourseService(repository=repo)
 
 
+@dataclass
+class FakeEmbeddingBatch:
+    vectors: list[list[float]]
+    source: str = "local"
+    model: str = "local-hash-1536"
+    dimension: int = 1536
+    status: str = "local_fallback"
+
+
+@dataclass
+class FakeEmbeddingService:
+    calls: list[list[str]] = field(default_factory=list)
+
+    def embed_texts(self, _user: User, texts: list[str]) -> FakeEmbeddingBatch:
+        self.calls.append(texts)
+        vectors = []
+        for index, _text in enumerate(texts):
+            vector = [0.0] * 1536
+            vector[index % 1536] = 1.0
+            vectors.append(vector)
+        return FakeEmbeddingBatch(vectors=vectors)
+
+
 def as_dict(model: Any) -> dict[str, Any]:
     return model.model_dump() if hasattr(model, "model_dump") else model
 
@@ -228,6 +251,29 @@ def test_markdown_headings_generate_chapters_and_knowledge_points() -> None:
     assert [point["title"] for point in points] == ["搜索问题", "启发式搜索", "对抗搜索"]
     assert points[1]["chapter"] == "搜索问题"
     assert "A*" in repo.knowledge_chunks[1].content
+
+
+def test_create_course_best_effort_generates_chunk_embeddings() -> None:
+    repo = FakeCourseRepository(
+        materials=[
+            make_material(
+                1,
+                1,
+                "ai.md",
+                "# 搜索问题\n状态空间是搜索的基础。\n## 启发式搜索\nA* 使用启发函数。",
+            )
+        ]
+    )
+    embedding_service = FakeEmbeddingService()
+    service = CourseService(repository=repo, embedding_service=embedding_service)
+
+    service.create_course_from_materials(make_user(), [1], "AI 搜索复习")
+
+    assert embedding_service.calls == [[chunk.content for chunk in repo.knowledge_chunks]]
+    assert all(chunk.embedding is not None for chunk in repo.knowledge_chunks)
+    assert repo.knowledge_chunks[0].metadata_json["embedding_source"] == "local"
+    assert repo.knowledge_chunks[0].metadata_json["embedding_model"] == "local-hash-1536"
+    assert repo.knowledge_chunks[0].metadata_json["embedding_dimension"] == 1536
 
 
 def test_unheaded_txt_generates_numbered_sections() -> None:

@@ -233,7 +233,7 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 
 ### 4.6 `knowledge_chunks`
 
-用途：RAG 检索切片。Phase 5.1 会把 TXT/Markdown 资料按知识点切成文本片段写入本表，本轮 `embedding` 保持为空，后续 RAG 阶段再补向量化。
+用途：RAG 检索切片。Phase 5.1 会把 TXT/Markdown 资料按知识点切成文本片段写入本表，Phase 6.4 会复用既有 `Vector(1536)` 字段保存 OpenAI-compatible embedding 或显式本地 fallback 向量。
 
 字段：
 
@@ -246,8 +246,8 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 | `content` | text | 切片内容 |
 | `page_number` | integer | 页码 |
 | `section_title` | varchar | 小节标题 |
-| `embedding` | vector | 向量 |
-| `metadata_json` | jsonb | 来源元数据 |
+| `embedding` | vector | 1536 维向量，可为空 |
+| `metadata_json` | jsonb | 来源元数据；Phase 6.4 后记录 `embedding_source`、`embedding_model`、`embedding_dimension`、`embedded_at` |
 
 索引：
 
@@ -508,7 +508,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 | `base_url` | text | OpenAI-compatible 接口地址，讯飞星火 Spark 推荐 `https://spark-api-open.xf-yun.com/v1` |
 | `api_key_ciphertext` | text | 加密后的 API Key |
 | `chat_model` | varchar | 聊天模型 |
-| `embedding_model` | varchar | 可空向量模型，Phase 6.2 暂未启用 embedding |
+| `embedding_model` | varchar | 可空向量模型，Phase 6.4 后用于 OpenAI-compatible `/embeddings`；缺省时使用显式本地 fallback |
 | `tool_flags_json` | jsonb | 预留工具标记，当前设置页不管理联网搜索或深度思考 |
 | `is_default` | boolean | 是否为当前用户默认配置 |
 | `last_test_ok` | boolean | 最近一次连接测试是否成功 |
@@ -688,6 +688,7 @@ Demo 数据要求：
 11. 两个不同用户的数据互不可见。
 12. Demo 数据可重置且不污染普通用户数据。
 13. Phase 6.2 后，用户模型 Key 必须按配置独立加密保存，读取设置只能返回来源、模型、默认配置、脱敏 Key 和可用性；课程 RAG 回答的 `trace_id` 和 `citation_json` 必须可追溯。
+14. Phase 6.4 后，知识切片向量必须保持 1536 维合同，外部 embedding 失败不得阻断建课或问答，fallback 来源必须写入 metadata。
 
 当前已验证：
 
@@ -703,3 +704,4 @@ Demo 数据要求：
 - Phase 4.4 资料库服务已验证上传、列表、详情、进度和加入课程都只访问当前用户数据；迁移 `0005` 会把旧 `course_materials` 兼容复制为 `materials` 与 `course_material_links`。
 - Phase 5.1 课程生成服务已验证 TXT/Markdown 资料能创建 `courses`、`course_enrollments`、`course_materials`、`course_material_links`、`knowledge_points` 和 `knowledge_chunks`；A 用户不能用 B 用户资料建课，也不能读取 B 用户课程。
 - Phase 6.2 模型设置服务已验证用户 API Key 不以明文进入数据库，同一用户多套模型配置互相隔离，空 `api_key` 保存会保留原密钥，缺少加密 Key 时拒绝保存用户 Key；课程会话命中引用且默认模型配置可用时，assistant 内容来自模型回答，`citation_json` 保留真实引用，`trace_id` 非空。
+- Phase 6.4 已验证 OpenAI-compatible embedding 请求、`dimensions` 重试、维度不匹配拒绝、本地 `local-hash-1536` fallback、课程生成 best-effort 写入向量和 RAG 混合排序字段。

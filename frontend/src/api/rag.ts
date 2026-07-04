@@ -21,6 +21,10 @@ export type RagSearchResultItem = {
   page_number: number | null;
   section_title: string | null;
   score: number;
+  keyword_score?: number | null;
+  vector_score?: number | null;
+  retrieval_source?: string | null;
+  embedding_status?: string | null;
 };
 
 export type RagSearchResponse = {
@@ -28,6 +32,8 @@ export type RagSearchResponse = {
   query: string;
   top_k: number;
   results: RagSearchResultItem[];
+  retrieval_mode?: string;
+  embedding_status?: string;
 };
 
 export async function searchRag(payload: RagSearchRequest) {

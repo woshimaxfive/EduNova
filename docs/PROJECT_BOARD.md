@@ -71,11 +71,12 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 | Phase 4.3 主页会话与消息持久化 | 已完成 | 新增受保护 `/api/v1/tutor/sessions` 会话接口，`/app` 首次发送创建主页会话，连续追问复用当前会话，左侧历史点击从后端恢复消息，刷新后历史由 `/dashboard/summary` 保留；当前回复为模板占位，不接真实 AI/RAG |
 | Phase 4.4 真实资料库上传与列表闭环 | 已完成 | 新增 `materials`、`course_material_links` 和受保护 `/api/v1/materials/*`；`/app` 上传资料写入当前用户个人资料库并刷新 summary，`/app/library` 从真实资料列表渲染并保留搜索、文档/图片筛选、详情反馈和生成课程预备浮层；TXT/Markdown 轻解析，PDF/DOCX/PPTX/图片仅入库 |
 | Phase 5.1 真实从资料生成课程结构 | 已完成 | 新增受保护 `/api/v1/courses/from-materials`、课程列表、课程详情、课程概览和知识点接口；已上传且解析完成的 TXT/Markdown 可生成当前用户自己的课程、课程资料副本、资料关联、知识点和知识切片；`/app` 与 `/app/library` 的生成课程浮层调用真实接口并跳转新课程空间；PDF/DOCX/PPTX/图片和未解析资料仍拒绝建课 |
-| Phase 5.2 课程知识库检索与引用地基 | 已完成 | 新增受保护 `/api/v1/rag/search`，基于当前用户课程内 `knowledge_chunks` 做确定性关键词检索；课程空间发送问题会展示真实资料、章节和切片引用；无命中显示资料不足，不接真实 AI/embedding |
+| Phase 5.2 课程知识库检索与引用地基 | 已完成 | 新增受保护 `/api/v1/rag/search`，基于当前用户课程内 `knowledge_chunks` 做确定性关键词检索；课程空间发送问题会展示真实资料、章节和切片引用；无命中显示资料不足 |
 | Phase 5.3 课程空间会话与引用持久化 | 已完成 | 复用受保护 `/api/v1/tutor/sessions`，课程空间使用 `scope=course&course_id=...` 读取课程内历史；发送课程问题会创建或复用课程会话，后端自动检索课程知识切片并把真实引用写入 assistant `citation_json`；刷新或点击课程历史可恢复消息和引用 |
 | Phase 6.1 模型 Provider 与真实课程 RAG 回答 | 已完成 | 新增受保护 `/api/v1/settings/model` 和 `/api/v1/settings/model/test`，用户模型 Key 加密保存，用户配置优先、服务器配置兜底；设置页已把讯飞星火 Spark 作为首位 Provider 预设，并移除深度思考/联网搜索设置项；课程会话命中引用且模型可用时调用 OpenAI-compatible Chat Completions 生成非流式真实回答，主页会话仍保持模板 |
 | Phase 6.2 模型配置收敛与多配置管理 | 已完成 | 新增 `model_settings` 多配置迁移和 `/settings/model/configs` 系列接口；同一用户可保存多套配置、独立加密、独立测试、选择默认使用，课程回答运行时使用用户默认配置并在缺省时回退服务器兜底；设置页 Provider 收敛为讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务，OpenRouter 不再作为可见预设 |
 | Phase 6.3 课程问答流式输出 | 已完成 | 新增受保护 `/api/v1/tutor/sessions/{session_id}/messages/stream`，课程空间通过 SSE 逐段渲染 assistant 内容，流式完成后再持久化 user 消息、完整 assistant、真实引用和 `trace_id`；主页会话仍不进入模型流式 |
+| Phase 6.4 课程知识库 Embedding 与混合检索 | 已完成 | 新增 `EmbeddingService` 和 OpenAI-compatible `/embeddings` 能力；课程生成后 best-effort 写入 1536 维知识切片向量，RAG 搜索时懒加载补齐缺失或过期向量；无 embedding 配置时显式使用 `local-hash-1536` fallback；`/rag/search` 返回混合检索状态、关键词分数和向量分数 |
 
 ## 3. 里程碑
 
@@ -85,7 +86,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 | M1 工程骨架 | 7 月 1-2 日 | 后端骨架、前端设计基线、Docker、编码检查 | 已完成 |
 | M2 数据与课程 | 7 月 2 日 | 核心表、学习闭环基础表、迁移、人工智能导论课程包 | 已完成 |
 | M3 前端学习空间与登录 | 7 月 3 日 | 前端学习空间壳子、注册登录、学生主入口 | 已完成 Phase 3 前端骨架、Phase 4.1 真实认证第一刀、Phase 4.2 首页真实总览、Phase 4.3 主页会话持久化和 Phase 4.4 资料库真实闭环 |
-| M4 上传建课与 RAG | 7 月 4-5 日 | 上传解析、自动建课、检索引用 | 已完成资料库上传与列表地基、TXT/Markdown 规则建课第一刀、课程知识库关键词检索引用地基、课程空间会话引用持久化、真实课程 RAG 回答和课程问答流式输出第一刀；深度解析、向量化和资源生成未开始 |
+| M4 上传建课与 RAG | 7 月 4-5 日 | 上传解析、自动建课、检索引用 | 已完成资料库上传与列表地基、TXT/Markdown 规则建课第一刀、课程知识库检索引用地基、课程空间会话引用持久化、真实课程 RAG 回答、课程问答流式输出和 embedding 混合检索第一刀；PDF/PPT/DOCX 深度解析、OCR、讯飞原生 embedding 和资源生成未开始 |
 | M5 画像与资源生成 | 7 月 6-7 日 | 对话画像、多智能体、5 类资源 | 未开始 |
 | M6 学习闭环 | 7 月 8-10 日 | 路径、掌握度、辅导、练习、报告 | 未开始 |
 | M7 增强功能 | 7 月 11-12 日 | 期末冲刺、资料对比、导出、演示模式 | 未开始 |
@@ -142,6 +143,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 - [x] 接入 `/settings/model` 模型配置闭环和 OpenAI-compatible Provider，让 `/app/courses/:courseId` 在命中课程引用时生成真实非流式 RAG 回答；设置页首位预设对齐赛题相关的讯飞星火 Spark。
 - [x] Phase 6.2 收敛模型 Provider 列表并补多配置管理：保留讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务，OpenRouter 从可见预设移除；实现前已按官方文档校验模型名、Base URL 和鉴权方式。
 - [x] Phase 6.3 接入课程问答流式输出：课程空间发送问题优先走 `/tutor/sessions/{session_id}/messages/stream`，token 分片逐步渲染，`done` 后恢复后端持久化消息和引用，模型失败不写入半截 assistant。
+- [x] Phase 6.4 接入课程知识库 embedding 与混合检索：课程生成和 RAG 搜索会补齐 1536 维向量，缺少外部 embedding 配置时使用显式本地 fallback，引用区展示混合检索和 fallback 状态。
 
 ### P2 随开发推进
 
@@ -165,7 +167,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 | 上传资料解析不稳定 | 高 | 第一版优先支持文本型资料，OCR 后置 |
 | 模型 API 不稳定 | 高 | Phase 6.1 已支持服务器配置兜底、用户配置优先、连接测试和模型未配置提示；后续补演示 fallback Provider |
 | 多智能体变成空概念 | 高 | 每次任务记录 agent_run_logs 和 trace_id |
-| RAG 没有引用展示 | 中 | Phase 5.2 已完成课程内真实引用展示，Phase 5.3 已把引用持久化到课程会话，Phase 6.1 已让真实模型回答保留 `citation_json`，Phase 6.3 已在流式完成后继续保存引用；后续资源生成仍必须检查 citation_refs |
+| RAG 没有引用展示 | 中 | Phase 5.2 已完成课程内真实引用展示，Phase 5.3 已把引用持久化到课程会话，Phase 6.1 已让真实模型回答保留 `citation_json`，Phase 6.3 已在流式完成后继续保存引用，Phase 6.4 已补混合检索和检索状态；后续资源生成仍必须检查 citation_refs |
 | 前端做成普通后台 | 高 | 严格遵守 `docs/UI_UX_DESIGN.md`，首屏采用 AI 对话主页、贴边可收起历史侧栏、侧栏账号入口、输入区资料库浮层入口、最近学习轻量列表、发送后主页对话态和生成课程浮层；历史搜索使用居中浮层，不在侧栏内联挤占列表；资料库采用文件库式列表而不是流程看板或后台表单；学习画布、资源工坊、证据层进入课程空间或回答展开区，核心页面用工作区结构而不是后台卡片墙；后续接 API 时继续保持对话主导 |
 | 单人开发时间不足 | 高 | 每天必须有可运行版本，先主链路后增强 |
 | 开源协议遗漏 | 中 | 建立 OPEN_SOURCE_NOTICE |
@@ -216,7 +218,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 
 ```text
 1. 保持 P3 `/app` 对话主页作为学生主入口，不再回到管理系统式首页。
-2. Phase 6.1 已完成模型 Provider、讯飞星火首位预设与非流式真实课程 RAG 回答；Phase 6.2 已完成模型配置收敛与多配置管理；Phase 6.3 已完成课程问答流式输出，下一步可继续补 embedding/向量召回或进入资源生成第一刀，继续避免一次性铺太大。
+2. Phase 6.1 已完成模型 Provider、讯飞星火首位预设与非流式真实课程 RAG 回答；Phase 6.2 已完成模型配置收敛与多配置管理；Phase 6.3 已完成课程问答流式输出；Phase 6.4 已完成 embedding 混合检索第一刀。下一步更适合进入资源生成第一刀、学习画像真实化或 PDF/PPT/DOCX 深度解析专项，继续避免一次性铺太大。
 3. 把 P3.7/P3.11 剩余本地反馈逐步替换为真实画像、学习路径、资源、练习、报告和 Agent 接口。
 4. 继续补 Phase 5 浏览器主链路验收证据，覆盖桌面和 390px 移动宽度。
 5. 继续保持文档随 API、数据库、部署和前端状态同步更新。

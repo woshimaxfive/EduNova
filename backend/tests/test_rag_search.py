@@ -27,12 +27,35 @@ class TokenAuthRepository:
 class FakeRagRepository:
     courses: list[Course] = field(default_factory=list)
     chunks: list[KnowledgeChunk] = field(default_factory=list)
+    saved_chunks: list[KnowledgeChunk] = field(default_factory=list)
 
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return next((course for course in self.courses if course.id == course_id and course.owner_id == user_id), None)
 
     def list_searchable_chunks(self, course_id: int) -> list[KnowledgeChunk]:
         return sorted((chunk for chunk in self.chunks if chunk.course_id == course_id), key=lambda chunk: chunk.id)
+
+    def save_chunk_embeddings(self, chunks: list[KnowledgeChunk]) -> None:
+        self.saved_chunks.extend(chunks)
+
+
+@dataclass
+class FakeEmbeddingBatch:
+    vectors: list[list[float]]
+    source: str
+    model: str
+    dimension: int
+    status: str
+
+
+@dataclass
+class FakeEmbeddingService:
+    batches: list[FakeEmbeddingBatch]
+    calls: list[list[str]] = field(default_factory=list)
+
+    def embed_texts(self, _user: User, texts: list[str]) -> FakeEmbeddingBatch:
+        self.calls.append(texts)
+        return self.batches.pop(0)
 
 
 def make_user(user_id: int = 1) -> User:
@@ -132,6 +155,12 @@ def make_service(repo: FakeRagRepository | None = None) -> RagService:
     return RagService(repository=repo or make_repository())
 
 
+def unit_vector(index: int) -> list[float]:
+    vector = [0.0] * 1536
+    vector[index] = 1.0
+    return vector
+
+
 def test_rag_route_requires_login() -> None:
     client = TestClient(create_app())
 
@@ -153,6 +182,41 @@ def test_rag_search_returns_current_user_citations_sorted_by_score() -> None:
     assert result.results[0].section_title == "启发式搜索"
     assert "启发函数" in result.results[0].content
     assert result.results[0].score >= result.results[1].score
+
+
+def test_rag_search_uses_hybrid_scores_and_returns_embedding_metadata() -> None:
+    repo = make_repository()
+    embedding_service = FakeEmbeddingService(
+        batches=[
+            FakeEmbeddingBatch(
+                vectors=[unit_vector(1), unit_vector(0), unit_vector(0)],
+                source="local",
+                model="local-hash-1536",
+                dimension=1536,
+                status="local_fallback",
+            ),
+            FakeEmbeddingBatch(
+                vectors=[unit_vector(1)],
+                source="local",
+                model="local-hash-1536",
+                dimension=1536,
+                status="local_fallback",
+            ),
+        ]
+    )
+    service = RagService(repository=repo, embedding_service=embedding_service)
+
+    result = service.search(make_user(), course_id=101, query="语义向量问题", top_k=3)
+
+    assert result.retrieval_mode == "hybrid"
+    assert result.embedding_status == "local_fallback"
+    assert result.results[0].chunk_id == 501
+    assert result.results[0].retrieval_source == "vector"
+    assert result.results[0].keyword_score == 0
+    assert result.results[0].vector_score > 0
+    assert repo.saved_chunks == repo.chunks
+    assert repo.chunks[0].metadata_json["embedding_model"] == "local-hash-1536"
+    assert repo.chunks[0].metadata_json["embedding_dimension"] == 1536
 
 
 def test_rag_search_denies_other_user_course() -> None:
@@ -217,4 +281,7 @@ def test_rag_search_route_returns_documented_envelope() -> None:
     body = response.json()
     assert body["data"]["results"][0]["chunk_id"] == 501
     assert body["data"]["results"][0]["source_title"] == "人工智能导论讲义.md"
+    assert body["data"]["retrieval_mode"] in {"keyword", "hybrid"}
+    assert "embedding_status" in body["data"]
+    assert "keyword_score" in body["data"]["results"][0]
     assert body["trace_id"].startswith("trace_")

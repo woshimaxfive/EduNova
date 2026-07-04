@@ -130,9 +130,12 @@ describe("EduNova routes", () => {
     expect(await screen.findByRole("heading", { name: "课程暂不可用" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "人工智能导论" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "课程对话空间" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "知识学习画布" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "证据与 Agent 轨迹" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "资源生成区" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "问答模式" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "学习模式" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("region", { name: "课程提问引导" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "知识学习画布" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "证据与 Agent 轨迹" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "资源生成区" })).not.toBeInTheDocument();
   });
 
   it("renders the protected learning path workspace for an authenticated student", async () => {

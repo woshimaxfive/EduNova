@@ -6,12 +6,12 @@
 
 本文档记录 EduNova 的本地开发、Docker Compose 和部署准备方式。
 
-当前部署范围覆盖到 Phase 6.4：
+当前部署范围覆盖到 Phase 6.5：
 
 - 工程骨架和 Docker Compose。
 - 数据库迁移和内置课程包导入。
 - 真实认证、首页、资料库、规则建课、课程 RAG 和课程会话。
-- 模型配置、课程流式回答、Embedding 与混合检索。
+- 模型配置、课程流式回答、Embedding、混合检索和课程空间双模式前端。
 - 前端本地开发、生产构建和 Nginx 统一入口草案。
 
 - FastAPI backend。
@@ -250,6 +250,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 17. `/app/settings` 可以读取模型配置摘要和多配置列表，保存个人 OpenAI-compatible 配置，设为默认、删除并测试连接；前端不显示明文 Key。
 18. 课程空间命中资料引用且模型配置可用时，可以通过 `/api/v1/tutor/sessions/{session_id}/messages` 或流式接口保存真实模型回答和引用；模型未配置时显示明确提示。
 19. Phase 6.4 后，课程空间命中资料问题时引用区应显示混合检索状态；没有外部 embedding 配置时应显示本地 fallback，并明确 `local-hash-1536` 不是外部语义向量，刷新后消息、引用和状态仍可恢复。
+20. Phase 6.5 后，课程空间默认进入问答模式，点击知识点或引用进入学习模式，默认首屏不常驻知识画布、资源区和证据层。
 
 当前已验证记录按阶段存放在 [TEST_PLAN.md](TEST_PLAN.md)。
 
@@ -298,6 +299,7 @@ http://127.0.0.1:5173
 - 已解析 TXT/Markdown 资料可通过 `/courses/from-materials` 生成课程。
 - 课程空间问题会持久化真实引用，并在默认模型可用时生成流式 RAG 回答。
 - Phase 6.4 后引用区会显示混合检索或本地 fallback 状态。
+- Phase 6.5 后课程空间默认问答模式和学习模式都在同一路由内完成，不新增部署入口。
 - `/app/settings` 可管理多套用户模型配置。
 
 本地开发时 Vite 会把 `/api` 代理到 `http://127.0.0.1:8000`。

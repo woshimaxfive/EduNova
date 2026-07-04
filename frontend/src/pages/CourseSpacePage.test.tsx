@@ -401,6 +401,9 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "课程提问引导" })).toBeInTheDocument();
     expect(screen.getByText("推荐问题")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "知识学习画布" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "证据与 Agent 轨迹" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "资源生成区" })).not.toBeInTheDocument();
     expect(screen.queryByText("监督学习先抓住“数据、目标、泛化”三件事")).not.toBeInTheDocument();
     expect(screen.queryByText("AI 辅导回答")).not.toBeInTheDocument();
   });
@@ -448,9 +451,33 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.getByText(/模型回答：启发式搜索复习/)).toBeInTheDocument();
     expect(screen.getAllByText("启发式搜索")).not.toHaveLength(0);
     expect(screen.getAllByText("混合检索")).not.toHaveLength(0);
-    expect(screen.getAllByText("本地 fallback")).not.toHaveLength(0);
+    expect(screen.getAllByText(/本地 fallback/)).not.toHaveLength(0);
     expect(screen.getByText(/启发函数估计路径代价/)).toBeInTheDocument();
     expect(screen.queryByText("监督学习先抓住“数据、目标、泛化”三件事")).not.toBeInTheDocument();
+  });
+
+  it("opens study mode from a course knowledge point", async () => {
+    const user = userEvent.setup();
+
+    renderCoursePage();
+
+    await screen.findByRole("heading", { name: "AI 搜索复习" });
+    expect(screen.getByRole("button", { name: "问答模式" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "启发式搜索" }));
+
+    const studyMode = screen.getByRole("region", { name: "课程学习模式" });
+    expect(studyMode).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "学习模式" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(studyMode).getByRole("heading", { name: "启发式搜索" })).toBeInTheDocument();
+    expect(within(studyMode).getByText("理解启发函数和 A*。")).toBeInTheDocument();
+    expect(within(studyMode).getByLabelText("知识点信息")).toHaveTextContent("搜索问题");
+    expect(screen.getByRole("complementary", { name: "AI 辅导" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "回到问答模式" }));
+
+    expect(screen.getByRole("region", { name: "课程提问引导" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "问答模式" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("reuses the active course session for follow-up questions", async () => {
@@ -511,6 +538,31 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.getByText(/启发函数估计路径代价/)).toBeInTheDocument();
   });
 
+  it("opens study mode from a persisted citation and keeps the current session when returning", async () => {
+    const user = userEvent.setup();
+
+    renderCoursePage({ sessions: [makeSession("777", "已有课程历史")] });
+
+    const courseHistory = await screen.findByLabelText("课程内历史对话");
+    await user.click(await within(courseHistory).findByRole("button", { name: /已有课程历史/ }));
+
+    await user.click(await screen.findByRole("button", { name: /人工智能导论讲义\.md/ }));
+
+    const studyMode = screen.getByRole("region", { name: "课程学习模式" });
+    expect(within(studyMode).getByText("资料来源")).toBeInTheDocument();
+    expect(within(studyMode).getByRole("heading", { name: "启发式搜索" })).toBeInTheDocument();
+    expect(within(studyMode).getByText(/启发函数估计路径代价/)).toBeInTheDocument();
+    expect(within(studyMode).getByLabelText("引用信息")).toHaveTextContent("人工智能导论讲义.md");
+    expect(within(studyMode).getByLabelText("引用信息")).toHaveTextContent("本地 fallback");
+    expect(screen.getByRole("complementary", { name: "AI 辅导" })).toHaveTextContent("历史里的回答保留真实引用。");
+
+    await user.click(screen.getByRole("button", { name: "回到问答模式" }));
+
+    const thread = await screen.findByRole("region", { name: "课程即时对话" });
+    expect(within(thread).getByText("历史里的问题")).toBeInTheDocument();
+    expect(within(thread).getByText("历史里的回答保留真实引用。")).toBeInTheDocument();
+  });
+
   it("shows an insufficient-evidence message from persisted assistant citations", async () => {
     const user = userEvent.setup();
     const session = makeSession("901", "量子通信怎么复习？");
@@ -524,7 +576,8 @@ describe("CourseSpacePage course tutor sessions", () => {
     await user.click(screen.getByRole("button", { name: "发送" }));
 
     const thread = await screen.findByRole("region", { name: "课程即时对话" });
-    expect(within(thread).getByText("当前课程资料里没有找到足够依据。")).toBeInTheDocument();
+    expect(within(thread).getByText("我先检查了课程资料，但还没有足够依据支撑这个问题。")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("当前课程资料里没有找到足够依据。");
   });
 
   it("keeps the typed question when course message persistence fails", async () => {

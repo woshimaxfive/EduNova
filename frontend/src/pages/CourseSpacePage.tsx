@@ -3,7 +3,6 @@ import {
   ArrowRight,
   ChartLineUp,
   ChatCircleText,
-  CheckCircle,
   Compass,
   FileText,
   ListChecks,
@@ -15,7 +14,7 @@ import { type KeyboardEvent, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
-import { getCourse, getCourseOverview, getKnowledgePoints, type ApiCourseKnowledgePoint } from "../api/courses";
+import { getCourse, getCourseOverview, getKnowledgePoints } from "../api/courses";
 import { type RagSearchResultItem } from "../api/rag";
 import {
   createTutorSession,
@@ -25,13 +24,9 @@ import {
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
-import { LearningCanvas } from "../components/canvas/LearningCanvas";
-import { EvidenceLayer } from "../components/evidence/EvidenceLayer";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
-import { StudioDock } from "../components/studio/StudioDock";
-import { type AgentTraceEvent, type CitationRef, type LearningSpaceSnapshot, type LearningTask } from "../types/api";
 
 const courseStarterQuestions = [
   "这门课最适合先复习哪些知识点？",
@@ -46,73 +41,6 @@ const courseActionLinks = [
   { label: "查看学习报告", to: PATHS.reports, icon: ChartLineUp }
 ];
 
-function mapKnowledgePointsToNodes(points: ApiCourseKnowledgePoint[]) {
-  return points.map((point, index) => {
-    const column = index % 4;
-    const row = Math.floor(index / 4);
-
-    return {
-      id: point.id,
-      title: point.title,
-      chapter: point.chapter ?? "课程知识点",
-      status: index === 0 ? ("focus" as const) : ("ready" as const),
-      x: 14 + column * 22,
-      y: 24 + row * 26
-    };
-  });
-}
-
-function materialTypeFromTitle(title: string) {
-  const extension = title.split(".").pop()?.toLowerCase();
-
-  if (extension === "md" || extension === "markdown") {
-    return "markdown" as const;
-  }
-  if (extension === "txt") {
-    return "txt" as const;
-  }
-  if (extension === "pdf") {
-    return "pdf" as const;
-  }
-  if (extension === "pptx") {
-    return "pptx" as const;
-  }
-  if (extension === "docx") {
-    return "docx" as const;
-  }
-  return "txt" as const;
-}
-
-function confidenceFromScore(score: number): CitationRef["confidence"] {
-  if (score >= 6) {
-    return "high";
-  }
-  if (score >= 3) {
-    return "medium";
-  }
-  return "low";
-}
-
-function mapRagResultsToCitations(results: RagSearchResultItem[]): CitationRef[] {
-  return results.map((result) => ({
-    id: `chunk-${result.chunk_id}`,
-    sourceTitle: result.source_title,
-    sectionTitle: result.section_title ?? "课程切片",
-    pageNumber: result.page_number ?? undefined,
-    confidence: confidenceFromScore(result.score)
-  }));
-}
-
-function buildCourseMaterials(titles: string[], knowledgePointCount: number) {
-  return titles.map((title, index) => ({
-    id: index + 1,
-    title,
-    type: materialTypeFromTitle(title),
-    parseStatus: "completed" as const,
-    coverageLabel: `${knowledgePointCount} 个知识点`
-  }));
-}
-
 function retrievalSourceLabel(source?: string | null) {
   if (source === "hybrid") {
     return "混合检索";
@@ -125,7 +53,7 @@ function retrievalSourceLabel(source?: string | null) {
 
 function embeddingStatusLabel(status?: string | null) {
   if (status === "local_fallback") {
-    return "本地 fallback";
+    return "本地 fallback (local-hash-1536)";
   }
   if (status === "completed") {
     return "真实向量";
@@ -136,7 +64,17 @@ function embeddingStatusLabel(status?: string | null) {
   return "关键词检索";
 }
 
-type AnswerPanelKind = "citations" | "path" | "agent";
+type AnswerPanelKind = "citations" | "resources" | "path" | "thinking";
+type CourseMode = "chat" | "study";
+type StudyTarget =
+  | {
+      type: "knowledge";
+      id: string;
+    }
+  | {
+      type: "citation";
+      chunkId: number;
+    };
 type CourseMessage = {
   id: string;
   role: "user" | "assistant";
@@ -197,6 +135,8 @@ export function CourseSpacePage() {
   });
   const [activeCourseSessionId, setActiveCourseSessionId] = useState<string | null>(null);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<AnswerPanelKind>("citations");
+  const [courseMode, setCourseMode] = useState<CourseMode>("chat");
+  const [studyTarget, setStudyTarget] = useState<StudyTarget | null>(null);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [coursePrompt, setCoursePrompt] = useState("");
   const [courseMessages, setCourseMessages] = useState<CourseMessage[]>([]);
@@ -250,59 +190,17 @@ export function CourseSpacePage() {
         sourceType: "uploaded" as const,
         progressPercent: 0
       };
-  const knowledgeNodes = apiKnowledgePoints.length > 0 ? mapKnowledgePointsToNodes(apiKnowledgePoints) : [];
-  const sourceMaterials = overviewMaterials.length > 0 ? buildCourseMaterials(overviewMaterials, apiCourse?.knowledge_point_count ?? apiKnowledgePoints.length) : [];
   const latestAssistantWithRetrieval = [...displayedCourseMessages].reverse().find((message) => message.role === "assistant" && message.citations !== undefined);
   const latestRagResults = latestAssistantWithRetrieval?.citations ?? [];
   const hasRetrievalResult = Boolean(latestAssistantWithRetrieval);
-  const evidenceCitations = mapRagResultsToCitations(latestRagResults);
-  const retrieverStatus: AgentTraceEvent["status"] = !hasRetrievalResult
-    ? "pending"
-    : latestRagResults.length === 0
-      ? "warning"
-      : "completed";
-  const courseTasks: LearningTask[] = [
-    {
-      id: 1,
-      title: hasDisplayedCourseMessages ? "继续追问并检查引用" : "提出第一个课程问题",
-      type: "review",
-      status: hasDisplayedCourseMessages ? "doing" : "todo"
-    },
-    {
-      id: 2,
-      title: knowledgeNodes.length > 0 ? "查看知识画布中的知识点" : "等待知识点加载",
-      type: "read",
-      status: knowledgeNodes.length > 0 ? "done" : "todo"
-    }
-  ];
-  const courseAgentTrace: AgentTraceEvent[] = [
-    {
-      id: "rag-retriever",
-      agentName: "RetrieverAgent",
-      summary: hasRetrievalResult ? `检索到 ${latestRagResults.length} 条课程切片引用` : "等待课程问题触发检索",
-      status: retrieverStatus,
-      durationMs: hasRetrievalResult ? 120 : undefined
-    }
-  ];
-  const canvasSnapshot: LearningSpaceSnapshot = {
-    currentCourse: {
-      ...courseSummary,
-      title: `${courseSummary.title}知识画布`
-    },
-    materials: sourceMaterials,
-    knowledgeNodes,
-    todayTasks: courseTasks,
-    studioOutputs: [],
-    citations: evidenceCitations,
-    agentTrace: courseAgentTrace
-  };
-  const evidenceSnapshot = {
-    ...canvasSnapshot,
-    citations: evidenceCitations,
-    agentTrace: courseAgentTrace
-  };
-  const materialCount = apiCourse?.material_count ?? sourceMaterials.length;
-  const knowledgePointCount = apiCourse?.knowledge_point_count ?? knowledgeNodes.length;
+  const selectedKnowledgePoint =
+    studyTarget?.type === "knowledge" ? apiKnowledgePoints.find((point) => point.id === studyTarget.id) ?? null : null;
+  const selectedCitation =
+    studyTarget?.type === "citation"
+      ? latestRagResults.find((citation) => citation.chunk_id === studyTarget.chunkId) ?? null
+      : null;
+  const materialCount = apiCourse?.material_count ?? overviewMaterials.length;
+  const knowledgePointCount = apiCourse?.knowledge_point_count ?? apiKnowledgePoints.length;
 
   function selectCourseConversation(sessionId: string) {
     if (!hasRealCourseId) {
@@ -312,6 +210,18 @@ export function CourseSpacePage() {
     setActiveCourseSessionId(sessionId);
     setStreamingSessionId(null);
     setCourseMessages([]);
+    setCourseMode("chat");
+    setStudyTarget(null);
+  }
+
+  function openKnowledgeStudy(pointId: string) {
+    setCourseMode("study");
+    setStudyTarget({ type: "knowledge", id: pointId });
+  }
+
+  function openCitationStudy(citation: RagSearchResultItem) {
+    setCourseMode("study");
+    setStudyTarget({ type: "citation", chunkId: citation.chunk_id });
   }
 
   async function sendCourseQuestion() {
@@ -436,14 +346,33 @@ export function CourseSpacePage() {
               </dl>
             </header>
 
-            <section className="course-space-grid">
-              <section className="course-chat-panel" role="region" aria-label="课程对话空间">
+            <div className="course-mode-tabs" aria-label="课程空间模式">
+              <button
+                className={courseMode === "chat" ? "active" : ""}
+                type="button"
+                aria-pressed={courseMode === "chat"}
+                onClick={() => setCourseMode("chat")}
+              >
+                问答模式
+              </button>
+              <button
+                className={courseMode === "study" ? "active" : ""}
+                type="button"
+                aria-pressed={courseMode === "study"}
+                onClick={() => setCourseMode("study")}
+              >
+                学习模式
+              </button>
+            </div>
+
+            {courseMode === "chat" ? (
+              <section className="course-chat-panel course-chat-mode" role="region" aria-label="课程对话空间">
                 <div className="course-panel-heading">
                   <span className="course-panel-icon" aria-hidden="true">
                     <ChatCircleText size={20} weight="duotone" />
                   </span>
                   <div>
-                    <h2>继续问</h2>
+                    <h2>问这门课</h2>
                   </div>
                 </div>
 
@@ -469,15 +398,23 @@ export function CourseSpacePage() {
                   )}
                 </div>
 
+                {apiKnowledgePoints.length > 0 ? (
+                  <div className="course-knowledge-strip" aria-label="课程知识点">
+                    <span>知识点</span>
+                    {apiKnowledgePoints.map((point) => (
+                      <button type="button" key={point.id} onClick={() => openKnowledgeStudy(point.id)}>
+                        {point.title}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
                 {hasDisplayedCourseMessages ? (
                   <>
                     <section className="course-message-stack" aria-label="课程即时对话">
                       {displayedCourseMessages.map((message) => (
                         <article className={`course-message ${message.role}`} key={message.id}>
                           <p>{message.content}</p>
-                          {message.role === "assistant" && message.citations !== undefined ? (
-                            <CourseMessageCitations citations={message.citations} />
-                          ) : null}
                         </article>
                       ))}
                     </section>
@@ -490,7 +427,16 @@ export function CourseSpacePage() {
                           onClick={() => setActiveAnswerPanel("citations")}
                         >
                           <FileText size={17} weight="duotone" aria-hidden="true" />
-                          <span>引用来源</span>
+                          <span>来源</span>
+                        </button>
+                        <button
+                          className={activeAnswerPanel === "resources" ? "active" : ""}
+                          type="button"
+                          aria-pressed={activeAnswerPanel === "resources"}
+                          onClick={() => setActiveAnswerPanel("resources")}
+                        >
+                          <Sparkle size={17} weight="duotone" aria-hidden="true" />
+                          <span>生成资源</span>
                         </button>
                         <button
                           className={activeAnswerPanel === "path" ? "active" : ""}
@@ -502,13 +448,13 @@ export function CourseSpacePage() {
                           <span>学习路径</span>
                         </button>
                         <button
-                          className={activeAnswerPanel === "agent" ? "active" : ""}
+                          className={activeAnswerPanel === "thinking" ? "active" : ""}
                           type="button"
-                          aria-pressed={activeAnswerPanel === "agent"}
-                          onClick={() => setActiveAnswerPanel("agent")}
+                          aria-pressed={activeAnswerPanel === "thinking"}
+                          onClick={() => setActiveAnswerPanel("thinking")}
                         >
-                          <Sparkle size={17} weight="duotone" aria-hidden="true" />
-                          <span>Agent 过程</span>
+                          <Compass size={17} weight="duotone" aria-hidden="true" />
+                          <span>思考过程</span>
                         </button>
                       </div>
                       <AnswerDetailPanel
@@ -516,14 +462,8 @@ export function CourseSpacePage() {
                         citations={latestRagResults}
                         hasRealCourse={Boolean(apiCourse)}
                         hasSearched={hasRetrievalResult}
+                        onOpenCitation={openCitationStudy}
                       />
-                      {latestRagResults.length > 0 ? (
-                        <div className="answer-citation-strip" aria-label="回答引用预览">
-                          {latestRagResults.map((citation) => (
-                            <span key={citation.chunk_id}>{citation.source_title}</span>
-                          ))}
-                        </div>
-                      ) : null}
                     </article>
                   </>
                 ) : (
@@ -542,7 +482,20 @@ export function CourseSpacePage() {
                   </article>
                 )}
 
-                <div className="course-composer">
+                <nav className="course-action-links" aria-label="课程行动入口">
+                  {courseActionLinks.map((action) => {
+                    const Icon = action.icon;
+
+                    return (
+                      <Link key={action.to} to={action.to}>
+                        <Icon size={17} weight="duotone" aria-hidden="true" />
+                        <span>{action.label}</span>
+                      </Link>
+                    );
+                  })}
+                </nav>
+
+                <div className="course-composer" role="region" aria-label="课程输入区">
                   <label htmlFor="course-question-input">课程问题输入</label>
                   <textarea
                     id="course-question-input"
@@ -559,45 +512,108 @@ export function CourseSpacePage() {
                   <InlineFeedback message={courseFeedback} tone="warning" className="course-inline-feedback" />
                 </div>
               </section>
+            ) : (
+              <section className="course-study-layout" role="region" aria-label="课程学习模式">
+                <article className="course-study-main" aria-label="学习内容">
+                  <button className="course-back-link" type="button" onClick={() => setCourseMode("chat")}>
+                    <ArrowLeft size={17} weight="bold" aria-hidden="true" />
+                    <span>回到问答模式</span>
+                  </button>
+                  {selectedKnowledgePoint ? (
+                    <>
+                      <p className="course-answer-label">知识点</p>
+                      <h2>{selectedKnowledgePoint.title}</h2>
+                      <p>{selectedKnowledgePoint.summary ?? "这条知识点还没有摘要，可以在右侧直接追问。"}</p>
+                      <dl className="course-study-meta" aria-label="知识点信息">
+                        <div>
+                          <dt>章节</dt>
+                          <dd>{selectedKnowledgePoint.chapter ?? "课程知识点"}</dd>
+                        </div>
+                        <div>
+                          <dt>难度</dt>
+                          <dd>{selectedKnowledgePoint.difficulty ?? "未标注"}</dd>
+                        </div>
+                      </dl>
+                    </>
+                  ) : selectedCitation ? (
+                    <>
+                      <p className="course-answer-label">资料来源</p>
+                      <h2>{selectedCitation.section_title ?? selectedCitation.source_title}</h2>
+                      <p>{selectedCitation.content}</p>
+                      <dl className="course-study-meta" aria-label="引用信息">
+                        <div>
+                          <dt>资料</dt>
+                          <dd>{selectedCitation.source_title}</dd>
+                        </div>
+                        <div>
+                          <dt>检索</dt>
+                          <dd>
+                            {retrievalSourceLabel(selectedCitation.retrieval_source)} · {embeddingStatusLabel(selectedCitation.embedding_status)}
+                          </dd>
+                        </div>
+                      </dl>
+                    </>
+                  ) : (
+                    <>
+                      <p className="course-answer-label">学习模式</p>
+                      <h2>选择一个知识点或引用来源</h2>
+                      <p>从下方知识点进入，或回到问答模式后点开回答来源。</p>
+                    </>
+                  )}
+                  {apiKnowledgePoints.length > 0 ? (
+                    <div className="course-knowledge-strip" aria-label="课程知识点">
+                      <span>知识点</span>
+                      {apiKnowledgePoints.map((point) => (
+                        <button
+                          className={selectedKnowledgePoint?.id === point.id ? "active" : ""}
+                          type="button"
+                          key={point.id}
+                          aria-pressed={selectedKnowledgePoint?.id === point.id}
+                          onClick={() => openKnowledgeStudy(point.id)}
+                        >
+                          {point.title}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </article>
 
-              <aside className="course-context-panel" aria-label="课程学习上下文">
-                <div className="course-panel-heading">
-                  <span className="course-panel-icon" aria-hidden="true">
-                    <CheckCircle size={20} weight="duotone" />
-                  </span>
-                  <div>
-                    <h2>下一步</h2>
+                <aside className="course-study-assistant" aria-label="AI 辅导">
+                  <div className="course-panel-heading">
+                    <span className="course-panel-icon" aria-hidden="true">
+                      <ChatCircleText size={20} weight="duotone" />
+                    </span>
+                    <div>
+                      <h2>AI 辅导</h2>
+                      <p>围绕当前内容继续追问。</p>
+                    </div>
                   </div>
-                </div>
-                <ol className="course-task-list" aria-label="课程任务">
-                  {courseTasks.map((task) => (
-                    <li key={task.id} className={task.status}>
-                      <strong>{task.title}</strong>
-                      <span>{task.type}</span>
-                    </li>
-                  ))}
-                </ol>
-                <nav className="course-action-links" aria-label="课程行动入口">
-                  {courseActionLinks.map((action) => {
-                    const Icon = action.icon;
-
-                    return (
-                      <Link key={action.to} to={action.to}>
-                        <Icon size={17} weight="duotone" aria-hidden="true" />
-                        <span>{action.label}</span>
-                      </Link>
-                    );
-                  })}
-                </nav>
-              </aside>
-            </section>
-
-            <LearningCanvas snapshot={canvasSnapshot} />
-
-            <div className="course-space-secondary">
-              <StudioDock outputs={[]} showGenerateAction={false} />
-              <EvidenceLayer snapshot={evidenceSnapshot} />
-            </div>
+                  <section className="course-study-mini-thread" aria-label="当前课程对话摘要">
+                    {displayedCourseMessages.slice(-2).map((message) => (
+                      <article className={`course-message ${message.role}`} key={message.id}>
+                        <p>{message.content}</p>
+                      </article>
+                    ))}
+                  </section>
+                  <div className="course-composer compact" role="region" aria-label="课程输入区">
+                    <label htmlFor="course-study-question-input">课程问题输入</label>
+                    <textarea
+                      id="course-study-question-input"
+                      rows={3}
+                      value={coursePrompt}
+                      onChange={(event) => setCoursePrompt(event.target.value)}
+                      onKeyDown={handleCourseComposerKeyDown}
+                      placeholder="问这里为什么、换个例子，或让它出一道练习"
+                    />
+                    <button className="course-send-button" type="button" disabled={isSearchingCourse} onClick={() => void sendCourseQuestion()}>
+                      <ArrowRight size={17} weight="bold" aria-hidden="true" />
+                      <span>{isSearchingCourse ? "保存中" : "发送"}</span>
+                    </button>
+                    <InlineFeedback message={courseFeedback} tone="warning" className="course-inline-feedback" />
+                  </div>
+                </aside>
+              </section>
+            )}
           </div>
         </section>
       </section>
@@ -610,54 +626,37 @@ type AnswerDetailPanelProps = {
   citations: RagSearchResultItem[];
   hasRealCourse: boolean;
   hasSearched: boolean;
+  onOpenCitation: (citation: RagSearchResultItem) => void;
 };
 
-function CourseMessageCitations({ citations }: { citations: RagSearchResultItem[] }) {
-  if (citations.length === 0) {
+function AnswerDetailPanel({ activePanel, citations, hasRealCourse, hasSearched, onOpenCitation }: AnswerDetailPanelProps) {
+  if (activePanel === "resources") {
     return (
-      <section className="answer-detail-panel course-message-citations" role="region" aria-label="课程回答引用">
-        <strong>引用来源</strong>
-        <p>当前课程资料里没有找到足够依据。</p>
+      <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
+        <strong>生成资源</strong>
+        <p>真实资源生成会在后续阶段接入。当前可以先基于这次回答的来源，准备讲解、练习、思维导图、代码实操和 PPT 大纲。</p>
       </section>
     );
   }
 
-  return (
-    <section className="answer-detail-panel course-message-citations" role="region" aria-label="课程回答引用">
-      <strong>引用来源</strong>
-      <div className="citation-list">
-        {citations.map((citation) => (
-          <article key={citation.chunk_id} className="citation-item">
-            <strong>{citation.source_title}</strong>
-            <span>{citation.section_title ?? "课程切片"}</span>
-            <small className="citation-meta">
-              <span>匹配度 {citation.score.toFixed(1)}</span>
-              <span>{retrievalSourceLabel(citation.retrieval_source)}</span>
-              <span>{embeddingStatusLabel(citation.embedding_status)}</span>
-            </small>
-            <p>{citation.content}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function AnswerDetailPanel({ activePanel, citations, hasRealCourse, hasSearched }: AnswerDetailPanelProps) {
   if (activePanel === "path") {
     return (
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
         <strong>建议路径</strong>
-        <p>先复习训练集、测试集和目标函数，再进入过拟合、正则化和泛化误差，最后用 10 分钟练习巩固。</p>
+        <p>先围绕本次命中的来源复习核心概念，再追问一个例题，最后把仍不确定的知识点加入后续练习。</p>
       </section>
     );
   }
 
-  if (activePanel === "agent") {
+  if (activePanel === "thinking") {
     return (
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-        <strong>Agent 过程</strong>
-        <p>RetrieverAgent 先检索课程资料，PathAgent 生成复习顺序，TutorAgent 再把结论写成可追问回答。</p>
+        <strong>思考过程</strong>
+        <p>
+          {hasSearched
+            ? `已完成课程资料检索，命中 ${citations.length} 条引用。完整多智能体轨迹将在资源生成阶段接入。`
+            : "发送课程问题后，会先检索当前课程资料，再决定是否调用模型回答。"}
+        </p>
       </section>
     );
   }
@@ -666,7 +665,7 @@ function AnswerDetailPanel({ activePanel, citations, hasRealCourse, hasSearched 
     if (!hasSearched) {
       return (
         <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-          <strong>引用来源</strong>
+          <strong>来源</strong>
           <p>发送课程问题后，会先从本课程知识切片中检索真实引用。</p>
         </section>
       );
@@ -675,7 +674,7 @@ function AnswerDetailPanel({ activePanel, citations, hasRealCourse, hasSearched 
     if (citations.length === 0) {
       return (
         <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-          <strong>引用来源</strong>
+          <strong>来源</strong>
           <p>当前课程资料里没有找到足够依据。</p>
         </section>
       );
@@ -683,10 +682,15 @@ function AnswerDetailPanel({ activePanel, citations, hasRealCourse, hasSearched 
 
     return (
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-        <strong>引用来源</strong>
+        <strong>来源</strong>
         <div className="citation-list">
           {citations.map((citation) => (
-            <article key={citation.chunk_id} className="citation-item">
+            <button
+              key={citation.chunk_id}
+              className="citation-item citation-item-button"
+              type="button"
+              onClick={() => onOpenCitation(citation)}
+            >
               <strong>{citation.source_title}</strong>
               <span>{citation.section_title ?? "课程切片"}</span>
               <small className="citation-meta">
@@ -694,7 +698,8 @@ function AnswerDetailPanel({ activePanel, citations, hasRealCourse, hasSearched 
                 <span>{retrievalSourceLabel(citation.retrieval_source)}</span>
                 <span>{embeddingStatusLabel(citation.embedding_status)}</span>
               </small>
-            </article>
+              <span className="citation-content">{citation.content}</span>
+            </button>
           ))}
         </div>
       </section>
@@ -703,7 +708,7 @@ function AnswerDetailPanel({ activePanel, citations, hasRealCourse, hasSearched 
 
   return (
     <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-      <strong>引用来源</strong>
+      <strong>来源</strong>
       <p>请从课程列表进入真实课程后再查看引用来源。</p>
     </section>
   );

@@ -6,7 +6,19 @@
 
 EduNova 的测试目标不是只证明代码能运行，而是证明系统满足赛题要求、适合比赛演示、能够后续开源部署，并且关键 AI 输出具有可解释性和可信度。
 
-本文档是全项目测试计划。除“当前自动化验证入口”一节外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前阶段已经全部实现。当前已验收 FastAPI 最小骨架、`/api/health`、pytest、ruff、编码检查、Docker Compose 配置、PostgreSQL、Redis、backend 三服务真实启动健康检查、frontend 与 Nginx 服务配置、SQLAlchemy 数据库入口、Alembic 迁移环境、pgvector 扩展迁移、第一批核心业务表迁移、学习闭环基础表迁移、`users.starter_mode` 迁移、独立资料库迁移、人工智能导论内置课程包导入，以及 Phase 3 前端工程骨架、路由保护、登录入口、注册 starter mode、AI 对话主页、贴边可收起历史侧栏、侧栏账号入口、发送后主页对话态、底部学习输入区、输入区资料库浮层入口、文件上传入口、联网搜索激活态、Enter 发送、最近学习轻量列表、文件库式资料库、课程空间真实入口、独立学习路径页、学生端核心页面骨架、统一贴边工作区外壳、生成课程浮层、上传建课状态轨道、学习空间短状态信号、界面文案减法、本地交互反馈、P3.11 前端本地功能闭环、P3.13 路由与资料库精修、P3.15 可用性收口、P3.16 Phase 4 前口径对齐、Phase 4.1 真实注册登录认证闭环、Phase 4.2 `/dashboard/summary` 首页真实总览、Phase 4.3 `/tutor/sessions` 主页会话和消息持久化、Phase 4.4 `/materials` 真实资料库上传与列表闭环、Phase 5.1 `/courses/from-materials` 真实规则建课闭环、Phase 5.2 `/rag/search` 课程知识库检索引用、Phase 5.3 课程空间会话与引用持久化、Phase 6.1 `/settings/model` 模型配置和非流式真实课程 RAG 回答、Phase 6.2 `/settings/model/configs` 多模型配置隔离、Phase 6.3 `/tutor/sessions/{session_id}/messages/stream` 课程问答流式输出、Phase 6.4 课程知识库 embedding 与混合检索、前端 API 合同模块、前端 lint、Vitest 和生产构建。
+本文档是全项目测试计划。除“当前自动化验证入口”和“浏览器验收记录”外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前阶段已经全部实现。
+
+当前自动化基线已经覆盖：
+
+- FastAPI、`/api/health`、pytest、ruff 和编码检查。
+- Docker Compose 配置、PostgreSQL、Redis、frontend、backend 和 Nginx。
+- SQLAlchemy、Alembic、pgvector、核心业务表和学习闭环基础表。
+- 真实认证、首页 summary、主页会话、资料库、规则建课、RAG 检索和课程会话。
+- 模型设置、多模型配置、非流式课程 RAG 回答、SSE 流式回答。
+- Embedding 服务、`local-hash-1536` fallback 和混合检索字段。
+- 前端 API 合同模块、核心页面测试、Vitest、lint 和生产构建。
+
+当前阶段的完整状态见 [STATUS.md](STATUS.md)。
 
 测试需要覆盖以下问题：
 
@@ -131,12 +143,12 @@ cd ..
 | `/dashboard/summary` | 无 token 401、blank 用户空状态、ai_intro 用户返回当前用户课程和资料、真实进度显示、主页历史和资源摘要、多用户隔离 |
 | `/profiles/chat` | 画像生成、画像事件写入 |
 | `/materials/upload`、`/materials`、`/materials/{material_id}`、`/materials/{material_id}/progress`、`/courses/{course_id}/materials` | 无 token 401、当前用户隔离、TXT/Markdown 轻解析、图片仅入库且不 OCR、不支持扩展名、大小限制、未归属筛选、课程关联唯一性、进度状态稳定 |
-| `/courses/from-materials`、`/courses`、`/courses/{course_id}`、`/courses/{course_id}/overview`、`/courses/{course_id}/knowledge-points` | 无 token 401、当前用户隔离、TXT/Markdown 资料生成课程、Markdown 标题生成知识点、无标题 TXT 分段生成知识点、拒绝未解析资料和非文本资料、创建 Course/Enrollment/CourseMaterial/CourseMaterialLink/KnowledgePoint/KnowledgeChunk、课程列表和详情只返回当前用户课程 |
-| `/rag/search` | 无 token 401、当前用户课程隔离、关键词命中、向量命中、混合排序、缺失向量懒加载、不同 embedding 模型导致重建、外部 embedding 失败回退关键词检索、无命中稳定空结果、新字段 `retrieval_mode`、`embedding_status`、`keyword_score`、`vector_score` 稳定返回 |
-| `/settings/model`、`/settings/model/test`、`/settings/model/configs` | 无 token 401、服务器配置摘要不泄露明文 Key、旧兼容接口仍读取/更新默认配置、多配置列表只返回当前用户配置、创建/更新/删除/设默认/指定测试隔离正确、用户配置加密保存、空 `api_key` 保留原密钥、缺少加密 Key 返回配置错误、本地 Provider 可无真实 Key、连接测试成功/失败稳定返回且写入脱敏测试状态；Phase 6.4 起覆盖 OpenAI-compatible embedding 请求、`dimensions` 重试、维度不匹配拒绝和不泄露 Key |
+| `/courses/from-materials`、`/courses/*` | 无 token 401、用户隔离、TXT/Markdown 建课、知识点和知识切片创建、非文本资料拒绝、课程只返回当前用户数据 |
+| `/rag/search` | 无 token 401、用户隔离、关键词命中、向量命中、混合排序、懒加载、fallback、无命中和新增分数字段 |
+| `/settings/model`、`/settings/model/test`、`/settings/model/configs` | 无 token 401、多配置隔离、默认配置、Key 加密、脱敏返回、连接测试、OpenAI-compatible embedding 和不泄露 Key |
 | `/resources/generate` | 5 类资源、trace_id、审核状态 |
 | `/paths/generate` | 学习路径、任务列表、推荐理由 |
-| `/tutor/sessions` | 无 token 401、创建 home session、课程 session 校验、当前用户隔离、发送消息写入 user 和模板 assistant、详情按时间返回 messages、列表只返回当前用户当前 scope；Phase 5.3 起课程 session 发送命中问题时 assistant `citation_json` 写入真实 chunk/source/section/score，无命中时为空引用且提示资料依据不足，主页 session 不触发课程检索；Phase 6.1 起课程命中引用且模型可用时 assistant 内容来自模型、`trace_id` 非空，模型未配置时保留引用并提示未配置，模型失败时不写入半截 assistant；Phase 6.3 起 `/tutor/sessions/{session_id}/messages/stream` 覆盖无 token 401、home session 400、`metadata/token/done/error` SSE 顺序、无引用不调用模型、未配置保留引用、流式失败不落半截消息和旧普通发送接口不回归；Phase 6.4 起课程引用可包含混合检索分数字段且历史恢复不回归 |
+| `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、模型回答、SSE 流式、错误回滚和历史恢复 |
 | `/practice/sessions` | 出题、提交答案、批改 |
 | `/reports/generate` | 学习报告、证据来源 |
 | `/demo/reset` | 演示数据重置 |

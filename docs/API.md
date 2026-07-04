@@ -1273,7 +1273,36 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 
 用途：删除当前用户自己的某条模型配置。删除默认配置后，后端会把剩余配置中最近更新的一条设为默认；没有个人配置时回退服务器配置。
 
-模型 Provider 第一版支持 OpenAI-compatible Chat Completions，目标接口为 `{base_url}/chat/completions`；Phase 6.4 起同一 Provider 增加 OpenAI-compatible Embeddings，目标接口为 `{base_url}/embeddings`。Phase 6.2 的可见预设收敛为：讯飞星火 Spark、DeepSeek、通义千问、Kimi、智谱 GLM、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio、自定义兼容服务；OpenRouter 不再作为可见预设。讯飞星火 Spark 推荐 Base URL 为 `https://spark-api-open.xf-yun.com/v1`，默认聊天模型为 `lite`，可选聊天模型包括 `lite`、`generalv3`、`pro-128k`、`max-32k`、`4.0Ultra`。讯飞原生 Embeddingp/Embeddingq 因为独立授权、签名鉴权和 2560 维输出，本轮不接入。接口形态参考 OpenAI 官方 Chat Completions 与 Embeddings API。
+模型 Provider 第一版按 OpenAI-compatible 协议实现：
+
+- 聊天回答：`{base_url}/chat/completions`。
+- 向量生成：`{base_url}/embeddings`。
+- 课程回答运行时优先使用当前用户默认配置。
+- 用户没有默认配置时回退服务器 `.env` 兜底配置。
+
+Phase 6.2 后设置页可见预设收敛为：
+
+- 讯飞星火 Spark。
+- DeepSeek。
+- 通义千问。
+- Kimi。
+- 智谱 GLM。
+- 百度千帆。
+- 腾讯混元。
+- 硅基流动。
+- 本地 Ollama。
+- 本地 LM Studio。
+- 自定义兼容服务。
+
+OpenRouter 不再作为可见预设。
+
+讯飞星火 Spark 推荐配置：
+
+- Base URL：`https://spark-api-open.xf-yun.com/v1`。
+- 默认聊天模型：`lite`。
+- 可选聊天模型：`lite`、`generalv3`、`pro-128k`、`max-32k`、`4.0Ultra`。
+
+讯飞原生 Embeddingp/Embeddingq 因为独立授权、签名鉴权和 2560 维输出，当前阶段不接入。
 
 ## 20. API 验收标准
 

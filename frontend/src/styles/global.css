@@ -4541,7 +4541,7 @@ a {
 .selected-materials-note {
   gap: 8px;
   width: min(760px, 100%);
-  margin: 0 auto;
+  margin: 8px auto 0;
   color: var(--text-muted);
   font-size: 0.92rem;
 }

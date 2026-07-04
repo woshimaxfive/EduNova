@@ -12,6 +12,8 @@ from backend.app.services.model_settings import (
     ModelSettingsService,
 )
 
+HOME_MODEL_NOT_CONFIGURED_MESSAGE = "当前未配置可用模型，请先到设置里保存可用模型配置。"
+
 
 class CourseAnswerGenerationError(RuntimeError):
     pass
@@ -33,6 +35,18 @@ class CourseAnswerStream:
 class CourseAnswerService:
     def __init__(self, model_settings_service: ModelSettingsService) -> None:
         self.model_settings_service = model_settings_service
+
+    def generate_home(self, user: User, question: str) -> CourseAnswerGeneration:
+        trace_id = make_trace_id()
+        messages = self._build_home_messages(question=question)
+        try:
+            content = self.model_settings_service.chat_completion(user=user, messages=messages)
+        except ModelNotConfiguredError:
+            return CourseAnswerGeneration(content=HOME_MODEL_NOT_CONFIGURED_MESSAGE, trace_id=None)
+        except ModelProviderError as exc:
+            raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
+
+        return CourseAnswerGeneration(content=content, trace_id=trace_id)
 
     def generate(self, user: User, question: str, citations: list[dict[str, Any]]) -> CourseAnswerGeneration:
         if not citations:
@@ -77,6 +91,28 @@ class CourseAnswerService:
                 raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
 
         return CourseAnswerStream(tokens=guarded_tokens(), trace_id=trace_id, used_model=True)
+
+    @staticmethod
+    def _build_home_messages(question: str) -> list[dict[str, str]]:
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "你是 EduNova 的主页学习助手，面向学生给出清晰、可执行的学习建议。"
+                    "当前主页对话没有课程引用、资料 RAG 或真实联网搜索能力，不能声称已经读取资料、联网或引用课程内容。"
+                    "如果问题需要基于具体资料回答，请建议学生进入课程空间，或先上传 TXT/Markdown 资料生成课程。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": "\n".join(
+                    [
+                        f"学生问题：{question}",
+                        "请给出简洁、可执行的回答；如果信息不足，请说明还需要哪些资料。",
+                    ]
+                ),
+            },
+        ]
 
     @staticmethod
     def _build_messages(question: str, citations: list[dict[str, Any]]) -> list[dict[str, str]]:

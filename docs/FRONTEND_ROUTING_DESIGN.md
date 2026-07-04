@@ -497,7 +497,7 @@ Phase 5 以后：
 - `frontend/src/api/` 已按业务域拆分 auth、dashboard、courses、materials、rag、tutor、settings 等已实现合同模块；profiles、resources、agents、paths、practice、reports、demo 仅保留为后续预留常量，当前后端未挂载对应 router。
 - Phase 4.1 已接真实 `/auth/register`、`/auth/login`、`/auth/me` 和 `/auth/logout`；注册页会提交 `starter_mode`，注册成功后自动调用登录接口写入 session。
 - Phase 4.2 已接真实 `/dashboard/summary`；`LearningSpacePage` 使用 React Query 读取当前用户 summary，左侧主页历史、最近学习列表、主页资料库浮层资料和 blank/ai_intro 空状态不再来自前端静态 demo 数据。
-- Phase 4.3 已接真实 `/tutor/sessions`；`LearningSpacePage` 首次发送会创建 `scope=home` 会话，发送消息写入 user 和模板 assistant 消息，连续追问不重复创建历史，点击左侧主页历史会拉取后端 messages。
+- Phase 4.3 已接真实 `/tutor/sessions`；`LearningSpacePage` 首次发送会创建 `scope=home` 会话，发送消息写入 user 和 assistant 消息，当前主页 assistant 来自普通模型回答，连续追问不重复创建历史，点击左侧主页历史会拉取后端 messages。
 - Phase 4.4 已接真实 `/materials`；`LearningSpacePage` 上传按钮会调用 `/materials/upload` 并刷新 `/dashboard/summary`，`LibraryPage` 调用 `/materials` 渲染当前用户资料列表，上传成功后刷新列表和 summary。
 - Phase 5.1 已接真实 `/courses/from-materials`、`/courses`、`/courses/{course_id}`、`/courses/{course_id}/overview` 和 `/courses/{course_id}/knowledge-points`；`LearningSpacePage` 和 `LibraryPage` 的生成课程浮层会调用真实接口，成功后刷新数据并跳转新课程空间。
 - Phase 6.4 已让课程生成和 `/rag/search` 自动补齐知识切片 embedding；`CourseSpacePage` 会在引用来源区显示混合检索、关键词检索和本地 fallback 状态，并明确 `local-hash-1536` 不是外部语义向量。
@@ -506,6 +506,7 @@ Phase 5 以后：
 - Phase 6.2 的 Provider 预设不追求数量多，只保留讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务；OpenRouter 不再作为可见预设。回答模型是主字段，向量模型折叠在高级项中；Phase 6.4 起向量模型用于 OpenAI-compatible embedding，缺省时仍可依靠 `local-hash-1536` 跑通。
 - `FirstRunGuide` 已作为学习空间中的轻量引导占位，真实触发条件需要 Phase 4 根据画像和课程上下文接入。
 - `/app` 已重做为总 AI 对话主页，包含贴边可收起主页历史、侧栏账号入口、中心 AI 学习入口、输入区资料库按钮、文件上传入口、最近学习轻量列表、发送后主页对话态和生成课程浮层。
+- `/app` 输入区资料状态只在选中资料后贴着 composer 显示“已选择 N 份资料”；联网搜索和深度思考只通过按钮高亮和 `aria-pressed` 表达，不显示中间状态条或“联网搜索已开”文案。
 - P3.9 已把 `/app/library`、`/app/courses/:courseId`、资源工坊、画像、辅导、练习、报告和设置统一到同一套贴边工作区外壳，不再保留旧顶部导航。
 - 注册页选择 `blank` 时，进入 `/app` 后 summary 返回无内置课程、无内置资料和无历史对话；选择 `ai_intro` 时，summary 返回复制到当前用户空间的人工智能导论示例课程和资料。
 - `/app/courses/:courseId` 已从课程空间骨架推进到真实课程详情、知识点读取、课程会话历史、引用持久化、命中引用后的真实模型回答、课程回答流式输出和混合检索状态展示；无课程消息时只显示推荐问题和开始提问引导，不再渲染固定示例回答。真实课程加载中、资料为空或引用为空时不回落到 demo 课程、demo 资料或 demo 引用；今日任务、知识画布、资源输出区和 Agent 轨迹仍保留前端预备交互。

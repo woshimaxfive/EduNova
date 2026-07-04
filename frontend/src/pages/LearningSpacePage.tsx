@@ -331,16 +331,6 @@ export function LearningSpacePage() {
             </div>
           )}
 
-          {effectiveSelectedMaterialIds.length > 0 || isWebSearchEnabled ? (
-            <div className="selected-materials-note">
-              <LinkSimple size={16} weight="duotone" aria-hidden="true" />
-              <span>
-                {effectiveSelectedMaterialIds.length > 0
-                  ? `已选择 ${effectiveSelectedMaterialIds.length} 份资料${isWebSearchEnabled ? "，联网搜索已开" : ""}。`
-                  : "联网搜索已开。"}
-              </span>
-            </div>
-          ) : null}
           <section className={hasHomeThread ? "composer-frame docked" : "composer-frame"} aria-label={hasHomeThread ? "底部学习输入" : "学习输入区"}>
             <div className="conversation-composer">
               <textarea
@@ -414,6 +404,12 @@ export function LearningSpacePage() {
                 </div>
               </div>
             </div>
+            {effectiveSelectedMaterialIds.length > 0 ? (
+              <div className="selected-materials-note">
+                <LinkSimple size={16} weight="duotone" aria-hidden="true" />
+                <span>{`已选择 ${effectiveSelectedMaterialIds.length} 份资料。`}</span>
+              </div>
+            ) : null}
             <InlineFeedback message={composerFeedback?.message ?? null} tone={composerFeedback?.tone} className="composer-inline-feedback" />
           </section>
 

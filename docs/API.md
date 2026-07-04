@@ -943,7 +943,7 @@ Authorization: Bearer <token>
 
 ### POST `/tutor/sessions/{session_id}/messages`
 
-用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条模板 `assistant` 回复。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。Phase 6.1 后，课程会话在命中引用且模型配置可用时，会通过 OpenAI-compatible Chat Completions 生成非流式真实回答；主页 `scope=home` 仍保持模板回复，不调用模型。Phase 6.3 后，课程空间前端默认优先使用流式接口，本接口保留为兼容路径和自动化测试路径。Phase 6.4 后，课程 RAG 默认使用关键词/向量混合检索，旧关键词字段继续兼容。
+用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条 `assistant` 回复。当前 `scope=home` 会调用当前用户默认模型配置生成普通学习回答，用户配置不存在时回退服务器 `.env` 配置；主页不做资料 RAG、不做真实联网搜索、不做流式输出。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。Phase 6.1 后，课程会话在命中引用且模型配置可用时，会通过 OpenAI-compatible Chat Completions 生成非流式真实回答。Phase 6.3 后，课程空间前端默认优先使用流式接口，本接口保留为兼容路径和自动化测试路径。Phase 6.4 后，课程 RAG 默认使用关键词/向量混合检索，旧关键词字段继续兼容。
 
 请求：
 
@@ -957,10 +957,11 @@ Authorization: Bearer <token>
 
 主页会话规则：
 
-- assistant 回复仍是模板占位。
-- `citation_json=[]`、`trace_id=null`。
-- 不调用课程 RAG，避免影响主页历史行为。
-- Phase 6.1 不让主页会话调用模型，避免没有课程引用时伪装成真实 RAG 回答。
+- assistant 内容来自普通模型回答；无可用模型配置时保存清晰提示。
+- `citation_json=[]`；模型成功时 `trace_id` 写入本次模型调用 trace，未配置模型时为 `null`。
+- 不调用课程 RAG，不读取已选资料内容，不伪造引用。
+- 联网搜索和深度思考仍是前端预备开关，本接口不会因为按钮高亮而进行真实联网搜索或推理参数透传。
+- 模型调用失败时返回可恢复错误，不写入半截 assistant 消息。
 
 课程会话规则：
 

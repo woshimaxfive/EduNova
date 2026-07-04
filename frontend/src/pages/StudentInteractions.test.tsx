@@ -161,9 +161,9 @@ describe("student interaction affordances", () => {
                   id: "701-a1",
                   session_id: session.id,
                   role: "assistant",
-                  content: "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。",
+                  content: "模型回答：先把监督学习拆成概念、题型和错题三步复习。",
                   citation_json: [],
-                  trace_id: null,
+                  trace_id: "trace_home_model",
                   created_at: "2026-07-03T12:01:00Z"
                 }
               ]
@@ -249,6 +249,7 @@ describe("student interaction affordances", () => {
     expect(screen.getByRole("button", { name: "作为本次对话参考" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "关闭资料库" }));
+    expect(within(screen.getByRole("region", { name: "学习输入区" })).getByText("已选择 1 份资料。")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "发送" }));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
@@ -260,6 +261,7 @@ describe("student interaction affordances", () => {
 
     expect(screen.getByRole("button", { name: "联网搜索" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "深度思考" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText(/联网搜索已开/)).not.toBeInTheDocument();
     expect(screen.queryByText("已生成回答。")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "主页对话" })).toHaveTextContent("监督学习怎么复习？");
   });

@@ -9,10 +9,9 @@ from sqlalchemy.orm import Session
 
 from backend.app.models import ChatMessage, ChatSession, Course, CourseEnrollment, User
 from backend.app.schemas.tutor import TutorSessionDetail, TutorSessionSummary, session_detail_to_api, session_to_summary
-from backend.app.services.course_answers import CourseAnswerGenerationError
+from backend.app.services.course_answers import CourseAnswerGenerationError, HOME_MODEL_NOT_CONFIGURED_MESSAGE
 
 
-TEMPLATE_ASSISTANT_REPLY = "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。"
 COURSE_ASSISTANT_REPLY_WITH_CITATIONS = "我先从课程资料里找到了相关依据。下面保留真实引用片段，后续接入大模型后会基于这些来源生成完整回答。"
 COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS = "我先检查了课程资料，但还没有足够依据支撑这个问题。"
 COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED = "已找到资料依据，但当前未配置可用模型。"
@@ -68,6 +67,9 @@ class CourseCitationSearcher(Protocol):
 
 
 class CourseAnswerGenerator(Protocol):
+    def generate_home(self, user: User, question: str) -> Any:
+        ...
+
     def generate(self, user: User, question: str, citations: list[dict[str, Any]]) -> Any:
         ...
 
@@ -220,7 +222,7 @@ class TutorSessionService:
 
         session = self._get_session_for_user(user.id, session_id)
         citation_json = self._search_course_citations(user=user, session=session, message_text=message_text)
-        generated_answer = self._generate_course_answer(
+        generated_answer = self._generate_answer(
             user=user,
             session=session,
             message_text=message_text,
@@ -343,13 +345,22 @@ class TutorSessionService:
                 },
             }
 
-    def _generate_course_answer(
+    def _generate_answer(
         self,
         user: User,
         session: ChatSession,
         message_text: str,
         citation_json: list[dict[str, Any]],
     ) -> GeneratedAnswer:
+        if session.scope == "home":
+            if self.course_answer_generator is None:
+                return GeneratedAnswer(content=HOME_MODEL_NOT_CONFIGURED_MESSAGE, trace_id=None)
+            answer = self.course_answer_generator.generate_home(user=user, question=message_text)
+            return GeneratedAnswer(
+                content=str(getattr(answer, "content", "") or ""),
+                trace_id=getattr(answer, "trace_id", None),
+            )
+
         if session.scope != "course" or not citation_json:
             return GeneratedAnswer(content="", trace_id=None)
         if self.course_answer_generator is None:
@@ -458,7 +469,7 @@ class TutorSessionService:
     @staticmethod
     def _build_assistant_reply(session: ChatSession, citation_json: list[dict[str, Any]]) -> str:
         if session.scope != "course":
-            return TEMPLATE_ASSISTANT_REPLY
+            return HOME_MODEL_NOT_CONFIGURED_MESSAGE
         if citation_json:
             return COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED
         return COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS

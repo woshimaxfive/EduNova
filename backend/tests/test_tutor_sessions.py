@@ -136,6 +136,18 @@ class FakeCourseAnswerGenerator:
             raise self.should_raise
         return SimpleNamespace(content=self.content, trace_id=self.trace_id)
 
+    def generate_home(self, user: User, question: str) -> SimpleNamespace:
+        self.calls.append(
+            {
+                "user_id": user.id,
+                "question": question,
+                "citations": [],
+            }
+        )
+        if self.should_raise is not None:
+            raise self.should_raise
+        return SimpleNamespace(content=self.content, trace_id=self.trace_id)
+
     def stream(self, user: User, question: str, citations: list[dict[str, Any]]) -> SimpleNamespace:
         self.calls.append(
             {
@@ -243,20 +255,28 @@ def test_create_course_session_requires_course_id_and_accessible_course() -> Non
     assert session.course_id == 7
 
 
-def test_append_message_writes_user_and_template_assistant_messages_in_order() -> None:
+def test_append_message_writes_user_and_model_assistant_messages_in_order() -> None:
     module = load_tutor_module()
     user = make_user(1)
     repo = FakeTutorRepository()
-    service = module.TutorSessionService(repo)
+    answer_generator = FakeCourseAnswerGenerator(content="模型回答：先把目标拆成三步，再按资料和题型复习。")
+    service = module.TutorSessionService(repo, course_answer_generator=answer_generator)
     session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="期末复习")
 
     detail = as_dict(service.append_message(user=user, session_id=session.id, content="为什么反向传播要用链式法则？"))
 
     assert [message["role"] for message in detail["messages"]] == ["user", "assistant"]
     assert detail["messages"][0]["content"] == "为什么反向传播要用链式法则？"
-    assert "可以先把资料按章节和题型拆开" in detail["messages"][1]["content"]
+    assert detail["messages"][1]["content"] == "模型回答：先把目标拆成三步，再按资料和题型复习。"
     assert detail["messages"][1]["citation_json"] == []
-    assert detail["messages"][1]["trace_id"] is None
+    assert detail["messages"][1]["trace_id"] == "trace_model_test"
+    assert answer_generator.calls == [
+        {
+            "user_id": 1,
+            "question": "为什么反向传播要用链式法则？",
+            "citations": [],
+        }
+    ]
     assert detail["session"]["updated_at"] > detail["session"]["created_at"]
     assert repo.committed is True
 
@@ -343,7 +363,7 @@ def test_append_course_message_records_insufficient_evidence_without_fabricated_
     assert detail["messages"][1]["citation_json"] == []
 
 
-def test_append_home_message_keeps_template_reply_and_does_not_call_course_searcher() -> None:
+def test_append_home_message_uses_model_reply_but_does_not_call_course_searcher() -> None:
     module = load_tutor_module()
     user = make_user(1)
     repo = FakeTutorRepository(allowed_course_ids={7})
@@ -373,9 +393,48 @@ def test_append_home_message_keeps_template_reply_and_does_not_call_course_searc
     detail = as_dict(service.append_message(user=user, session_id=session.id, content="主页怎么复习？"))
 
     assert citation_searcher.calls == []
-    assert answer_generator.calls == []
-    assert "可以先把资料按章节和题型拆开" in detail["messages"][1]["content"]
+    assert answer_generator.calls == [
+        {
+            "user_id": 1,
+            "question": "主页怎么复习？",
+            "citations": [],
+        }
+    ]
+    assert detail["messages"][1]["content"] == "模型回答：启发式搜索要先理解启发函数，再练 A 星算法。"
     assert detail["messages"][1]["citation_json"] == []
+    assert detail["messages"][1]["trace_id"] == "trace_model_test"
+
+
+def test_append_home_message_without_model_config_saves_clear_prompt() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    service = module.TutorSessionService(repo)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="主页答疑")
+
+    detail = as_dict(service.append_message(user=user, session_id=session.id, content="主页怎么复习？"))
+
+    assert "当前未配置可用模型" in detail["messages"][1]["content"]
+    assert detail["messages"][1]["citation_json"] == []
+    assert detail["messages"][1]["trace_id"] is None
+
+
+def test_append_home_message_model_failure_does_not_persist_half_messages() -> None:
+    module = load_tutor_module()
+    answer_module = importlib.import_module("backend.app.services.course_answers")
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    answer_generator = FakeCourseAnswerGenerator(
+        should_raise=answer_module.CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。")
+    )
+    service = module.TutorSessionService(repo, course_answer_generator=answer_generator)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="主页答疑")
+
+    with pytest.raises(answer_module.CourseAnswerGenerationError):
+        service.append_message(user=user, session_id=session.id, content="主页怎么复习？")
+
+    assert repo.messages == []
+    assert repo.rolled_back is False
 
 
 def test_append_course_message_with_citations_and_missing_model_config_saves_clear_prompt() -> None:

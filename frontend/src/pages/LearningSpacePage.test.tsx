@@ -252,7 +252,7 @@ function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, 
         {
           id: `a-${sentMessages.length + 2}`,
           role: "assistant",
-          content: "可以先把资料按章节和题型拆开：先补核心概念，再用期末题做检索式复习。回答会保留引用和路径建议。"
+          content: "模型回答：先把学习目标拆成三步，再按资料和题型复习。"
         }
       );
 
@@ -474,7 +474,7 @@ describe("LearningSpacePage", () => {
     const thread = screen.getByRole("region", { name: "主页对话" });
 
     expect(within(thread).getByText("期末复习怎么安排？")).toBeInTheDocument();
-    expect(within(thread).getByText(/可以先把资料按章节和题型拆开/)).toBeInTheDocument();
+    expect(within(thread).getByText(/模型回答：先把学习目标拆成三步/)).toBeInTheDocument();
     expect(within(thread).queryByRole("region", { name: "回答展开详情" })).not.toBeInTheDocument();
     await user.click(within(thread).getByRole("button", { name: "来源" }));
     expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("来源");
@@ -482,6 +482,23 @@ describe("LearningSpacePage", () => {
     expect(screen.getByRole("button", { name: /期末复习怎么安排/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("已生成回答。")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).not.toBeInTheDocument();
+  });
+
+  it("keeps selected material state inside the composer without web search copy", async () => {
+    const user = userEvent.setup();
+
+    renderWithDashboardSummary(starterSummary);
+
+    await user.click(screen.getByRole("button", { name: "打开资料库" }));
+    await user.click(screen.getByRole("button", { name: /真实资料讲义.md/ }));
+    await user.click(screen.getByRole("button", { name: "关闭资料库" }));
+    await user.click(screen.getByRole("button", { name: "联网搜索" }));
+
+    const composer = screen.getByRole("region", { name: "学习输入区" });
+
+    expect(within(composer).getByText("已选择 1 份资料。")).toBeInTheDocument();
+    expect(screen.queryByText(/联网搜索已开/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "联网搜索" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("creates a persistent home session before the first send and reuses it for follow-ups", async () => {

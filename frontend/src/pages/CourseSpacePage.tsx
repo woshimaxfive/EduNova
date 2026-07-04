@@ -328,7 +328,6 @@ export function CourseSpacePage() {
               </Link>
               <div className="course-space-title">
                 <h1>{courseSummary.title}</h1>
-                <p>{courseSummary.description} 课程对话、资料、路径和引用都在这里。</p>
               </div>
               <dl className="course-space-metrics" aria-label="课程状态">
                 <div>
@@ -376,38 +375,16 @@ export function CourseSpacePage() {
                   </div>
                 </div>
 
-                <div className="course-thread-list" aria-label="课程内历史对话">
-                  {hasRealCourseId ? (
-                    courseSessions.length > 0 ? (
-                      courseSessions.map((session) => (
-                        <button
-                          className={selectedCourseSessionId === session.id ? "active" : ""}
-                          type="button"
-                          key={session.id}
-                          aria-pressed={selectedCourseSessionId === session.id}
-                          onClick={() => void selectCourseConversation(session.id)}
-                        >
-                          {session.title}
-                        </button>
-                      ))
-                    ) : (
-                      <p className="course-thread-empty">还没有课程对话</p>
-                    )
-                  ) : (
-                    <p className="course-thread-empty">请从课程列表重新进入</p>
-                  )}
+                <div className="course-context-toolbar" aria-label="课程上下文入口">
+                  <button type="button" onClick={() => setCourseMode("study")}>
+                    <FileText size={17} weight="duotone" aria-hidden="true" />
+                    <span>{knowledgePointCount > 0 ? `${knowledgePointCount} 个知识点` : "查看知识点"}</span>
+                  </button>
+                  <button type="button" onClick={() => setCoursePrompt(courseStarterQuestions[0])}>
+                    <Compass size={17} weight="duotone" aria-hidden="true" />
+                    <span>让 AI 规划复习</span>
+                  </button>
                 </div>
-
-                {apiKnowledgePoints.length > 0 ? (
-                  <div className="course-knowledge-strip" aria-label="课程知识点">
-                    <span>知识点</span>
-                    {apiKnowledgePoints.map((point) => (
-                      <button type="button" key={point.id} onClick={() => openKnowledgeStudy(point.id)}>
-                        {point.title}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
 
                 {hasDisplayedCourseMessages ? (
                   <>
@@ -469,7 +446,7 @@ export function CourseSpacePage() {
                 ) : (
                   <article className="course-answer course-start-panel" role="region" aria-label="课程提问引导">
                     <p className="course-answer-label">开始提问</p>
-                    <h2>围绕这门课问一个具体问题</h2>
+                    <h2>问这门课</h2>
                     <p>我会先检索这门课的知识切片，再把回答、引用来源和下一步学习建议保存在课程历史里。</p>
                     <div className="course-question-suggestions" aria-label="推荐问题">
                       <span>推荐问题</span>
@@ -556,12 +533,12 @@ export function CourseSpacePage() {
                   ) : (
                     <>
                       <p className="course-answer-label">学习模式</p>
-                      <h2>选择一个知识点或引用来源</h2>
-                      <p>从下方知识点进入，或回到问答模式后点开回答来源。</p>
+                      <h2>选择知识点开始学习</h2>
+                      <p>先选一个课程知识点，中间看内容，右侧继续追问。回答里的来源也可以带你进入同一个学习模式。</p>
                     </>
                   )}
                   {apiKnowledgePoints.length > 0 ? (
-                    <div className="course-knowledge-strip" aria-label="课程知识点">
+                    <div className="course-study-picker" aria-label="课程知识点">
                       <span>知识点</span>
                       {apiKnowledgePoints.map((point) => (
                         <button

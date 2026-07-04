@@ -381,7 +381,7 @@ describe("CourseSpacePage course tutor sessions", () => {
   it("loads course-scoped tutor sessions for the current course", async () => {
     const { calls } = renderCoursePage({ sessions: [makeSession("777", "已有课程历史")] });
 
-    const courseHistory = await screen.findByLabelText("课程内历史对话");
+    const courseHistory = await screen.findByLabelText("历史对话");
     expect(await within(courseHistory).findByRole("button", { name: /已有课程历史/ })).toBeInTheDocument();
     expect(calls).toContainEqual(
       expect.objectContaining({
@@ -464,6 +464,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     await screen.findByRole("heading", { name: "AI 搜索复习" });
     expect(screen.getByRole("button", { name: "问答模式" })).toHaveAttribute("aria-pressed", "true");
 
+    await user.click(screen.getByRole("button", { name: "学习模式" }));
     await user.click(screen.getByRole("button", { name: "启发式搜索" }));
 
     const studyMode = screen.getByRole("region", { name: "课程学习模式" });
@@ -528,7 +529,7 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     renderCoursePage({ sessions: [makeSession("777", "已有课程历史")] });
 
-    const courseHistory = await screen.findByLabelText("课程内历史对话");
+    const courseHistory = await screen.findByLabelText("历史对话");
     await user.click(await within(courseHistory).findByRole("button", { name: /已有课程历史/ }));
 
     const thread = await screen.findByRole("region", { name: "课程即时对话" });
@@ -543,7 +544,7 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     renderCoursePage({ sessions: [makeSession("777", "已有课程历史")] });
 
-    const courseHistory = await screen.findByLabelText("课程内历史对话");
+    const courseHistory = await screen.findByLabelText("历史对话");
     await user.click(await within(courseHistory).findByRole("button", { name: /已有课程历史/ }));
 
     await user.click(await screen.findByRole("button", { name: /人工智能导论讲义\.md/ }));

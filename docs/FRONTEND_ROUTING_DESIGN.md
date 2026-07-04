@@ -87,7 +87,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 - 课程空间的课程内历史、课程提问、资源输出、引用和 Agent 过程属于课程上下文。
 - 课程提问必须使用当前课程会话保存消息和引用。
 - 课程回答优先通过流式接口显示。
-- 课程空间默认进入问答模式，点击知识点或引用后进入学习模式；资源和路径任务进入学习模式仍是后续真实能力。
+- 课程空间默认进入问答模式，知识点入口和引用可进入学习模式；资源和路径任务进入学习模式仍是后续真实能力。
 - 学习模式中间承载课程内容，右侧 AI 辅导栏服务当前上下文，不另建独立 tutor 会话体系。
 - 引用区可以展示检索状态，但不能把模型或 embedding 配置细节变成课程页主操作。
 - 普通二级路由不注入主页 demo 历史；主页历史只在 `/app` 显示，课程历史只在对应课程空间显示。
@@ -503,7 +503,7 @@ Phase 5 以后：
 - Phase 4.4 已接真实 `/materials`；`LearningSpacePage` 上传按钮会调用 `/materials/upload` 并刷新 `/dashboard/summary`，`LibraryPage` 调用 `/materials` 渲染当前用户资料列表，上传成功后刷新列表和 summary。
 - Phase 5.1 已接真实 `/courses/from-materials`、`/courses`、`/courses/{course_id}`、`/courses/{course_id}/overview` 和 `/courses/{course_id}/knowledge-points`；`LearningSpacePage` 和 `LibraryPage` 的生成课程浮层会调用真实接口，成功后刷新数据并跳转新课程空间。
 - Phase 6.4 已让课程生成和 `/rag/search` 自动补齐知识切片 embedding；`CourseSpacePage` 会在引用来源区显示混合检索、关键词检索和本地 fallback 状态，并明确 `local-hash-1536` 不是外部语义向量。
-- Phase 6.5 已把 `CourseSpacePage` 改造为双模式：默认问答模式不常驻知识画布、资源区和证据层；来源、生成资源、学习路径和思考过程收敛到回答下方；点击知识点或引用会进入学习模式，右侧复用当前课程 AI 辅导输入。
+- Phase 6.5 已把 `CourseSpacePage` 改造为双模式：默认问答模式不常驻知识画布、资源区、证据层、横向知识点条或主区重复历史；来源、生成资源、学习路径和思考过程收敛到回答下方；知识点入口和引用会进入学习模式，右侧复用当前课程 AI 辅导输入。
 - Phase 6.3 已接真实 `/tutor/sessions/{session_id}/messages/stream`；`CourseSpacePage` 发送课程问题时先创建或复用课程会话，再用 `fetch` + `ReadableStream` 读取 SSE，token 到达时逐步渲染，`done` 后用后端持久化消息替换临时状态。
 - Phase 6.1 已接真实 `/settings/model` 和 `/settings/model/test`；Phase 6.2 已接真实 `/settings/model/configs`、`/settings/model/configs/{id}`、`/settings/model/configs/{id}/default` 和 `/settings/model/configs/{id}/test`；`SettingsPage` 会显示配置列表和当前编辑面板，支持创建、编辑、测试、设默认和删除用户自己的模型配置，并且不展示明文 Key。
 - Phase 6.2 的 Provider 预设不追求数量多，只保留讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务；OpenRouter 不再作为可见预设。回答模型是主字段，向量模型折叠在高级项中；Phase 6.4 起向量模型用于 OpenAI-compatible embedding，缺省时仍可依靠 `local-hash-1536` 跑通。
@@ -545,7 +545,7 @@ Phase 5 以后：
 - Phase 6.2 起覆盖多模型配置列表、创建、设默认、指定测试、删除和 Provider 预设收敛。
 - Phase 6.3 起覆盖课程空间流式发送、token 渲染、done 替换、错误保留输入和历史刷新。
 - Phase 6.4 起覆盖课程引用区的混合检索、本地 fallback 和关键词 fallback 状态。
-- P3.7/Phase 4.4/Phase 6.5 交互测试已覆盖主页资料上传、资料库默认未选中与点选高亮、联网搜索激活态、发送失败局部反馈、课程回答展开、知识点进入学习模式、引用进入学习模式、课程辅导入口、练习提交校验、资料库上传失败、建课失败弹层反馈、资料引用反馈和设置保存/测试/删除反馈；资料上传和资料库列表已断言真实 `/materials` 调用。
+- P3.7/Phase 4.4/Phase 6.5 交互测试已覆盖主页资料上传、资料库默认未选中与点选高亮、联网搜索激活态、发送失败局部反馈、课程回答展开、知识点入口进入学习模式、引用进入学习模式、课程辅导入口、练习提交校验、资料库上传失败、建课失败弹层反馈、资料引用反馈和设置保存/测试/删除反馈；资料上传和资料库列表已断言真实 `/materials` 调用。
 - P3.9 测试已覆盖登录页无共享演示学生按钮、注册页空白/人工智能导论 starter mode、普通路由复用贴边工作区侧栏、普通路由不注入 demo 历史、资料库文档/图片筛选和上传交互，以及空白 starter 账号进入主页后没有内置课程和资料。
 - P3.13 测试已覆盖普通路由侧栏高亮、普通路由不显示重复说明、普通路由“新建对话”回到主页，以及资料库生成课程默认未选中。
 - 路由回归测试覆盖已废弃开发调参地址进入 404，避免临时设计页重新混入正式学生端路由。

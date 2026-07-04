@@ -1,5 +1,7 @@
 # EduNova MVP Implementation Plan
 
+> 文档性质：历史实施计划原稿。本文保留阶段路线、任务拆解和早期执行依据；当前实现状态以 [../../STATUS.md](../../STATUS.md) 为准，下一步任务以 [../../PROJECT_BOARD.md](../../PROJECT_BOARD.md) 为准。
+
 中文阅读版：[2026-07-01-edunova-mvp-implementation-中文阅读版.md](2026-07-01-edunova-mvp-implementation-中文阅读版.md)
 
 测试计划：[../../TEST_PLAN.md](../../TEST_PLAN.md)

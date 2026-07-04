@@ -1,8 +1,6 @@
 import { CheckCircle, ListChecks, WarningCircle } from "@phosphor-icons/react";
 import { useState } from "react";
 
-import { ActionNotice } from "../components/feedback/ActionNotice";
-import { useActionNotice } from "../components/feedback/useActionNotice";
 import { PageFrame } from "./PageFrame";
 
 const reviewItems = ["链式法则应用", "计算图局部梯度", "反向传播步骤表达"];
@@ -11,17 +9,14 @@ export function PracticePage() {
   const [answer, setAnswer] = useState("");
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [attemptCount, setAttemptCount] = useState(0);
-  const { notice, showNotice } = useActionNotice();
 
   function submitAnswer() {
     if (!answer.trim()) {
-      showNotice("先写下你的推导思路。", "warning");
       return;
     }
 
     setHasSubmitted(true);
     setAttemptCount((current) => current + 1);
-    showNotice("已提交答案。", "success");
   }
 
   return (
@@ -51,7 +46,6 @@ export function PracticePage() {
           <button className="primary-action" type="button" onClick={submitAnswer}>
             提交答案
           </button>
-          <ActionNotice notice={notice} />
         </section>
 
         <aside className="practice-side-stack">

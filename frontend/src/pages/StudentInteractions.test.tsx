@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode } from "react";
@@ -230,7 +230,7 @@ describe("student interaction affordances", () => {
     const uploadedFile = new File(["demo"], "数据结构期末题.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText("上传资料文件"), uploadedFile);
 
-    expect(screen.getByRole("status")).toHaveTextContent("数据结构期末题.pdf 已上传到资料库");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "打开资料库" }));
 
@@ -245,13 +245,13 @@ describe("student interaction affordances", () => {
     await user.click(material);
 
     expect(material).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("status")).toHaveTextContent("已选择 1 份资料");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "作为本次对话参考" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "关闭资料库" }));
     await user.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("先输入一个学习问题");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: "学习问题输入" }), "监督学习怎么复习？");
     await user.click(screen.getByRole("button", { name: "联网搜索" }));
@@ -271,7 +271,7 @@ describe("student interaction affordances", () => {
     await user.type(screen.getByRole("textbox", { name: "课程问题输入" }), "监督学习怎么复习？");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("课程地址无效，请从课程列表重新进入。");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "课程问题输入" })).toHaveValue("监督学习怎么复习？");
     expect(screen.queryByRole("region", { name: "课程即时对话" })).not.toBeInTheDocument();
   });
@@ -385,7 +385,7 @@ describe("student interaction affordances", () => {
     await user.type(courseInput, "给我一个十分钟复习计划{enter}");
 
     expect(courseInput).toHaveValue("给我一个十分钟复习计划");
-    expect(screen.getByRole("status")).toHaveTextContent("课程地址无效，请从课程列表重新进入。");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "课程即时对话" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "历史对话" })).toHaveTextContent("还没有历史对话");
   });
@@ -454,12 +454,12 @@ describe("student interaction affordances", () => {
 
     await user.click(screen.getByRole("button", { name: "提交答案" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("先写下你的推导思路");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: "作答区" }), "需要把局部梯度沿计算图传回参数。");
     await user.click(screen.getByRole("button", { name: "提交答案" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("已提交答案");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "批改反馈" })).toHaveTextContent("本次批改");
     expect(screen.getByRole("region", { name: "薄弱点复习队列" })).toHaveTextContent("下一题");
   });
@@ -476,7 +476,7 @@ describe("student interaction affordances", () => {
     await user.click(screen.getByRole("button", { name: "练习" }));
     await user.click(screen.getAllByRole("button", { name: "生成资源" })[0]);
 
-    expect(screen.getByRole("status")).toHaveTextContent("已生成「反向传播练习」任务");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "生成队列" })).toHaveTextContent("反向传播练习");
     expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("反向传播练习");
   });
@@ -491,13 +491,13 @@ describe("student interaction affordances", () => {
     await user.type(screen.getByRole("textbox", { name: "学习目标" }), "两周冲刺软件杯演示");
     await user.click(screen.getByRole("button", { name: "保存目标" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("学习目标已更新");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("目标更新：两周冲刺软件杯演示");
 
     await user.type(screen.getByRole("textbox", { name: "画像问题回答" }), "最担心反向传播推导。");
     await user.click(screen.getByRole("button", { name: "更新画像" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("画像证据已更新");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("画像对话：最担心反向传播推导。");
   });
 
@@ -508,7 +508,7 @@ describe("student interaction affordances", () => {
 
     await user.click(screen.getByRole("button", { name: "导出档案" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("学习档案已准备好");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "学习报告" })).toHaveTextContent("已整理画像、错因、引用和复习建议");
     expect(screen.getByRole("region", { name: "导出学习档案" })).toHaveTextContent("已生成 1 份学习档案");
   });
@@ -604,8 +604,8 @@ describe("student interaction affordances", () => {
     const uploadedFile = new File(["demo"], "课堂截图.png", { type: "image/png" });
     await user.upload(screen.getByLabelText("上传资料文件"), uploadedFile);
 
-    expect(await screen.findByRole("status")).toHaveTextContent("课堂截图.png 已上传到资料库");
     expect(await screen.findByRole("button", { name: /课堂截图.png/ })).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /课堂截图.png/ })).toHaveTextContent("仅入库，暂不做 OCR");
     expect(screen.queryByText("等待提取说明")).not.toBeInTheDocument();
     expect(calls).toContainEqual({ method: "post", url: MATERIAL_ENDPOINTS.upload });
@@ -829,8 +829,8 @@ describe("student interaction affordances", () => {
     await user.type(screen.getByLabelText("API Key"), "hunyuan-user-secret");
     await user.click(screen.getByRole("button", { name: "保存配置" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("模型配置已保存");
-    expect(screen.getByRole("button", { name: /腾讯混元默认/ })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: /腾讯混元默认/ })).toBeInTheDocument());
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByText("hunyuan-user-secret")).not.toBeInTheDocument();
     expect(calls).toContainEqual({
       method: "post",
@@ -847,15 +847,23 @@ describe("student interaction affordances", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "设为默认" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("已设为默认模型配置");
+    await waitFor(() => expect(calls).toContainEqual({
+      method: "post",
+      url: SETTINGS_ENDPOINTS.defaultConfig(2)
+    }));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "测试连接" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("模型连接成功");
+    await waitFor(() => expect(calls).toContainEqual({
+      method: "post",
+      url: SETTINGS_ENDPOINTS.testConfig(2)
+    }));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "删除配置" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("模型配置已删除");
-    expect(screen.queryByRole("button", { name: /腾讯混元默认/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("button", { name: /腾讯混元默认/ })).not.toBeInTheDocument());
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("creates a real course from the library page and enters the new course", async () => {

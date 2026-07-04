@@ -17,7 +17,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { buildCoursePath } from "../app/routePaths";
 import { createCourseFromMaterials } from "../api/courses";
 import { getDashboardSummary, type DashboardMaterial } from "../api/dashboard";
-import { getApiErrorMessage } from "../api/errors";
 import { uploadMaterial } from "../api/materials";
 import {
   createTutorSession,
@@ -26,8 +25,6 @@ import {
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
-import { ActionNotice } from "../components/feedback/ActionNotice";
-import { useActionNotice } from "../components/feedback/useActionNotice";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { useAuthStore } from "../features/auth/authStore";
@@ -65,7 +62,6 @@ export function LearningSpacePage() {
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>("sources");
   const [expandedAnswerId, setExpandedAnswerId] = useState<string | null>(null);
-  const { notice, showNotice } = useActionNotice();
   const hasHomeThread = messages.length > 0;
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", "summary"],
@@ -106,15 +102,13 @@ export function LearningSpacePage() {
     });
   }, [hasHomeThread, messages.length]);
 
-  function openLibrary(message = "已打开资料库。") {
+  function openLibrary() {
     setIsLibraryOpen(true);
-    showNotice(message);
   }
 
   function openCourseGeneration() {
     setIsLibraryOpen(false);
     setIsCourseDialogOpen(true);
-    showNotice("已打开生成课程。");
   }
 
   async function handleUploadFile(event: ChangeEvent<HTMLInputElement>) {
@@ -129,10 +123,9 @@ export function LearningSpacePage() {
     try {
       await uploadMaterial({ file });
       await queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
-      showNotice(`${file.name} 已上传到资料库。`, "success");
       event.target.value = "";
-    } catch {
-      showNotice("资料上传失败，请稍后再试。", "warning");
+    } catch (error) {
+      void error;
     } finally {
       setIsUploadingMaterial(false);
     }
@@ -141,8 +134,6 @@ export function LearningSpacePage() {
   function toggleMaterialSelection(materialId: string) {
     setSelectedMaterialIds((current) => {
       const next = current.includes(materialId) ? current.filter((id) => id !== materialId) : [...current, materialId];
-
-      showNotice(next.length > 0 ? `已选择 ${next.length} 份资料。` : "已清空本次参考资料。", next.length > 0 ? "success" : "info");
 
       return next;
     });
@@ -180,7 +171,6 @@ export function LearningSpacePage() {
     const question = prompt.trim();
 
     if (!question) {
-      showNotice("先输入一个学习问题。", "warning");
       return;
     }
 
@@ -211,8 +201,8 @@ export function LearningSpacePage() {
       upsertHomeThread(detail.data.session);
       setPrompt("");
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
-    } catch {
-      showNotice("消息发送失败，请稍后再试。", "warning");
+    } catch (error) {
+      void error;
     } finally {
       setIsSendingQuestion(false);
     }
@@ -233,9 +223,8 @@ export function LearningSpacePage() {
 
       setMessages(mapTutorMessages(detail.data.messages));
       upsertHomeThread(detail.data.session);
-      showNotice(`已切换到「${detail.data.session.title}」。`);
-    } catch {
-      showNotice("历史对话读取失败，请稍后再试。", "warning");
+    } catch (error) {
+      void error;
     }
   }
 
@@ -245,7 +234,6 @@ export function LearningSpacePage() {
       .filter((materialId) => Number.isFinite(materialId));
 
     if (selectedMaterialIdsAsNumbers.length === 0) {
-      showNotice("请先选择至少一份资料。", "warning");
       return;
     }
 
@@ -264,10 +252,9 @@ export function LearningSpacePage() {
       await queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
       setIsCourseDialogOpen(false);
       setIsLibraryOpen(false);
-      showNotice(`已生成「${created.data.course.title}」。`, "success");
       navigate(buildCoursePath(created.data.course.id));
     } catch (error) {
-      showNotice(getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析的 TXT 或 Markdown 资料。"), "warning");
+      void error;
     } finally {
       setIsCreatingCourse(false);
     }
@@ -290,7 +277,6 @@ export function LearningSpacePage() {
             setPrompt("");
             setMessages([]);
             setActiveHomeThreadId(null);
-            showNotice("已新建一条主页独立对话。", "success");
           }}
           onSelectConversation={(conversation) => void selectHomeConversation(conversation)}
         />
@@ -340,8 +326,6 @@ export function LearningSpacePage() {
               </span>
             </div>
           ) : null}
-          <ActionNotice notice={notice} className="home-action-notice" />
-
           <section className={hasHomeThread ? "composer-frame docked" : "composer-frame"} aria-label={hasHomeThread ? "底部学习输入" : "学习输入区"}>
             <div className="conversation-composer">
               <textarea
@@ -386,7 +370,6 @@ export function LearningSpacePage() {
                     aria-pressed={isWebSearchEnabled}
                     onClick={() => {
                       setIsWebSearchEnabled((enabled) => !enabled);
-                      showNotice(isWebSearchEnabled ? "联网搜索已关闭。" : "联网搜索已开启。");
                     }}
                   >
                     <MagnifyingGlass size={18} weight="duotone" aria-hidden="true" />
@@ -399,7 +382,6 @@ export function LearningSpacePage() {
                     aria-pressed={isDeepThinkingEnabled}
                     onClick={() => {
                       setIsDeepThinkingEnabled((enabled) => !enabled);
-                      showNotice(isDeepThinkingEnabled ? "深度思考已关闭。" : "深度思考已开启。");
                     }}
                   >
                     <ChatCircleText size={18} weight="duotone" aria-hidden="true" />
@@ -407,7 +389,7 @@ export function LearningSpacePage() {
                   </button>
                 </div>
                 <div className="composer-submit-row">
-                  <button className="voice-button" type="button" aria-label="语音输入" onClick={() => showNotice("语音输入暂未开启。")}>
+                  <button className="voice-button" type="button" aria-label="语音输入">
                     <Microphone size={18} weight="duotone" aria-hidden="true" />
                   </button>
                   <button className="ask-button" type="button" disabled={isSendingQuestion} onClick={() => void handleSendQuestion()}>
@@ -445,7 +427,7 @@ export function LearningSpacePage() {
             <section className="recent-course-strip" aria-label="最近学习">
               <div className="recent-course-heading">
                 <span>最近学习</span>
-                <button type="button" onClick={() => showNotice("已显示最近学习。")}>
+                <button type="button">
                   查看全部
                 </button>
               </div>
@@ -482,7 +464,6 @@ export function LearningSpacePage() {
           onToggleMaterial={toggleMaterialSelection}
           onOpenCourseGeneration={openCourseGeneration}
           onClose={() => setIsLibraryOpen(false)}
-          showNotice={showNotice}
         />
       ) : null}
       {isCourseDialogOpen ? (
@@ -667,10 +648,9 @@ type MaterialLibraryDrawerProps = CourseGenerationDialogProps & {
   selectedMaterialIds: string[];
   onToggleMaterial: (materialId: string) => void;
   onOpenCourseGeneration: () => void;
-  showNotice: (message: string, tone?: "info" | "success" | "warning") => void;
 };
 
-function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMaterial, onOpenCourseGeneration, onClose, showNotice }: MaterialLibraryDrawerProps) {
+function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMaterial, onOpenCourseGeneration, onClose }: MaterialLibraryDrawerProps) {
   const selectedCount = selectedMaterialIds.length;
   const [searchTerm, setSearchTerm] = useState("");
   const visibleMaterials = useMemo(() => {
@@ -716,9 +696,7 @@ function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMateria
             className={selectedCount > 0 ? "dialog-primary-button" : "dialog-primary-button secondary disabled"}
             type="button"
             disabled={selectedCount === 0}
-            onClick={() =>
-              showNotice(selectedCount > 0 ? `本次对话将参考 ${selectedCount} 份资料。` : "先点选资料，再作为对话参考。", selectedCount > 0 ? "success" : "warning")
-            }
+            onClick={onClose}
           >
             作为本次对话参考
           </button>

@@ -1,9 +1,6 @@
 import { FileArrowUp, Sparkle } from "@phosphor-icons/react";
 import { type KeyboardEvent, useState } from "react";
 
-import { ActionNotice } from "../feedback/ActionNotice";
-import { useActionNotice } from "../feedback/useActionNotice";
-
 const suggestions = [
   "根据反向传播给我出 10 道期末题",
   "解释我为什么链式法则总错",
@@ -13,19 +10,16 @@ const suggestions = [
 export function CommandBar() {
   const [value, setValue] = useState("");
   const [sentPrompt, setSentPrompt] = useState("");
-  const { notice, showNotice } = useActionNotice();
 
   function sendCommand() {
     const prompt = value.trim();
 
     if (!prompt) {
-      showNotice("先输入学习指令。", "warning");
       return;
     }
 
     setSentPrompt(prompt);
     setValue("");
-    showNotice("已记录学习指令，等待 AI 服务接入。", "success");
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -45,7 +39,7 @@ export function CommandBar() {
         ))}
       </div>
       <div className="command-bar">
-        <button className="icon-button" type="button" aria-label="添加资料" onClick={() => showNotice("添加资料会在资料库上传接入后开放。")}>
+        <button className="icon-button" type="button" aria-label="添加资料">
           <FileArrowUp size={20} />
         </button>
         <textarea
@@ -61,7 +55,6 @@ export function CommandBar() {
           <span>发送</span>
         </button>
       </div>
-      <ActionNotice notice={notice} />
       {sentPrompt ? <p className="command-result">最近指令：{sentPrompt}</p> : null}
     </section>
   );

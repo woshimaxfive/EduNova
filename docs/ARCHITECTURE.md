@@ -227,7 +227,7 @@ frontend/src/
 - Phase 6.4 起课程引用来自混合检索，缺少外部 embedding 配置时显式显示本地 fallback。
 - 资源和 Agent 轨迹仍使用前端预备交互，后续由资源生成和 Agent 日志接口替换。
 - 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面使用前端样例数据；后续由资料、画像、RAG、练习评估、掌握度报告和设置接口替换。
-- 当前 P3.7 按钮反馈使用 React 本地状态和 `ActionNotice`，用于固定前端交互边界；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
+- 当前前端已移除 `ActionNotice` 类全局提示条；按钮反馈优先通过选中态、列表刷新、详情面板、输入内容和真实路由跳转表达，后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
 - 上传建课状态轨道和状态条当前使用前端样例状态，后续由 `/materials/{material_id}/progress`、`/courses/from-materials` 和长任务接口驱动。
 - React Flow、ECharts、Mermaid 和 Markmap 已作为依赖准备，复杂图谱和可视化在后续阶段逐步接入。
 

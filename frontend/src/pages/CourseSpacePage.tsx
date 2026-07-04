@@ -27,8 +27,6 @@ import {
 } from "../api/tutor";
 import { LearningCanvas } from "../components/canvas/LearningCanvas";
 import { EvidenceLayer } from "../components/evidence/EvidenceLayer";
-import { ActionNotice } from "../components/feedback/ActionNotice";
-import { useActionNotice } from "../components/feedback/useActionNotice";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { StudioDock } from "../components/studio/StudioDock";
@@ -203,7 +201,6 @@ export function CourseSpacePage() {
   const [courseMessages, setCourseMessages] = useState<CourseMessage[]>([]);
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [isSearchingCourse, setIsSearchingCourse] = useState(false);
-  const { notice, showNotice } = useActionNotice();
   const apiCourse = courseQuery.data?.data;
   const apiKnowledgePoints = useMemo(
     () => knowledgePointsQuery.data?.data ?? [],
@@ -319,7 +316,6 @@ export function CourseSpacePage() {
     const question = coursePrompt.trim();
 
     if (!question) {
-      showNotice("先输入课程问题。", "warning");
       return;
     }
 
@@ -328,7 +324,6 @@ export function CourseSpacePage() {
     }
 
     if (!hasRealCourseId) {
-      showNotice("课程地址无效，请从课程列表重新进入。", "warning");
       return;
     }
 
@@ -369,8 +364,6 @@ export function CourseSpacePage() {
         }
       });
       const messages = mapTutorMessagesToCourseMessages(detail.messages);
-      const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-      const citationCount = latestAssistant?.citations?.length ?? 0;
 
       setActiveCourseSessionId(detail.session.id);
       setCourseMessages(messages);
@@ -378,11 +371,9 @@ export function CourseSpacePage() {
       setCoursePrompt("");
       queryClient.setQueryData(["tutor", "session", detail.session.id], { data: detail, trace_id: null });
       void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
-      showNotice(citationCount > 0 ? "已保存课程回答和引用。" : "课程资料依据不足。", citationCount > 0 ? "success" : "warning");
     } catch {
       setCourseMessages(previousMessages);
       setStreamingSessionId(null);
-      showNotice("模型暂不可用，请检查设置或稍后重试。", "warning");
     } finally {
       setIsSearchingCourse(false);
     }
@@ -560,7 +551,6 @@ export function CourseSpacePage() {
                     <span>{isSearchingCourse ? "保存中" : "发送"}</span>
                   </button>
                 </div>
-                <ActionNotice notice={notice} />
               </section>
 
               <aside className="course-context-panel" aria-label="课程学习上下文">

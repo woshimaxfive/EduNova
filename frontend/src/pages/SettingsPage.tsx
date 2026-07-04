@@ -13,8 +13,6 @@ import {
   type ModelConfigSummary,
   type ModelConfigUpdateRequest
 } from "../api/settings";
-import { ActionNotice } from "../components/feedback/ActionNotice";
-import { useActionNotice } from "../components/feedback/useActionNotice";
 import {
   getProviderPreset,
   inferProviderPresetId,
@@ -83,7 +81,6 @@ export function SettingsPage() {
   const [selectedConfigId, setSelectedConfigId] = useState<number | "new" | null>(null);
   const [draft, setDraft] = useState<ModelConfigDraft>(EMPTY_CONFIG_DRAFT);
   const queryClient = useQueryClient();
-  const { notice, showNotice } = useActionNotice();
   const modelConfigsQuery = useQuery({
     queryKey: ["settings", "model-configs"],
     queryFn: listModelConfigs,
@@ -116,10 +113,6 @@ export function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
       setSelectedConfigId(response.data.id);
       setDraft(draftFromConfig(response.data));
-      showNotice("模型配置已保存。", "success");
-    },
-    onError: () => {
-      showNotice("模型配置保存失败，请检查密钥加密配置。", "warning");
     }
   });
   const updateConfigMutation = useMutation({
@@ -130,10 +123,6 @@ export function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
       setSelectedConfigId(response.data.id);
       setDraft(draftFromConfig(response.data));
-      showNotice("模型配置已保存。", "success");
-    },
-    onError: () => {
-      showNotice("模型配置保存失败，请检查名称、Base URL 或密钥。", "warning");
     }
   });
   const defaultConfigMutation = useMutation({
@@ -141,20 +130,12 @@ export function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings", "model-configs"] });
       queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
-      showNotice("已设为默认模型配置。", "success");
-    },
-    onError: () => {
-      showNotice("默认配置切换失败，请稍后重试。", "warning");
     }
   });
   const testConfigMutation = useMutation({
     mutationFn: (configId: number) => testModelConfig(configId),
-    onSuccess: (response) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings", "model-configs"] });
-      showNotice(response.data.message || "模型连接成功。", response.data.ok ? "success" : "warning");
-    },
-    onError: () => {
-      showNotice("模型连接失败，请检查 Base URL、回答模型或密钥。", "warning");
     }
   });
   const deleteConfigMutation = useMutation({
@@ -167,15 +148,11 @@ export function SettingsPage() {
         ?? null;
       setSelectedConfigId(nextConfig?.id ?? "new");
       setDraft(nextConfig ? draftFromConfig(nextConfig) : newDraftFromPreset());
-      showNotice("模型配置已删除。", "success");
-    },
-    onError: () => {
-      showNotice("模型配置删除失败，请稍后重试。", "warning");
     }
   });
 
   function saveSettings() {
-    showNotice(`${nickname || "学生"} 的设置已保存。`, "success");
+    void nickname;
   }
 
   function updateDraft(field: keyof ModelConfigDraft, value: string) {
@@ -216,7 +193,6 @@ export function SettingsPage() {
 
   function saveModelConfiguration() {
     if (!canSave) {
-      showNotice("请先补全配置名称、Base URL 和回答模型。", "warning");
       return;
     }
 
@@ -242,7 +218,6 @@ export function SettingsPage() {
 
   function setCurrentAsDefault() {
     if (activeConfigId === null) {
-      showNotice("请先保存配置，再设为默认。", "warning");
       return;
     }
 
@@ -251,7 +226,6 @@ export function SettingsPage() {
 
   function runModelConnectionTest() {
     if (activeConfigId === null) {
-      showNotice("请先保存配置，再测试连接。", "warning");
       return;
     }
 
@@ -435,9 +409,6 @@ export function SettingsPage() {
                 </div>
               </div>
             </div>
-          </div>
-          <div className="settings-action-stack">
-            <ActionNotice notice={notice} />
           </div>
         </section>
 

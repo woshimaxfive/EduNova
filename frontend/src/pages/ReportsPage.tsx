@@ -1,8 +1,6 @@
 import { ChartLineUp, FileArrowUp, FileText, Graph, ShieldCheck } from "@phosphor-icons/react";
 import { useState } from "react";
 
-import { ActionNotice } from "../components/feedback/ActionNotice";
-import { useActionNotice } from "../components/feedback/useActionNotice";
 import { PageFrame } from "./PageFrame";
 
 const masteryRows = [
@@ -14,12 +12,10 @@ const masteryRows = [
 export function ReportsPage() {
   const [isReportReady, setIsReportReady] = useState(false);
   const [exportCount, setExportCount] = useState(0);
-  const { notice, showNotice } = useActionNotice();
 
   function exportReport() {
     setIsReportReady(true);
     setExportCount((current) => current + 1);
-    showNotice("学习档案已准备好。", "success");
   }
 
   return (
@@ -77,7 +73,6 @@ export function ReportsPage() {
             <FileArrowUp size={17} aria-hidden="true" />
             <span>导出档案</span>
           </button>
-          <ActionNotice notice={notice} />
         </aside>
       </div>
     </PageFrame>

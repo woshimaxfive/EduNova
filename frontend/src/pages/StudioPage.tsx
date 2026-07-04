@@ -1,8 +1,6 @@
 import { ClockCounterClockwise, Sparkle } from "@phosphor-icons/react";
 import { useState } from "react";
 
-import { ActionNotice } from "../components/feedback/ActionNotice";
-import { useActionNotice } from "../components/feedback/useActionNotice";
 import { StudioDock } from "../components/studio/StudioDock";
 import { WorkspaceStateStrip } from "../components/states/WorkspaceStateStrip";
 import { getWorkspaceStatePanels } from "../features/workspace/workflowState";
@@ -20,7 +18,6 @@ export function StudioPage() {
   const [selectedResourceType, setSelectedResourceType] = useState<StudioOutput["resourceType"]>("讲解");
   const [queueItems, setQueueItems] = useState<Array<{ title: string; meta: string; icon: typeof ClockCounterClockwise }>>([]);
   const [outputs, setOutputs] = useState<StudioOutput[]>([]);
-  const { notice, showNotice } = useActionNotice();
 
   function generateResource() {
     const title = `${selectedKnowledge}${selectedResourceType}`;
@@ -40,7 +37,6 @@ export function StudioPage() {
       ...current
     ]);
     setOutputs((current) => [nextOutput, ...current]);
-    showNotice(`已生成「${title}」任务。`, "success");
   }
 
   return (
@@ -55,7 +51,6 @@ export function StudioPage() {
             <span>生成资源</span>
           </button>
         </div>
-        <ActionNotice notice={notice} />
 
         <div className="studio-control-grid">
           <label>

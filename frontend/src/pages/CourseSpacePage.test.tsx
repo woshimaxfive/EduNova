@@ -536,7 +536,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     await user.type(input, "这次保存会失败吗？");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("模型暂不可用，请检查设置或稍后重试。");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(input).toHaveValue("这次保存会失败吗？");
     expect(screen.queryByRole("region", { name: "课程即时对话" })).not.toBeInTheDocument();
   });

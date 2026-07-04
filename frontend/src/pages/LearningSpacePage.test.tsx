@@ -538,7 +538,7 @@ describe("LearningSpacePage", () => {
     await user.type(input, "这次发送会失败吗？");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("消息发送失败，请稍后再试。");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(input).toHaveValue("这次发送会失败吗？");
     expect(screen.queryByRole("region", { name: "主页对话" })).not.toBeInTheDocument();
   });
@@ -747,8 +747,8 @@ describe("LearningSpacePage", () => {
     await screen.findByText("还没有课程");
     await user.upload(screen.getByLabelText("上传资料文件"), new File(["反向传播资料"], "真实上传资料.txt", { type: "text/plain" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("真实上传资料.txt 已上传到资料库");
     expect(calls.filter((call) => call.method === "post" && call.url === MATERIAL_ENDPOINTS.upload)).toHaveLength(1);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "打开资料库" }));
     expect(screen.getByRole("dialog", { name: "资料库" })).toHaveTextContent("真实上传资料.txt");
   });

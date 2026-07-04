@@ -5,10 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 import { buildCoursePath } from "../app/routePaths";
 import { createCourseFromMaterials } from "../api/courses";
-import { getApiErrorMessage } from "../api/errors";
 import { listMaterials, type MaterialListItem, uploadMaterial } from "../api/materials";
-import { ActionNotice } from "../components/feedback/ActionNotice";
-import { useActionNotice } from "../components/feedback/useActionNotice";
 import { PageFrame } from "./PageFrame";
 
 type LibraryFilter = "all" | "document" | "image";
@@ -42,7 +39,6 @@ export function LibraryPage() {
   const [courseTitle, setCourseTitle] = useState("资料生成课程");
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
-  const { notice, showNotice } = useActionNotice();
   const materialsQuery = useQuery({
     queryKey: ["materials", "list"],
     queryFn: () => listMaterials(),
@@ -62,7 +58,6 @@ export function LibraryPage() {
 
   function showMaterialCitation(material: LibraryFile) {
     setActiveMaterial(material);
-    showNotice(`已打开「${material.title}」的引用预览。`, "success");
   }
 
   async function handleUploadFile(event: ChangeEvent<HTMLInputElement>) {
@@ -80,9 +75,8 @@ export function LibraryPage() {
         queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
       ]);
-      showNotice(`${file.name} 已上传到资料库。`, "success");
-    } catch {
-      showNotice("资料上传失败，请稍后再试。", "warning");
+    } catch (error) {
+      void error;
     } finally {
       setIsUploadingMaterial(false);
       event.target.value = "";
@@ -99,7 +93,6 @@ export function LibraryPage() {
       .filter((materialId) => Number.isFinite(materialId));
 
     if (selectedMaterialIdsAsNumbers.length === 0) {
-      showNotice("先至少选择一份资料。", "warning");
       return;
     }
 
@@ -120,10 +113,9 @@ export function LibraryPage() {
         queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
       ]);
       setIsCourseDialogOpen(false);
-      showNotice(`已生成「${created.data.course.title}」。`, "success");
       navigate(buildCoursePath(created.data.course.id));
     } catch (error) {
-      showNotice(getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析的 TXT 或 Markdown 资料。"), "warning");
+      void error;
     } finally {
       setIsCreatingCourse(false);
     }
@@ -169,7 +161,6 @@ export function LibraryPage() {
                 aria-pressed={activeFilter === filter}
                 onClick={() => {
                   setActiveFilter(filter as LibraryFilter);
-                  showNotice(`已切换到${label}资料。`);
                 }}
               >
                 {label}
@@ -216,7 +207,6 @@ export function LibraryPage() {
             </section>
           ) : null}
 
-          <ActionNotice notice={notice} />
         </section>
       </PageFrame>
 

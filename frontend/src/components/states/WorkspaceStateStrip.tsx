@@ -1,7 +1,5 @@
 import { CircleNotch, FileArrowUp, SealCheck, ShieldCheck, WarningCircle } from "@phosphor-icons/react";
 
-import { ActionNotice } from "../feedback/ActionNotice";
-import { useActionNotice } from "../feedback/useActionNotice";
 import { type WorkspacePanelKind, type WorkspaceStatePanel } from "../../types/api";
 
 type WorkspaceStateStripProps = {
@@ -17,8 +15,6 @@ const stateIcons = {
 } as const satisfies Record<WorkspacePanelKind, typeof FileArrowUp>;
 
 export function WorkspaceStateStrip({ panels }: WorkspaceStateStripProps) {
-  const { notice, showNotice } = useActionNotice();
-
   return (
     <section className="workspace-state-strip" aria-label="状态信号">
       {panels.map((panel) => {
@@ -33,17 +29,12 @@ export function WorkspaceStateStrip({ panels }: WorkspaceStateStripProps) {
               <strong>{panel.title}</strong>
               <small>{panel.description}</small>
             </span>
-            <button
-              type="button"
-              aria-label={`${panel.title}：${panel.actionLabel}`}
-              onClick={() => showNotice(`已选择「${panel.title}」。`)}
-            >
+            <button type="button" aria-label={`${panel.title}：${panel.actionLabel}`}>
               {panel.actionLabel}
             </button>
           </article>
         );
       })}
-      <ActionNotice notice={notice} className="state-strip-notice" />
     </section>
   );
 }

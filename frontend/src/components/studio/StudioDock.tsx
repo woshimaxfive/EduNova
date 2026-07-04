@@ -1,7 +1,5 @@
 import { Notebook, Sparkle } from "@phosphor-icons/react";
 
-import { ActionNotice } from "../feedback/ActionNotice";
-import { useActionNotice } from "../feedback/useActionNotice";
 import { type StudioOutput } from "../../types/api";
 
 type StudioDockProps = {
@@ -11,8 +9,7 @@ type StudioDockProps = {
 };
 
 export function StudioDock({ outputs, onGenerate, showGenerateAction = true }: StudioDockProps) {
-  const { notice, showNotice } = useActionNotice();
-  const handleGenerate = onGenerate ?? (() => showNotice("已加入生成队列。"));
+  const handleGenerate = onGenerate ?? (() => undefined);
 
   return (
     <section className="studio-dock" role="region" aria-label="资源生成区">
@@ -27,7 +24,6 @@ export function StudioDock({ outputs, onGenerate, showGenerateAction = true }: S
           </button>
         ) : null}
       </div>
-      <ActionNotice notice={notice} />
       <div className="studio-track">
         {outputs.map((output) => (
           <article className={`studio-item ${output.reviewStatus === "低依据" ? "low-evidence" : ""}`} key={output.id}>

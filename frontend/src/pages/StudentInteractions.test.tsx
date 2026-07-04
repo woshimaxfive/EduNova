@@ -5,7 +5,7 @@ import { type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { PATHS } from "../app/routePaths";
+import { buildCoursePath, PATHS } from "../app/routePaths";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
@@ -269,6 +269,10 @@ describe("student interaction affordances", () => {
 
     renderPage(<CourseSpacePage />);
 
+    await user.type(screen.getByRole("textbox", { name: "课程问题输入" }), "监督学习怎么复习？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    expect(screen.getByRole("region", { name: "课程即时对话" })).toHaveTextContent("监督学习怎么复习？");
+
     await user.click(screen.getByRole("button", { name: "学习路径" }));
 
     expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("建议路径");
@@ -319,20 +323,18 @@ describe("student interaction affordances", () => {
               {
                 id: "9001",
                 title: "梯度下降",
-                chapter: "优化方法",
                 summary: "理解梯度方向和学习率。",
-                order: 1,
-                mastery_level: "not_started",
-                chunk_count: 3
+                chapter: "优化方法",
+                order_index: 1,
+                difficulty: "基础"
               },
               {
                 id: "9002",
                 title: "模型评估",
-                chapter: "评估指标",
                 summary: "区分训练集、验证集和测试集。",
-                order: 2,
-                mastery_level: "not_started",
-                chunk_count: 2
+                chapter: "评估指标",
+                order_index: 2,
+                difficulty: "基础"
               }
             ],
             trace_id: "trace_course_points"
@@ -414,19 +416,50 @@ describe("student interaction affordances", () => {
     expect(within(courseThreadList).getByRole("button", { name: "解释泛化能力和过拟合的区别" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("switches tutor modes and provides feedback for tutor actions", async () => {
-    const user = userEvent.setup();
+  it("uses the tutor route as a course tutoring entry without static demo answers", async () => {
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === COURSE_ENDPOINTS.list) {
+        return {
+          data: {
+            data: [
+              {
+                id: "808",
+                title: "机器学习期末复习",
+                description: "由资料生成",
+                subject: "自主学习",
+                source_type: "uploaded",
+                status: "ready",
+                progress_percent: 0,
+                material_count: 1,
+                knowledge_point_count: 2,
+                chunk_count: 5
+              }
+            ],
+            trace_id: "trace_tutor_courses"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_tutor_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
 
     renderPage(<TutorPage />);
 
-    await user.click(screen.getByRole("button", { name: "苏格拉底追问" }));
-
-    expect(screen.getByRole("button", { name: "苏格拉底追问" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("当前模式：苏格拉底追问")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "深度思考" }));
-
-    expect(screen.getByRole("status")).toHaveTextContent("深度思考已开启");
+    expect(await screen.findByRole("link", { name: /机器学习期末复习/ })).toHaveAttribute("href", buildCoursePath("808"));
+    expect(screen.getByRole("region", { name: "课程辅导入口" })).toHaveTextContent("课程空间");
+    expect(screen.queryByText("为什么反向传播需要链式法则？")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "苏格拉底追问" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "深度思考" })).not.toBeInTheDocument();
   });
 
   it("validates and acknowledges practice submissions", async () => {

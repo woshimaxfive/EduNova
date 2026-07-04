@@ -1,96 +1,77 @@
-import { ChatCircleText, GraduationCap, MagnifyingGlass, Microphone, ShieldCheck, Sparkle } from "@phosphor-icons/react";
-import { useState } from "react";
+import { ArrowRight, Books, HouseLine, UploadSimple } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 
-import { ActionNotice } from "../components/feedback/ActionNotice";
-import { useActionNotice } from "../components/feedback/useActionNotice";
-import { demoLearningSpace } from "../data/demoLearningSpace";
+import { buildCoursePath, PATHS } from "../app/routePaths";
+import { listCourses } from "../api/courses";
 import { PageFrame } from "./PageFrame";
 
-const tutorModes = ["直接解释", "苏格拉底追问", "考前冲刺"] as const;
-
-type TutorMode = (typeof tutorModes)[number];
-
 export function TutorPage() {
-  const [activeMode, setActiveMode] = useState<TutorMode>("直接解释");
-  const { notice, showNotice } = useActionNotice();
+  const coursesQuery = useQuery({
+    queryKey: ["courses", "tutor-entry"],
+    queryFn: () => listCourses(),
+    staleTime: 30_000
+  });
+  const courses = coursesQuery.data?.data ?? [];
+  const hasCourses = courses.length > 0;
 
   return (
     <PageFrame title="AI 辅导">
-      <div className="student-workspace tutor-workspace">
-        <section className="student-panel tutor-dialog" role="region" aria-label="AI 辅导对话">
+      <div className="student-workspace tutor-entry-workspace">
+        <section className="student-panel tutor-entry-panel" role="region" aria-label="课程辅导入口">
           <div className="student-panel-heading">
+            <span className="student-panel-icon" aria-hidden="true">
+              <Books size={20} weight="duotone" />
+            </span>
             <div>
-              <h2>继续追问</h2>
+              <h2>选择课程开始辅导</h2>
             </div>
           </div>
-          <div className="tutor-shell">
-            <div className="message user">为什么反向传播需要链式法则？</div>
-            <div className="message assistant">
-              <ChatCircleText size={18} weight="duotone" aria-hidden="true" />
-              <span>因为每一层参数对最终损失的影响都要沿计算图逐层传回。先把复合函数拆成局部梯度，再沿路径相乘。</span>
+
+          <p className="tutor-entry-copy">
+            AI 辅导已经收敛到课程空间：进入一门课程后提问，回答会基于该课程资料检索、生成引用，并保存到课程历史。
+          </p>
+
+          {coursesQuery.isLoading ? <p className="tutor-entry-state">正在读取你的课程...</p> : null}
+
+          {!coursesQuery.isLoading && hasCourses ? (
+            <div className="tutor-course-list" aria-label="可辅导课程">
+              {courses.map((course) => (
+                <Link className="tutor-course-card" to={buildCoursePath(course.id)} key={course.id}>
+                  <span>
+                    <strong>{course.title}</strong>
+                    <small>
+                      {course.material_count} 份资料 · {course.knowledge_point_count} 个知识点 ·{" "}
+                      {course.progress_percent > 0 ? `${course.progress_percent}%` : "未开始"}
+                    </small>
+                  </span>
+                  <ArrowRight size={18} weight="bold" aria-hidden="true" />
+                </Link>
+              ))}
             </div>
-            <div className="answer-action-row" aria-label="回答附加信息">
-              <button type="button" onClick={() => showNotice("已展开回答来源。")}>
-                <ShieldCheck size={17} weight="duotone" aria-hidden="true" />
-                <span>查看来源</span>
-              </button>
-              <button type="button" onClick={() => showNotice("深度思考已开启。")}>
-                <Sparkle size={17} weight="duotone" aria-hidden="true" />
-                <span>深度思考</span>
-              </button>
-              <button type="button" onClick={() => showNotice("语音输入暂未开启。")}>
-                <Microphone size={17} weight="duotone" aria-hidden="true" />
-                <span>语音输入</span>
-              </button>
+          ) : null}
+
+          {!coursesQuery.isLoading && !hasCourses ? (
+            <div className="tutor-empty-state">
+              <strong>还没有可辅导的课程</strong>
+              <p>先上传 TXT 或 Markdown 资料生成课程，再进入课程空间提问。这样回答才能带上真实引用。</p>
+              <div className="tutor-empty-actions">
+                <Link className="primary-action" to={PATHS.library}>
+                  <UploadSimple size={17} weight="bold" aria-hidden="true" />
+                  <span>去资料库上传资料</span>
+                </Link>
+                <Link className="secondary-action" to={PATHS.app}>
+                  <HouseLine size={17} weight="bold" aria-hidden="true" />
+                  <span>回到学习主页</span>
+                </Link>
+              </div>
             </div>
-            <ActionNotice notice={notice} />
-          </div>
-          <label className="tutor-composer">
-            <span>追问输入</span>
-            <textarea rows={3} aria-label="追问输入" placeholder="继续问这道题，或者让 EduNova 换一种方式解释" />
-          </label>
+          ) : null}
         </section>
 
-        <aside className="tutor-side-stack">
-          <section className="student-panel tutor-mode-panel" role="region" aria-label="辅导模式">
-            <div className="mode-row">
-              {tutorModes.map((mode) => (
-                <button
-                  className={activeMode === mode ? "active" : ""}
-                  type="button"
-                  key={mode}
-                  aria-pressed={activeMode === mode}
-                  onClick={() => {
-                    setActiveMode(mode);
-                    showNotice(`已切换到${mode}模式。`, "success");
-                  }}
-                >
-                  <GraduationCap size={17} weight="duotone" aria-hidden="true" />
-                  <span>{mode}</span>
-                </button>
-              ))}
-            </div>
-            <p className="mode-current">当前模式：{activeMode}</p>
-          </section>
-
-          <section className="student-panel citation-panel" role="region" aria-label="引用来源">
-            <div className="student-panel-heading compact">
-              <div>
-                <h2>回答来源</h2>
-              </div>
-              <MagnifyingGlass size={18} weight="duotone" aria-hidden="true" />
-            </div>
-            <div className="citation-list">
-              {demoLearningSpace.citations.map((citation) => (
-                <article key={citation.id}>
-                  <strong>{citation.sourceTitle}</strong>
-                  <small>
-                    {citation.sectionTitle} · 第 {citation.pageNumber} 页
-                  </small>
-                </article>
-              ))}
-            </div>
-          </section>
+        <aside className="student-panel tutor-entry-note" role="region" aria-label="辅导说明">
+          <strong>当前边界</strong>
+          <p>这里不再展示静态问答。真实课程问答、RAG 引用、流式输出和历史恢复都在对应课程空间完成。</p>
         </aside>
       </div>
     </PageFrame>

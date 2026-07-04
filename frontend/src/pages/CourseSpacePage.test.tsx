@@ -212,11 +212,10 @@ function renderCoursePage(options: CoursePageOptions = {}) {
             {
               id: "401",
               title: "启发式搜索",
-              chapter: "搜索问题",
               summary: "理解启发函数和 A*。",
-              order: 1,
-              mastery_level: "not_started",
-              chunk_count: 2
+              chapter: "搜索问题",
+              order_index: 1,
+              difficulty: "基础"
             }
           ],
           trace_id: "trace_course_points"
@@ -388,6 +387,16 @@ describe("CourseSpacePage course tutor sessions", () => {
     );
   });
 
+  it("shows start guidance instead of a fixed assistant answer before any course message exists", async () => {
+    renderCoursePage();
+
+    expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "课程提问引导" })).toBeInTheDocument();
+    expect(screen.getByText("推荐问题")).toBeInTheDocument();
+    expect(screen.queryByText("监督学习先抓住“数据、目标、泛化”三件事")).not.toBeInTheDocument();
+    expect(screen.queryByText("AI 辅导回答")).not.toBeInTheDocument();
+  });
+
   it("creates a course session before sending the first course question and renders persisted citations", async () => {
     const user = userEvent.setup();
     const { calls, fetchCalls } = renderCoursePage();
@@ -423,8 +432,9 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.getByText(/模型回答：启发式搜索复习/)).toBeInTheDocument();
     expect(screen.getAllByText("启发式搜索")).not.toHaveLength(0);
     expect(screen.getAllByText("混合检索")).not.toHaveLength(0);
-    expect(screen.getAllByText("本地向量")).not.toHaveLength(0);
+    expect(screen.getAllByText("本地 fallback")).not.toHaveLength(0);
     expect(screen.getByText(/启发函数估计路径代价/)).toBeInTheDocument();
+    expect(screen.queryByText("监督学习先抓住“数据、目标、泛化”三件事")).not.toBeInTheDocument();
   });
 
   it("reuses the active course session for follow-up questions", async () => {

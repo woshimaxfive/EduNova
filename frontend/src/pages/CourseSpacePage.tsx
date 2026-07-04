@@ -41,6 +41,12 @@ const courseThreads = [
   "解释泛化能力和过拟合的区别"
 ];
 
+const courseStarterQuestions = [
+  "这门课最适合先复习哪些知识点？",
+  "把当前资料里的重点整理成期末复习顺序",
+  "根据引用帮我找一个薄弱点练习方向"
+];
+
 const courseActionLinks = [
   { label: "查看学习路径", to: PATHS.path, icon: Compass },
   { label: "进入 AI 辅导", to: PATHS.tutor, icon: ChatCircleText },
@@ -56,7 +62,7 @@ function mapKnowledgePointsToNodes(points: ApiCourseKnowledgePoint[]) {
     return {
       id: point.id,
       title: point.title,
-      chapter: point.chapter,
+      chapter: point.chapter ?? "课程知识点",
       status: index === 0 ? ("focus" as const) : ("ready" as const),
       x: 14 + column * 22,
       y: 24 + row * 26
@@ -127,7 +133,7 @@ function retrievalSourceLabel(source?: string | null) {
 
 function embeddingStatusLabel(status?: string | null) {
   if (status === "local_fallback") {
-    return "本地向量";
+    return "本地 fallback";
   }
   if (status === "completed") {
     return "真实向量";
@@ -241,6 +247,7 @@ export function CourseSpacePage() {
       : hasRealCourseId && selectedCourseSessionId && activeCourseSessionDetailId === selectedCourseSessionId
         ? persistedCourseMessages
         : courseMessages;
+  const hasDisplayedCourseMessages = displayedCourseMessages.length > 0;
   const courseSummary = apiCourse
     ? {
         id: Number.parseInt(apiCourse.id, 10),
@@ -490,64 +497,78 @@ export function CourseSpacePage() {
                   )}
                 </div>
 
-                <article className="course-answer">
-                  <p className="course-answer-label">AI 辅导回答</p>
-                  <h2>监督学习先抓住“数据、目标、泛化”三件事</h2>
-                  <p>先区分训练集和测试集，再把过拟合、泛化误差和正则化连起来。</p>
-                  <div className="answer-action-row" aria-label="回答展开入口">
-                    <button
-                      className={activeAnswerPanel === "citations" ? "active" : ""}
-                      type="button"
-                      aria-pressed={activeAnswerPanel === "citations"}
-                      onClick={() => setActiveAnswerPanel("citations")}
-                    >
-                      <FileText size={17} weight="duotone" aria-hidden="true" />
-                      <span>引用来源</span>
-                    </button>
-                    <button
-                      className={activeAnswerPanel === "path" ? "active" : ""}
-                      type="button"
-                      aria-pressed={activeAnswerPanel === "path"}
-                      onClick={() => setActiveAnswerPanel("path")}
-                    >
-                      <Target size={17} weight="duotone" aria-hidden="true" />
-                      <span>学习路径</span>
-                    </button>
-                    <button
-                      className={activeAnswerPanel === "agent" ? "active" : ""}
-                      type="button"
-                      aria-pressed={activeAnswerPanel === "agent"}
-                      onClick={() => setActiveAnswerPanel("agent")}
-                    >
-                      <Sparkle size={17} weight="duotone" aria-hidden="true" />
-                      <span>Agent 过程</span>
-                    </button>
-                  </div>
-                  <AnswerDetailPanel
-                    activePanel={activeAnswerPanel}
-                    citations={latestRagResults}
-                    hasRealCourse={Boolean(apiCourse)}
-                    hasSearched={hasRetrievalResult}
-                  />
-                  <div className="answer-citation-strip" aria-label="回答引用预览">
-                    {apiCourse
-                      ? latestRagResults.map((citation) => <span key={citation.chunk_id}>{citation.source_title}</span>)
-                      : snapshot.citations.map((citation) => <span key={citation.id}>{citation.sourceTitle}</span>)}
-                  </div>
-                </article>
-
-                {displayedCourseMessages.length > 0 ? (
-                  <section className="course-message-stack" aria-label="课程即时对话">
-                    {displayedCourseMessages.map((message) => (
-                      <article className={`course-message ${message.role}`} key={message.id}>
-                        <p>{message.content}</p>
-                        {message.role === "assistant" && message.citations !== undefined ? (
-                          <CourseMessageCitations citations={message.citations} />
-                        ) : null}
-                      </article>
-                    ))}
-                  </section>
-                ) : null}
+                {hasDisplayedCourseMessages ? (
+                  <>
+                    <section className="course-message-stack" aria-label="课程即时对话">
+                      {displayedCourseMessages.map((message) => (
+                        <article className={`course-message ${message.role}`} key={message.id}>
+                          <p>{message.content}</p>
+                          {message.role === "assistant" && message.citations !== undefined ? (
+                            <CourseMessageCitations citations={message.citations} />
+                          ) : null}
+                        </article>
+                      ))}
+                    </section>
+                    <article className="course-answer course-evidence-panel" aria-label="课程回答详情">
+                      <div className="answer-action-row" aria-label="回答展开入口">
+                        <button
+                          className={activeAnswerPanel === "citations" ? "active" : ""}
+                          type="button"
+                          aria-pressed={activeAnswerPanel === "citations"}
+                          onClick={() => setActiveAnswerPanel("citations")}
+                        >
+                          <FileText size={17} weight="duotone" aria-hidden="true" />
+                          <span>引用来源</span>
+                        </button>
+                        <button
+                          className={activeAnswerPanel === "path" ? "active" : ""}
+                          type="button"
+                          aria-pressed={activeAnswerPanel === "path"}
+                          onClick={() => setActiveAnswerPanel("path")}
+                        >
+                          <Target size={17} weight="duotone" aria-hidden="true" />
+                          <span>学习路径</span>
+                        </button>
+                        <button
+                          className={activeAnswerPanel === "agent" ? "active" : ""}
+                          type="button"
+                          aria-pressed={activeAnswerPanel === "agent"}
+                          onClick={() => setActiveAnswerPanel("agent")}
+                        >
+                          <Sparkle size={17} weight="duotone" aria-hidden="true" />
+                          <span>Agent 过程</span>
+                        </button>
+                      </div>
+                      <AnswerDetailPanel
+                        activePanel={activeAnswerPanel}
+                        citations={latestRagResults}
+                        hasRealCourse={Boolean(apiCourse)}
+                        hasSearched={hasRetrievalResult}
+                      />
+                      {latestRagResults.length > 0 ? (
+                        <div className="answer-citation-strip" aria-label="回答引用预览">
+                          {latestRagResults.map((citation) => (
+                            <span key={citation.chunk_id}>{citation.source_title}</span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </article>
+                  </>
+                ) : (
+                  <article className="course-answer course-start-panel" role="region" aria-label="课程提问引导">
+                    <p className="course-answer-label">开始提问</p>
+                    <h2>围绕这门课问一个具体问题</h2>
+                    <p>我会先检索这门课的知识切片，再把回答、引用来源和下一步学习建议保存在课程历史里。</p>
+                    <div className="course-question-suggestions" aria-label="推荐问题">
+                      <span>推荐问题</span>
+                      {courseStarterQuestions.map((question) => (
+                        <button type="button" key={question} onClick={() => setCoursePrompt(question)}>
+                          {question}
+                        </button>
+                      ))}
+                    </div>
+                  </article>
+                )}
 
                 <div className="course-composer">
                   <label htmlFor="course-question-input">课程问题输入</label>

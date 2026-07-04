@@ -51,7 +51,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 | `/app/path` | LearningPathPage | 学习路径、阶段任务和路径依据 |
 | `/app/studio` | StudioPage | 生成和管理学习资源 |
 | `/app/profile` | ProfilePage | 对话式画像与画像证据 |
-| `/app/tutor` | TutorPage | AI 辅导和苏格拉底追问 |
+| `/app/tutor` | TutorPage | AI 辅导入口，选择课程后进入对应课程空间提问 |
 | `/app/practice` | PracticePage | 练习、批改、错因复盘 |
 | `/app/reports` | ReportsPage | 学习报告、掌握度、导出入口 |
 | `/app/settings` | SettingsPage | 模型连接、个人设置、数据导出 |
@@ -65,7 +65,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 | `/app` | 总 AI 学习主页 | 类似 ChatGPT 首页，承载贴边可收起主页历史、侧栏账号入口、轻量输入框、发送后主页对话态、文件上传、资料选择和最近课程入口 |
 | `/app/library` | 独立资料库 | 文件库式管理已上传但未必归属课程的资料，可搜索、查看引用、作为主页对话参考，也可通过浮层从资料生成课程 |
 | `/app/path` | 学习路径工作区 | 普通受保护路由，展示阶段任务、路径依据和下一步行动；主要从课程空间、回答展开区或后续路径接口进入，不作为首页主视觉 |
-| `/app/courses/:courseId` | 课程对话空间 | 已读取真实课程详情、知识点、课程会话历史和课程知识库检索引用；Phase 6.4 后引用区显示混合检索、关键词检索和本地向量 fallback 状态，继续承载某一课程内的资料、学习路径、练习和资源入口 |
+| `/app/courses/:courseId` | 课程对话空间 | 已读取真实课程详情、知识点、课程会话历史和课程知识库检索引用；Phase 6.4 后引用区显示混合检索、关键词检索和本地 fallback 状态，继续承载某一课程内的资料、学习路径、练习和资源入口 |
 | 生成课程浮层 | 上层任务流 | 可由输入框、资料库或资料选择区触发，完成选择资料、填写课程名称、调用真实规则建课接口并进入课程 |
 
 当前路由边界：
@@ -74,6 +74,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 - `/app/library` 是独立资料库，资料可以不属于任何课程。
 - `/app/courses/:courseId` 是课程上下文，课程历史和主页历史分开。
 - `/app/settings` 只处理模型连接、个人设置和数据边界，不放运行期搜索/思考开关。
+- `/app/tutor` 不再维护独立静态问答；它读取当前用户课程列表，并把真实提问统一引导到 `/app/courses/:courseId`。
 - 生成课程浮层会调用 `/courses/from-materials` 生成 TXT/Markdown 规则课程。
 
 后续继续接真实接口时应保证：
@@ -366,7 +367,7 @@ Phase 3A 为了工程清晰，可以先有对应路由，但视觉上不做复�
 | LearningPathPage | 展示阶段任务、路径依据和下一步行动 | 不放到首页抢主视觉，不做复杂项目管理看板 |
 | StudioPage | 资源生成和资源详情 | 不做卡片墙首页 |
 | ProfilePage | 对话画像、画像证据、画像事件 | 不做复杂用户中心 |
-| TutorPage | 沉浸式 AI 辅导和引用问答 | 不替代学习空间主入口 |
+| TutorPage | 课程辅导入口，读取当前用户课程并跳转课程空间 | 不伪造静态问答，不另建第二套课程问答系统 |
 | PracticePage | 练习、批改、错因复盘 | 不做完整考试系统 |
 | ReportsPage | 掌握度、学习报告、导出 | 不做运营报表 |
 | SettingsPage | 模型连接、个人资料、导出设置；Phase 6.2 已接入多模型配置列表、创建、测试、设默认和删除，Provider 预设收敛为国内常用和本地部署入口 | 不做复杂管理员后台，不放深度思考或联网搜索开关 |
@@ -493,13 +494,13 @@ Phase 5 以后：
 - 已登录用户访问 `/login` 或 `/register` 会通过 `PublicOnlyRoute` 回到 `/app`。
 - `authStore` 使用 Zustand 保存真实 JWT token 和用户信息。
 - API client 默认基础路径为 `/api/v1`，会自动附加 Bearer token；接口返回 401 时清理登录态，如果用户位于 `/app/*`，会返回 `/login`。
-- `frontend/src/api/` 已按业务域拆分 auth、dashboard、courses、materials、profiles、resources、paths、tutor、practice、reports、demo、settings 等合同模块，路径与 `docs/API.md` 对齐。
+- `frontend/src/api/` 已按业务域拆分 auth、dashboard、courses、materials、rag、tutor、settings 等已实现合同模块；profiles、resources、agents、paths、practice、reports、demo 仅保留为后续预留常量，当前后端未挂载对应 router。
 - Phase 4.1 已接真实 `/auth/register`、`/auth/login`、`/auth/me` 和 `/auth/logout`；注册页会提交 `starter_mode`，注册成功后自动调用登录接口写入 session。
 - Phase 4.2 已接真实 `/dashboard/summary`；`LearningSpacePage` 使用 React Query 读取当前用户 summary，左侧主页历史、最近学习列表、主页资料库浮层资料和 blank/ai_intro 空状态不再来自前端静态 demo 数据。
 - Phase 4.3 已接真实 `/tutor/sessions`；`LearningSpacePage` 首次发送会创建 `scope=home` 会话，发送消息写入 user 和模板 assistant 消息，连续追问不重复创建历史，点击左侧主页历史会拉取后端 messages。
 - Phase 4.4 已接真实 `/materials`；`LearningSpacePage` 上传按钮会调用 `/materials/upload` 并刷新 `/dashboard/summary`，`LibraryPage` 调用 `/materials` 渲染当前用户资料列表，上传成功后刷新列表和 summary。
 - Phase 5.1 已接真实 `/courses/from-materials`、`/courses`、`/courses/{course_id}`、`/courses/{course_id}/overview` 和 `/courses/{course_id}/knowledge-points`；`LearningSpacePage` 和 `LibraryPage` 的生成课程浮层会调用真实接口，成功后刷新数据并跳转新课程空间。
-- Phase 6.4 已让课程生成和 `/rag/search` 自动补齐知识切片 embedding；`CourseSpacePage` 会在引用来源区显示混合检索、关键词检索和本地向量 fallback 状态。
+- Phase 6.4 已让课程生成和 `/rag/search` 自动补齐知识切片 embedding；`CourseSpacePage` 会在引用来源区显示混合检索、关键词检索和本地 fallback 状态，并明确 `local-hash-1536` 不是外部语义向量。
 - Phase 6.3 已接真实 `/tutor/sessions/{session_id}/messages/stream`；`CourseSpacePage` 发送课程问题时先创建或复用课程会话，再用 `fetch` + `ReadableStream` 读取 SSE，token 到达时逐步渲染，`done` 后用后端持久化消息替换临时状态。
 - Phase 6.1 已接真实 `/settings/model` 和 `/settings/model/test`；Phase 6.2 已接真实 `/settings/model/configs`、`/settings/model/configs/{id}`、`/settings/model/configs/{id}/default` 和 `/settings/model/configs/{id}/test`；`SettingsPage` 会显示配置列表和当前编辑面板，支持创建、编辑、测试、设默认和删除用户自己的模型配置，并且不展示明文 Key。
 - Phase 6.2 的 Provider 预设不追求数量多，只保留讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务；OpenRouter 不再作为可见预设。回答模型是主字段，向量模型折叠在高级项中；Phase 6.4 起向量模型用于 OpenAI-compatible embedding，缺省时仍可依靠 `local-hash-1536` 跑通。
@@ -507,17 +508,17 @@ Phase 5 以后：
 - `/app` 已重做为总 AI 对话主页，包含贴边可收起主页历史、侧栏账号入口、中心 AI 学习入口、输入区资料库按钮、文件上传入口、最近学习轻量列表、发送后主页对话态和生成课程浮层。
 - P3.9 已把 `/app/library`、`/app/courses/:courseId`、资源工坊、画像、辅导、练习、报告和设置统一到同一套贴边工作区外壳，不再保留旧顶部导航。
 - 注册页选择 `blank` 时，进入 `/app` 后 summary 返回无内置课程、无内置资料和无历史对话；选择 `ai_intro` 时，summary 返回复制到当前用户空间的人工智能导论示例课程和资料。
-- `/app/courses/:courseId` 已从课程空间骨架推进到真实课程详情、知识点读取、课程会话历史、引用持久化、命中引用后的真实模型回答、课程回答流式输出和混合检索状态展示；今日任务、知识画布、资源输出区和 Agent 轨迹仍保留前端预备交互。
+- `/app/courses/:courseId` 已从课程空间骨架推进到真实课程详情、知识点读取、课程会话历史、引用持久化、命中引用后的真实模型回答、课程回答流式输出和混合检索状态展示；无课程消息时只显示推荐问题和开始提问引导，不再渲染固定示例回答。今日任务、知识画布、资源输出区和 Agent 轨迹仍保留前端预备交互。
 - `/app/path` 已补独立学习路径页，展示阶段任务、路径依据和下一步行动，并复用普通受保护路由的贴边工作区外壳；已用 Codex 内置浏览器复验桌面和 390px 移动宽度。
 - `/app/library` 已重做为文件库式资料库，包含搜索、文档/图片筛选、真实文件选择入口、真实资料列表、查看详情反馈和生成课程浮层；资料库视觉应融入背景，不使用突兀的硬白表格块。
 - P3.13 已把普通路由标题收敛为短标题，隐藏重复说明；普通路由侧栏“新建对话”回到 `/app`；资料库页主按钮使用“生成课程”，生成课程浮层默认未选中，上传资料只进入资料库。
 - P3.14 已把普通侧栏和主页侧栏的“搜索历史”统一为居中浮层，不再在左栏内联展开搜索框；主页发送成功不再产生持久状态条，避免和回答内容或底部输入区重叠。
 - `/app/studio` 已补资源生成工作台、生成队列、资源输出和状态信号。
-- `/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` 已补学习画像、AI 辅导、练习、报告和设置核心页面骨架。
+- `/app/tutor` 已改为课程辅导入口，读取当前用户课程并跳转课程空间；`/app/profile`、`/app/practice`、`/app/reports` 仍是前端页面骨架和本地预备交互，等待后续真实接口。
 - 学习画布、资源工坊、证据层和 Agent 轨迹组件不再作为首页首屏主体，已进入课程空间或回答展开区素材。
 - 学习空间相关状态模型已覆盖上传建课状态轨道、空状态、加载状态、错误恢复、低依据提示和 Demo fallback 标记，后续由真实接口驱动。
 - P3.10 已完成界面文案减法：主页首屏去掉常驻解释句，资料来源提示只在选择资料或开启联网后出现；普通路由页面标题改为短标题，说明句压缩，重复小标题删除，状态信号只保留学生可操作的短提示。
-- P3.7 已补齐主要页面按钮的自然本地反馈：资料库浮层、生成课程、课程回答展开、知识点详情、资料引用、辅导模式、练习提交、报告导出、设置保存、顶部搜索和资源生成入口不再是空点击；P3.14 起主页发送成功以对话内容和历史选中态表达，不再额外显示持久成功提示；Phase 4.3 起主页发送已改为真实会话持久化。
+- P3.7 已补齐主要页面按钮的自然本地反馈：资料库浮层、生成课程、课程回答展开、知识点详情、资料引用、练习提交、报告导出、设置保存、顶部搜索和资源生成入口不再是空点击；本轮已将 `/app/tutor` 收敛为课程辅导入口，不再保留静态辅导模式按钮。P3.14 起主页发送成功以对话内容和历史选中态表达，不再额外显示持久成功提示；Phase 4.3 起主页发送已改为真实会话持久化。
 - 未接真实能力的按钮保留可理解的本地反馈，但不在常驻 UI 中展示“后续接入真实接口或任务系统”这类开发说明。
 - P3.8 已改为分层导航，P3.9 进一步统一为贴边工作区侧栏：资料库、资源工坊、个人资料、设置、退出登录和历史入口保持一致，普通路由不再展示旧顶部导航；普通路由侧栏显示主页全局历史，课程空间侧栏显示课程内历史。
 
@@ -538,7 +539,7 @@ Phase 5 以后：
 - Phase 6.2 起覆盖多模型配置列表、创建、设默认、指定测试、删除和 Provider 预设收敛。
 - Phase 6.3 起覆盖课程空间流式发送、token 渲染、done 替换、错误保留输入和历史刷新。
 - Phase 6.4 起覆盖课程引用区的混合检索、本地 fallback 和关键词 fallback 状态。
-- P3.7/Phase 4.4 交互测试已覆盖主页资料上传、资料库默认未选中与点选高亮、联网搜索激活态、发送反馈、课程回答展开、知识画布节点详情、辅导模式切换、练习提交校验、资料引用反馈和设置保存反馈；资料上传和资料库列表已断言真实 `/materials` 调用。
+- P3.7/Phase 4.4 交互测试已覆盖主页资料上传、资料库默认未选中与点选高亮、联网搜索激活态、发送反馈、课程回答展开、知识画布节点详情、课程辅导入口、练习提交校验、资料引用反馈和设置保存反馈；资料上传和资料库列表已断言真实 `/materials` 调用。
 - P3.9 测试已覆盖登录页无共享演示学生按钮、注册页空白/人工智能导论 starter mode、普通路由复用贴边工作区侧栏、普通路由保留主页全局历史、资料库文档/图片筛选和上传交互，以及空白 starter 账号进入主页后没有内置课程和资料。
 - P3.13 测试已覆盖普通路由侧栏高亮、普通路由不显示重复说明、普通路由“新建对话”回到主页，以及资料库生成课程默认未选中。
 - 路由回归测试覆盖已废弃开发调参地址进入 404，避免临时设计页重新混入正式学生端路由。

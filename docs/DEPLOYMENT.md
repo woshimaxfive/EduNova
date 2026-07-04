@@ -249,7 +249,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 16. 已解析 TXT/Markdown 资料可以通过 `/api/v1/courses/from-materials` 生成当前用户自己的课程结构，成功后前端进入 `/app/courses/{course_id}` 并读取真实标题和知识点。
 17. `/app/settings` 可以读取模型配置摘要和多配置列表，保存个人 OpenAI-compatible 配置，设为默认、删除并测试连接；前端不显示明文 Key。
 18. 课程空间命中资料引用且模型配置可用时，可以通过 `/api/v1/tutor/sessions/{session_id}/messages` 或流式接口保存真实模型回答和引用；模型未配置时显示明确提示。
-19. Phase 6.4 后，课程空间命中资料问题时引用区应显示混合检索状态；没有外部 embedding 配置时应显示本地向量 fallback，刷新后消息、引用和状态仍可恢复。
+19. Phase 6.4 后，课程空间命中资料问题时引用区应显示混合检索状态；没有外部 embedding 配置时应显示本地 fallback，并明确 `local-hash-1536` 不是外部语义向量，刷新后消息、引用和状态仍可恢复。
 
 当前已验证记录按阶段存放在 [TEST_PLAN.md](TEST_PLAN.md)。
 
@@ -297,7 +297,7 @@ http://127.0.0.1:5173
 - 主页上传和 `/app/library` 会调用 `/materials`。
 - 已解析 TXT/Markdown 资料可通过 `/courses/from-materials` 生成课程。
 - 课程空间问题会持久化真实引用，并在默认模型可用时生成流式 RAG 回答。
-- Phase 6.4 后引用区会显示混合检索或本地向量 fallback 状态。
+- Phase 6.4 后引用区会显示混合检索或本地 fallback 状态。
 - `/app/settings` 可管理多套用户模型配置。
 
 本地开发时 Vite 会把 `/api` 代理到 `http://127.0.0.1:8000`。

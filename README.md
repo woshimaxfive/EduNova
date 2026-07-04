@@ -21,6 +21,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - 已解析 TXT/Markdown 资料生成真实课程结构。
 - 课程知识点、知识切片、课程内历史和引用持久化。
 - 课程空间真实模型 RAG 回答、SSE 流式输出和刷新恢复。
+- `/app/tutor` 已收敛为课程辅导入口，真实提问统一进入课程空间。
 - 多套个人模型配置、默认配置切换、服务器 `.env` 兜底。
 - OpenAI-compatible Embeddings 与 `local-hash-1536` 本地 fallback。
 

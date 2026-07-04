@@ -44,7 +44,7 @@
 | `/app/settings` | 管理多套模型配置，支持 Provider 预设、保存、测试、设默认和删除 |
 | `/app/studio` | 资源工坊骨架和本地预备交互 |
 | `/app/profile` | 学习画像骨架和本地预备交互 |
-| `/app/tutor` | AI 辅导骨架和本地预备交互 |
+| `/app/tutor` | 课程辅导入口，读取当前用户课程并跳转对应课程空间，不再展示静态假问答 |
 | `/app/practice` | 练习骨架和本地预备交互 |
 | `/app/reports` | 报告骨架和本地预备交互 |
 
@@ -62,6 +62,8 @@
 | 模型 | OpenAI-compatible chat、stream、embeddings 已接入 |
 | 安全 | 用户数据隔离、Key 加密、脱敏返回和上传目录忽略已接入 |
 
+当前后端已挂载的业务 router 是 `auth`、`dashboard`、`courses`、`materials`、`rag`、`settings` 和 `tutor`。`profiles`、`resources`、`agents`、`paths`、`practice`、`reports` 和 `demo` 仍只是前端 API 常量与后续接口设计，不属于当前已实现后端能力。
+
 ## 尚未完成
 
 | 能力 | 当前处理 |
@@ -69,6 +71,7 @@
 | PDF/PPTX/DOCX 深度解析 | 资料可以入库，但不能用于规则建课 |
 | OCR 和图片题目识别 | 图片只入库，不做识别 |
 | 讯飞原生 Embeddingp/Embeddingq | 暂不接入，当前用 OpenAI-compatible embeddings 或本地 fallback |
+| Profile/Resource/Agent/Path/Practice/Report 后端接口 | 前端保留合同常量和页面骨架，后端 router 未挂载 |
 | 多智能体资源生成 | 页面和表结构有准备，真实生成流程未接入 |
 | 学习画像真实生成 | 页面和表结构有准备，真实画像事件未接入 |
 | 练习评估 | 页面和表结构有准备，真实出题和批改未接入 |

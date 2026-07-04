@@ -31,11 +31,10 @@ export type ApiCourseSummary = {
 export type ApiCourseKnowledgePoint = {
   id: string;
   title: string;
-  chapter: string;
-  summary: string;
-  order: number;
-  mastery_level: "not_started" | "learning" | "weak" | "mastered";
-  chunk_count: number;
+  summary: string | null;
+  chapter: string | null;
+  order_index: number;
+  difficulty: string | null;
 };
 
 export type ApiCourseOverview = {

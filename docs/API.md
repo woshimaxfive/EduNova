@@ -28,22 +28,30 @@
 /api/v1
 ```
 
-前端模块只负责路径、请求参数和响应类型约定，不在模块内塞业务编排。当前已覆盖：
+前端模块只负责路径、请求参数和响应类型约定，不在模块内塞业务编排。
+
+当前后端已经挂载的 `/api/v1` router 为：
 
 ```text
 auth
 dashboard
-profiles
 courses
 materials
+rag
+tutor
+settings
+```
+
+当前前端仍保留以下合同常量，方便后续 Phase 接入，但它们不是当前已经挂载的后端 router，不能在页面或文档中当作已实现接口：
+
+```text
+profiles
 resources
 agents
 paths
-tutor
 practice
 reports
 demo
-settings
 ```
 
 这些模块已有 Vitest 合同测试，用于防止路径和基础路径漂移。
@@ -333,6 +341,8 @@ Authorization: Bearer <token>
 
 ## 6. Profile 接口
 
+状态：后续预留。当前后端未挂载 `profiles` router，`ProfilePage` 仍是前端骨架和本地预备交互。以下接口是 Phase 7 画像真实化时的目标合同。
+
 ### GET `/profiles/me`
 
 用途：读取当前学生画像。
@@ -423,11 +433,10 @@ Authorization: Bearer <token>
 {
   "id": "9001",
   "title": "梯度下降",
-  "chapter": "优化方法",
   "summary": "理解梯度方向和学习率。",
-  "order": 1,
-  "mastery_level": "not_started",
-  "chunk_count": 3
+  "chapter": "优化方法",
+  "order_index": 1,
+  "difficulty": "基础"
 }
 ```
 
@@ -622,11 +631,10 @@ Authorization: Bearer <token>
       {
         "id": "9001",
         "title": "第一章 绪论",
-        "chapter": "第一章 绪论",
         "summary": "由资料内容生成的课程知识点摘要。",
-        "order": 1,
-        "mastery_level": "not_started",
-        "chunk_count": 3
+        "chapter": "第一章 绪论",
+        "order_index": 1,
+        "difficulty": "基础"
       }
     ]
   },
@@ -720,6 +728,8 @@ Authorization: Bearer <token>
 
 ## 10. Resource 接口
 
+状态：后续预留。当前后端未挂载 `resources` router，`StudioPage` 只提供资源工坊前端骨架和本地预备交互。
+
 ### POST `/resources/generate`
 
 用途：生成个性化学习资源。
@@ -771,6 +781,8 @@ Authorization: Bearer <token>
 
 ## 11. Agent Trace 接口
 
+状态：后续预留。当前后端未挂载 `agents` router；课程问答会返回 `trace_id` 和引用，但完整多智能体轨迹查询还未实现。
+
 ### GET `/agents/traces/{trace_id}`
 
 用途：获取某次多智能体任务轨迹。
@@ -798,6 +810,8 @@ Authorization: Bearer <token>
 ```
 
 ## 12. Learning Path 接口
+
+状态：后续预留。当前后端未挂载 `paths` router，`/app/path` 仍展示前端学习路径骨架。
 
 ### POST `/paths/generate`
 
@@ -1006,6 +1020,8 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 - `done` 事件返回最终 `TutorSessionDetail`，前端用它替换临时流式状态并刷新课程历史。
 
 ## 14. Practice 与 Report 接口
+
+状态：后续预留。当前后端未挂载 `practice` 与 `reports` router，练习和报告页面仍是前端骨架和本地预备交互。
 
 ### POST `/practice/sessions`
 

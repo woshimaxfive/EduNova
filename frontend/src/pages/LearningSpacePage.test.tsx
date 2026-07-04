@@ -539,6 +539,7 @@ describe("LearningSpacePage", () => {
     await user.click(screen.getByRole("button", { name: "发送" }));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("消息发送失败，请稍后再试。");
     expect(input).toHaveValue("这次发送会失败吗？");
     expect(screen.queryByRole("region", { name: "主页对话" })).not.toBeInTheDocument();
   });

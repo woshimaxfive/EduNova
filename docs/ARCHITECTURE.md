@@ -198,7 +198,7 @@ frontend/src/
 | `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，默认基础路径 `/api/v1` |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和短状态信号的纯状态模型 |
 | `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、学习路径、资源工坊、画像、辅导、练习、报告、设置和 404；学生端核心页面已从占位页补成可扩展工作区骨架 |
-| `frontend/src/components` | 贴边侧栏、学习空间壳子、学习画布、资料源簇、命令栏、资源输出区、证据层、Agent 轨迹和统一反馈层 |
+| `frontend/src/components` | 贴边侧栏、学习空间壳子、学习画布、资料源簇、命令栏、资源输出区、证据层、Agent 轨迹、局部反馈和轻量 toast |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、深色模式、reduced motion 和 reduced transparency 基础 |
 
 前端 API 模块当前分工：
@@ -227,7 +227,7 @@ frontend/src/
 - Phase 6.4 起课程引用来自混合检索，缺少外部 embedding 配置时显式显示本地 fallback。
 - 资源和 Agent 轨迹仍使用前端预备交互，后续由资源生成和 Agent 日志接口替换。
 - 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面使用前端样例数据；后续由资料、画像、RAG、练习评估、掌握度报告和设置接口替换。
-- 当前前端已移除 `ActionNotice` 类全局提示条；按钮反馈优先通过选中态、列表刷新、详情面板、输入内容和真实路由跳转表达，后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
+- 当前前端已移除 `ActionNotice` 类全局横向提示条；按钮反馈优先通过选中态、列表刷新、详情面板、输入内容和真实路由跳转表达。失败、校验错误和模型不可用等需要用户处理的状态使用局部 `InlineFeedback`，模型配置保存、设默认、删除和连接测试等短确认使用右下角 toast；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
 - 上传建课状态轨道和状态条当前使用前端样例状态，后续由 `/materials/{material_id}/progress`、`/courses/from-materials` 和长任务接口驱动。
 - React Flow、ECharts、Mermaid 和 Markmap 已作为依赖准备，复杂图谱和可视化在后续阶段逐步接入。
 

@@ -17,6 +17,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { buildCoursePath } from "../app/routePaths";
 import { createCourseFromMaterials } from "../api/courses";
 import { getDashboardSummary, type DashboardMaterial } from "../api/dashboard";
+import { getApiErrorMessage } from "../api/errors";
 import { uploadMaterial } from "../api/materials";
 import {
   createTutorSession,
@@ -25,6 +26,7 @@ import {
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
+import { InlineFeedback, type FeedbackTone } from "../components/feedback/InlineFeedback";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { useAuthStore } from "../features/auth/authStore";
@@ -62,6 +64,8 @@ export function LearningSpacePage() {
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>("sources");
   const [expandedAnswerId, setExpandedAnswerId] = useState<string | null>(null);
+  const [composerFeedback, setComposerFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
+  const [courseDialogFeedback, setCourseDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const hasHomeThread = messages.length > 0;
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", "summary"],
@@ -123,9 +127,11 @@ export function LearningSpacePage() {
     try {
       await uploadMaterial({ file });
       await queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      setComposerFeedback(null);
       event.target.value = "";
     } catch (error) {
       void error;
+      setComposerFeedback({ message: "资料上传失败，请稍后再试。", tone: "warning" });
     } finally {
       setIsUploadingMaterial(false);
     }
@@ -171,6 +177,7 @@ export function LearningSpacePage() {
     const question = prompt.trim();
 
     if (!question) {
+      setComposerFeedback({ message: "先输入一个学习问题。", tone: "warning" });
       return;
     }
 
@@ -179,6 +186,7 @@ export function LearningSpacePage() {
     }
 
     setIsSendingQuestion(true);
+    setComposerFeedback(null);
 
     try {
       let sessionId = activeHomeThreadId;
@@ -203,6 +211,7 @@ export function LearningSpacePage() {
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
     } catch (error) {
       void error;
+      setComposerFeedback({ message: "消息发送失败，请稍后再试。", tone: "warning" });
     } finally {
       setIsSendingQuestion(false);
     }
@@ -225,6 +234,7 @@ export function LearningSpacePage() {
       upsertHomeThread(detail.data.session);
     } catch (error) {
       void error;
+      setComposerFeedback({ message: "历史对话读取失败，请稍后再试。", tone: "warning" });
     }
   }
 
@@ -234,6 +244,7 @@ export function LearningSpacePage() {
       .filter((materialId) => Number.isFinite(materialId));
 
     if (selectedMaterialIdsAsNumbers.length === 0) {
+      setCourseDialogFeedback({ message: "请先选择至少一份资料。", tone: "warning" });
       return;
     }
 
@@ -242,6 +253,7 @@ export function LearningSpacePage() {
     }
 
     setIsCreatingCourse(true);
+    setCourseDialogFeedback(null);
 
     try {
       const created = await createCourseFromMaterials({
@@ -254,7 +266,10 @@ export function LearningSpacePage() {
       setIsLibraryOpen(false);
       navigate(buildCoursePath(created.data.course.id));
     } catch (error) {
-      void error;
+      setCourseDialogFeedback({
+        message: getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析的 TXT 或 Markdown 资料。"),
+        tone: "warning"
+      });
     } finally {
       setIsCreatingCourse(false);
     }
@@ -399,6 +414,7 @@ export function LearningSpacePage() {
                 </div>
               </div>
             </div>
+            <InlineFeedback message={composerFeedback?.message ?? null} tone={composerFeedback?.tone} className="composer-inline-feedback" />
           </section>
 
           {!hasHomeThread ? (
@@ -474,6 +490,7 @@ export function LearningSpacePage() {
           onClose={() => setIsCourseDialogOpen(false)}
           onCreate={(courseTitle) => void createCourseFromSelectedMaterials(courseTitle)}
           isCreatingCourse={isCreatingCourse}
+          feedback={courseDialogFeedback}
         />
       ) : null}
     </LearningSpaceShell>
@@ -599,6 +616,7 @@ type CourseGenerationDialogWithNoticeProps = CourseGenerationDialogProps & {
   onToggleMaterial: (materialId: string) => void;
   onCreate: (courseTitle: string) => void;
   isCreatingCourse: boolean;
+  feedback: { message: string; tone: FeedbackTone } | null;
 };
 
 function CourseGenerationDialog({
@@ -607,7 +625,8 @@ function CourseGenerationDialog({
   onToggleMaterial,
   onClose,
   onCreate,
-  isCreatingCourse
+  isCreatingCourse,
+  feedback
 }: CourseGenerationDialogWithNoticeProps) {
   const selectedCount = selectedMaterialIds.length;
   const [courseTitle, setCourseTitle] = useState("人工智能导论期末复习");
@@ -630,6 +649,7 @@ function CourseGenerationDialog({
           <strong>{selectedCount > 0 ? `已选择 ${selectedCount} 份资料` : "先选择要生成课程的资料"}</strong>
           <small>只建立关联，不移动原文件。</small>
         </div>
+        <InlineFeedback message={feedback?.message ?? null} tone={feedback?.tone} className="dialog-inline-feedback" />
         <button
           className={selectedCount > 0 ? "dialog-primary-button" : "dialog-primary-button disabled"}
           type="button"

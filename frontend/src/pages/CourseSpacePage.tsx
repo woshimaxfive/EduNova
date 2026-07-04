@@ -27,6 +27,7 @@ import {
 } from "../api/tutor";
 import { LearningCanvas } from "../components/canvas/LearningCanvas";
 import { EvidenceLayer } from "../components/evidence/EvidenceLayer";
+import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { StudioDock } from "../components/studio/StudioDock";
@@ -201,6 +202,7 @@ export function CourseSpacePage() {
   const [courseMessages, setCourseMessages] = useState<CourseMessage[]>([]);
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [isSearchingCourse, setIsSearchingCourse] = useState(false);
+  const [courseFeedback, setCourseFeedback] = useState<string | null>(null);
   const apiCourse = courseQuery.data?.data;
   const apiKnowledgePoints = useMemo(
     () => knowledgePointsQuery.data?.data ?? [],
@@ -316,6 +318,7 @@ export function CourseSpacePage() {
     const question = coursePrompt.trim();
 
     if (!question) {
+      setCourseFeedback("先输入课程问题。");
       return;
     }
 
@@ -324,10 +327,12 @@ export function CourseSpacePage() {
     }
 
     if (!hasRealCourseId) {
+      setCourseFeedback("课程地址无效，请从课程列表重新进入。");
       return;
     }
 
     setIsSearchingCourse(true);
+    setCourseFeedback(null);
     const previousMessages = displayedCourseMessages;
 
     try {
@@ -374,6 +379,7 @@ export function CourseSpacePage() {
     } catch {
       setCourseMessages(previousMessages);
       setStreamingSessionId(null);
+      setCourseFeedback("模型暂不可用，请检查设置或稍后重试。");
     } finally {
       setIsSearchingCourse(false);
     }
@@ -550,6 +556,7 @@ export function CourseSpacePage() {
                     <ArrowRight size={17} weight="bold" aria-hidden="true" />
                     <span>{isSearchingCourse ? "保存中" : "发送"}</span>
                   </button>
+                  <InlineFeedback message={courseFeedback} tone="warning" className="course-inline-feedback" />
                 </div>
               </section>
 

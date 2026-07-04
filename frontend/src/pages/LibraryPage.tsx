@@ -5,7 +5,9 @@ import { useNavigate } from "react-router-dom";
 
 import { buildCoursePath } from "../app/routePaths";
 import { createCourseFromMaterials } from "../api/courses";
+import { getApiErrorMessage } from "../api/errors";
 import { listMaterials, type MaterialListItem, uploadMaterial } from "../api/materials";
+import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { PageFrame } from "./PageFrame";
 
 type LibraryFilter = "all" | "document" | "image";
@@ -39,6 +41,8 @@ export function LibraryPage() {
   const [courseTitle, setCourseTitle] = useState("资料生成课程");
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
+  const [libraryFeedback, setLibraryFeedback] = useState<string | null>(null);
+  const [courseDialogFeedback, setCourseDialogFeedback] = useState<string | null>(null);
   const materialsQuery = useQuery({
     queryKey: ["materials", "list"],
     queryFn: () => listMaterials(),
@@ -75,8 +79,10 @@ export function LibraryPage() {
         queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
       ]);
+      setLibraryFeedback(null);
     } catch (error) {
       void error;
+      setLibraryFeedback("资料上传失败，请稍后再试。");
     } finally {
       setIsUploadingMaterial(false);
       event.target.value = "";
@@ -93,6 +99,7 @@ export function LibraryPage() {
       .filter((materialId) => Number.isFinite(materialId));
 
     if (selectedMaterialIdsAsNumbers.length === 0) {
+      setCourseDialogFeedback("先至少选择一份资料。");
       return;
     }
 
@@ -101,6 +108,7 @@ export function LibraryPage() {
     }
 
     setIsCreatingCourse(true);
+    setCourseDialogFeedback(null);
 
     try {
       const created = await createCourseFromMaterials({
@@ -115,7 +123,7 @@ export function LibraryPage() {
       setIsCourseDialogOpen(false);
       navigate(buildCoursePath(created.data.course.id));
     } catch (error) {
-      void error;
+      setCourseDialogFeedback(getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析的 TXT 或 Markdown 资料。"));
     } finally {
       setIsCreatingCourse(false);
     }
@@ -147,6 +155,7 @@ export function LibraryPage() {
               <span>生成课程</span>
             </button>
           </div>
+          <InlineFeedback message={libraryFeedback} tone="warning" className="library-inline-feedback" />
 
           <div className="library-filter-row" aria-label="资料类型">
             {[
@@ -218,6 +227,7 @@ export function LibraryPage() {
           isCreatingCourse={isCreatingCourse}
           onCourseTitleChange={setCourseTitle}
           onToggleMaterial={toggleCourseMaterial}
+          feedback={courseDialogFeedback}
           onClose={() => setIsCourseDialogOpen(false)}
           onCreate={() => void handleCreateCourse()}
         />
@@ -231,6 +241,7 @@ type LibraryCourseDialogProps = {
   selectedMaterialIds: string[];
   courseTitle: string;
   isCreatingCourse: boolean;
+  feedback: string | null;
   onCourseTitleChange: (courseTitle: string) => void;
   onToggleMaterial: (materialId: string) => void;
   onClose: () => void;
@@ -242,6 +253,7 @@ function LibraryCourseDialog({
   selectedMaterialIds,
   courseTitle,
   isCreatingCourse,
+  feedback,
   onCourseTitleChange,
   onToggleMaterial,
   onClose,
@@ -273,6 +285,7 @@ function LibraryCourseDialog({
             </button>
           ))}
         </div>
+        <InlineFeedback message={feedback} tone="warning" className="dialog-inline-feedback" />
         <button
           className={selectedCount > 0 ? "dialog-primary-button" : "dialog-primary-button disabled"}
           type="button"

@@ -244,7 +244,7 @@ cd ..
 - P3 收尾补完后，`/app/path` 必须按浏览器验收规则通过桌面和 390px 移动宽度可见验收：学习路径、阶段任务、路径依据、下一步行动和开始练习入口可见，页面无水平溢出。
 - Phase 4.2 后，`/app` 必须通过 `/dashboard/summary` 渲染最近学习、主页历史和主页资料库浮层资料：blank summary 不得出现前端假课程、假资料或假历史；ai_intro summary 应显示当前用户自己的人工智能导论课程和资料；资料库浮层默认未选中。
 - Phase 4.3 后，`/app` 主页发送必须走 `/tutor/sessions`：首次发送先创建 home session，再发送消息；连续追问不创建第二条历史；点击左侧历史必须从后端恢复 messages；发送失败必须提示且保留输入；刷新后左侧历史仍由 `/dashboard/summary` 保留。
-- Phase 4.4 后，资料上传和资料库必须走 `/materials`：主页上传文件调用 `/materials/upload` 并刷新 `/dashboard/summary`；`/app/library` 调用 `/materials` 渲染真实列表，不再出现静态假资料；文档/图片筛选、搜索、详情反馈、上传失败提示和空状态必须可用。
+- Phase 4.4 后，资料上传和资料库必须走 `/materials`：主页上传文件调用 `/materials/upload` 并刷新 `/dashboard/summary`；`/app/library` 调用 `/materials` 渲染真实列表，不再出现静态假资料；文档/图片筛选、搜索、详情反馈、上传失败局部提示、建课失败弹层提示和空状态必须可用。
 - Phase 5.1 后，从资料生成课程必须走 `/courses/from-materials`：`/app` 主页资料库浮层和 `/app/library` 都调用真实建课接口，成功后刷新 summary/materials 并跳转 `/app/courses/{course_id}`；选择图片、PDF、DOCX、PPTX 或未解析资料时必须显示后端错误并保留用户选择；课程空间标题、资料数、知识点数和知识点列表来自课程接口。
 
 ### 3.5 浏览器端到端测试
@@ -655,13 +655,13 @@ Phase 1A 起，仓库提供统一验证脚本：
 - RAG 搜索测试覆盖无 token 401、当前用户课程命中引用、多用户隔离、空 query 和非法 `top_k` 校验、无命中稳定空结果、Markdown 标题/TXT 内容/中文关键词命中，以及 `/rag/search` envelope；Phase 6.4 起覆盖关键词命中、向量命中、混合排序、缺失向量懒加载、本地 fallback 状态、外部 embedding 失败回退和新分数字段稳定返回。
 - 前端认证联调测试覆盖登录成功写入 token、登录失败提示、注册 `blank/ai_intro` 请求体、注册后自动登录、后端用户字段映射，以及登录页不出现 demo 账号。
 - 上传建课工作流状态测试，覆盖 chunking、failed 和必要短状态信号。
-- 学习空间页面测试，覆盖 AI 对话主页、贴边历史侧栏、侧栏收起、侧栏账号入口、历史搜索居中浮层、发送后主页对话态、底部学习输入区、发送成功不显示持久“已生成回答”状态条、Enter 发送、Shift+Enter 换行、AI 学习入口、资料库入口、语义化最近学习列表、最近课程链接、生成课程浮层，以及首页不再渲染资料库右栏和知识学习画布；Phase 4.2 起还覆盖 `/app` 调用 `/dashboard/summary`，用接口课程、接口资料和接口主页历史渲染页面，并确认 blank summary 不出现静态 starter 课程、资料和历史；Phase 4.3 起还覆盖首次发送创建 session、连续发送复用 session、点击历史加载后端 messages、刷新后仍可从 summary 看到主页历史、发送失败不新增全局提示条且输入不丢失；Phase 4.4 起还覆盖主页上传调用 `/materials/upload`、上传成功刷新 summary、资料库浮层显示真实资料。
+- 学习空间页面测试，覆盖 AI 对话主页、贴边历史侧栏、侧栏收起、侧栏账号入口、历史搜索居中浮层、发送后主页对话态、底部学习输入区、发送成功不显示持久“已生成回答”状态条、Enter 发送、Shift+Enter 换行、AI 学习入口、资料库入口、语义化最近学习列表、最近课程链接、生成课程浮层，以及首页不再渲染资料库右栏和知识学习画布；Phase 4.2 起还覆盖 `/app` 调用 `/dashboard/summary`，用接口课程、接口资料和接口主页历史渲染页面，并确认 blank summary 不出现静态 starter 课程、资料和历史；Phase 4.3 起还覆盖首次发送创建 session、连续发送复用 session、点击历史加载后端 messages、刷新后仍可从 summary 看到主页历史、发送失败不新增全局提示条但显示输入区局部错误且输入不丢失；Phase 4.4 起还覆盖主页上传调用 `/materials/upload`、上传成功刷新 summary、资料库浮层显示真实资料。
 - Phase 5.1 前端测试覆盖主页资料库浮层调用 `/courses/from-materials` 后跳转新课程、资料库页调用同一建课接口、API 错误时保留选择，以及课程空间通过 `/courses/{course_id}` 和 `/knowledge-points` 渲染真实标题、资料数和知识点。
 - Phase 5.2 前端测试覆盖 `rag.ts` API 合同、课程空间发送问题调用 `/rag/search`、命中时显示真实引用来源和片段、无命中时显示资料不足、检索失败时保留输入。
 - Phase 5.3 前端测试覆盖课程页加载 `scope=course&course_id=...` 会话列表、首次发送创建课程会话再发送消息、连续发送复用当前课程会话、点击课程内历史恢复真实 messages 和引用、无依据回答显示资料不足、发送失败保留输入。
 - Phase 6.1 前端测试覆盖 `settings.ts` 类型化 API 合同、设置页服务器/个人/未配置状态渲染、讯飞星火 Spark 首位 Provider 预设、保存模型配置、连接测试成功/失败反馈、不显示固定假 Key、不在设置页显示深度思考/联网搜索、课程空间渲染后端返回的模型回答和真实引用、模型失败时保留输入。
 - Phase 6.2 前端测试覆盖多套模型配置列表、创建配置、默认配置切换、删除配置、不同 Provider 的 Key 脱敏展示、指定配置连接测试、切换 Provider 不误用旧 Key，以及国内常用 Provider 和本地兼容服务的预设顺序与默认值；前端 API 合同测试覆盖新增 configs 路径、创建、更新、设默认、测试和删除函数。
-- Phase 6.3 前端测试覆盖课程页首次发送先创建课程会话再调用 stream endpoint、连续追问不重复创建会话、token 分片逐步显示、done 后渲染持久化消息和真实引用、stream error 时保留输入且不生成全局提示条。
+- Phase 6.3 前端测试覆盖课程页首次发送先创建课程会话再调用 stream endpoint、连续追问不重复创建会话、token 分片逐步显示、done 后渲染持久化消息和真实引用、stream error 时保留输入、显示输入区局部错误且不生成全局提示条。
 - Phase 6.4 前端测试覆盖课程页引用区显示混合检索状态、本地 fallback 状态和关键词 fallback 状态；引用仍可展开，流式回答和历史恢复不回归。
 - 路由测试覆盖 `/app/courses/:courseId` 课程空间壳子，确认课程对话空间、知识画布、证据与 Agent 轨迹和资源生成区可见；覆盖 `/app/path` 学习路径页，确认学习路径、阶段任务和路径依据可见。
 - 学生核心页面测试覆盖文件库式资料库、文档/图片筛选、真实资料列表、资源工坊、学习画像、AI 辅导入口、练习、报告和设置页面的核心区域。

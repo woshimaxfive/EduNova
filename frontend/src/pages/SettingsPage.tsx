@@ -13,6 +13,9 @@ import {
   type ModelConfigSummary,
   type ModelConfigUpdateRequest
 } from "../api/settings";
+import { InlineFeedback } from "../components/feedback/InlineFeedback";
+import { ToastStack } from "../components/feedback/ToastStack";
+import { useToastQueue } from "../components/feedback/useToastQueue";
 import {
   getProviderPreset,
   inferProviderPresetId,
@@ -80,7 +83,9 @@ export function SettingsPage() {
   const [nickname, setNickname] = useState("演示学生");
   const [selectedConfigId, setSelectedConfigId] = useState<number | "new" | null>(null);
   const [draft, setDraft] = useState<ModelConfigDraft>(EMPTY_CONFIG_DRAFT);
+  const [settingsFeedback, setSettingsFeedback] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { toast, showToast, dismissToast } = useToastQueue();
   const modelConfigsQuery = useQuery({
     queryKey: ["settings", "model-configs"],
     queryFn: listModelConfigs,
@@ -113,6 +118,11 @@ export function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
       setSelectedConfigId(response.data.id);
       setDraft(draftFromConfig(response.data));
+      setSettingsFeedback(null);
+      showToast("模型配置已保存。", "success");
+    },
+    onError: () => {
+      showToast("模型配置保存失败，请检查密钥加密配置。", "warning");
     }
   });
   const updateConfigMutation = useMutation({
@@ -123,6 +133,11 @@ export function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
       setSelectedConfigId(response.data.id);
       setDraft(draftFromConfig(response.data));
+      setSettingsFeedback(null);
+      showToast("模型配置已保存。", "success");
+    },
+    onError: () => {
+      showToast("模型配置保存失败，请检查名称、Base URL 或密钥。", "warning");
     }
   });
   const defaultConfigMutation = useMutation({
@@ -130,12 +145,22 @@ export function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings", "model-configs"] });
       queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
+      setSettingsFeedback(null);
+      showToast("已设为默认模型配置。", "success");
+    },
+    onError: () => {
+      showToast("默认配置切换失败，请稍后重试。", "warning");
     }
   });
   const testConfigMutation = useMutation({
     mutationFn: (configId: number) => testModelConfig(configId),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["settings", "model-configs"] });
+      setSettingsFeedback(null);
+      showToast(response.data.message || "模型连接成功。", response.data.ok ? "success" : "warning");
+    },
+    onError: () => {
+      showToast("模型连接失败，请检查 Base URL、回答模型或密钥。", "warning");
     }
   });
   const deleteConfigMutation = useMutation({
@@ -148,11 +173,17 @@ export function SettingsPage() {
         ?? null;
       setSelectedConfigId(nextConfig?.id ?? "new");
       setDraft(nextConfig ? draftFromConfig(nextConfig) : newDraftFromPreset());
+      setSettingsFeedback(null);
+      showToast("模型配置已删除。", "success");
+    },
+    onError: () => {
+      showToast("模型配置删除失败，请稍后重试。", "warning");
     }
   });
 
   function saveSettings() {
     void nickname;
+    showToast(`${nickname || "学生"} 的设置已保存。`, "success");
   }
 
   function updateDraft(field: keyof ModelConfigDraft, value: string) {
@@ -193,6 +224,7 @@ export function SettingsPage() {
 
   function saveModelConfiguration() {
     if (!canSave) {
+      setSettingsFeedback("请先补全配置名称、Base URL 和回答模型。");
       return;
     }
 
@@ -218,6 +250,7 @@ export function SettingsPage() {
 
   function setCurrentAsDefault() {
     if (activeConfigId === null) {
+      setSettingsFeedback("请先保存配置，再设为默认。");
       return;
     }
 
@@ -226,6 +259,7 @@ export function SettingsPage() {
 
   function runModelConnectionTest() {
     if (activeConfigId === null) {
+      setSettingsFeedback("请先保存配置，再测试连接。");
       return;
     }
 
@@ -407,6 +441,7 @@ export function SettingsPage() {
                     删除配置
                   </button>
                 </div>
+                <InlineFeedback message={settingsFeedback} tone="warning" className="settings-inline-feedback" />
               </div>
             </div>
           </div>
@@ -444,6 +479,7 @@ export function SettingsPage() {
             </button>
           </div>
         </section>
+        <ToastStack toast={toast} onDismiss={dismissToast} />
       </div>
     </PageFrame>
   );

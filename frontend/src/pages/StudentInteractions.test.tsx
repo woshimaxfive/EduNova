@@ -637,6 +637,104 @@ describe("student interaction affordances", () => {
 
   });
 
+  it("shows local library feedback when upload fails", async () => {
+    const user = userEvent.setup();
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+
+      if (url === MATERIAL_ENDPOINTS.list && method === "get") {
+        return {
+          data: { data: [], trace_id: "trace_materials_empty" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === MATERIAL_ENDPOINTS.upload && method === "post") {
+        throw new Error("upload failed");
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    renderPage(<LibraryPage />);
+
+    const uploadedFile = new File(["demo"], "失败资料.txt", { type: "text/plain" });
+    await user.upload(screen.getByLabelText("上传资料文件"), uploadedFile);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("资料上传失败，请稍后再试。");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("shows dialog feedback and keeps material selection when course generation fails", async () => {
+    const user = userEvent.setup();
+    const materials: MaterialListItem[] = [
+      {
+        id: "501",
+        title: "线性代数复习.md",
+        type: "MD",
+        detail: "已解析",
+        modified: "今天",
+        size: "12 KB",
+        category: "document",
+        extension: "MD",
+        parse_status: "completed",
+        course_ids: []
+      }
+    ];
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+
+      if (url === MATERIAL_ENDPOINTS.list && method === "get") {
+        return {
+          data: { data: materials, trace_id: "trace_materials_course_error" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === COURSE_ENDPOINTS.fromMaterials && method === "post") {
+        throw new Error("course failed");
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    renderPage(<LibraryPage />);
+
+    expect(await screen.findByRole("button", { name: /线性代数复习.md/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "生成课程" }));
+
+    const dialog = screen.getByRole("dialog", { name: "从资料生成课程" });
+    const materialButton = within(dialog).getByRole("button", { name: /线性代数复习.md/ });
+    await user.click(materialButton);
+    await user.click(within(dialog).getByRole("button", { name: "生成课程" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("课程生成失败，请确认选择的是已解析的 TXT 或 Markdown 资料。");
+    expect(materialButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("manages isolated model configs with curated provider presets", async () => {
     const user = userEvent.setup();
     let settingsList: ModelSettingsListResponse = {
@@ -831,6 +929,7 @@ describe("student interaction affordances", () => {
 
     await waitFor(() => expect(screen.getByRole("button", { name: /腾讯混元默认/ })).toBeInTheDocument());
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("模型配置已保存。");
     expect(screen.queryByText("hunyuan-user-secret")).not.toBeInTheDocument();
     expect(calls).toContainEqual({
       method: "post",
@@ -852,6 +951,7 @@ describe("student interaction affordances", () => {
       url: SETTINGS_ENDPOINTS.defaultConfig(2)
     }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("已设为默认模型配置。"));
 
     await user.click(screen.getByRole("button", { name: "测试连接" }));
 
@@ -860,10 +960,12 @@ describe("student interaction affordances", () => {
       url: SETTINGS_ENDPOINTS.testConfig(2)
     }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("模型连接成功。"));
 
     await user.click(screen.getByRole("button", { name: "删除配置" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: /腾讯混元默认/ })).not.toBeInTheDocument());
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("模型配置已删除。"));
   });
 
   it("creates a real course from the library page and enters the new course", async () => {

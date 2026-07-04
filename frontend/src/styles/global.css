@@ -101,6 +101,108 @@ a {
   text-decoration: none;
 }
 
+.inline-feedback {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(16, 24, 32, 0.1);
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 760;
+  line-height: 1.45;
+}
+
+.inline-feedback-info {
+  color: var(--accent-strong);
+  border-color: rgba(8, 127, 115, 0.18);
+  background: rgba(228, 247, 244, 0.72);
+}
+
+.inline-feedback-success {
+  color: var(--green);
+  border-color: rgba(32, 139, 98, 0.18);
+  background: rgba(32, 139, 98, 0.1);
+}
+
+.inline-feedback-warning {
+  color: #9a3412;
+  border-color: rgba(183, 121, 31, 0.2);
+  background: rgba(255, 247, 237, 0.82);
+}
+
+.composer-inline-feedback {
+  width: min(760px, 100%);
+  margin-inline: auto;
+}
+
+.course-inline-feedback,
+.settings-inline-feedback,
+.library-inline-feedback,
+.dialog-inline-feedback {
+  width: 100%;
+}
+
+.course-inline-feedback {
+  justify-self: stretch;
+}
+
+.toast-stack {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 90;
+  width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(16, 24, 32, 0.12);
+  border-radius: 8px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 46px rgba(16, 24, 32, 0.16);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+
+.toast-success {
+  border-color: rgba(32, 139, 98, 0.2);
+}
+
+.toast-warning {
+  border-color: rgba(183, 121, 31, 0.24);
+}
+
+.toast-message span {
+  min-width: 0;
+  font-size: 0.86rem;
+  font-weight: 780;
+  line-height: 1.45;
+}
+
+.toast-message button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: rgba(16, 24, 32, 0.05);
+}
+
+.toast-message button:hover {
+  color: var(--text);
+  background: rgba(16, 24, 32, 0.09);
+}
+
 .app-surface,
 .entry-page,
 .state-page {
@@ -5613,6 +5715,13 @@ a {
 
   .library-action-button {
     width: 100%;
+  }
+
+  .toast-stack {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    width: auto;
   }
 
   .starter-mode-option {

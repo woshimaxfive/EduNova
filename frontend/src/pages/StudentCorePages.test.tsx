@@ -181,6 +181,7 @@ describe("student core pages", () => {
     expect(screen.getByRole("region", { name: "学习报告" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "导出学习档案" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出档案" })).toBeInTheDocument();
+    expect(screen.queryByText("引用覆盖：AI 导论内置讲义、期末复习题样例")).not.toBeInTheDocument();
   });
 
   it("renders settings with model, privacy, and account boundaries", () => {
@@ -197,7 +198,7 @@ describe("student core pages", () => {
     expect(screen.getByRole("button", { name: "保存设置" })).toBeInTheDocument();
   });
 
-  it("keeps secondary routes inside the same edge workspace shell as the home page", () => {
+  it("keeps secondary routes inside the same shell without injecting demo history", () => {
     renderRoutePage(<SettingsPage />, "/app/settings");
 
     const historyRail = screen.getByRole("region", { name: "历史对话" });
@@ -206,8 +207,8 @@ describe("student core pages", () => {
     expect(within(historyRail).getByRole("link", { name: "个人资料" })).toHaveAttribute("href", "/app/profile");
     expect(within(historyRail).getByRole("link", { name: "设置" })).toHaveAttribute("href", "/app/settings");
     expect(within(historyRail).getByRole("link", { name: "设置" })).toHaveAttribute("aria-current", "page");
-    expect(within(historyRail).getByRole("button", { name: /神经网络反向传播怎么复习/ })).toBeInTheDocument();
-    expect(within(historyRail).queryByText("还没有历史对话")).not.toBeInTheDocument();
+    expect(within(historyRail).queryByRole("button", { name: /神经网络反向传播怎么复习/ })).not.toBeInTheDocument();
+    expect(within(historyRail).getByText("还没有历史对话")).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "应用导航" })).not.toBeInTheDocument();
   });
 });

@@ -6,9 +6,9 @@ import { useActionNotice } from "../components/feedback/useActionNotice";
 import { PageFrame } from "./PageFrame";
 
 const masteryRows = [
-  { title: "人工智能概述", value: "已掌握", progress: 88 },
-  { title: "监督学习", value: "学习中", progress: 62 },
-  { title: "反向传播", value: "薄弱点", progress: 34 }
+  { title: "课程掌握度", value: "待生成", progress: 0 },
+  { title: "练习表现", value: "待生成", progress: 0 },
+  { title: "复习稳定性", value: "待生成", progress: 0 }
 ];
 
 export function ReportsPage() {
@@ -58,11 +58,11 @@ export function ReportsPage() {
           <ul className="report-evidence-list">
             <li>
               <ShieldCheck size={17} weight="duotone" aria-hidden="true" />
-              <span>引用覆盖：AI 导论内置讲义、期末复习题样例</span>
+              <span>{isReportReady ? "本地预览：已整理本次导出请求" : "暂无真实报告依据"}</span>
             </li>
             <li>
               <Graph size={17} weight="duotone" aria-hidden="true" />
-              <span>画像变化：反向传播从待学习变为薄弱点</span>
+              <span>{isReportReady ? "本地预览：暂无画像变化记录" : "完成课程问答或练习后会形成报告线索"}</span>
             </li>
           </ul>
         </section>

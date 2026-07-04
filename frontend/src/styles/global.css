@@ -521,7 +521,7 @@ a {
 .workflow-step.completed .workflow-icon,
 .workflow-step.active .workflow-icon,
 .workspace-state-panel.low_evidence .state-panel-icon,
-.workspace-state-panel.demo_fallback .state-panel-icon {
+.workspace-state-panel.local_preview .state-panel-icon {
   color: var(--accent-strong);
 }
 

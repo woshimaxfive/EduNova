@@ -32,14 +32,7 @@ import { useActionNotice } from "../components/feedback/useActionNotice";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { StudioDock } from "../components/studio/StudioDock";
-import { demoLearningSpace } from "../data/demoLearningSpace";
-import { type AgentTraceEvent, type CitationRef } from "../types/api";
-
-const courseThreads = [
-  "监督学习这一章怎么安排复习？",
-  "把神经网络薄弱点整理成练习",
-  "解释泛化能力和过拟合的区别"
-];
+import { type AgentTraceEvent, type CitationRef, type LearningSpaceSnapshot, type LearningTask } from "../types/api";
 
 const courseStarterQuestions = [
   "这门课最适合先复习哪些知识点？",
@@ -203,8 +196,6 @@ export function CourseSpacePage() {
     enabled: hasRealCourseId,
     staleTime: 10_000
   });
-  const [threads, setThreads] = useState(courseThreads);
-  const [activeThread, setActiveThread] = useState(courseThreads[0]);
   const [activeCourseSessionId, setActiveCourseSessionId] = useState<string | null>(null);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<AnswerPanelKind>("citations");
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
@@ -213,7 +204,6 @@ export function CourseSpacePage() {
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [isSearchingCourse, setIsSearchingCourse] = useState(false);
   const { notice, showNotice } = useActionNotice();
-  const snapshot = demoLearningSpace;
   const apiCourse = courseQuery.data?.data;
   const apiKnowledgePoints = useMemo(
     () => knowledgePointsQuery.data?.data ?? [],
@@ -229,18 +219,13 @@ export function CourseSpacePage() {
     enabled: hasRealCourseId && Boolean(selectedCourseSessionId),
     staleTime: 5_000
   });
-  const sidebarConversations = hasRealCourseId
-    ? mapCourseSessionsToConversations(courseSessions)
-    : threads.map((title, index) => ({ id: `course-thread-${index}`, title, meta: "课程内" }));
+  const sidebarConversations = hasRealCourseId ? mapCourseSessionsToConversations(courseSessions) : [];
   const activeCourseSessionDetail = activeCourseSessionQuery.data?.data;
   const activeCourseSessionDetailId = activeCourseSessionDetail?.session?.id ?? null;
-  const persistedCourseMessages = useMemo(() => {
-    if (!hasRealCourseId || activeCourseSessionDetailId !== selectedCourseSessionId) {
-      return [];
-    }
-
-    return mapTutorMessagesToCourseMessages(activeCourseSessionDetail?.messages ?? []);
-  }, [activeCourseSessionDetail?.messages, activeCourseSessionDetailId, hasRealCourseId, selectedCourseSessionId]);
+  const persistedCourseMessages =
+    hasRealCourseId && activeCourseSessionDetailId === selectedCourseSessionId
+      ? mapTutorMessagesToCourseMessages(activeCourseSessionDetail?.messages ?? [])
+      : [];
   const displayedCourseMessages =
     streamingSessionId !== null
       ? courseMessages
@@ -248,6 +233,7 @@ export function CourseSpacePage() {
         ? persistedCourseMessages
         : courseMessages;
   const hasDisplayedCourseMessages = displayedCourseMessages.length > 0;
+  const isCourseLoading = hasRealCourseId && courseQuery.isPending && !apiCourse;
   const courseSummary = apiCourse
     ? {
         id: Number.parseInt(apiCourse.id, 10),
@@ -257,55 +243,67 @@ export function CourseSpacePage() {
         sourceType: apiCourse.source_type,
         progressPercent: apiCourse.progress_percent
       }
-    : snapshot.currentCourse;
-  const knowledgeNodes = apiKnowledgePoints.length > 0 ? mapKnowledgePointsToNodes(apiKnowledgePoints) : snapshot.knowledgeNodes;
-  const sourceMaterials =
-    overviewMaterials.length > 0
-      ? buildCourseMaterials(overviewMaterials, apiCourse?.knowledge_point_count ?? apiKnowledgePoints.length)
-      : apiCourse && apiCourse.material_count > 0
-        ? Array.from({ length: apiCourse.material_count }, (_, index) => ({
-            id: index + 1,
-            title: `课程资料 ${index + 1}`,
-            type: "txt" as const,
-            parseStatus: "completed" as const,
-            coverageLabel: `${apiCourse.knowledge_point_count} 个知识点`
-          }))
-        : snapshot.materials;
+    : {
+        id: Number.isFinite(numericCourseId) ? numericCourseId : 0,
+        title: isCourseLoading ? "课程加载中" : "课程暂不可用",
+        description: isCourseLoading ? "正在读取这门课的资料、知识点和历史对话。" : "请从学习主页或课程列表重新进入。",
+        subject: "课程空间",
+        sourceType: "uploaded" as const,
+        progressPercent: 0
+      };
+  const knowledgeNodes = apiKnowledgePoints.length > 0 ? mapKnowledgePointsToNodes(apiKnowledgePoints) : [];
+  const sourceMaterials = overviewMaterials.length > 0 ? buildCourseMaterials(overviewMaterials, apiCourse?.knowledge_point_count ?? apiKnowledgePoints.length) : [];
   const latestAssistantWithRetrieval = [...displayedCourseMessages].reverse().find((message) => message.role === "assistant" && message.citations !== undefined);
   const latestRagResults = latestAssistantWithRetrieval?.citations ?? [];
   const hasRetrievalResult = Boolean(latestAssistantWithRetrieval);
-  const evidenceCitations = apiCourse ? mapRagResultsToCitations(latestRagResults) : snapshot.citations;
+  const evidenceCitations = mapRagResultsToCitations(latestRagResults);
   const retrieverStatus: AgentTraceEvent["status"] = !hasRetrievalResult
     ? "pending"
     : latestRagResults.length === 0
       ? "warning"
       : "completed";
-  const canvasSnapshot = {
-    ...snapshot,
+  const courseTasks: LearningTask[] = [
+    {
+      id: 1,
+      title: hasDisplayedCourseMessages ? "继续追问并检查引用" : "提出第一个课程问题",
+      type: "review",
+      status: hasDisplayedCourseMessages ? "doing" : "todo"
+    },
+    {
+      id: 2,
+      title: knowledgeNodes.length > 0 ? "查看知识画布中的知识点" : "等待知识点加载",
+      type: "read",
+      status: knowledgeNodes.length > 0 ? "done" : "todo"
+    }
+  ];
+  const courseAgentTrace: AgentTraceEvent[] = [
+    {
+      id: "rag-retriever",
+      agentName: "RetrieverAgent",
+      summary: hasRetrievalResult ? `检索到 ${latestRagResults.length} 条课程切片引用` : "等待课程问题触发检索",
+      status: retrieverStatus,
+      durationMs: hasRetrievalResult ? 120 : undefined
+    }
+  ];
+  const canvasSnapshot: LearningSpaceSnapshot = {
     currentCourse: {
       ...courseSummary,
       title: `${courseSummary.title}知识画布`
     },
     materials: sourceMaterials,
-    knowledgeNodes
+    knowledgeNodes,
+    todayTasks: courseTasks,
+    studioOutputs: [],
+    citations: evidenceCitations,
+    agentTrace: courseAgentTrace
   };
   const evidenceSnapshot = {
     ...canvasSnapshot,
     citations: evidenceCitations,
-    agentTrace: apiCourse
-      ? [
-          {
-            id: "rag-retriever",
-            agentName: "RetrieverAgent",
-            summary: hasRetrievalResult ? `检索到 ${latestRagResults.length} 条课程切片引用` : "等待课程问题触发检索",
-            status: retrieverStatus,
-            durationMs: hasRetrievalResult ? 120 : undefined
-          }
-        ]
-      : snapshot.agentTrace
+    agentTrace: courseAgentTrace
   };
-  const materialCount = apiCourse?.material_count ?? snapshot.materials.length;
-  const knowledgePointCount = apiCourse?.knowledge_point_count ?? snapshot.knowledgeNodes.length;
+  const materialCount = apiCourse?.material_count ?? sourceMaterials.length;
+  const knowledgePointCount = apiCourse?.knowledge_point_count ?? knowledgeNodes.length;
 
   function selectCourseConversation(sessionId: string) {
     if (!hasRealCourseId) {
@@ -315,17 +313,6 @@ export function CourseSpacePage() {
     setActiveCourseSessionId(sessionId);
     setStreamingSessionId(null);
     setCourseMessages([]);
-  }
-
-  function appendDemoCourseMessages(question: string, assistantAnswer: string, citations?: RagSearchResultItem[]) {
-    const timestamp = Date.now();
-    setCourseMessages((current) => [
-      ...current,
-      { id: `course-user-${timestamp}`, role: "user", content: question },
-      { id: `course-assistant-${timestamp}`, role: "assistant", content: assistantAnswer, citations }
-    ]);
-    setThreads((current) => (current.includes(question) ? current : [question, ...current]));
-    setActiveThread(question);
   }
 
   async function sendCourseQuestion() {
@@ -341,9 +328,7 @@ export function CourseSpacePage() {
     }
 
     if (!hasRealCourseId) {
-      appendDemoCourseMessages(question, "我会按课程资料回答：先定位相关知识点，再给出复习顺序、引用来源和下一步练习。");
-      setCoursePrompt("");
-      showNotice("已生成课程回答。", "success");
+      showNotice("课程地址无效，请从课程列表重新进入。", "warning");
       return;
     }
 
@@ -421,10 +406,10 @@ export function CourseSpacePage() {
         <AppSidebar
           isCollapsed={isHistoryCollapsed}
           conversations={sidebarConversations}
-          activeConversationId={hasRealCourseId ? selectedCourseSessionId : sidebarConversations.find((conversation) => conversation.title === activeThread)?.id}
+          activeConversationId={hasRealCourseId ? selectedCourseSessionId : null}
           onToggleCollapsed={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
           onSelectConversation={(conversation) =>
-            hasRealCourseId ? void selectCourseConversation(conversation.id) : setActiveThread(conversation.title)
+            hasRealCourseId ? void selectCourseConversation(conversation.id) : undefined
           }
         />
         <section className="route-main-surface course-route-surface">
@@ -483,17 +468,7 @@ export function CourseSpacePage() {
                       <p className="course-thread-empty">还没有课程对话</p>
                     )
                   ) : (
-                    threads.map((thread) => (
-                      <button
-                        className={activeThread === thread ? "active" : ""}
-                        type="button"
-                        key={thread}
-                        aria-pressed={activeThread === thread}
-                        onClick={() => setActiveThread(thread)}
-                      >
-                        {thread}
-                      </button>
-                    ))
+                    <p className="course-thread-empty">请从课程列表重新进入</p>
                   )}
                 </div>
 
@@ -598,7 +573,7 @@ export function CourseSpacePage() {
                   </div>
                 </div>
                 <ol className="course-task-list" aria-label="课程任务">
-                  {snapshot.todayTasks.map((task) => (
+                  {courseTasks.map((task) => (
                     <li key={task.id} className={task.status}>
                       <strong>{task.title}</strong>
                       <span>{task.type}</span>
@@ -623,7 +598,7 @@ export function CourseSpacePage() {
             <LearningCanvas snapshot={canvasSnapshot} />
 
             <div className="course-space-secondary">
-              <StudioDock outputs={snapshot.studioOutputs} />
+              <StudioDock outputs={[]} showGenerateAction={false} />
               <EvidenceLayer snapshot={evidenceSnapshot} />
             </div>
           </div>
@@ -732,7 +707,7 @@ function AnswerDetailPanel({ activePanel, citations, hasRealCourse, hasSearched 
   return (
     <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
       <strong>引用来源</strong>
-      <p>AI 导论内置讲义和期末复习题样例会作为回答依据。</p>
+      <p>请从课程列表进入真实课程后再查看引用来源。</p>
     </section>
   );
 }

@@ -24,7 +24,7 @@ export type CourseSummary = {
   title: string;
   description: string;
   subject: string;
-  sourceType: "builtin" | "uploaded" | "demo_fallback";
+  sourceType: "builtin" | "uploaded" | "generated";
   progressPercent: number;
 };
 
@@ -57,7 +57,7 @@ export type WorkflowStage = {
   nextAction?: string;
 };
 
-export type WorkspacePanelKind = "empty" | "loading" | "error" | "low_evidence" | "demo_fallback";
+export type WorkspacePanelKind = "empty" | "loading" | "error" | "low_evidence" | "local_preview";
 
 export type WorkspaceStatePanel = {
   kind: WorkspacePanelKind;

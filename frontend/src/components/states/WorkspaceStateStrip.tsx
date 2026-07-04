@@ -13,7 +13,7 @@ const stateIcons = {
   loading: CircleNotch,
   error: WarningCircle,
   low_evidence: ShieldCheck,
-  demo_fallback: SealCheck
+  local_preview: SealCheck
 } as const satisfies Record<WorkspacePanelKind, typeof FileArrowUp>;
 
 export function WorkspaceStateStrip({ panels }: WorkspaceStateStripProps) {

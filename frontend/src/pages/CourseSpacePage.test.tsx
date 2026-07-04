@@ -28,6 +28,7 @@ type CoursePageOptions = {
   failSend?: boolean;
   streamEvents?: Array<{ event: string; data: unknown }>;
   controlledStream?: boolean;
+  delayCourseData?: boolean;
 };
 
 type FetchCall = {
@@ -151,6 +152,13 @@ function renderCoursePage(options: CoursePageOptions = {}) {
     const url = config.url ?? "";
     const payload = parsePayload(config.data);
     calls.push({ method, url, payload, params: config.params });
+
+    if (
+      options.delayCourseData &&
+      [COURSE_ENDPOINTS.detail(808), COURSE_ENDPOINTS.overview(808), COURSE_ENDPOINTS.knowledgePoints(808)].includes(url)
+    ) {
+      return new Promise(() => {});
+    }
 
     if (url === COURSE_ENDPOINTS.detail(808)) {
       return {
@@ -395,6 +403,14 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.getByText("推荐问题")).toBeInTheDocument();
     expect(screen.queryByText("监督学习先抓住“数据、目标、泛化”三件事")).not.toBeInTheDocument();
     expect(screen.queryByText("AI 辅导回答")).not.toBeInTheDocument();
+  });
+
+  it("does not show demo course fallback while real course data is loading", () => {
+    renderCoursePage({ delayCourseData: true });
+
+    expect(screen.queryByRole("heading", { name: "人工智能导论" })).not.toBeInTheDocument();
+    expect(screen.queryByText("AI 导论内置讲义")).not.toBeInTheDocument();
+    expect(screen.queryByText("监督学习与泛化")).not.toBeInTheDocument();
   });
 
   it("creates a course session before sending the first course question and renders persisted citations", async () => {

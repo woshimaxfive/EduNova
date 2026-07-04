@@ -1226,7 +1226,7 @@ GET /demo/status
 ```
 
 - [ ] Frontend login page has Demo button that signs into the demo account after reset confirmation.
-- [ ] Clearly label fallback content with `demo_fallback` in API payloads and UI detail panels.
+- [ ] Use explicit local preview states for unfinished capabilities; do not present fallback content as real model, citation, or resource output.
 - [ ] Verify full demo chain:
 
 ```text

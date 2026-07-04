@@ -84,10 +84,10 @@ const workspaceStatePanels: WorkspaceStatePanel[] = [
     actionLabel: "补充资料"
   },
   {
-    kind: "demo_fallback",
-    title: "演示兜底内容",
-    description: "演示来源清晰可见。",
-    actionLabel: "查看标记"
+    kind: "local_preview",
+    title: "本地预备反馈",
+    description: "未接真实能力时只给出短反馈。",
+    actionLabel: "查看边界"
   }
 ];
 

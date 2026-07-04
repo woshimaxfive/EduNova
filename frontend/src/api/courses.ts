@@ -20,7 +20,7 @@ export type ApiCourseSummary = {
   title: string;
   description: string;
   subject: string;
-  source_type: "builtin" | "uploaded" | "demo_fallback";
+  source_type: "builtin" | "uploaded" | "generated";
   status: string;
   progress_percent: number;
   material_count: number;

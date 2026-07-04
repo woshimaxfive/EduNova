@@ -42,13 +42,13 @@ describe("workspace workflow state", () => {
     });
   });
 
-  it("exposes the required empty, loading, error, low evidence and demo fallback states", () => {
+  it("exposes the required empty, loading, error, low evidence and local preview states", () => {
     expect(getWorkspaceStatePanels().map((panel) => panel.kind)).toEqual([
       "empty",
       "loading",
       "error",
       "low_evidence",
-      "demo_fallback"
+      "local_preview"
     ]);
   });
 });

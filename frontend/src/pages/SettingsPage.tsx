@@ -387,13 +387,13 @@ export function SettingsPage() {
                   <details className="settings-advanced-field">
                     <summary>高级项：向量模型</summary>
                     <label>
-                      <span>向量模型（后续检索增强使用）</span>
+                      <span>向量模型（课程知识库检索使用）</span>
                       <input
                         value={currentDraft.embedding_model}
-                        placeholder={selectedPreset.embeddingModel || "可留空，后续接入 embedding 时再填写"}
+                        placeholder={selectedPreset.embeddingModel || "可留空，系统会使用本地 fallback"}
                         onChange={(event) => updateDraft("embedding_model", event.target.value)}
                       />
-                      <small className="settings-field-hint">当前课程回答先使用关键词引用；embedding 和向量召回后续接入。</small>
+                      <small className="settings-field-hint">不填写向量模型时，课程检索会使用本地 fallback，页面会明确标记来源。</small>
                     </label>
                   </details>
                 </div>

@@ -264,28 +264,16 @@ describe("student interaction affordances", () => {
     expect(screen.getByRole("region", { name: "主页对话" })).toHaveTextContent("监督学习怎么复习？");
   });
 
-  it("opens course answer detail panels instead of leaving action buttons inert", async () => {
+  it("does not create local course answers when the course route context is missing", async () => {
     const user = userEvent.setup();
-
     renderPage(<CourseSpacePage />);
 
     await user.type(screen.getByRole("textbox", { name: "课程问题输入" }), "监督学习怎么复习？");
     await user.click(screen.getByRole("button", { name: "发送" }));
-    expect(screen.getByRole("region", { name: "课程即时对话" })).toHaveTextContent("监督学习怎么复习？");
 
-    await user.click(screen.getByRole("button", { name: "学习路径" }));
-
-    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("建议路径");
-
-    await user.click(screen.getByRole("button", { name: "Agent 过程" }));
-
-    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("RetrieverAgent");
-    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("PathAgent");
-    expect(screen.getByRole("region", { name: "回答展开详情" })).not.toHaveTextContent("PlannerAgent");
-
-    await user.click(screen.getByRole("button", { name: "监督学习，当前焦点" }));
-
-    expect(screen.getByRole("region", { name: "当前知识点详情" })).toHaveTextContent("监督学习");
+    expect(screen.getByRole("status")).toHaveTextContent("课程地址无效，请从课程列表重新进入。");
+    expect(screen.getByRole("textbox", { name: "课程问题输入" })).toHaveValue("监督学习怎么复习？");
+    expect(screen.queryByRole("region", { name: "课程即时对话" })).not.toBeInTheDocument();
   });
 
   it("renders generated course detail and knowledge points from the course API", async () => {
@@ -387,7 +375,7 @@ describe("student interaction affordances", () => {
     }
   });
 
-  it("sends course-local questions with Enter and adds them to the course history", async () => {
+  it("keeps invalid course questions in the input instead of adding fake history", async () => {
     const user = userEvent.setup();
 
     renderPage(<CourseSpacePage />);
@@ -396,24 +384,21 @@ describe("student interaction affordances", () => {
 
     await user.type(courseInput, "给我一个十分钟复习计划{enter}");
 
-    expect(courseInput).toHaveValue("");
-    expect(screen.getByRole("status")).toHaveTextContent("已生成课程回答");
-    expect(screen.getByRole("region", { name: "课程即时对话" })).toHaveTextContent("给我一个十分钟复习计划");
-    expect(screen.getByRole("region", { name: "课程即时对话" })).toHaveTextContent("我会按课程资料回答");
-    expect(screen.getByRole("region", { name: "历史对话" })).toHaveTextContent("给我一个十分钟复习计划");
+    expect(courseInput).toHaveValue("给我一个十分钟复习计划");
+    expect(screen.getByRole("status")).toHaveTextContent("课程地址无效，请从课程列表重新进入。");
+    expect(screen.queryByRole("region", { name: "课程即时对话" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "历史对话" })).toHaveTextContent("还没有历史对话");
   });
 
-  it("uses the shared sidebar history to switch the course thread", async () => {
-    const user = userEvent.setup();
-
+  it("does not render static course history when no real course sessions exist", () => {
     renderPage(<CourseSpacePage />);
 
     const historyRail = screen.getByRole("region", { name: "历史对话" });
     const courseThreadList = screen.getByLabelText("课程内历史对话");
 
-    await user.click(within(historyRail).getByRole("button", { name: /解释泛化能力和过拟合的区别/ }));
-
-    expect(within(courseThreadList).getByRole("button", { name: "解释泛化能力和过拟合的区别" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(historyRail).queryByRole("button", { name: /解释泛化能力和过拟合的区别/ })).not.toBeInTheDocument();
+    expect(within(courseThreadList).queryByRole("button")).not.toBeInTheDocument();
+    expect(courseThreadList).toHaveTextContent("请从课程列表重新进入");
   });
 
   it("uses the tutor route as a course tutoring entry without static demo answers", async () => {
@@ -483,6 +468,9 @@ describe("student interaction affordances", () => {
     const user = userEvent.setup();
 
     renderPage(<StudioPage />);
+
+    expect(screen.getByRole("region", { name: "生成队列" })).not.toHaveTextContent("监督学习个性化讲解");
+    expect(screen.getByRole("region", { name: "资源生成区" })).not.toHaveTextContent("反向传播薄弱点练习");
 
     await user.selectOptions(screen.getByLabelText("知识点"), "反向传播");
     await user.click(screen.getByRole("button", { name: "练习" }));

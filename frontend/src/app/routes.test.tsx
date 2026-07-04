@@ -114,7 +114,7 @@ describe("EduNova routes", () => {
     expect(await screen.findByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
   });
 
-  it("renders the protected course space for an authenticated student", async () => {
+  it("renders the protected course shell without demo fallback for an invalid course id", async () => {
     useAuthStore.getState().setSession({
       token: "demo-token",
       user: {
@@ -127,7 +127,8 @@ describe("EduNova routes", () => {
 
     renderRoutes(["/app/courses/course-ai"]);
 
-    expect(await screen.findByRole("heading", { name: "人工智能导论" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "课程暂不可用" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "人工智能导论" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "课程对话空间" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "知识学习画布" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "证据与 Agent 轨迹" })).toBeInTheDocument();

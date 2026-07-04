@@ -77,6 +77,21 @@ class CourseAnswerGenerator(Protocol):
         ...
 
 
+class ProfileEventRecorder(Protocol):
+    def record_course_question_event(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        user_message: ChatMessage,
+        assistant_message: ChatMessage,
+        message_text: str,
+        citation_json: list[dict[str, Any]],
+        trace_id: str | None,
+    ) -> Any:
+        ...
+
+
 @dataclass(frozen=True)
 class GeneratedAnswer:
     content: str
@@ -159,10 +174,12 @@ class TutorSessionService:
         repository: TutorSessionRepository,
         course_citation_searcher: CourseCitationSearcher | None = None,
         course_answer_generator: CourseAnswerGenerator | None = None,
+        profile_event_recorder: ProfileEventRecorder | None = None,
     ) -> None:
         self.repository = repository
         self.course_citation_searcher = course_citation_searcher
         self.course_answer_generator = course_answer_generator
+        self.profile_event_recorder = profile_event_recorder
 
     def create_session(
         self,
@@ -403,6 +420,16 @@ class TutorSessionService:
             self.repository.add_message(assistant_message)
             self.repository.touch_session(session)
             self.repository.flush()
+            if self.profile_event_recorder is not None and session.scope == "course":
+                self.profile_event_recorder.record_course_question_event(
+                    user=user,
+                    session=session,
+                    user_message=user_message,
+                    assistant_message=assistant_message,
+                    message_text=message_text,
+                    citation_json=citation_json,
+                    trace_id=trace_id,
+                )
             self.repository.commit()
         except Exception:
             self.repository.rollback()

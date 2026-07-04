@@ -15,6 +15,7 @@ from backend.app.schemas.tutor import CreateTutorSessionRequest, SendTutorMessag
 from backend.app.services.course_answers import CourseAnswerGenerationError, CourseAnswerService
 from backend.app.services.embeddings import EmbeddingService
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
+from backend.app.services.profiles import ProfileService, SqlAlchemyProfileRepository
 from backend.app.services.rag import RagService, SqlAlchemyRagRepository
 from backend.app.services.tutor import (
     EmptyMessageError,
@@ -41,6 +42,7 @@ def get_tutor_session_service(db=Depends(get_db_session)) -> TutorSessionService
             embedding_service=EmbeddingService(model_settings_service),
         ),
         course_answer_generator=CourseAnswerService(model_settings_service),
+        profile_event_recorder=ProfileService(SqlAlchemyProfileRepository(db)),
     )
 
 

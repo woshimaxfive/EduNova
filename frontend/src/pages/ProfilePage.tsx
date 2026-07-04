@@ -1,24 +1,104 @@
 import { Brain, ChatCircleText, Compass, PencilSimpleLine, TrendUp } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 
+import {
+  getMyProfile,
+  listProfileEvents,
+  updateProfileByChat,
+  type ProfileEventResponse,
+  type StudentProfileResponse
+} from "../api/profiles";
+import { type ApiEnvelope } from "../types/api";
+import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { PageFrame } from "./PageFrame";
 
-const initialProfileDimensions = [
-  { label: "目标", value: "两周内完成期末复习路线", tone: "focus" },
-  { label: "基础", value: "搜索与机器学习概念较稳", tone: "ready" },
-  { label: "薄弱点", value: "反向传播链式法则", tone: "warning" },
-  { label: "节奏", value: "每天 45 分钟，偏好短讲解加练习", tone: "steady" }
-];
+type ProfileDimension = {
+  label: string;
+  value: string;
+  tone: string;
+};
 
-const evidenceItems = ["最近 3 次追问集中在神经网络", "错题反馈显示推导步骤容易跳步", "上传资料覆盖监督学习和期末题"];
+const EMPTY_PROFILE: StudentProfileResponse = {
+  id: null,
+  version: 0,
+  has_profile: false,
+  profile_json: {
+    major_background: "",
+    knowledge_foundation: "",
+    learning_goal: "",
+    cognitive_style: "",
+    learning_preference: "",
+    weak_points: [],
+    learning_pace: "",
+    motivation_interest: ""
+  },
+  confidence_score: 0,
+  updated_reason: null,
+  updated_at: null,
+  next_question: "这门课你最想先解决什么问题？"
+};
+
+function buildDimensions(profile: StudentProfileResponse): ProfileDimension[] {
+  const profileJson = profile.profile_json;
+  return [
+    { label: "目标", value: profileJson.learning_goal || "待补充", tone: "focus" },
+    { label: "基础", value: profileJson.knowledge_foundation || "未填写", tone: "ready" },
+    {
+      label: "薄弱点",
+      value: profileJson.weak_points.length > 0 ? profileJson.weak_points.join("、") : "未填写",
+      tone: "warning"
+    },
+    { label: "节奏", value: profileJson.learning_pace || "未填写", tone: "steady" },
+    { label: "背景", value: profileJson.major_background || "未填写", tone: "ready" },
+    { label: "方式", value: profileJson.learning_preference || "未填写", tone: "focus" },
+    { label: "风格", value: profileJson.cognitive_style || "未填写", tone: "steady" },
+    { label: "动机", value: profileJson.motivation_interest || "未填写", tone: "ready" }
+  ];
+}
 
 export function ProfilePage() {
-  const [profileDimensions, setProfileDimensions] = useState(initialProfileDimensions);
-  const [profileEvidence, setProfileEvidence] = useState(evidenceItems);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
-  const [goalDraft, setGoalDraft] = useState(initialProfileDimensions[0].value);
+  const [goalDraft, setGoalDraft] = useState("");
   const [profileAnswer, setProfileAnswer] = useState("");
-  const [confidence, setConfidence] = useState(72);
+  const [profileFeedback, setProfileFeedback] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const profileQuery = useQuery({
+    queryKey: ["profiles", "me"],
+    queryFn: getMyProfile,
+    staleTime: 30_000
+  });
+  const eventsQuery = useQuery({
+    queryKey: ["profiles", "events"],
+    queryFn: listProfileEvents,
+    staleTime: 30_000
+  });
+  const profile = profileQuery.data?.data ?? EMPTY_PROFILE;
+  const profileEvents = eventsQuery.data?.data ?? [];
+  const profileDimensions = useMemo(() => buildDimensions(profile), [profile]);
+  const currentGoal = profile.profile_json.learning_goal;
+  const confidence = Math.round(profile.confidence_score);
+  const updateProfileMutation = useMutation({
+    mutationFn: updateProfileByChat,
+    onSuccess: (response) => {
+      queryClient.setQueryData<ApiEnvelope<StudentProfileResponse>>(["profiles", "me"], {
+        data: response.data.profile,
+        trace_id: response.trace_id
+      });
+      queryClient.setQueryData<ApiEnvelope<ProfileEventResponse[]> | undefined>(["profiles", "events"], (current) => ({
+        data: [response.data.event, ...(current?.data ?? [])],
+        trace_id: response.trace_id
+      }));
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      setGoalDraft(response.data.profile.profile_json.learning_goal);
+      setProfileAnswer("");
+      setIsEditingGoal(false);
+      setProfileFeedback(null);
+    },
+    onError: () => {
+      setProfileFeedback("画像更新失败，请稍后重试。");
+    }
+  });
 
   function saveGoal() {
     const nextGoal = goalDraft.trim();
@@ -27,10 +107,7 @@ export function ProfilePage() {
       return;
     }
 
-    setProfileDimensions((current) => current.map((item) => (item.label === "目标" ? { ...item, value: nextGoal } : item)));
-    setProfileEvidence((current) => [`目标更新：${nextGoal}`, ...current]);
-    setConfidence((current) => Math.min(current + 3, 92));
-    setIsEditingGoal(false);
+    updateProfileMutation.mutate({ message: nextGoal });
   }
 
   function submitProfileAnswer() {
@@ -40,9 +117,7 @@ export function ProfilePage() {
       return;
     }
 
-    setProfileEvidence((current) => [`画像对话：${answer}`, ...current]);
-    setConfidence((current) => Math.min(current + 4, 94));
-    setProfileAnswer("");
+    updateProfileMutation.mutate({ message: answer });
   }
 
   return (
@@ -58,6 +133,10 @@ export function ProfilePage() {
               可信度 {confidence}%
             </span>
           </div>
+          <InlineFeedback
+            message={profileQuery.isError ? "画像读取失败，请稍后重试。" : profileFeedback}
+            tone="warning"
+          />
           <div className="profile-dimension-grid">
             {profileDimensions.map((item) => (
               <article className={`profile-dimension ${item.tone}`} key={item.label}>
@@ -69,12 +148,21 @@ export function ProfilePage() {
           {isEditingGoal ? (
             <div className="inline-edit-row">
               <input aria-label="学习目标" value={goalDraft} onChange={(event) => setGoalDraft(event.target.value)} />
-              <button className="primary-action" type="button" onClick={saveGoal}>
+              <button className="primary-action" type="button" onClick={saveGoal} disabled={updateProfileMutation.isPending}>
                 保存目标
               </button>
             </div>
           ) : null}
-          <button className="soft-button" type="button" onClick={() => setIsEditingGoal((editing) => !editing)}>
+          <button
+            className="soft-button"
+            type="button"
+            onClick={() => {
+              if (!isEditingGoal) {
+                setGoalDraft(currentGoal);
+              }
+              setIsEditingGoal((editing) => !editing);
+            }}
+          >
             <PencilSimpleLine size={17} weight="duotone" aria-hidden="true" />
             <span>更新目标</span>
           </button>
@@ -88,10 +176,16 @@ export function ProfilePage() {
               </div>
             </div>
             <ul className="evidence-list">
-              {profileEvidence.map((item, index) => (
-                <li key={`${item}-${index}`}>
+              {profileEvents.length === 0 && !eventsQuery.isLoading ? (
+                <li>
                   <Brain size={17} weight="duotone" aria-hidden="true" />
-                  <span>{item}</span>
+                  <span>还没有画像证据</span>
+                </li>
+              ) : null}
+              {profileEvents.map((item) => (
+                <li key={item.id}>
+                  <Brain size={17} weight="duotone" aria-hidden="true" />
+                  <span>{item.change_summary}</span>
                 </li>
               ))}
             </ul>
@@ -105,7 +199,7 @@ export function ProfilePage() {
             </div>
             <div className="profile-prompt-strip">
               <Compass size={17} weight="duotone" aria-hidden="true" />
-              <span>下一问：这门课你最担心哪一章？</span>
+              <span>下一问：{profile.next_question}</span>
             </div>
             <label className="profile-answer-box">
               <span>我的回答</span>
@@ -117,7 +211,7 @@ export function ProfilePage() {
                 placeholder="比如：最担心反向传播推导。"
               />
             </label>
-            <button className="primary-action" type="button" onClick={submitProfileAnswer}>
+            <button className="primary-action" type="button" onClick={submitProfileAnswer} disabled={updateProfileMutation.isPending}>
               更新画像
             </button>
           </section>

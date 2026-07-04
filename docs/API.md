@@ -37,6 +37,7 @@ auth
 dashboard
 courses
 materials
+profiles
 rag
 tutor
 settings
@@ -45,7 +46,6 @@ settings
 当前前端仍保留以下合同常量，方便后续 Phase 接入，但它们不是当前已经挂载的后端 router，不能在页面或文档中当作已实现接口：
 
 ```text
-profiles
 resources
 agents
 paths
@@ -341,19 +341,27 @@ Authorization: Bearer <token>
 
 ## 6. Profile 接口
 
-状态：后续预留。当前后端未挂载 `profiles` router，`ProfilePage` 仍是前端骨架和本地预备交互。以下接口是 Phase 7 画像真实化时的目标合同。
+状态：Phase 7.1 已实现。当前后端已挂载 `profiles` router，`ProfilePage` 从真实后端读取画像和画像事件。画像采用确定性抽取，不新增外部模型调用。
 
 ### GET `/profiles/me`
 
 用途：读取当前学生画像。
+
+规则：
+
+- 必须携带 JWT，只读取当前用户自己的画像。
+- 空画像也返回稳定 8 维结构，字符串字段为空字符串，`weak_points=[]`。
+- `version` 由当前画像关联的画像事件数量派生。
+- `next_question` 用于前端画像对话入口，不等同于强制问卷。
 
 响应：
 
 ```json
 {
   "data": {
-    "id": 1,
+    "id": "1",
     "version": 3,
+    "has_profile": true,
     "profile_json": {
       "major_background": "计算机专业大二",
       "knowledge_foundation": "机器学习刚入门",
@@ -364,15 +372,18 @@ Authorization: Bearer <token>
       "learning_pace": "期末前冲刺",
       "motivation_interest": "希望提升 AI 实践能力"
     },
-    "updated_at": "2026-07-01T10:30:00+08:00"
+    "confidence_score": 72,
+    "updated_reason": "更新学习画像：学习目标、知识基础",
+    "updated_at": "2026-07-05T09:00:00Z",
+    "next_question": "这门课你最担心哪一章？"
   },
-  "trace_id": "trace_20260701_005"
+  "trace_id": "trace_profile_me"
 }
 ```
 
 ### POST `/profiles/chat`
 
-用途：通过对话更新学习画像。
+用途：通过对话更新学习画像。Phase 7.1 使用确定性规则抽取 8 维画像，写入 `student_profiles` 并追加 `profile_events`。
 
 请求：
 
@@ -382,11 +393,38 @@ Authorization: Bearer <token>
 }
 ```
 
-响应包含 AI 回复、画像变更和事件。
+响应包含回复、最新画像和本次画像事件：
+
+```json
+{
+  "data": {
+    "reply": "已更新你的学习画像。",
+    "profile": {},
+    "event": {
+      "id": "10",
+      "dimension": "profile_chat",
+      "change_summary": "更新学习画像：学习目标、薄弱点",
+      "evidence_json": {
+        "source_type": "profile_chat",
+        "summary": "学生画像对话",
+        "updated_dimensions": ["learning_goal", "weak_points"]
+      },
+      "created_at": "2026-07-05T09:01:00Z"
+    }
+  },
+  "trace_id": "trace_profile_chat"
+}
+```
 
 ### GET `/profiles/events`
 
 用途：查看画像变化记录。
+
+规则：
+
+- 只返回当前用户画像事件，默认最近 20 条。
+- 课程问答产生的画像候选事件会使用 `dimension="weak_points"`。
+- 课程问答事件的 `evidence_json` 只保存 `source_type`、`course_id`、`session_id`、消息 ID、`trace_id` 和引用摘要；不保存完整用户问题、系统提示词、模型输入或资料原文。
 
 ## 7. Course 接口
 

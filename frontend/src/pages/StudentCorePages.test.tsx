@@ -8,6 +8,7 @@ import { buildCoursePath } from "../app/routePaths";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS, type ApiCourseSummary } from "../api/courses";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
+import { PROFILE_ENDPOINTS } from "../api/profiles";
 import { LibraryPage } from "./LibraryPage";
 import { PracticePage } from "./PracticePage";
 import { ProfilePage } from "./ProfilePage";
@@ -92,6 +93,58 @@ describe("student core pages", () => {
         };
       }
 
+      if (config.url === PROFILE_ENDPOINTS.me) {
+        return {
+          data: {
+            data: {
+              id: "77",
+              version: 2,
+              has_profile: true,
+              profile_json: {
+                major_background: "计算机专业大二",
+                knowledge_foundation: "机器学习刚入门",
+                learning_goal: "期末前掌握神经网络",
+                cognitive_style: "案例驱动",
+                learning_preference: "图解和代码",
+                weak_points: ["链式法则"],
+                learning_pace: "每天 45 分钟",
+                motivation_interest: "提升 AI 实践能力"
+              },
+              confidence_score: 72,
+              updated_reason: "更新学习画像：学习目标、基础",
+              updated_at: "2026-07-05T09:00:00Z",
+              next_question: "这门课你最担心哪一章？"
+            },
+            trace_id: "trace_profile_me"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (config.url === PROFILE_ENDPOINTS.events) {
+        return {
+          data: {
+            data: [
+              {
+                id: "91",
+                dimension: "profile_chat",
+                change_summary: "更新学习画像：学习目标、基础",
+                evidence_json: { source_type: "profile_chat", summary: "学生画像对话" },
+                created_at: "2026-07-05T09:01:00Z"
+              }
+            ],
+            trace_id: "trace_profile_events"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
       return {
         data: { data: {}, trace_id: "trace_core_default" },
         status: 200,
@@ -132,14 +185,15 @@ describe("student core pages", () => {
     expect(screen.queryByRole("button", { name: "复盘报告" })).not.toBeInTheDocument();
   });
 
-  it("renders the learning profile workspace", () => {
+  it("renders the learning profile workspace from the real profile API", async () => {
     renderPage(<ProfilePage />);
 
     expect(screen.getByRole("heading", { name: "学习画像" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "学习画像" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "画像证据" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "画像对话入口" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "更新目标" })).toBeInTheDocument();
+    expect(await screen.findByText("期末前掌握神经网络")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("更新学习画像：学习目标、基础");
   });
 
   it("renders the AI tutor route as a course selector instead of a static demo chat", async () => {

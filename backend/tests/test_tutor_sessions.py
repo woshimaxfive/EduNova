@@ -163,6 +163,35 @@ class FakeCourseAnswerGenerator:
 
 
 @dataclass
+class FakeProfileEventRecorder:
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def record_course_question_event(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        user_message: ChatMessage,
+        assistant_message: ChatMessage,
+        message_text: str,
+        citation_json: list[dict[str, Any]],
+        trace_id: str | None,
+    ) -> None:
+        self.calls.append(
+            {
+                "user_id": user.id,
+                "scope": session.scope,
+                "course_id": session.course_id,
+                "user_message_id": user_message.id,
+                "assistant_message_id": assistant_message.id,
+                "message_text": message_text,
+                "citation_count": len(citation_json),
+                "trace_id": trace_id,
+            }
+        )
+
+
+@dataclass
 class TokenAuthRepository:
     user: User
 
@@ -344,6 +373,49 @@ def test_append_course_message_persists_real_citations_from_course_knowledge() -
     assert detail["messages"][1]["trace_id"] == "trace_model_test"
 
 
+def test_append_course_message_records_profile_candidate_event_after_messages_have_ids() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    profile_recorder = FakeProfileEventRecorder()
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=FakeCourseCitationSearcher(
+            results=[
+                {
+                    "chunk_id": 501,
+                    "course_id": 7,
+                    "material_id": 301,
+                    "knowledge_point_id": 401,
+                    "content": "启发式搜索利用启发函数估计路径代价。",
+                    "source_title": "人工智能导论讲义.md",
+                    "page_number": None,
+                    "section_title": "启发式搜索",
+                    "score": 9.5,
+                }
+            ]
+        ),
+        course_answer_generator=FakeCourseAnswerGenerator(),
+        profile_event_recorder=profile_recorder,
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+
+    service.append_message(user=user, session_id=session.id, content="为什么启发式搜索这么难？")
+
+    assert profile_recorder.calls == [
+        {
+            "user_id": 1,
+            "scope": "course",
+            "course_id": 7,
+            "user_message_id": 1,
+            "assistant_message_id": 2,
+            "message_text": "为什么启发式搜索这么难？",
+            "citation_count": 1,
+            "trace_id": "trace_model_test",
+        }
+    ]
+
+
 def test_append_course_message_records_insufficient_evidence_without_fabricated_citations() -> None:
     module = load_tutor_module()
     user = make_user(1)
@@ -403,6 +475,23 @@ def test_append_home_message_uses_model_reply_but_does_not_call_course_searcher(
     assert detail["messages"][1]["content"] == "模型回答：启发式搜索要先理解启发函数，再练 A 星算法。"
     assert detail["messages"][1]["citation_json"] == []
     assert detail["messages"][1]["trace_id"] == "trace_model_test"
+
+
+def test_append_home_message_does_not_record_profile_candidate_event() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    profile_recorder = FakeProfileEventRecorder()
+    service = module.TutorSessionService(
+        repo,
+        course_answer_generator=FakeCourseAnswerGenerator(),
+        profile_event_recorder=profile_recorder,
+    )
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="主页答疑")
+
+    service.append_message(user=user, session_id=session.id, content="为什么我不会反向传播？")
+
+    assert profile_recorder.calls == []
 
 
 def test_append_home_message_without_model_config_saves_clear_prompt() -> None:
@@ -552,6 +641,50 @@ def test_stream_course_message_emits_tokens_and_persists_final_messages() -> Non
     assert events[-1]["data"]["messages"][1]["content"] == repo.messages[1].content
 
 
+def test_stream_course_message_records_profile_candidate_event_on_done() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    profile_recorder = FakeProfileEventRecorder()
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=FakeCourseCitationSearcher(
+            results=[
+                {
+                    "chunk_id": 501,
+                    "course_id": 7,
+                    "material_id": 301,
+                    "knowledge_point_id": 401,
+                    "content": "启发式搜索利用启发函数估计路径代价。",
+                    "source_title": "人工智能导论讲义.md",
+                    "page_number": None,
+                    "section_title": "启发式搜索",
+                    "score": 9.5,
+                }
+            ]
+        ),
+        course_answer_generator=FakeCourseAnswerGenerator(tokens=["模型回答：", "先看启发函数。"]),
+        profile_event_recorder=profile_recorder,
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+
+    events = list(service.stream_message(user=user, session_id=session.id, content="启发式搜索怎么复习才不难？"))
+
+    assert events[-1]["event"] == "done"
+    assert profile_recorder.calls == [
+        {
+            "user_id": 1,
+            "scope": "course",
+            "course_id": 7,
+            "user_message_id": 1,
+            "assistant_message_id": 2,
+            "message_text": "启发式搜索怎么复习才不难？",
+            "citation_count": 1,
+            "trace_id": "trace_model_test",
+        }
+    ]
+
+
 def test_stream_course_message_without_citations_does_not_call_model_and_persists_insufficient_evidence() -> None:
     module = load_tutor_module()
     user = make_user(1)
@@ -620,6 +753,42 @@ def test_stream_course_message_model_failure_emits_error_without_half_messages()
     assert events[-1]["event"] == "error"
     assert events[-1]["data"]["code"] == "MODEL_PROVIDER_ERROR"
     assert repo.messages == []
+
+
+def test_stream_course_message_model_failure_does_not_record_profile_candidate_event() -> None:
+    module = load_tutor_module()
+    answer_module = importlib.import_module("backend.app.services.course_answers")
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    profile_recorder = FakeProfileEventRecorder()
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=FakeCourseCitationSearcher(
+            results=[
+                {
+                    "chunk_id": 501,
+                    "course_id": 7,
+                    "material_id": 301,
+                    "knowledge_point_id": 401,
+                    "content": "启发式搜索利用启发函数估计路径代价。",
+                    "source_title": "人工智能导论讲义.md",
+                    "page_number": None,
+                    "section_title": "启发式搜索",
+                    "score": 9.5,
+                }
+            ]
+        ),
+        course_answer_generator=FakeCourseAnswerGenerator(
+            should_raise=answer_module.CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。")
+        ),
+        profile_event_recorder=profile_recorder,
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+
+    events = list(service.stream_message(user=user, session_id=session.id, content="启发式搜索怎么复习才不难？"))
+
+    assert events[-1]["event"] == "error"
+    assert profile_recorder.calls == []
 
 
 def test_get_session_and_append_message_reject_other_users_session() -> None:

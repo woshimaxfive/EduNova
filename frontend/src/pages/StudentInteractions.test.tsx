@@ -10,6 +10,7 @@ import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
+import { PROFILE_ENDPOINTS, type StudentProfileResponse, type ProfileEventResponse } from "../api/profiles";
 import { SETTINGS_ENDPOINTS, type ModelConfigSummary, type ModelSettingsListResponse } from "../api/settings";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
@@ -489,24 +490,111 @@ describe("student interaction affordances", () => {
     expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("反向传播练习");
   });
 
-  it("updates profile goals and evidence from local form input", async () => {
+  it("updates profile goals and evidence through the real profile API", async () => {
     const user = userEvent.setup();
+    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+    let profile: StudentProfileResponse = {
+      id: null,
+      version: 0,
+      has_profile: false,
+      profile_json: {
+        major_background: "",
+        knowledge_foundation: "",
+        learning_goal: "",
+        cognitive_style: "",
+        learning_preference: "",
+        weak_points: [],
+        learning_pace: "",
+        motivation_interest: ""
+      },
+      confidence_score: 0,
+      updated_reason: null,
+      updated_at: null,
+      next_question: "这门课你最想先解决什么问题？"
+    };
+    let events: ProfileEventResponse[] = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+      calls.push({ url, method, data: parsePayload(config.data) });
+
+      if (url === PROFILE_ENDPOINTS.me) {
+        return { data: { data: profile, trace_id: "trace_profile_me" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+
+      if (url === PROFILE_ENDPOINTS.events) {
+        return { data: { data: events, trace_id: "trace_profile_events" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+
+      if (url === PROFILE_ENDPOINTS.chat && method === "post") {
+        const payload = parsePayload(config.data) as { message: string };
+        const isGoal = payload.message.includes("两周冲刺软件杯演示");
+        const event: ProfileEventResponse = {
+          id: String(events.length + 1),
+          dimension: "profile_chat",
+          change_summary: isGoal ? "更新学习画像：学习目标" : "更新学习画像：薄弱点",
+          evidence_json: { source_type: "profile_chat", summary: "学生画像对话" },
+          created_at: "2026-07-05T09:01:00Z"
+        };
+        profile = {
+          ...profile,
+          id: "7",
+          version: profile.version + 1,
+          has_profile: true,
+          confidence_score: 68,
+          updated_reason: event.change_summary,
+          updated_at: "2026-07-05T09:01:00Z",
+          profile_json: {
+            ...profile.profile_json,
+            learning_goal: isGoal ? "两周冲刺软件杯演示" : profile.profile_json.learning_goal,
+            weak_points: isGoal ? profile.profile_json.weak_points : ["反向传播推导"]
+          }
+        };
+        events = [event, ...events];
+
+        return {
+          data: {
+            data: {
+              reply: "已更新你的学习画像。",
+              profile,
+              event
+            },
+            trace_id: "trace_profile_chat"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return { data: { data: {}, trace_id: "trace_default" }, status: 200, statusText: "OK", headers: {}, config };
+    };
 
     renderPage(<ProfilePage />);
 
-    await user.click(screen.getByRole("button", { name: "更新目标" }));
+    expect(await screen.findByText("待补充")).toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: "更新目标" }));
     await user.clear(screen.getByRole("textbox", { name: "学习目标" }));
     await user.type(screen.getByRole("textbox", { name: "学习目标" }), "两周冲刺软件杯演示");
     await user.click(screen.getByRole("button", { name: "保存目标" }));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("目标更新：两周冲刺软件杯演示");
+    expect(await screen.findByText("两周冲刺软件杯演示")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("更新学习画像：学习目标");
 
     await user.type(screen.getByRole("textbox", { name: "画像问题回答" }), "最担心反向传播推导。");
     await user.click(screen.getByRole("button", { name: "更新画像" }));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("画像对话：最担心反向传播推导。");
+    expect(await screen.findByText("反向传播推导")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("更新学习画像：薄弱点");
+    expect(calls.filter((call) => call.url === PROFILE_ENDPOINTS.chat)).toEqual([
+      { url: PROFILE_ENDPOINTS.chat, method: "post", data: { message: "两周冲刺软件杯演示" } },
+      { url: PROFILE_ENDPOINTS.chat, method: "post", data: { message: "最担心反向传播推导。" } }
+    ]);
   });
 
   it("prepares the report export state before real file generation is connected", async () => {

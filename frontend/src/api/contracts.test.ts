@@ -10,7 +10,7 @@ import { MATERIAL_ENDPOINTS } from "./materials";
 import { PATH_ENDPOINTS } from "./paths";
 import { PRACTICE_ENDPOINTS } from "./practice";
 import { RAG_ENDPOINTS, searchRag } from "./rag";
-import { PROFILE_ENDPOINTS } from "./profiles";
+import { getMyProfile, listProfileEvents, PROFILE_ENDPOINTS, updateProfileByChat } from "./profiles";
 import { REPORT_ENDPOINTS } from "./reports";
 import { RESOURCE_ENDPOINTS } from "./resources";
 import {
@@ -37,6 +37,8 @@ describe("frontend API contracts", () => {
     expect(AUTH_ENDPOINTS.me).toBe("/auth/me");
     expect(DASHBOARD_ENDPOINTS.summary).toBe("/dashboard/summary");
     expect(PROFILE_ENDPOINTS.chat).toBe("/profiles/chat");
+    expect(PROFILE_ENDPOINTS.me).toBe("/profiles/me");
+    expect(PROFILE_ENDPOINTS.events).toBe("/profiles/events");
     expect(COURSE_ENDPOINTS.fromMaterials).toBe("/courses/from-materials");
     expect(COURSE_ENDPOINTS.masteryMap(7)).toBe("/courses/7/mastery-map");
     expect(MATERIAL_ENDPOINTS.upload).toBe("/materials/upload");
@@ -158,6 +160,98 @@ describe("frontend API contracts", () => {
         }
       ]);
       expect(response.data.results).toEqual([]);
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("uses typed profile API requests through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
+      });
+
+      return {
+        data: {
+          data:
+            config.url === PROFILE_ENDPOINTS.events
+              ? []
+              : config.url === PROFILE_ENDPOINTS.chat
+                ? {
+                    reply: "已更新你的学习画像。",
+                    profile: {
+                      id: "1",
+                      version: 1,
+                      has_profile: true,
+                      profile_json: {
+                        major_background: "计算机专业大二",
+                        knowledge_foundation: "机器学习刚入门",
+                        learning_goal: "期末前掌握神经网络",
+                        cognitive_style: "",
+                        learning_preference: "",
+                        weak_points: [],
+                        learning_pace: "",
+                        motivation_interest: ""
+                      },
+                      confidence_score: 64,
+                      updated_reason: "更新学习画像：学习目标",
+                      updated_at: "2026-07-05T09:00:00Z",
+                      next_question: "你更喜欢哪种学习方式？"
+                    },
+                    event: {
+                      id: "1",
+                      dimension: "profile_chat",
+                      change_summary: "更新学习画像：学习目标",
+                      evidence_json: { source_type: "profile_chat", summary: "学生画像对话" },
+                      created_at: "2026-07-05T09:00:00Z"
+                    }
+                  }
+                : {
+                    id: null,
+                    version: 0,
+                    has_profile: false,
+                    profile_json: {
+                      major_background: "",
+                      knowledge_foundation: "",
+                      learning_goal: "",
+                      cognitive_style: "",
+                      learning_preference: "",
+                      weak_points: [],
+                      learning_pace: "",
+                      motivation_interest: ""
+                    },
+                    confidence_score: 0,
+                    updated_reason: null,
+                    updated_at: null,
+                    next_question: "这门课你最想先解决什么问题？"
+                  },
+          trace_id: "trace_profiles_contract"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const profile = await getMyProfile();
+      const updated = await updateProfileByChat({ message: "我想期末前掌握神经网络" });
+      const events = await listProfileEvents();
+
+      expect(calls).toEqual([
+        { url: PROFILE_ENDPOINTS.me, method: "get", data: undefined },
+        { url: PROFILE_ENDPOINTS.chat, method: "post", data: { message: "我想期末前掌握神经网络" } },
+        { url: PROFILE_ENDPOINTS.events, method: "get", data: undefined }
+      ]);
+      expect(profile.data.has_profile).toBe(false);
+      expect(updated.data.profile.profile_json.learning_goal).toBe("期末前掌握神经网络");
+      expect(events.data).toEqual([]);
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

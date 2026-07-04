@@ -273,6 +273,8 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 
 Phase 7.1 复用本表保存当前用户真实 8 维画像，不新增 `version` 字段；接口返回的 `version` 由当前画像关联的 `profile_events` 数量派生。
 
+Phase 7.2 明确本表保存用户级长期画像，只保留一份，不为每门课程复制完整画像。专业背景、认知风格、学习偏好、学习节奏和长期目标优先放在这里；课程级目标、薄弱点、掌握度、复习队列和路径依据通过课程相关表或后续聚合接口表达。
+
 ### 4.8 `profile_events`
 
 用途：记录画像变化证据链。
@@ -291,9 +293,13 @@ Phase 7.1 复用本表保存当前用户真实 8 维画像，不新增 `version`
 
 Phase 7.1 中课程问答只会在 `scope=course` 且用户问题出现明确困惑或薄弱信号时写入 `dimension="weak_points"` 的画像候选事件。`evidence_json` 只保存来源类型、课程 ID、会话 ID、消息 ID、trace ID 和安全引用摘要，不保存完整用户问题、系统提示词、模型输入或资料原文。
 
+Phase 7.2 明确 `profile_events` 是证据流，不等同于正式弱点或学习事件总线。带课程来源的事件可作为课程学习状态候选证据，后续是否进入 `weakness_review_queue` 需要去重、合并或用户/练习结果确认。本阶段不新增通用 `learning_events` 表。
+
 ### 4.9 `learning_paths`
 
 用途：保存学习路径。
+
+Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状态、弱点复习队列、课程知识点和用户级画像生成；不只根据全局画像生成。
 
 字段：
 
@@ -447,6 +453,8 @@ Phase 7.1 中课程问答只会在 `scope=course` 且用户问题出现明确困
 ### 4.17 `weakness_review_queue`
 
 用途：保存薄弱点复习队列。
+
+Phase 7.2 明确本表承载课程级可执行复习任务。每个复习项必须绑定 `course_id`，候选来源可以来自画像事件、课程问答或练习评估，但进入队列前必须去重或合并，避免同一知识点反复生成多条任务。
 
 字段：
 
@@ -693,6 +701,7 @@ Demo 数据要求：
 12. Demo 数据可重置且不污染普通用户数据。
 13. Phase 6.2 后，用户模型 Key 必须按配置独立加密保存，读取设置只能返回来源、模型、默认配置、脱敏 Key 和可用性；课程 RAG 回答的 `trace_id` 和 `citation_json` 必须可追溯。
 14. Phase 6.4 后，知识切片向量必须保持 1536 维合同，外部 embedding 失败不得阻断建课或问答，fallback 来源必须写入 metadata。
+15. Phase 7.2 后，用户级画像只保留一份，课程级学习状态通过课程相关事件、弱点队列、路径和后续聚合接口表达，不新增通用 `learning_events` 表。
 
 当前已验证：
 
@@ -710,3 +719,4 @@ Demo 数据要求：
 - Phase 6.2 模型设置服务已验证用户 API Key 不以明文进入数据库，同一用户多套模型配置互相隔离，空 `api_key` 保存会保留原密钥，缺少加密 Key 时拒绝保存用户 Key；课程会话命中引用且默认模型配置可用时，assistant 内容来自模型回答，`citation_json` 保留真实引用，`trace_id` 非空。
 - Phase 6.4 已验证 OpenAI-compatible embedding 请求、`dimensions` 重试、维度不匹配拒绝、本地 `local-hash-1536` fallback、课程生成 best-effort 写入向量和 RAG 混合排序字段。
 - Phase 7.1 已验证 `student_profiles` 和 `profile_events` 支持当前用户画像读取、画像对话更新、事件倒序、多用户隔离，以及课程问答弱点候选事件的隐私安全证据写入。
+- Phase 7.2 已完成用户级画像与课程级学习状态的数据库边界设计；本阶段不新增迁移，不新增 `learning_events`。

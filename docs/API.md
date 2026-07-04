@@ -341,7 +341,7 @@ Authorization: Bearer <token>
 
 ## 6. Profile 接口
 
-状态：Phase 7.1 已实现。当前后端已挂载 `profiles` router，`ProfilePage` 从真实后端读取画像和画像事件。画像采用确定性抽取，不新增外部模型调用。
+状态：Phase 7.1 已实现。当前后端已挂载 `profiles` router，`ProfilePage` 从真实后端读取画像和画像事件。画像采用确定性抽取，不新增外部模型调用。Phase 7.2 已明确：`profiles` 表示用户级长期画像，不按课程复制完整画像；课程级目标、薄弱点、掌握度、复习队列和路径依据后续由课程学习状态聚合。
 
 ### GET `/profiles/me`
 
@@ -353,6 +353,7 @@ Authorization: Bearer <token>
 - 空画像也返回稳定 8 维结构，字符串字段为空字符串，`weak_points=[]`。
 - `version` 由当前画像关联的画像事件数量派生。
 - `next_question` 用于前端画像对话入口，不等同于强制问卷。
+- `profile_json` 是用户级画像。`knowledge_foundation`、`weak_points`、`learning_goal` 可以在后续展示和推荐中叠加课程级状态，但 `/profiles/me` 不返回每门课程一份画像。
 
 响应：
 
@@ -425,6 +426,8 @@ Authorization: Bearer <token>
 - 只返回当前用户画像事件，默认最近 20 条。
 - 课程问答产生的画像候选事件会使用 `dimension="weak_points"`。
 - 课程问答事件的 `evidence_json` 只保存 `source_type`、`course_id`、`session_id`、消息 ID、`trace_id` 和引用摘要；不保存完整用户问题、系统提示词、模型输入或资料原文。
+- 画像事件是证据流。带 `course_id` 的事件可以作为课程学习状态的候选来源，但不能直接视为已确认弱点或复习队列项。
+- 后续可增加 `course_id` 查询参数过滤某门课相关证据；当前实现仍返回当前用户最近画像事件。
 
 ## 7. Course 接口
 
@@ -488,6 +491,28 @@ Authorization: Bearer <token>
 - 掌握状态。
 - 先修关系。
 - 推荐复习标记。
+
+### GET `/courses/{course_id}/learning-state`
+
+状态：后续预留。Phase 7.2 仅确定接口方向，当前后端未实现。
+
+用途：聚合某一门课程下的学习状态，用于课程空间、学习路径和复习队列。
+
+规则：
+
+- 必须携带 JWT，只允许访问当前用户自己的课程。
+- 读取用户级 `student_profiles` 作为长期偏好和背景，不复制完整画像。
+- 聚合该课程相关 `profile_events`、后续 `weakness_review_queue`、`learning_paths`、练习评估和掌握度结果。
+- 课程问答候选事件只能作为候选证据，正式弱点以后续弱点队列为准。
+
+计划响应字段：
+
+- `course_id`。
+- `profile_overlay`：课程级目标、知识基础和候选薄弱点摘要。
+- `weakness_summary`：已确认复习项数量、候选事件数量和最近证据。
+- `path_summary`：当前路径 ID、阶段任务数量和下一步行动。
+- `mastery_summary`：知识点掌握概览。
+- `evidence_summary`：用于解释推荐的安全证据摘要。
 
 ## 8. Materials 接口
 
@@ -849,7 +874,7 @@ Authorization: Bearer <token>
 
 ## 12. Learning Path 接口
 
-状态：后续预留。当前后端未挂载 `paths` router，`/app/path` 仍展示前端学习路径骨架。
+状态：后续预留。当前后端未挂载 `paths` router，`/app/path` 仍展示前端学习路径骨架。Phase 7.2 已明确学习路径属于课程级能力，后续应基于课程学习状态、弱点队列、课程知识点和用户级画像共同生成，而不是只根据全局画像生成。
 
 ### POST `/paths/generate`
 
@@ -1117,9 +1142,17 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 
 ## 15. Weakness Review 接口
 
+状态：后续预留。Phase 7.2 已明确弱点复习队列是课程级可执行任务，不等同于 `profile_events` 中的候选事件。
+
 ### GET `/weakness-review-queue`
 
 用途：查看薄弱点复习队列。
+
+规则：
+
+- 后续实现必须按当前用户隔离。
+- 复习项必须绑定 `course_id`，不生成跨课程混杂队列。
+- 来源可以来自课程问答候选事件、练习错题和用户确认，但必须经过去重或合并后进入队列。
 
 ### POST `/weakness-review-queue/{item_id}/start`
 

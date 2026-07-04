@@ -13,7 +13,18 @@ import { RAG_ENDPOINTS, searchRag } from "./rag";
 import { PROFILE_ENDPOINTS } from "./profiles";
 import { REPORT_ENDPOINTS } from "./reports";
 import { RESOURCE_ENDPOINTS } from "./resources";
-import { getModelSettings, saveModelSettings, SETTINGS_ENDPOINTS, testModelSettings } from "./settings";
+import {
+  createModelConfig,
+  deleteModelConfig,
+  getModelSettings,
+  listModelConfigs,
+  saveModelSettings,
+  setDefaultModelConfig,
+  SETTINGS_ENDPOINTS,
+  testModelConfig,
+  testModelSettings,
+  updateModelConfig
+} from "./settings";
 import { listTutorSessions, TUTOR_ENDPOINTS } from "./tutor";
 
 describe("frontend API contracts", () => {
@@ -39,6 +50,10 @@ describe("frontend API contracts", () => {
     expect(REPORT_ENDPOINTS.latest).toBe("/reports/latest");
     expect(DEMO_ENDPOINTS.reset).toBe("/demo/reset");
     expect(SETTINGS_ENDPOINTS.testModel).toBe("/settings/model/test");
+    expect(SETTINGS_ENDPOINTS.configs).toBe("/settings/model/configs");
+    expect(SETTINGS_ENDPOINTS.config(7)).toBe("/settings/model/configs/7");
+    expect(SETTINGS_ENDPOINTS.testConfig(7)).toBe("/settings/model/configs/7/test");
+    expect(SETTINGS_ENDPOINTS.defaultConfig(7)).toBe("/settings/model/configs/7/default");
   });
 
   it("posts login requests through the shared API client", async () => {
@@ -208,14 +223,14 @@ describe("frontend API contracts", () => {
               ? {
                   ok: true,
                   source: "user",
-                  chat_model: "deepseek-chat",
+                  chat_model: "deepseek-v4-pro",
                   message: "模型连接成功。"
                 }
               : {
                   source: "user",
                   provider: "openai_compatible",
                   base_url: "https://api.deepseek.com/v1",
-                  chat_model: "deepseek-chat",
+                  chat_model: "deepseek-v4-pro",
                   embedding_model: "bge-m3",
                   has_api_key: true,
                   api_key_masked: "sk-u...cret",
@@ -236,7 +251,7 @@ describe("frontend API contracts", () => {
         provider: "openai_compatible",
         base_url: "https://api.deepseek.com/v1",
         api_key: "sk-user-secret",
-        chat_model: "deepseek-chat",
+        chat_model: "deepseek-v4-pro",
         embedding_model: "bge-m3"
       });
       const tested = await testModelSettings();
@@ -254,7 +269,7 @@ describe("frontend API contracts", () => {
             provider: "openai_compatible",
             base_url: "https://api.deepseek.com/v1",
             api_key: "sk-user-secret",
-            chat_model: "deepseek-chat",
+            chat_model: "deepseek-v4-pro",
             embedding_model: "bge-m3"
           }
         },
@@ -267,6 +282,110 @@ describe("frontend API contracts", () => {
       expect(summary.data.source).toBe("user");
       expect(saved.data.api_key_masked).toBe("sk-u...cret");
       expect(tested.data.ok).toBe(true);
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("uses typed multi-model config API requests through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
+      });
+
+      return {
+        data: {
+          data:
+            config.url === SETTINGS_ENDPOINTS.configs && config.method === "get"
+              ? {
+                  configs: [],
+                  default_config_id: null,
+                  system_summary: {
+                    source: "none",
+                    provider: "openai_compatible",
+                    base_url: null,
+                    chat_model: null,
+                    embedding_model: null,
+                    has_api_key: false,
+                    api_key_masked: null,
+                    can_use_model: false
+                  }
+                }
+              : config.url?.endsWith("/test")
+                ? {
+                    ok: true,
+                    source: "user",
+                    chat_model: "lite",
+                    message: "模型连接成功。",
+                    config_id: 3
+                  }
+                : {
+                    id: 3,
+                    source: "user",
+                    display_name: "星火 Lite",
+                    preset_id: "spark",
+                    provider: "openai_compatible",
+                    base_url: "https://spark-api-open.xf-yun.com/v1",
+                    chat_model: "lite",
+                    embedding_model: null,
+                    has_api_key: true,
+                    api_key_masked: "sp-u...oken",
+                    can_use_model: true,
+                    is_default: true,
+                    last_test_ok: null,
+                    last_test_message: null,
+                    last_tested_at: null
+                  },
+          trace_id: "trace_model_configs"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      await listModelConfigs();
+      await createModelConfig({
+        display_name: "星火 Lite",
+        preset_id: "spark",
+        provider: "openai_compatible",
+        base_url: "https://spark-api-open.xf-yun.com/v1",
+        api_key: "spark-user-token",
+        chat_model: "lite",
+        make_default: true
+      });
+      await updateModelConfig(3, { chat_model: "4.0Ultra", api_key: "" });
+      await setDefaultModelConfig(3);
+      await testModelConfig(3);
+      await deleteModelConfig(3);
+
+      expect(calls).toEqual([
+        { url: SETTINGS_ENDPOINTS.configs, method: "get", data: undefined },
+        {
+          url: SETTINGS_ENDPOINTS.configs,
+          method: "post",
+          data: {
+            display_name: "星火 Lite",
+            preset_id: "spark",
+            provider: "openai_compatible",
+            base_url: "https://spark-api-open.xf-yun.com/v1",
+            api_key: "spark-user-token",
+            chat_model: "lite",
+            make_default: true
+          }
+        },
+        { url: SETTINGS_ENDPOINTS.config(3), method: "patch", data: { chat_model: "4.0Ultra", api_key: "" } },
+        { url: SETTINGS_ENDPOINTS.defaultConfig(3), method: "post", data: undefined },
+        { url: SETTINGS_ENDPOINTS.testConfig(3), method: "post", data: undefined },
+        { url: SETTINGS_ENDPOINTS.config(3), method: "delete", data: undefined }
+      ]);
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

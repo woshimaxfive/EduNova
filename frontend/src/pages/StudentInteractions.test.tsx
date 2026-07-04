@@ -10,7 +10,7 @@ import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
-import { SETTINGS_ENDPOINTS, type ModelSettingsSummary } from "../api/settings";
+import { SETTINGS_ENDPOINTS, type ModelConfigSummary, type ModelSettingsListResponse } from "../api/settings";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
 import { CourseSpacePage } from "./CourseSpacePage";
@@ -616,17 +616,39 @@ describe("student interaction affordances", () => {
 
   });
 
-  it("loads saves and tests real model settings with Spark provider presets", async () => {
+  it("manages isolated model configs with curated provider presets", async () => {
     const user = userEvent.setup();
-    let settingsSummary: ModelSettingsSummary = {
-      source: "system",
-      provider: "openai_compatible",
-      base_url: "https://system-model.example.local/v1",
-      chat_model: "system-chat",
-      embedding_model: "system-embedding",
-      has_api_key: true,
-      api_key_masked: "sk-s...cret",
-      can_use_model: true
+    let settingsList: ModelSettingsListResponse = {
+      configs: [
+        {
+          id: 1,
+          source: "user",
+          display_name: "星火 Lite",
+          preset_id: "spark",
+          provider: "openai_compatible",
+          base_url: "https://spark-api-open.xf-yun.com/v1",
+          chat_model: "lite",
+          embedding_model: null,
+          has_api_key: true,
+          api_key_masked: "sp-u...oken",
+          can_use_model: true,
+          is_default: true,
+          last_test_ok: null,
+          last_test_message: null,
+          last_tested_at: null
+        }
+      ],
+      default_config_id: 1,
+      system_summary: {
+        source: "system",
+        provider: "openai_compatible",
+        base_url: "https://system-model.example.local/v1",
+        chat_model: "system-chat",
+        embedding_model: "system-embedding",
+        has_api_key: true,
+        api_key_masked: "sk-s...cret",
+        can_use_model: true
+      }
     };
     const calls: Array<{ method: string; url: string; payload: unknown }> = [];
 
@@ -636,9 +658,9 @@ describe("student interaction affordances", () => {
       const payload = parsePayload(config.data);
       calls.push({ method, url, payload });
 
-      if (url === SETTINGS_ENDPOINTS.model && method === "get") {
+      if (url === SETTINGS_ENDPOINTS.configs && method === "get") {
         return {
-          data: { data: settingsSummary, trace_id: "trace_settings_get" },
+          data: { data: settingsList, trace_id: "trace_settings_configs" },
           status: 200,
           statusText: "OK",
           headers: {},
@@ -646,20 +668,39 @@ describe("student interaction affordances", () => {
         };
       }
 
-      if (url === SETTINGS_ENDPOINTS.model && method === "put") {
-        settingsSummary = {
+      if (url === SETTINGS_ENDPOINTS.configs && method === "post") {
+        const data = payload as {
+          display_name: string;
+          preset_id: string;
+          base_url: string;
+          chat_model: string;
+          embedding_model?: string;
+          api_key?: string;
+        };
+        const newConfig: ModelConfigSummary = {
+          id: 2,
           source: "user",
+          display_name: data.display_name,
+          preset_id: data.preset_id,
           provider: "openai_compatible",
-          base_url: "https://spark-api-open.xf-yun.com/v1",
-          chat_model: "4.0Ultra",
-          embedding_model: null,
+          base_url: data.base_url,
+          chat_model: data.chat_model,
+          embedding_model: data.embedding_model ?? null,
           has_api_key: true,
-          api_key_masked: "sp-u...oken",
-          can_use_model: true
+          api_key_masked: "hy-u...oken",
+          can_use_model: true,
+          is_default: false,
+          last_test_ok: null,
+          last_test_message: null,
+          last_tested_at: null
+        };
+        settingsList = {
+          ...settingsList,
+          configs: [...settingsList.configs, newConfig]
         };
 
         return {
-          data: { data: settingsSummary, trace_id: "trace_settings_put" },
+          data: { data: newConfig, trace_id: "trace_settings_create" },
           status: 200,
           statusText: "OK",
           headers: {},
@@ -667,17 +708,62 @@ describe("student interaction affordances", () => {
         };
       }
 
-      if (url === SETTINGS_ENDPOINTS.testModel && method === "post") {
+      if (url === SETTINGS_ENDPOINTS.defaultConfig(2) && method === "post") {
+        settingsList = {
+          ...settingsList,
+          default_config_id: 2,
+          configs: settingsList.configs.map((item) => ({
+            ...item,
+            is_default: item.id === 2
+          }))
+        };
+
+        return {
+          data: { data: settingsList, trace_id: "trace_settings_default" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === SETTINGS_ENDPOINTS.testConfig(2) && method === "post") {
+        settingsList = {
+          ...settingsList,
+          configs: settingsList.configs.map((item) =>
+            item.id === 2 ? { ...item, last_test_ok: true, last_test_message: "模型连接成功。" } : item
+          )
+        };
+
         return {
           data: {
             data: {
               ok: true,
-              source: settingsSummary.source,
-              chat_model: settingsSummary.chat_model,
-              message: "模型连接成功。"
+              source: "user",
+              chat_model: "hunyuan-turbos-latest",
+              message: "模型连接成功。",
+              config_id: 2
             },
             trace_id: "trace_settings_test"
           },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === SETTINGS_ENDPOINTS.config(2) && method === "delete") {
+        settingsList = {
+          ...settingsList,
+          default_config_id: 1,
+          configs: settingsList.configs
+            .filter((item) => item.id !== 2)
+            .map((item) => ({ ...item, is_default: item.id === 1 }))
+        };
+
+        return {
+          data: { data: settingsList, trace_id: "trace_settings_delete" },
           status: 200,
           statusText: "OK",
           headers: {},
@@ -696,42 +782,59 @@ describe("student interaction affordances", () => {
 
     renderPage(<SettingsPage />);
 
-    expect(await screen.findByText("服务器配置")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("https://system-model.example.local/v1")).toBeInTheDocument();
-    expect(screen.getByText("sk-s...cret")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /星火 Lite/ })).toBeInTheDocument();
+    expect(screen.getByText("默认配置")).toBeInTheDocument();
+    expect(screen.getByText("sp-u...oken")).toBeInTheDocument();
     expect(screen.queryByText("sk-••••••••")).not.toBeInTheDocument();
     expect(screen.queryByText("深度思考")).not.toBeInTheDocument();
     expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();
+    expect(screen.queryByText("OpenRouter")).not.toBeInTheDocument();
 
     const providerPreset = screen.getByRole("combobox", { name: "Provider 预设" });
     expect(within(providerPreset).getAllByRole("option")[0]).toHaveTextContent("讯飞星火 Spark");
+    expect(within(providerPreset).getByRole("option", { name: "百度千帆" })).toBeInTheDocument();
+    expect(within(providerPreset).getByRole("option", { name: "腾讯混元" })).toBeInTheDocument();
 
-    await user.selectOptions(providerPreset, "spark");
+    await user.click(screen.getByRole("button", { name: "新建配置" }));
+    await user.selectOptions(providerPreset, "tencent-hunyuan");
 
-    expect(screen.getByRole("textbox", { name: "Base URL" })).toHaveValue("https://spark-api-open.xf-yun.com/v1");
-    expect(screen.getByRole("textbox", { name: "聊天模型" })).toHaveValue("4.0Ultra");
-    expect(screen.getByText(/lite、generalv3、pro-128k、max-32k、4.0Ultra/)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Base URL" })).toHaveValue(
+      "https://api.hunyuan.cloud.tencent.com/v1"
+    );
+    expect(screen.getByRole("textbox", { name: "回答模型" })).toHaveValue("hunyuan-turbos-latest");
 
-    await user.type(screen.getByLabelText("API Key / APIPassword"), "spark-user-token");
-    await user.click(screen.getByRole("button", { name: "保存模型配置" }));
+    await user.clear(screen.getByRole("textbox", { name: "配置名称" }));
+    await user.type(screen.getByRole("textbox", { name: "配置名称" }), "腾讯混元默认");
+    await user.type(screen.getByLabelText("API Key"), "hunyuan-user-secret");
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("模型配置已保存");
-    expect(screen.getByText("个人配置")).toBeInTheDocument();
-    expect(screen.queryByText("sk-user-secret")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /腾讯混元默认/ })).toBeInTheDocument();
+    expect(screen.queryByText("hunyuan-user-secret")).not.toBeInTheDocument();
     expect(calls).toContainEqual({
-      method: "put",
-      url: SETTINGS_ENDPOINTS.model,
+      method: "post",
+      url: SETTINGS_ENDPOINTS.configs,
       payload: {
+        display_name: "腾讯混元默认",
+        preset_id: "tencent-hunyuan",
         provider: "openai_compatible",
-        base_url: "https://spark-api-open.xf-yun.com/v1",
-        api_key: "spark-user-token",
-        chat_model: "4.0Ultra"
+        base_url: "https://api.hunyuan.cloud.tencent.com/v1",
+        api_key: "hunyuan-user-secret",
+        chat_model: "hunyuan-turbos-latest",
+        make_default: false
       }
     });
+
+    await user.click(screen.getByRole("button", { name: "设为默认" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("已设为默认模型配置");
 
     await user.click(screen.getByRole("button", { name: "测试连接" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("模型连接成功");
+
+    await user.click(screen.getByRole("button", { name: "删除配置" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("模型配置已删除");
+    expect(screen.queryByRole("button", { name: /腾讯混元默认/ })).not.toBeInTheDocument();
   });
 
   it("creates a real course from the library page and enters the new course", async () => {

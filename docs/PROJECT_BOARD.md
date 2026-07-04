@@ -74,6 +74,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 | Phase 5.2 课程知识库检索与引用地基 | 已完成 | 新增受保护 `/api/v1/rag/search`，基于当前用户课程内 `knowledge_chunks` 做确定性关键词检索；课程空间发送问题会展示真实资料、章节和切片引用；无命中显示资料不足，不接真实 AI/embedding |
 | Phase 5.3 课程空间会话与引用持久化 | 已完成 | 复用受保护 `/api/v1/tutor/sessions`，课程空间使用 `scope=course&course_id=...` 读取课程内历史；发送课程问题会创建或复用课程会话，后端自动检索课程知识切片并把真实引用写入 assistant `citation_json`；刷新或点击课程历史可恢复消息和引用 |
 | Phase 6.1 模型 Provider 与真实课程 RAG 回答 | 已完成 | 新增受保护 `/api/v1/settings/model` 和 `/api/v1/settings/model/test`，用户模型 Key 加密保存，用户配置优先、服务器配置兜底；设置页已把讯飞星火 Spark 作为首位 Provider 预设，并移除深度思考/联网搜索设置项；课程会话命中引用且模型可用时调用 OpenAI-compatible Chat Completions 生成非流式真实回答，主页会话仍保持模板 |
+| Phase 6.2 模型配置收敛与多配置管理 | 已完成 | 新增 `model_settings` 多配置迁移和 `/settings/model/configs` 系列接口；同一用户可保存多套配置、独立加密、独立测试、选择默认使用，课程回答运行时使用用户默认配置并在缺省时回退服务器兜底；设置页 Provider 收敛为讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务，OpenRouter 不再作为可见预设 |
 
 ## 3. 里程碑
 
@@ -138,6 +139,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 - [x] 接入 `/rag/search` 课程知识库检索引用闭环，让 `/app/courses/:courseId` 发送课程问题后展示真实资料来源和切片依据。
 - [x] 接入 `scope=course` 课程会话闭环，让 `/app/courses/:courseId` 的课程历史、消息和引用刷新后仍能恢复。
 - [x] 接入 `/settings/model` 模型配置闭环和 OpenAI-compatible Provider，让 `/app/courses/:courseId` 在命中课程引用时生成真实非流式 RAG 回答；设置页首位预设对齐赛题相关的讯飞星火 Spark。
+- [x] Phase 6.2 收敛模型 Provider 列表并补多配置管理：保留讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务，OpenRouter 从可见预设移除；实现前已按官方文档校验模型名、Base URL 和鉴权方式。
 
 ### P2 随开发推进
 
@@ -212,7 +214,7 @@ EduNova 当前阶段坚持“基础不牢，地动山摇”的开发原则。
 
 ```text
 1. 保持 P3 `/app` 对话主页作为学生主入口，不再回到管理系统式首页。
-2. Phase 6.1 已完成模型 Provider、讯飞星火首位预设与非流式真实课程 RAG 回答，下一步优先在 Phase 6 内继续补流式输出、embedding/向量召回或进入资源生成第一刀，继续避免一次性铺太大。
+2. Phase 6.1 已完成模型 Provider、讯飞星火首位预设与非流式真实课程 RAG 回答；Phase 6.2 已完成模型配置收敛与多配置管理，下一步可继续补流式输出、embedding/向量召回或进入资源生成第一刀，继续避免一次性铺太大。
 3. 把 P3.7/P3.11 剩余本地反馈逐步替换为真实画像、学习路径、资源、练习、报告和 Agent 接口。
 4. 继续补 Phase 5 浏览器主链路验收证据，覆盖桌面和 390px 移动宽度。
 5. 继续保持文档随 API、数据库、部署和前端状态同步更新。

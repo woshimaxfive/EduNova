@@ -68,7 +68,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 | `/app/courses/:courseId` | 课程对话空间 | 已读取真实课程详情、知识点、课程会话历史和课程知识库检索引用，继续承载某一课程内的资料、学习路径、练习和资源入口 |
 | 生成课程浮层 | 上层任务流 | 可由输入框、资料库或资料选择区触发，完成选择资料、填写课程名称、调用真实规则建课接口并进入课程 |
 
-当前 Phase 3 已实现的路由仍保留，`/app/courses/:courseId` 已在 Phase 5.1 接入真实课程详情和知识点，在 Phase 5.2 接入 `/rag/search` 课程知识库检索引用，在 Phase 5.3 接入 `scope=course` 课程会话、消息和引用持久化，并在 Phase 6.1 接入命中课程引用后的非流式真实模型回答；生成课程浮层会调用 `/courses/from-materials` 生成 TXT/Markdown 规则课程。P3.11 后，普通应用路由不再只是静态展示页：资源工坊、画像、练习、报告、设置、侧栏和命令栏都具备本地状态反馈；Phase 6.1 后，设置页模型配置已经替换为真实 `/settings/model` 读取、保存和连接测试，并把讯飞星火 Spark 作为首位 Provider 预设。后续接真实接口时替换数据来源，不改变 AI 对话主页和贴边工作区结构。后续接真实接口时应保证：
+当前 Phase 3 已实现的路由仍保留，`/app/courses/:courseId` 已在 Phase 5.1 接入真实课程详情和知识点，在 Phase 5.2 接入 `/rag/search` 课程知识库检索引用，在 Phase 5.3 接入 `scope=course` 课程会话、消息和引用持久化，并在 Phase 6.1 接入命中课程引用后的非流式真实模型回答；生成课程浮层会调用 `/courses/from-materials` 生成 TXT/Markdown 规则课程。P3.11 后，普通应用路由不再只是静态展示页：资源工坊、画像、练习、报告、设置、侧栏和命令栏都具备本地状态反馈；Phase 6.2 后，设置页模型配置已替换为 `/settings/model/configs` 多配置管理，同时保留旧 `/settings/model` 兼容接口，并把讯飞星火 Spark 作为首位 Provider 预设。后续接真实接口时替换数据来源，不改变 AI 对话主页和贴边工作区结构。后续接真实接口时应保证：
 
 - 首页不默认绑定课程。
 - 主页历史对话和课程内历史对话分开。
@@ -357,7 +357,7 @@ Phase 3A 为了工程清晰，可以先有对应路由，但视觉上不做复�
 | TutorPage | 沉浸式 AI 辅导和引用问答 | 不替代学习空间主入口 |
 | PracticePage | 练习、批改、错因复盘 | 不做完整考试系统 |
 | ReportsPage | 掌握度、学习报告、导出 | 不做运营报表 |
-| SettingsPage | 模型连接、个人资料、导出设置；Phase 6.1 已接入模型配置读取、保存、Provider 预设和连接测试 | 不做复杂管理员后台，不放深度思考或联网搜索开关 |
+| SettingsPage | 模型连接、个人资料、导出设置；Phase 6.2 已接入多模型配置列表、创建、测试、设默认和删除，Provider 预设收敛为国内常用和本地部署入口 | 不做复杂管理员后台，不放深度思考或联网搜索开关 |
 
 ## 11. 空状态与错误状态
 
@@ -459,7 +459,7 @@ Phase 4：
 
 Phase 5 以后：
 
-- RAG、资源工坊真实生成、AI 辅导、练习评估逐步接入对应路由和学习空间入口；从资料生成课程已在 Phase 5.1 接入 TXT/Markdown 规则建课，课程知识库检索已在 Phase 5.2 接入，课程空间会话与引用持久化已在 Phase 5.3 接入，模型设置和非流式真实课程 RAG 回答已在 Phase 6.1 接入。
+- RAG、资源工坊真实生成、AI 辅导、练习评估逐步接入对应路由和学习空间入口；从资料生成课程已在 Phase 5.1 接入 TXT/Markdown 规则建课，课程知识库检索已在 Phase 5.2 接入，课程空间会话与引用持久化已在 Phase 5.3 接入，模型设置和非流式真实课程 RAG 回答已在 Phase 6.1 接入，多模型配置隔离已在 Phase 6.2 接入。
 
 如果路由、入口或首次进入流程变化，必须同步更新：
 
@@ -487,7 +487,8 @@ Phase 5 以后：
 - Phase 4.3 已接真实 `/tutor/sessions`；`LearningSpacePage` 首次发送会创建 `scope=home` 会话，发送消息写入 user 和模板 assistant 消息，连续追问不重复创建历史，点击左侧主页历史会拉取后端 messages。
 - Phase 4.4 已接真实 `/materials`；`LearningSpacePage` 上传按钮会调用 `/materials/upload` 并刷新 `/dashboard/summary`，`LibraryPage` 调用 `/materials` 渲染当前用户资料列表，上传成功后刷新列表和 summary。
 - Phase 5.1 已接真实 `/courses/from-materials`、`/courses`、`/courses/{course_id}`、`/courses/{course_id}/overview` 和 `/courses/{course_id}/knowledge-points`；`LearningSpacePage` 和 `LibraryPage` 的生成课程浮层会调用真实接口，成功后刷新数据并跳转新课程空间。
-- Phase 6.1 已接真实 `/settings/model` 和 `/settings/model/test`；`SettingsPage` 会显示个人配置、服务器配置或未配置状态，保存用户 OpenAI-compatible 配置，提供讯飞星火 Spark 首位预设，测试连接，并且不展示明文 Key。
+- Phase 6.1 已接真实 `/settings/model` 和 `/settings/model/test`；Phase 6.2 已接真实 `/settings/model/configs`、`/settings/model/configs/{id}`、`/settings/model/configs/{id}/default` 和 `/settings/model/configs/{id}/test`；`SettingsPage` 会显示配置列表和当前编辑面板，支持创建、编辑、测试、设默认和删除用户自己的模型配置，并且不展示明文 Key。
+- Phase 6.2 的 Provider 预设不追求数量多，只保留讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务；OpenRouter 不再作为可见预设。回答模型是主字段，向量模型折叠在高级项中。
 - `FirstRunGuide` 已作为学习空间中的轻量引导占位，真实触发条件需要 Phase 4 根据画像和课程上下文接入。
 - `/app` 已重做为总 AI 对话主页，包含贴边可收起主页历史、侧栏账号入口、中心 AI 学习入口、输入区资料库按钮、文件上传入口、最近学习轻量列表、发送后主页对话态和生成课程浮层。
 - P3.9 已把 `/app/library`、`/app/courses/:courseId`、资源工坊、画像、辅导、练习、报告和设置统一到同一套贴边工作区外壳，不再保留旧顶部导航。
@@ -513,7 +514,7 @@ Phase 5 以后：
 - 登录态会写入本地存储。
 - 学习空间页面测试已覆盖 AI 对话主页、贴边历史侧栏、侧栏收起、侧栏账号入口、历史搜索居中浮层、发送后主页对话态、底部学习输入区、发送成功不显示持久“已生成回答”状态条、Enter 发送和 Shift+Enter 换行、AI 学习入口、资料库按钮、语义化最近学习列表、最近课程链接、生成课程浮层，以及首页不再渲染资料库右栏和知识学习画布；Phase 4.2 起额外覆盖 `/dashboard/summary` 调用、接口课程渲染、接口主页历史渲染、接口资料库资料渲染和 blank summary 不显示静态 starter 数据；Phase 4.3 起额外覆盖首次发送创建 session、连续发送复用 session、点击历史加载后端 messages、发送失败保留输入；Phase 4.4 起额外覆盖主页上传调用 `/materials/upload`、上传成功刷新 summary、资料库浮层显示真实资料；Phase 5.1 起额外覆盖主页/资料库生成课程调用 `/courses/from-materials`、成功跳转新课程和 API 错误保留选择。
 - 路由测试已覆盖已登录学生访问 `/app/courses/:courseId` 时能看到真实课程标题、资料数和知识点，也覆盖课程对话空间、知识画布、证据与 Agent 轨迹、资源生成区和 `/app/path` 学习路径。
-- 学生核心页面测试已覆盖 `/app/library` 文件库、真实资料列表、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` 对应的资料、生成、画像、辅导、练习、报告和设置区域；Phase 6.1 测试额外覆盖设置页真实模型配置读取、Provider 预设、保存和连接测试。
+- 学生核心页面测试已覆盖 `/app/library` 文件库、真实资料列表、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` 对应的资料、生成、画像、辅导、练习、报告和设置区域；Phase 6.1 测试额外覆盖设置页真实模型配置读取、Provider 预设、保存和连接测试；Phase 6.2 测试额外覆盖多模型配置列表、创建、设默认、指定测试、删除和 Provider 预设收敛。
 - P3.7/Phase 4.4 交互测试已覆盖主页资料上传、资料库默认未选中与点选高亮、联网搜索激活态、发送反馈、课程回答展开、知识画布节点详情、辅导模式切换、练习提交校验、资料引用反馈和设置保存反馈；资料上传和资料库列表已断言真实 `/materials` 调用。
 - P3.9 测试已覆盖登录页无共享演示学生按钮、注册页空白/人工智能导论 starter mode、普通路由复用贴边工作区侧栏、普通路由保留主页全局历史、资料库文档/图片筛选和上传交互，以及空白 starter 账号进入主页后没有内置课程和资料。
 - P3.13 测试已覆盖普通路由侧栏高亮、普通路由不显示重复说明、普通路由“新建对话”回到主页，以及资料库生成课程默认未选中。

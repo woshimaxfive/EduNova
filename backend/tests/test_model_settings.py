@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -46,13 +47,60 @@ class FakeModelSettingsRepository:
     committed: bool = False
     rolled_back: bool = False
 
+    def __post_init__(self) -> None:
+        self.settings_by_id: dict[int, ModelSetting] = {}
+        for index, setting in enumerate(self.settings_by_user.values(), start=1):
+            if setting.id is None:
+                setting.id = index
+            if not setting.is_default:
+                setting.is_default = True
+            self.settings_by_id[setting.id] = setting
+
     def get_for_user(self, user_id: int) -> ModelSetting | None:
-        return self.settings_by_user.get(user_id)
+        return self.get_default_for_user(user_id)
+
+    def get_default_for_user(self, user_id: int) -> ModelSetting | None:
+        default = next(
+            (
+                setting
+                for setting in self.settings_by_id.values()
+                if setting.user_id == user_id and setting.is_default
+            ),
+            None,
+        )
+        return default or self.settings_by_user.get(user_id)
+
+    def list_for_user(self, user_id: int) -> list[ModelSetting]:
+        return sorted(
+            [setting for setting in self.settings_by_id.values() if setting.user_id == user_id],
+            key=lambda setting: (not setting.is_default, -(setting.id or 0)),
+        )
+
+    def get_by_id_for_user(self, setting_id: int, user_id: int) -> ModelSetting | None:
+        setting = self.settings_by_id.get(setting_id)
+        if setting is None or setting.user_id != user_id:
+            return None
+        return setting
 
     def save(self, setting: ModelSetting) -> None:
         if setting.id is None:
-            setting.id = len(self.settings_by_user) + 1
-        self.settings_by_user[setting.user_id] = setting
+            setting.id = len(self.settings_by_id) + 1
+        self.settings_by_id[setting.id] = setting
+        if setting.is_default:
+            self.settings_by_user[setting.user_id] = setting
+
+    def delete(self, setting: ModelSetting) -> None:
+        if setting.id is not None:
+            self.settings_by_id.pop(setting.id, None)
+        if self.settings_by_user.get(setting.user_id) is setting:
+            self.settings_by_user.pop(setting.user_id, None)
+
+    def unset_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None:
+        for setting in self.settings_by_id.values():
+            if setting.user_id == user_id and setting.id != except_setting_id:
+                setting.is_default = False
+        if except_setting_id is None:
+            self.settings_by_user.pop(user_id, None)
 
     def commit(self) -> None:
         self.committed = True
@@ -278,6 +326,186 @@ def test_model_settings_test_connection_uses_current_runtime_config() -> None:
     assert provider.calls[0]["messages"][-1]["content"] == "请只回复 ok。"
 
 
+def test_multi_model_configs_are_independently_saved_and_defaulted() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=FakeProvider())
+
+    spark = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="星火 Lite",
+            preset_id="spark",
+            provider="openai_compatible",
+            base_url="https://spark-api-open.xf-yun.com/v1",
+            api_key="spark-secret",
+            chat_model="lite",
+            make_default=True,
+        ),
+    ))
+    local = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="本地 Ollama",
+            preset_id="ollama",
+            provider="openai_compatible",
+            base_url="http://localhost:11434/v1",
+            chat_model="qwen3:8b",
+            make_default=False,
+        ),
+    ))
+
+    configs = as_dict(service.list_configs(user))
+    runtime = service.resolve_runtime_config(user)
+
+    assert spark["is_default"] is True
+    assert local["is_default"] is False
+    assert configs["default_config_id"] == spark["id"]
+    assert [config["display_name"] for config in configs["configs"]] == ["星火 Lite", "本地 Ollama"]
+    assert "spark-secret" not in str(configs)
+    assert repo.settings_by_id[spark["id"]].api_key_ciphertext != repo.settings_by_id[local["id"]].api_key_ciphertext
+    assert runtime.chat_model == "lite"
+    assert runtime.api_key == "spark-secret"
+
+    service.set_default_config(user, local["id"])
+    runtime = service.resolve_runtime_config(user)
+    configs = as_dict(service.list_configs(user))
+
+    assert runtime.chat_model == "qwen3:8b"
+    assert runtime.api_key is None
+    assert runtime.can_use_model is True
+    assert configs["default_config_id"] == local["id"]
+    assert [config["is_default"] for config in configs["configs"]] == [True, False]
+
+
+def test_update_config_preserves_key_and_cross_user_access_is_blocked() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    other_user = make_user(2)
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=FakeProvider())
+    created = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="DeepSeek 主力",
+            preset_id="deepseek",
+            provider="openai_compatible",
+            base_url="https://api.deepseek.com",
+            api_key="deepseek-secret",
+            chat_model="deepseek-v4-pro",
+            make_default=True,
+        ),
+    ))
+
+    updated = as_dict(service.update_config(
+        user,
+        created["id"],
+        module.UpdateModelConfigRequest(
+            display_name="DeepSeek 默认",
+            api_key="",
+            chat_model="deepseek-v4-pro",
+        ),
+    ))
+
+    assert updated["display_name"] == "DeepSeek 默认"
+    assert service.resolve_runtime_config(user).api_key == "deepseek-secret"
+    with pytest.raises(module.ModelSettingsNotFoundError):
+        service.update_config(other_user, created["id"], module.UpdateModelConfigRequest(chat_model="hijack"))
+
+
+def test_delete_default_config_promotes_latest_remaining_config() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=FakeProvider())
+    first = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="星火",
+            preset_id="spark",
+            provider="openai_compatible",
+            base_url="https://spark-api-open.xf-yun.com/v1",
+            api_key="spark-secret",
+            chat_model="lite",
+            make_default=True,
+        ),
+    ))
+    second = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="Kimi",
+            preset_id="kimi",
+            provider="openai_compatible",
+            base_url="https://api.moonshot.cn/v1",
+            api_key="kimi-secret",
+            chat_model="kimi-k2.6",
+            make_default=False,
+        ),
+    ))
+
+    configs = as_dict(service.delete_config(user, first["id"]))
+
+    assert configs["default_config_id"] == second["id"]
+    assert service.resolve_runtime_config(user).chat_model == "kimi-k2.6"
+    with pytest.raises(module.ModelSettingsNotFoundError):
+        service.delete_config(user, first["id"])
+
+
+def test_connection_test_can_target_one_config_and_persist_safe_status() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    provider = FakeProvider(content="ok")
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=provider)
+    created = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="星火 Lite",
+            preset_id="spark",
+            provider="openai_compatible",
+            base_url="https://spark-api-open.xf-yun.com/v1",
+            api_key="spark-secret",
+            chat_model="lite",
+            make_default=True,
+        ),
+    ))
+
+    result = as_dict(service.test_config_connection(user, created["id"]))
+    stored = repo.settings_by_id[created["id"]]
+
+    assert result["ok"] is True
+    assert result["config_id"] == created["id"]
+    assert result["source"] == "user"
+    assert result["chat_model"] == "lite"
+    assert stored.last_test_ok is True
+    assert stored.last_test_message == "模型连接成功。"
+    assert isinstance(stored.last_tested_at, datetime)
+    assert provider.calls is not None
+    assert provider.calls[0]["config"].chat_model == "lite"
+
+
+def test_model_settings_multi_config_migration_contract() -> None:
+    migration_text = (
+        __import__("pathlib")
+        .Path(__file__)
+        .resolve()
+        .parents[1]
+        / "migrations"
+        / "versions"
+        / "20260704_0006_expand_model_settings_configs.py"
+    ).read_text(encoding="utf-8")
+
+    assert "display_name" in migration_text
+    assert "preset_id" in migration_text
+    assert "is_default" in migration_text
+    assert "last_test_ok" in migration_text
+    assert "last_test_message" in migration_text
+    assert "last_tested_at" in migration_text
+    assert "uq_model_settings_user_id" in migration_text
+    assert "ix_model_settings_user_default" in migration_text
+
+
 def test_openai_compatible_provider_posts_chat_completions_and_reads_content() -> None:
     provider_module = load_openai_provider_module()
     requests: list[httpx.Request] = []
@@ -386,6 +614,37 @@ def test_model_settings_routes_use_documented_envelopes() -> None:
         },
     )
     test_response = client.post("/api/v1/settings/model/test", headers={"Authorization": f"Bearer {token}"})
+    configs_response = client.get("/api/v1/settings/model/configs", headers={"Authorization": f"Bearer {token}"})
+    create_response = client.post(
+        "/api/v1/settings/model/configs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "display_name": "本地 Ollama",
+            "preset_id": "ollama",
+            "provider": "openai_compatible",
+            "base_url": "http://localhost:11434/v1",
+            "chat_model": "qwen3:8b",
+            "make_default": False,
+        },
+    )
+    created_config_id = create_response.json()["data"]["id"]
+    default_response = client.post(
+        f"/api/v1/settings/model/configs/{created_config_id}/default",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    targeted_test_response = client.post(
+        f"/api/v1/settings/model/configs/{created_config_id}/test",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    delete_response = client.delete(
+        f"/api/v1/settings/model/configs/{created_config_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    missing_response = client.patch(
+        "/api/v1/settings/model/configs/9999",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"chat_model": "missing"},
+    )
 
     assert get_response.status_code == 200
     assert get_response.json()["data"]["source"] == "system"
@@ -395,3 +654,15 @@ def test_model_settings_routes_use_documented_envelopes() -> None:
     assert "sk-user-secret" not in str(put_response.json())
     assert test_response.status_code == 200
     assert test_response.json()["data"]["ok"] is True
+    assert configs_response.status_code == 200
+    assert configs_response.json()["data"]["default_config_id"] is not None
+    assert "sk-user-secret" not in str(configs_response.json())
+    assert create_response.status_code == 200
+    assert create_response.json()["data"]["display_name"] == "本地 Ollama"
+    assert default_response.status_code == 200
+    assert default_response.json()["data"]["default_config_id"] == created_config_id
+    assert targeted_test_response.status_code == 200
+    assert targeted_test_response.json()["data"]["config_id"] == created_config_id
+    assert delete_response.status_code == 200
+    assert missing_response.status_code == 404
+    assert missing_response.json()["error"]["code"] == "MODEL_SETTINGS_NOT_FOUND"

@@ -352,7 +352,8 @@ class ChatMessage(IdMixin, CreatedAtMixin, Base):
 class ModelSetting(IdMixin, TimestampMixin, Base):
     __tablename__ = "model_settings"
     __table_args__ = (
-        UniqueConstraint("user_id", name="uq_model_settings_user_id"),
+        Index("ix_model_settings_user_default", "user_id", "is_default"),
+        Index("ix_model_settings_user_updated", "user_id", "updated_at"),
     )
 
     user_id: Mapped[int] = mapped_column(
@@ -361,6 +362,8 @@ class ModelSetting(IdMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False, default="默认模型配置")
+    preset_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     provider: Mapped[str] = mapped_column(
         String(80),
         nullable=False,
@@ -370,4 +373,8 @@ class ModelSetting(IdMixin, TimestampMixin, Base):
     api_key_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
     chat_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
     embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    last_test_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     tool_flags_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)

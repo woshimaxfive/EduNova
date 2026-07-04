@@ -2497,6 +2497,14 @@ a {
   align-items: start;
 }
 
+.settings-model-section {
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 260px);
+}
+
+.settings-section-main {
+  min-width: 0;
+}
+
 .settings-form-row {
   display: flex;
   flex-wrap: wrap;
@@ -2547,6 +2555,133 @@ a {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+.settings-config-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 18px;
+}
+
+.settings-config-list,
+.settings-config-editor {
+  min-width: 0;
+  border: 1px solid rgba(12, 34, 38, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.48);
+  box-shadow: 0 18px 55px rgba(6, 45, 50, 0.06);
+}
+
+.settings-config-list {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.settings-config-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 4px 8px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 820;
+}
+
+.settings-config-card {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: var(--text-strong);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-config-card:hover,
+.settings-config-card.active {
+  border-color: rgba(8, 127, 115, 0.16);
+  background: rgba(228, 247, 244, 0.72);
+}
+
+.settings-config-card.empty {
+  border-style: dashed;
+}
+
+.settings-config-card span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-config-card strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-config-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-config-title .settings-status {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  font-size: 0.68rem;
+}
+
+.settings-config-editor {
+  padding: 14px;
+}
+
+.settings-advanced-field {
+  flex: 1 1 100%;
+  padding: 8px 0 0;
+}
+
+.settings-advanced-field summary {
+  width: fit-content;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 820;
+}
+
+.settings-advanced-field label {
+  margin-top: 10px;
+}
+
+.settings-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.compact-action {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 0.78rem;
+}
+
+.danger-action {
+  color: #9a3412;
 }
 
 .settings-toggle {
@@ -5326,9 +5461,91 @@ a {
     overflow: visible;
     padding: 18px 14px 36px;
   }
+
+  .settings-model-section {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-model-section .settings-section-icon {
+    display: none;
+  }
+
+  .settings-action-stack {
+    width: 100%;
+  }
+
+  .settings-config-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-config-list,
+  .settings-config-editor {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .settings-model-grid label,
+  .settings-provider-field,
+  .settings-advanced-field {
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .settings-provider-note,
+  .settings-form-row input,
+  .settings-form-row select {
+    min-width: 0;
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 560px) {
+  .route-main-surface {
+    padding: 14px 10px 32px;
+    scrollbar-gutter: auto;
+  }
+
+  .settings-section {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-section-icon {
+    display: none;
+  }
+
+  .settings-config-layout {
+    gap: 12px;
+  }
+
+  .settings-config-list,
+  .settings-config-editor {
+    border-radius: 16px;
+  }
+
+  .settings-config-editor {
+    padding: 12px;
+  }
+
+  .settings-config-list-head,
+  .settings-form-actions,
+  .settings-model-summary {
+    align-items: stretch;
+  }
+
+  .settings-form-actions button,
+  .settings-config-list-head .compact-action,
+  .settings-model-summary > * {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .settings-config-title {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
   .library-command-row {
     grid-template-columns: 1fr;
   }

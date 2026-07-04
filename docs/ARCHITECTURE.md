@@ -164,7 +164,7 @@ frontend/src/
 - Phase 5.2 已完成受保护的 `/rag/search` 课程知识库检索；当前 `/app/courses/:courseId` 的课程会话发送会通过后端调用关键词检索，并把真实资料、章节和切片引用保存到 assistant 消息。
 - Phase 5.3 已完成课程空间 `scope=course` 会话持久化；课程侧栏历史来自 `/tutor/sessions?scope=course&course_id=...`，点击历史会恢复真实 messages 和 `citation_json`。
 - 当前主页 assistant 回复仍是模板占位，不调用模型。
-- 当前 `/app/courses/:courseId` 课程空间标题、资料数、知识点数、知识点列表、课程历史、课程消息和课程引用来自真实接口；Phase 6.1 起命中引用且模型配置可用时，课程 assistant 内容来自真实 OpenAI-compatible 模型回答。资源和 Agent 轨迹仍使用前端预备交互，后续由资源生成和 Agent 日志接口替换。
+- 当前 `/app/courses/:courseId` 课程空间标题、资料数、知识点数、知识点列表、课程历史、课程消息和课程引用来自真实接口；Phase 6.1 起命中引用且模型配置可用时，课程 assistant 内容来自真实 OpenAI-compatible 模型回答；Phase 6.2 起运行时使用当前用户默认模型配置。资源和 Agent 轨迹仍使用前端预备交互，后续由资源生成和 Agent 日志接口替换。
 - 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面使用前端样例数据；后续由资料、画像、RAG、练习评估、掌握度报告和设置接口替换。
 - 当前 P3.7 按钮反馈使用 React 本地状态和 `ActionNotice`，用于固定前端交互边界；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
 - 上传建课状态轨道和状态条当前使用前端样例状态，后续由 `/materials/{material_id}/progress`、`/courses/from-materials` 和长任务接口驱动。
@@ -200,7 +200,7 @@ backend/app/
 | `backend/app/data/builtin_courses` | 内置课程包数据 |
 | `backend/app/services/course_seed.py` | 内置课程导入服务 |
 | `backend/app/services/tutor.py` | 主页/课程会话服务，负责当前用户会话创建、列表、详情、追加消息、主页模板回复写入、课程会话关键词检索引用持久化，以及 Phase 6.1 的课程回答生成编排 |
-| `backend/app/services/model_settings.py` | 模型设置服务，负责用户/系统模型配置解析、Fernet 加密保存用户 Key、脱敏摘要、连接测试和运行时配置优先级 |
+| `backend/app/services/model_settings.py` | 模型设置服务，负责用户多模型配置、系统兜底配置解析、Fernet 加密保存用户 Key、脱敏摘要、连接测试、默认配置切换和运行时配置优先级 |
 | `backend/app/services/course_answers.py` | 课程回答服务，负责基于课程引用构造受控 prompt、调用模型 Provider、处理未配置和模型失败 |
 | `backend/app/services/materials.py` | 个人资料库服务，负责上传保存、轻解析、列表、详情、进度和课程资料关联 |
 | `backend/app/services/courses.py` | 课程服务，负责 TXT/Markdown 规则建课、课程列表、详情、概览和知识点读取 |
@@ -398,22 +398,24 @@ Provider 抽象目标能力：
 - `model_list`。
 - `health_check`。
 
-Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版。设置页支持：
+Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版。Phase 6.2 已把设置页从一人一套配置升级为“配置列表 + 当前编辑面板”。设置页支持：
 
-- Provider 预设，首位为讯飞星火 Spark。
+- 多套用户个人配置，互相隔离保存和测试。
+- Provider 预设，首位为讯飞星火 Spark，OpenRouter 不再作为可见预设。
 - Base URL。
 - API Key / APIPassword。
-- 聊天模型。
-- 可选 Embedding 模型预留字段。
-- 连通性测试。
+- 回答模型。
+- 可选 Embedding 模型预留字段，折叠在高级项中。
+- 指定配置的连通性测试。
+- 默认配置选择。
 
 配置解析优先级：
 
 ```text
-当前用户有效配置 -> .env 的 SYSTEM_MODEL_* -> 未配置提示
+当前用户默认有效配置 -> .env 的 SYSTEM_MODEL_* -> 未配置提示
 ```
 
-用户 API Key 使用 `MODEL_SETTINGS_ENCRYPTION_KEY` 派生的 Fernet 加密后保存到 `model_settings.api_key_ciphertext`。`GET /settings/model` 只返回来源、模型、脱敏 Key 和可用性，不返回明文 Key。设置页 Provider 预设首位是讯飞星火 Spark，实际后端协议仍走 OpenAI-compatible Chat Completions；`embedding_model` 是后续向量召回预留字段，Phase 6.1 可为空。
+用户 API Key 使用 `MODEL_SETTINGS_ENCRYPTION_KEY` 派生的 Fernet 加密后保存到 `model_settings.api_key_ciphertext`。每条用户配置单独保存密钥密文、测试状态和默认标记；`GET /settings/model/configs` 只返回配置摘要、脱敏 Key、服务器兜底摘要和默认配置 id，不返回明文 Key。旧 `/settings/model` 仍作为兼容接口读取或更新当前默认配置。设置页 Provider 预设首位是讯飞星火 Spark，实际后端协议仍走 OpenAI-compatible Chat Completions；`embedding_model` 是后续向量召回预留字段，Phase 6.2 可为空。
 
 降级策略：
 

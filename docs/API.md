@@ -1084,7 +1084,7 @@ Authorization: Bearer <token>
 
 ### GET `/settings/model`
 
-用途：获取当前模型设置摘要。Phase 6.1 已实现，必须携带 JWT。解析优先级为当前用户有效配置优先，其次使用 `.env` 中的系统模型配置；如果两者都不可用，返回 `source=none` 和 `can_use_model=false`。响应不会返回明文 API Key。前端 Provider 预设首位为讯飞星火 Spark，但后端协议仍统一保存为 `openai_compatible`。
+用途：获取当前模型设置摘要。Phase 6.2 后该接口作为兼容接口保留，读取当前用户默认模型配置；没有默认配置时回退 `.env` 中的系统模型配置；如果两者都不可用，返回 `source=none` 和 `can_use_model=false`。响应不会返回明文 API Key。前端 Provider 预设首位为讯飞星火 Spark，但后端协议仍统一保存为 `openai_compatible`。
 
 响应：
 
@@ -1106,7 +1106,7 @@ Authorization: Bearer <token>
 
 ### PUT `/settings/model`
 
-用途：保存当前用户自己的 OpenAI-compatible 模型设置。Phase 6.1 已实现。用户 API Key 使用 Fernet 加密后写入 `model_settings.api_key_ciphertext`；没有 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，保存非空 Key 返回 `CONFIGURATION_ERROR`。`api_key` 为空字符串或缺省时保留原密钥。`embedding_model` 当前可选，Phase 6.1 课程回答仍使用关键词引用，embedding/向量召回留到后续阶段。
+用途：保存当前用户默认 OpenAI-compatible 模型设置。Phase 6.2 后该接口作为兼容接口保留：如果当前用户已有默认配置，则更新默认配置；如果没有个人配置，则创建一条默认配置。用户 API Key 使用 Fernet 加密后写入 `model_settings.api_key_ciphertext`；没有 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，保存非空 Key 返回 `CONFIGURATION_ERROR`。`api_key` 为空字符串或缺省时保留原密钥。`embedding_model` 当前可选，Phase 6.2 仍不启用 embedding/向量召回。
 
 请求：
 
@@ -1115,7 +1115,7 @@ Authorization: Bearer <token>
   "provider": "openai_compatible",
   "base_url": "https://spark-api-open.xf-yun.com/v1",
   "api_key": "example-key",
-  "chat_model": "4.0Ultra"
+  "chat_model": "lite"
 }
 ```
 
@@ -1123,7 +1123,7 @@ Authorization: Bearer <token>
 
 ### POST `/settings/model/test`
 
-用途：测试模型连通性。Phase 6.1 已实现。后端使用当前解析出的配置发送极短 Chat Completions 测试请求，成功或失败都只返回摘要，不记录完整 Key、完整 prompt 或上传资料原文。
+用途：测试模型连通性。Phase 6.2 后该接口作为兼容接口保留，测试当前用户默认配置；没有默认配置时测试服务器兜底配置。后端发送极短 Chat Completions 测试请求，成功或失败都只返回摘要，不记录完整 Key、完整 prompt 或上传资料原文。
 
 响应：
 
@@ -1133,13 +1133,95 @@ Authorization: Bearer <token>
     "ok": true,
     "source": "user",
     "chat_model": "gpt-4.1-mini",
-    "message": "模型连接成功。"
+    "message": "模型连接成功。",
+    "config_id": 1
   },
   "trace_id": "trace_settings_002"
 }
 ```
 
-模型 Provider 第一版只支持 OpenAI-compatible Chat Completions，目标接口为 `{base_url}/chat/completions`。讯飞星火 Spark 推荐 Base URL 为 `https://spark-api-open.xf-yun.com/v1`，可选聊天模型包括 `lite`、`generalv3`、`pro-128k`、`max-32k`、`4.0Ultra`。接口形态参考 OpenAI 官方 Chat Completions API：https://platform.openai.com/docs/api-reference/chat/create 。
+### GET `/settings/model/configs`
+
+用途：读取当前用户所有模型配置和服务器兜底摘要。Phase 6.2 已实现，必须携带 JWT。每条用户配置互相隔离，Key 只返回脱敏值。
+
+响应：
+
+```json
+{
+  "data": {
+    "configs": [
+      {
+        "id": 1,
+        "source": "user",
+        "display_name": "星火 Lite",
+        "preset_id": "spark",
+        "provider": "openai_compatible",
+        "base_url": "https://spark-api-open.xf-yun.com/v1",
+        "chat_model": "lite",
+        "embedding_model": null,
+        "has_api_key": true,
+        "api_key_masked": "sp-u...oken",
+        "can_use_model": true,
+        "is_default": true,
+        "last_test_ok": true,
+        "last_test_message": "模型连接成功。",
+        "last_tested_at": "2026-07-04T10:00:00Z"
+      }
+    ],
+    "system_summary": {
+      "source": "system",
+      "provider": "openai_compatible",
+      "base_url": "https://api.example.com/v1",
+      "chat_model": "example-chat-model",
+      "embedding_model": null,
+      "has_api_key": false,
+      "api_key_masked": null,
+      "can_use_model": false
+    },
+    "default_config_id": 1
+  },
+  "trace_id": "trace_settings_configs"
+}
+```
+
+### POST `/settings/model/configs`
+
+用途：创建当前用户的一条模型配置。`display_name` 在同一用户内不能重复；`make_default=true` 时会取消该用户其他默认项。第一条个人配置会自动成为默认配置。
+
+请求：
+
+```json
+{
+  "display_name": "星火 Lite",
+  "preset_id": "spark",
+  "provider": "openai_compatible",
+  "base_url": "https://spark-api-open.xf-yun.com/v1",
+  "api_key": "example-key",
+  "chat_model": "lite",
+  "embedding_model": null,
+  "make_default": true
+}
+```
+
+响应：返回单条配置摘要，不返回明文 API Key。
+
+### PATCH `/settings/model/configs/{config_id}`
+
+用途：更新当前用户自己的模型配置。只允许访问当前用户的配置；跨用户配置返回 404。`api_key` 为空字符串或缺省时保留原密钥。
+
+### POST `/settings/model/configs/{config_id}/default`
+
+用途：把当前用户自己的某条配置设为默认，并取消同用户其他默认项。课程 RAG 回答运行时优先使用这条默认配置；默认不存在时才回退服务器 `.env` 配置。
+
+### POST `/settings/model/configs/{config_id}/test`
+
+用途：测试指定模型配置，并把脱敏测试状态写入 `last_test_ok`、`last_test_message`、`last_tested_at`。测试失败也不记录明文 Key、完整 prompt 或课程资料原文。
+
+### DELETE `/settings/model/configs/{config_id}`
+
+用途：删除当前用户自己的某条模型配置。删除默认配置后，后端会把剩余配置中最近更新的一条设为默认；没有个人配置时回退服务器配置。
+
+模型 Provider 第一版只支持 OpenAI-compatible Chat Completions，目标接口为 `{base_url}/chat/completions`。Phase 6.2 的可见预设收敛为：讯飞星火 Spark、DeepSeek、通义千问、Kimi、智谱 GLM、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio、自定义兼容服务；OpenRouter 不再作为可见预设。讯飞星火 Spark 推荐 Base URL 为 `https://spark-api-open.xf-yun.com/v1`，默认模型为 `lite`，可选聊天模型包括 `lite`、`generalv3`、`pro-128k`、`max-32k`、`4.0Ultra`。接口形态参考 OpenAI 官方 Chat Completions API：https://platform.openai.com/docs/api-reference/chat/create 。
 
 ## 20. API 验收标准
 

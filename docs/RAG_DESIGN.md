@@ -19,14 +19,14 @@ Phase 5.2 已完成第一版课程知识库检索地基，Phase 5.3 已把检索
 
 ## 2. 数据来源
 
-Phase 5.2 到 Phase 6.1 只读取或复用现有数据表：
+Phase 5.2 到 Phase 6.2 只读取或复用现有数据表：
 
 - `courses`：确认课程属于当前用户。
 - `course_materials`：提供资料标题和资料来源。
 - `knowledge_points`：提供知识点和章节上下文。
 - `knowledge_chunks`：提供可检索文本切片。
 - `chat_sessions`、`chat_messages`：保存课程会话消息和 assistant `citation_json`。
-- `model_settings`：保存用户自己的 OpenAI-compatible 模型配置和加密 Key；设置页首位预设为讯飞星火 Spark，但后端协议仍统一走 OpenAI-compatible。
+- `model_settings`：保存用户自己的 OpenAI-compatible 模型配置和加密 Key；Phase 6.2 起同一用户可保存多套配置，课程回答只使用当前默认配置，默认不存在时回退服务器 `.env`。
 
 本阶段不新增数据库迁移，`knowledge_chunks.embedding` 继续允许为空。
 
@@ -89,12 +89,13 @@ Authorization: Bearer <token>
 
 ## 5. 课程 RAG 回答生成
 
-Phase 6.1 的课程回答生成规则：
+Phase 6.1 到 Phase 6.2 的课程回答生成规则：
 
 - 只在 `scope=course` 会话中启用，不影响主页 `scope=home` 会话。
 - 先检索课程 `knowledge_chunks`，再决定是否调用模型。
 - prompt 只允许基于引用回答，要求说明依据，不允许编造资料外内容。
 - assistant `content` 保存模型返回文本，`citation_json` 保留检索引用，`trace_id` 记录本次模型调用。
+- 模型运行时配置解析为：当前用户默认配置优先，服务器 `.env` 兜底；非默认个人配置只在设置页保存、测试和切换默认时使用。
 - 模型不可用、超时、鉴权失败、非 JSON 或空内容时返回可恢复错误，前端保留输入，不写入半截 assistant 消息。
 
 ## 6. 后续演进

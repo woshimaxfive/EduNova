@@ -278,7 +278,9 @@ describe("student interaction affordances", () => {
     expect(screen.queryByRole("region", { name: "课程即时对话" })).not.toBeInTheDocument();
   });
 
-  it("renders generated course detail and knowledge points from the course API", async () => {
+  it("renders generated course detail and exposes knowledge points in study mode", async () => {
+    const user = userEvent.setup();
+
     apiClient.defaults.adapter = async (config) => {
       const url = config.url ?? "";
 
@@ -358,8 +360,13 @@ describe("student interaction affordances", () => {
     expect(screen.getByLabelText("课程状态")).toHaveTextContent("1");
     expect(screen.getByLabelText("课程状态")).toHaveTextContent("知识点");
     expect(screen.getByLabelText("课程状态")).toHaveTextContent("2");
-    expect(screen.getByText("梯度下降")).toBeInTheDocument();
-    expect(screen.getByText("模型评估")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "课程提问引导" })).toHaveTextContent("推荐问题");
+
+    await user.click(screen.getByRole("button", { name: "学习模式" }));
+
+    const studyMode = screen.getByRole("region", { name: "课程学习模式" });
+    expect(studyMode).toHaveTextContent("梯度下降");
+    expect(studyMode).toHaveTextContent("模型评估");
   });
 
   it("keeps tutoring practice and reports as course-context actions", () => {
@@ -396,11 +403,10 @@ describe("student interaction affordances", () => {
     renderPage(<CourseSpacePage />);
 
     const historyRail = screen.getByRole("region", { name: "历史对话" });
-    const courseThreadList = screen.getByLabelText("课程内历史对话");
 
     expect(within(historyRail).queryByRole("button", { name: /解释泛化能力和过拟合的区别/ })).not.toBeInTheDocument();
-    expect(within(courseThreadList).queryByRole("button")).not.toBeInTheDocument();
-    expect(courseThreadList).toHaveTextContent("请从课程列表重新进入");
+    expect(historyRail).toHaveTextContent("还没有历史对话");
+    expect(screen.queryByLabelText("课程内历史对话")).not.toBeInTheDocument();
   });
 
   it("uses the tutor route as a course tutoring entry without static demo answers", async () => {

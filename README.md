@@ -11,9 +11,9 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 9：课程级学习路径、掌握度图和弱点队列完善**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询、LangGraph 骨架、5 类课程资源生成和资源质量收口，Phase 9 已完成课程级路径、规则掌握度图、弱点推荐资源和复习时间第一版。下一步进入 Phase 10：AI 辅导、练习评估和学习报告闭环第一刀。
+当前最新完成到 **Phase 10：练习评估与学习报告闭环第一刀**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询、LangGraph 骨架、5 类课程资源生成和资源质量收口，Phase 9 已完成课程级路径、规则掌握度图、弱点推荐资源和复习时间第一版，Phase 10 已完成真实课程练习、确定性批改、弱点/掌握度反哺和学习报告展示第一刀。下一步进入 Phase 11：期末冲刺和资料对比。
 
-Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和可观测 trace 已能支撑演示与后续消费。LangGraph 仍是可观测骨架，后续只作为 hardening backlog 继续补资源工坊 trace 展示、AgentTimeline 白名单 metadata 和真实图编排接管，不再拆成新的 Phase 8.x，也不阻塞 Phase 9。
+Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和可观测 trace 已能支撑演示与后续消费。LangGraph 仍是可观测骨架，后续只作为 hardening backlog 继续补资源工坊 trace 展示、AgentTimeline 白名单 metadata 和真实图编排接管，不再拆成新的 Phase 8.x，也不阻塞 Phase 11。
 
 已经具备的主链路：
 
@@ -31,6 +31,8 @@ Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和
 - `/resources/generate` 已实现 5 类课程资源生成，资源工坊可生成讲解、思维导图、练习、代码实操和 PPT 大纲，并展示模型增强/本地可用稿/低依据、引用、质量分和生成 trace；弱模型、无模型或模型失败时仍先保留课程引用驱动的可用稿。
 - `/paths/generate`、`/paths/current` 和 `/paths/tasks/{task_id}` 已实现课程级学习路径生成、当前路径读取和任务状态更新；`/app/path` 已接入真实课程、任务、路径依据和掌握度图。
 - `/courses/{course_id}/mastery-map` 已实现规则掌握度图，`/courses/{course_id}/learning-state` 已返回真实 `path_summary`、`mastery_summary`、弱点推荐资源和下次复习时间。
+- `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已实现真实课程练习创建、作答提交和确定性批改；错题或低分题会以 `practice_assessment` 来源反哺课程级弱点队列和掌握度图。
+- `/reports/generate` 和 `/reports/latest` 已实现课程学习报告生成与读取；`/app/reports` 展示真实分数、掌握度更新、薄弱点、证据摘要和下一步建议，不做假导出。
 - `/app/tutor` 已收敛为课程辅导入口，真实提问统一进入课程空间。
 - 多套个人模型配置、默认配置切换、服务器 `.env` 兜底。
 - OpenAI-compatible Embeddings 与 `local-hash-1536` 本地 fallback。
@@ -43,7 +45,7 @@ Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和
 - OCR 和图片题目识别。
 - 讯飞原生 Embeddingp/Embeddingq。
 - 个人全局资源生成入口、资源编辑、异步资源任务队列。
-- 练习出题、练习批改、错题驱动薄弱点追溯、报告导出和演示模式重置。
+- 期末冲刺、资料对比、错题驱动深度薄弱点追溯、报告文件导出和演示模式重置。
 
 详细状态见 [docs/STATUS.md](docs/STATUS.md)，后续任务看 [docs/PROJECT_BOARD.md](docs/PROJECT_BOARD.md)。
 

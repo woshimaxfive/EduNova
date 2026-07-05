@@ -713,6 +713,20 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.queryByText("AI 辅导回答")).not.toBeInTheDocument();
   });
 
+  it("links practice and reports entries with the current course preselected", async () => {
+    renderCoursePage();
+
+    const actionLinks = await screen.findByRole("navigation", { name: "课程行动入口" });
+    expect(within(actionLinks).getByRole("link", { name: "开始练习" })).toHaveAttribute(
+      "href",
+      `${PATHS.practice}?course_id=808`
+    );
+    expect(within(actionLinks).getByRole("link", { name: "查看学习报告" })).toHaveAttribute(
+      "href",
+      `${PATHS.reports}?course_id=808`
+    );
+  });
+
   it("renders pending course weakness review items from learning state", async () => {
     renderCoursePage({ learningState: learningStateWithWeakness });
 

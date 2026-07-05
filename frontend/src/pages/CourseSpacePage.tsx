@@ -46,13 +46,6 @@ const courseStarterQuestions = [
   "根据引用帮我找一个薄弱点练习方向"
 ];
 
-const courseActionLinks = [
-  { label: "查看学习路径", to: PATHS.path, icon: Compass },
-  { label: "进入 AI 辅导", to: PATHS.tutor, icon: ChatCircleText },
-  { label: "开始练习", to: PATHS.practice, icon: ListChecks },
-  { label: "查看学习报告", to: PATHS.reports, icon: ChartLineUp }
-];
-
 function retrievalSourceLabel(source?: string | null) {
   if (source === "hybrid") {
     return "混合检索";
@@ -661,11 +654,16 @@ export function CourseSpacePage() {
                 )}
 
                 <nav className="course-action-links" aria-label="课程行动入口">
-                  {courseActionLinks.map((action) => {
+                  {[
+                    { label: "查看学习路径", to: `${PATHS.path}?course_id=${numericCourseId}`, icon: Compass },
+                    { label: "进入 AI 辅导", to: PATHS.tutor, icon: ChatCircleText },
+                    { label: "开始练习", to: `${PATHS.practice}?course_id=${numericCourseId}`, icon: ListChecks },
+                    { label: "查看学习报告", to: `${PATHS.reports}?course_id=${numericCourseId}`, icon: ChartLineUp }
+                  ].map((action) => {
                     const Icon = action.icon;
 
                     return (
-                      <Link key={action.to} to={action.to}>
+                      <Link key={action.label} to={action.to}>
                         <Icon size={17} weight="duotone" aria-hidden="true" />
                         <span>{action.label}</span>
                       </Link>

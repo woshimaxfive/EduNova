@@ -8,7 +8,9 @@ import { buildCoursePath } from "../app/routePaths";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS, type ApiCourseSummary } from "../api/courses";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
+import { PRACTICE_ENDPOINTS } from "../api/practice";
 import { PROFILE_ENDPOINTS } from "../api/profiles";
+import { REPORT_ENDPOINTS } from "../api/reports";
 import { LibraryPage } from "./LibraryPage";
 import { PracticePage } from "./PracticePage";
 import { ProfilePage } from "./ProfilePage";
@@ -58,6 +60,7 @@ describe("student core pages", () => {
       }
     ];
     apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
       if (config.url === MATERIAL_ENDPOINTS.list) {
         const materials: MaterialListItem[] = [
           {
@@ -86,6 +89,93 @@ describe("student core pages", () => {
       if (config.url === COURSE_ENDPOINTS.list) {
         return {
           data: { data: tutorCourses, trace_id: "trace_core_courses" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (config.url === COURSE_ENDPOINTS.knowledgePoints(808)) {
+        return {
+          data: {
+            data: [
+              {
+                id: "401",
+                title: "启发式搜索",
+                summary: "理解启发函数。",
+                chapter: "搜索问题",
+                order_index: 0,
+                difficulty: null
+              }
+            ],
+            trace_id: "trace_core_points"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (config.url === PRACTICE_ENDPOINTS.sessions && method === "post") {
+        return {
+          data: {
+            data: {
+              id: "501",
+              course_id: "808",
+              title: "AI 搜索复习 练习",
+              status: "in_progress",
+              score: null,
+              questions: [
+                {
+                  id: "q1",
+                  question_type: "short_answer",
+                  knowledge_point_id: "401",
+                  knowledge_point_title: "启发式搜索",
+                  prompt: "请解释启发式搜索的复习重点。",
+                  options: [],
+                  correct_answer: null,
+                  keywords: ["启发函数"],
+                  explanation: "围绕课程引用说明。",
+                  difficulty: "medium"
+                }
+              ],
+              answers: [],
+              created_at: "2026-07-05T10:00:00Z",
+              updated_at: "2026-07-05T10:00:00Z"
+            },
+            trace_id: "trace_core_practice"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (config.url === REPORT_ENDPOINTS.latest) {
+        return {
+          data: {
+            data: {
+              id: null,
+              course_id: "808",
+              practice_session_id: null,
+              status: "empty",
+              score: null,
+              report: {
+                summary: "还没有真实学习报告。",
+                mastery_update: { weak_count: 0, mastered_count: 0, learning_count: 0 },
+                weakness_list: [],
+                evidence_refs: [],
+                next_step_suggestions: [],
+                review_queue_updates: [],
+                profile_changes: []
+              },
+              created_at: null
+            },
+            trace_id: "trace_core_report"
+          },
           status: 200,
           statusText: "OK",
           headers: {},
@@ -217,24 +307,24 @@ describe("student core pages", () => {
     expect(screen.getByRole("link", { name: "回到学习主页" })).toHaveAttribute("href", "/app");
   });
 
-  it("renders practice as an answer, feedback, and review loop", () => {
+  it("renders practice as an answer, feedback, and review loop", async () => {
     renderPage(<PracticePage />);
 
     expect(screen.getByRole("heading", { name: "练习" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "练习作答" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "批改反馈" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "薄弱点复习队列" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "提交答案" })).toBeInTheDocument();
+    await screen.findByRole("button", { name: "生成练习" });
   });
 
-  it("renders reports as an explainable learning record", () => {
+  it("renders reports as an explainable learning record", async () => {
     renderPage(<ReportsPage />);
 
     expect(screen.getByRole("heading", { name: "学习报告" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "掌握度地图" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "学习报告" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "导出学习档案" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "导出档案" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "生成学习报告" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "生成学习报告" })).toBeInTheDocument();
     expect(screen.queryByText("引用覆盖：AI 导论内置讲义、期末复习题样例")).not.toBeInTheDocument();
   });
 

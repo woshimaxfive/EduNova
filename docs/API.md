@@ -44,13 +44,13 @@ settings
 agents
 resources
 paths
+practice
+reports
 ```
 
 当前前端仍保留以下合同常量，方便后续 Phase 接入，但它们不是当前已经挂载的后端 router，不能在页面或文档中当作已实现接口：
 
 ```text
-practice
-reports
 demo
 ```
 
@@ -485,12 +485,13 @@ Authorization: Bearer <token>
 
 状态：Phase 9 已实现。
 
-用途：获取课程级规则掌握度图。掌握度第一版不单独持久化，而是按课程知识点、`confirmed/reviewing/completed` 弱点队列、当前 active 学习路径任务和同课程生成资源实时计算。
+用途：获取课程级规则掌握度图。掌握度第一版不单独持久化，而是按课程知识点、`confirmed/reviewing/completed` 弱点队列、当前 active 学习路径任务、同课程生成资源和 Phase 10 练习评估结果实时计算。
 
 规则：
 
 - 必须携带 JWT，只允许访问当前用户自己的课程。
 - `confirmed/reviewing` 弱点映射为 `weak`。
+- Phase 10 后，练习作答低分或错误的知识点映射为 `weak`，正确或高分知识点可提升为 `mastered`。
 - 已完成弱点到达 `next_review_at` 时映射为 `recommended_review`。
 - 有进行中或待做路径任务的知识点映射为 `learning`。
 - 完成路径任务或完成弱点且未到复习时间映射为 `mastered`。
@@ -531,9 +532,9 @@ Authorization: Bearer <token>
 
 ### GET `/courses/{course_id}/learning-state`
 
-状态：Phase 9 已更新。Phase 7.3 完成课程问答候选事件入队，Phase 7.4 增加队列项确认、开始、完成和忽略操作，Phase 9 增加推荐资源、下次复习时间、真实路径摘要和掌握度摘要。
+状态：Phase 10 已更新。Phase 7.3 完成课程问答候选事件入队，Phase 7.4 增加队列项确认、开始、完成和忽略操作，Phase 9 增加推荐资源、下次复习时间、真实路径摘要和掌握度摘要，Phase 10 接入练习评估对弱点队列和掌握度的反哺。
 
-用途：聚合某一门课程下的学习状态，并把课程问答产生的弱点候选画像事件确定性同步为待确认复习项。当前会返回弱点队列、路径摘要和规则掌握度摘要；仍不生成练习评估或报告。
+用途：聚合某一门课程下的学习状态，并把课程问答产生的弱点候选画像事件确定性同步为待确认复习项。当前会返回弱点队列、路径摘要和规则掌握度摘要；练习提交后，低分或错误题对应的 `practice_assessment` 弱点会以 `confirmed` 来源进入队列并影响掌握度摘要。
 
 规则：
 
@@ -547,7 +548,7 @@ Authorization: Bearer <token>
 - `confirmed/reviewing/completed` 复习项会按同课程同知识点资源或安全标题匹配补充 `recommended_resource_ids` 和资源摘要；`pending` 仍只表示待确认，不直接作为路径依据。
 - `confirmed/reviewing` 项若缺少 `next_review_at`，读取学习状态时可确定性补齐；`complete` 操作会设置下一次复习时间。
 - `path_summary` 读取同课程最新 `active` 学习路径，不存在时返回真实空摘要。
-- `mastery_summary` 复用掌握度图规则实时统计。
+- `mastery_summary` 复用掌握度图规则实时统计，并纳入 Phase 10 练习结果。
 - 队列和响应不包含完整用户问题、系统提示词、模型输入或资料原文。
 
 响应字段：
@@ -990,7 +991,7 @@ Authorization: Bearer <token>
 
 ## 11. Agent Trace 接口
 
-状态：Phase 8.1 已实现 trace 查询底座，Phase 8.2 已由资源生成流程写入 `profile -> retrieve -> diagnosis -> resource -> review -> persist` 六步 Agent 日志；学习路径、练习评估和报告导出仍未接入。
+状态：Phase 8.1 已实现 trace 查询底座，Phase 8.2 已由资源生成流程写入 `profile -> retrieve -> diagnosis -> resource -> review -> persist` 六步 Agent 日志；Phase 9 学习路径和 Phase 10 练习评估/学习报告已接入各自业务闭环。报告文件导出仍未接入。
 
 ### GET `/agents/traces/{trace_id}`
 
@@ -1345,11 +1346,21 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 
 ## 14. Practice 与 Report 接口
 
-状态：后续预留。当前后端未挂载 `practice` 与 `reports` router，练习和报告页面仍是前端骨架和本地预备交互。
+状态：Phase 10 已实现。当前后端已挂载 `practice` 与 `reports` router，`/app/practice` 和 `/app/reports` 已接入真实接口。
+
+统一规则：
+
+- 所有接口必须携带 JWT。
+- 只能创建、读取和提交当前用户自己课程下的练习。
+- 只能生成和读取当前用户自己课程下的报告。
+- 练习生成和批改采用确定性规则，不依赖外部模型。
+- 练习题第一刀支持 `single_choice`、`multiple_choice`、`short_answer`。
+- 练习提交后，低分或错误题会按课程和知识点合并进入 `weakness_review_queue`，`source_type="practice_assessment"`，`status="confirmed"`。
+- 响应不返回标准答案，不保存或返回系统提示词、模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
 ### POST `/practice/sessions`
 
-用途：创建练习。
+用途：创建当前用户课程练习，并返回题目。题目来自课程知识点、同课程资源和薄弱点线索的确定性组合。
 
 请求：
 
@@ -1362,13 +1373,51 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 }
 ```
 
+响应：
+
+```json
+{
+  "data": {
+    "id": "501",
+    "course_id": "101",
+    "title": "人工智能导论 练习",
+    "status": "in_progress",
+    "score": null,
+    "questions": [
+      {
+        "id": "q1",
+        "question_type": "single_choice",
+        "knowledge_point_id": "8",
+        "knowledge_point_title": "启发式搜索",
+        "prompt": "关于启发式搜索，哪一项最符合课程复习重点？",
+        "options": ["启发式搜索", "无关概念"],
+        "correct_answer": null,
+        "keywords": ["启发式搜索", "关键概念"],
+        "explanation": "围绕课程引用复习。",
+        "difficulty": "medium"
+      }
+    ],
+    "answers": [],
+    "created_at": "2026-07-05T10:00:00Z",
+    "updated_at": "2026-07-05T10:00:00Z"
+  },
+  "trace_id": "trace_practice_session"
+}
+```
+
+错误：
+
+- 未登录返回 401。
+- 课程不存在、非本人课程或跨课程知识点返回 404。
+- 题量或难度非法返回 400。
+
 ### GET `/practice/sessions/{session_id}`
 
-用途：查看练习题。
+用途：读取当前用户自己的练习、题目、作答和反馈。非本人练习返回 404。
 
 ### POST `/practice/sessions/{session_id}/answers`
 
-用途：提交答案。
+用途：提交答案，写入 `practice_answers`，更新 `practice_sessions.status/score`，并把低分或错误题反哺到课程级弱点队列。
 
 请求：
 
@@ -1383,9 +1432,19 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 }
 ```
 
+规则：
+
+- 客观题按标准答案确定性批改。
+- 多选题使用逗号分隔答案，至少覆盖标准答案才算正确；部分覆盖按命中比例给分。
+- 简答题按关键词、课程引用覆盖和关键概念命中率给分。
+- 空答案或提交不属于当前练习的题目返回 400。
+- 当前实现允许重复提交同一练习，后一次提交会替换本练习的作答记录并重算分数。
+
+响应仍为 `PracticeSessionDetail`，`status` 变为 `completed`，`score` 为本次平均分，`answers` 含逐题 `score`、`message`、`matched_keywords`、`missing_keywords` 和 `explanation`。
+
 ### POST `/reports/generate`
 
-用途：生成学习报告。
+用途：基于当前用户课程和可选练习生成课程学习报告，写入 `assessment_reports`。
 
 请求：
 
@@ -1396,13 +1455,94 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 }
 ```
 
+响应：
+
+```json
+{
+  "data": {
+    "id": "801",
+    "course_id": "101",
+    "practice_session_id": "501",
+    "status": "ready",
+    "score": 67,
+    "report": {
+      "summary": "本次评估得分 67，基于真实练习作答生成。",
+      "mastery_update": {
+        "weak_count": 1,
+        "mastered_count": 2,
+        "learning_count": 4
+      },
+      "weakness_list": [
+        {
+          "knowledge_point_id": "8",
+          "title": "启发式搜索",
+          "source_type": "practice_assessment"
+        }
+      ],
+      "evidence_refs": [
+        {
+          "practice_answer_id": "601",
+          "knowledge_point_id": "8",
+          "score": 0
+        }
+      ],
+      "next_step_suggestions": ["优先复习《人工智能导论》中得分较低的知识点。"],
+      "review_queue_updates": [],
+      "profile_changes": ["练习结果可作为后续画像证据，但本阶段不自动改写用户长期画像。"]
+    },
+    "created_at": "2026-07-05T10:10:00Z"
+  },
+  "trace_id": "trace_report"
+}
+```
+
+错误：
+
+- 未登录返回 401。
+- 课程不存在、非本人课程、指定练习不存在或练习不属于当前课程返回 404。
+
 ### GET `/reports/latest`
 
-用途：获取最新学习报告。
+用途：获取当前用户当前课程最新学习报告。
+
+查询参数：
+
+```text
+course_id=101
+```
+
+无报告时返回真实空状态：
+
+```json
+{
+  "data": {
+    "id": null,
+    "course_id": "101",
+    "practice_session_id": null,
+    "status": "empty",
+    "score": null,
+    "report": {
+      "summary": "还没有真实学习报告。",
+      "mastery_update": {
+        "weak_count": 0,
+        "mastered_count": 0,
+        "learning_count": 0
+      },
+      "weakness_list": [],
+      "evidence_refs": [],
+      "next_step_suggestions": ["完成一次课程练习后生成报告。"],
+      "review_queue_updates": [],
+      "profile_changes": []
+    },
+    "created_at": null
+  },
+  "trace_id": "trace_report_latest"
+}
+```
 
 ## 15. Weakness Review 接口
 
-状态：Phase 7.4 已实现课程绑定的弱点复习队列操作接口。当前接口只处理确认、开始、完成和忽略，不生成学习路径、资源、练习或报告。
+状态：Phase 7.4 已实现课程绑定的弱点复习队列操作接口。当前接口只处理确认、开始、完成和忽略；Phase 10 后练习评估可以写入 `practice_assessment` 来源的 `confirmed` 复习项，但队列操作接口本身仍不生成学习路径、资源、练习或报告。
 
 ### POST `/courses/{course_id}/weakness-review-items/{item_id}/confirm`
 

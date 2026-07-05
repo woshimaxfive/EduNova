@@ -7153,7 +7153,15 @@ a {
   }
 
   .course-action-links {
-    display: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .course-action-links a {
+    min-width: 0;
+    justify-content: center;
   }
 
   .course-study-layout {

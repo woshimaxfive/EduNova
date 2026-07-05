@@ -25,6 +25,7 @@ from backend.app.models import (
     LearningTask,
     Material,
     ProfileEvent,
+    PracticeAnswer,
     StudentProfile,
     User,
     WeaknessReviewItem,
@@ -56,6 +57,7 @@ class FakeCourseRepository:
     generated_resources: list[GeneratedResource] = field(default_factory=list)
     learning_paths: list[LearningPath] = field(default_factory=list)
     learning_tasks: list[LearningTask] = field(default_factory=list)
+    practice_answers: list[PracticeAnswer] = field(default_factory=list)
     next_course_id: int = 101
     next_enrollment_id: int = 201
     next_course_material_id: int = 301
@@ -193,6 +195,13 @@ class FakeCourseRepository:
 
     def list_tasks_for_path(self, path_id: int) -> list[LearningTask]:
         return [task for task in self.learning_tasks if task.path_id == path_id]
+
+    def list_practice_answers(self, user_id: int, course_id: int) -> list[PracticeAnswer]:
+        return [
+            answer
+            for answer in self.practice_answers
+            if answer.user_id == user_id and (answer.question_json or {}).get("course_id") == course_id
+        ]
 
     def commit(self) -> None:
         return None
@@ -339,6 +348,25 @@ def make_weakness_item(
     item.created_at = datetime(2026, 7, 5, 8, 10, tzinfo=UTC)
     item.updated_at = datetime(2026, 7, 5, 8, 12, tzinfo=UTC)
     return item
+
+
+def make_practice_answer(answer_id: int, point_id: int, score: int, is_correct: bool) -> PracticeAnswer:
+    return PracticeAnswer(
+        id=answer_id,
+        session_id=900,
+        user_id=1,
+        question_json={
+            "id": f"q-{answer_id}",
+            "course_id": 101,
+            "knowledge_point_id": str(point_id),
+            "knowledge_point_title": "练习知识点",
+            "question_type": "single_choice",
+        },
+        answer_text="学生作答",
+        feedback_json={"score": score, "message": "规则批改"},
+        is_correct=is_correct,
+        created_at=datetime(2026, 7, 5, 9, 0, tzinfo=UTC),
+    )
 
 
 def make_resource(
@@ -844,6 +872,30 @@ def test_mastery_map_maps_weaknesses_tasks_resources_and_scopes_course() -> None
 
     with pytest.raises(CourseNotFoundError):
         make_service(repo).get_mastery_map(make_user(1), 202)
+
+
+def test_mastery_map_uses_practice_answers_to_mark_weak_and_mastered_points() -> None:
+    repo = FakeCourseRepository(
+        courses=[make_course()],
+        knowledge_points=[
+            KnowledgePoint(id=401, course_id=101, title="启发式搜索", summary="摘要", chapter="第一章", order_index=0),
+            KnowledgePoint(id=402, course_id=101, title="A* 搜索", summary="摘要", chapter="第一章", order_index=1),
+        ],
+        practice_answers=[
+            make_practice_answer(901, 401, score=0, is_correct=False),
+            make_practice_answer(902, 402, score=100, is_correct=True),
+        ],
+    )
+
+    mastery = as_dict(make_service(repo).get_mastery_map(make_user(), 101))
+
+    by_title = {point["title"]: point for point in mastery["points"]}
+    assert by_title["启发式搜索"]["status"] == "weak"
+    assert by_title["启发式搜索"]["score"] == 35
+    assert by_title["A* 搜索"]["status"] == "mastered"
+    assert by_title["A* 搜索"]["score"] == 90
+    assert mastery["summary"]["weak_count"] == 1
+    assert mastery["summary"]["mastered_count"] == 1
 
 
 def test_create_course_route_returns_envelope() -> None:

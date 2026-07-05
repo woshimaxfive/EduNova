@@ -10,7 +10,9 @@ import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
+import { PRACTICE_ENDPOINTS } from "../api/practice";
 import { PROFILE_ENDPOINTS, type StudentProfileResponse, type ProfileEventResponse } from "../api/profiles";
+import { REPORT_ENDPOINTS } from "../api/reports";
 import { RESOURCE_ENDPOINTS, type GeneratedResource, type ResourceQualityScore } from "../api/resources";
 import { SETTINGS_ENDPOINTS, type ModelConfigSummary, type ModelSettingsListResponse } from "../api/settings";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
@@ -372,13 +374,19 @@ describe("student interaction affordances", () => {
   });
 
   it("keeps tutoring practice and reports as course-context actions", () => {
-    renderPage(<CourseSpacePage />);
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/app/courses/808"]}>
+        <Routes>
+          <Route path={PATHS.courseDetail} element={<CourseSpacePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
 
     const courseActions = screen.getByRole("navigation", { name: "课程行动入口" });
     const expectedActions = [
       ["进入 AI 辅导", PATHS.tutor],
-      ["开始练习", PATHS.practice],
-      ["查看学习报告", PATHS.reports]
+      ["开始练习", `${PATHS.practice}?course_id=808`],
+      ["查看学习报告", `${PATHS.reports}?course_id=808`]
     ] as const;
 
     for (const [label, path] of expectedActions) {
@@ -457,21 +465,141 @@ describe("student interaction affordances", () => {
     expect(screen.queryByRole("button", { name: "深度思考" })).not.toBeInTheDocument();
   });
 
-  it("validates and acknowledges practice submissions", async () => {
+  it("creates a real practice session and acknowledges submitted answers", async () => {
     const user = userEvent.setup();
+    const session = {
+      id: "501",
+      course_id: "808",
+      title: "机器学习期末复习 练习",
+      status: "in_progress",
+      score: null,
+      questions: [
+        {
+          id: "q1",
+          question_type: "short_answer",
+          knowledge_point_id: "401",
+          knowledge_point_title: "反向传播",
+          prompt: "请解释反向传播的复习重点。",
+          options: [],
+          correct_answer: null,
+          keywords: ["局部梯度", "计算图"],
+          explanation: "围绕课程引用说明。",
+          difficulty: "medium"
+        }
+      ],
+      answers: [],
+      created_at: "2026-07-05T10:00:00Z",
+      updated_at: "2026-07-05T10:00:00Z"
+    };
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+
+      if (url === COURSE_ENDPOINTS.list) {
+        return {
+          data: {
+            data: [
+              {
+                id: "808",
+                title: "机器学习期末复习",
+                description: "由资料生成",
+                subject: "自主学习",
+                source_type: "uploaded",
+                status: "ready",
+                progress_percent: 0,
+                material_count: 1,
+                knowledge_point_count: 1,
+                chunk_count: 5
+              }
+            ],
+            trace_id: "trace_practice_courses"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === COURSE_ENDPOINTS.knowledgePoints(808)) {
+        return {
+          data: {
+            data: [
+              {
+                id: "401",
+                title: "反向传播",
+                summary: "理解局部梯度和计算图。",
+                chapter: "神经网络",
+                order_index: 0,
+                difficulty: null
+              }
+            ],
+            trace_id: "trace_practice_points"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === PRACTICE_ENDPOINTS.sessions && method === "post") {
+        return {
+          data: { data: session, trace_id: "trace_practice_create" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === PRACTICE_ENDPOINTS.answers(501) && method === "post") {
+        return {
+          data: {
+            data: {
+              ...session,
+              status: "completed",
+              score: 100,
+              answers: [
+                {
+                  question_id: "q1",
+                  answer_text: "需要把局部梯度沿计算图传回参数。",
+                  is_correct: true,
+                  feedback: {
+                    score: 100,
+                    message: "已掌握关键依据。",
+                    matched_keywords: ["局部梯度", "计算图"],
+                    missing_keywords: [],
+                    explanation: "围绕课程引用说明。"
+                  }
+                }
+              ],
+              updated_at: "2026-07-05T10:05:00Z"
+            },
+            trace_id: "trace_practice_submit"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return { data: { data: {}, trace_id: "trace_practice_default" }, status: 200, statusText: "OK", headers: {}, config };
+    };
 
     renderPage(<PracticePage />);
 
-    await user.click(screen.getByRole("button", { name: "提交答案" }));
+    await user.click(await screen.findByRole("button", { name: "生成练习" }));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
-    await user.type(screen.getByRole("textbox", { name: "作答区" }), "需要把局部梯度沿计算图传回参数。");
+    await user.type(await screen.findByRole("textbox", { name: "q1 作答区" }), "需要把局部梯度沿计算图传回参数。");
     await user.click(screen.getByRole("button", { name: "提交答案" }));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "批改反馈" })).toHaveTextContent("本次批改");
-    expect(screen.getByRole("region", { name: "薄弱点复习队列" })).toHaveTextContent("下一题");
+    await waitFor(() => expect(screen.getByRole("region", { name: "薄弱点复习队列" })).toHaveTextContent("已掌握关键依据。"));
+    expect(screen.getByRole("region", { name: "批改反馈" })).toHaveTextContent("本次得分 100");
   });
 
   it("generates studio resources through the real resource API", async () => {
@@ -757,16 +885,126 @@ describe("student interaction affordances", () => {
     ]);
   });
 
-  it("prepares the report export state before real file generation is connected", async () => {
+  it("generates and renders a real learning report", async () => {
     const user = userEvent.setup();
+    let reportReady = false;
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+
+      if (url === COURSE_ENDPOINTS.list) {
+        return {
+          data: {
+            data: [
+              {
+                id: "808",
+                title: "机器学习期末复习",
+                description: "由资料生成",
+                subject: "自主学习",
+                source_type: "uploaded",
+                status: "ready",
+                progress_percent: 0,
+                material_count: 1,
+                knowledge_point_count: 1,
+                chunk_count: 5
+              }
+            ],
+            trace_id: "trace_report_courses"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === REPORT_ENDPOINTS.latest) {
+        return {
+          data: {
+            data: reportReady
+              ? {
+                  id: "901",
+                  course_id: "808",
+                  practice_session_id: "501",
+                  status: "ready",
+                  score: 80,
+                  report: {
+                    summary: "本次评估得分 80，基于真实练习作答生成。",
+                    mastery_update: { weak_count: 1, mastered_count: 2, learning_count: 1 },
+                    weakness_list: [{ knowledge_point_id: "401", title: "反向传播", source_type: "practice_assessment" }],
+                    evidence_refs: [{ practice_answer_id: "601", knowledge_point_id: "401", score: 50 }],
+                    next_step_suggestions: ["优先复习反向传播。"],
+                    review_queue_updates: [{ title: "反向传播", status: "confirmed", source_type: "practice_assessment" }],
+                    profile_changes: []
+                  },
+                  created_at: "2026-07-05T10:10:00Z"
+                }
+              : {
+                  id: null,
+                  course_id: "808",
+                  practice_session_id: null,
+                  status: "empty",
+                  score: null,
+                  report: {
+                    summary: "还没有真实学习报告。",
+                    mastery_update: { weak_count: 0, mastered_count: 0, learning_count: 0 },
+                    weakness_list: [],
+                    evidence_refs: [],
+                    next_step_suggestions: [],
+                    review_queue_updates: [],
+                    profile_changes: []
+                  },
+                  created_at: null
+                },
+            trace_id: "trace_report_latest"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === REPORT_ENDPOINTS.generate && method === "post") {
+        reportReady = true;
+        return {
+          data: {
+            data: {
+              id: "901",
+              course_id: "808",
+              practice_session_id: "501",
+              status: "ready",
+              score: 80,
+              report: {
+                summary: "本次评估得分 80，基于真实练习作答生成。",
+                mastery_update: { weak_count: 1, mastered_count: 2, learning_count: 1 },
+                weakness_list: [{ knowledge_point_id: "401", title: "反向传播", source_type: "practice_assessment" }],
+                evidence_refs: [{ practice_answer_id: "601", knowledge_point_id: "401", score: 50 }],
+                next_step_suggestions: ["优先复习反向传播。"],
+                review_queue_updates: [{ title: "反向传播", status: "confirmed", source_type: "practice_assessment" }],
+                profile_changes: []
+              },
+              created_at: "2026-07-05T10:10:00Z"
+            },
+            trace_id: "trace_report_generate"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return { data: { data: {}, trace_id: "trace_report_default" }, status: 200, statusText: "OK", headers: {}, config };
+    };
 
     renderPage(<ReportsPage />);
 
-    await user.click(screen.getByRole("button", { name: "导出档案" }));
+    await user.click(await screen.findByRole("button", { name: "生成学习报告" }));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "学习报告" })).toHaveTextContent("已整理画像、错因、引用和复习建议");
-    expect(screen.getByRole("region", { name: "导出学习档案" })).toHaveTextContent("已生成 1 份学习档案");
+    expect(await screen.findByText("本次评估得分 80，基于真实练习作答生成。")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "学习报告" })).toHaveTextContent("反向传播");
   });
 
   it("shows feedback for library actions that await real APIs", async () => {

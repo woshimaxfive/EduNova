@@ -20,6 +20,8 @@ from backend.app.models import (
     LearningPath,
     LearningTask,
     Material,
+    PracticeAnswer,
+    PracticeSession,
     ProfileEvent,
     StudentProfile,
     User,
@@ -115,6 +117,8 @@ class CourseRepository(Protocol):
     def list_learning_tasks(self, user_id: int, course_id: int) -> list[LearningTask]: ...
 
     def list_tasks_for_path(self, path_id: int) -> list[LearningTask]: ...
+
+    def list_practice_answers(self, user_id: int, course_id: int) -> list[PracticeAnswer]: ...
 
     def commit(self) -> None: ...
 
@@ -278,6 +282,16 @@ class SqlAlchemyCourseRepository:
             )
         )
 
+    def list_practice_answers(self, user_id: int, course_id: int) -> list[PracticeAnswer]:
+        return list(
+            self.db.scalars(
+                select(PracticeAnswer)
+                .join(PracticeSession, PracticeSession.id == PracticeAnswer.session_id)
+                .where(PracticeAnswer.user_id == user_id, PracticeSession.course_id == course_id)
+                .order_by(PracticeAnswer.created_at.desc(), PracticeAnswer.id.desc())
+            )
+        )
+
     def commit(self) -> None:
         self.db.commit()
 
@@ -407,7 +421,8 @@ class CourseService:
         review_items = self.repository.list_weakness_review_items(user.id, course.id)
         resources = self.repository.list_generated_resources(user.id, course.id)
         tasks = self.repository.list_learning_tasks(user.id, course.id)
-        points = self._build_mastery_points(knowledge_points, review_items, resources, tasks)
+        practice_answers = self.repository.list_practice_answers(user.id, course.id)
+        points = self._build_mastery_points(knowledge_points, review_items, resources, tasks, practice_answers)
         return CourseMasteryMap(
             course_id=str(course.id),
             summary=self._build_mastery_summary(points),
@@ -433,6 +448,7 @@ class CourseService:
             review_items,
             resources,
             self.repository.list_learning_tasks(user.id, course.id),
+            self.repository.list_practice_answers(user.id, course.id),
         )
         resources_by_id = {resource.id: resource for resource in resources}
 
@@ -746,11 +762,13 @@ class CourseService:
         review_items: list[WeaknessReviewItem],
         resources: list[GeneratedResource],
         tasks: list[LearningTask],
+        practice_answers: list[PracticeAnswer] | None = None,
     ) -> list[CourseMasteryPoint]:
         now = datetime.now(UTC)
         weaknesses_by_point: dict[int, list[WeaknessReviewItem]] = {}
         tasks_by_point: dict[int, list[LearningTask]] = {}
         resources_by_point: dict[int, list[GeneratedResource]] = {}
+        answers_by_point: dict[int, list[PracticeAnswer]] = {}
         for item in review_items:
             if item.knowledge_point_id is not None:
                 weaknesses_by_point.setdefault(item.knowledge_point_id, []).append(item)
@@ -760,12 +778,17 @@ class CourseService:
         for resource in resources:
             if resource.knowledge_point_id is not None:
                 resources_by_point.setdefault(resource.knowledge_point_id, []).append(resource)
+        for answer in practice_answers or []:
+            point_id = cls._safe_int((answer.question_json or {}).get("knowledge_point_id"))
+            if point_id is not None:
+                answers_by_point.setdefault(point_id, []).append(answer)
 
         points: list[CourseMasteryPoint] = []
         for point in knowledge_points:
             point_weaknesses = weaknesses_by_point.get(point.id, [])
             point_tasks = tasks_by_point.get(point.id, [])
-            status = cls._mastery_status(point_weaknesses, point_tasks, now)
+            point_answers = answers_by_point.get(point.id, [])
+            status = cls._mastery_status(point_weaknesses, point_tasks, now, point_answers)
             points.append(
                 CourseMasteryPoint(
                     id=str(point.id),
@@ -782,13 +805,25 @@ class CourseService:
         return points
 
     @staticmethod
-    def _mastery_status(weaknesses: list[WeaknessReviewItem], tasks: list[LearningTask], now: datetime) -> str:
+    def _mastery_status(
+        weaknesses: list[WeaknessReviewItem],
+        tasks: list[LearningTask],
+        now: datetime,
+        practice_answers: list[PracticeAnswer] | None = None,
+    ) -> str:
         if any(item.status in {"confirmed", "reviewing"} for item in weaknesses):
+            return "weak"
+        if any(CourseService._practice_answer_score(answer) < 60 for answer in practice_answers or [] if answer.answer_text is not None):
             return "weak"
         if any(item.status == "completed" and item.next_review_at is not None and item.next_review_at <= now for item in weaknesses):
             return "recommended_review"
         if any(task.status in {"todo", "doing"} for task in tasks):
             return "learning"
+        if any(
+            answer.answer_text is not None and (answer.is_correct is True or CourseService._practice_answer_score(answer) >= 80)
+            for answer in practice_answers or []
+        ):
+            return "mastered"
         if any(task.status == "completed" for task in tasks) or any(item.status == "completed" for item in weaknesses):
             return "mastered"
         return "not_started"
@@ -876,6 +911,13 @@ class CourseService:
             return int(value)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _practice_answer_score(answer: PracticeAnswer) -> int:
+        try:
+            return int((answer.feedback_json or {}).get("score") or 0)
+        except (TypeError, ValueError):
+            return 0
 
     @classmethod
     def _normalize_weakness_title(cls, value: str) -> str:

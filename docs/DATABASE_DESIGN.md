@@ -426,6 +426,8 @@ Phase 8.1 开始实际复用该表提供 `/agents/traces/{trace_id}` 查询。Ph
 
 用途：保存一次练习。
 
+Phase 10 开始实际复用本表保存课程级练习会话，不新增迁移。练习必须绑定 `user_id` 和 `course_id`，只能由当前用户访问。题目第一刀不新增单独题目表，而是在创建练习时用 `practice_answers.question_json` 保存安全题目结构，提交后再用同表保存作答和反馈。
+
 字段：
 
 | 字段 | 类型 | 说明 |
@@ -443,6 +445,8 @@ Phase 8.1 开始实际复用该表提供 `/agents/traces/{trace_id}` 查询。Ph
 
 用途：保存每道题作答和批改。
 
+Phase 10 中，创建练习时先写入 `answer_text=null`、`is_correct=null` 的占位行，用 `question_json` 保存 `single_choice`、`multiple_choice` 和 `short_answer` 题目；提交答案时替换为真实作答记录并写入确定性批改反馈。`question_json` 只保存题目、选项、知识点、关键词和安全解释，不保存系统提示词、模型输入、API Key 或完整课程资料原文。
+
 字段：
 
 | 字段 | 类型 | 说明 |
@@ -459,6 +463,8 @@ Phase 8.1 开始实际复用该表提供 `/agents/traces/{trace_id}` 查询。Ph
 ### 4.16 `assessment_reports`
 
 用途：保存学习评估报告。
+
+Phase 10 开始实际复用本表保存课程学习报告，不新增迁移。报告基于课程、可选练习、弱点队列和掌握度摘要生成，`report_json` 只保存可展示摘要、证据引用、下一步建议和复习队列更新摘要，不保存完整用户画像原文、完整课程资料原文、系统提示词、模型输入或 API Key。
 
 字段：
 
@@ -483,6 +489,8 @@ Phase 7.3 复用本表，不新增迁移。虽然历史模型允许 `course_id` 
 Phase 7.4 继续不新增迁移，复用 `status` 字段承载队列状态流转：`pending` 表示待确认，`confirmed` 表示学生已确认待复习，`reviewing` 表示复习中，`completed` 表示已完成本轮复习，`dismissed` 表示软忽略/移出主列表。`dismissed` 不物理删除，仍参与课程内去重，避免同一课程问答候选事件在下次 `learning-state` 同步时重新入队。
 
 Phase 9 继续复用本表，不新增字段。`GET /courses/{course_id}/learning-state` 会为 `confirmed/reviewing/completed` 项确定性补充同课程推荐资源：优先同知识点资源，没有知识点时按安全标题匹配，每项最多 3 个资源 ID。`pending` 项仍只表达待确认语义，不直接进入学习路径。`complete` 操作后会设置下一次复习时间；`confirmed/reviewing` 项缺少 `next_review_at` 时，学习状态读取可补齐确定性复习时间。推荐资源和复习时间只写已有 `recommended_resource_ids` 与 `next_review_at` 字段。
+
+Phase 10 继续复用本表，不新增字段。练习评估中的错题或低分题会以 `source_type="practice_assessment"` 写入课程级 `confirmed` 复习项，因为它来自学生真实作答证据；课程问答候选事件仍保持 `pending` 待确认语义。练习来源入队按同课程同知识点或安全标题去重，不保存完整答案之外的隐私资料原文、系统提示词或模型输入。
 
 字段：
 
@@ -732,6 +740,7 @@ Demo 数据要求：
 15. Phase 7.2 后，用户级画像只保留一份，课程级学习状态通过课程相关事件、弱点队列、路径和后续聚合接口表达，不新增通用 `learning_events` 表。
 16. Phase 7.3 后，课程问答弱点候选事件可通过 `/courses/{course_id}/learning-state` 同步为当前课程 `weakness_review_queue` 的 `pending` 项，服务层强制绑定 `course_id`。
 17. Phase 7.4 后，弱点复习项通过课程绑定接口进行确认、开始、完成和软忽略；`dismissed` 项不返回主列表，但必须继续参与去重。
+18. Phase 10 后，练习会话、作答、报告和练习评估来源弱点都复用已有表；练习错题或低分题可生成 `practice_assessment` 来源的 `confirmed` 队列项，并影响 `/courses/{course_id}/mastery-map` 和 `/courses/{course_id}/learning-state`。
 
 当前已验证：
 

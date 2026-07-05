@@ -1,22 +1,46 @@
-import { ChartLineUp, FileArrowUp, FileText, Graph, ShieldCheck } from "@phosphor-icons/react";
+import { ChartLineUp, FileText, Graph, ShieldCheck } from "@phosphor-icons/react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
+import { listCourses } from "../api/courses";
+import { generateReport, getLatestReport } from "../api/reports";
 import { PageFrame } from "./PageFrame";
 
-const masteryRows = [
-  { title: "课程掌握度", value: "待生成", progress: 0 },
-  { title: "练习表现", value: "待生成", progress: 0 },
-  { title: "复习稳定性", value: "待生成", progress: 0 }
-];
-
 export function ReportsPage() {
-  const [isReportReady, setIsReportReady] = useState(false);
-  const [exportCount, setExportCount] = useState(0);
+  const [searchParams] = useSearchParams();
+  const initialCourseId = searchParams.get("course_id") ?? "";
+  const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
+  const [localError, setLocalError] = useState("");
 
-  function exportReport() {
-    setIsReportReady(true);
-    setExportCount((current) => current + 1);
-  }
+  const coursesQuery = useQuery({
+    queryKey: ["report-courses"],
+    queryFn: () => listCourses()
+  });
+  const courses = coursesQuery.data?.data ?? [];
+  const effectiveCourseId = selectedCourseId || courses[0]?.id || "";
+  const numericCourseId = Number(effectiveCourseId);
+  const canUseCourse = Number.isFinite(numericCourseId) && numericCourseId > 0;
+  const latestReportQuery = useQuery({
+    queryKey: ["latest-report", numericCourseId],
+    queryFn: () => getLatestReport(numericCourseId),
+    enabled: canUseCourse
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: () => generateReport({ course_id: numericCourseId }),
+    onSuccess: () => {
+      setLocalError("");
+      void latestReportQuery.refetch();
+    },
+    onError: () => {
+      setLocalError("学习报告生成失败，请稍后重试。");
+    }
+  });
+
+  const report = latestReportQuery.data?.data;
+  const reportBody = report?.report;
+  const readError = latestReportQuery.isError ? "学习报告读取失败，请稍后重试。" : "";
 
   return (
     <PageFrame title="学习报告">
@@ -28,18 +52,35 @@ export function ReportsPage() {
             </div>
             <ChartLineUp size={24} weight="duotone" aria-hidden="true" />
           </div>
+          <label className="report-course-picker">
+            <span>课程</span>
+            <select aria-label="选择课程" value={effectiveCourseId} onChange={(event) => setSelectedCourseId(event.target.value)}>
+              {courses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.title}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="mastery-list">
-            {masteryRows.map((row) => (
-              <article key={row.title}>
-                <div>
-                  <strong>{row.title}</strong>
-                  <span>{row.value}</span>
-                </div>
-                <div className="mastery-meter" aria-label={`${row.title} ${row.progress}%`}>
-                  <span style={{ width: `${row.progress}%` }} />
-                </div>
-              </article>
-            ))}
+            <article>
+              <div>
+                <strong>薄弱点</strong>
+                <span>{reportBody?.mastery_update.weak_count ?? 0}</span>
+              </div>
+              <div className="mastery-meter" aria-label={`薄弱点 ${reportBody?.mastery_update.weak_count ?? 0}`}>
+                <span style={{ width: `${Math.min((reportBody?.mastery_update.weak_count ?? 0) * 20, 100)}%` }} />
+              </div>
+            </article>
+            <article>
+              <div>
+                <strong>已掌握</strong>
+                <span>{reportBody?.mastery_update.mastered_count ?? 0}</span>
+              </div>
+              <div className="mastery-meter" aria-label={`已掌握 ${reportBody?.mastery_update.mastered_count ?? 0}`}>
+                <span style={{ width: `${Math.min((reportBody?.mastery_update.mastered_count ?? 0) * 20, 100)}%` }} />
+              </div>
+            </article>
           </div>
         </section>
 
@@ -47,31 +88,35 @@ export function ReportsPage() {
           <div className="report-brief">
             <FileText size={24} weight="duotone" aria-hidden="true" />
             <div>
-              <strong>{isReportReady ? "本周学习档案已生成" : "本周掌握度正在生成"}</strong>
-              <p>{isReportReady ? "已整理画像、错因、引用和复习建议。" : "包含掌握度、错因、引用和导出。"}</p>
+              <strong>{report?.status === "ready" ? "课程学习报告" : "还没有真实学习报告"}</strong>
+              <p>{reportBody?.summary ?? "还没有真实学习报告。"}</p>
             </div>
           </div>
+          {readError || localError ? <p className="form-error">{readError || localError}</p> : null}
           <ul className="report-evidence-list">
-            <li>
-              <ShieldCheck size={17} weight="duotone" aria-hidden="true" />
-              <span>{isReportReady ? "本地预览：已整理本次导出请求" : "暂无真实报告依据"}</span>
-            </li>
-            <li>
-              <Graph size={17} weight="duotone" aria-hidden="true" />
-              <span>{isReportReady ? "本地预览：暂无画像变化记录" : "完成课程问答或练习后会形成报告线索"}</span>
-            </li>
+            {(reportBody?.weakness_list ?? []).map((item) => (
+              <li key={`${item.knowledge_point_id}-${item.title}`}>
+                <ShieldCheck size={17} weight="duotone" aria-hidden="true" />
+                <span>{item.title}</span>
+              </li>
+            ))}
+            {(reportBody?.next_step_suggestions ?? []).map((item) => (
+              <li key={item}>
+                <Graph size={17} weight="duotone" aria-hidden="true" />
+                <span>{item}</span>
+              </li>
+            ))}
           </ul>
         </section>
 
-        <aside className="student-panel export-panel" role="region" aria-label="导出学习档案">
+        <aside className="student-panel export-panel" role="region" aria-label="生成学习报告">
           <div>
-            <h2>导出档案</h2>
-            <p>默认不包含密钥或隐私原文。</p>
+            <h2>生成报告</h2>
+            <p>基于真实练习、弱点和掌握度生成，不包含密钥或隐私原文。</p>
           </div>
-          {isReportReady ? <p className="export-ready-note">已生成 {exportCount} 份学习档案，可重新导出。</p> : null}
-          <button className="soft-button" type="button" onClick={exportReport}>
-            <FileArrowUp size={17} aria-hidden="true" />
-            <span>导出档案</span>
+          <button className="soft-button" type="button" disabled={!canUseCourse || generateMutation.isPending} onClick={() => generateMutation.mutate()}>
+            <FileText size={17} aria-hidden="true" />
+            <span>生成学习报告</span>
           </button>
         </aside>
       </div>

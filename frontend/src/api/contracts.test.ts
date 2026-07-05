@@ -8,10 +8,10 @@ import { DASHBOARD_ENDPOINTS } from "./dashboard";
 import { DEMO_ENDPOINTS } from "./demo";
 import { MATERIAL_ENDPOINTS } from "./materials";
 import { generatePath, getCurrentPath, PATH_ENDPOINTS, updatePathTask } from "./paths";
-import { PRACTICE_ENDPOINTS } from "./practice";
+import { createPracticeSession, getPracticeSession, PRACTICE_ENDPOINTS, submitPracticeAnswers } from "./practice";
 import { RAG_ENDPOINTS, searchRag } from "./rag";
 import { getMyProfile, listProfileEvents, PROFILE_ENDPOINTS, updateProfileByChat } from "./profiles";
-import { REPORT_ENDPOINTS } from "./reports";
+import { generateReport, getLatestReport, REPORT_ENDPOINTS } from "./reports";
 import {
   generateResources,
   getResource,
@@ -624,6 +624,150 @@ describe("frontend API contracts", () => {
       expect(generated.data.tasks[0].recommended_resources[0].title).toBe("启发式搜索讲解");
       expect(current.data.evidence_summary.knowledge_point_count).toBe(3);
       expect(updated.data.status).toBe("completed");
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("uses typed practice APIs through the shared client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
+      });
+
+      const session = {
+        id: "501",
+        course_id: "7",
+        title: "人工智能导论 练习",
+        status: "completed",
+        score: 67,
+        questions: [
+          {
+            id: "q1",
+            question_type: "single_choice",
+            knowledge_point_id: "401",
+            knowledge_point_title: "启发式搜索",
+            prompt: "关于启发式搜索，哪一项最符合课程复习重点？",
+            options: ["启发式搜索", "无关概念"],
+            correct_answer: null,
+            keywords: ["启发式搜索", "关键概念"],
+            explanation: "围绕课程引用复习。",
+            difficulty: "medium"
+          }
+        ],
+        answers: [
+          {
+            question_id: "q1",
+            answer_text: "无关概念",
+            is_correct: false,
+            feedback: {
+              score: 0,
+              message: "这道题暴露了需要复习的知识点。",
+              matched_keywords: [],
+              missing_keywords: ["启发式搜索"],
+              explanation: "围绕课程引用复习。"
+            }
+          }
+        ],
+        created_at: "2026-07-05T10:00:00Z",
+        updated_at: "2026-07-05T10:01:00Z"
+      };
+
+      return {
+        data: { data: session, trace_id: "trace_practice_contract" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const created = await createPracticeSession({
+        course_id: 7,
+        knowledge_point_ids: [401],
+        question_count: 1,
+        difficulty: "medium"
+      });
+      const detail = await getPracticeSession(501);
+      const submitted = await submitPracticeAnswers(501, { answers: [{ question_id: "q1", answer_text: "无关概念" }] });
+
+      expect(calls).toEqual([
+        {
+          url: PRACTICE_ENDPOINTS.sessions,
+          method: "post",
+          data: { course_id: 7, knowledge_point_ids: [401], question_count: 1, difficulty: "medium" }
+        },
+        { url: PRACTICE_ENDPOINTS.detail(501), method: "get", data: undefined },
+        {
+          url: PRACTICE_ENDPOINTS.answers(501),
+          method: "post",
+          data: { answers: [{ question_id: "q1", answer_text: "无关概念" }] }
+        }
+      ]);
+      expect(created.data.questions[0].correct_answer).toBeNull();
+      expect(detail.data.id).toBe("501");
+      expect(submitted.data.answers[0].feedback.score).toBe(0);
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("uses typed report APIs through the shared client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown; params?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data,
+        params: config.params
+      });
+
+      return {
+        data: {
+          data: {
+            id: "801",
+            course_id: "7",
+            practice_session_id: "501",
+            status: "ready",
+            score: 67,
+            report: {
+              summary: "本次评估得分 67，基于真实练习作答生成。",
+              mastery_update: { weak_count: 1, mastered_count: 2, learning_count: 1 },
+              weakness_list: [{ knowledge_point_id: "401", title: "启发式搜索", source_type: "practice_assessment" }],
+              evidence_refs: [{ practice_answer_id: "601", knowledge_point_id: "401", score: 0 }],
+              next_step_suggestions: ["优先复习薄弱点。"],
+              review_queue_updates: [],
+              profile_changes: []
+            },
+            created_at: "2026-07-05T10:10:00Z"
+          },
+          trace_id: "trace_report_contract"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const generated = await generateReport({ course_id: 7, practice_session_id: 501 });
+      const latest = await getLatestReport(7);
+
+      expect(calls).toEqual([
+        { url: REPORT_ENDPOINTS.generate, method: "post", data: { course_id: 7, practice_session_id: 501 }, params: undefined },
+        { url: REPORT_ENDPOINTS.latest, method: "get", data: undefined, params: { course_id: 7 } }
+      ]);
+      expect(generated.data.report.weakness_list[0].source_type).toBe("practice_assessment");
+      expect(latest.data.score).toBe(67);
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

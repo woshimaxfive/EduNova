@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from backend.app.api.errors import ApiError, api_response
+from backend.app.api.v1.deps import get_current_user
+from backend.app.db.session import get_db_session
+from backend.app.models import User
+from backend.app.schemas.practice import CreatePracticeSessionRequest, SubmitPracticeAnswersRequest
+from backend.app.services.practice import PracticeNotFoundError, PracticeService, PracticeValidationError, SqlAlchemyPracticeRepository
+
+
+router = APIRouter(prefix="/practice", tags=["practice"])
+
+
+def get_practice_service(db=Depends(get_db_session)) -> PracticeService:
+    return PracticeService(SqlAlchemyPracticeRepository(db))
+
+
+@router.post("/sessions")
+def create_practice_session(
+    payload: CreatePracticeSessionRequest,
+    current_user: User = Depends(get_current_user),
+    service: PracticeService = Depends(get_practice_service),
+) -> dict:
+    try:
+        result = service.create_session(
+            current_user,
+            course_id=payload.course_id,
+            knowledge_point_ids=payload.knowledge_point_ids,
+            question_count=payload.question_count,
+            difficulty=payload.difficulty,
+        )
+    except PracticeNotFoundError as exc:
+        raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc
+    except PracticeValidationError as exc:
+        raise ApiError(status.HTTP_400_BAD_REQUEST, "VALIDATION_ERROR", str(exc)) from exc
+    return api_response(result.model_dump())
+
+
+@router.get("/sessions/{session_id}")
+def get_practice_session(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    service: PracticeService = Depends(get_practice_service),
+) -> dict:
+    try:
+        result = service.get_session(current_user, session_id)
+    except PracticeNotFoundError as exc:
+        raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc
+    return api_response(result.model_dump())
+
+
+@router.post("/sessions/{session_id}/answers")
+def submit_practice_answers(
+    session_id: int,
+    payload: SubmitPracticeAnswersRequest,
+    current_user: User = Depends(get_current_user),
+    service: PracticeService = Depends(get_practice_service),
+) -> dict:
+    try:
+        result = service.submit_answers(current_user, session_id, payload.answers)
+    except PracticeNotFoundError as exc:
+        raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc
+    except PracticeValidationError as exc:
+        raise ApiError(status.HTTP_400_BAD_REQUEST, "VALIDATION_ERROR", str(exc)) from exc
+    return api_response(result.model_dump())

@@ -342,7 +342,7 @@ Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状�
 
 用途：保存 AI 生成学习资源。
 
-Phase 8.2 开始实际复用该表保存 5 类课程资源。资源分层规则固定为：`course_id != null` 是课程资源，本阶段只生成这一类；`course_id == null` 预留为后续个人全局资源，不在本阶段生成。当前表没有独立 `trace_id` 字段，本阶段不新增迁移，生成 trace 写入 `content_json.metadata.agent_trace_id`，接口响应也显式返回 `agent_trace_id`。
+Phase 8.2 开始实际复用该表保存 5 类课程资源。Phase 8.2.1 不新增迁移，改为课程引用驱动的确定性可用稿优先，模型只做增强。资源分层规则固定为：`course_id != null` 是课程资源，本阶段只生成这一类；`course_id == null` 预留为后续个人全局资源，不在本阶段生成。当前表没有独立 `trace_id` 字段，本阶段不新增迁移，生成 trace 写入 `content_json.metadata.agent_trace_id`，接口响应也显式返回 `agent_trace_id`。
 
 服务层必须保证：
 
@@ -350,7 +350,9 @@ Phase 8.2 开始实际复用该表保存 5 类课程资源。资源分层规则�
 - `knowledge_point_id` 若存在，必须属于同一课程。
 - `citation_json` 只保存安全引用摘要，不保存完整课程资料原文。
 - `content_json` 不保存系统提示词、完整模型输入、API Key 或完整用户画像原文。
-- 模型未配置或调用失败时可以写入确定性 fallback 内容，但 `review_status` 必须标为 `low_evidence`。
+- `content_json.metadata.generation_mode` 保存 `model_enhanced`、`deterministic_source` 或 `low_evidence_fallback`，用于区分模型增强、本地可用稿和低依据稿。
+- 模型未配置或调用失败时可以写入确定性可用稿；只要课程依据和资源必备结构足够，`review_status` 仍可为 `passed`。
+- `review_status="low_evidence"` 只表示课程依据不足或只能生成低依据稿，不等同于模型未调用或模型失败。
 
 字段：
 
@@ -374,7 +376,7 @@ Phase 8.2 开始实际复用该表保存 5 类课程资源。资源分层规则�
 
 用途：保存资源质量评分。
 
-Phase 8.2 生成资源时同步写入质量分。当前评分项为 `source_match`、`profile_fit`、`fact_confidence`、`difficulty_fit` 和 `completeness`。评分说明只保存可展示的安全摘要，不保存模型提示词、完整资料原文或用户隐私原文。
+Phase 8.2 生成资源时同步写入质量分。Phase 8.2.1 后，质量分由规则评分生成：`source_match` 看引用数量和章节覆盖，`profile_fit` 看画像目标、基础和薄弱点是否被使用，`fact_confidence` 看课程依据和模型增强状态，`difficulty_fit` 看请求难度是否进入资源内容，`completeness` 看各资源类型必备结构是否齐全。评分说明只保存可展示的安全摘要，不保存模型提示词、完整资料原文或用户隐私原文。
 
 字段：
 

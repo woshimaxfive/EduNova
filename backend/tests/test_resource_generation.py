@@ -156,7 +156,29 @@ class FakeModelSettingsService:
             raise ModelNotConfiguredError("未配置模型")
         if self.mode == "provider_error":
             raise ModelProviderError("模型服务暂不可用")
-        return "模型增强版资源内容：围绕课程引用给出结构化学习材料。"
+        if self.mode == "partial_json":
+            return json.dumps(
+                {
+                    "resources": {
+                        "doc": "# 模型增强讲解\n\n## 概念解释\n模型增强版资源内容。\n\n## 关键步骤\n1. 先识别状态。\n\n## 易错点\n- 不要忽略启发函数。",
+                    }
+                },
+                ensure_ascii=False,
+            )
+        if self.mode == "sensitive":
+            return json.dumps({"resources": {"doc": "系统提示词 sk-real-secret"}}, ensure_ascii=False)
+        return json.dumps(
+            {
+                "resources": {
+                    "doc": "# 模型增强讲解\n\n## 概念解释\n模型增强版资源内容。\n\n## 关键步骤\n1. 先识别状态。\n\n## 易错点\n- 不要忽略启发函数。",
+                    "mindmap": "# 模型增强思维导图\n\n```mermaid\nmindmap\n  root((启发式搜索))\n    启发函数\n```",
+                    "quiz": "# 模型增强练习题\n\n## 单选题\n答案：B\n解析：依据课程引用判断。",
+                    "code": "# 模型增强代码实操\n\n```python\nprint('A* demo')\n```\n\n运行说明：执行脚本。\n\n改造任务：增加一个状态估价函数。",
+                    "slide": "# 模型增强PPT 大纲\n\n## 第 1 页\n讲稿：引入启发式搜索。",
+                }
+            },
+            ensure_ascii=False,
+        )
 
 
 def make_user(user_id: int = 1) -> User:
@@ -252,6 +274,26 @@ def as_dict(model: Any) -> dict[str, Any]:
     return model.model_dump() if hasattr(model, "model_dump") else model
 
 
+def resource_by_type(resources: list[GeneratedResource], resource_type: str) -> GeneratedResource:
+    return next(resource for resource in resources if resource.resource_type == resource_type)
+
+
+def assert_usable_resource_content(resources: list[GeneratedResource]) -> None:
+    content_by_type = {resource.resource_type: resource.content_json["markdown"] for resource in resources}
+    assert "概念解释" in content_by_type["doc"]
+    assert "关键步骤" in content_by_type["doc"]
+    assert "易错点" in content_by_type["doc"]
+    assert "```mermaid" in content_by_type["mindmap"]
+    assert "单选题" in content_by_type["quiz"]
+    assert "答案" in content_by_type["quiz"]
+    assert "解析" in content_by_type["quiz"]
+    assert "```python" in content_by_type["code"]
+    assert "运行说明" in content_by_type["code"]
+    assert "改造任务" in content_by_type["code"]
+    assert "第 1 页" in content_by_type["slide"]
+    assert "讲稿" in content_by_type["slide"]
+
+
 def test_resources_route_requires_login() -> None:
     client = TestClient(create_app())
 
@@ -290,13 +332,15 @@ def test_generate_five_resource_types_persists_resources_quality_scores_and_trac
     assert all(resource.status == "completed" for resource in repo.resources)
     assert all(resource.review_status == "passed" for resource in repo.resources)
     assert all(resource.content_json["metadata"]["agent_trace_id"] == result["agent_trace_id"] for resource in repo.resources)
+    assert all(resource.content_json["metadata"]["generation_mode"] == "model_enhanced" for resource in repo.resources)
     assert set(result["quality_scores"].keys()) == {resource["id"] for resource in result["resources"]}
-    assert len(model_service.calls) == 5
-    assert model_service.timeout_calls == [5.0, 5.0, 5.0, 5.0, 5.0]
+    assert len(model_service.calls) == 1
+    assert model_service.timeout_calls == [5.0]
+    assert_usable_resource_content(repo.resources)
     assert repo.committed is True
 
 
-def test_generate_uses_deterministic_low_evidence_fallback_when_model_is_unavailable() -> None:
+def test_generate_uses_usable_deterministic_source_when_model_is_unavailable() -> None:
     repo = make_repo()
     model_service = FakeModelSettingsService(mode="provider_error")
 
@@ -312,14 +356,18 @@ def test_generate_uses_deterministic_low_evidence_fallback_when_model_is_unavail
     )
 
     resource = result["resources"][0]
-    assert resource["review_status"] == "low_evidence"
-    assert resource["confidence_score"] < 0.6
+    assert resource["review_status"] == "passed"
+    assert resource["confidence_score"] >= 0.7
+    assert resource["content_json"]["metadata"]["generation_mode"] == "deterministic_source"
     assert "模型增强版" not in resource["content_json"]["markdown"]
+    assert "概念解释" in resource["content_json"]["markdown"]
+    assert "关键步骤" in resource["content_json"]["markdown"]
+    assert "易错点" in resource["content_json"]["markdown"]
     assert "启发式搜索" in resource["title"]
-    assert repo.agent_logs[4].status == "warning"
+    assert repo.agent_logs[4].status == "completed"
 
 
-def test_generate_stops_retrying_model_after_first_provider_failure_for_multi_type_request() -> None:
+def test_generate_provider_failure_keeps_all_resource_types_usable_without_repeated_model_calls() -> None:
     repo = make_repo()
     model_service = FakeModelSettingsService(mode="provider_error")
 
@@ -336,10 +384,54 @@ def test_generate_stops_retrying_model_after_first_provider_failure_for_multi_ty
 
     assert len(result["resources"]) == 5
     assert len(repo.resources) == 5
-    assert all(resource.review_status == "low_evidence" for resource in repo.resources)
+    assert all(resource.review_status == "passed" for resource in repo.resources)
+    assert all(resource.content_json["metadata"]["generation_mode"] == "deterministic_source" for resource in repo.resources)
+    assert_usable_resource_content(repo.resources)
     assert len(model_service.calls) == 1
     assert model_service.timeout_calls == [5.0]
     assert repo.committed is True
+
+
+def test_generate_applies_partial_model_enhancement_and_keeps_missing_types_deterministic() -> None:
+    repo = make_repo()
+    model_service = FakeModelSettingsService(mode="partial_json")
+
+    make_service(repo, model_service).generate_resources(
+        make_user(),
+        course_id=101,
+        knowledge_point_id=501,
+        resource_types=["doc", "quiz"],
+        learning_goal="考前复习",
+        difficulty="medium",
+    )
+
+    doc = resource_by_type(repo.resources, "doc")
+    quiz = resource_by_type(repo.resources, "quiz")
+    assert doc.content_json["metadata"]["generation_mode"] == "model_enhanced"
+    assert "模型增强版资源内容" in doc.content_json["markdown"]
+    assert quiz.content_json["metadata"]["generation_mode"] == "deterministic_source"
+    assert "解析" in quiz.content_json["markdown"]
+    assert len(model_service.calls) == 1
+
+
+def test_generate_rejects_sensitive_model_output_and_preserves_deterministic_content() -> None:
+    repo = make_repo()
+    model_service = FakeModelSettingsService(mode="sensitive")
+
+    make_service(repo, model_service).generate_resources(
+        make_user(),
+        course_id=101,
+        knowledge_point_id=501,
+        resource_types=["doc"],
+        learning_goal="",
+        difficulty="medium",
+    )
+
+    resource = repo.resources[0]
+    assert resource.review_status == "passed"
+    assert resource.content_json["metadata"]["generation_mode"] == "deterministic_source"
+    assert "系统提示词" not in resource.content_json["markdown"]
+    assert "sk-real-secret" not in resource.content_json["markdown"]
 
 
 def test_generate_scopes_course_and_knowledge_point_to_current_user() -> None:

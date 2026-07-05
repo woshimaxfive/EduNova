@@ -508,7 +508,7 @@ Phase 5 以后：
 - Phase 6.5 已把 `CourseSpacePage` 改造为双模式：默认问答模式不常驻知识画布、资源区、证据层、横向知识点条或主区重复历史；来源、生成资源、学习路径和思考过程收敛到回答下方；知识点入口和引用会进入学习模式，右侧复用当前课程 AI 辅导输入。
 - Phase 7.1 已把 `ProfilePage` 接入真实 `/profiles/me`、`/profiles/chat` 和 `/profiles/events`；空画像显示待补充，画像证据来自后端事件，课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件。
 - Phase 8.1 已把 `CourseSpacePage` 的“思考过程”接入真实 `/agents/traces/{trace_id}`；存在 `latest_trace_id` 时读取当前用户自己的 Agent trace，空 trace 和读取失败只在回答详情局部提示。
-- Phase 8.2 已把 `StudioPage` 接入真实 `/resources`：读取当前用户课程、知识点和资源列表，生成讲解、练习、思维导图、代码实操和 PPT 大纲后刷新资源列表；资源输出卡片可选择，详情区展示当前资源的完整 Markdown、引用、可信度、低依据状态和质量分；`CourseSpacePage` 的“生成资源”入口跳转 `/app/studio?course_id=...`。
+- Phase 8.2 已把 `StudioPage` 接入真实 `/resources`：读取当前用户课程、知识点和资源列表，生成讲解、练习、思维导图、代码实操和 PPT 大纲后刷新资源列表；Phase 8.2.1 后资源输出卡片展示“模型增强 / 本地可用稿 / 低依据”，详情区展示当前资源的完整 Markdown、引用、可信度、质量分和资料依据不足提示；`CourseSpacePage` 的“生成资源”入口跳转 `/app/studio?course_id=...`。
 - Phase 6.3 已接真实 `/tutor/sessions/{session_id}/messages/stream`；`CourseSpacePage` 发送课程问题时先创建或复用课程会话，再用 `fetch` + `ReadableStream` 读取 SSE，token 到达时逐步渲染，`done` 后用后端持久化消息替换临时状态。
 - Phase 6.1 已接真实 `/settings/model` 和 `/settings/model/test`；Phase 6.2 已接真实 `/settings/model/configs`、`/settings/model/configs/{id}`、`/settings/model/configs/{id}/default` 和 `/settings/model/configs/{id}/test`；`SettingsPage` 会显示配置列表和当前编辑面板，支持创建、编辑、测试、设默认和删除用户自己的模型配置，并且不展示明文 Key。
 - Phase 6.2 的 Provider 预设不追求数量多，只保留讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务；OpenRouter 不再作为可见预设。回答模型是主字段，向量模型折叠在高级项中；Phase 6.4 起向量模型用于 OpenAI-compatible embedding，缺省时仍可依靠 `local-hash-1536` 跑通。
@@ -524,7 +524,7 @@ Phase 5 以后：
 - P3.14 已把普通侧栏和主页侧栏的“搜索历史”统一为居中浮层，不再在左栏内联展开搜索框；主页发送成功不再产生持久状态条，避免和回答内容或底部输入区重叠。
 - 后续前端交互不再使用“已切换到/已完成”这类全局或横向提示条；页面反馈优先收敛到选中态、列表刷新、详情面板、输入状态和真实跳转。
 - 上传失败、发送失败、课程生成失败、模型连接失败和表单校验失败必须保留反馈，但只放在对应输入区、资料库、弹层或设置表单附近；模型配置保存、设默认、删除和连接测试成功使用右下角轻量 toast，不占据主内容中间。
-- `/app/studio` 已从本地预备队列升级为真实资源工坊：按课程和知识点调用 `/resources/generate`，资源列表来自 `/resources`，初始不展示假资源；用户可在资源输出区选择已生成资源并查看完整内容。
+- `/app/studio` 已从本地预备队列升级为真实资源工坊：按课程和知识点调用 `/resources/generate`，资源列表来自 `/resources`，初始不展示假资源；用户可在资源输出区选择已生成资源并查看完整内容，能区分模型增强、本地可用稿和低依据稿。
 - `/app/tutor` 已改为课程辅导入口，读取当前用户课程并跳转课程空间；`/app/profile`、`/app/practice`、`/app/reports` 仍是前端页面骨架和本地预备交互，等待后续真实接口。
 - 学习画布、资源工坊、证据层和 Agent 轨迹组件不再作为首页或课程默认首屏主体；课程页默认问答，相关内容进入回答展开区或学习模式素材。
 - 学习空间相关状态模型已覆盖上传建课状态轨道、空状态、加载状态、错误恢复、低依据提示和本地预备反馈；真实数据缺口不能再用 demo 内容填充。

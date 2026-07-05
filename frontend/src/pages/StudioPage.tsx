@@ -57,6 +57,10 @@ function resourceMarkdown(resource: GeneratedResource) {
   return markdown;
 }
 
+function isLowEvidenceResource(resource: GeneratedResource) {
+  return resource.review_status === "low_evidence" || resource.content_json.metadata?.generation_mode === "low_evidence_fallback";
+}
+
 export function StudioPage() {
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -355,6 +359,13 @@ export function StudioPage() {
                 <h2>资源内容</h2>
               </div>
             </div>
+            {isLowEvidenceResource(selectedResource) ? (
+              <InlineFeedback
+                message="资料依据不足，这份资源是低依据草稿，请补充课程资料后重新生成。"
+                tone="warning"
+                className="library-inline-feedback"
+              />
+            ) : null}
             <article className="resource-reader">
               <strong>{selectedResource.title}</strong>
               <pre className="resource-markdown-viewer">{resourceMarkdown(selectedResource)}</pre>

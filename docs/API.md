@@ -42,12 +42,12 @@ rag
 tutor
 settings
 agents
+resources
 ```
 
 当前前端仍保留以下合同常量，方便后续 Phase 接入，但它们不是当前已经挂载的后端 router，不能在页面或文档中当作已实现接口：
 
 ```text
-resources
 paths
 practice
 reports
@@ -801,14 +801,15 @@ Authorization: Bearer <token>
 
 ## 10. Resource 接口
 
-状态：Phase 8.2 已实现。当前后端已挂载 `resources` router，第一刀只生成课程资源：`course_id != null` 表示课程资源；`course_id == null` 仅作为后续个人全局资源读取语义预留，本阶段不提供全局资源生成入口。
+状态：Phase 8.2 已实现，Phase 8.2.1 已完成模型无关的资源质量收口。当前后端已挂载 `resources` router，第一刀只生成课程资源：`course_id != null` 表示课程资源；`course_id == null` 仅作为后续个人全局资源读取语义预留，本阶段不提供全局资源生成入口。
 
 统一规则：
 
 - 所有接口必须携带 JWT。
 - 只能生成和读取当前用户自己的课程、知识点、资源和质量分；非本人资源或课程返回 404。
 - `resource_type` 只支持 `doc`、`mindmap`、`quiz`、`code`、`slide`。
-- 生成采用模型优先：优先当前用户默认模型，其次服务器默认模型；模型未配置或调用失败时，使用课程引用驱动的确定性 fallback，`review_status="low_evidence"`，不伪装成模型输出。
+- 生成采用课程引用驱动的确定性可用稿优先，模型只做批量增强：一次生成请求最多调用一次模型；模型未配置、调用失败、解析失败、输出缺失或输出含敏感标记时，保留对应资源的本地可用稿。
+- `content_json.metadata.generation_mode` 可为 `model_enhanced`、`deterministic_source` 或 `low_evidence_fallback`。`review_status="passed"` 表示资源通过本地质量门槛，不要求一定来自模型；`review_status="low_evidence"` 只表示课程依据不足或只能生成低依据稿。
 - 响应、资源内容、质量分和 Agent trace 只保存安全摘要、引用标题和白名单 metadata，不返回系统提示词、完整模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
 ### POST `/resources/generate`
@@ -852,9 +853,11 @@ Authorization: Bearer <token>
           "markdown": "# 反向传播个性化讲解\n\n先理解链式法则，再看计算图中的梯度传递。",
           "metadata": {
             "agent_trace_id": "trace_20260705_resource_001",
-            "generation_mode": "model",
+            "generation_mode": "model_enhanced",
             "difficulty": "medium",
-            "has_learning_goal": true
+            "has_learning_goal": true,
+            "source_excerpt_count": 3,
+            "model_enhancement_failed": false
           }
         },
         "citation_json": [
@@ -915,13 +918,15 @@ Authorization: Bearer <token>
         "markdown": "# 反向传播练习",
         "metadata": {
           "agent_trace_id": "trace_20260705_resource_001",
-          "generation_mode": "fallback"
+          "generation_mode": "deterministic_source",
+          "source_excerpt_count": 2,
+          "model_enhancement_failed": true
         }
       },
       "citation_json": [],
       "status": "completed",
-      "review_status": "low_evidence",
-      "confidence_score": 0.55,
+      "review_status": "passed",
+      "confidence_score": 0.78,
       "agent_trace_id": "trace_20260705_resource_001",
       "created_at": "2026-07-05T14:00:00Z",
       "updated_at": "2026-07-05T14:00:00Z"

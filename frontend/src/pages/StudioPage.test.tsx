@@ -51,7 +51,8 @@ function makeResource(overrides: Partial<GeneratedResource> = {}): GeneratedReso
     content_json: {
       markdown: "# 启发式搜索个性化讲解\n\n先理解启发函数，再对比 A*。",
       metadata: {
-        agent_trace_id: "trace_resource"
+        agent_trace_id: "trace_resource",
+        generation_mode: "model_enhanced"
       }
     },
     citation_json: [
@@ -231,7 +232,7 @@ describe("StudioPage resource generation", () => {
       );
     });
     expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("启发式搜索个性化讲解");
-    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("可使用");
+    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("模型增强");
     expect(screen.getByRole("region", { name: "资源质量" })).toHaveTextContent("来源匹配");
     expect(screen.getByRole("region", { name: "引用来源" })).toHaveTextContent("人工智能导论讲义.md");
     expect(calls.filter((call) => call.url === RESOURCE_ENDPOINTS.list).length).toBeGreaterThanOrEqual(2);
@@ -284,7 +285,7 @@ describe("StudioPage resource generation", () => {
         title: "启发式搜索个性化讲解",
         content_json: {
           markdown: "# 启发式搜索个性化讲解\n\n第一段讲解。\n\n第二段复习建议。",
-          metadata: { agent_trace_id: "trace_doc" }
+          metadata: { agent_trace_id: "trace_doc", generation_mode: "deterministic_source" }
         }
       }),
       makeResource({
@@ -293,8 +294,9 @@ describe("StudioPage resource generation", () => {
         title: "启发式搜索练习题",
         content_json: {
           markdown: "# 启发式搜索练习题\n\n## 单选题\n答案：B。",
-          metadata: { agent_trace_id: "trace_quiz" }
-        }
+          metadata: { agent_trace_id: "trace_quiz", generation_mode: "low_evidence_fallback" }
+        },
+        review_status: "low_evidence"
       })
     ];
 
@@ -410,12 +412,15 @@ describe("StudioPage resource generation", () => {
     renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808`);
 
     expect(await screen.findByRole("button", { name: "查看资源 启发式搜索个性化讲解" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("本地可用稿");
     expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("第二段复习建议。");
     expect(await screen.findByText("基于课程引用摘要生成。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "查看资源 启发式搜索练习题" }));
 
     expect(screen.getByRole("button", { name: "查看资源 启发式搜索练习题" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("低依据");
+    expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("资料依据不足");
     expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("答案：B。");
     expect(await screen.findByText("练习题基于课程引用摘要。")).toBeInTheDocument();
   });

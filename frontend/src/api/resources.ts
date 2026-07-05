@@ -11,6 +11,7 @@ export const RESOURCE_ENDPOINTS = {
 export type ResourceType = "doc" | "mindmap" | "quiz" | "code" | "slide";
 export type ResourceDifficulty = "easy" | "medium" | "hard";
 export type ResourceReviewStatus = "passed" | "low_evidence" | "pending" | "failed" | string;
+export type ResourceGenerationMode = "model_enhanced" | "deterministic_source" | "low_evidence_fallback" | string;
 
 export type GenerateResourcesRequest = {
   course_id: number;
@@ -36,9 +37,11 @@ export type GeneratedResourceContent = {
   citation_summaries?: string[];
   metadata?: {
     agent_trace_id?: string;
-    generation_mode?: string;
+    generation_mode?: ResourceGenerationMode;
     difficulty?: ResourceDifficulty;
     has_learning_goal?: boolean;
+    source_excerpt_count?: number;
+    model_enhancement_failed?: boolean;
   };
   [key: string]: unknown;
 };

@@ -151,7 +151,7 @@ cd ..
 | `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、模型回答、SSE 流式、错误回滚和历史恢复 |
 | `/profiles/me`、`/profiles/chat`、`/profiles/events` | 无 token 401、空画像稳定 8 维结构、画像对话更新、画像事件写入、事件倒序、多用户隔离、课程问答候选事件隐私安全 |
 | `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要和 metadata 白名单 |
-| `/resources/generate`、`/resources`、`/resources/{resource_id}`、`/resources/{resource_id}/quality` | 无 token 401、课程/知识点/资源用户隔离、5 类课程资源持久化、质量分、Agent trace、模型优先与低依据 fallback、隐私安全 |
+| `/resources/generate`、`/resources`、`/resources/{resource_id}`、`/resources/{resource_id}/quality` | 无 token 401、课程/知识点/资源用户隔离、5 类课程资源持久化、质量分、Agent trace、模型增强、本地可用稿、低依据 fallback、隐私安全 |
 
 后续预留接口还没有挂载后端 router，当前只保留前端常量和目标合同，不能计入已通过的后端接口测试：
 
@@ -203,7 +203,7 @@ cd ..
 - 普通路由侧栏当前页面高亮，路由页不显示重复说明句，普通路由“新建对话”回到 `/app`。
 - 资料库上传不自动加入生成课程选择，生成课程浮层默认未选中，点选后才高亮。
 - 资料库浮层和资料库页未选择资料时，作为对话参考和生成课程等主按钮必须禁用；从资料库进入生成课程时页面上只能保留一个上层浮层。
-- 资源工坊按课程、知识点和资源类型调用真实资源接口，生成后刷新资源列表、引用、低依据状态和质量分。
+- 资源工坊按课程、知识点和资源类型调用真实资源接口，生成后刷新资源列表、引用、生成模式标签、低依据状态和质量分。
 - 学习画像目标编辑、画像问题回答和证据追加。
 - 练习提交后的本地批改态、报告导出准备态和设置表单保存反馈。
 - 命令栏快捷建议、空输入提示、发送反馈和可复用组件状态。
@@ -683,8 +683,10 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 7.4 前端测试覆盖 `updateCourseWeaknessReviewItem` API 合同、课程空间待确认/待复习/复习中/已完成状态渲染，确认/开始/完成/忽略操作调用接口并刷新 learning-state，dismissed 项不展示，操作失败仅在弱点区局部提示且不阻断课程问答。
 - Phase 8.1 后端测试覆盖 `/agents/traces/{trace_id}` 无 token 401、trace 不存在 404、其他用户 trace 404、当前用户 trace 按 `step_index/created_at/id` 排序返回、安全 metadata 白名单和敏感摘要隐藏，以及 LangGraph `profile -> retrieve -> diagnosis -> resource -> review -> persist` 骨架。
 - Phase 8.1 前端测试覆盖 `getAgentTrace` 类型化 API 合同、课程空间“思考过程”读取真实 Agent trace、空 trace 真实空状态，以及 trace 读取失败只在回答详情局部提示。
-- Phase 8.2 后端测试覆盖 `/resources/generate` 无 token 401、非本人课程/资源和跨课程知识点 404，5 类资源持久化到 `generated_resources`，质量分写入 `resource_quality_scores`，`agent_run_logs` 记录 `profile -> retrieve -> diagnosis -> resource -> review -> persist`，模型优先路径和 provider 失败 fallback，资源列表过滤、质量分读取、多用户隔离和隐私字段不泄露。
+- Phase 8.2 后端测试覆盖 `/resources/generate` 无 token 401、非本人课程/资源和跨课程知识点 404，5 类资源持久化到 `generated_resources`，质量分写入 `resource_quality_scores`，`agent_run_logs` 记录 `profile -> retrieve -> diagnosis -> resource -> review -> persist`，资源列表过滤、质量分读取、多用户隔离和隐私字段不泄露。
+- Phase 8.2.1 后端测试覆盖模型未配置、provider 报错或超时时 5 类资源仍生成可用确定性稿；模型成功时只调用一次批量增强；模型输出缺失、格式错误或含敏感标记时回退到确定性稿；5 类资源分别断言讲解有关键步骤和易错点、练习有答案解析、代码含可运行代码块、PPT 有页纲和讲稿、思维导图含 Mermaid。
 - Phase 8.2 前端测试覆盖 `resources.ts` 类型化 API 合同、`/app/studio` 真实课程选择、知识点选择、5 类资源选择、生成成功刷新资源列表、已生成资源选择与完整内容查看、按选中资源读取质量分、空资源状态、生成失败局部提示、fallback/低依据展示，以及课程空间“生成资源”入口跳转 `/app/studio?course_id=...`。
+- Phase 8.2.1 前端测试覆盖资源卡显示“模型增强 / 本地可用稿 / 低依据”，低依据资源打开后显示“资料依据不足”局部提示，质量区展示真实评分理由。
 - 路由测试覆盖 `/app/courses/:courseId` 课程空间壳子，确认默认问答模式可见，并确认无效课程不会回落到 demo 课程、常驻知识画布、证据层或资源区；覆盖 `/app/path` 学习路径页，确认学习路径、阶段任务和路径依据可见。
 - 学生核心页面测试覆盖文件库式资料库、文档/图片筛选、真实资料列表、资源工坊、学习画像、AI 辅导入口、练习、报告和设置页面的核心区域。
 - P3.7/P3.14/Phase 4.4 交互测试覆盖主页上传资料文件、资料库默认未选中与点选高亮、联网搜索激活态、资料状态贴近输入区且不显示“联网搜索已开”文案、发送后进入主页对话且不显示持久“已生成回答”状态条、课程回答展开、知识点详情、AI 辅导入口、练习提交校验、资料库上传、文档/图片筛选、生成课程资料选择、资料库详情面板和设置页真实状态；Phase 4.4 起资料库上传和列表断言真实 `/materials` 调用。
@@ -721,6 +723,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 7.4 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/courses/{course_id}` 桌面和 390px：待复习弱点区可见确认、开始、完成和忽略操作；操作后状态刷新正确，失败只显示局部提示，页面无水平溢出。
 - Phase 8.1 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/courses/{course_id}` 桌面和 390px：有 `latest_trace_id` 时“思考过程”显示真实 Agent trace 或真实空状态，不显示静态假轨迹，页面无水平溢出。
 - Phase 8.2 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/studio` 和 `/app/courses/{course_id}` 桌面与 390px：资源工坊能基于真实课程生成并展示持久化资源、可选择资源卡片查看完整内容、展示引用、质量分和低依据状态；课程页“生成资源”入口能带当前课程进入资源工坊；页面不展示静态假资源且无水平溢出。
+- Phase 8.2.1 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/studio` 桌面和 390px：在模型不可用、弱模型或模型失败条件下生成 5 类资源，逐个打开后内容可用，资源卡能显示模型增强、本地可用稿或低依据，页面无水平溢出。
 - Docker Compose 配置校验。
 - 当前未接入讯飞原生 Embeddingp/Embeddingq、OCR、PDF/PPT/DOCX 深度解析、真实学习路径生成、真实练习评估、报告导出文件和完整浏览器 E2E；真实资源生成 worker 已经进入 Phase 8.2 验证范围，但还没有资源编辑、异步任务队列或个人全局资源生成入口。弱点复习队列已支持课程问答候选事件入队和用户确认/开始/完成/软忽略，但尚未接入推荐资源、下次复习时间或练习评估来源。真实后端认证已经进入 Phase 4.1 验证范围，首页真实总览已经进入 Phase 4.2 验证范围，主页会话持久化已经进入 Phase 4.3 验证范围，真实资料库上传与列表已经进入 Phase 4.4 验证范围，真实 TXT/Markdown 规则建课已经进入 Phase 5.1 验证范围，课程知识库检索引用已经进入 Phase 5.2 验证范围，课程空间会话引用持久化已经进入 Phase 5.3 验证范围，模型配置和非流式真实课程 RAG 回答已经进入 Phase 6.1 验证范围，多模型配置隔离已经进入 Phase 6.2 验证范围，课程问答流式输出已经进入 Phase 6.3 验证范围，课程知识库 embedding 与混合检索已经进入 Phase 6.4 验证范围，课程空间双模式前端已经进入 Phase 6.5 验证范围，真实学习画像和画像候选事件已经进入 Phase 7.1 验证范围，学习事件语义与课程学习状态边界已经进入 Phase 7.2 验证范围，课程级学习状态和待确认弱点队列已经进入 Phase 7.3 验证范围，课程级弱点复习队列状态流转已经进入 Phase 7.4 验证范围，Agent Graph 与可观测轨迹底座已经进入 Phase 8.1 验证范围，多智能体生成 5 类课程资源已经进入 Phase 8.2 验证范围。
 

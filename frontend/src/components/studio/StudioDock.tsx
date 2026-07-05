@@ -18,17 +18,28 @@ const resourceTypeLabels: Record<GeneratedResource["resource_type"], string> = {
   slide: "PPT 大纲"
 };
 
-function reviewStatusLabel(status: string) {
-  if (status === "passed") {
-    return "可使用";
-  }
-  if (status === "low_evidence") {
+function generationModeLabel(output: GeneratedResource) {
+  const generationMode = output.content_json.metadata?.generation_mode;
+  if (output.review_status === "low_evidence" || generationMode === "low_evidence_fallback") {
     return "低依据";
   }
-  if (status === "failed") {
+  if (generationMode === "model_enhanced") {
+    return "模型增强";
+  }
+  if (generationMode === "deterministic_source") {
+    return "本地可用稿";
+  }
+  if (output.review_status === "failed") {
     return "生成失败";
   }
+  if (output.review_status === "passed") {
+    return "可使用";
+  }
   return "待生成";
+}
+
+function isLowEvidence(output: GeneratedResource) {
+  return output.review_status === "low_evidence" || output.content_json.metadata?.generation_mode === "low_evidence_fallback";
 }
 
 export function StudioDock({ outputs, selectedResourceId, onGenerate, onSelectResource, showGenerateAction = true }: StudioDockProps) {
@@ -51,12 +62,12 @@ export function StudioDock({ outputs, selectedResourceId, onGenerate, onSelectRe
       <div className="studio-track">
         {outputs.length > 0 ? (
           outputs.map((output) => {
-            const statusLabel = reviewStatusLabel(output.review_status);
+            const statusLabel = generationModeLabel(output);
             const isSelected = output.id === activeResourceId;
 
             return (
               <button
-                className={`studio-item ${output.review_status === "low_evidence" ? "low-evidence" : ""} ${isSelected ? "active" : ""}`}
+                className={`studio-item ${isLowEvidence(output) ? "low-evidence" : ""} ${isSelected ? "active" : ""}`}
                 key={output.id}
                 type="button"
                 aria-label={`查看资源 ${output.title}`}

@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 8.2：多智能体生成 5 类学习资源**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询、LangGraph 骨架和 5 类课程资源生成，下一步进入 Phase 9：学习路径、掌握度图和薄弱点队列完善。
+当前最新完成到 **Phase 8.2.1：模型无关的资源质量收口**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询、LangGraph 骨架、5 类课程资源生成和资源质量收口，下一步进入 Phase 9：学习路径、掌握度图和薄弱点队列完善。
 
 已经具备的主链路：
 
@@ -26,7 +26,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - `/courses/{course_id}/learning-state` 已实现课程级学习状态第一刀，可把课程问答弱点候选事件同步为 `pending` 待确认复习项，并在课程空间展示待复习弱点摘要。
 - 课程级弱点复习项已支持确认、开始、完成和软忽略状态流转；软忽略项不在主列表展示，但继续参与去重。
 - `/agents/traces/{trace_id}` 已实现当前用户 Agent 轨迹查询，课程空间“思考过程”可读取真实 trace 或真实空状态。
-- `/resources/generate` 已实现 5 类课程资源生成，资源工坊可生成讲解、思维导图、练习、代码实操和 PPT 大纲，并展示引用、低依据状态、质量分和生成 trace。
+- `/resources/generate` 已实现 5 类课程资源生成，资源工坊可生成讲解、思维导图、练习、代码实操和 PPT 大纲，并展示模型增强/本地可用稿/低依据、引用、质量分和生成 trace；弱模型、无模型或模型失败时仍先保留课程引用驱动的可用稿。
 - `/app/tutor` 已收敛为课程辅导入口，真实提问统一进入课程空间。
 - 多套个人模型配置、默认配置切换、服务器 `.env` 兜底。
 - OpenAI-compatible Embeddings 与 `local-hash-1536` 本地 fallback。

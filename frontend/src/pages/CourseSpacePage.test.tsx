@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PATHS } from "../app/routePaths";
+import { AGENT_ENDPOINTS, type AgentTrace } from "../api/agents";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { TUTOR_ENDPOINTS, type TutorCitation, type TutorSessionDetail, type TutorSessionSummary } from "../api/tutor";
@@ -26,7 +27,9 @@ type CoursePageOptions = {
   sendDetail?: TutorSessionDetail;
   historyDetail?: TutorSessionDetail;
   learningState?: unknown;
+  agentTrace?: AgentTrace;
   failLearningState?: boolean;
+  failAgentTrace?: boolean;
   failWeaknessAction?: boolean;
   failSend?: boolean;
   streamEvents?: Array<{ event: string; data: unknown }>;
@@ -119,6 +122,39 @@ const learningStateWithWeakness = {
     latest_source_title: "人工智能导论讲义.md",
     latest_section_title: "启发式搜索"
   }
+};
+
+const agentTraceWithSteps: AgentTrace = {
+  trace_id: "trace_candidate",
+  course_id: "808",
+  status: "completed",
+  steps: [
+    {
+      id: "10",
+      agent_name: "retrieve",
+      step_index: 1,
+      status: "completed",
+      input_summary: "检索课程知识点",
+      output_summary: "命中 2 条引用",
+      duration_ms: 25,
+      metadata: {
+        citation_count: 2,
+        review_result: "pass"
+      },
+      created_at: "2026-07-05T10:00:01Z"
+    },
+    {
+      id: "11",
+      agent_name: "diagnosis",
+      step_index: 2,
+      status: "completed",
+      input_summary: "结合画像和引用判断薄弱点",
+      output_summary: "形成待确认证据",
+      duration_ms: 18,
+      metadata: {},
+      created_at: "2026-07-05T10:00:02Z"
+    }
+  ]
 };
 
 const learningStateWithReviewFlow = {
@@ -307,6 +343,23 @@ function renderCoursePage(options: CoursePageOptions = {}) {
         data: {
           data: options.learningState ?? emptyLearningState,
           trace_id: "trace_learning_state"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (url === AGENT_ENDPOINTS.trace("trace_candidate")) {
+      if (options.failAgentTrace) {
+        throw new Error("Agent 轨迹读取失败。");
+      }
+
+      return {
+        data: {
+          data: options.agentTrace ?? agentTraceWithSteps,
+          trace_id: "trace_agent_page"
         },
         status: 200,
         statusText: "OK",
@@ -670,6 +723,67 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     expect(await screen.findByText("课程学习状态读取失败，请稍后重试。")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
+  });
+
+  it("renders real agent trace steps in the thinking panel", async () => {
+    const user = userEvent.setup();
+    const { calls } = renderCoursePage({
+      sessions: [makeSession("777", "已有课程历史")],
+      learningState: learningStateWithWeakness,
+      agentTrace: agentTraceWithSteps
+    });
+
+    await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await user.click(await screen.findByRole("button", { name: "思考过程" }));
+
+    const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
+    expect(await within(detailPanel).findByLabelText("Agent 执行轨迹")).toBeInTheDocument();
+    expect(within(detailPanel).getByText("retrieve")).toBeInTheDocument();
+    expect(within(detailPanel).getByText("命中 2 条引用")).toBeInTheDocument();
+    expect(within(detailPanel).getByText("diagnosis")).toBeInTheDocument();
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        method: "get",
+        url: AGENT_ENDPOINTS.trace("trace_candidate")
+      })
+    );
+  });
+
+  it("renders a real empty state when the agent trace has no steps", async () => {
+    const user = userEvent.setup();
+    renderCoursePage({
+      sessions: [makeSession("777", "已有课程历史")],
+      learningState: learningStateWithWeakness,
+      agentTrace: {
+        trace_id: "trace_candidate",
+        course_id: "808",
+        status: "completed",
+        steps: []
+      }
+    });
+
+    await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await user.click(await screen.findByRole("button", { name: "思考过程" }));
+
+    const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
+    expect(await within(detailPanel).findByText("当前 Agent trace 暂无可展示步骤。")).toBeInTheDocument();
+    expect(within(detailPanel).queryByLabelText("Agent 执行轨迹")).not.toBeInTheDocument();
+  });
+
+  it("shows local thinking-panel feedback when agent trace loading fails", async () => {
+    const user = userEvent.setup();
+    renderCoursePage({
+      sessions: [makeSession("777", "已有课程历史")],
+      learningState: learningStateWithWeakness,
+      failAgentTrace: true
+    });
+
+    await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await user.click(await screen.findByRole("button", { name: "思考过程" }));
+
+    const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
+    expect(await within(detailPanel).findByText("Agent 轨迹读取失败，请稍后重试。")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "待复习弱点" })).toHaveTextContent("启发式搜索");
   });
 
   it("does not show demo course fallback while real course data is loading", () => {

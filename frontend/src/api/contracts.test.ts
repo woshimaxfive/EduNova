@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AGENT_ENDPOINTS } from "./agents";
+import { AGENT_ENDPOINTS, getAgentTrace } from "./agents";
 import { AUTH_ENDPOINTS, login } from "./auth";
 import { apiClient } from "./client";
 import { COURSE_ENDPOINTS, getCourseLearningState, updateCourseWeaknessReviewItem } from "./courses";
@@ -421,6 +421,59 @@ describe("frontend API contracts", () => {
         }
       ]);
       expect(response.data.status).toBe("confirmed");
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("reads typed agent traces through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method
+      });
+
+      return {
+        data: {
+          data: {
+            trace_id: "trace_candidate",
+            course_id: "7",
+            status: "completed",
+            steps: [
+              {
+                id: "10",
+                agent_name: "retrieve",
+                step_index: 1,
+                status: "completed",
+                input_summary: "检索课程知识点",
+                output_summary: "命中 2 条引用",
+                duration_ms: 25,
+                metadata: {
+                  citation_count: 2,
+                  review_result: "pass"
+                },
+                created_at: "2026-07-05T10:00:01Z"
+              }
+            ]
+          },
+          trace_id: "trace_agent_contract"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const response = await getAgentTrace("trace_candidate");
+
+      expect(calls).toEqual([{ url: AGENT_ENDPOINTS.trace("trace_candidate"), method: "get" }]);
+      expect(response.data.steps[0].agent_name).toBe("retrieve");
+      expect(response.data.steps[0].metadata.citation_count).toBe(2);
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

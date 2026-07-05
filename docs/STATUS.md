@@ -4,9 +4,9 @@
 
 ## 状态摘要
 
-当前最新完成到 **Phase 7.4：课程级弱点复习队列确认与状态流转**。
+当前最新完成到 **Phase 8.1：Agent Graph 与可观测轨迹底座**。
 
-Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已按“对话式学习画像”主线收口；Phase 7.3 和 Phase 7.4 前置补齐课程级弱点队列基础，是为了让画像证据能落到课程状态里，不改变后续 Phase 编号。下一阶段进入 Phase 8：多智能体资源生成；学习路径、掌握度和复习队列完善仍归入 Phase 9。
+Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已按“对话式学习画像”主线收口；Phase 7.3 和 Phase 7.4 前置补齐课程级弱点队列基础，是为了让画像证据能落到课程状态里，不改变后续 Phase 编号。Phase 8 已从 8.1 的 Agent 可观测底座开始；多智能体资源生成主体进入 Phase 8.2，学习路径、掌握度和复习队列完善仍归入 Phase 9。
 
 这一阶段之后，EduNova 已经从前端骨架推进到真实学生学习底座：
 
@@ -21,8 +21,9 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 - Phase 7.2 已明确用户级画像和课程级学习状态的边界：用户级画像只有一份，课程级目标、薄弱点、掌握度、复习队列和学习路径按课程聚合。
 - Phase 7.3 已把课程问答弱点候选事件同步为课程级 `weakness_review_queue` 待确认复习项，并在课程空间展示真实“待复习弱点”摘要。
 - Phase 7.4 已为课程级弱点复习项补齐确认、开始、完成和软忽略状态流转，课程空间可以直接操作真实队列项。
+- Phase 8.1 已挂载 `/agents/traces/{trace_id}`，复用 `agent_run_logs` 查询当前用户自己的 Agent 轨迹，并在课程空间“思考过程”面板读取真实 trace；同时新增 LangGraph `profile -> retrieve -> diagnosis -> resource -> review -> persist` 骨架。
 
-当前仍然不是完整产品。弱点队列还没有推荐资源、下次复习时间和练习评估入队，学习路径、资源生成、练习、报告和深度文档解析还在后续阶段。
+当前仍然不是完整产品。Agent trace 底座已经可查，但还没有 5 类资源生成；弱点队列还没有推荐资源、下次复习时间和练习评估入队，学习路径、资源生成、练习、报告和深度文档解析还在后续阶段。
 
 ## 已完成主链路
 
@@ -41,6 +42,7 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 | Embedding | OpenAI-compatible `/embeddings` 与本地 fallback | `EmbeddingService` |
 | 学习画像 | 8 维用户级画像、画像对话更新、画像事件、课程问答候选事件和课程状态分层边界 | `/api/v1/profiles/*` |
 | 课程学习状态 | 当前课程画像叠层、弱点候选计数、复习队列和状态流转 | `/api/v1/courses/{course_id}/learning-state` |
+| Agent 轨迹 | 当前用户自己的 Agent trace 查询、步骤排序和安全摘要返回 | `/api/v1/agents/traces/{trace_id}` |
 
 ## 当前前端状态
 
@@ -50,7 +52,7 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 | `/register` | 调用真实注册接口，可选择空白开始或复制人工智能导论 |
 | `/app` | GPT 式主页，真实读取 summary、主页历史、最近课程和资料库浮层；发送后调用主页通用模型回答 |
 | `/app/library` | 文件库式资料库，真实读取资料列表，支持上传、搜索、筛选和详情 |
-| `/app/courses/:courseId` | 默认问答模式 + 按需学习模式；读取真实课程、知识点、课程历史、消息、引用和课程学习状态，支持流式课程问答，可确认/开始/完成/忽略待复习弱点，知识点入口和引用可进入学习模式 |
+| `/app/courses/:courseId` | 默认问答模式 + 按需学习模式；读取真实课程、知识点、课程历史、消息、引用、课程学习状态和 Agent trace，支持流式课程问答，可确认/开始/完成/忽略待复习弱点，知识点入口和引用可进入学习模式 |
 | `/app/settings` | 管理多套模型配置，支持 Provider 预设、保存、测试、设默认和删除 |
 | `/app/studio` | 资源工坊骨架和本地预备交互；初始不展示假生成资源 |
 | `/app/profile` | 读取真实 8 维画像、画像事件和画像对话更新；空画像显示待补充，不展示静态假画像 |
@@ -62,7 +64,7 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 
 主页输入区的资料状态只显示已选资料数量，并贴近底部输入框；联网搜索和深度思考目前仍是预备能力，只通过按钮高亮和 `aria-pressed` 表达，不显示“已联网搜索”之类的能力暗示。
 
-课程空间 Phase 6.5 已落地“默认问答模式 + 按需学习模式”。默认问答模式保持课程版 ChatGPT 体验，真实引用、生成资源、学习路径和思考过程在回答下方渐进展开；知识点不再以横向列表常驻首屏，而是通过轻量入口进入学习模式后选择，引用来源可直接进入学习模式。学习模式中间显示学习内容，右侧提供上下文 AI 辅导。生成资源、真实学习路径和完整 Agent 轨迹仍是后续能力，当前不伪造数据。
+课程空间 Phase 6.5 已落地“默认问答模式 + 按需学习模式”。默认问答模式保持课程版 ChatGPT 体验，真实引用、生成资源、学习路径和思考过程在回答下方渐进展开；知识点不再以横向列表常驻首屏，而是通过轻量入口进入学习模式后选择，引用来源可直接进入学习模式。学习模式中间显示学习内容，右侧提供上下文 AI 辅导。Phase 8.1 后，“思考过程”会在存在 `latest_trace_id` 时读取真实 Agent trace；生成资源和真实学习路径仍是后续能力，当前不伪造数据。
 
 ## 当前后端状态
 
@@ -77,10 +79,11 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 | RAG | 混合检索、引用字段和检索状态已接入 |
 | 模型 | OpenAI-compatible chat、stream、embeddings 已接入 |
 | 学习画像 | `profiles` router 已接入，复用 `student_profiles` 和 `profile_events`；不为每门课复制完整画像 |
+| Agent 轨迹 | `agents` router 已接入，复用 `agent_run_logs`，支持当前用户 trace 查询和安全摘要返回 |
 | Docker | Compose 五服务可按默认端口启动；后端容器已支持 Alembic 配置读取；前端镜像构建不复用本机 `node_modules` |
 | 安全 | 用户数据隔离、Key 加密、脱敏返回和上传目录忽略已接入 |
 
-当前后端已挂载的业务 router 是 `auth`、`dashboard`、`courses`、`materials`、`profiles`、`rag`、`settings` 和 `tutor`。`resources`、`agents`、`paths`、`practice`、`reports` 和 `demo` 仍只是前端 API 常量与后续接口设计，不属于当前已实现后端能力。
+当前后端已挂载的业务 router 是 `auth`、`dashboard`、`courses`、`materials`、`profiles`、`rag`、`settings`、`tutor` 和 `agents`。`resources`、`paths`、`practice`、`reports` 和 `demo` 仍只是前端 API 常量与后续接口设计，不属于当前已实现后端能力。
 
 课程问答在 Phase 7.1 后会把明确困惑/薄弱信号沉淀为画像候选事件，但只保存课程、会话、消息、`trace_id` 和引用摘要，不保存完整用户问题、系统提示词、模型输入或资料原文。Phase 7.3 的 `/courses/{course_id}/learning-state` 会把当前课程的这些候选事件按知识点或安全标题同步为 `pending` 待确认复习项，不把候选事件直接宣称为已诊断弱点。Phase 7.4 后，学生可以把队列项确认为 `confirmed`、开始为 `reviewing`、完成为 `completed`，也可以软忽略为 `dismissed`；`dismissed` 不在主列表展示，但继续参与去重。
 
@@ -101,8 +104,8 @@ Phase 7.2 的分层口径：
 | PDF/PPTX/DOCX 深度解析 | 资料可以入库，但不能用于规则建课 |
 | OCR 和图片题目识别 | 图片只入库，不做识别 |
 | 讯飞原生 Embeddingp/Embeddingq | 暂不接入，当前用 OpenAI-compatible embeddings 或本地 fallback |
-| Resource/Agent/Path/Practice/Report 后端接口 | 前端保留合同常量和页面骨架，后端 router 未挂载 |
-| 多智能体资源生成 | 页面和表结构有准备，真实生成流程未接入 |
+| Resource/Path/Practice/Report 后端接口 | 前端保留合同常量和页面骨架，后端 router 未挂载 |
+| 多智能体资源生成 | Agent trace 底座和 LangGraph 骨架已接入，真实 5 类资源生成流程未接入 |
 | 弱点复习增强 | Phase 7.4 已支持确认、开始、完成和软忽略；推荐资源、下次复习时间和练习评估入队未接入 |
 | 学习路径 | 页面和表结构有准备，真实路径生成未接入；后续应基于课程学习状态而非单独全局画像生成 |
 | 练习评估 | 页面和表结构有准备，真实出题和批改未接入 |
@@ -131,17 +134,18 @@ Phase 7.2 的分层口径：
 | Phase 7.2 | 已完成 | 学习事件语义与课程学习状态边界 |
 | Phase 7.3 | 已完成 | 课程级弱点追踪与待确认复习队列第一刀 |
 | Phase 7.4 | 已完成 | 课程级弱点复习队列确认与状态流转 |
-| Phase 8 | 未开始 | 多智能体资源生成 |
+| Phase 8.1 | 已完成 | Agent Graph 与可观测轨迹底座 |
+| Phase 8.2 | 未开始 | 多智能体生成 5 类学习资源 |
 | Phase 9 | 未开始 | 学习路径、掌握度图和薄弱点队列完善 |
 
 ## 下一步建议
 
-当前可以继续进入 **Phase 8：多智能体资源生成**。
+当前可以继续进入 **Phase 8.2：多智能体生成 5 类学习资源**。
 
 原因：
 
 - Phase 7 已完成用户级画像、画像事件和课程问答候选证据闭环。
-- 原始实施计划中 Phase 8 的目标是多智能体协同生成 5 类学习资源，并展示可追溯的 Agent 轨迹。
+- Phase 8.1 已先完成可追溯 Agent 轨迹底座，下一步可以在同一 Phase 下接入真实资源生成 worker。
 - Phase 7.3/7.4 已前置课程级弱点队列基础，但不把学习路径提前改名为 Phase 8。
 - 学习路径、掌握度图和复习队列完善继续留到 Phase 9，届时再消费已确认/复习中的弱点，而不是直接消费 `pending` 候选项。
 
@@ -151,4 +155,4 @@ Phase 7.2 的分层口径：
 - 学习路径、掌握度图和复习队列完善。
 - 练习评估与弱点队列来源扩展。
 
-建议 Phase 8 先只推进多智能体资源生成主目标，不同时展开学习路径、练习评估或报告导出；继续保持代码、测试、文档和浏览器验收同步。
+建议 Phase 8.2 只推进多智能体资源生成主目标，不同时展开学习路径、练习评估或报告导出；继续保持代码、测试、文档和浏览器验收同步。

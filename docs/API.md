@@ -41,13 +41,13 @@ profiles
 rag
 tutor
 settings
+agents
 ```
 
 当前前端仍保留以下合同常量，方便后续 Phase 接入，但它们不是当前已经挂载的后端 router，不能在页面或文档中当作已实现接口：
 
 ```text
 resources
-agents
 paths
 practice
 reports
@@ -854,31 +854,46 @@ Authorization: Bearer <token>
 
 ## 11. Agent Trace 接口
 
-状态：后续预留。当前后端未挂载 `agents` router；课程问答会返回 `trace_id` 和引用，但完整多智能体轨迹查询还未实现。
+状态：Phase 8.1 已实现。当前后端已挂载 `agents` router，先提供隐私安全的 Agent trace 查询底座；资源生成、学习路径、练习评估和报告导出仍未接入。
 
 ### GET `/agents/traces/{trace_id}`
 
-用途：获取某次多智能体任务轨迹。
+用途：获取当前用户自己的某次 Agent 任务轨迹。必须携带 JWT；trace 不存在或不属于当前用户时返回 404，避免跨用户枚举。
+
+响应字段：
+
+- `trace_id`：业务 trace。
+- `course_id`：关联课程，可能为空。
+- `status`：由步骤状态派生，可能为 `running`、`completed`、`warning` 或 `failed`。
+- `steps`：按 `step_index`、`created_at`、`id` 排序的步骤列表。
+- `metadata`：仅返回白名单安全摘要，例如引用数量、审核结果、资源数量等；不返回系统提示词、模型输入、完整资料原文、API Key 或用户隐私原文。
 
 响应：
 
 ```json
 {
   "data": {
-    "trace_id": "trace_20260701_resource_001",
-    "logs": [
+    "trace_id": "trace_20260705_agent_001",
+    "course_id": "101",
+    "status": "completed",
+    "steps": [
       {
-        "agent_name": "ProfileAgent",
+        "id": "1",
+        "agent_name": "retrieve",
         "step_index": 1,
-        "status": "success",
-        "duration_ms": 120,
-        "input_summary": "读取学生画像",
-        "output_summary": "识别学生偏好案例学习",
-        "review_status": null
+        "status": "completed",
+        "input_summary": "检索课程知识点",
+        "output_summary": "命中 2 条引用",
+        "duration_ms": 25,
+        "metadata": {
+          "citation_count": 2,
+          "review_result": "pass"
+        },
+        "created_at": "2026-07-05T10:00:01Z"
       }
     ]
   },
-  "trace_id": "trace_20260701_010"
+  "trace_id": "trace_20260705_010"
 }
 ```
 

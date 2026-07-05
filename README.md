@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 7.4：课程级弱点复习队列确认与状态流转**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，下一阶段进入 Phase 8：多智能体资源生成。
+当前最新完成到 **Phase 8.1：Agent Graph 与可观测轨迹底座**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已先接入 Agent trace 查询和 LangGraph 骨架，下一步进入 Phase 8.2：多智能体生成 5 类学习资源。
 
 已经具备的主链路：
 
@@ -25,6 +25,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - 学习画像与课程学习状态的边界已经明确：用户级画像只保留一份，课程级弱点、路径和复习队列按课程聚合。
 - `/courses/{course_id}/learning-state` 已实现课程级学习状态第一刀，可把课程问答弱点候选事件同步为 `pending` 待确认复习项，并在课程空间展示待复习弱点摘要。
 - 课程级弱点复习项已支持确认、开始、完成和软忽略状态流转；软忽略项不在主列表展示，但继续参与去重。
+- `/agents/traces/{trace_id}` 已实现当前用户 Agent 轨迹查询，课程空间“思考过程”可读取真实 trace 或真实空状态。
 - `/app/tutor` 已收敛为课程辅导入口，真实提问统一进入课程空间。
 - 多套个人模型配置、默认配置切换、服务器 `.env` 兜底。
 - OpenAI-compatible Embeddings 与 `local-hash-1536` 本地 fallback。
@@ -36,7 +37,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - PDF、PPTX、DOCX 深度解析。
 - OCR 和图片题目识别。
 - 讯飞原生 Embeddingp/Embeddingq。
-- 多智能体真实资源生成。
+- 多智能体真实资源生成 worker 和 5 类资源生成。
 - 弱点队列推荐资源、下次复习时间、练习评估入队、学习路径、练习评估、报告导出和演示模式重置。
 
 详细状态见 [docs/STATUS.md](docs/STATUS.md)，后续任务看 [docs/PROJECT_BOARD.md](docs/PROJECT_BOARD.md)。

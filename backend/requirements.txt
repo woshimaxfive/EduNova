@@ -10,3 +10,4 @@ PyJWT
 python-multipart
 httpx
 cryptography
+langgraph

@@ -14,6 +14,7 @@ import { type KeyboardEvent, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
+import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import {
   getCourse,
   getCourseLearningState,
@@ -32,9 +33,11 @@ import {
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
+import { AgentTimeline } from "../components/evidence/AgentTimeline";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
+import { type AgentTraceEvent } from "../types/api";
 
 const courseStarterQuestions = [
   "这门课最适合先复习哪些知识点？",
@@ -212,6 +215,17 @@ export function CourseSpacePage() {
   const learningState = learningStateQuery.data?.data;
   const weaknessSummary = learningState?.weakness_summary;
   const weaknessItems = (learningState?.weakness_review_queue ?? []).filter((item) => item.status !== "dismissed");
+  const latestAgentTraceId = learningState?.evidence_summary?.latest_trace_id ?? null;
+  const agentTraceQuery = useQuery({
+    queryKey: ["agents", "trace", latestAgentTraceId],
+    queryFn: () => getAgentTrace(latestAgentTraceId ?? ""),
+    enabled: Boolean(latestAgentTraceId) && activeAnswerPanel === "thinking",
+    staleTime: 10_000
+  });
+  const agentTraceEvents = useMemo(
+    () => agentTraceQuery.data?.data.steps.map(mapAgentTraceStepToEvent) ?? [],
+    [agentTraceQuery.data?.data.steps]
+  );
   const courseSessions = Array.isArray(courseSessionsQuery.data?.data) ? courseSessionsQuery.data.data : [];
   const latestCourseSessionId = courseSessions[0]?.id ?? null;
   const selectedCourseSessionId = hasRealCourseId ? (activeCourseSessionId ?? latestCourseSessionId) : null;
@@ -596,6 +610,10 @@ export function CourseSpacePage() {
                         citations={latestRagResults}
                         hasRealCourse={Boolean(apiCourse)}
                         hasSearched={hasRetrievalResult}
+                        agentTraceId={latestAgentTraceId}
+                        agentTraceEvents={agentTraceEvents}
+                        isAgentTraceLoading={agentTraceQuery.isPending && agentTraceQuery.fetchStatus !== "idle"}
+                        isAgentTraceError={agentTraceQuery.isError}
                         onOpenCitation={openCitationStudy}
                       />
                     </article>
@@ -760,10 +778,24 @@ type AnswerDetailPanelProps = {
   citations: RagSearchResultItem[];
   hasRealCourse: boolean;
   hasSearched: boolean;
+  agentTraceId: string | null;
+  agentTraceEvents: AgentTraceEvent[];
+  isAgentTraceLoading: boolean;
+  isAgentTraceError: boolean;
   onOpenCitation: (citation: RagSearchResultItem) => void;
 };
 
-function AnswerDetailPanel({ activePanel, citations, hasRealCourse, hasSearched, onOpenCitation }: AnswerDetailPanelProps) {
+function AnswerDetailPanel({
+  activePanel,
+  citations,
+  hasRealCourse,
+  hasSearched,
+  agentTraceId,
+  agentTraceEvents,
+  isAgentTraceLoading,
+  isAgentTraceError,
+  onOpenCitation
+}: AnswerDetailPanelProps) {
   if (activePanel === "resources") {
     return (
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
@@ -783,13 +815,42 @@ function AnswerDetailPanel({ activePanel, citations, hasRealCourse, hasSearched,
   }
 
   if (activePanel === "thinking") {
+    if (isAgentTraceError) {
+      return (
+        <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
+          <strong>思考过程</strong>
+          <InlineFeedback message="Agent 轨迹读取失败，请稍后重试。" tone="warning" className="course-inline-feedback" />
+        </section>
+      );
+    }
+
+    if (isAgentTraceLoading) {
+      return (
+        <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
+          <strong>思考过程</strong>
+          <p>正在读取 Agent 执行轨迹。</p>
+        </section>
+      );
+    }
+
+    if (agentTraceId && agentTraceEvents.length > 0) {
+      return (
+        <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
+          <strong>思考过程</strong>
+          <AgentTimeline events={agentTraceEvents} />
+        </section>
+      );
+    }
+
     return (
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
         <strong>思考过程</strong>
         <p>
-          {hasSearched
-            ? `已完成课程资料检索，命中 ${citations.length} 条引用。完整多智能体轨迹将在资源生成阶段接入。`
-            : "发送课程问题后，会先检索当前课程资料，再决定是否调用模型回答。"}
+          {agentTraceId
+            ? "当前 Agent trace 暂无可展示步骤。"
+            : hasSearched
+              ? `已完成课程资料检索，命中 ${citations.length} 条引用。暂未记录完整 Agent 轨迹。`
+              : "发送课程问题后，会先检索当前课程资料，再决定是否调用模型回答。"}
         </p>
       </section>
     );

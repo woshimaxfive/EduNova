@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom";
 import { getKnowledgePoints, listCourses } from "../api/courses";
 import {
   generateResources,
+  getResourceQuality,
   listResources,
   type GeneratedResource,
   type ResourceDifficulty,
@@ -48,12 +49,12 @@ function parseCourseId(value: string | null) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function markdownPreview(resource: GeneratedResource) {
+function resourceMarkdown(resource: GeneratedResource) {
   const markdown = resource.content_json.markdown;
   if (!markdown) {
     return "资源内容已生成。";
   }
-  return markdown.replace(/^#+\s*/gm, "").split("\n").find((line) => line.trim()) ?? "资源内容已生成。";
+  return markdown;
 }
 
 export function StudioPage() {
@@ -70,6 +71,7 @@ export function StudioPage() {
   const [difficulty, setDifficulty] = useState<ResourceDifficulty>("medium");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [latestQualityScores, setLatestQualityScores] = useState<Record<string, ResourceQualityScore[]>>({});
+  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
 
   const coursesQuery = useQuery({
     queryKey: ["courses", "studio"],
@@ -126,8 +128,19 @@ export function StudioPage() {
     [resourcesQuery.data]
   );
 
-  const latestResource = useMemo(() => resources[0] ?? null, [resources]);
-  const latestResourceQuality = latestResource ? latestQualityScores[latestResource.id] ?? [] : [];
+  const selectedResource = useMemo(
+    () => resources.find((resource) => resource.id === selectedResourceId) ?? resources[0] ?? null,
+    [resources, selectedResourceId]
+  );
+  const resourceQualityQuery = useQuery({
+    queryKey: ["resources", "quality", selectedResource?.id],
+    queryFn: () => getResourceQuality(Number.parseInt(selectedResource?.id ?? "0", 10)),
+    enabled: selectedResource !== null,
+    staleTime: 10_000
+  });
+  const selectedResourceQuality = selectedResource
+    ? latestQualityScores[selectedResource.id] ?? resourceQualityQuery.data?.data ?? []
+    : [];
 
   const generateMutation = useMutation({
     mutationFn: () => {
@@ -145,6 +158,7 @@ export function StudioPage() {
     onSuccess: (response) => {
       setFeedback(null);
       setLatestQualityScores(response.data.quality_scores);
+      setSelectedResourceId(response.data.resources[0]?.id ?? null);
       void queryClient.invalidateQueries({ queryKey: ["resources", "list", effectiveCourseId] });
     },
     onError: () => {
@@ -284,9 +298,15 @@ export function StudioPage() {
         </section>
       </section>
 
-      <StudioDock outputs={resources} onGenerate={handleGenerate} showGenerateAction={false} />
+      <StudioDock
+        outputs={resources}
+        selectedResourceId={selectedResource?.id ?? null}
+        onGenerate={handleGenerate}
+        onSelectResource={setSelectedResourceId}
+        showGenerateAction={false}
+      />
 
-      {latestResource ? (
+      {selectedResource ? (
         <>
           <section className="student-panel generation-queue" role="region" aria-label="资源质量">
             <div className="student-panel-heading">
@@ -294,8 +314,8 @@ export function StudioPage() {
                 <h2>资源质量</h2>
               </div>
             </div>
-            {latestResourceQuality.length > 0 ? (
-              latestResourceQuality.map((score) => (
+            {selectedResourceQuality.length > 0 ? (
+              selectedResourceQuality.map((score) => (
                 <article className="queue-row" key={score.id}>
                   <span>
                     <strong>{qualityLabels[score.score_name] ?? score.score_name}</strong>
@@ -315,8 +335,8 @@ export function StudioPage() {
                 <h2>引用来源</h2>
               </div>
             </div>
-            {latestResource.citation_json.length > 0 ? (
-              latestResource.citation_json.map((citation, index) => (
+            {selectedResource.citation_json.length > 0 ? (
+              selectedResource.citation_json.map((citation, index) => (
                 <article className="queue-row" key={`${citation.chunk_id ?? index}-${citation.section_title ?? "citation"}`}>
                   <span>
                     <strong>{citation.section_title ?? "课程引用"}</strong>
@@ -329,17 +349,15 @@ export function StudioPage() {
             )}
           </section>
 
-          <section className="student-panel generation-queue" role="region" aria-label="资源内容预览">
+          <section className="student-panel resource-detail-panel" role="region" aria-label="资源完整内容">
             <div className="student-panel-heading">
               <div>
-                <h2>内容预览</h2>
+                <h2>资源内容</h2>
               </div>
             </div>
-            <article className="queue-row">
-              <span>
-                <strong>{latestResource.title}</strong>
-                <small>{markdownPreview(latestResource)}</small>
-              </span>
+            <article className="resource-reader">
+              <strong>{selectedResource.title}</strong>
+              <pre className="resource-markdown-viewer">{resourceMarkdown(selectedResource)}</pre>
             </article>
           </section>
         </>

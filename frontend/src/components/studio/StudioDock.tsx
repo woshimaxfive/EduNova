@@ -4,7 +4,9 @@ import { type GeneratedResource } from "../../api/resources";
 
 type StudioDockProps = {
   outputs: GeneratedResource[];
+  selectedResourceId?: string | null;
   onGenerate?: () => void;
+  onSelectResource?: (resourceId: string) => void;
   showGenerateAction?: boolean;
 };
 
@@ -29,8 +31,9 @@ function reviewStatusLabel(status: string) {
   return "待生成";
 }
 
-export function StudioDock({ outputs, onGenerate, showGenerateAction = true }: StudioDockProps) {
+export function StudioDock({ outputs, selectedResourceId, onGenerate, onSelectResource, showGenerateAction = true }: StudioDockProps) {
   const handleGenerate = onGenerate ?? (() => undefined);
+  const activeResourceId = selectedResourceId ?? outputs[0]?.id ?? null;
 
   return (
     <section className="studio-dock" role="region" aria-label="资源生成区">
@@ -49,16 +52,24 @@ export function StudioDock({ outputs, onGenerate, showGenerateAction = true }: S
         {outputs.length > 0 ? (
           outputs.map((output) => {
             const statusLabel = reviewStatusLabel(output.review_status);
+            const isSelected = output.id === activeResourceId;
 
             return (
-              <article className={`studio-item ${output.review_status === "low_evidence" ? "low-evidence" : ""}`} key={output.id}>
+              <button
+                className={`studio-item ${output.review_status === "low_evidence" ? "low-evidence" : ""} ${isSelected ? "active" : ""}`}
+                key={output.id}
+                type="button"
+                aria-label={`查看资源 ${output.title}`}
+                aria-pressed={isSelected}
+                onClick={() => onSelectResource?.(output.id)}
+              >
                 <Notebook size={18} weight="duotone" aria-hidden="true" />
                 <div>
                   <small>{resourceTypeLabels[output.resource_type]}</small>
                   <strong>{output.title}</strong>
                 </div>
                 <span>{statusLabel}</span>
-              </article>
+              </button>
             );
           })
         ) : (

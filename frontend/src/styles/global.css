@@ -926,11 +926,21 @@ a {
 .studio-item {
   justify-content: space-between;
   gap: 12px;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   min-height: 92px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface-strong);
+}
+
+.studio-item:hover,
+.studio-item.active {
+  border-color: rgba(8, 127, 115, 0.36);
+  background: rgba(8, 127, 115, 0.12);
 }
 
 .studio-item span {
@@ -3617,6 +3627,12 @@ a {
   box-shadow: none;
 }
 
+.studio-item:hover,
+.studio-item.active {
+  border-color: rgba(216, 255, 250, 0.36);
+  background: rgba(255, 255, 255, 0.11);
+}
+
 .studio-item span {
   color: #d8fffa;
   background: rgba(8, 127, 115, 0.28);
@@ -3625,6 +3641,33 @@ a {
 .studio-item.low-evidence span {
   color: #ffe4ae;
   background: rgba(183, 121, 31, 0.26);
+}
+
+.resource-detail-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.resource-reader {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.resource-markdown-viewer {
+  max-height: min(520px, 62dvh);
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.64);
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  line-height: 1.65;
 }
 
 .evidence-layer {

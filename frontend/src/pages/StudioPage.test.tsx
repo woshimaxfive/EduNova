@@ -275,6 +275,151 @@ describe("StudioPage resource generation", () => {
     expect(screen.queryByText("监督学习个性化讲解")).not.toBeInTheDocument();
   });
 
+  it("opens generated resources and shows the selected full content with quality scores", async () => {
+    const user = userEvent.setup();
+    const resources: GeneratedResource[] = [
+      makeResource({
+        id: "901",
+        resource_type: "doc",
+        title: "启发式搜索个性化讲解",
+        content_json: {
+          markdown: "# 启发式搜索个性化讲解\n\n第一段讲解。\n\n第二段复习建议。",
+          metadata: { agent_trace_id: "trace_doc" }
+        }
+      }),
+      makeResource({
+        id: "902",
+        resource_type: "quiz",
+        title: "启发式搜索练习题",
+        content_json: {
+          markdown: "# 启发式搜索练习题\n\n## 单选题\n答案：B。",
+          metadata: { agent_trace_id: "trace_quiz" }
+        }
+      })
+    ];
+
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === COURSE_ENDPOINTS.list) {
+        return {
+          data: {
+            data: [
+              {
+                id: "808",
+                title: "AI 搜索复习",
+                description: "由 1 份资料生成",
+                subject: "人工智能",
+                source_type: "uploaded",
+                status: "ready",
+                progress_percent: 0,
+                material_count: 1,
+                knowledge_point_count: 1,
+                chunk_count: 3
+              }
+            ],
+            page: 1,
+            page_size: 1,
+            total: 1,
+            trace_id: "trace_courses"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (config.url === COURSE_ENDPOINTS.knowledgePoints(808)) {
+        return {
+          data: {
+            data: [
+              {
+                id: "401",
+                title: "启发式搜索",
+                summary: "理解启发函数和 A*。",
+                chapter: "搜索问题",
+                order_index: 1,
+                difficulty: "基础"
+              }
+            ],
+            trace_id: "trace_points"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (config.url === RESOURCE_ENDPOINTS.list) {
+        return {
+          data: {
+            data: resources,
+            page: 1,
+            page_size: resources.length,
+            total: resources.length,
+            trace_id: "trace_resources"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (config.url === RESOURCE_ENDPOINTS.quality(901)) {
+        return {
+          data: { data: makeQuality("901"), trace_id: "trace_quality_doc" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (config.url === RESOURCE_ENDPOINTS.quality(902)) {
+        return {
+          data: {
+            data: [
+              {
+                id: "3003",
+                resource_id: "902",
+                score_name: "source_match",
+                score_value: 0.66,
+                rationale: "练习题基于课程引用摘要。",
+                created_at: "2026-07-05T14:00:00Z"
+              }
+            ],
+            trace_id: "trace_quality_quiz"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808`);
+
+    expect(await screen.findByRole("button", { name: "查看资源 启发式搜索个性化讲解" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("第二段复习建议。");
+    expect(await screen.findByText("基于课程引用摘要生成。")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "查看资源 启发式搜索练习题" }));
+
+    expect(screen.getByRole("button", { name: "查看资源 启发式搜索练习题" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("答案：B。");
+    expect(await screen.findByText("练习题基于课程引用摘要。")).toBeInTheDocument();
+  });
+
   it("shows local feedback when resource generation fails", async () => {
     const user = userEvent.setup();
 

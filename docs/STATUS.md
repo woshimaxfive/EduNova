@@ -24,6 +24,8 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 - Phase 8.1 已挂载 `/agents/traces/{trace_id}`，复用 `agent_run_logs` 查询当前用户自己的 Agent 轨迹，并在课程空间“思考过程”面板读取真实 trace；同时新增 LangGraph `profile -> retrieve -> diagnosis -> resource -> review -> persist` 骨架。
 - Phase 8.2 已挂载 `/resources`，可基于当前用户课程生成讲解、思维导图、练习、代码实操和 PPT 大纲，并写入资源、质量分和 Agent 轨迹；Phase 8.2.1 已改为课程引用驱动的确定性可用稿优先，模型只做批量增强，模型不可用或失败时不再把可用资源降级为空模板。
 
+Phase 8 暂按“可用完成”收口：Agent trace 底座、5 类课程资源生成、质量门槛和模型无关可用稿已经能支撑产品主链路和演示验收。保留的 Phase 8 hardening backlog 只包括资源工坊直接展示资源生成 trace、AgentTimeline 补充白名单 metadata、后续评估让 LangGraph 真正接管生成编排；这些不再拆成新的 Phase 8.x，也不阻塞 Phase 9。
+
 当前仍然不是完整产品。5 类课程资源生成已经接入，但弱点队列还没有推荐资源、下次复习时间和练习评估入队，学习路径、掌握度图、练习评估、报告和深度文档解析还在后续阶段。
 
 ## 已完成主链路
@@ -111,6 +113,7 @@ Phase 7.2 的分层口径：
 | 讯飞原生 Embeddingp/Embeddingq | 暂不接入，当前用 OpenAI-compatible embeddings 或本地 fallback |
 | Path/Practice/Report 后端接口 | 前端保留合同常量和页面骨架，后端 router 未挂载 |
 | 资源增强 | Phase 8.2.1 已支持 5 类课程资源的模型无关可用稿、可选模型增强和规则质量分；资源编辑、异步任务队列、个人全局资源生成入口和推荐资源消费未接入 |
+| Agent 编排 hardening | Phase 8 已可用收口；资源工坊 trace 展示、AgentTimeline metadata 和 LangGraph 真正接管生成编排作为后续 hardening backlog，不阻塞 Phase 9 |
 | 弱点复习增强 | Phase 7.4 已支持确认、开始、完成和软忽略；推荐资源、下次复习时间和练习评估入队未接入 |
 | 学习路径 | 页面和表结构有准备，真实路径生成未接入；后续应基于课程学习状态而非单独全局画像生成 |
 | 练习评估 | 页面和表结构有准备，真实出题和批改未接入 |
@@ -152,6 +155,7 @@ Phase 7.2 的分层口径：
 
 - Phase 7 已完成用户级画像、画像事件和课程问答候选证据闭环。
 - Phase 8.1 已先完成可追溯 Agent 轨迹底座，Phase 8.2/8.2.1 已把 5 类课程资源生成、质量分、生成轨迹和模型无关可用性接入同一闭环。
+- Phase 8 后续只保留 hardening backlog，不再继续切新的 Phase 8.x。
 - Phase 7.3/7.4 已前置课程级弱点队列基础，但不把学习路径提前改名为 Phase 8。
 - 学习路径、掌握度图和复习队列完善继续留到 Phase 9，届时再消费已确认/复习中的弱点，而不是直接消费 `pending` 候选项。
 

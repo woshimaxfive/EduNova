@@ -36,6 +36,8 @@ EduNova 坚持“基础不牢，地动山摇”的开发原则。
 | 当前主要缺口 | 学习路径、掌握度图、弱点队列推荐资源/复习时间、练习评估、报告导出、深度解析、OCR；`paths/practice/reports` 后端 router 尚未挂载 |
 | 下一步建议 | Phase 9：学习路径、掌握度图和薄弱点队列完善 |
 
+Phase 8 暂按“可用完成”收口，不再拆新的 Phase 8.x。资源工坊 trace 展示、AgentTimeline 白名单 metadata 和 LangGraph 真正接管生成编排保留为 hardening backlog，不阻塞 Phase 9。
+
 ## 4. 里程碑
 
 | 里程碑 | 时间 | 目标 | 状态 |
@@ -90,6 +92,7 @@ EduNova 坚持“基础不牢，地动山摇”的开发原则。
 ### P1 可排期专项
 
 - [ ] 将 `paths/practice/reports` 从前端预留合同推进为真实后端 router 时，必须分别补 API、权限、测试和浏览器验收；`agents` 已在 Phase 8.1 接入 trace 查询，`resources` 已在 Phase 8.2 接入。
+- [ ] Phase 8 hardening backlog：资源工坊直接展示资源生成 trace、AgentTimeline 补充白名单 metadata、后续评估让 LangGraph 真正接管生成编排；这些不是新 Phase，也不阻塞 Phase 9。
 - [ ] Phase 9 学习路径、掌握度图和弱点队列推荐资源第一刀。
 - [ ] 练习评估和弱点队列来源扩展。
 - [ ] 学习报告真实数据和导出第一刀。

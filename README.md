@@ -13,6 +13,8 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 当前最新完成到 **Phase 8.2.1：模型无关的资源质量收口**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询、LangGraph 骨架、5 类课程资源生成和资源质量收口，下一步进入 Phase 9：学习路径、掌握度图和薄弱点队列完善。
 
+Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和可观测 trace 已能支撑演示与后续消费。LangGraph 仍是可观测骨架，后续只作为 hardening backlog 继续补资源工坊 trace 展示、AgentTimeline 白名单 metadata 和真实图编排接管，不再拆成新的 Phase 8.x，也不阻塞 Phase 9。
+
 已经具备的主链路：
 
 - 真实注册、登录、退出和受保护路由。

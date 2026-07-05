@@ -6,12 +6,17 @@
 
 本文档记录 EduNova 的本地开发、Docker Compose 和部署准备方式。
 
-当前部署范围覆盖到 Phase 6.5：
+当前部署范围覆盖到 Phase 12.2：
 
 - 工程骨架和 Docker Compose。
 - 数据库迁移和内置课程包导入。
 - 真实认证、首页、资料库、规则建课、课程 RAG 和课程会话。
 - 模型配置、课程流式回答、Embedding、混合检索和课程空间双模式前端。
+- 学习画像、课程学习状态、弱点复习队列和状态流转。
+- Agent trace 查询和资源生成 trace。
+- 5 类课程资源生成、质量分、本地可用稿和模型增强。
+- 学习路径、规则掌握度图、练习评估、学习报告、期末冲刺、资料对比和 Markdown 学习档案导出。
+- 交付基线文档、开源说明、MIT 许可证和验收证据索引。
 - 前端本地开发、生产构建和 Nginx 统一入口草案。
 
 - FastAPI backend。
@@ -27,17 +32,18 @@
 - 受保护学习空间首页总览接口 `/api/v1/dashboard/summary`。
 - 受保护主页会话接口 `/api/v1/tutor/sessions`。
 - 受保护资料库接口 `/api/v1/materials/upload`、`/api/v1/materials`、`/api/v1/materials/{material_id}`、`/api/v1/materials/{material_id}/progress` 和 `/api/v1/courses/{course_id}/materials`。
-- 受保护课程接口 `/api/v1/courses/from-materials`、`/api/v1/courses`、`/api/v1/courses/{course_id}`、`/api/v1/courses/{course_id}/overview` 和 `/api/v1/courses/{course_id}/knowledge-points`。
+- 受保护课程接口 `/api/v1/courses/from-materials`、`/api/v1/courses`、`/api/v1/courses/{course_id}`、`/api/v1/courses/{course_id}/overview`、`/api/v1/courses/{course_id}/knowledge-points`、`/api/v1/courses/{course_id}/learning-state` 和 `/api/v1/courses/{course_id}/mastery-map`。
 - 受保护 RAG 检索接口 `/api/v1/rag/search`，支持关键词/向量混合召回和本地 fallback 状态。
 - 受保护模型设置接口 `/api/v1/settings/model`、`/api/v1/settings/model/test` 和 `/api/v1/settings/model/configs` 系列接口。
+- 受保护画像、Agent trace、资源、学习路径、练习、报告、期末冲刺、资料对比和 Markdown 导出接口。
 - React + TypeScript + Vite 前端本地开发服务器。
 - 前端 lint、Vitest 和生产构建命令。
 - 前端 API 合同模块，默认请求基础路径 `/api/v1`。
-- Phase 3 学生端核心页面骨架，覆盖资料库、资源工坊、学习画像、AI 辅导、练习、报告和设置。
+- 学生端核心页面，覆盖首页、资料库、课程空间、资源工坊、学习画像、AI 辅导入口、练习、报告、学习路径和设置。
 
 以下能力还未接入当前部署：
 
-- 讯飞原生 Embeddingp/Embeddingq、多智能体、OCR、PDF/PPT/DOCX 深度解析和真实资源生成业务。
+- 讯飞原生 Embeddingp/Embeddingq、OCR、PDF/PPT/DOCX 深度解析、PDF/Word 导出、异步导出任务和完整浏览器 E2E。
 
 这些能力会在后续阶段逐步加入，并同步更新本文档。
 
@@ -318,17 +324,18 @@ http://127.0.0.1:5173
 - Phase 6.4 后引用区会显示混合检索或本地 fallback 状态。
 - Phase 6.5 后课程空间默认问答模式和学习模式都在同一路由内完成，不新增部署入口。
 - `/app/settings` 可管理多套用户模型配置。
+- `/app/profile`、`/app/studio`、`/app/path`、`/app/practice` 和 `/app/reports` 已接入真实画像、资源、路径、练习、报告和 Markdown 导出接口。
 
 本地开发时 Vite 会把 `/api` 代理到 `http://127.0.0.1:8000`。
 如果后端端口变化，可以设置 `VITE_API_PROXY_TARGET`。
 
-资源工坊、画像、练习和报告仍使用前端预备交互或样例数据，后续由真实业务接口逐步替换。
+前端不应再用静态假资源、假画像、假练习或假报告填充真实数据缺口。模型未配置、资料不足或接口失败时，应展示真实空状态、低依据提示或局部错误。
 
 ## 9. 后续部署计划
 
 后续阶段将补充：
 
-- 后端数据库连接检查。
-- Docker 五服务真实启动验收截图和公网部署说明。
-- 演示模式初始化命令。
-- 生产部署建议。
+- 完整浏览器 E2E 和更细粒度部署验收截图。
+- 公网部署、TLS、反向代理和生产环境变量建议。
+- 对象存储、日志轮转、备份恢复和监控建议。
+- PDF/PPTX/DOCX 深度解析、OCR 和异步任务队列接入后的部署说明。

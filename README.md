@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 12.1：Markdown 学习档案导出第一刀**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询、LangGraph 骨架、5 类课程资源生成和资源质量收口，Phase 9 已完成课程级路径、规则掌握度图、弱点推荐资源和复习时间第一版，Phase 10 已完成真实课程练习、确定性批改、弱点/掌握度反哺和学习报告展示第一刀，Phase 11.1 已完成课程级 3/7/14 天期末冲刺计划，Phase 11.2 已完成同课程多资料对比，Phase 12.1 已完成课程级 Markdown 学习档案导出。下一步进入 Phase 12.2：开源准备、验收证据和提交材料边界。
+当前最新完成到 **Phase 12.2：交付基线、开源准备与验收证据**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询、LangGraph 骨架、5 类课程资源生成和资源质量收口，Phase 9 已完成课程级路径、规则掌握度图、弱点推荐资源和复习时间第一版，Phase 10 已完成真实课程练习、确定性批改、弱点/掌握度反哺和学习报告展示第一刀，Phase 11.1 已完成课程级 3/7/14 天期末冲刺计划，Phase 11.2 已完成同课程多资料对比，Phase 12.1 已完成课程级 Markdown 学习档案导出，Phase 12.2 已补齐交付文档、开源说明、MIT 许可证和验收证据索引。下一步进入 Phase 13：Verification and Hardening / 产品打磨。
 
 Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和可观测 trace 已能支撑演示与后续消费。LangGraph 仍是可观测骨架，后续只作为 hardening backlog 继续补资源工坊 trace 展示、AgentTimeline 白名单 metadata 和真实图编排接管，不再拆成新的 Phase 8.x，也不阻塞 Phase 11。
 
@@ -38,6 +38,7 @@ Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和
 - `/app/tutor` 已收敛为课程辅导入口，真实提问统一进入课程空间。
 - 多套个人模型配置、默认配置切换、服务器 `.env` 兜底。
 - OpenAI-compatible Embeddings 与 `local-hash-1536` 本地 fallback。
+- Phase 12.2 已补交付基线文档、测试报告、用户指南、开源说明、答辩问答、AI 辅助开发说明和 MIT 许可证。
 
 当前主页回答是普通模型问答，不做资料 RAG、真实联网搜索或流式输出；课程空间才会使用课程引用、混合检索和流式 RAG。课程空间默认是问答模式，知识点入口和引用可进入学习模式。课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件，并通过课程学习状态同步为待确认复习项；这仍是“待确认/待复习”，不是已完成正式诊断。学生确认后才进入待复习、复习中或已完成语义，Phase 9 路径生成只消费已确认/复习中的弱点，不直接消费 `pending` 候选项。后续不会为每门课复制完整画像，而是通过课程级学习状态聚合目标、薄弱点、掌握度、复习队列和路径依据。
 
@@ -48,6 +49,7 @@ Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和
 - 讯飞原生 Embeddingp/Embeddingq。
 - 个人全局资源生成入口、资源编辑、异步资源任务队列。
 - 资料对比结果持久化、资料对比与期末冲刺联动、错题驱动深度薄弱点追溯、PDF/Word 导出、异步导出任务和深度解析。
+- 完整浏览器 E2E 自动化套件和 Phase 13 产品打磨专项。
 
 详细状态见 [docs/STATUS.md](docs/STATUS.md)，后续任务看 [docs/PROJECT_BOARD.md](docs/PROJECT_BOARD.md)。
 
@@ -71,6 +73,15 @@ Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和
 | [安全基线](docs/SECURITY.md) | 账号、密钥、上传资料、RAG、日志和权限安全 |
 | [部署说明](docs/DEPLOYMENT.md) | 本地开发、Docker Compose、环境变量和迁移 |
 | [风险登记册](docs/RISK_REGISTER.md) | 项目风险、触发信号和应对策略 |
+| [Agent 设计说明](docs/AGENT_DESIGN.md) | 多智能体角色、trace 白名单和失败恢复 |
+| [开发指南](docs/DEVELOPMENT_GUIDE.md) | 本地开发、分支、测试、文档同步和浏览器验收 |
+| [开源说明](docs/OPEN_SOURCE_NOTICE.md) | MIT 协议、第三方依赖、密钥和隐私边界 |
+| [答辩问答](docs/DEFENSE_QA.md) | 赛题、RAG、多智能体、安全、部署和后续打磨问答 |
+| [开发报告](docs/DEVELOPMENT_REPORT.md) | 系统设计、阶段成果、核心创新和当前限制 |
+| [测试报告](docs/TEST_REPORT.md) | 自动化测试、Docker、浏览器验收和证据索引 |
+| [用户指南](docs/USER_GUIDE.md) | 学生端使用流程 |
+| [AI 辅助开发说明](docs/AI_CODING_USAGE.md) | AI Coding 使用边界、人工审查和隐私规则 |
+| [Phase 12.2 验收证据](docs/evidence/PHASE_12_2_ACCEPTANCE.md) | 当前交付基线的验证命令和浏览器验收记录 |
 | [产品设计](docs/superpowers/specs/2026-07-01-edunova-product-design.md) | 产品定位和设计原始稿 |
 | [实施计划](docs/superpowers/plans/2026-07-01-edunova-mvp-implementation.md) | 阶段路线和实现计划原始稿 |
 | [中文阅读版](docs/superpowers/plans/2026-07-01-edunova-mvp-implementation-中文阅读版.md) | 实施计划中文导读 |
@@ -88,10 +99,10 @@ Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和
 - 练习评估、掌握度地图和薄弱点复习队列。
 - 期末冲刺和资料对比。
 - Markdown 学习档案导出。
-- 演示模式。
+- 快速演示通过注册页示例课程模式完成；独立共享 demo reset 不作为当前主线。
 - Docker Compose 部署。
 
-当前代码只完成了其中一部分。不要把“完整目标”误读成“当前已全部实现”。
+当前代码已经具备第一版主学习闭环和交付基线，但仍不是完整商业产品。不要把“第一版目标”误读成 PDF/Word、OCR、深度解析、教师端和完整 E2E 都已经完成。
 
 ## 技术栈
 

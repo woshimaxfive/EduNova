@@ -4,9 +4,16 @@ import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { buildCoursePath } from "../app/routePaths";
-import { createCourseFromMaterials } from "../api/courses";
+import { createCourseFromMaterials, listCourses, type ApiCourseSummary } from "../api/courses";
 import { getApiErrorMessage } from "../api/errors";
-import { listMaterials, type MaterialListItem, uploadMaterial } from "../api/materials";
+import {
+  compareMaterials,
+  listMaterials,
+  type MaterialComparisonPoint,
+  type MaterialComparisonResult,
+  type MaterialListItem,
+  uploadMaterial
+} from "../api/materials";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { PageFrame } from "./PageFrame";
 
@@ -29,6 +36,49 @@ function buildStatusLabel(material: LibraryFile) {
   return "解析中";
 }
 
+function parseNumericId(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function pointConfidenceLabel(confidence: string) {
+  if (confidence === "high") {
+    return "高";
+  }
+  if (confidence === "low") {
+    return "低";
+  }
+  return "中";
+}
+
+function renderComparisonPointList(title: string, points: MaterialComparisonPoint[]) {
+  return (
+    <section className="material-compare-result-group" aria-label={title}>
+      <h3>{title}</h3>
+      {points.length === 0 ? <p className="library-file-empty">暂无结果。</p> : null}
+      {points.length > 0 ? (
+        <ul>
+          {points.map((point) => (
+            <li key={`${title}-${point.title}-${point.material_ids.join("-")}`}>
+              <strong>{point.title}</strong>
+              <small>
+                {point.reason} · 依据 {point.support_count} 条 · 可信度 {pointConfidenceLabel(point.confidence)}
+              </small>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 export function LibraryPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -43,12 +93,38 @@ export function LibraryPage() {
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
   const [libraryFeedback, setLibraryFeedback] = useState<string | null>(null);
   const [courseDialogFeedback, setCourseDialogFeedback] = useState<string | null>(null);
+  const [compareCourseId, setCompareCourseId] = useState<string>("");
+  const [compareMaterialIds, setCompareMaterialIds] = useState<string[]>([]);
+  const [compareResult, setCompareResult] = useState<MaterialComparisonResult | null>(null);
+  const [compareFeedback, setCompareFeedback] = useState<string | null>(null);
+  const [isComparingMaterials, setIsComparingMaterials] = useState(false);
   const materialsQuery = useQuery({
     queryKey: ["materials", "list"],
     queryFn: () => listMaterials(),
     staleTime: 30_000
   });
-  const files = useMemo(() => materialsQuery.data?.data ?? [], [materialsQuery.data?.data]);
+  const coursesQuery = useQuery({
+    queryKey: ["courses", "list"],
+    queryFn: () => listCourses(),
+    staleTime: 30_000
+  });
+  const files = useMemo(() => asArray<MaterialListItem>(materialsQuery.data?.data), [materialsQuery.data?.data]);
+  const courses = useMemo(() => asArray<ApiCourseSummary>(coursesQuery.data?.data), [coursesQuery.data?.data]);
+  const effectiveCompareCourseId = compareCourseId || courses[0]?.id || "";
+  const compareCourseMaterials = useMemo(
+    () =>
+      files.filter(
+        (file) =>
+          effectiveCompareCourseId &&
+          file.category === "document" &&
+          file.parse_status === "completed" &&
+          file.course_ids.includes(effectiveCompareCourseId)
+      ),
+    [effectiveCompareCourseId, files]
+  );
+  const selectedComparableCount = compareMaterialIds.filter((materialId) =>
+    compareCourseMaterials.some((material) => material.id === materialId)
+  ).length;
   const filteredFiles = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
@@ -91,6 +167,42 @@ export function LibraryPage() {
 
   function toggleCourseMaterial(materialId: string) {
     setCourseMaterialIds((current) => (current.includes(materialId) ? current.filter((id) => id !== materialId) : [...current, materialId]));
+  }
+
+  function handleCompareCourseChange(event: ChangeEvent<HTMLSelectElement>) {
+    setCompareCourseId(event.target.value);
+    setCompareMaterialIds([]);
+    setCompareResult(null);
+    setCompareFeedback(null);
+  }
+
+  function toggleCompareMaterial(materialId: string) {
+    setCompareMaterialIds((current) => (current.includes(materialId) ? current.filter((id) => id !== materialId) : [...current, materialId]));
+    setCompareFeedback(null);
+  }
+
+  async function handleCompareMaterials() {
+    const courseId = parseNumericId(effectiveCompareCourseId);
+    const selectedMaterialIds = compareMaterialIds
+      .map((materialId) => Number.parseInt(materialId, 10))
+      .filter((materialId) => Number.isFinite(materialId));
+
+    if (courseId === null || selectedMaterialIds.length < 2 || isComparingMaterials) {
+      setCompareFeedback("至少选择两份同课程资料。");
+      return;
+    }
+
+    setIsComparingMaterials(true);
+    setCompareFeedback(null);
+
+    try {
+      const result = await compareMaterials({ course_id: courseId, material_ids: selectedMaterialIds });
+      setCompareResult(result.data);
+    } catch (error) {
+      setCompareFeedback(getApiErrorMessage(error, "资料对比失败，请稍后重试。"));
+    } finally {
+      setIsComparingMaterials(false);
+    }
   }
 
   async function handleCreateCourse() {
@@ -216,6 +328,95 @@ export function LibraryPage() {
             </section>
           ) : null}
 
+          <section className="material-compare-panel" role="region" aria-label="资料对比">
+            <div className="student-panel-heading compact">
+              <div>
+                <h2>资料对比</h2>
+              </div>
+              <span className="panel-count">{selectedComparableCount} 已选</span>
+            </div>
+
+            <div className="material-compare-controls">
+              <label>
+                <span>对比课程</span>
+                <select value={effectiveCompareCourseId} onChange={handleCompareCourseChange} disabled={courses.length === 0}>
+                  {courses.length === 0 ? (
+                    <option value="">暂无课程</option>
+                  ) : (
+                    courses.map((course: ApiCourseSummary) => (
+                      <option key={course.id} value={course.id}>
+                        {course.title}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+              <button
+                className="library-action-button primary"
+                type="button"
+                disabled={selectedComparableCount < 2 || isComparingMaterials}
+                onClick={() => void handleCompareMaterials()}
+              >
+                {isComparingMaterials ? "对比中" : "生成资料对比"}
+              </button>
+            </div>
+
+            <div className="material-compare-list">
+              {coursesQuery.isLoading ? <p className="library-file-empty">正在读取课程。</p> : null}
+              {!coursesQuery.isLoading && coursesQuery.isError ? <p className="library-file-empty">课程列表暂时没有读取成功。</p> : null}
+              {!coursesQuery.isLoading && !coursesQuery.isError && compareCourseMaterials.length === 0 ? (
+                <p className="library-file-empty">至少选择两份同课程资料。</p>
+              ) : null}
+              {compareCourseMaterials.map((material) => (
+                <button
+                  className={compareMaterialIds.includes(material.id) ? "active" : ""}
+                  key={material.id}
+                  type="button"
+                  aria-pressed={compareMaterialIds.includes(material.id)}
+                  onClick={() => toggleCompareMaterial(material.id)}
+                >
+                  <span>{material.extension}</span>
+                  <strong>{material.title}</strong>
+                  <small>{material.detail}</small>
+                </button>
+              ))}
+            </div>
+
+            {selectedComparableCount < 2 ? <p className="material-compare-note">至少选择两份同课程资料。</p> : null}
+            <InlineFeedback message={compareFeedback} tone="warning" className="library-inline-feedback" />
+
+            {compareResult ? (
+              <div className="material-compare-result">
+                <div className="material-compare-summary">
+                  <strong>{compareResult.summary.message}</strong>
+                  <span>
+                    {compareResult.summary.comparable_material_count} 份可比较 · {compareResult.summary.matched_concept_count} 个命中点 · {compareResult.summary.citation_count} 条引用
+                  </span>
+                </div>
+                <div className="material-compare-grid">
+                  {renderComparisonPointList("重复重点", compareResult.repeated_concepts)}
+                  {renderComparisonPointList("疑似考点", compareResult.exam_likely_points)}
+                  {renderComparisonPointList("单资料独有点", compareResult.materials_only_points)}
+                  {renderComparisonPointList("试题独有点", compareResult.questions_only_points)}
+                  {renderComparisonPointList("遗漏复习点", compareResult.missing_review_points)}
+                  {renderComparisonPointList("优先复习顺序", compareResult.priority_order)}
+                </div>
+                <section className="material-compare-citations" aria-label="对比引用">
+                  <h3>引用摘要</h3>
+                  {compareResult.citations.length === 0 ? <p className="library-file-empty">暂无引用。</p> : null}
+                  <ul>
+                    {compareResult.citations.map((citation) => (
+                      <li key={citation.id}>
+                        <strong>{citation.source_title}</strong>
+                        <small>{citation.section_title ?? "未标注章节"}</small>
+                        <span>{citation.excerpt}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
+            ) : null}
+          </section>
         </section>
       </PageFrame>
 

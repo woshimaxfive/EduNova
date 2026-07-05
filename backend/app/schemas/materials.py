@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MaterialUploadResult(BaseModel):
@@ -49,3 +49,49 @@ class AttachCourseMaterialsResult(BaseModel):
     course_id: str
     material_ids: list[str]
     attached_count: int
+
+
+class CompareMaterialsRequest(BaseModel):
+    course_id: int
+    material_ids: list[int] = Field(min_length=2)
+
+
+class MaterialComparisonSummary(BaseModel):
+    compared_material_count: int
+    comparable_material_count: int
+    matched_concept_count: int
+    citation_count: int
+    message: str
+
+
+class MaterialComparisonCitation(BaseModel):
+    id: str
+    material_id: str
+    source_title: str
+    section_title: str | None
+    page_number: int | None
+    excerpt: str
+    confidence: str
+
+
+class MaterialComparisonPoint(BaseModel):
+    title: str
+    material_ids: list[str]
+    source_titles: list[str]
+    reason: str
+    confidence: str
+    support_count: int
+    knowledge_point_id: str | None = None
+
+
+class MaterialComparisonResult(BaseModel):
+    course_id: str
+    material_ids: list[str]
+    summary: MaterialComparisonSummary
+    repeated_concepts: list[MaterialComparisonPoint]
+    exam_likely_points: list[MaterialComparisonPoint]
+    materials_only_points: list[MaterialComparisonPoint]
+    questions_only_points: list[MaterialComparisonPoint]
+    missing_review_points: list[MaterialComparisonPoint]
+    priority_order: list[MaterialComparisonPoint]
+    citations: list[MaterialComparisonCitation]

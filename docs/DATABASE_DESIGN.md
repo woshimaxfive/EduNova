@@ -148,6 +148,8 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 
 迁移后，`course_materials` 暂时保留，用于兼容内置课程和已有 `knowledge_chunks.material_id` 关系；新上传资料写入 `materials`，加入课程时写入 `course_material_links`。Phase 5.1 从 TXT/Markdown 资料生成课程时，会为新课程创建兼容旧链路的 `course_materials` 副本，同时用 `course_material_links.usage_type=course_source` 关联原个人资料库资料，保证后续 RAG 可以沿 `knowledge_chunks -> course_materials` 接入。
 
+Phase 11.2 的资料对比第一刀不新增表和迁移，也不持久化对比结果。`POST /materials/compare` 复用 `materials` 做当前用户资料所有权校验，复用 `course_material_links` 校验资料已绑定当前课程，优先读取 `knowledge_chunks.metadata_json.source_material_id` 与 `course_materials.metadata_json.source_material_id` 做课程切片对比；缺少切片时，仅对已解析 TXT/Markdown 的 `materials.extracted_text` 做短摘录 fallback。服务层只返回重复重点、疑似考点、独有点、遗漏点、优先顺序和安全引用摘要，不保存完整资料原文、系统提示词、模型输入或 API Key。
+
 字段：
 
 | 字段 | 类型 | 说明 |
@@ -746,6 +748,7 @@ Demo 数据要求：
 17. Phase 7.4 后，弱点复习项通过课程绑定接口进行确认、开始、完成和软忽略；`dismissed` 项不返回主列表，但必须继续参与去重。
 18. Phase 10 后，练习会话、作答、报告和练习评估来源弱点都复用已有表；练习错题或低分题可生成 `practice_assessment` 来源的 `confirmed` 队列项，并影响 `/courses/{course_id}/mastery-map` 和 `/courses/{course_id}/learning-state`。
 19. Phase 11.1 后，期末冲刺计划复用 `learning_paths` 和 `learning_tasks`，使用 `sprint_active` / `sprint_archived` 与 `plan_json.kind="exam_sprint"` 区分普通学习路径，不新增表或迁移。
+20. Phase 11.2 后，资料对比复用 `materials`、`course_material_links`、`course_materials` 和 `knowledge_chunks`，不新增表、不持久化结果；`material_ids` 指资料库 `materials.id`，服务层强制校验当前用户所有权和课程绑定关系。
 
 当前已验证：
 
@@ -766,3 +769,4 @@ Demo 数据要求：
 - Phase 7.2 已完成用户级画像与课程级学习状态的数据库边界设计；本阶段不新增迁移，不新增 `learning_events`。
 - Phase 7.3 已验证课程学习状态服务能读取当前课程弱点候选事件、按知识点或标题去重生成 `pending` 复习项，并保持多用户、跨课程和隐私隔离。
 - Phase 7.4 已验证弱点复习项状态流转、多用户和跨课程隔离、非法流转拦截、`dismissed` 防重新入队以及主列表过滤。
+- Phase 11.2 已验证资料对比服务只访问当前用户自己的课程和资料，未绑定当前课程资料返回 404，少于两份可比较资料返回 400；课程切片和 TXT/Markdown fallback 都只返回安全短摘录，不泄露完整资料原文、系统提示词、模型输入或 API Key。

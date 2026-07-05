@@ -769,7 +769,7 @@ Authorization: Bearer <token>
 
 ### POST `/materials/compare`
 
-用途：对比多份资料并提炼考点。Phase 4.4 未实现。
+用途：对同一课程下 2 份以上资料做确定性对比，输出重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序和安全引用。Phase 11.2 已实现第一刀；本接口不调用外部模型、不持久化对比结果、不做 OCR 或深度解析，不返回完整资料原文。
 
 请求：
 
@@ -780,7 +780,65 @@ Authorization: Bearer <token>
 }
 ```
 
-响应包含高频考点、重复概念、遗漏点和引用来源。
+请求规则：
+
+- 必须携带 JWT。
+- `course_id` 必须属于当前用户。
+- `material_ids` 使用资料库 `materials.id`，去重后至少 2 份。
+- 每个资料必须属于当前用户，并且已通过 `course_material_links` 绑定到当前课程。
+- 少于 2 份可比较资料返回 400；非本人课程、非本人资料或未绑定当前课程资料返回 404。
+- 优先读取 `knowledge_chunks.metadata_json.source_material_id` 和 `course_materials.metadata_json.source_material_id` 做课程切片对比；若没有切片且资料是已解析 TXT/Markdown，则只使用 `Material.extracted_text` 的安全短摘录 fallback。
+
+响应：
+
+```json
+{
+  "data": {
+    "course_id": "1",
+    "material_ids": ["1", "2"],
+    "summary": {
+      "material_count": 2,
+      "comparable_material_count": 2,
+      "concept_count": 5,
+      "citation_count": 4,
+      "message": "已基于课程知识切片和安全短摘录完成资料对比。"
+    },
+    "repeated_concepts": [
+      {
+        "title": "启发式搜索",
+        "material_ids": ["1", "2"],
+        "source_titles": ["人工智能导论讲义.md", "期末样题.md"],
+        "reason": "多份资料重复出现。",
+        "confidence": "high",
+        "support_count": 2,
+        "knowledge_point_id": "10"
+      }
+    ],
+    "exam_likely_points": [],
+    "materials_only_points": [],
+    "questions_only_points": [],
+    "missing_review_points": [],
+    "priority_order": [],
+    "citations": [
+      {
+        "material_id": "1",
+        "source_title": "人工智能导论讲义.md",
+        "section_title": "启发式搜索",
+        "page_number": null,
+        "excerpt": "启发式搜索使用启发函数估计路径代价。",
+        "confidence": "high"
+      }
+    ]
+  },
+  "trace_id": "trace_20260705_001"
+}
+```
+
+隐私边界：
+
+- `citations.excerpt` 只返回短摘录。
+- 响应不包含完整资料原文、系统提示词、模型输入、API Key 或用户隐私原文。
+- 本阶段结果只在 `/app/library` 展示，不写入数据库，也不改变 Phase 11.1 期末冲刺计划生成语义。
 
 ## 9. RAG 接口
 
@@ -1597,7 +1655,7 @@ course_id=101
 
 ## 16. Exam Sprint 接口
 
-状态：Phase 11.1 已实现期末冲刺模式第一刀。当前只生成课程级 3/7/14 天冲刺计划，不实现资料对比 `/materials/compare`，不调用外部模型，不新增迁移。
+状态：Phase 11.1 已实现期末冲刺模式第一刀。当前只生成课程级 3/7/14 天冲刺计划，不消费 Phase 11.2 `/materials/compare` 结果，不调用外部模型，不新增迁移。
 
 统一规则：
 
@@ -1606,7 +1664,7 @@ course_id=101
 - 计划复用 `learning_paths` 和 `learning_tasks` 持久化，`learning_paths.plan_json.kind="exam_sprint"`。
 - 冲刺计划状态使用 `sprint_active` / `sprint_archived`，不会污染 `/paths/current` 的普通 `active` 学习路径。
 - 同一用户同一课程生成新冲刺计划时，只归档旧 `sprint_active`，不归档普通学习路径。
-- `material_ids` 只作为本课程资料筛选依据，本阶段不做资料对比或跨资料差异分析。
+- `material_ids` 只作为本课程资料筛选依据，本接口内不执行资料对比或跨资料差异分析。
 - 响应和 `plan_json` 不保存系统提示词、模型输入、API Key、完整资料原文、完整用户画像原文或完整练习原始答案。
 
 ### POST `/exam-sprint/plans`

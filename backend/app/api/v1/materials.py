@@ -6,7 +6,7 @@ from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
 from backend.app.db.session import get_db_session
 from backend.app.models import User
-from backend.app.schemas.materials import AttachCourseMaterialsRequest
+from backend.app.schemas.materials import AttachCourseMaterialsRequest, CompareMaterialsRequest
 from backend.app.services.materials import (
     CourseNotFoundError,
     MaterialNotFoundError,
@@ -60,6 +60,22 @@ def list_materials(
         raise ApiError(status_code=status.HTTP_404_NOT_FOUND, code="NOT_FOUND", message=str(exc)) from exc
 
     return api_response([item.model_dump() for item in result])
+
+
+@router.post("/materials/compare")
+def compare_materials(
+    payload: CompareMaterialsRequest,
+    current_user: User = Depends(get_current_user),
+    service: MaterialService = Depends(get_material_service),
+) -> dict:
+    try:
+        result = service.compare_materials(current_user, course_id=payload.course_id, material_ids=payload.material_ids)
+    except MaterialValidationError as exc:
+        raise ApiError(status_code=status.HTTP_400_BAD_REQUEST, code="VALIDATION_ERROR", message=str(exc)) from exc
+    except (CourseNotFoundError, MaterialNotFoundError) as exc:
+        raise ApiError(status_code=status.HTTP_404_NOT_FOUND, code="NOT_FOUND", message=str(exc)) from exc
+
+    return api_response(result.model_dump())
 
 
 @router.get("/materials/{material_id}")

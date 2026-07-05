@@ -1131,6 +1131,280 @@ describe("student interaction affordances", () => {
 
   });
 
+  it("compares selected course materials without blocking other library actions", async () => {
+    const user = userEvent.setup();
+    const calls: Array<{ method: string; url: string; payload: unknown }> = [];
+    const materials: MaterialListItem[] = [
+      {
+        id: "301",
+        title: "AI 导论讲义.md",
+        type: "MD",
+        detail: "已解析",
+        modified: "今天",
+        size: "12 KB",
+        category: "document",
+        extension: "MD",
+        parse_status: "completed",
+        course_ids: ["101"]
+      },
+      {
+        id: "302",
+        title: "期末样题.md",
+        type: "MD",
+        detail: "已解析",
+        modified: "今天",
+        size: "8 KB",
+        category: "document",
+        extension: "MD",
+        parse_status: "completed",
+        course_ids: ["101"]
+      },
+      {
+        id: "303",
+        title: "课堂截图.png",
+        type: "PNG",
+        detail: "仅入库，暂不做 OCR",
+        modified: "今天",
+        size: "20 KB",
+        category: "image",
+        extension: "PNG",
+        parse_status: "uploaded",
+        course_ids: ["101"]
+      },
+      {
+        id: "304",
+        title: "其他课程资料.md",
+        type: "MD",
+        detail: "已解析",
+        modified: "昨天",
+        size: "6 KB",
+        category: "document",
+        extension: "MD",
+        parse_status: "completed",
+        course_ids: ["202"]
+      }
+    ];
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+      calls.push({ method, url, payload: parsePayload(config.data) });
+
+      if (url === MATERIAL_ENDPOINTS.list && method === "get") {
+        return {
+          data: { data: materials, trace_id: "trace_materials_compare_list" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === COURSE_ENDPOINTS.list && method === "get") {
+        return {
+          data: {
+            data: [
+              {
+                id: "101",
+                title: "人工智能导论",
+                description: "由资料生成",
+                subject: "人工智能",
+                source_type: "uploaded",
+                status: "ready",
+                progress_percent: 0,
+                material_count: 2,
+                knowledge_point_count: 3,
+                chunk_count: 4
+              }
+            ],
+            trace_id: "trace_materials_compare_courses"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === MATERIAL_ENDPOINTS.compare && method === "post") {
+        return {
+          data: {
+            data: {
+              course_id: "101",
+              material_ids: ["301", "302"],
+              summary: {
+                compared_material_count: 2,
+                comparable_material_count: 2,
+                matched_concept_count: 4,
+                citation_count: 2,
+                message: "已基于课程知识切片和安全短摘录完成资料对比。"
+              },
+              repeated_concepts: [
+                {
+                  title: "启发式搜索",
+                  material_ids: ["301", "302"],
+                  source_titles: ["AI 导论讲义.md", "期末样题.md"],
+                  reason: "多份资料重复出现。",
+                  confidence: "high",
+                  support_count: 2,
+                  knowledge_point_id: "401"
+                }
+              ],
+              exam_likely_points: [
+                {
+                  title: "启发式搜索",
+                  material_ids: ["301", "302"],
+                  source_titles: ["AI 导论讲义.md", "期末样题.md"],
+                  reason: "疑似考点。",
+                  confidence: "high",
+                  support_count: 2,
+                  knowledge_point_id: "401"
+                }
+              ],
+              materials_only_points: [{ title: "反向传播", material_ids: ["301"], source_titles: ["AI 导论讲义.md"], reason: "单资料独有。", confidence: "medium", support_count: 1, knowledge_point_id: "402" }],
+              questions_only_points: [{ title: "监督学习", material_ids: ["302"], source_titles: ["期末样题.md"], reason: "样题独有。", confidence: "medium", support_count: 1, knowledge_point_id: null }],
+              missing_review_points: [{ title: "AI 伦理", material_ids: [], source_titles: [], reason: "所选资料暂未覆盖。", confidence: "low", support_count: 0, knowledge_point_id: "403" }],
+              priority_order: [{ title: "启发式搜索", material_ids: ["301", "302"], source_titles: ["AI 导论讲义.md", "期末样题.md"], reason: "优先复习。", confidence: "high", support_count: 2, knowledge_point_id: "401" }],
+              citations: [
+                {
+                  id: "m301-1",
+                  material_id: "301",
+                  source_title: "AI 导论讲义.md",
+                  section_title: "启发式搜索",
+                  page_number: null,
+                  excerpt: "启发式搜索使用启发函数。",
+                  confidence: "high"
+                }
+              ]
+            },
+            trace_id: "trace_materials_compare"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    renderPage(<LibraryPage />);
+
+    const comparePanel = await screen.findByRole("region", { name: "资料对比" });
+
+    expect(comparePanel).toHaveTextContent("至少选择两份同课程资料");
+    expect(await within(comparePanel).findByRole("button", { name: /AI 导论讲义.md/ })).toBeInTheDocument();
+    expect(await within(comparePanel).findByRole("button", { name: /期末样题.md/ })).toBeInTheDocument();
+    expect(within(comparePanel).queryByRole("button", { name: /课堂截图.png/ })).not.toBeInTheDocument();
+    expect(within(comparePanel).queryByRole("button", { name: /其他课程资料.md/ })).not.toBeInTheDocument();
+    expect(within(comparePanel).getByRole("button", { name: "生成资料对比" })).toBeDisabled();
+
+    await user.click(within(comparePanel).getByRole("button", { name: /AI 导论讲义.md/ }));
+    await user.click(within(comparePanel).getByRole("button", { name: /期末样题.md/ }));
+    await user.click(within(comparePanel).getByRole("button", { name: "生成资料对比" }));
+
+    expect((await within(comparePanel).findAllByText("启发式搜索")).length).toBeGreaterThan(1);
+    expect(comparePanel).toHaveTextContent("反向传播");
+    expect(comparePanel).toHaveTextContent("监督学习");
+    expect(comparePanel).toHaveTextContent("AI 伦理");
+    expect(comparePanel).toHaveTextContent("启发式搜索使用启发函数。");
+    expect(screen.getByRole("button", { name: "上传资料" })).toBeEnabled();
+    expect(calls).toContainEqual({
+      method: "post",
+      url: MATERIAL_ENDPOINTS.compare,
+      payload: { course_id: 101, material_ids: [301, 302] }
+    });
+  });
+
+  it("keeps material comparison errors inside the comparison panel", async () => {
+    const user = userEvent.setup();
+    const materials: MaterialListItem[] = [
+      {
+        id: "301",
+        title: "AI 导论讲义.md",
+        type: "MD",
+        detail: "已解析",
+        modified: "今天",
+        size: "12 KB",
+        category: "document",
+        extension: "MD",
+        parse_status: "completed",
+        course_ids: ["101"]
+      },
+      {
+        id: "302",
+        title: "期末样题.md",
+        type: "MD",
+        detail: "已解析",
+        modified: "今天",
+        size: "8 KB",
+        category: "document",
+        extension: "MD",
+        parse_status: "completed",
+        course_ids: ["101"]
+      }
+    ];
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+
+      if (url === MATERIAL_ENDPOINTS.list && method === "get") {
+        return { data: { data: materials, trace_id: "trace_compare_error_materials" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+
+      if (url === COURSE_ENDPOINTS.list && method === "get") {
+        return {
+          data: {
+            data: [
+              {
+                id: "101",
+                title: "人工智能导论",
+                description: "由资料生成",
+                subject: "人工智能",
+                source_type: "uploaded",
+                status: "ready",
+                progress_percent: 0,
+                material_count: 2,
+                knowledge_point_count: 3,
+                chunk_count: 4
+              }
+            ],
+            trace_id: "trace_compare_error_courses"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === MATERIAL_ENDPOINTS.compare && method === "post") {
+        throw new Error("compare failed");
+      }
+
+      return { data: { data: {}, trace_id: "trace_default" }, status: 200, statusText: "OK", headers: {}, config };
+    };
+
+    renderPage(<LibraryPage />);
+
+    const comparePanel = await screen.findByRole("region", { name: "资料对比" });
+    await user.click(await within(comparePanel).findByRole("button", { name: /AI 导论讲义.md/ }));
+    await user.click(await within(comparePanel).findByRole("button", { name: /期末样题.md/ }));
+    await user.click(within(comparePanel).getByRole("button", { name: "生成资料对比" }));
+
+    expect(await within(comparePanel).findByRole("alert")).toHaveTextContent("资料对比失败，请稍后重试。");
+    expect(screen.getByRole("button", { name: "上传资料" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "生成课程" })).toBeEnabled();
+  });
+
   it("shows local library feedback when upload fails", async () => {
     const user = userEvent.setup();
 

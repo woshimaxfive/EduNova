@@ -7,7 +7,7 @@ import { COURSE_ENDPOINTS, getCourseLearningState, getMasteryMap, updateCourseWe
 import { DASHBOARD_ENDPOINTS } from "./dashboard";
 import { DEMO_ENDPOINTS } from "./demo";
 import { EXAM_SPRINT_ENDPOINTS, generateExamSprintPlan, getExamSprintPlan } from "./examSprint";
-import { MATERIAL_ENDPOINTS } from "./materials";
+import { compareMaterials, MATERIAL_ENDPOINTS } from "./materials";
 import { generatePath, getCurrentPath, PATH_ENDPOINTS, updatePathTask } from "./paths";
 import { createPracticeSession, getPracticeSession, PRACTICE_ENDPOINTS, submitPracticeAnswers } from "./practice";
 import { RAG_ENDPOINTS, searchRag } from "./rag";
@@ -53,6 +53,7 @@ describe("frontend API contracts", () => {
       "/courses/7/weakness-review-items/701/confirm"
     );
     expect(MATERIAL_ENDPOINTS.upload).toBe("/materials/upload");
+    expect(MATERIAL_ENDPOINTS.compare).toBe("/materials/compare");
     expect(MATERIAL_ENDPOINTS.progress(3)).toBe("/materials/3/progress");
     expect(RAG_ENDPOINTS.search).toBe("/rag/search");
     expect(RESOURCE_ENDPOINTS.generate).toBe("/resources/generate");
@@ -175,6 +176,83 @@ describe("frontend API contracts", () => {
         }
       ]);
       expect(response.data.results).toEqual([]);
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("uses typed material comparison API through the shared client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
+      });
+
+      return {
+        data: {
+          data: {
+            course_id: "7",
+            material_ids: ["301", "302"],
+            summary: {
+              compared_material_count: 2,
+              comparable_material_count: 2,
+              matched_concept_count: 3,
+              citation_count: 2,
+              message: "已基于课程知识切片完成资料对比。"
+            },
+            repeated_concepts: [
+              {
+                title: "启发式搜索",
+                material_ids: ["301", "302"],
+                source_titles: ["AI 导论讲义.md", "期末样题.md"],
+                reason: "多份资料重复出现。",
+                confidence: "high",
+                support_count: 2,
+                knowledge_point_id: "401"
+              }
+            ],
+            exam_likely_points: [],
+            materials_only_points: [],
+            questions_only_points: [],
+            missing_review_points: [],
+            priority_order: [],
+            citations: [
+              {
+                id: "m301-1",
+                material_id: "301",
+                source_title: "AI 导论讲义.md",
+                section_title: "启发式搜索",
+                page_number: null,
+                excerpt: "启发式搜索使用启发函数。",
+                confidence: "high"
+              }
+            ]
+          },
+          trace_id: "trace_compare_contract"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const response = await compareMaterials({ course_id: 7, material_ids: [301, 302] });
+
+      expect(calls).toEqual([
+        {
+          url: MATERIAL_ENDPOINTS.compare,
+          method: "post",
+          data: { course_id: 7, material_ids: [301, 302] }
+        }
+      ]);
+      expect(response.data.repeated_concepts[0].title).toBe("启发式搜索");
+      expect(response.data.citations[0].source_title).toBe("AI 导论讲义.md");
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

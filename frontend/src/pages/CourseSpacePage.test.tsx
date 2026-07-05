@@ -27,6 +27,7 @@ type CoursePageOptions = {
   historyDetail?: TutorSessionDetail;
   learningState?: unknown;
   failLearningState?: boolean;
+  failWeaknessAction?: boolean;
   failSend?: boolean;
   streamEvents?: Array<{ event: string; data: unknown }>;
   controlledStream?: boolean;
@@ -65,8 +66,10 @@ const emptyLearningState = {
   weakness_summary: {
     candidate_event_count: 0,
     pending_count: 0,
+    confirmed_count: 0,
     reviewing_count: 0,
     completed_count: 0,
+    dismissed_count: 0,
     latest_evidence_at: null
   },
   weakness_review_queue: [],
@@ -91,8 +94,10 @@ const learningStateWithWeakness = {
   weakness_summary: {
     candidate_event_count: 2,
     pending_count: 1,
+    confirmed_count: 0,
     reviewing_count: 0,
     completed_count: 0,
+    dismissed_count: 0,
     latest_evidence_at: "2026-07-05T08:30:00Z"
   },
   weakness_review_queue: [
@@ -114,6 +119,76 @@ const learningStateWithWeakness = {
     latest_source_title: "人工智能导论讲义.md",
     latest_section_title: "启发式搜索"
   }
+};
+
+const learningStateWithReviewFlow = {
+  ...emptyLearningState,
+  weakness_summary: {
+    candidate_event_count: 5,
+    pending_count: 1,
+    confirmed_count: 1,
+    reviewing_count: 1,
+    completed_count: 1,
+    dismissed_count: 1,
+    latest_evidence_at: "2026-07-05T08:30:00Z"
+  },
+  weakness_review_queue: [
+    {
+      id: "701",
+      title: "启发式搜索",
+      status: "pending",
+      source_type: "course_question",
+      course_id: "808",
+      knowledge_point_id: "401",
+      next_review_at: null,
+      created_at: "2026-07-05T08:30:00Z",
+      updated_at: "2026-07-05T08:30:00Z"
+    },
+    {
+      id: "702",
+      title: "反向传播",
+      status: "confirmed",
+      source_type: "course_question",
+      course_id: "808",
+      knowledge_point_id: "402",
+      next_review_at: null,
+      created_at: "2026-07-05T08:31:00Z",
+      updated_at: "2026-07-05T08:31:00Z"
+    },
+    {
+      id: "703",
+      title: "A* 搜索",
+      status: "reviewing",
+      source_type: "course_question",
+      course_id: "808",
+      knowledge_point_id: "403",
+      next_review_at: null,
+      created_at: "2026-07-05T08:32:00Z",
+      updated_at: "2026-07-05T08:32:00Z"
+    },
+    {
+      id: "704",
+      title: "搜索复杂度",
+      status: "completed",
+      source_type: "course_question",
+      course_id: "808",
+      knowledge_point_id: "404",
+      next_review_at: null,
+      created_at: "2026-07-05T08:33:00Z",
+      updated_at: "2026-07-05T08:33:00Z"
+    },
+    {
+      id: "705",
+      title: "已忽略弱点",
+      status: "dismissed",
+      source_type: "course_question",
+      course_id: "808",
+      knowledge_point_id: "405",
+      next_review_at: null,
+      created_at: "2026-07-05T08:34:00Z",
+      updated_at: "2026-07-05T08:34:00Z"
+    }
+  ]
 };
 
 function parsePayload(data: unknown) {
@@ -232,6 +307,33 @@ function renderCoursePage(options: CoursePageOptions = {}) {
         data: {
           data: options.learningState ?? emptyLearningState,
           trace_id: "trace_learning_state"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (url.includes("/weakness-review-items/") && method === "post") {
+      if (options.failWeaknessAction) {
+        throw new Error("弱点状态更新失败。");
+      }
+
+      return {
+        data: {
+          data: {
+            id: "701",
+            title: "启发式搜索",
+            status: "confirmed",
+            source_type: "course_question",
+            course_id: "808",
+            knowledge_point_id: "401",
+            next_review_at: null,
+            created_at: "2026-07-05T08:30:00Z",
+            updated_at: "2026-07-05T08:40:00Z"
+          },
+          trace_id: "trace_weakness_action"
         },
         status: 200,
         statusText: "OK",
@@ -500,6 +602,67 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(within(weaknessRegion).getByText("启发式搜索")).toBeInTheDocument();
     expect(within(weaknessRegion).getAllByText("待确认").length).toBeGreaterThanOrEqual(2);
     expect(within(weaknessRegion).queryByText("学习路径尚未生成")).not.toBeInTheDocument();
+  });
+
+  it("renders actionable course weakness review states", async () => {
+    renderCoursePage({ learningState: learningStateWithReviewFlow });
+
+    const weaknessRegion = await screen.findByRole("region", { name: "待复习弱点" });
+    await within(weaknessRegion).findByText("启发式搜索");
+
+    expect(weaknessRegion).toHaveTextContent(/待确认\s*1/);
+    expect(weaknessRegion).toHaveTextContent(/待复习\s*1/);
+    expect(weaknessRegion).toHaveTextContent(/复习中\s*1/);
+    expect(weaknessRegion).toHaveTextContent(/已完成\s*1/);
+    expect(within(weaknessRegion).getByRole("button", { name: "确认 启发式搜索" })).toBeInTheDocument();
+    expect(within(weaknessRegion).getByRole("button", { name: "开始 启发式搜索" })).toBeInTheDocument();
+    expect(within(weaknessRegion).getByRole("button", { name: "忽略 启发式搜索" })).toBeInTheDocument();
+    expect(within(weaknessRegion).getByRole("button", { name: "开始 反向传播" })).toBeInTheDocument();
+    expect(within(weaknessRegion).getByRole("button", { name: "完成 A* 搜索" })).toBeInTheDocument();
+    expect(within(weaknessRegion).getByRole("button", { name: "移除 搜索复杂度" })).toBeInTheDocument();
+    expect(within(weaknessRegion).queryByText("已忽略弱点")).not.toBeInTheDocument();
+  });
+
+  it("updates a weakness review item and refreshes course learning state", async () => {
+    const user = userEvent.setup();
+    const { calls } = renderCoursePage({ learningState: learningStateWithReviewFlow });
+
+    const weaknessRegion = await screen.findByRole("region", { name: "待复习弱点" });
+    await user.click(await within(weaknessRegion).findByRole("button", { name: "确认 启发式搜索" }));
+
+    await waitFor(() => {
+      expect(calls).toContainEqual(
+        expect.objectContaining({
+          method: "post",
+          url: COURSE_ENDPOINTS.weaknessReviewAction(808, "701", "confirm")
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(calls.filter((call) => call.url === COURSE_ENDPOINTS.learningState(808))).toHaveLength(2);
+    });
+  });
+
+  it("shows local feedback when weakness review item update fails without blocking course questions", async () => {
+    const user = userEvent.setup();
+    const { fetchCalls } = renderCoursePage({ learningState: learningStateWithReviewFlow, failWeaknessAction: true });
+
+    const weaknessRegion = await screen.findByRole("region", { name: "待复习弱点" });
+    await user.click(await within(weaknessRegion).findByRole("button", { name: "确认 启发式搜索" }));
+
+    expect(await within(weaknessRegion).findByText("弱点状态更新失败，请稍后重试。")).toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "课程问题输入" }), "为什么启发式搜索这么难？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    await waitFor(() => {
+      expect(fetchCalls).toContainEqual(
+        expect.objectContaining({
+          method: "POST",
+          url: `/api/v1${TUTOR_ENDPOINTS.stream("901")}`
+        })
+      );
+    });
   });
 
   it("shows local feedback when course learning state fails to load", async () => {

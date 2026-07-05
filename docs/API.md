@@ -494,7 +494,7 @@ Authorization: Bearer <token>
 
 ### GET `/courses/{course_id}/learning-state`
 
-状态：Phase 7.3 已实现第一刀。
+状态：Phase 7.4 已实现。Phase 7.3 完成课程问答候选事件入队，Phase 7.4 增加队列项确认、开始、完成和忽略操作。
 
 用途：聚合某一门课程下的学习状态，并把课程问答产生的弱点候选画像事件确定性同步为待确认复习项。当前只实现课程级弱点追踪第一刀，不生成学习路径、资源、练习评估或报告。
 
@@ -505,14 +505,15 @@ Authorization: Bearer <token>
 - 请求时执行一次确定性同步：只处理当前课程下 `dimension="weak_points"`、`evidence_json.source_type="course_question"` 的画像候选事件。
 - 有 `knowledge_point_id` 时按知识点去重；无知识点时按安全标题去重，标题优先使用 `section_title`、`source_title`，否则使用“课程问答薄弱点”。
 - 新入队项写入 `weakness_review_queue`，状态为 `pending`，产品语义是“待确认/待复习”，不是系统已经完成正式诊断。
-- 已存在同课程同知识点或同标题的 `pending/reviewing/completed` 项时不重复创建。
+- 已存在同课程同知识点或同标题的 `pending/confirmed/reviewing/completed/dismissed` 项时不重复创建，避免已忽略项被候选事件重新入队。
+- `weakness_review_queue` 主列表只返回非 `dismissed` 项；`dismissed` 仍参与统计和去重。
 - 队列和响应不包含完整用户问题、系统提示词、模型输入或资料原文。
 
 响应字段：
 
 - `course_id`。
 - `profile_overlay`：用户级画像中的 `learning_goal`、`knowledge_foundation`、`weak_points`。
-- `weakness_summary`：`candidate_event_count`、`pending_count`、`reviewing_count`、`completed_count`、`latest_evidence_at`。
+- `weakness_summary`：`candidate_event_count`、`pending_count`、`confirmed_count`、`reviewing_count`、`completed_count`、`dismissed_count`、`latest_evidence_at`。
 - `weakness_review_queue`：复习项数组，包含 `id`、`title`、`status`、`source_type`、`course_id`、`knowledge_point_id`、`next_review_at`、`created_at`、`updated_at`。
 - `path_summary`：空摘要，当前返回学习路径尚未生成。
 - `mastery_summary`：空摘要，当前返回掌握度尚未接入。
@@ -1151,21 +1152,57 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 
 ## 15. Weakness Review 接口
 
-状态：独立弱点复习操作接口仍为后续预留。Phase 7.3 已通过 `GET /courses/{course_id}/learning-state` 实现从课程问答画像候选事件到 `weakness_review_queue` 的待确认入队第一刀，但尚未提供开始、完成、删除或用户确认接口。
+状态：Phase 7.4 已实现课程绑定的弱点复习队列操作接口。当前接口只处理确认、开始、完成和忽略，不生成学习路径、资源、练习或报告。
 
-### GET `/weakness-review-queue`
+### POST `/courses/{course_id}/weakness-review-items/{item_id}/confirm`
 
-用途：查看薄弱点复习队列。
+用途：确认某个 `pending` 待确认项是当前课程的薄弱点，状态变为 `confirmed`。
 
 规则：
 
-- 后续实现必须按当前用户隔离。
-- 复习项必须绑定 `course_id`，不生成跨课程混杂队列。
-- 来源可以来自课程问答候选事件、练习错题和用户确认，但必须经过去重或合并后进入队列。
+- 必须携带 JWT。
+- 只能操作当前用户自己的课程和该课程下的队列项。
+- 无权限、课程不存在、跨课程队列项或其他用户队列项统一返回 404。
+- 非法状态流转返回 400。
 
-### POST `/weakness-review-queue/{item_id}/start`
+### POST `/courses/{course_id}/weakness-review-items/{item_id}/start`
 
-用途：开始某个薄弱点复习任务。
+用途：开始复习某个弱点项，状态变为 `reviewing`。允许从 `pending` 或 `confirmed` 进入。
+
+### POST `/courses/{course_id}/weakness-review-items/{item_id}/complete`
+
+用途：完成本轮复习，状态变为 `completed`。允许从 `pending`、`confirmed` 或 `reviewing` 进入。
+
+### POST `/courses/{course_id}/weakness-review-items/{item_id}/dismiss`
+
+用途：忽略或移除某个弱点项，状态变为 `dismissed`。这是软忽略，不物理删除；重复忽略同一项幂等返回当前项。
+
+响应：
+
+```json
+{
+  "data": {
+    "id": "701",
+    "title": "启发式搜索",
+    "status": "confirmed",
+    "source_type": "course_question",
+    "course_id": "7",
+    "knowledge_point_id": "401",
+    "next_review_at": null,
+    "created_at": "2026-07-05T08:30:00Z",
+    "updated_at": "2026-07-05T08:40:00Z"
+  },
+  "trace_id": "trace_20260705_074"
+}
+```
+
+状态流转：
+
+- `pending -> confirmed | reviewing | completed | dismissed`
+- `confirmed -> reviewing | completed | dismissed`
+- `reviewing -> completed | dismissed`
+- `completed -> dismissed`
+- `dismissed` 只允许重复 `dismiss`，不允许再开始或完成。
 
 ## 16. Exam Sprint 接口
 

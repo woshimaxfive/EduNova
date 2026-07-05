@@ -458,7 +458,9 @@ Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状�
 
 Phase 7.2 明确本表承载课程级可执行复习任务。每个复习项必须绑定 `course_id`，候选来源可以来自画像事件、课程问答或练习评估，但进入队列前必须去重或合并，避免同一知识点反复生成多条任务。
 
-Phase 7.3 复用本表，不新增迁移。虽然历史模型允许 `course_id` 为空，本阶段服务层强制课程问答候选事件入队时写入非空 `course_id`；`source_type="course_question"`，`status="pending"` 表示待确认/待复习，不表示系统已经完成正式诊断。当前不写推荐资源、不设置下次复习时间，也不提供状态流转操作接口。
+Phase 7.3 复用本表，不新增迁移。虽然历史模型允许 `course_id` 为空，本阶段服务层强制课程问答候选事件入队时写入非空 `course_id`；`source_type="course_question"`，`status="pending"` 表示待确认/待复习，不表示系统已经完成正式诊断。
+
+Phase 7.4 继续不新增迁移，复用 `status` 字段承载队列状态流转：`pending` 表示待确认，`confirmed` 表示学生已确认待复习，`reviewing` 表示复习中，`completed` 表示已完成本轮复习，`dismissed` 表示软忽略/移出主列表。`dismissed` 不物理删除，仍参与课程内去重，避免同一课程问答候选事件在下次 `learning-state` 同步时重新入队。当前仍不写推荐资源、不设置下次复习时间。
 
 字段：
 
@@ -470,7 +472,7 @@ Phase 7.3 复用本表，不新增迁移。虽然历史模型允许 `course_id` 
 | `knowledge_point_id` | bigint | 薄弱知识点 |
 | `title` | varchar | 复习项标题 |
 | `source_type` | varchar | 来源类型 |
-| `status` | varchar | 待复习、进行中、完成 |
+| `status` | varchar | `pending`、`confirmed`、`reviewing`、`completed`、`dismissed` |
 | `recommended_resource_ids` | jsonb | 推荐资源 |
 | `next_review_at` | timestamptz | 下次复习时间 |
 | `created_at` | timestamptz | 创建时间 |
@@ -707,6 +709,7 @@ Demo 数据要求：
 14. Phase 6.4 后，知识切片向量必须保持 1536 维合同，外部 embedding 失败不得阻断建课或问答，fallback 来源必须写入 metadata。
 15. Phase 7.2 后，用户级画像只保留一份，课程级学习状态通过课程相关事件、弱点队列、路径和后续聚合接口表达，不新增通用 `learning_events` 表。
 16. Phase 7.3 后，课程问答弱点候选事件可通过 `/courses/{course_id}/learning-state` 同步为当前课程 `weakness_review_queue` 的 `pending` 项，服务层强制绑定 `course_id`。
+17. Phase 7.4 后，弱点复习项通过课程绑定接口进行确认、开始、完成和软忽略；`dismissed` 项不返回主列表，但必须继续参与去重。
 
 当前已验证：
 
@@ -726,3 +729,4 @@ Demo 数据要求：
 - Phase 7.1 已验证 `student_profiles` 和 `profile_events` 支持当前用户画像读取、画像对话更新、事件倒序、多用户隔离，以及课程问答弱点候选事件的隐私安全证据写入。
 - Phase 7.2 已完成用户级画像与课程级学习状态的数据库边界设计；本阶段不新增迁移，不新增 `learning_events`。
 - Phase 7.3 已验证课程学习状态服务能读取当前课程弱点候选事件、按知识点或标题去重生成 `pending` 复习项，并保持多用户、跨课程和隐私隔离。
+- Phase 7.4 已验证弱点复习项状态流转、多用户和跨课程隔离、非法流转拦截、`dismissed` 防重新入队以及主列表过滤。

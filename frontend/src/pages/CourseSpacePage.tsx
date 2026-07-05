@@ -10,11 +10,19 @@ import {
   Target
 } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type KeyboardEvent, useMemo, useState } from "react";
+import { type KeyboardEvent, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
-import { getCourse, getCourseLearningState, getCourseOverview, getKnowledgePoints } from "../api/courses";
+import {
+  getCourse,
+  getCourseLearningState,
+  getCourseOverview,
+  getKnowledgePoints,
+  updateCourseWeaknessReviewItem,
+  type CourseWeaknessReviewAction,
+  type CourseWeaknessReviewItem
+} from "../api/courses";
 import { type RagSearchResultItem } from "../api/rag";
 import {
   createTutorSession,
@@ -65,13 +73,46 @@ function embeddingStatusLabel(status?: string | null) {
 }
 
 function weaknessStatusLabel(status: string) {
+  if (status === "confirmed") {
+    return "待复习";
+  }
   if (status === "reviewing") {
     return "复习中";
   }
   if (status === "completed") {
-    return "已复习";
+    return "已完成";
+  }
+  if (status === "dismissed") {
+    return "已忽略";
   }
   return "待确认";
+}
+
+function weaknessActionsForItem(item: CourseWeaknessReviewItem): Array<{ action: CourseWeaknessReviewAction; label: string; icon: typeof ListChecks }> {
+  if (item.status === "pending") {
+    return [
+      { action: "confirm", label: "确认", icon: ListChecks },
+      { action: "start", label: "开始", icon: ArrowRight },
+      { action: "dismiss", label: "忽略", icon: ArrowLeft }
+    ];
+  }
+  if (item.status === "confirmed") {
+    return [
+      { action: "start", label: "开始", icon: ArrowRight },
+      { action: "complete", label: "完成", icon: Target },
+      { action: "dismiss", label: "忽略", icon: ArrowLeft }
+    ];
+  }
+  if (item.status === "reviewing") {
+    return [
+      { action: "complete", label: "完成", icon: Target },
+      { action: "dismiss", label: "忽略", icon: ArrowLeft }
+    ];
+  }
+  if (item.status === "completed") {
+    return [{ action: "dismiss", label: "移除", icon: ArrowLeft }];
+  }
+  return [];
 }
 
 type AnswerPanelKind = "citations" | "resources" | "path" | "thinking";
@@ -159,6 +200,9 @@ export function CourseSpacePage() {
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [isSearchingCourse, setIsSearchingCourse] = useState(false);
   const [courseFeedback, setCourseFeedback] = useState<string | null>(null);
+  const [weaknessFeedback, setWeaknessFeedback] = useState<string | null>(null);
+  const [updatingWeaknessItemId, setUpdatingWeaknessItemId] = useState<string | null>(null);
+  const optimisticMessageSequence = useRef(0);
   const apiCourse = courseQuery.data?.data;
   const apiKnowledgePoints = useMemo(
     () => knowledgePointsQuery.data?.data ?? [],
@@ -167,9 +211,7 @@ export function CourseSpacePage() {
   const overviewMaterials = courseOverviewQuery.data?.data.materials ?? [];
   const learningState = learningStateQuery.data?.data;
   const weaknessSummary = learningState?.weakness_summary;
-  const pendingWeaknessItems = (learningState?.weakness_review_queue ?? []).filter(
-    (item) => item.status === "pending"
-  );
+  const weaknessItems = (learningState?.weakness_review_queue ?? []).filter((item) => item.status !== "dismissed");
   const courseSessions = Array.isArray(courseSessionsQuery.data?.data) ? courseSessionsQuery.data.data : [];
   const latestCourseSessionId = courseSessions[0]?.id ?? null;
   const selectedCourseSessionId = hasRealCourseId ? (activeCourseSessionId ?? latestCourseSessionId) : null;
@@ -245,6 +287,24 @@ export function CourseSpacePage() {
     setStudyTarget({ type: "citation", chunkId: citation.chunk_id });
   }
 
+  async function updateWeaknessReviewItem(item: CourseWeaknessReviewItem, action: CourseWeaknessReviewAction) {
+    if (!hasRealCourseId || updatingWeaknessItemId !== null) {
+      return;
+    }
+
+    setUpdatingWeaknessItemId(item.id);
+    setWeaknessFeedback(null);
+
+    try {
+      await updateCourseWeaknessReviewItem(numericCourseId, item.id, action);
+      void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
+    } catch {
+      setWeaknessFeedback("弱点状态更新失败，请稍后重试。");
+    } finally {
+      setUpdatingWeaknessItemId(null);
+    }
+  }
+
   async function sendCourseQuestion() {
     const question = coursePrompt.trim();
 
@@ -281,11 +341,12 @@ export function CourseSpacePage() {
 
       setActiveCourseSessionId(sessionId);
       setStreamingSessionId(sessionId);
-      const timestamp = Date.now();
-      const assistantMessageId = `course-assistant-stream-${timestamp}`;
+      optimisticMessageSequence.current += 1;
+      const optimisticId = optimisticMessageSequence.current;
+      const assistantMessageId = `course-assistant-stream-${optimisticId}`;
       const optimisticMessages: CourseMessage[] = [
         ...previousMessages,
-        { id: `course-user-stream-${timestamp}`, role: "user", content: question },
+        { id: `course-user-stream-${optimisticId}`, role: "user", content: question },
         { id: assistantMessageId, role: "assistant", content: "", citations: [] }
       ];
       setCourseMessages(optimisticMessages);
@@ -420,6 +481,18 @@ export function CourseSpacePage() {
                         <dd>{weaknessSummary?.pending_count ?? 0}</dd>
                       </div>
                       <div>
+                        <dt>待复习</dt>
+                        <dd>{weaknessSummary?.confirmed_count ?? 0}</dd>
+                      </div>
+                      <div>
+                        <dt>复习中</dt>
+                        <dd>{weaknessSummary?.reviewing_count ?? 0}</dd>
+                      </div>
+                      <div>
+                        <dt>已完成</dt>
+                        <dd>{weaknessSummary?.completed_count ?? 0}</dd>
+                      </div>
+                      <div>
                         <dt>候选证据</dt>
                         <dd>{weaknessSummary?.candidate_event_count ?? 0}</dd>
                       </div>
@@ -430,12 +503,38 @@ export function CourseSpacePage() {
                     tone="warning"
                     className="course-inline-feedback"
                   />
-                  {pendingWeaknessItems.length > 0 ? (
+                  <InlineFeedback
+                    message={weaknessFeedback}
+                    tone="warning"
+                    className="course-inline-feedback"
+                  />
+                  {weaknessItems.length > 0 ? (
                     <ul className="course-weakness-list">
-                      {pendingWeaknessItems.map((item) => (
+                      {weaknessItems.map((item) => (
                         <li key={item.id}>
-                          <span>{item.title}</span>
-                          <em>{weaknessStatusLabel(item.status)}</em>
+                          <div className="course-weakness-main">
+                            <span>{item.title}</span>
+                            <em>{weaknessStatusLabel(item.status)}</em>
+                          </div>
+                          <div className="course-weakness-actions" aria-label={`${item.title} 操作`}>
+                            {weaknessActionsForItem(item).map((action) => {
+                              const Icon = action.icon;
+                              const isUpdating = updatingWeaknessItemId === item.id;
+
+                              return (
+                                <button
+                                  key={action.action}
+                                  type="button"
+                                  aria-label={`${action.label} ${item.title}`}
+                                  disabled={updatingWeaknessItemId !== null}
+                                  onClick={() => void updateWeaknessReviewItem(item, action.action)}
+                                >
+                                  <Icon size={14} weight="bold" aria-hidden="true" />
+                                  <span>{isUpdating ? "更新中" : action.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </li>
                       ))}
                     </ul>

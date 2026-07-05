@@ -31,6 +31,7 @@ from backend.app.schemas.courses import (
     CoursePlaceholderSummary,
     CourseProfileOverlay,
     CourseSummary,
+    CourseWeaknessReviewItem,
     CourseWeaknessSummary,
     CreateCourseFromMaterialsResult,
     iso_timestamp,
@@ -44,6 +45,10 @@ class CourseGenerationError(Exception):
 
 
 class CourseNotFoundError(Exception):
+    pass
+
+
+class CourseWeaknessStateTransitionError(Exception):
     pass
 
 
@@ -92,6 +97,8 @@ class CourseRepository(Protocol):
     def list_weakness_candidate_events(self, user_id: int, course_id: int) -> list[ProfileEvent]: ...
 
     def list_weakness_review_items(self, user_id: int, course_id: int) -> list[WeaknessReviewItem]: ...
+
+    def get_weakness_review_item(self, user_id: int, course_id: int, item_id: int) -> WeaknessReviewItem | None: ...
 
     def add_weakness_review_item(self, item: WeaknessReviewItem) -> None: ...
 
@@ -210,6 +217,15 @@ class SqlAlchemyCourseRepository:
             )
         )
 
+    def get_weakness_review_item(self, user_id: int, course_id: int, item_id: int) -> WeaknessReviewItem | None:
+        return self.db.scalar(
+            select(WeaknessReviewItem).where(
+                WeaknessReviewItem.id == item_id,
+                WeaknessReviewItem.user_id == user_id,
+                WeaknessReviewItem.course_id == course_id,
+            )
+        )
+
     def add_weakness_review_item(self, item: WeaknessReviewItem) -> None:
         self.db.add(item)
         self.db.flush()
@@ -227,6 +243,19 @@ class SqlAlchemyCourseRepository:
 class CourseService:
     text_extensions = {".txt", ".md", ".markdown"}
     chunk_size = 900
+    weakness_action_target_status = {
+        "confirm": "confirmed",
+        "start": "reviewing",
+        "complete": "completed",
+        "dismiss": "dismissed",
+    }
+    weakness_allowed_actions = {
+        "pending": {"confirm", "start", "complete", "dismiss"},
+        "confirmed": {"start", "complete", "dismiss"},
+        "reviewing": {"complete", "dismiss"},
+        "completed": {"dismiss"},
+        "dismissed": {"dismiss"},
+    }
 
     def __init__(self, repository: CourseRepository, embedding_service: CourseEmbeddingService | None = None) -> None:
         self.repository = repository
@@ -342,7 +371,7 @@ class CourseService:
                 weak_points=profile_json["weak_points"],
             ),
             weakness_summary=self._build_weakness_summary(candidate_events, review_items),
-            weakness_review_queue=[weakness_item_to_api(item) for item in review_items],
+            weakness_review_queue=[weakness_item_to_api(item) for item in review_items if item.status != "dismissed"],
             path_summary=CoursePlaceholderSummary(status="not_started", message="学习路径尚未生成。"),
             mastery_summary=CoursePlaceholderSummary(status="not_started", message="掌握度尚未接入。"),
             evidence_summary=CourseEvidenceSummary(
@@ -352,6 +381,40 @@ class CourseService:
                 latest_section_title=latest_candidate.section_title if latest_candidate is not None else None,
             ),
         )
+
+    def update_weakness_review_item(
+        self,
+        user: User,
+        course_id: int,
+        item_id: int,
+        action: str,
+    ) -> CourseWeaknessReviewItem:
+        course = self._require_course(user, course_id)
+        item = self.repository.get_weakness_review_item(user.id, course.id, item_id)
+        if item is None:
+            raise CourseNotFoundError("弱点复习项不存在或无权访问。")
+
+        if action not in self.weakness_action_target_status:
+            raise CourseWeaknessStateTransitionError("不支持的弱点复习操作。")
+
+        allowed_actions = self.weakness_allowed_actions.get(item.status, set())
+        if action not in allowed_actions:
+            raise CourseWeaknessStateTransitionError("当前状态不允许执行这个操作。")
+
+        target_status = self.weakness_action_target_status[action]
+        if item.status == target_status:
+            return weakness_item_to_api(item)
+
+        try:
+            item.status = target_status
+            item.updated_at = datetime.now(UTC)
+            self.repository.commit()
+            self.repository.refresh(item)
+        except Exception:
+            self.repository.rollback()
+            raise
+
+        return weakness_item_to_api(item)
 
     def _sync_weakness_review_queue(self, user: User, course_id: int, candidate_events: list[ProfileEvent]) -> None:
         existing_items = self.repository.list_weakness_review_items(user.id, course_id)
@@ -570,8 +633,10 @@ class CourseService:
         return CourseWeaknessSummary(
             candidate_event_count=len(candidate_events),
             pending_count=sum(1 for item in review_items if item.status == "pending"),
+            confirmed_count=sum(1 for item in review_items if item.status == "confirmed"),
             reviewing_count=sum(1 for item in review_items if item.status == "reviewing"),
             completed_count=sum(1 for item in review_items if item.status == "completed"),
+            dismissed_count=sum(1 for item in review_items if item.status == "dismissed"),
             latest_evidence_at=iso_timestamp(latest_event.created_at) if latest_event is not None else None,
         )
 

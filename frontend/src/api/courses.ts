@@ -8,6 +8,8 @@ export const COURSE_ENDPOINTS = {
   knowledgePoints: (courseId: number) => `/courses/${courseId}/knowledge-points`,
   masteryMap: (courseId: number) => `/courses/${courseId}/mastery-map`,
   learningState: (courseId: number) => `/courses/${courseId}/learning-state`,
+  weaknessReviewAction: (courseId: number, itemId: string, action: CourseWeaknessReviewAction) =>
+    `/courses/${courseId}/weakness-review-items/${itemId}/${action}`,
   fromMaterials: "/courses/from-materials"
 } as const;
 
@@ -59,15 +61,21 @@ export type CourseProfileOverlay = {
 export type CourseWeaknessSummary = {
   candidate_event_count: number;
   pending_count: number;
+  confirmed_count: number;
   reviewing_count: number;
   completed_count: number;
+  dismissed_count: number;
   latest_evidence_at: string | null;
 };
+
+export type CourseWeaknessReviewAction = "confirm" | "start" | "complete" | "dismiss";
+
+export type CourseWeaknessReviewStatus = "pending" | "confirmed" | "reviewing" | "completed" | "dismissed";
 
 export type CourseWeaknessReviewItem = {
   id: string;
   title: string;
-  status: "pending" | "reviewing" | "completed";
+  status: CourseWeaknessReviewStatus;
   source_type: string;
   course_id: string;
   knowledge_point_id: string | null;
@@ -129,6 +137,17 @@ export async function getMasteryMap(courseId: number) {
 
 export async function getCourseLearningState(courseId: number) {
   const response = await apiClient.get<ApiEnvelope<CourseLearningState>>(COURSE_ENDPOINTS.learningState(courseId));
+  return response.data;
+}
+
+export async function updateCourseWeaknessReviewItem(
+  courseId: number,
+  itemId: string,
+  action: CourseWeaknessReviewAction
+) {
+  const response = await apiClient.post<ApiEnvelope<CourseWeaknessReviewItem>>(
+    COURSE_ENDPOINTS.weaknessReviewAction(courseId, itemId, action)
+  );
   return response.data;
 }
 

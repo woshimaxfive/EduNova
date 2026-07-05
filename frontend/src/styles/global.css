@@ -6661,13 +6661,15 @@ a {
 
 .course-weakness-counts {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 0;
+  justify-content: flex-end;
 }
 
 .course-weakness-counts div {
   display: grid;
-  min-width: 74px;
+  min-width: 70px;
   gap: 2px;
   padding: 8px 10px;
   border: 1px solid rgba(16, 24, 32, 0.07);
@@ -6697,9 +6699,9 @@ a {
 }
 
 .course-weakness-list li {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   min-height: 34px;
   padding: 8px 10px;
@@ -6707,6 +6709,17 @@ a {
   background: rgba(15, 143, 122, 0.08);
   color: var(--text-strong);
   font-weight: 780;
+}
+
+.course-weakness-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.course-weakness-main span {
+  overflow-wrap: anywhere;
 }
 
 .course-weakness-list em {
@@ -6717,11 +6730,60 @@ a {
   font-weight: 820;
 }
 
+.course-weakness-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.course-weakness-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid rgba(15, 143, 122, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-strong);
+  font-size: 0.76rem;
+  font-weight: 820;
+  cursor: pointer;
+}
+
+.course-weakness-actions button:hover:not(:disabled) {
+  border-color: rgba(15, 143, 122, 0.32);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.course-weakness-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .course-weakness-empty {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.9rem;
   font-weight: 720;
+}
+
+@media (max-width: 620px) {
+  .course-weakness-header,
+  .course-weakness-list li {
+    grid-template-columns: 1fr;
+  }
+
+  .course-weakness-header {
+    display: grid;
+  }
+
+  .course-weakness-counts,
+  .course-weakness-actions {
+    justify-content: flex-start;
+  }
 }
 
 .course-start-panel {

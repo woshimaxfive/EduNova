@@ -13,6 +13,7 @@ from backend.app.services.courses import (
     CourseGenerationError,
     CourseNotFoundError,
     CourseService,
+    CourseWeaknessStateTransitionError,
     SqlAlchemyCourseRepository,
 )
 from backend.app.services.embeddings import EmbeddingService
@@ -93,6 +94,61 @@ def get_course_learning_state(
         return api_response(service.get_learning_state(current_user, course_id).model_dump())
     except CourseNotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+
+
+def _update_weakness_review_item(
+    course_id: int,
+    item_id: int,
+    action: str,
+    current_user: User,
+    service: CourseService,
+) -> dict:
+    try:
+        return api_response(service.update_weakness_review_item(current_user, course_id, item_id, action).model_dump())
+    except CourseNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+    except CourseWeaknessStateTransitionError as exc:
+        raise ApiError(400, "VALIDATION_ERROR", str(exc)) from exc
+
+
+@router.post("/{course_id}/weakness-review-items/{item_id}/confirm")
+def confirm_weakness_review_item(
+    course_id: int,
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    service: CourseService = Depends(get_course_service),
+) -> dict:
+    return _update_weakness_review_item(course_id, item_id, "confirm", current_user, service)
+
+
+@router.post("/{course_id}/weakness-review-items/{item_id}/start")
+def start_weakness_review_item(
+    course_id: int,
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    service: CourseService = Depends(get_course_service),
+) -> dict:
+    return _update_weakness_review_item(course_id, item_id, "start", current_user, service)
+
+
+@router.post("/{course_id}/weakness-review-items/{item_id}/complete")
+def complete_weakness_review_item(
+    course_id: int,
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    service: CourseService = Depends(get_course_service),
+) -> dict:
+    return _update_weakness_review_item(course_id, item_id, "complete", current_user, service)
+
+
+@router.post("/{course_id}/weakness-review-items/{item_id}/dismiss")
+def dismiss_weakness_review_item(
+    course_id: int,
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    service: CourseService = Depends(get_course_service),
+) -> dict:
+    return _update_weakness_review_item(course_id, item_id, "dismiss", current_user, service)
 
 
 @router.post("/from-materials")

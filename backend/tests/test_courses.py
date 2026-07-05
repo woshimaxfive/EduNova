@@ -146,6 +146,16 @@ class FakeCourseRepository:
         result = [item for item in self.weakness_items if item.user_id == user_id and item.course_id == course_id]
         return sorted(result, key=lambda item: (item.created_at, item.id), reverse=True)
 
+    def get_weakness_review_item(self, user_id: int, course_id: int, item_id: int) -> WeaknessReviewItem | None:
+        return next(
+            (
+                item
+                for item in self.weakness_items
+                if item.user_id == user_id and item.course_id == course_id and item.id == item_id
+            ),
+            None,
+        )
+
     def add_weakness_review_item(self, item: WeaknessReviewItem) -> None:
         item.id = self.next_weakness_item_id
         self.next_weakness_item_id += 1
@@ -305,11 +315,14 @@ def test_course_routes_require_login() -> None:
 
     response = client.get("/api/v1/courses")
     learning_state_response = client.get("/api/v1/courses/101/learning-state")
+    weakness_action_response = client.post("/api/v1/courses/101/weakness-review-items/701/confirm")
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
     assert learning_state_response.status_code == 401
     assert learning_state_response.json()["error"]["code"] == "UNAUTHORIZED"
+    assert weakness_action_response.status_code == 401
+    assert weakness_action_response.json()["error"]["code"] == "UNAUTHORIZED"
 
 
 def test_create_course_from_txt_material_builds_course_graph() -> None:
@@ -550,6 +563,77 @@ def test_learning_state_isolates_users_courses_and_existing_items() -> None:
         make_service(repo).get_learning_state(make_user(1), 303)
 
 
+def test_learning_state_hides_dismissed_items_and_prevents_requeue() -> None:
+    dismissed = make_weakness_item(55, 1, 101, title="启发式搜索", knowledge_point_id=401, status="dismissed")
+    repo = FakeCourseRepository(
+        courses=[make_course()],
+        weakness_items=[dismissed],
+        profile_events=[make_candidate_event(1, 1, 101, knowledge_point_id=401, section_title="启发式搜索")],
+    )
+
+    state = as_dict(make_service(repo).get_learning_state(make_user(), 101))
+
+    assert len(repo.weakness_items) == 1
+    assert state["weakness_review_queue"] == []
+    assert state["weakness_summary"]["pending_count"] == 0
+    assert state["weakness_summary"]["dismissed_count"] == 1
+
+
+def test_update_weakness_review_item_allows_expected_status_transitions() -> None:
+    transitions = [
+        ("pending", "confirm", "confirmed"),
+        ("pending", "start", "reviewing"),
+        ("pending", "complete", "completed"),
+        ("pending", "dismiss", "dismissed"),
+        ("confirmed", "start", "reviewing"),
+        ("confirmed", "complete", "completed"),
+        ("confirmed", "dismiss", "dismissed"),
+        ("reviewing", "complete", "completed"),
+        ("reviewing", "dismiss", "dismissed"),
+        ("completed", "dismiss", "dismissed"),
+        ("dismissed", "dismiss", "dismissed"),
+    ]
+
+    for initial_status, action, expected_status in transitions:
+        item = make_weakness_item(55, 1, 101, status=initial_status)
+        repo = FakeCourseRepository(courses=[make_course()], weakness_items=[item])
+
+        updated = as_dict(make_service(repo).update_weakness_review_item(make_user(), 101, 55, action))
+
+        assert updated["status"] == expected_status
+        assert item.status == expected_status
+
+
+def test_update_weakness_review_item_rejects_invalid_transitions() -> None:
+    from backend.app.services.courses import CourseWeaknessStateTransitionError
+
+    item = make_weakness_item(55, 1, 101, status="dismissed")
+    repo = FakeCourseRepository(courses=[make_course()], weakness_items=[item])
+
+    with pytest.raises(CourseWeaknessStateTransitionError):
+        make_service(repo).update_weakness_review_item(make_user(), 101, 55, "start")
+
+    assert item.status == "dismissed"
+
+
+def test_update_weakness_review_item_scopes_user_course_and_item() -> None:
+    from backend.app.services.courses import CourseNotFoundError
+
+    repo = FakeCourseRepository(
+        courses=[make_course(101, owner_id=1), make_course(202, owner_id=1), make_course(303, owner_id=2)],
+        weakness_items=[
+            make_weakness_item(55, 1, 202, title="其他课程弱点"),
+            make_weakness_item(56, 2, 303, title="其他用户弱点"),
+        ],
+    )
+
+    with pytest.raises(CourseNotFoundError):
+        make_service(repo).update_weakness_review_item(make_user(1), 101, 55, "confirm")
+
+    with pytest.raises(CourseNotFoundError):
+        make_service(repo).update_weakness_review_item(make_user(1), 303, 56, "confirm")
+
+
 def test_learning_state_response_does_not_expose_private_prompt_or_source_text() -> None:
     event = make_candidate_event(1, 1, 101, section_title=None, source_title="神经网络讲义.md")
     event.evidence_json["raw_question"] = "为什么反向传播这么难？这是完整用户问题"
@@ -620,3 +704,34 @@ def test_learning_state_route_returns_envelope_and_scopes_course() -> None:
     assert response.json()["data"]["course_id"] == "101"
     assert response.json()["data"]["weakness_summary"]["pending_count"] == 1
     assert missing_response.status_code == 404
+
+
+def test_weakness_review_action_route_updates_item_and_handles_errors() -> None:
+    repo = FakeCourseRepository(
+        courses=[make_course(101, owner_id=1), make_course(202, owner_id=1)],
+        weakness_items=[
+            make_weakness_item(55, 1, 101, status="pending"),
+            make_weakness_item(56, 1, 202, title="其他课程弱点", status="pending"),
+            make_weakness_item(57, 1, 101, title="已忽略弱点", status="dismissed"),
+        ],
+    )
+    user = make_user()
+    settings = Settings(_env_file=None, jwt_secret="courses-test-secret-with-32-bytes", jwt_expire_minutes=30)
+    app = create_app()
+    app.dependency_overrides[get_auth_service] = lambda: AuthService(
+        repository=TokenAuthRepository(user),
+        settings=settings,
+    )
+    app.dependency_overrides[get_course_service] = lambda: CourseService(repository=repo)
+    client = TestClient(app)
+    token = create_access_token(str(user.id), settings=settings)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    confirmed_response = client.post("/api/v1/courses/101/weakness-review-items/55/confirm", headers=headers)
+    cross_course_response = client.post("/api/v1/courses/101/weakness-review-items/56/confirm", headers=headers)
+    invalid_response = client.post("/api/v1/courses/101/weakness-review-items/57/start", headers=headers)
+
+    assert confirmed_response.status_code == 200
+    assert confirmed_response.json()["data"]["status"] == "confirmed"
+    assert cross_course_response.status_code == 404
+    assert invalid_response.status_code == 400

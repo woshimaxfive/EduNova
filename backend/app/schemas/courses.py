@@ -62,8 +62,10 @@ class CourseProfileOverlay(BaseModel):
 class CourseWeaknessSummary(BaseModel):
     candidate_event_count: int
     pending_count: int
+    confirmed_count: int
     reviewing_count: int
     completed_count: int
+    dismissed_count: int
     latest_evidence_at: str | None
 
 

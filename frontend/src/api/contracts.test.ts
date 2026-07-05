@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { AGENT_ENDPOINTS } from "./agents";
 import { AUTH_ENDPOINTS, login } from "./auth";
 import { apiClient } from "./client";
-import { COURSE_ENDPOINTS, getCourseLearningState } from "./courses";
+import { COURSE_ENDPOINTS, getCourseLearningState, updateCourseWeaknessReviewItem } from "./courses";
 import { DASHBOARD_ENDPOINTS } from "./dashboard";
 import { DEMO_ENDPOINTS } from "./demo";
 import { MATERIAL_ENDPOINTS } from "./materials";
@@ -42,6 +42,9 @@ describe("frontend API contracts", () => {
     expect(COURSE_ENDPOINTS.fromMaterials).toBe("/courses/from-materials");
     expect(COURSE_ENDPOINTS.masteryMap(7)).toBe("/courses/7/mastery-map");
     expect(COURSE_ENDPOINTS.learningState(7)).toBe("/courses/7/learning-state");
+    expect(COURSE_ENDPOINTS.weaknessReviewAction(7, "701", "confirm")).toBe(
+      "/courses/7/weakness-review-items/701/confirm"
+    );
     expect(MATERIAL_ENDPOINTS.upload).toBe("/materials/upload");
     expect(MATERIAL_ENDPOINTS.progress(3)).toBe("/materials/3/progress");
     expect(RAG_ENDPOINTS.search).toBe("/rag/search");
@@ -322,8 +325,10 @@ describe("frontend API contracts", () => {
             weakness_summary: {
               candidate_event_count: 1,
               pending_count: 1,
+              confirmed_count: 0,
               reviewing_count: 0,
               completed_count: 0,
+              dismissed_count: 0,
               latest_evidence_at: "2026-07-05T08:30:00Z"
             },
             weakness_review_queue: [
@@ -369,6 +374,53 @@ describe("frontend API contracts", () => {
       expect(calls).toEqual([{ url: COURSE_ENDPOINTS.learningState(7), method: "get" }]);
       expect(response.data.weakness_summary.pending_count).toBe(1);
       expect(response.data.weakness_review_queue[0].title).toBe("启发式搜索");
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("updates course weakness review items through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method
+      });
+
+      return {
+        data: {
+          data: {
+            id: "701",
+            title: "启发式搜索",
+            status: "confirmed",
+            source_type: "course_question",
+            course_id: "7",
+            knowledge_point_id: "401",
+            next_review_at: null,
+            created_at: "2026-07-05T08:30:00Z",
+            updated_at: "2026-07-05T08:40:00Z"
+          },
+          trace_id: "trace_weakness_action"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const response = await updateCourseWeaknessReviewItem(7, "701", "confirm");
+
+      expect(calls).toEqual([
+        {
+          url: COURSE_ENDPOINTS.weaknessReviewAction(7, "701", "confirm"),
+          method: "post"
+        }
+      ]);
+      expect(response.data.status).toBe("confirmed");
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

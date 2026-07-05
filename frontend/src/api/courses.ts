@@ -72,6 +72,12 @@ export type CourseWeaknessReviewAction = "confirm" | "start" | "complete" | "dis
 
 export type CourseWeaknessReviewStatus = "pending" | "confirmed" | "reviewing" | "completed" | "dismissed";
 
+export type CourseResourceBrief = {
+  id: string;
+  title: string;
+  resource_type: string;
+};
+
 export type CourseWeaknessReviewItem = {
   id: string;
   title: string;
@@ -79,14 +85,49 @@ export type CourseWeaknessReviewItem = {
   source_type: string;
   course_id: string;
   knowledge_point_id: string | null;
+  recommended_resource_ids: string[];
+  recommended_resources: CourseResourceBrief[];
   next_review_at: string | null;
   created_at: string;
   updated_at: string;
 };
 
-export type CoursePlaceholderSummary = {
+export type CoursePathSummary = {
   status: string;
   message: string;
+  path_id: string | null;
+  current_task_title: string | null;
+  task_count: number;
+  completed_task_count: number;
+};
+
+export type CourseMasterySummary = {
+  total_count: number;
+  weak_count: number;
+  learning_count: number;
+  mastered_count: number;
+  recommended_review_count: number;
+  not_started_count: number;
+};
+
+export type CourseMasteryStatus = "not_started" | "learning" | "mastered" | "weak" | "recommended_review";
+
+export type CourseMasteryPoint = {
+  id: string;
+  title: string;
+  chapter: string | null;
+  order_index: number;
+  status: CourseMasteryStatus;
+  score: number;
+  prerequisite_ids: string[];
+  weakness_item_ids: string[];
+  recommended_resource_ids: string[];
+};
+
+export type CourseMasteryMap = {
+  course_id: string;
+  summary: CourseMasterySummary;
+  points: CourseMasteryPoint[];
 };
 
 export type CourseEvidenceSummary = {
@@ -101,8 +142,8 @@ export type CourseLearningState = {
   profile_overlay: CourseProfileOverlay;
   weakness_summary: CourseWeaknessSummary;
   weakness_review_queue: CourseWeaknessReviewItem[];
-  path_summary: CoursePlaceholderSummary;
-  mastery_summary: CoursePlaceholderSummary;
+  path_summary: CoursePathSummary;
+  mastery_summary: CourseMasterySummary;
   evidence_summary: CourseEvidenceSummary;
 };
 
@@ -129,9 +170,7 @@ export async function getKnowledgePoints(courseId: number) {
 }
 
 export async function getMasteryMap(courseId: number) {
-  const response = await apiClient.get<ApiEnvelope<{ course_id: string; points: ApiCourseKnowledgePoint[] }>>(
-    COURSE_ENDPOINTS.masteryMap(courseId)
-  );
+  const response = await apiClient.get<ApiEnvelope<CourseMasteryMap>>(COURSE_ENDPOINTS.masteryMap(courseId));
   return response.data;
 }
 

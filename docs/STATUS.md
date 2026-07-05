@@ -4,9 +4,9 @@
 
 ## 状态摘要
 
-当前最新完成到 **Phase 8.2.1：模型无关的资源质量收口**。
+当前最新完成到 **Phase 9：课程级学习路径、掌握度图和弱点队列完善**。
 
-Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已按“对话式学习画像”主线收口；Phase 7.3 和 Phase 7.4 前置补齐课程级弱点队列基础，是为了让画像证据能落到课程状态里，不改变后续 Phase 编号。Phase 8 已完成 Agent 可观测底座、5 类课程资源生成和资源质量收口；学习路径、掌握度和复习队列完善仍归入 Phase 9。
+Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已按“对话式学习画像”主线收口；Phase 7.3 和 Phase 7.4 前置补齐课程级弱点队列基础，是为了让画像证据能落到课程状态里，不改变后续 Phase 编号。Phase 8 已完成 Agent 可观测底座、5 类课程资源生成和资源质量收口；Phase 9 已完成课程级学习路径、规则掌握度图、弱点队列推荐资源和复习时间第一版。
 
 这一阶段之后，EduNova 已经从前端骨架推进到真实学生学习底座：
 
@@ -23,10 +23,12 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 - Phase 7.4 已为课程级弱点复习项补齐确认、开始、完成和软忽略状态流转，课程空间可以直接操作真实队列项。
 - Phase 8.1 已挂载 `/agents/traces/{trace_id}`，复用 `agent_run_logs` 查询当前用户自己的 Agent 轨迹，并在课程空间“思考过程”面板读取真实 trace；同时新增 LangGraph `profile -> retrieve -> diagnosis -> resource -> review -> persist` 骨架。
 - Phase 8.2 已挂载 `/resources`，可基于当前用户课程生成讲解、思维导图、练习、代码实操和 PPT 大纲，并写入资源、质量分和 Agent 轨迹；Phase 8.2.1 已改为课程引用驱动的确定性可用稿优先，模型只做批量增强，模型不可用或失败时不再把可用资源降级为空模板。
+- Phase 9 已挂载 `/paths`，可为当前用户课程生成 active 学习路径、更新任务状态，并把 `/app/path` 接入真实课程、任务、路径依据和掌握度图。
+- Phase 9 已实现 `/courses/{course_id}/mastery-map`，并让 `/courses/{course_id}/learning-state` 返回真实路径摘要、掌握度摘要、弱点推荐资源和下次复习时间。
 
 Phase 8 暂按“可用完成”收口：Agent trace 底座、5 类课程资源生成、质量门槛和模型无关可用稿已经能支撑产品主链路和演示验收。保留的 Phase 8 hardening backlog 只包括资源工坊直接展示资源生成 trace、AgentTimeline 补充白名单 metadata、后续评估让 LangGraph 真正接管生成编排；这些不再拆成新的 Phase 8.x，也不阻塞 Phase 9。
 
-当前仍然不是完整产品。5 类课程资源生成已经接入，但弱点队列还没有推荐资源、下次复习时间和练习评估入队，学习路径、掌握度图、练习评估、报告和深度文档解析还在后续阶段。
+当前仍然不是完整产品。课程级路径、掌握度图和弱点队列完善已经接入，但练习出题、练习批改、错题驱动薄弱点追溯、报告导出和深度文档解析还在后续阶段。
 
 ## 已完成主链路
 
@@ -47,6 +49,8 @@ Phase 8 暂按“可用完成”收口：Agent trace 底座、5 类课程资源�
 | 课程学习状态 | 当前课程画像叠层、弱点候选计数、复习队列和状态流转 | `/api/v1/courses/{course_id}/learning-state` |
 | Agent 轨迹 | 当前用户自己的 Agent trace 查询、步骤排序和安全摘要返回 | `/api/v1/agents/traces/{trace_id}` |
 | 课程资源 | 生成 5 类课程学习资源、质量分和资源生成 Agent trace | `/api/v1/resources/*` |
+| 学习路径 | 生成课程级 active 路径、更新路径任务、读取当前路径 | `/api/v1/paths/*` |
+| 掌握度图 | 按课程知识点、弱点队列、路径任务和资源推荐计算规则掌握度 | `/api/v1/courses/{course_id}/mastery-map` |
 
 ## 当前前端状态
 
@@ -68,7 +72,7 @@ Phase 8 暂按“可用完成”收口：Agent trace 底座、5 类课程资源�
 
 主页输入区的资料状态只显示已选资料数量，并贴近底部输入框；联网搜索和深度思考目前仍是预备能力，只通过按钮高亮和 `aria-pressed` 表达，不显示“已联网搜索”之类的能力暗示。
 
-课程空间 Phase 6.5 已落地“默认问答模式 + 按需学习模式”。默认问答模式保持课程版 ChatGPT 体验，真实引用、生成资源、学习路径和思考过程在回答下方渐进展开；知识点不再以横向列表常驻首屏，而是通过轻量入口进入学习模式后选择，引用来源可直接进入学习模式。学习模式中间显示学习内容，右侧提供上下文 AI 辅导。Phase 8.1 后，“思考过程”会在存在 `latest_trace_id` 时读取真实 Agent trace；Phase 8.2 后，“生成资源”入口会跳转到资源工坊并带上当前课程，真实学习路径仍是后续能力，当前不伪造路径数据。
+课程空间 Phase 6.5 已落地“默认问答模式 + 按需学习模式”。默认问答模式保持课程版 ChatGPT 体验，真实引用、生成资源、学习路径和思考过程在回答下方渐进展开；知识点不再以横向列表常驻首屏，而是通过轻量入口进入学习模式后选择，引用来源可直接进入学习模式。学习模式中间显示学习内容，右侧提供上下文 AI 辅导。Phase 8.1 后，“思考过程”会在存在 `latest_trace_id` 时读取真实 Agent trace；Phase 8.2 后，“生成资源”入口会跳转到资源工坊并带上当前课程；Phase 9 后，“学习路径”读取真实 `path_summary` 并跳转 `/app/path?course_id=...`。
 
 ## 当前后端状态
 
@@ -88,7 +92,7 @@ Phase 8 暂按“可用完成”收口：Agent trace 底座、5 类课程资源�
 | Docker | Compose 五服务可按默认端口启动；后端容器已支持 Alembic 配置读取；前端镜像构建不复用本机 `node_modules` |
 | 安全 | 用户数据隔离、Key 加密、脱敏返回和上传目录忽略已接入 |
 
-当前后端已挂载的业务 router 是 `auth`、`dashboard`、`courses`、`materials`、`profiles`、`rag`、`settings`、`tutor`、`agents` 和 `resources`。`paths`、`practice`、`reports` 和 `demo` 仍只是前端 API 常量与后续接口设计，不属于当前已实现后端能力。
+当前后端已挂载的业务 router 是 `auth`、`dashboard`、`courses`、`materials`、`profiles`、`rag`、`settings`、`tutor`、`agents`、`resources` 和 `paths`。`practice`、`reports` 和 `demo` 仍只是前端 API 常量与后续接口设计，不属于当前已实现后端能力。
 
 资源分层口径：`generated_resources.course_id != null` 是课程资源，Phase 8.2 只生成这一类；`course_id == null` 预留为后续个人全局资源，本阶段不提供生成入口。资源生成在 Phase 8.2.1 后固定为“确定性可用稿优先，模型批量增强”：本地 draft 先保证 5 类资源具备可读、可练、可复用结构，模型未配置、调用失败、解析失败、输出缺失或输出含敏感标记时保留对应资源的本地可用稿。`content_json.metadata.generation_mode` 区分 `model_enhanced`、`deterministic_source` 和 `low_evidence_fallback`；`review_status="passed"` 表示资源通过本地质量门槛，不要求一定来自模型，`low_evidence` 只表示课程依据不足。资源、质量分和 Agent trace 均不保存系统提示词、完整模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
@@ -99,8 +103,8 @@ Phase 7.2 的分层口径：
 - `student_profiles` 保存用户级长期画像，只保留一份。
 - `profile_events` 保存证据流，可带课程来源信息。
 - `weakness_review_queue` 保存课程级可执行复习项，Phase 7.3 已接入课程问答候选事件到 `pending` 项的同步，Phase 7.4 已接入确认、开始、完成和软忽略状态流转，必须绑定 `course_id`。
-- `learning_paths` 和 `learning_tasks` 后续保存课程级路径和任务。
-- `/courses/{course_id}/learning-state` 是课程级学习状态聚合接口，不新增通用 `learning_events` 表。
+- `learning_paths` 和 `learning_tasks` 保存 Phase 9 生成的课程级 active 路径和任务，旧 active 路径会归档为 `archived`。
+- `/courses/{course_id}/learning-state` 是课程级学习状态聚合接口，不新增通用 `learning_events` 表；Phase 9 后同时返回路径摘要、掌握度摘要、推荐资源和复习时间。
 
 课程空间和普通二级路由已经去掉前端 demo 数据兜底：真实课程加载中不会显示“人工智能导论”示例课程，资源工坊初始不展示假生成队列，报告页不展示固定资料证据，普通二级路由侧栏不再注入主页 demo 历史。
 
@@ -114,8 +118,9 @@ Phase 7.2 的分层口径：
 | Path/Practice/Report 后端接口 | 前端保留合同常量和页面骨架，后端 router 未挂载 |
 | 资源增强 | Phase 8.2.1 已支持 5 类课程资源的模型无关可用稿、可选模型增强和规则质量分；资源编辑、异步任务队列、个人全局资源生成入口和推荐资源消费未接入 |
 | Agent 编排 hardening | Phase 8 已可用收口；资源工坊 trace 展示、AgentTimeline metadata 和 LangGraph 真正接管生成编排作为后续 hardening backlog，不阻塞 Phase 9 |
-| 弱点复习增强 | Phase 7.4 已支持确认、开始、完成和软忽略；推荐资源、下次复习时间和练习评估入队未接入 |
-| 学习路径 | 页面和表结构有准备，真实路径生成未接入；后续应基于课程学习状态而非单独全局画像生成 |
+| 弱点复习增强 | Phase 9 已支持推荐资源和下次复习时间；练习评估入队未接入 |
+| 学习路径 | Phase 9 已接入真实路径生成、当前路径读取、任务状态更新和课程页摘要 |
+| 掌握度图 | Phase 9 已接入规则掌握度图；练习评估修正掌握度仍未接入 |
 | 练习评估 | 页面和表结构有准备，真实出题和批改未接入 |
 | 学习报告导出 | 页面和表结构有准备，真实导出未接入 |
 | 演示模式重置 | 入口保留，真实重置流程未接入 |
@@ -145,24 +150,22 @@ Phase 7.2 的分层口径：
 | Phase 8.1 | 已完成 | Agent Graph 与可观测轨迹底座 |
 | Phase 8.2 | 已完成 | 多智能体生成 5 类学习资源 |
 | Phase 8.2.1 | 已完成 | 模型无关的资源质量收口，确定性可用稿优先、模型批量增强和规则质量分 |
-| Phase 9 | 未开始 | 学习路径、掌握度图和薄弱点队列完善 |
+| Phase 9 | 已完成 | 课程级学习路径、规则掌握度图、弱点队列推荐资源和复习时间 |
 
 ## 下一步建议
 
-当前可以继续进入 **Phase 9：学习路径、掌握度图和薄弱点队列完善**。
+当前可以继续进入 **Phase 10：AI 辅导、练习评估和学习报告闭环第一刀**。
 
 原因：
 
 - Phase 7 已完成用户级画像、画像事件和课程问答候选证据闭环。
-- Phase 8.1 已先完成可追溯 Agent 轨迹底座，Phase 8.2/8.2.1 已把 5 类课程资源生成、质量分、生成轨迹和模型无关可用性接入同一闭环。
-- Phase 8 后续只保留 hardening backlog，不再继续切新的 Phase 8.x。
-- Phase 7.3/7.4 已前置课程级弱点队列基础，但不把学习路径提前改名为 Phase 8。
-- 学习路径、掌握度图和复习队列完善继续留到 Phase 9，届时再消费已确认/复习中的弱点，而不是直接消费 `pending` 候选项。
+- Phase 8 已完成资源生成和可观测底座，Phase 9 已把课程级路径、掌握度、弱点推荐资源和复习时间接入。
+- 下一步需要真实练习数据，才能把错题、答题结果和报告反馈接入弱点队列与掌握度修正。
 
 可选并行方向：
 
 - PDF/PPTX/DOCX 深度解析专项。
-- 学习路径、掌握度图和复习队列完善。
 - 练习评估与弱点队列来源扩展。
+- 学习报告生成和导出。
 
-建议 Phase 9 只推进课程级学习路径、掌握度图和弱点队列完善，不同时展开练习评估或报告导出；继续保持代码、测试、文档和浏览器验收同步。
+建议 Phase 10 只推进真实练习评估闭环第一刀，不同时展开复杂报告导出或演示模式重置；继续保持代码、测试、文档和浏览器验收同步。

@@ -303,6 +303,8 @@ Phase 7.3 中 `GET /courses/{course_id}/learning-state` 会读取当前用户当
 
 Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状态、弱点复习队列、课程知识点和用户级画像生成；不只根据全局画像生成。
 
+Phase 9 开始实际复用本表保存课程级学习路径，不新增迁移。生成新路径时，服务层会把同一用户同一课程旧 `active` 路径归档为 `archived`，再写入新的 `active` 路径。`plan_json` 只保存安全摘要、生成规则、计数、依据说明和可展示 metadata，不保存系统提示词、模型输入、API Key、完整课程资料原文或完整用户画像原文。
+
 字段：
 
 | 字段 | 类型 | 说明 |
@@ -321,6 +323,8 @@ Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状�
 
 用途：路径中的学习任务。
 
+Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `reviewing` 弱点、`confirmed` 弱点、未覆盖知识点排序；`pending` 和 `dismissed` 弱点不进入路径任务。任务类型固定为 `review`、`learn`、`resource`，任务状态固定为 `todo`、`doing`、`completed`；第一条任务为 `doing`，其余为 `todo`。`recommended_resource_ids` 最多保存 3 个同课程资源 ID，优先匹配同知识点资源，没有知识点时按安全标题匹配。
+
 字段：
 
 | 字段 | 类型 | 说明 |
@@ -331,10 +335,10 @@ Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状�
 | `course_id` | bigint | 课程 |
 | `knowledge_point_id` | bigint | 知识点 |
 | `title` | varchar | 任务标题 |
-| `task_type` | varchar | 讲解、练习、复习、冲刺 |
+| `task_type` | varchar | `review`、`learn`、`resource` |
 | `reason` | text | 推荐理由 |
 | `recommended_resource_ids` | jsonb | 推荐资源 ID 列表 |
-| `status` | varchar | 未开始、进行中、完成 |
+| `status` | varchar | `todo`、`doing`、`completed` |
 | `due_at` | timestamptz | 建议完成时间 |
 | `next_review_at` | timestamptz | 下次复习时间 |
 
@@ -476,7 +480,9 @@ Phase 7.2 明确本表承载课程级可执行复习任务。每个复习项必�
 
 Phase 7.3 复用本表，不新增迁移。虽然历史模型允许 `course_id` 为空，本阶段服务层强制课程问答候选事件入队时写入非空 `course_id`；`source_type="course_question"`，`status="pending"` 表示待确认/待复习，不表示系统已经完成正式诊断。
 
-Phase 7.4 继续不新增迁移，复用 `status` 字段承载队列状态流转：`pending` 表示待确认，`confirmed` 表示学生已确认待复习，`reviewing` 表示复习中，`completed` 表示已完成本轮复习，`dismissed` 表示软忽略/移出主列表。`dismissed` 不物理删除，仍参与课程内去重，避免同一课程问答候选事件在下次 `learning-state` 同步时重新入队。当前仍不写推荐资源、不设置下次复习时间。
+Phase 7.4 继续不新增迁移，复用 `status` 字段承载队列状态流转：`pending` 表示待确认，`confirmed` 表示学生已确认待复习，`reviewing` 表示复习中，`completed` 表示已完成本轮复习，`dismissed` 表示软忽略/移出主列表。`dismissed` 不物理删除，仍参与课程内去重，避免同一课程问答候选事件在下次 `learning-state` 同步时重新入队。
+
+Phase 9 继续复用本表，不新增字段。`GET /courses/{course_id}/learning-state` 会为 `confirmed/reviewing/completed` 项确定性补充同课程推荐资源：优先同知识点资源，没有知识点时按安全标题匹配，每项最多 3 个资源 ID。`pending` 项仍只表达待确认语义，不直接进入学习路径。`complete` 操作后会设置下一次复习时间；`confirmed/reviewing` 项缺少 `next_review_at` 时，学习状态读取可补齐确定性复习时间。推荐资源和复习时间只写已有 `recommended_resource_ids` 与 `next_review_at` 字段。
 
 字段：
 

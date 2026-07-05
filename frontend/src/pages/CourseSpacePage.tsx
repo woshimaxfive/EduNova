@@ -21,6 +21,7 @@ import {
   getCourseOverview,
   getKnowledgePoints,
   updateCourseWeaknessReviewItem,
+  type CoursePathSummary,
   type CourseWeaknessReviewAction,
   type CourseWeaknessReviewItem
 } from "../api/courses";
@@ -116,6 +117,22 @@ function weaknessActionsForItem(item: CourseWeaknessReviewItem): Array<{ action:
     return [{ action: "dismiss", label: "移除", icon: ArrowLeft }];
   }
   return [];
+}
+
+function formatReviewDate(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit"
+  });
 }
 
 type AnswerPanelKind = "citations" | "resources" | "path" | "thinking";
@@ -312,6 +329,7 @@ export function CourseSpacePage() {
     try {
       await updateCourseWeaknessReviewItem(numericCourseId, item.id, action);
       void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
+      void queryClient.invalidateQueries({ queryKey: ["courses", "mastery-map", numericCourseId] });
     } catch {
       setWeaknessFeedback("弱点状态更新失败，请稍后重试。");
     } finally {
@@ -527,7 +545,13 @@ export function CourseSpacePage() {
                       {weaknessItems.map((item) => (
                         <li key={item.id}>
                           <div className="course-weakness-main">
-                            <span>{item.title}</span>
+                            <div>
+                              <span>{item.title}</span>
+                              {item.recommended_resources.length > 0 ? (
+                                <small>推荐资源：{item.recommended_resources.map((resource) => resource.title).join("、")}</small>
+                              ) : null}
+                              {formatReviewDate(item.next_review_at) ? <small>下次复习：{formatReviewDate(item.next_review_at)}</small> : null}
+                            </div>
                             <em>{weaknessStatusLabel(item.status)}</em>
                           </div>
                           <div className="course-weakness-actions" aria-label={`${item.title} 操作`}>
@@ -611,6 +635,7 @@ export function CourseSpacePage() {
                         citations={latestRagResults}
                         hasRealCourse={Boolean(apiCourse)}
                         hasSearched={hasRetrievalResult}
+                        pathSummary={learningState?.path_summary ?? null}
                         agentTraceId={latestAgentTraceId}
                         agentTraceEvents={agentTraceEvents}
                         isAgentTraceLoading={agentTraceQuery.isPending && agentTraceQuery.fetchStatus !== "idle"}
@@ -780,6 +805,7 @@ type AnswerDetailPanelProps = {
   citations: RagSearchResultItem[];
   hasRealCourse: boolean;
   hasSearched: boolean;
+  pathSummary: CoursePathSummary | null;
   agentTraceId: string | null;
   agentTraceEvents: AgentTraceEvent[];
   isAgentTraceLoading: boolean;
@@ -793,6 +819,7 @@ function AnswerDetailPanel({
   citations,
   hasRealCourse,
   hasSearched,
+  pathSummary,
   agentTraceId,
   agentTraceEvents,
   isAgentTraceLoading,
@@ -812,10 +839,24 @@ function AnswerDetailPanel({
   }
 
   if (activePanel === "path") {
+    const pathHref = courseId !== null ? `${PATHS.path}?course_id=${courseId}` : PATHS.path;
+
     return (
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-        <strong>建议路径</strong>
-        <p>先围绕本次命中的来源复习核心概念，再追问一个例题，最后把仍不确定的知识点加入后续练习。</p>
+        <strong>学习路径</strong>
+        <p>{pathSummary?.message ?? "学习路径尚未生成。"}</p>
+        {pathSummary?.current_task_title ? (
+          <div className="answer-detail-meta">
+            <span>当前任务</span>
+            <em>{pathSummary.current_task_title}</em>
+          </div>
+        ) : null}
+        {pathSummary ? (
+          <small>
+            {pathSummary.completed_task_count}/{pathSummary.task_count} 已完成
+          </small>
+        ) : null}
+        <Link to={pathHref}>查看完整路径</Link>
       </section>
     );
   }

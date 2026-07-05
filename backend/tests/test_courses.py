@@ -18,8 +18,11 @@ from backend.app.models import (
     CourseEnrollment,
     CourseMaterial,
     CourseMaterialLink,
+    GeneratedResource,
     KnowledgeChunk,
     KnowledgePoint,
+    LearningPath,
+    LearningTask,
     Material,
     ProfileEvent,
     StudentProfile,
@@ -50,6 +53,9 @@ class FakeCourseRepository:
     profiles: dict[int, StudentProfile] = field(default_factory=dict)
     profile_events: list[ProfileEvent] = field(default_factory=list)
     weakness_items: list[WeaknessReviewItem] = field(default_factory=list)
+    generated_resources: list[GeneratedResource] = field(default_factory=list)
+    learning_paths: list[LearningPath] = field(default_factory=list)
+    learning_tasks: list[LearningTask] = field(default_factory=list)
     next_course_id: int = 101
     next_enrollment_id: int = 201
     next_course_material_id: int = 301
@@ -162,6 +168,31 @@ class FakeCourseRepository:
         item.created_at = item.created_at or datetime(2026, 7, 5, 8, 0, tzinfo=UTC)
         item.updated_at = item.updated_at or item.created_at
         self.weakness_items.append(item)
+
+    def list_generated_resources(self, user_id: int, course_id: int) -> list[GeneratedResource]:
+        return [
+            resource
+            for resource in self.generated_resources
+            if resource.user_id == user_id and resource.course_id == course_id
+        ]
+
+    def get_active_path(self, user_id: int, course_id: int) -> LearningPath | None:
+        active_paths = [
+            path
+            for path in self.learning_paths
+            if path.user_id == user_id and path.course_id == course_id and path.status == "active"
+        ]
+        return active_paths[0] if active_paths else None
+
+    def list_learning_tasks(self, user_id: int, course_id: int) -> list[LearningTask]:
+        return [
+            task
+            for task in self.learning_tasks
+            if task.user_id == user_id and task.course_id == course_id
+        ]
+
+    def list_tasks_for_path(self, path_id: int) -> list[LearningTask]:
+        return [task for task in self.learning_tasks if task.path_id == path_id]
 
     def commit(self) -> None:
         return None
@@ -310,15 +341,88 @@ def make_weakness_item(
     return item
 
 
+def make_resource(
+    resource_id: int,
+    user_id: int,
+    course_id: int,
+    *,
+    title: str = "启发式搜索讲解",
+    knowledge_point_id: int | None = 401,
+) -> GeneratedResource:
+    return GeneratedResource(
+        id=resource_id,
+        user_id=user_id,
+        course_id=course_id,
+        knowledge_point_id=knowledge_point_id,
+        resource_type="doc",
+        title=title,
+        content_json={"markdown": "安全摘要", "metadata": {"agent_trace_id": "trace_resource"}},
+        citation_json=[],
+        status="completed",
+        review_status="passed",
+        confidence_score=Decimal("0.86"),
+        created_at=datetime(2026, 7, 5, 8, 20, tzinfo=UTC),
+        updated_at=datetime(2026, 7, 5, 8, 21, tzinfo=UTC),
+    )
+
+
+def make_learning_path(path_id: int, user_id: int = 1, course_id: int = 101) -> LearningPath:
+    path = LearningPath(
+        id=path_id,
+        user_id=user_id,
+        course_id=course_id,
+        title="AI 搜索复习路径",
+        goal="期末前掌握搜索算法",
+        status="active",
+        plan_json={"duration_days": 7, "reason": "基于已确认弱点生成"},
+    )
+    path.created_at = datetime(2026, 7, 5, 8, 30, tzinfo=UTC)
+    path.updated_at = datetime(2026, 7, 5, 8, 30, tzinfo=UTC)
+    return path
+
+
+def make_learning_task(
+    task_id: int,
+    path_id: int,
+    *,
+    user_id: int = 1,
+    course_id: int = 101,
+    knowledge_point_id: int | None = 401,
+    title: str = "复习启发式搜索",
+    task_type: str = "review",
+    status: str = "doing",
+) -> LearningTask:
+    task = LearningTask(
+        id=task_id,
+        path_id=path_id,
+        user_id=user_id,
+        course_id=course_id,
+        knowledge_point_id=knowledge_point_id,
+        title=title,
+        task_type=task_type,
+        reason="来自已确认薄弱点",
+        recommended_resource_ids=[801],
+        status=status,
+        due_at=datetime(2026, 7, 6, 8, 0, tzinfo=UTC),
+        next_review_at=None,
+    )
+    task.created_at = datetime(2026, 7, 5, 8, 31, tzinfo=UTC)
+    task.updated_at = datetime(2026, 7, 5, 8, 31, tzinfo=UTC)
+    return task
+
+
 def test_course_routes_require_login() -> None:
     client = TestClient(create_app())
 
     response = client.get("/api/v1/courses")
+    mastery_map_response = client.get("/api/v1/courses/101/mastery-map")
     learning_state_response = client.get("/api/v1/courses/101/learning-state")
     weakness_action_response = client.post("/api/v1/courses/101/weakness-review-items/701/confirm")
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
+    assert mastery_map_response.status_code == 401
+    assert mastery_map_response.json()["error"]["code"] == "UNAUTHORIZED"
     assert learning_state_response.status_code == 401
     assert learning_state_response.json()["error"]["code"] == "UNAUTHORIZED"
     assert weakness_action_response.status_code == 401
@@ -475,7 +579,8 @@ def test_learning_state_returns_empty_course_state_without_candidates() -> None:
     assert state["weakness_summary"]["pending_count"] == 0
     assert state["weakness_review_queue"] == []
     assert state["path_summary"]["status"] == "not_started"
-    assert state["mastery_summary"]["status"] == "not_started"
+    assert state["path_summary"]["path_id"] is None
+    assert state["mastery_summary"]["total_count"] == 0
 
 
 def test_learning_state_promotes_course_question_candidate_to_pending_review_item() -> None:
@@ -602,6 +707,8 @@ def test_update_weakness_review_item_allows_expected_status_transitions() -> Non
 
         assert updated["status"] == expected_status
         assert item.status == expected_status
+        if action == "complete":
+            assert item.next_review_at is not None
 
 
 def test_update_weakness_review_item_rejects_invalid_transitions() -> None:
@@ -650,6 +757,93 @@ def test_learning_state_response_does_not_expose_private_prompt_or_source_text()
     assert "系统提示词" not in serialized
     assert "模型输入" not in serialized
     assert "资料原文" not in serialized
+
+
+def test_learning_state_returns_real_path_mastery_and_resource_recommendations() -> None:
+    path = make_learning_path(901)
+    reviewing = make_weakness_item(55, 1, 101, knowledge_point_id=401, status="reviewing")
+    completed = make_weakness_item(56, 1, 101, title="A* 搜索", knowledge_point_id=402, status="completed")
+    completed.next_review_at = datetime(2026, 7, 4, 8, 0, tzinfo=UTC)
+    repo = FakeCourseRepository(
+        courses=[make_course()],
+        knowledge_points=[
+            KnowledgePoint(id=401, course_id=101, title="启发式搜索", summary="摘要", chapter="第一章", order_index=0),
+            KnowledgePoint(id=402, course_id=101, title="A* 搜索", summary="摘要", chapter="第一章", order_index=1),
+            KnowledgePoint(id=403, course_id=101, title="局部搜索", summary="摘要", chapter="第一章", order_index=2),
+        ],
+        weakness_items=[reviewing, completed],
+        generated_resources=[
+            make_resource(801, 1, 101, knowledge_point_id=401),
+            make_resource(802, 1, 101, title="A* 搜索讲解", knowledge_point_id=402),
+        ],
+        learning_paths=[path],
+        learning_tasks=[
+            make_learning_task(1001, 901, knowledge_point_id=401, status="doing"),
+            make_learning_task(1002, 901, knowledge_point_id=403, title="学习局部搜索", task_type="learn", status="todo"),
+        ],
+    )
+
+    state = as_dict(make_service(repo).get_learning_state(make_user(), 101))
+
+    assert state["path_summary"] == {
+        "status": "active",
+        "message": "当前学习路径进行中。",
+        "path_id": "901",
+        "current_task_title": "复习启发式搜索",
+        "task_count": 2,
+        "completed_task_count": 0,
+    }
+    assert state["mastery_summary"]["total_count"] == 3
+    assert state["mastery_summary"]["weak_count"] == 1
+    assert state["mastery_summary"]["learning_count"] == 1
+    assert state["mastery_summary"]["recommended_review_count"] == 1
+    by_title = {item["title"]: item for item in state["weakness_review_queue"]}
+    assert by_title["启发式搜索"]["recommended_resource_ids"] == ["801"]
+    assert by_title["启发式搜索"]["recommended_resources"][0]["title"] == "启发式搜索讲解"
+    assert by_title["启发式搜索"]["next_review_at"] is not None
+
+
+def test_mastery_map_maps_weaknesses_tasks_resources_and_scopes_course() -> None:
+    path = make_learning_path(901)
+    repo = FakeCourseRepository(
+        courses=[make_course(), make_course(202, owner_id=2)],
+        knowledge_points=[
+            KnowledgePoint(id=401, course_id=101, title="启发式搜索", summary="摘要", chapter="第一章", order_index=0),
+            KnowledgePoint(id=402, course_id=101, title="A* 搜索", summary="摘要", chapter="第一章", order_index=1),
+            KnowledgePoint(id=403, course_id=101, title="局部搜索", summary="摘要", chapter="第一章", order_index=2),
+        ],
+        weakness_items=[
+            make_weakness_item(55, 1, 101, knowledge_point_id=401, status="confirmed"),
+            make_weakness_item(56, 1, 101, title="A* 搜索", knowledge_point_id=402, status="completed"),
+        ],
+        generated_resources=[make_resource(801, 1, 101, knowledge_point_id=401)],
+        learning_paths=[path],
+        learning_tasks=[
+            make_learning_task(1001, 901, knowledge_point_id=401, status="todo"),
+            make_learning_task(1002, 901, knowledge_point_id=403, title="完成局部搜索", status="completed"),
+        ],
+    )
+
+    mastery = as_dict(make_service(repo).get_mastery_map(make_user(), 101))
+
+    by_title = {point["title"]: point for point in mastery["points"]}
+    assert by_title["启发式搜索"]["status"] == "weak"
+    assert by_title["启发式搜索"]["score"] == 35
+    assert by_title["启发式搜索"]["weakness_item_ids"] == ["55"]
+    assert by_title["启发式搜索"]["recommended_resource_ids"] == ["801"]
+    assert by_title["局部搜索"]["status"] == "mastered"
+    assert mastery["summary"]["weak_count"] == 1
+    assert mastery["summary"]["mastered_count"] == 2
+
+    serialized = str(mastery)
+    assert "系统提示词" not in serialized
+    assert "模型输入" not in serialized
+    assert "资料原文" not in serialized
+
+    from backend.app.services.courses import CourseNotFoundError
+
+    with pytest.raises(CourseNotFoundError):
+        make_service(repo).get_mastery_map(make_user(1), 202)
 
 
 def test_create_course_route_returns_envelope() -> None:
@@ -703,6 +897,33 @@ def test_learning_state_route_returns_envelope_and_scopes_course() -> None:
     assert response.status_code == 200
     assert response.json()["data"]["course_id"] == "101"
     assert response.json()["data"]["weakness_summary"]["pending_count"] == 1
+    assert missing_response.status_code == 404
+
+
+def test_mastery_map_route_returns_envelope_and_scopes_course() -> None:
+    repo = FakeCourseRepository(
+        courses=[make_course()],
+        knowledge_points=[KnowledgePoint(id=401, course_id=101, title="启发式搜索", summary="摘要", chapter="第一章", order_index=0)],
+        weakness_items=[make_weakness_item(55, 1, 101, knowledge_point_id=401, status="confirmed")],
+    )
+    user = make_user()
+    settings = Settings(_env_file=None, jwt_secret="courses-test-secret-with-32-bytes", jwt_expire_minutes=30)
+    app = create_app()
+    app.dependency_overrides[get_auth_service] = lambda: AuthService(
+        repository=TokenAuthRepository(user),
+        settings=settings,
+    )
+    app.dependency_overrides[get_course_service] = lambda: CourseService(repository=repo)
+    client = TestClient(app)
+    token = create_access_token(str(user.id), settings=settings)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.get("/api/v1/courses/101/mastery-map", headers=headers)
+    missing_response = client.get("/api/v1/courses/202/mastery-map", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["data"]["course_id"] == "101"
+    assert response.json()["data"]["points"][0]["status"] == "weak"
     assert missing_response.status_code == 404
 
 

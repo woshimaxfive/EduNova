@@ -3,11 +3,11 @@ import { describe, expect, it } from "vitest";
 import { AGENT_ENDPOINTS, getAgentTrace } from "./agents";
 import { AUTH_ENDPOINTS, login } from "./auth";
 import { apiClient } from "./client";
-import { COURSE_ENDPOINTS, getCourseLearningState, updateCourseWeaknessReviewItem } from "./courses";
+import { COURSE_ENDPOINTS, getCourseLearningState, getMasteryMap, updateCourseWeaknessReviewItem } from "./courses";
 import { DASHBOARD_ENDPOINTS } from "./dashboard";
 import { DEMO_ENDPOINTS } from "./demo";
 import { MATERIAL_ENDPOINTS } from "./materials";
-import { PATH_ENDPOINTS } from "./paths";
+import { generatePath, getCurrentPath, PATH_ENDPOINTS, updatePathTask } from "./paths";
 import { PRACTICE_ENDPOINTS } from "./practice";
 import { RAG_ENDPOINTS, searchRag } from "./rag";
 import { getMyProfile, listProfileEvents, PROFILE_ENDPOINTS, updateProfileByChat } from "./profiles";
@@ -56,6 +56,8 @@ describe("frontend API contracts", () => {
     expect(RAG_ENDPOINTS.search).toBe("/rag/search");
     expect(RESOURCE_ENDPOINTS.generate).toBe("/resources/generate");
     expect(AGENT_ENDPOINTS.trace("trace_demo")).toBe("/agents/traces/trace_demo");
+    expect(PATH_ENDPOINTS.generate).toBe("/paths/generate");
+    expect(PATH_ENDPOINTS.current).toBe("/paths/current");
     expect(PATH_ENDPOINTS.updateTask(9)).toBe("/paths/tasks/9");
     expect(TUTOR_ENDPOINTS.message(4)).toBe("/tutor/sessions/4/messages");
     expect(PRACTICE_ENDPOINTS.answers(8)).toBe("/practice/sessions/8/answers");
@@ -345,6 +347,8 @@ describe("frontend API contracts", () => {
                 source_type: "course_question",
                 course_id: "7",
                 knowledge_point_id: "401",
+                recommended_resource_ids: [],
+                recommended_resources: [],
                 next_review_at: null,
                 created_at: "2026-07-05T08:30:00Z",
                 updated_at: "2026-07-05T08:30:00Z"
@@ -352,11 +356,19 @@ describe("frontend API contracts", () => {
             ],
             path_summary: {
               status: "not_started",
-              message: "学习路径尚未生成。"
+              message: "学习路径尚未生成。",
+              path_id: null,
+              current_task_title: null,
+              task_count: 0,
+              completed_task_count: 0
             },
             mastery_summary: {
-              status: "not_started",
-              message: "掌握度尚未接入。"
+              total_count: 0,
+              weak_count: 0,
+              learning_count: 0,
+              mastered_count: 0,
+              recommended_review_count: 0,
+              not_started_count: 0
             },
             evidence_summary: {
               candidate_event_count: 1,
@@ -385,6 +397,61 @@ describe("frontend API contracts", () => {
     }
   });
 
+  it("gets course mastery map through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method
+      });
+
+      return {
+        data: {
+          data: {
+            course_id: "7",
+            summary: {
+              total_count: 1,
+              weak_count: 1,
+              learning_count: 0,
+              mastered_count: 0,
+              recommended_review_count: 0,
+              not_started_count: 0
+            },
+            points: [
+              {
+                id: "401",
+                title: "启发式搜索",
+                chapter: "搜索问题",
+                order_index: 0,
+                status: "weak",
+                score: 35,
+                prerequisite_ids: [],
+                weakness_item_ids: ["701"],
+                recommended_resource_ids: ["801"]
+              }
+            ]
+          },
+          trace_id: "trace_mastery"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const response = await getMasteryMap(7);
+
+      expect(calls).toEqual([{ url: COURSE_ENDPOINTS.masteryMap(7), method: "get" }]);
+      expect(response.data.points[0].status).toBe("weak");
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
   it("updates course weakness review items through the shared API client", async () => {
     const previousAdapter = apiClient.defaults.adapter;
     const calls: Array<{ url?: string; method?: string }> = [];
@@ -404,6 +471,14 @@ describe("frontend API contracts", () => {
             source_type: "course_question",
             course_id: "7",
             knowledge_point_id: "401",
+            recommended_resource_ids: ["901"],
+            recommended_resources: [
+              {
+                id: "901",
+                title: "启发式搜索讲解",
+                resource_type: "doc"
+              }
+            ],
             next_review_at: null,
             created_at: "2026-07-05T08:30:00Z",
             updated_at: "2026-07-05T08:40:00Z"
@@ -427,6 +502,128 @@ describe("frontend API contracts", () => {
         }
       ]);
       expect(response.data.status).toBe("confirmed");
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("uses typed learning path APIs through the shared client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown; params?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data,
+        params: config.params
+      });
+
+      const pathDetail = {
+        course_id: "7",
+        status: "active",
+        message: "当前学习路径进行中。",
+        path: {
+          id: "901",
+          course_id: "7",
+          title: "AI 搜索复习 学习路径",
+          goal: "期末前掌握搜索算法",
+          status: "active",
+          plan_json: {
+            duration_days: 7
+          },
+          created_at: "2026-07-05T09:00:00Z",
+          updated_at: "2026-07-05T09:00:00Z"
+        },
+        tasks: [
+          {
+            id: "1001",
+            path_id: "901",
+            course_id: "7",
+            knowledge_point_id: "401",
+            title: "复习启发式搜索",
+            task_type: "review",
+            reason: "来自已确认薄弱点",
+            recommended_resource_ids: ["801"],
+            recommended_resources: [
+              {
+                id: "801",
+                title: "启发式搜索讲解",
+                resource_type: "doc"
+              }
+            ],
+            status: "doing",
+            due_at: "2026-07-06T09:00:00Z",
+            next_review_at: null,
+            created_at: "2026-07-05T09:00:00Z",
+            updated_at: "2026-07-05T09:00:00Z"
+          }
+        ],
+        evidence_summary: {
+          knowledge_point_count: 3,
+          confirmed_or_reviewing_weakness_count: 1,
+          pending_weakness_count: 0,
+          resource_count: 1,
+          basis: ["课程知识点 3 个。"]
+        }
+      };
+
+      if (config.url === PATH_ENDPOINTS.updateTask(1001)) {
+        return {
+          data: {
+            data: {
+              ...pathDetail.tasks[0],
+              status: "completed"
+            },
+            trace_id: "trace_task"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: {
+          data: pathDetail,
+          trace_id: "trace_path"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const generated = await generatePath({ course_id: 7, duration_days: 7, goal: "期末前掌握搜索算法" });
+      const current = await getCurrentPath(7);
+      const updated = await updatePathTask(1001, { status: "completed" });
+
+      expect(calls).toEqual([
+        {
+          url: PATH_ENDPOINTS.generate,
+          method: "post",
+          data: { course_id: 7, duration_days: 7, goal: "期末前掌握搜索算法" },
+          params: undefined
+        },
+        {
+          url: PATH_ENDPOINTS.current,
+          method: "get",
+          data: undefined,
+          params: { course_id: 7 }
+        },
+        {
+          url: PATH_ENDPOINTS.updateTask(1001),
+          method: "patch",
+          data: { status: "completed" },
+          params: undefined
+        }
+      ]);
+      expect(generated.data.tasks[0].recommended_resources[0].title).toBe("启发式搜索讲解");
+      expect(current.data.evidence_summary.knowledge_point_count).toBe(3);
+      expect(updated.data.status).toBe("completed");
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

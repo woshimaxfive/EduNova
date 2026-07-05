@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import { type ApiEnvelope } from "../types/api";
+import { type CourseResourceBrief } from "./courses";
 
 export const PATH_ENDPOINTS = {
   generate: "/paths/generate",
@@ -7,27 +8,76 @@ export const PATH_ENDPOINTS = {
   updateTask: (taskId: number) => `/paths/tasks/${taskId}`
 } as const;
 
+export type PathTaskStatus = "todo" | "doing" | "completed";
+
 export type GeneratePathRequest = {
   course_id: number;
-  duration_days: number;
+  duration_days: 3 | 7 | 14;
   goal: string;
 };
 
 export type UpdatePathTaskRequest = {
-  status: "todo" | "doing" | "completed";
+  status: PathTaskStatus;
+};
+
+export type LearningPath = {
+  id: string;
+  course_id: string;
+  title: string;
+  goal: string;
+  status: "active" | "archived" | string;
+  plan_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LearningPathTask = {
+  id: string;
+  path_id: string;
+  course_id: string;
+  knowledge_point_id: string | null;
+  title: string;
+  task_type: "review" | "learn" | "resource" | string;
+  reason: string;
+  recommended_resource_ids: string[];
+  recommended_resources: CourseResourceBrief[];
+  status: PathTaskStatus;
+  due_at: string | null;
+  next_review_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PathEvidenceSummary = {
+  knowledge_point_count: number;
+  confirmed_or_reviewing_weakness_count: number;
+  pending_weakness_count: number;
+  resource_count: number;
+  basis: string[];
+};
+
+export type LearningPathDetail = {
+  course_id: string;
+  status: "not_started" | "active" | string;
+  message: string;
+  path: LearningPath | null;
+  tasks: LearningPathTask[];
+  evidence_summary: PathEvidenceSummary;
 };
 
 export async function generatePath(payload: GeneratePathRequest) {
-  const response = await apiClient.post<ApiEnvelope<Record<string, unknown>>>(PATH_ENDPOINTS.generate, payload);
+  const response = await apiClient.post<ApiEnvelope<LearningPathDetail>>(PATH_ENDPOINTS.generate, payload);
   return response.data;
 }
 
-export async function getCurrentPath() {
-  const response = await apiClient.get<ApiEnvelope<Record<string, unknown>>>(PATH_ENDPOINTS.current);
+export async function getCurrentPath(courseId: number) {
+  const response = await apiClient.get<ApiEnvelope<LearningPathDetail>>(PATH_ENDPOINTS.current, {
+    params: { course_id: courseId }
+  });
   return response.data;
 }
 
 export async function updatePathTask(taskId: number, payload: UpdatePathTaskRequest) {
-  const response = await apiClient.patch<ApiEnvelope<Record<string, unknown>>>(PATH_ENDPOINTS.updateTask(taskId), payload);
+  const response = await apiClient.patch<ApiEnvelope<LearningPathTask>>(PATH_ENDPOINTS.updateTask(taskId), payload);
   return response.data;
 }

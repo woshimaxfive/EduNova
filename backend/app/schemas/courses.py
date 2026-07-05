@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
-from backend.app.models import WeaknessReviewItem
+from backend.app.models import GeneratedResource, WeaknessReviewItem
 
 
 class CreateCourseFromMaterialsRequest(BaseModel):
@@ -76,14 +76,53 @@ class CourseWeaknessReviewItem(BaseModel):
     source_type: str
     course_id: str
     knowledge_point_id: str | None
+    recommended_resource_ids: list[str]
+    recommended_resources: list["CourseResourceBrief"]
     next_review_at: str | None
     created_at: str
     updated_at: str
 
 
-class CoursePlaceholderSummary(BaseModel):
+class CourseResourceBrief(BaseModel):
+    id: str
+    title: str
+    resource_type: str
+
+
+class CoursePathSummary(BaseModel):
     status: str
     message: str
+    path_id: str | None = None
+    current_task_title: str | None = None
+    task_count: int = 0
+    completed_task_count: int = 0
+
+
+class CourseMasterySummary(BaseModel):
+    total_count: int
+    weak_count: int
+    learning_count: int
+    mastered_count: int
+    recommended_review_count: int
+    not_started_count: int
+
+
+class CourseMasteryPoint(BaseModel):
+    id: str
+    title: str
+    chapter: str | None
+    order_index: int
+    status: str
+    score: int
+    prerequisite_ids: list[str]
+    weakness_item_ids: list[str]
+    recommended_resource_ids: list[str]
+
+
+class CourseMasteryMap(BaseModel):
+    course_id: str
+    summary: CourseMasterySummary
+    points: list[CourseMasteryPoint]
 
 
 class CourseEvidenceSummary(BaseModel):
@@ -98,8 +137,8 @@ class CourseLearningState(BaseModel):
     profile_overlay: CourseProfileOverlay
     weakness_summary: CourseWeaknessSummary
     weakness_review_queue: list[CourseWeaknessReviewItem]
-    path_summary: CoursePlaceholderSummary
-    mastery_summary: CoursePlaceholderSummary
+    path_summary: CoursePathSummary
+    mastery_summary: CourseMasterySummary
     evidence_summary: CourseEvidenceSummary
 
 
@@ -111,7 +150,20 @@ def iso_timestamp(value: datetime | None) -> str | None:
     return timestamp.isoformat().replace("+00:00", "Z")
 
 
-def weakness_item_to_api(item: WeaknessReviewItem) -> CourseWeaknessReviewItem:
+def resource_brief(resource: GeneratedResource) -> CourseResourceBrief:
+    return CourseResourceBrief(
+        id=str(resource.id),
+        title=resource.title,
+        resource_type=resource.resource_type,
+    )
+
+
+def weakness_item_to_api(
+    item: WeaknessReviewItem,
+    resources_by_id: dict[int, GeneratedResource] | None = None,
+) -> CourseWeaknessReviewItem:
+    resources_by_id = resources_by_id or {}
+    resource_ids = [int(value) for value in (item.recommended_resource_ids or []) if str(value).isdigit()]
     return CourseWeaknessReviewItem(
         id=str(item.id),
         title=item.title,
@@ -119,6 +171,8 @@ def weakness_item_to_api(item: WeaknessReviewItem) -> CourseWeaknessReviewItem:
         source_type=item.source_type,
         course_id=str(item.course_id),
         knowledge_point_id=str(item.knowledge_point_id) if item.knowledge_point_id is not None else None,
+        recommended_resource_ids=[str(resource_id) for resource_id in resource_ids],
+        recommended_resources=[resource_brief(resources_by_id[resource_id]) for resource_id in resource_ids if resource_id in resources_by_id],
         next_review_at=iso_timestamp(item.next_review_at),
         created_at=iso_timestamp(item.created_at) or "",
         updated_at=iso_timestamp(item.updated_at) or "",

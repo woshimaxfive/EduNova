@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Protocol
@@ -14,8 +14,11 @@ from backend.app.models import (
     CourseEnrollment,
     CourseMaterial,
     CourseMaterialLink,
+    GeneratedResource,
     KnowledgeChunk,
     KnowledgePoint,
+    LearningPath,
+    LearningTask,
     Material,
     ProfileEvent,
     StudentProfile,
@@ -27,8 +30,11 @@ from backend.app.schemas.courses import (
     CourseKnowledgePoint,
     CourseLearningState,
     CourseListResponse,
+    CourseMasteryMap,
+    CourseMasteryPoint,
+    CourseMasterySummary,
     CourseOverview,
-    CoursePlaceholderSummary,
+    CoursePathSummary,
     CourseProfileOverlay,
     CourseSummary,
     CourseWeaknessReviewItem,
@@ -101,6 +107,14 @@ class CourseRepository(Protocol):
     def get_weakness_review_item(self, user_id: int, course_id: int, item_id: int) -> WeaknessReviewItem | None: ...
 
     def add_weakness_review_item(self, item: WeaknessReviewItem) -> None: ...
+
+    def list_generated_resources(self, user_id: int, course_id: int) -> list[GeneratedResource]: ...
+
+    def get_active_path(self, user_id: int, course_id: int) -> LearningPath | None: ...
+
+    def list_learning_tasks(self, user_id: int, course_id: int) -> list[LearningTask]: ...
+
+    def list_tasks_for_path(self, path_id: int) -> list[LearningTask]: ...
 
     def commit(self) -> None: ...
 
@@ -230,6 +244,40 @@ class SqlAlchemyCourseRepository:
         self.db.add(item)
         self.db.flush()
 
+    def list_generated_resources(self, user_id: int, course_id: int) -> list[GeneratedResource]:
+        return list(
+            self.db.scalars(
+                select(GeneratedResource)
+                .where(GeneratedResource.user_id == user_id, GeneratedResource.course_id == course_id)
+                .order_by(GeneratedResource.updated_at.desc(), GeneratedResource.id.desc())
+            )
+        )
+
+    def get_active_path(self, user_id: int, course_id: int) -> LearningPath | None:
+        return self.db.scalar(
+            select(LearningPath)
+            .where(LearningPath.user_id == user_id, LearningPath.course_id == course_id, LearningPath.status == "active")
+            .order_by(LearningPath.updated_at.desc(), LearningPath.id.desc())
+        )
+
+    def list_learning_tasks(self, user_id: int, course_id: int) -> list[LearningTask]:
+        return list(
+            self.db.scalars(
+                select(LearningTask)
+                .where(LearningTask.user_id == user_id, LearningTask.course_id == course_id)
+                .order_by(LearningTask.due_at.asc(), LearningTask.id.asc())
+            )
+        )
+
+    def list_tasks_for_path(self, path_id: int) -> list[LearningTask]:
+        return list(
+            self.db.scalars(
+                select(LearningTask)
+                .where(LearningTask.path_id == path_id)
+                .order_by(LearningTask.due_at.asc(), LearningTask.id.asc())
+            )
+        )
+
     def commit(self) -> None:
         self.db.commit()
 
@@ -353,15 +401,40 @@ class CourseService:
         course = self._require_course(user, course_id)
         return [self._build_knowledge_point(point) for point in self.repository.list_knowledge_points(course.id)]
 
+    def get_mastery_map(self, user: User, course_id: int) -> CourseMasteryMap:
+        course = self._require_course(user, course_id)
+        knowledge_points = self.repository.list_knowledge_points(course.id)
+        review_items = self.repository.list_weakness_review_items(user.id, course.id)
+        resources = self.repository.list_generated_resources(user.id, course.id)
+        tasks = self.repository.list_learning_tasks(user.id, course.id)
+        points = self._build_mastery_points(knowledge_points, review_items, resources, tasks)
+        return CourseMasteryMap(
+            course_id=str(course.id),
+            summary=self._build_mastery_summary(points),
+            points=points,
+        )
+
     def get_learning_state(self, user: User, course_id: int) -> CourseLearningState:
         course = self._require_course(user, course_id)
         candidate_events = self.repository.list_weakness_candidate_events(user.id, course.id)
         self._sync_weakness_review_queue(user, course.id, candidate_events)
         review_items = self.repository.list_weakness_review_items(user.id, course.id)
+        resources = self.repository.list_generated_resources(user.id, course.id)
+        if self._sync_weakness_resource_recommendations(review_items, resources):
+            self.repository.commit()
         profile = self.repository.get_profile(user.id)
         profile_json = normalize_profile_json(profile.profile_json if profile is not None else None)
         latest_event = max(candidate_events, key=lambda event: (event.created_at, event.id), default=None)
         latest_candidate = self._candidate_from_event(latest_event) if latest_event is not None else None
+        path = self.repository.get_active_path(user.id, course.id)
+        path_tasks = self.repository.list_tasks_for_path(path.id) if path is not None else []
+        mastery_points = self._build_mastery_points(
+            self.repository.list_knowledge_points(course.id),
+            review_items,
+            resources,
+            self.repository.list_learning_tasks(user.id, course.id),
+        )
+        resources_by_id = {resource.id: resource for resource in resources}
 
         return CourseLearningState(
             course_id=str(course.id),
@@ -371,9 +444,9 @@ class CourseService:
                 weak_points=profile_json["weak_points"],
             ),
             weakness_summary=self._build_weakness_summary(candidate_events, review_items),
-            weakness_review_queue=[weakness_item_to_api(item) for item in review_items if item.status != "dismissed"],
-            path_summary=CoursePlaceholderSummary(status="not_started", message="学习路径尚未生成。"),
-            mastery_summary=CoursePlaceholderSummary(status="not_started", message="掌握度尚未接入。"),
+            weakness_review_queue=[weakness_item_to_api(item, resources_by_id) for item in review_items if item.status != "dismissed"],
+            path_summary=self._build_path_summary(path, path_tasks),
+            mastery_summary=self._build_mastery_summary(mastery_points),
             evidence_summary=CourseEvidenceSummary(
                 candidate_event_count=len(candidate_events),
                 latest_trace_id=latest_candidate.trace_id if latest_candidate is not None else None,
@@ -407,6 +480,8 @@ class CourseService:
 
         try:
             item.status = target_status
+            if target_status == "completed":
+                item.next_review_at = datetime.now(UTC) + timedelta(days=7)
             item.updated_at = datetime.now(UTC)
             self.repository.commit()
             self.repository.refresh(item)
@@ -639,6 +714,153 @@ class CourseService:
             dismissed_count=sum(1 for item in review_items if item.status == "dismissed"),
             latest_evidence_at=iso_timestamp(latest_event.created_at) if latest_event is not None else None,
         )
+
+    @staticmethod
+    def _build_path_summary(path: LearningPath | None, tasks: list[LearningTask]) -> CoursePathSummary:
+        if path is None:
+            return CoursePathSummary(
+                status="not_started",
+                message="学习路径尚未生成。",
+                path_id=None,
+                current_task_title=None,
+                task_count=0,
+                completed_task_count=0,
+            )
+        current_task = next((task for task in tasks if task.status == "doing"), None)
+        if current_task is None:
+            current_task = next((task for task in tasks if task.status == "todo"), None)
+        completed_count = sum(1 for task in tasks if task.status == "completed")
+        return CoursePathSummary(
+            status=path.status,
+            message="当前学习路径进行中。" if path.status == "active" else "学习路径已归档。",
+            path_id=str(path.id),
+            current_task_title=current_task.title if current_task is not None else None,
+            task_count=len(tasks),
+            completed_task_count=completed_count,
+        )
+
+    @classmethod
+    def _build_mastery_points(
+        cls,
+        knowledge_points: list[KnowledgePoint],
+        review_items: list[WeaknessReviewItem],
+        resources: list[GeneratedResource],
+        tasks: list[LearningTask],
+    ) -> list[CourseMasteryPoint]:
+        now = datetime.now(UTC)
+        weaknesses_by_point: dict[int, list[WeaknessReviewItem]] = {}
+        tasks_by_point: dict[int, list[LearningTask]] = {}
+        resources_by_point: dict[int, list[GeneratedResource]] = {}
+        for item in review_items:
+            if item.knowledge_point_id is not None:
+                weaknesses_by_point.setdefault(item.knowledge_point_id, []).append(item)
+        for task in tasks:
+            if task.knowledge_point_id is not None:
+                tasks_by_point.setdefault(task.knowledge_point_id, []).append(task)
+        for resource in resources:
+            if resource.knowledge_point_id is not None:
+                resources_by_point.setdefault(resource.knowledge_point_id, []).append(resource)
+
+        points: list[CourseMasteryPoint] = []
+        for point in knowledge_points:
+            point_weaknesses = weaknesses_by_point.get(point.id, [])
+            point_tasks = tasks_by_point.get(point.id, [])
+            status = cls._mastery_status(point_weaknesses, point_tasks, now)
+            points.append(
+                CourseMasteryPoint(
+                    id=str(point.id),
+                    title=point.title,
+                    chapter=point.chapter,
+                    order_index=point.order_index,
+                    status=status,
+                    score=cls._mastery_score(status),
+                    prerequisite_ids=cls._safe_prerequisite_ids(point.prerequisites_json),
+                    weakness_item_ids=[str(item.id) for item in point_weaknesses if item.status != "dismissed"],
+                    recommended_resource_ids=[str(resource.id) for resource in resources_by_point.get(point.id, [])[:3]],
+                )
+            )
+        return points
+
+    @staticmethod
+    def _mastery_status(weaknesses: list[WeaknessReviewItem], tasks: list[LearningTask], now: datetime) -> str:
+        if any(item.status in {"confirmed", "reviewing"} for item in weaknesses):
+            return "weak"
+        if any(item.status == "completed" and item.next_review_at is not None and item.next_review_at <= now for item in weaknesses):
+            return "recommended_review"
+        if any(task.status in {"todo", "doing"} for task in tasks):
+            return "learning"
+        if any(task.status == "completed" for task in tasks) or any(item.status == "completed" for item in weaknesses):
+            return "mastered"
+        return "not_started"
+
+    @staticmethod
+    def _mastery_score(status: str) -> int:
+        return {
+            "weak": 35,
+            "recommended_review": 55,
+            "learning": 60,
+            "mastered": 90,
+            "not_started": 0,
+        }.get(status, 0)
+
+    @staticmethod
+    def _build_mastery_summary(points: list[CourseMasteryPoint]) -> CourseMasterySummary:
+        return CourseMasterySummary(
+            total_count=len(points),
+            weak_count=sum(1 for point in points if point.status == "weak"),
+            learning_count=sum(1 for point in points if point.status == "learning"),
+            mastered_count=sum(1 for point in points if point.status == "mastered"),
+            recommended_review_count=sum(1 for point in points if point.status == "recommended_review"),
+            not_started_count=sum(1 for point in points if point.status == "not_started"),
+        )
+
+    @classmethod
+    def _sync_weakness_resource_recommendations(
+        cls,
+        review_items: list[WeaknessReviewItem],
+        resources: list[GeneratedResource],
+    ) -> bool:
+        changed = False
+        for item in review_items:
+            if item.status in {"confirmed", "reviewing", "completed"}:
+                recommended_ids = cls._recommend_resource_ids(resources, item.knowledge_point_id, item.title)
+                if item.recommended_resource_ids != recommended_ids:
+                    item.recommended_resource_ids = recommended_ids
+                    changed = True
+                if item.next_review_at is None:
+                    item.next_review_at = datetime.now(UTC) + timedelta(days=3)
+                    changed = True
+        return changed
+
+    @classmethod
+    def _recommend_resource_ids(cls, resources: list[GeneratedResource], knowledge_point_id: int | None, title: str) -> list[int]:
+        normalized_title = cls._normalize_weakness_title(title)
+        matched: list[GeneratedResource] = []
+        if knowledge_point_id is not None:
+            matched.extend([resource for resource in resources if resource.knowledge_point_id == knowledge_point_id])
+            if matched:
+                return [resource.id for resource in matched[:3]]
+        if len(matched) < 3 and normalized_title:
+            matched.extend(
+                [
+                    resource
+                    for resource in resources
+                    if resource not in matched and normalized_title in cls._normalize_weakness_title(resource.title)
+                ]
+            )
+        return [resource.id for resource in matched[:3]]
+
+    @staticmethod
+    def _safe_prerequisite_ids(value: object) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        result: list[str] = []
+        for item in value:
+            try:
+                result.append(str(int(item)))
+            except (TypeError, ValueError):
+                continue
+        return result
 
     @staticmethod
     def _safe_title(value: object) -> str:

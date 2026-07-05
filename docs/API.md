@@ -43,12 +43,12 @@ tutor
 settings
 agents
 resources
+paths
 ```
 
 当前前端仍保留以下合同常量，方便后续 Phase 接入，但它们不是当前已经挂载的后端 router，不能在页面或文档中当作已实现接口：
 
 ```text
-paths
 practice
 reports
 demo
@@ -483,20 +483,57 @@ Authorization: Bearer <token>
 
 ### GET `/courses/{course_id}/mastery-map`
 
-用途：获取知识点掌握地图。当前未实现，后续由掌握度和练习评估阶段接入。
+状态：Phase 9 已实现。
 
-响应包含：
+用途：获取课程级规则掌握度图。掌握度第一版不单独持久化，而是按课程知识点、`confirmed/reviewing/completed` 弱点队列、当前 active 学习路径任务和同课程生成资源实时计算。
 
-- 知识点。
-- 掌握状态。
-- 先修关系。
-- 推荐复习标记。
+规则：
+
+- 必须携带 JWT，只允许访问当前用户自己的课程。
+- `confirmed/reviewing` 弱点映射为 `weak`。
+- 已完成弱点到达 `next_review_at` 时映射为 `recommended_review`。
+- 有进行中或待做路径任务的知识点映射为 `learning`。
+- 完成路径任务或完成弱点且未到复习时间映射为 `mastered`。
+- 其他知识点映射为 `not_started`。
+- 响应不包含完整用户问题、系统提示词、模型输入、API Key、完整课程资料原文或完整画像原文。
+
+响应：
+
+```json
+{
+  "data": {
+    "course_id": "101",
+    "summary": {
+      "total_count": 3,
+      "weak_count": 1,
+      "learning_count": 1,
+      "mastered_count": 1,
+      "recommended_review_count": 0,
+      "not_started_count": 0
+    },
+    "points": [
+      {
+        "id": "9001",
+        "title": "启发式搜索",
+        "chapter": "搜索问题",
+        "order_index": 1,
+        "status": "weak",
+        "score": 35,
+        "prerequisite_ids": [],
+        "weakness_item_ids": ["7001"],
+        "recommended_resource_ids": ["8001"]
+      }
+    ]
+  },
+  "trace_id": "trace_mastery_map"
+}
+```
 
 ### GET `/courses/{course_id}/learning-state`
 
-状态：Phase 7.4 已实现。Phase 7.3 完成课程问答候选事件入队，Phase 7.4 增加队列项确认、开始、完成和忽略操作。
+状态：Phase 9 已更新。Phase 7.3 完成课程问答候选事件入队，Phase 7.4 增加队列项确认、开始、完成和忽略操作，Phase 9 增加推荐资源、下次复习时间、真实路径摘要和掌握度摘要。
 
-用途：聚合某一门课程下的学习状态，并把课程问答产生的弱点候选画像事件确定性同步为待确认复习项。当前只实现课程级弱点追踪第一刀，不生成学习路径、资源、练习评估或报告。
+用途：聚合某一门课程下的学习状态，并把课程问答产生的弱点候选画像事件确定性同步为待确认复习项。当前会返回弱点队列、路径摘要和规则掌握度摘要；仍不生成练习评估或报告。
 
 规则：
 
@@ -507,6 +544,10 @@ Authorization: Bearer <token>
 - 新入队项写入 `weakness_review_queue`，状态为 `pending`，产品语义是“待确认/待复习”，不是系统已经完成正式诊断。
 - 已存在同课程同知识点或同标题的 `pending/confirmed/reviewing/completed/dismissed` 项时不重复创建，避免已忽略项被候选事件重新入队。
 - `weakness_review_queue` 主列表只返回非 `dismissed` 项；`dismissed` 仍参与统计和去重。
+- `confirmed/reviewing/completed` 复习项会按同课程同知识点资源或安全标题匹配补充 `recommended_resource_ids` 和资源摘要；`pending` 仍只表示待确认，不直接作为路径依据。
+- `confirmed/reviewing` 项若缺少 `next_review_at`，读取学习状态时可确定性补齐；`complete` 操作会设置下一次复习时间。
+- `path_summary` 读取同课程最新 `active` 学习路径，不存在时返回真实空摘要。
+- `mastery_summary` 复用掌握度图规则实时统计。
 - 队列和响应不包含完整用户问题、系统提示词、模型输入或资料原文。
 
 响应字段：
@@ -514,9 +555,9 @@ Authorization: Bearer <token>
 - `course_id`。
 - `profile_overlay`：用户级画像中的 `learning_goal`、`knowledge_foundation`、`weak_points`。
 - `weakness_summary`：`candidate_event_count`、`pending_count`、`confirmed_count`、`reviewing_count`、`completed_count`、`dismissed_count`、`latest_evidence_at`。
-- `weakness_review_queue`：复习项数组，包含 `id`、`title`、`status`、`source_type`、`course_id`、`knowledge_point_id`、`next_review_at`、`created_at`、`updated_at`。
-- `path_summary`：空摘要，当前返回学习路径尚未生成。
-- `mastery_summary`：空摘要，当前返回掌握度尚未接入。
+- `weakness_review_queue`：复习项数组，包含 `id`、`title`、`status`、`source_type`、`course_id`、`knowledge_point_id`、`recommended_resource_ids`、`recommended_resources`、`next_review_at`、`created_at`、`updated_at`。
+- `path_summary`：`status`、`message`、`path_id`、`current_task_title`、`task_count`、`completed_task_count`。
+- `mastery_summary`：`total_count`、`weak_count`、`learning_count`、`mastered_count`、`recommended_review_count`、`not_started_count`。
 - `evidence_summary`：候选事件数量、最新 `trace_id` 和最新安全来源标题/章节摘要。
 
 错误：
@@ -994,11 +1035,20 @@ Authorization: Bearer <token>
 
 ## 12. Learning Path 接口
 
-状态：后续预留。当前后端未挂载 `paths` router，`/app/path` 仍展示前端学习路径骨架。Phase 7.2 已明确学习路径属于课程级能力，后续应基于课程学习状态、弱点队列、课程知识点和用户级画像共同生成，而不是只根据全局画像生成。
+状态：Phase 9 已实现。当前后端已挂载 `paths` router，`/app/path` 读取真实课程路径、任务、推荐资源和掌握度图。
+
+统一规则：
+
+- 所有接口必须携带 JWT。
+- 学习路径属于课程级能力，只允许访问当前用户自己的课程和任务。
+- 生成路径时归档同课程旧 `active` 路径为 `archived`，再写入新的 `learning_paths` 和 `learning_tasks`。
+- 路径生成只消费 `confirmed/reviewing` 弱点队列、课程知识点、同课程生成资源和用户级画像叠层；`pending/dismissed` 不进入路径任务。
+- 任务类型固定为 `review`、`learn`、`resource`，任务状态固定为 `todo`、`doing`、`completed`。
+- `plan_json` 只保存安全摘要、生成规则、计数、依据说明和可展示 metadata，不保存系统提示词、模型输入、API Key、完整资料原文或完整画像原文。
 
 ### POST `/paths/generate`
 
-用途：生成个性化学习路径。
+用途：为当前用户的一门课程生成可执行学习路径。
 
 请求：
 
@@ -1010,13 +1060,101 @@ Authorization: Bearer <token>
 }
 ```
 
+- `course_id` 必填，必须是当前用户自己的课程。
+- `duration_days` 只能为 `3`、`7` 或 `14`。
+- `goal` 可选，作为本次路径目标保存到路径摘要。
+
+响应：
+
+```json
+{
+  "data": {
+    "course_id": "101",
+    "status": "active",
+    "message": "当前学习路径进行中。",
+    "path": {
+      "id": "901",
+      "course_id": "101",
+      "title": "机器学习期末复习 学习路径",
+      "goal": "期末复习神经网络",
+      "status": "active",
+      "plan_json": {
+        "duration_days": 7,
+        "generation_rule": "reviewing -> confirmed -> uncovered_knowledge_points",
+        "basis": ["课程知识点 6 个。", "已确认或复习中的薄弱点 2 个。"]
+      },
+      "created_at": "2026-07-05T16:00:00Z",
+      "updated_at": "2026-07-05T16:00:00Z"
+    },
+    "tasks": [
+      {
+        "id": "1001",
+        "path_id": "901",
+        "course_id": "101",
+        "knowledge_point_id": "9001",
+        "title": "复习启发式搜索",
+        "task_type": "review",
+        "reason": "来自复习中的薄弱点。",
+        "recommended_resource_ids": ["8001"],
+        "recommended_resources": [
+          {
+            "id": "8001",
+            "title": "启发式搜索讲解",
+            "resource_type": "doc"
+          }
+        ],
+        "status": "doing",
+        "due_at": "2026-07-06T16:00:00Z",
+        "next_review_at": null,
+        "created_at": "2026-07-05T16:00:00Z",
+        "updated_at": "2026-07-05T16:00:00Z"
+      }
+    ],
+    "evidence_summary": {
+      "knowledge_point_count": 6,
+      "confirmed_or_reviewing_weakness_count": 2,
+      "pending_weakness_count": 1,
+      "resource_count": 3,
+      "basis": ["课程知识点 6 个。"]
+    }
+  },
+  "trace_id": "trace_path_generate"
+}
+```
+
 ### GET `/paths/current`
 
-用途：获取当前学习路径。
+用途：获取当前用户某门课程最新 `active` 学习路径。无路径时返回真实空状态，不生成假路径。
+
+查询参数：
+
+- `course_id`：必填。
+
+空状态响应：
+
+```json
+{
+  "data": {
+    "course_id": "101",
+    "status": "not_started",
+    "message": "学习路径尚未生成。",
+    "path": null,
+    "tasks": [],
+    "evidence_summary": {
+      "knowledge_point_count": 6,
+      "confirmed_or_reviewing_weakness_count": 0,
+      "pending_weakness_count": 1,
+      "resource_count": 0,
+      "basis": []
+    }
+  },
+  "trace_id": "trace_path_current"
+}
+```
 
 ### PATCH `/paths/tasks/{task_id}`
 
-用途：更新任务状态。
+用途：更新当前用户自己的路径任务状态。非本人任务返回 404；状态只能为 `todo`、`doing`、`completed`。
 
 请求：
 
@@ -1025,6 +1163,8 @@ Authorization: Bearer <token>
   "status": "completed"
 }
 ```
+
+响应为更新后的任务对象，字段同 `tasks[]` 元素。
 
 ## 13. Tutor 接口
 

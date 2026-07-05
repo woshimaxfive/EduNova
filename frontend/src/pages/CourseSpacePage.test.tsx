@@ -78,11 +78,19 @@ const emptyLearningState = {
   weakness_review_queue: [],
   path_summary: {
     status: "not_started",
-    message: "学习路径尚未生成。"
+    message: "学习路径尚未生成。",
+    path_id: null,
+    current_task_title: null,
+    task_count: 0,
+    completed_task_count: 0
   },
   mastery_summary: {
-    status: "not_started",
-    message: "掌握度尚未接入。"
+    total_count: 0,
+    weak_count: 0,
+    learning_count: 0,
+    mastered_count: 0,
+    recommended_review_count: 0,
+    not_started_count: 0
   },
   evidence_summary: {
     candidate_event_count: 0,
@@ -111,6 +119,8 @@ const learningStateWithWeakness = {
       source_type: "course_question",
       course_id: "808",
       knowledge_point_id: "401",
+      recommended_resource_ids: [],
+      recommended_resources: [],
       next_review_at: null,
       created_at: "2026-07-05T08:30:00Z",
       updated_at: "2026-07-05T08:30:00Z"
@@ -176,6 +186,8 @@ const learningStateWithReviewFlow = {
       source_type: "course_question",
       course_id: "808",
       knowledge_point_id: "401",
+      recommended_resource_ids: [],
+      recommended_resources: [],
       next_review_at: null,
       created_at: "2026-07-05T08:30:00Z",
       updated_at: "2026-07-05T08:30:00Z"
@@ -187,6 +199,14 @@ const learningStateWithReviewFlow = {
       source_type: "course_question",
       course_id: "808",
       knowledge_point_id: "402",
+      recommended_resource_ids: ["801"],
+      recommended_resources: [
+        {
+          id: "801",
+          title: "反向传播讲解",
+          resource_type: "doc"
+        }
+      ],
       next_review_at: null,
       created_at: "2026-07-05T08:31:00Z",
       updated_at: "2026-07-05T08:31:00Z"
@@ -198,6 +218,8 @@ const learningStateWithReviewFlow = {
       source_type: "course_question",
       course_id: "808",
       knowledge_point_id: "403",
+      recommended_resource_ids: [],
+      recommended_resources: [],
       next_review_at: null,
       created_at: "2026-07-05T08:32:00Z",
       updated_at: "2026-07-05T08:32:00Z"
@@ -209,6 +231,8 @@ const learningStateWithReviewFlow = {
       source_type: "course_question",
       course_id: "808",
       knowledge_point_id: "404",
+      recommended_resource_ids: [],
+      recommended_resources: [],
       next_review_at: null,
       created_at: "2026-07-05T08:33:00Z",
       updated_at: "2026-07-05T08:33:00Z"
@@ -220,9 +244,52 @@ const learningStateWithReviewFlow = {
       source_type: "course_question",
       course_id: "808",
       knowledge_point_id: "405",
+      recommended_resource_ids: [],
+      recommended_resources: [],
       next_review_at: null,
       created_at: "2026-07-05T08:34:00Z",
       updated_at: "2026-07-05T08:34:00Z"
+    }
+  ]
+};
+
+const learningStateWithPath = {
+  ...learningStateWithWeakness,
+  path_summary: {
+    status: "active",
+    message: "当前学习路径进行中。",
+    path_id: "901",
+    current_task_title: "复习启发式搜索",
+    task_count: 3,
+    completed_task_count: 1
+  },
+  mastery_summary: {
+    total_count: 4,
+    weak_count: 1,
+    learning_count: 1,
+    mastered_count: 1,
+    recommended_review_count: 1,
+    not_started_count: 0
+  },
+  weakness_review_queue: [
+    {
+      id: "701",
+      title: "启发式搜索",
+      status: "confirmed",
+      source_type: "course_question",
+      course_id: "808",
+      knowledge_point_id: "401",
+      recommended_resource_ids: ["801"],
+      recommended_resources: [
+        {
+          id: "801",
+          title: "启发式搜索讲解",
+          resource_type: "doc"
+        }
+      ],
+      next_review_at: "2026-07-12T08:30:00Z",
+      created_at: "2026-07-05T08:30:00Z",
+      updated_at: "2026-07-05T08:30:00Z"
     }
   ]
 };
@@ -382,6 +449,8 @@ function renderCoursePage(options: CoursePageOptions = {}) {
             source_type: "course_question",
             course_id: "808",
             knowledge_point_id: "401",
+            recommended_resource_ids: [],
+            recommended_resources: [],
             next_review_at: null,
             created_at: "2026-07-05T08:30:00Z",
             updated_at: "2026-07-05T08:40:00Z"
@@ -765,6 +834,26 @@ describe("CourseSpacePage course tutor sessions", () => {
       `${PATHS.studio}?course_id=808`
     );
     expect(within(detailPanel).queryByText(/后续阶段接入/)).not.toBeInTheDocument();
+  });
+
+  it("shows real learning path summary and links to the course path workspace", async () => {
+    const user = userEvent.setup();
+    renderCoursePage({
+      sessions: [makeSession("777", "已有课程历史")],
+      learningState: learningStateWithPath
+    });
+
+    await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await user.click(await screen.findByRole("button", { name: "学习路径" }));
+
+    const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
+    expect(within(detailPanel).getByText("当前学习路径进行中。")).toBeInTheDocument();
+    expect(within(detailPanel).getByText("复习启发式搜索")).toBeInTheDocument();
+    expect(within(detailPanel).getByRole("link", { name: "查看完整路径" })).toHaveAttribute(
+      "href",
+      `${PATHS.path}?course_id=808`
+    );
+    expect(within(detailPanel).queryByText("先围绕本次命中的来源复习核心概念")).not.toBeInTheDocument();
   });
 
   it("renders a real empty state when the agent trace has no steps", async () => {

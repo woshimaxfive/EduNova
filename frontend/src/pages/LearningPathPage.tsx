@@ -6,6 +6,12 @@ import { Link, useSearchParams } from "react-router-dom";
 import { buildCoursePath } from "../app/routePaths";
 import { getMasteryMap, listCourses, type CourseMasteryPoint, type CourseMasteryStatus } from "../api/courses";
 import {
+  generateExamSprintPlan,
+  type ExamSprintDailyTask,
+  type ExamSprintDuration,
+  type ExamSprintPlan
+} from "../api/examSprint";
+import {
   generatePath,
   getCurrentPath,
   updatePathTask,
@@ -21,6 +27,7 @@ const durationOptions: Array<{ label: string; value: GeneratePathRequest["durati
   { label: "7 天", value: 7 },
   { label: "14 天", value: 14 }
 ];
+const sprintDurationOptions: Array<{ label: string; value: ExamSprintDuration }> = durationOptions;
 
 function parseCourseId(value: string | null) {
   if (!value) {
@@ -83,6 +90,27 @@ function formatDateTime(value: string | null) {
   });
 }
 
+function sprintTaskTypeLabel(taskType: string) {
+  if (taskType === "sprint_practice") {
+    return "必刷题";
+  }
+  if (taskType === "sprint_resource") {
+    return "资源阅读";
+  }
+  return "重点复习";
+}
+
+function groupSprintTasks(tasks: ExamSprintDailyTask[]) {
+  const groups = new Map<number, ExamSprintDailyTask[]>();
+
+  tasks.forEach((task) => {
+    const dayIndex = task.day_index || 1;
+    groups.set(dayIndex, [...(groups.get(dayIndex) ?? []), task]);
+  });
+
+  return [...groups.entries()].sort(([left], [right]) => left - right);
+}
+
 export function LearningPathPage() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
@@ -91,6 +119,10 @@ export function LearningPathPage() {
   const [durationDays, setDurationDays] = useState<GeneratePathRequest["duration_days"]>(7);
   const [goal, setGoal] = useState("");
   const [localFeedback, setLocalFeedback] = useState<string | null>(null);
+  const [sprintDurationDays, setSprintDurationDays] = useState<ExamSprintDuration>(7);
+  const [sprintGoal, setSprintGoal] = useState("");
+  const [sprintPlan, setSprintPlan] = useState<ExamSprintPlan | null>(null);
+  const [sprintFeedback, setSprintFeedback] = useState<string | null>(null);
 
   const coursesQuery = useQuery({
     queryKey: ["courses", "list"],
@@ -125,6 +157,7 @@ export function LearningPathPage() {
   const masteryMap = masteryQuery.data?.data ?? null;
   const hasPath = Boolean(pathDetail?.path);
   const hasReadError = coursesQuery.isError || currentPathQuery.isError || masteryQuery.isError;
+  const sprintTaskGroups = sprintPlan ? groupSprintTasks(sprintPlan.daily_tasks) : [];
 
   const generateMutation = useMutation({
     mutationFn: (payload: GeneratePathRequest) => generatePath(payload),
@@ -153,16 +186,38 @@ export function LearningPathPage() {
       setLocalFeedback("任务状态更新失败，请稍后重试。");
     }
   });
+  const sprintMutation = useMutation({
+    mutationFn: (payload: { course_id: number; duration_days: ExamSprintDuration; material_ids: number[]; goal: string }) =>
+      generateExamSprintPlan(payload),
+    onSuccess: (result, payload) => {
+      setSprintFeedback(null);
+      setSprintPlan(result.data);
+      void queryClient.invalidateQueries({ queryKey: ["courses", "mastery-map", payload.course_id] });
+      void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", payload.course_id] });
+    },
+    onError: () => {
+      setSprintFeedback("期末冲刺计划生成失败，请稍后重试。");
+    }
+  });
 
   function handleCourseChange(event: ChangeEvent<HTMLSelectElement>) {
     setSelectedCourseId(parseCourseId(event.target.value));
     setLocalFeedback(null);
+    setSprintFeedback(null);
+    setSprintPlan(null);
   }
 
   function handleDurationChange(event: ChangeEvent<HTMLSelectElement>) {
     const value = Number.parseInt(event.target.value, 10);
     if (value === 3 || value === 7 || value === 14) {
       setDurationDays(value);
+    }
+  }
+
+  function handleSprintDurationChange(event: ChangeEvent<HTMLSelectElement>) {
+    const value = Number.parseInt(event.target.value, 10);
+    if (value === 3 || value === 7 || value === 14) {
+      setSprintDurationDays(value);
     }
   }
 
@@ -175,6 +230,19 @@ export function LearningPathPage() {
       course_id: effectiveCourseId,
       duration_days: durationDays,
       goal: goal.trim()
+    });
+  }
+
+  function submitGenerateSprintPlan() {
+    if (effectiveCourseId === null || !hasCourse || sprintMutation.isPending) {
+      return;
+    }
+
+    sprintMutation.mutate({
+      course_id: effectiveCourseId,
+      duration_days: sprintDurationDays,
+      material_ids: [],
+      goal: sprintGoal.trim()
     });
   }
 
@@ -343,6 +411,135 @@ export function LearningPathPage() {
               <p className="path-empty-state">正在读取掌握度图。</p>
             ) : (
               <p className="path-empty-state">暂无掌握度数据。</p>
+            )}
+          </section>
+
+          <section className="student-panel exam-sprint-panel" role="region" aria-label="期末冲刺计划">
+            <div className="student-panel-heading compact">
+              <div>
+                <h2>期末冲刺</h2>
+              </div>
+              {sprintPlan ? <span className="panel-count">{sprintPlan.duration_days} 天</span> : null}
+            </div>
+
+            <div className="exam-sprint-controls">
+              <label>
+                <span>冲刺天数</span>
+                <select aria-label="冲刺天数" value={sprintDurationDays} onChange={handleSprintDurationChange}>
+                  {sprintDurationOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>冲刺目标</span>
+                <input value={sprintGoal} placeholder="可选" onChange={(event) => setSprintGoal(event.target.value)} />
+              </label>
+              <button
+                className="primary-action"
+                type="button"
+                disabled={!hasCourse || sprintMutation.isPending}
+                onClick={submitGenerateSprintPlan}
+              >
+                <span>{sprintMutation.isPending ? "生成中" : "生成期末冲刺计划"}</span>
+              </button>
+            </div>
+
+            <InlineFeedback message={sprintFeedback} tone="warning" />
+
+            {sprintPlan ? (
+              <div className="exam-sprint-result">
+                <div className="exam-sprint-summary">
+                  <span>{sprintPlan.evidence_summary.knowledge_point_count} 个知识点</span>
+                  <span>{sprintPlan.evidence_summary.weakness_count} 个确认弱点</span>
+                  <span>{sprintPlan.evidence_summary.practice_low_score_count} 条练习证据</span>
+                </div>
+
+                {sprintPlan.high_frequency_points.length > 0 ? (
+                  <section className="exam-sprint-block" aria-label="高频点">
+                    <h3>高频点</h3>
+                    <ul>
+                      {sprintPlan.high_frequency_points.slice(0, 4).map((point) => (
+                        <li key={`${point.knowledge_point_id ?? point.title}-high`}>
+                          <Target size={15} weight="duotone" aria-hidden="true" />
+                          <span>{point.title}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+
+                {sprintPlan.weak_points.length > 0 ? (
+                  <section className="exam-sprint-block" aria-label="薄弱点">
+                    <h3>薄弱点</h3>
+                    <ul>
+                      {sprintPlan.weak_points.slice(0, 4).map((point) => (
+                        <li key={`${point.knowledge_point_id ?? point.title}-weak`}>
+                          <CheckCircle size={15} weight="duotone" aria-hidden="true" />
+                          <span>{point.title}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+
+                <section className="exam-sprint-block" aria-label="每日任务">
+                  <h3>每日任务</h3>
+                  {sprintTaskGroups.map(([dayIndex, dailyTasks]) => (
+                    <article className="exam-sprint-day" key={dayIndex}>
+                      <strong>第 {dayIndex} 天</strong>
+                      <ul>
+                        {dailyTasks.map((task) => (
+                          <li key={task.id}>
+                            <span>{sprintTaskTypeLabel(task.task_type)}</span>
+                            <div>
+                              <b>{task.title}</b>
+                              <small>
+                                {task.status === "doing" ? "进行中" : "待开始"} · {formatDateTime(task.due_at)}
+                              </small>
+                              {task.recommended_resources.map((resource) => (
+                                <em key={resource.id}>{resource.title}</em>
+                              ))}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                  ))}
+                </section>
+
+                {sprintPlan.must_do_questions.length > 0 ? (
+                  <section className="exam-sprint-block" aria-label="必刷题">
+                    <h3>必刷题</h3>
+                    <ul>
+                      {sprintPlan.must_do_questions.slice(0, 3).map((question) => (
+                        <li key={question.id}>
+                          <FileText size={15} weight="duotone" aria-hidden="true" />
+                          <span>{question.prompt}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+
+                {sprintPlan.easy_mistake_warnings.length > 0 ? (
+                  <section className="exam-sprint-block" aria-label="易错提醒">
+                    <h3>易错提醒</h3>
+                    <ul>
+                      {sprintPlan.easy_mistake_warnings.slice(0, 3).map((warning) => (
+                        <li key={`${warning.knowledge_point_id ?? warning.title}-warning`}>
+                          <Sparkle size={15} weight="duotone" aria-hidden="true" />
+                          <span>{warning.warning}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+              </div>
+            ) : (
+              <p className="path-empty-state">选择课程后可生成 3/7/14 天期末冲刺计划。</p>
             )}
           </section>
 

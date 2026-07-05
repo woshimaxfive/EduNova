@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PATHS } from "../app/routePaths";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
+import { EXAM_SPRINT_ENDPOINTS } from "../api/examSprint";
 import { PATH_ENDPOINTS } from "../api/paths";
 import { LearningPathPage } from "./LearningPathPage";
 
@@ -130,6 +131,105 @@ const masteryResponse = {
       recommended_resource_ids: ["801"]
     }
   ]
+};
+
+const sprintPlanResponse = {
+  id: "3001",
+  course_id: "808",
+  duration_days: 7,
+  goal: "期末冲刺",
+  status: "sprint_active",
+  high_frequency_points: [
+    {
+      knowledge_point_id: "401",
+      title: "启发式搜索",
+      reason: "来自练习低分或错题",
+      score: 120,
+      recommended_resource_ids: ["801"],
+      recommended_resources: [
+        {
+          id: "801",
+          title: "启发式搜索讲解",
+          resource_type: "doc",
+          knowledge_point_id: "401"
+        }
+      ]
+    }
+  ],
+  weak_points: [
+    {
+      knowledge_point_id: "401",
+      title: "启发式搜索",
+      reason: "来自已确认或复习中的弱点队列",
+      score: 130,
+      recommended_resource_ids: ["801"],
+      recommended_resources: [
+        {
+          id: "801",
+          title: "启发式搜索讲解",
+          resource_type: "doc",
+          knowledge_point_id: "401"
+        }
+      ]
+    }
+  ],
+  daily_tasks: [
+    {
+      id: "4001",
+      day_index: 1,
+      title: "第 1 天复习启发式搜索",
+      task_type: "sprint_review",
+      status: "doing",
+      due_at: "2026-07-05T11:00:00Z",
+      knowledge_point_id: "401",
+      reason: "期末冲刺优先处理薄弱点和高频知识点。",
+      recommended_resource_ids: ["801"],
+      recommended_resources: [
+        {
+          id: "801",
+          title: "启发式搜索讲解",
+          resource_type: "doc",
+          knowledge_point_id: "401"
+        }
+      ]
+    }
+  ],
+  must_do_questions: [
+    {
+      id: "sprint-q1",
+      knowledge_point_id: "401",
+      title: "启发式搜索",
+      question_type: "short_answer",
+      prompt: "用课程证据解释启发式搜索的核心概念、常见误区和解题步骤。",
+      reason: "来自弱点、练习低分或高频知识点。"
+    }
+  ],
+  easy_mistake_warnings: [
+    {
+      knowledge_point_id: "401",
+      title: "启发式搜索",
+      warning: "启发式搜索：先复述概念边界，再做题；错题要标出依据缺口。"
+    }
+  ],
+  recommended_resources: [
+    {
+      id: "801",
+      title: "启发式搜索讲解",
+      resource_type: "doc",
+      knowledge_point_id: "401"
+    }
+  ],
+  evidence_summary: {
+    knowledge_point_count: 3,
+    weakness_count: 1,
+    practice_low_score_count: 1,
+    resource_count: 1,
+    report_suggestion_count: 1,
+    material_filter_count: 0,
+    basis: ["课程知识点 3 个。"]
+  },
+  created_at: "2026-07-05T11:00:00Z",
+  updated_at: "2026-07-05T11:00:00Z"
 };
 
 describe("LearningPathPage", () => {
@@ -275,5 +375,88 @@ describe("LearningPathPage", () => {
     renderWithProviders(<LearningPathPage />);
 
     expect(await screen.findByText("学习路径数据读取失败，请稍后重试。")).toBeInTheDocument();
+  });
+
+  it("generates and renders an exam sprint plan without replacing the normal path", async () => {
+    const user = userEvent.setup();
+    const calls: Array<{ method: string; url: string; payload: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+      const payload = parsePayload(config.data);
+      calls.push({ method, url, payload });
+
+      if (url === COURSE_ENDPOINTS.list) {
+        return { data: courseListResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === PATH_ENDPOINTS.current) {
+        return { data: { data: activePathResponse, trace_id: "trace_path" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === COURSE_ENDPOINTS.masteryMap(808)) {
+        return { data: { data: masteryResponse, trace_id: "trace_mastery" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === EXAM_SPRINT_ENDPOINTS.generate) {
+        return { data: { data: sprintPlanResponse, trace_id: "trace_sprint" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+
+      throw new Error(`Unexpected request ${method} ${url}`);
+    };
+
+    renderWithProviders(<LearningPathPage />);
+
+    expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
+    const sprintRegion = screen.getByRole("region", { name: "期末冲刺计划" });
+
+    await user.selectOptions(within(sprintRegion).getByLabelText("冲刺天数"), "3");
+    await user.click(within(sprintRegion).getByRole("button", { name: "生成期末冲刺计划" }));
+
+    expect(await within(sprintRegion).findByText("第 1 天复习启发式搜索")).toBeInTheDocument();
+    expect(within(sprintRegion).getByText("用课程证据解释启发式搜索的核心概念、常见误区和解题步骤。")).toBeInTheDocument();
+    expect(within(sprintRegion).getByText("启发式搜索：先复述概念边界，再做题；错题要标出依据缺口。")).toBeInTheDocument();
+    expect(within(sprintRegion).getByText("启发式搜索讲解")).toBeInTheDocument();
+    expect(screen.getByText("复习启发式搜索")).toBeInTheDocument();
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        method: "post",
+        url: EXAM_SPRINT_ENDPOINTS.generate,
+        payload: {
+          course_id: 808,
+          duration_days: 3,
+          material_ids: [],
+          goal: ""
+        }
+      })
+    );
+  });
+
+  it("shows local sprint feedback without blocking the normal learning path", async () => {
+    const user = userEvent.setup();
+
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === COURSE_ENDPOINTS.list) {
+        return { data: courseListResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (config.url === PATH_ENDPOINTS.current) {
+        return { data: { data: activePathResponse, trace_id: "trace_path" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (config.url === COURSE_ENDPOINTS.masteryMap(808)) {
+        return { data: { data: masteryResponse, trace_id: "trace_mastery" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (config.url === EXAM_SPRINT_ENDPOINTS.generate) {
+        throw new Error("sprint failed");
+      }
+      throw new Error(`Unexpected request ${config.url}`);
+    };
+
+    renderWithProviders(<LearningPathPage />);
+
+    expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
+    const sprintRegion = screen.getByRole("region", { name: "期末冲刺计划" });
+
+    await user.click(within(sprintRegion).getByRole("button", { name: "生成期末冲刺计划" }));
+
+    expect(await within(sprintRegion).findByText("期末冲刺计划生成失败，请稍后重试。")).toBeInTheDocument();
+    expect(screen.getByText("复习启发式搜索")).toBeInTheDocument();
   });
 });

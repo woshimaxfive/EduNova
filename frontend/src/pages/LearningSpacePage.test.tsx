@@ -346,6 +346,7 @@ describe("LearningSpacePage", () => {
     const { calls } = renderWithDashboardSummary();
 
     expect(await screen.findByRole("link", { name: /真实机器学习课/ })).toHaveAttribute("href", "/app/courses/101");
+    expect(screen.getByRole("link", { name: /期末冲刺/ })).toHaveAttribute("href", "/app/path?course_id=101");
     expect(screen.getByRole("button", { name: /接口里的主页历史/ })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Python 基础补齐/ })).not.toBeInTheDocument();
     expect(calls.map((call) => call.url)).toContain(DASHBOARD_ENDPOINTS.summary);

@@ -14,7 +14,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { buildCoursePath } from "../app/routePaths";
+import { PATHS, buildCoursePath } from "../app/routePaths";
 import { createCourseFromMaterials } from "../api/courses";
 import { getDashboardSummary, type DashboardMaterial } from "../api/dashboard";
 import { getApiErrorMessage } from "../api/errors";
@@ -439,9 +439,10 @@ export function LearningSpacePage() {
             <section className="recent-course-strip" aria-label="最近学习">
               <div className="recent-course-heading">
                 <span>最近学习</span>
-                <button type="button">
-                  查看全部
-                </button>
+                <Link className="home-sprint-link" to={`${PATHS.path}?course_id=${recentCourses[0].id}`}>
+                  <Sparkle size={15} weight="duotone" aria-hidden="true" />
+                  <span>期末冲刺</span>
+                </Link>
               </div>
               <ul className="recent-course-list" aria-label="最近学习列表">
                 {recentCourses.map((course) => (

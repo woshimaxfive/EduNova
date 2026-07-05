@@ -2636,9 +2636,148 @@ a {
   background: var(--accent-strong);
 }
 
+.exam-sprint-panel,
+.exam-sprint-result,
+.exam-sprint-block,
+.exam-sprint-day {
+  display: grid;
+  gap: 12px;
+}
+
+.exam-sprint-controls {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.5fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.exam-sprint-controls label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.exam-sprint-controls select,
+.exam-sprint-controls input {
+  min-width: 0;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid rgba(16, 24, 32, 0.1);
+  border-radius: 12px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.72);
+  outline: none;
+}
+
+.exam-sprint-controls .primary-action {
+  grid-column: 1 / -1;
+  width: 100%;
+  justify-content: center;
+}
+
+.exam-sprint-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.exam-sprint-summary span,
+.exam-sprint-block li {
+  min-height: 28px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.exam-sprint-block h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 0.9rem;
+}
+
+.exam-sprint-block ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.exam-sprint-block li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.exam-sprint-day {
+  padding: 10px;
+  border: 1px solid rgba(16, 24, 32, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.exam-sprint-day strong {
+  color: var(--text-strong);
+}
+
+.exam-sprint-day ul,
+.exam-sprint-day li,
+.exam-sprint-day li div {
+  display: grid;
+  min-width: 0;
+}
+
+.exam-sprint-day ul {
+  gap: 8px;
+}
+
+.exam-sprint-day li {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  border-radius: 12px;
+}
+
+.exam-sprint-day li span {
+  white-space: nowrap;
+}
+
+.exam-sprint-day li div {
+  gap: 3px;
+}
+
+.exam-sprint-day b,
+.exam-sprint-day small,
+.exam-sprint-day em {
+  overflow-wrap: anywhere;
+}
+
+.exam-sprint-day small {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.exam-sprint-day em {
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
 @media (max-width: 760px) {
   .path-control-row,
-  .path-stage-list > li {
+  .path-stage-list > li,
+  .exam-sprint-controls,
+  .exam-sprint-day li {
     grid-template-columns: 1fr;
   }
 
@@ -4902,11 +5041,16 @@ a {
   font-weight: 780;
 }
 
-.recent-course-heading button {
+.recent-course-heading button,
+.home-sprint-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border: 0;
   color: var(--accent-strong);
   background: transparent;
   font-weight: 800;
+  text-decoration: none;
 }
 
 .recent-course-list {

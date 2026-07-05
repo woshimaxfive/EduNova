@@ -46,6 +46,7 @@ resources
 paths
 practice
 reports
+exam-sprint
 ```
 
 当前前端仍保留以下合同常量，方便后续 Phase 接入，但它们不是当前已经挂载的后端 router，不能在页面或文档中当作已实现接口：
@@ -1596,6 +1597,18 @@ course_id=101
 
 ## 16. Exam Sprint 接口
 
+状态：Phase 11.1 已实现期末冲刺模式第一刀。当前只生成课程级 3/7/14 天冲刺计划，不实现资料对比 `/materials/compare`，不调用外部模型，不新增迁移。
+
+统一规则：
+
+- 所有接口必须携带 JWT。
+- 只能访问当前用户自己的课程、资料和冲刺计划；非本人课程、资料或计划返回 404。
+- 计划复用 `learning_paths` 和 `learning_tasks` 持久化，`learning_paths.plan_json.kind="exam_sprint"`。
+- 冲刺计划状态使用 `sprint_active` / `sprint_archived`，不会污染 `/paths/current` 的普通 `active` 学习路径。
+- 同一用户同一课程生成新冲刺计划时，只归档旧 `sprint_active`，不归档普通学习路径。
+- `material_ids` 只作为本课程资料筛选依据，本阶段不做资料对比或跨资料差异分析。
+- 响应和 `plan_json` 不保存系统提示词、模型输入、API Key、完整资料原文、完整用户画像原文或完整练习原始答案。
+
 ### POST `/exam-sprint/plans`
 
 用途：生成期末冲刺计划。
@@ -1611,9 +1624,98 @@ course_id=101
 }
 ```
 
+字段：
+
+- `course_id`：必填，当前用户自己的课程 ID。
+- `duration_days`：只允许 `3`、`7`、`14`。
+- `material_ids`：可选，必须属于当前用户且已关联当前课程；本阶段只用于限定证据来源。
+- `goal`：可选，最长 500 字。
+
+响应：
+
+```json
+{
+  "data": {
+    "id": "3001",
+    "course_id": "101",
+    "duration_days": 7,
+    "goal": "复习人工智能导论期末考试",
+    "status": "sprint_active",
+    "high_frequency_points": [
+      {
+        "knowledge_point_id": "402",
+        "title": "启发式搜索",
+        "reason": "来自练习低分或错题；已有同课程资源可复用",
+        "score": 120,
+        "recommended_resource_ids": ["901"],
+        "recommended_resources": [
+          {
+            "id": "901",
+            "title": "启发式搜索讲解",
+            "resource_type": "doc",
+            "knowledge_point_id": "402"
+          }
+        ]
+      }
+    ],
+    "weak_points": [],
+    "daily_tasks": [
+      {
+        "id": "4001",
+        "day_index": 1,
+        "title": "第 1 天复习启发式搜索",
+        "task_type": "sprint_review",
+        "status": "doing",
+        "due_at": "2026-07-05T11:00:00Z",
+        "knowledge_point_id": "402",
+        "reason": "期末冲刺优先处理薄弱点和高频知识点。",
+        "recommended_resource_ids": ["901"],
+        "recommended_resources": []
+      }
+    ],
+    "must_do_questions": [
+      {
+        "id": "sprint-q1",
+        "knowledge_point_id": "402",
+        "title": "启发式搜索",
+        "question_type": "short_answer",
+        "prompt": "用课程证据解释启发式搜索的核心概念、常见误区和解题步骤。",
+        "reason": "来自弱点、练习低分或高频知识点。"
+      }
+    ],
+    "easy_mistake_warnings": [
+      {
+        "knowledge_point_id": "402",
+        "title": "启发式搜索",
+        "warning": "启发式搜索：先复述概念边界，再做题；错题要标出依据缺口。"
+      }
+    ],
+    "recommended_resources": [],
+    "evidence_summary": {
+      "knowledge_point_count": 3,
+      "weakness_count": 1,
+      "practice_low_score_count": 1,
+      "resource_count": 2,
+      "report_suggestion_count": 1,
+      "material_filter_count": 2,
+      "basis": ["课程知识点 3 个。"]
+    },
+    "created_at": "2026-07-05T11:00:00Z",
+    "updated_at": "2026-07-05T11:00:00Z"
+  },
+  "trace_id": "trace_exam_sprint"
+}
+```
+
+错误：
+
+- 未登录返回 401。
+- 课程不存在、非本人课程、资料不存在或资料不属于当前课程返回 404。
+- `duration_days` 不为 `3/7/14` 或课程没有可用知识点时返回 400/422，且不生成假计划。
+
 ### GET `/exam-sprint/plans/{plan_id}`
 
-用途：查看冲刺计划。
+用途：查看当前用户自己的冲刺计划。非本人计划返回 404，避免跨用户枚举。
 
 ## 17. Export 接口
 

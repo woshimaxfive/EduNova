@@ -305,6 +305,8 @@ Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状�
 
 Phase 9 开始实际复用本表保存课程级学习路径，不新增迁移。生成新路径时，服务层会把同一用户同一课程旧 `active` 路径归档为 `archived`，再写入新的 `active` 路径。`plan_json` 只保存安全摘要、生成规则、计数、依据说明和可展示 metadata，不保存系统提示词、模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
+Phase 11.1 继续复用本表保存课程级期末冲刺计划，不新增迁移。冲刺计划使用 `status="sprint_active"` 和 `status="sprint_archived"`，`plan_json.kind="exam_sprint"`；生成新冲刺计划时只归档同一用户同一课程旧 `sprint_active`，不归档 Phase 9 普通 `active` 学习路径。`plan_json` 保存高频点、薄弱点、必刷题、易错提醒、推荐资源 ID、证据计数和任务天数映射等安全摘要，不保存系统提示词、模型输入、API Key、完整资料原文、完整用户画像原文或完整练习原始答案。
+
 字段：
 
 | 字段 | 类型 | 说明 |
@@ -323,7 +325,9 @@ Phase 9 开始实际复用本表保存课程级学习路径，不新增迁移。
 
 用途：路径中的学习任务。
 
-Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `reviewing` 弱点、`confirmed` 弱点、未覆盖知识点排序；`pending` 和 `dismissed` 弱点不进入路径任务。任务类型固定为 `review`、`learn`、`resource`，任务状态固定为 `todo`、`doing`、`completed`；第一条任务为 `doing`，其余为 `todo`。`recommended_resource_ids` 最多保存 3 个同课程资源 ID，优先匹配同知识点资源，没有知识点时按安全标题匹配。
+Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `reviewing` 弱点、`confirmed` 弱点、未覆盖知识点排序；`pending` 和 `dismissed` 弱点不进入路径任务。普通路径任务类型固定为 `review`、`learn`、`resource`，任务状态固定为 `todo`、`doing`、`completed`；第一条任务为 `doing`，其余为 `todo`。`recommended_resource_ids` 最多保存 3 个同课程资源 ID，优先匹配同知识点资源，没有知识点时按安全标题匹配。
+
+Phase 11.1 期末冲刺计划也复用本表保存每日任务，`task_type` 使用 `sprint_review`、`sprint_practice`、`sprint_resource`，状态仍使用 `doing` / `todo`；第一条冲刺任务为 `doing`，其余为 `todo`。任务的天数分组保存在所属 `learning_paths.plan_json.task_days` 中。
 
 字段：
 
@@ -335,7 +339,7 @@ Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `r
 | `course_id` | bigint | 课程 |
 | `knowledge_point_id` | bigint | 知识点 |
 | `title` | varchar | 任务标题 |
-| `task_type` | varchar | `review`、`learn`、`resource` |
+| `task_type` | varchar | 普通路径为 `review`、`learn`、`resource`；期末冲刺为 `sprint_review`、`sprint_practice`、`sprint_resource` |
 | `reason` | text | 推荐理由 |
 | `recommended_resource_ids` | jsonb | 推荐资源 ID 列表 |
 | `status` | varchar | `todo`、`doing`、`completed` |
@@ -741,6 +745,7 @@ Demo 数据要求：
 16. Phase 7.3 后，课程问答弱点候选事件可通过 `/courses/{course_id}/learning-state` 同步为当前课程 `weakness_review_queue` 的 `pending` 项，服务层强制绑定 `course_id`。
 17. Phase 7.4 后，弱点复习项通过课程绑定接口进行确认、开始、完成和软忽略；`dismissed` 项不返回主列表，但必须继续参与去重。
 18. Phase 10 后，练习会话、作答、报告和练习评估来源弱点都复用已有表；练习错题或低分题可生成 `practice_assessment` 来源的 `confirmed` 队列项，并影响 `/courses/{course_id}/mastery-map` 和 `/courses/{course_id}/learning-state`。
+19. Phase 11.1 后，期末冲刺计划复用 `learning_paths` 和 `learning_tasks`，使用 `sprint_active` / `sprint_archived` 与 `plan_json.kind="exam_sprint"` 区分普通学习路径，不新增表或迁移。
 
 当前已验证：
 

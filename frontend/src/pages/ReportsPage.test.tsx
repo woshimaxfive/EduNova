@@ -1,17 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
+import { EXPORT_ENDPOINTS } from "../api/exports";
 import { REPORT_ENDPOINTS } from "../api/reports";
 import { PATHS } from "../app/routePaths";
 import { ReportsPage } from "./ReportsPage";
 
 let previousAdapter = apiClient.defaults.adapter;
+let createObjectUrlSpy: ReturnType<typeof vi.fn>;
+let revokeObjectUrlSpy: ReturnType<typeof vi.fn>;
+let clickSpy: ReturnType<typeof vi.spyOn>;
 
 function renderWithProviders(ui: ReactNode, initialPath = `${PATHS.reports}?course_id=808`) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -90,13 +94,25 @@ const readyReport = {
 describe("ReportsPage", () => {
   beforeEach(() => {
     previousAdapter = apiClient.defaults.adapter;
+    createObjectUrlSpy = vi.fn(() => "blob:learning-dossier");
+    revokeObjectUrlSpy = vi.fn();
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectUrlSpy
+    });
+    Object.defineProperty(window.URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectUrlSpy
+    });
+    clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
   });
 
   afterEach(() => {
     apiClient.defaults.adapter = previousAdapter;
+    clickSpy.mockRestore();
   });
 
-  it("renders empty latest report and generates a real report", async () => {
+  it("renders empty latest report, generates a real report, and exports Markdown", async () => {
     const user = userEvent.setup();
     const calls: Array<{ method: string; url: string; payload: unknown; params: unknown }> = [];
     let generated = false;
@@ -123,13 +139,40 @@ describe("ReportsPage", () => {
         generated = true;
         return { data: { data: readyReport, trace_id: "trace_report" }, status: 200, statusText: "OK", headers: {}, config };
       }
+      if (url === EXPORT_ENDPOINTS.learningDossier) {
+        return {
+          data: {
+            data: {
+              course_id: "808",
+              filename: "edunova-人工智能导论-learning-dossier.md",
+              content_type: "text/markdown; charset=utf-8",
+              markdown: "# 人工智能导论 学习档案\n\n本次评估得分 67，基于真实练习作答生成。",
+              generated_at: "2026-07-05T15:00:00Z",
+              source_summary: {
+                has_report: true,
+                report_id: "801",
+                knowledge_point_count: 2,
+                weakness_count: 1,
+                path_task_count: 0,
+                resource_count: 0,
+                practice_answer_count: 1
+              }
+            },
+            trace_id: "trace_export"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
       throw new Error(`Unexpected request ${method} ${url}`);
     };
 
     renderWithProviders(<ReportsPage />);
 
     expect(await screen.findByText("还没有真实学习报告。")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "导出档案" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导出学习档案" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "生成学习报告" }));
 
@@ -140,6 +183,20 @@ describe("ReportsPage", () => {
       expect.objectContaining({
         method: "post",
         url: REPORT_ENDPOINTS.generate,
+        payload: { course_id: 808 }
+      })
+    );
+
+    await user.click(screen.getByRole("button", { name: "导出学习档案" }));
+
+    expect(await screen.findByText("已生成 Markdown 学习档案。")).toBeInTheDocument();
+    expect(createObjectUrlSpy).toHaveBeenCalledTimes(1);
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(revokeObjectUrlSpy).toHaveBeenCalledWith("blob:learning-dossier");
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        method: "post",
+        url: EXPORT_ENDPOINTS.learningDossier,
         payload: { course_id: 808 }
       })
     );
@@ -156,5 +213,32 @@ describe("ReportsPage", () => {
     renderWithProviders(<ReportsPage />);
 
     expect(await screen.findByText("学习报告读取失败，请稍后重试。")).toBeInTheDocument();
+  });
+
+  it("shows local export errors without blocking the report", async () => {
+    const user = userEvent.setup();
+
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === COURSE_ENDPOINTS.list) {
+        return { data: coursesResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (config.url === REPORT_ENDPOINTS.latest) {
+        return { data: { data: readyReport, trace_id: "trace_latest_report" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (config.url === EXPORT_ENDPOINTS.learningDossier) {
+        throw new Error("export failed");
+      }
+      throw new Error(`Unexpected request ${config.url}`);
+    };
+
+    renderWithProviders(<ReportsPage />);
+
+    expect(await screen.findByText("本次评估得分 67，基于真实练习作答生成。")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "导出学习档案" }));
+
+    expect(await screen.findByText("学习档案导出失败，请稍后重试。")).toBeInTheDocument();
+    expect(screen.getByText("本次评估得分 67，基于真实练习作答生成。")).toBeInTheDocument();
+    await waitFor(() => expect(createObjectUrlSpy).not.toHaveBeenCalled());
   });
 });

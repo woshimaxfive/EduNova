@@ -1,17 +1,32 @@
-import { ChartLineUp, FileText, Graph, ShieldCheck } from "@phosphor-icons/react";
+import { ChartLineUp, DownloadSimple, FileText, Graph, ShieldCheck } from "@phosphor-icons/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { listCourses } from "../api/courses";
+import { exportLearningDossier } from "../api/exports";
 import { generateReport, getLatestReport } from "../api/reports";
 import { PageFrame } from "./PageFrame";
+
+function downloadMarkdownFile(filename: string, markdown: string, contentType: string) {
+  const blob = new Blob([markdown], { type: contentType });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
 
 export function ReportsPage() {
   const [searchParams] = useSearchParams();
   const initialCourseId = searchParams.get("course_id") ?? "";
   const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
   const [localError, setLocalError] = useState("");
+  const [exportError, setExportError] = useState("");
+  const [exportMessage, setExportMessage] = useState("");
 
   const coursesQuery = useQuery({
     queryKey: ["report-courses"],
@@ -31,10 +46,24 @@ export function ReportsPage() {
     mutationFn: () => generateReport({ course_id: numericCourseId }),
     onSuccess: () => {
       setLocalError("");
+      setExportMessage("");
       void latestReportQuery.refetch();
     },
     onError: () => {
       setLocalError("学习报告生成失败，请稍后重试。");
+    }
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: () => exportLearningDossier({ course_id: numericCourseId }),
+    onSuccess: (response) => {
+      setExportError("");
+      downloadMarkdownFile(response.data.filename, response.data.markdown, response.data.content_type);
+      setExportMessage("已生成 Markdown 学习档案。");
+    },
+    onError: () => {
+      setExportMessage("");
+      setExportError("学习档案导出失败，请稍后重试。");
     }
   });
 
@@ -118,6 +147,12 @@ export function ReportsPage() {
             <FileText size={17} aria-hidden="true" />
             <span>生成学习报告</span>
           </button>
+          <button className="soft-button" type="button" disabled={!canUseCourse || exportMutation.isPending} onClick={() => exportMutation.mutate()}>
+            <DownloadSimple size={17} aria-hidden="true" />
+            <span>导出学习档案</span>
+          </button>
+          {exportMessage ? <p className="inline-feedback inline-feedback-success">{exportMessage}</p> : null}
+          {exportError ? <p className="form-error">{exportError}</p> : null}
         </aside>
       </div>
     </PageFrame>

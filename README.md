@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 11.2：资料对比第一刀**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询、LangGraph 骨架、5 类课程资源生成和资源质量收口，Phase 9 已完成课程级路径、规则掌握度图、弱点推荐资源和复习时间第一版，Phase 10 已完成真实课程练习、确定性批改、弱点/掌握度反哺和学习报告展示第一刀，Phase 11.1 已完成课程级 3/7/14 天期末冲刺计划，Phase 11.2 已完成同课程多资料对比。下一步进入 Phase 12：演示模式、导出和开源准备边界。
+当前最新完成到 **Phase 12.1：Markdown 学习档案导出第一刀**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询、LangGraph 骨架、5 类课程资源生成和资源质量收口，Phase 9 已完成课程级路径、规则掌握度图、弱点推荐资源和复习时间第一版，Phase 10 已完成真实课程练习、确定性批改、弱点/掌握度反哺和学习报告展示第一刀，Phase 11.1 已完成课程级 3/7/14 天期末冲刺计划，Phase 11.2 已完成同课程多资料对比，Phase 12.1 已完成课程级 Markdown 学习档案导出。下一步进入 Phase 12.2：开源准备、验收证据和提交材料边界。
 
 Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和可观测 trace 已能支撑演示与后续消费。LangGraph 仍是可观测骨架，后续只作为 hardening backlog 继续补资源工坊 trace 展示、AgentTimeline 白名单 metadata 和真实图编排接管，不再拆成新的 Phase 8.x，也不阻塞 Phase 11。
 
@@ -32,7 +32,7 @@ Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和
 - `/paths/generate`、`/paths/current` 和 `/paths/tasks/{task_id}` 已实现课程级学习路径生成、当前路径读取和任务状态更新；`/app/path` 已接入真实课程、任务、路径依据和掌握度图。
 - `/courses/{course_id}/mastery-map` 已实现规则掌握度图，`/courses/{course_id}/learning-state` 已返回真实 `path_summary`、`mastery_summary`、弱点推荐资源和下次复习时间。
 - `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已实现真实课程练习创建、作答提交和确定性批改；错题或低分题会以 `practice_assessment` 来源反哺课程级弱点队列和掌握度图。
-- `/reports/generate` 和 `/reports/latest` 已实现课程学习报告生成与读取；`/app/reports` 展示真实分数、掌握度更新、薄弱点、证据摘要和下一步建议，不做假导出。
+- `/reports/generate` 和 `/reports/latest` 已实现课程学习报告生成与读取；`/exports/learning-dossier` 已实现课程级 Markdown 学习档案同步导出；`/app/reports` 展示真实分数、掌握度更新、薄弱点、证据摘要和下一步建议，并可下载 `.md` 学习档案。
 - `/exam-sprint/plans` 已实现期末冲刺计划生成和读取；复用 `learning_paths` / `learning_tasks`，用 `sprint_active` / `sprint_archived` 避免影响普通学习路径，`/app/path` 可生成并展示每日任务、高频点、薄弱点、必刷题、易错提醒和推荐资源。
 - `/materials/compare` 已实现同课程资料对比第一刀；`/app/library` 可选择已绑定课程的两份以上 TXT/Markdown 资料，展示重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序和安全引用摘要。
 - `/app/tutor` 已收敛为课程辅导入口，真实提问统一进入课程空间。
@@ -47,7 +47,7 @@ Phase 8 暂按“可用完成”收口：资源生成主链路、质量门槛和
 - OCR 和图片题目识别。
 - 讯飞原生 Embeddingp/Embeddingq。
 - 个人全局资源生成入口、资源编辑、异步资源任务队列。
-- 资料对比结果持久化、资料对比与期末冲刺联动、错题驱动深度薄弱点追溯、报告文件导出和演示模式重置。
+- 资料对比结果持久化、资料对比与期末冲刺联动、错题驱动深度薄弱点追溯、PDF/Word 导出、异步导出任务和深度解析。
 
 详细状态见 [docs/STATUS.md](docs/STATUS.md)，后续任务看 [docs/PROJECT_BOARD.md](docs/PROJECT_BOARD.md)。
 

@@ -7,6 +7,7 @@ import { COURSE_ENDPOINTS, getCourseLearningState, getMasteryMap, updateCourseWe
 import { DASHBOARD_ENDPOINTS } from "./dashboard";
 import { DEMO_ENDPOINTS } from "./demo";
 import { EXAM_SPRINT_ENDPOINTS, generateExamSprintPlan, getExamSprintPlan } from "./examSprint";
+import { exportLearningDossier, EXPORT_ENDPOINTS } from "./exports";
 import { compareMaterials, MATERIAL_ENDPOINTS } from "./materials";
 import { generatePath, getCurrentPath, PATH_ENDPOINTS, updatePathTask } from "./paths";
 import { createPracticeSession, getPracticeSession, PRACTICE_ENDPOINTS, submitPracticeAnswers } from "./practice";
@@ -63,6 +64,7 @@ describe("frontend API contracts", () => {
     expect(PATH_ENDPOINTS.updateTask(9)).toBe("/paths/tasks/9");
     expect(EXAM_SPRINT_ENDPOINTS.generate).toBe("/exam-sprint/plans");
     expect(EXAM_SPRINT_ENDPOINTS.detail(12)).toBe("/exam-sprint/plans/12");
+    expect(EXPORT_ENDPOINTS.learningDossier).toBe("/exports/learning-dossier");
     expect(TUTOR_ENDPOINTS.message(4)).toBe("/tutor/sessions/4/messages");
     expect(PRACTICE_ENDPOINTS.answers(8)).toBe("/practice/sessions/8/answers");
     expect(REPORT_ENDPOINTS.latest).toBe("/reports/latest");
@@ -943,6 +945,61 @@ describe("frontend API contracts", () => {
       ]);
       expect(generated.data.report.weakness_list[0].source_type).toBe("practice_assessment");
       expect(latest.data.score).toBe(67);
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("uses typed learning dossier export API through the shared client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
+      });
+
+      return {
+        data: {
+          data: {
+            course_id: "7",
+            filename: "edunova-人工智能导论-learning-dossier.md",
+            content_type: "text/markdown; charset=utf-8",
+            markdown: "# 人工智能导论 学习档案\n\n还没有真实学习报告。",
+            generated_at: "2026-07-05T15:00:00Z",
+            source_summary: {
+              has_report: false,
+              report_id: null,
+              knowledge_point_count: 2,
+              weakness_count: 1,
+              path_task_count: 0,
+              resource_count: 0,
+              practice_answer_count: 0
+            }
+          },
+          trace_id: "trace_export_contract"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const response = await exportLearningDossier({ course_id: 7 });
+
+      expect(calls).toEqual([
+        {
+          url: EXPORT_ENDPOINTS.learningDossier,
+          method: "post",
+          data: { course_id: 7 }
+        }
+      ]);
+      expect(response.data.content_type).toBe("text/markdown; charset=utf-8");
+      expect(response.data.markdown).toContain("学习档案");
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

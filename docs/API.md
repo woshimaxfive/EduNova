@@ -47,6 +47,7 @@ paths
 practice
 reports
 exam-sprint
+exports
 ```
 
 当前前端仍保留以下合同常量，方便后续 Phase 接入，但它们不是当前已经挂载的后端 router，不能在页面或文档中当作已实现接口：
@@ -1050,7 +1051,7 @@ Authorization: Bearer <token>
 
 ## 11. Agent Trace 接口
 
-状态：Phase 8.1 已实现 trace 查询底座，Phase 8.2 已由资源生成流程写入 `profile -> retrieve -> diagnosis -> resource -> review -> persist` 六步 Agent 日志；Phase 9 学习路径和 Phase 10 练习评估/学习报告已接入各自业务闭环。报告文件导出仍未接入。
+状态：Phase 8.1 已实现 trace 查询底座，Phase 8.2 已由资源生成流程写入 `profile -> retrieve -> diagnosis -> resource -> review -> persist` 六步 Agent 日志；Phase 9 学习路径和 Phase 10 练习评估/学习报告已接入各自业务闭环；Phase 12.1 已接入同步 Markdown 学习档案导出，但导出不写 Agent trace。
 
 ### GET `/agents/traces/{trace_id}`
 
@@ -1777,9 +1778,19 @@ course_id=101
 
 ## 17. Export 接口
 
+状态：Phase 12.1 已实现 Markdown 学习档案导出第一刀。当前为同步 JSON 返回，不创建导出任务、不保存服务器端文件、不做 PDF/Word，也不调用外部模型。
+
+统一规则：
+
+- 必须携带 JWT。
+- 只能导出当前用户自己的课程。
+- 导出内容来自课程信息、最新学习报告、知识点数量、弱点队列、当前 active 学习路径任务、同课程资源和练习证据摘要。
+- 没有学习报告时仍返回真实空状态，不伪造分数或诊断结论。
+- 响应不包含完整资料原文、完整作答原文、内部指令、模型请求内容、密钥、登录令牌或完整用户画像。
+
 ### POST `/exports/learning-dossier`
 
-用途：导出 Markdown 学习档案。
+用途：导出课程级 Markdown 学习档案。前端用返回的 `markdown` 和 `filename` 在浏览器端创建 `.md` 下载。
 
 请求：
 
@@ -1789,9 +1800,38 @@ course_id=101
 }
 ```
 
+响应：
+
+```json
+{
+  "data": {
+    "course_id": "101",
+    "filename": "edunova-人工智能导论-learning-dossier.md",
+    "content_type": "text/markdown; charset=utf-8",
+    "markdown": "# 人工智能导论 学习档案\n\n## 数据概览\n...",
+    "generated_at": "2026-07-05T15:00:00Z",
+    "source_summary": {
+      "has_report": true,
+      "report_id": "801",
+      "knowledge_point_count": 12,
+      "weakness_count": 2,
+      "path_task_count": 7,
+      "resource_count": 5,
+      "practice_answer_count": 10
+    }
+  },
+  "trace_id": "trace_export"
+}
+```
+
+错误：
+
+- 未登录返回 401。
+- 课程不存在或不属于当前用户返回 404。
+
 ### GET `/exports/{job_id}`
 
-用途：查看导出状态和下载地址。
+状态：后续异步导出预留，Phase 12.1 不实现。当前 Markdown 学习档案通过 `POST /exports/learning-dossier` 同步返回。
 
 ## 18. Demo 接口
 

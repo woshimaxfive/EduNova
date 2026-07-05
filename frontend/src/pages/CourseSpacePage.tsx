@@ -14,7 +14,7 @@ import { type KeyboardEvent, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
-import { getCourse, getCourseOverview, getKnowledgePoints } from "../api/courses";
+import { getCourse, getCourseLearningState, getCourseOverview, getKnowledgePoints } from "../api/courses";
 import { type RagSearchResultItem } from "../api/rag";
 import {
   createTutorSession,
@@ -62,6 +62,16 @@ function embeddingStatusLabel(status?: string | null) {
     return "关键词兜底";
   }
   return "关键词检索";
+}
+
+function weaknessStatusLabel(status: string) {
+  if (status === "reviewing") {
+    return "复习中";
+  }
+  if (status === "completed") {
+    return "已复习";
+  }
+  return "待确认";
 }
 
 type AnswerPanelKind = "citations" | "resources" | "path" | "thinking";
@@ -127,6 +137,12 @@ export function CourseSpacePage() {
     enabled: hasRealCourseId,
     staleTime: 30_000
   });
+  const learningStateQuery = useQuery({
+    queryKey: ["courses", "learning-state", numericCourseId],
+    queryFn: () => getCourseLearningState(numericCourseId),
+    enabled: hasRealCourseId,
+    staleTime: 10_000
+  });
   const courseSessionsQuery = useQuery({
     queryKey: ["tutor", "sessions", "course", numericCourseId],
     queryFn: () => listTutorSessions("course", numericCourseId),
@@ -149,6 +165,11 @@ export function CourseSpacePage() {
     [knowledgePointsQuery.data?.data]
   );
   const overviewMaterials = courseOverviewQuery.data?.data.materials ?? [];
+  const learningState = learningStateQuery.data?.data;
+  const weaknessSummary = learningState?.weakness_summary;
+  const pendingWeaknessItems = (learningState?.weakness_review_queue ?? []).filter(
+    (item) => item.status === "pending"
+  );
   const courseSessions = Array.isArray(courseSessionsQuery.data?.data) ? courseSessionsQuery.data.data : [];
   const latestCourseSessionId = courseSessions[0]?.id ?? null;
   const selectedCourseSessionId = hasRealCourseId ? (activeCourseSessionId ?? latestCourseSessionId) : null;
@@ -286,6 +307,7 @@ export function CourseSpacePage() {
       setCoursePrompt("");
       queryClient.setQueryData(["tutor", "session", detail.session.id], { data: detail, trace_id: null });
       void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
+      void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
     } catch {
       setCourseMessages(previousMessages);
       setStreamingSessionId(null);
@@ -385,6 +407,42 @@ export function CourseSpacePage() {
                     <span>让 AI 规划复习</span>
                   </button>
                 </div>
+
+                <aside className="course-weakness-panel" role="region" aria-label="待复习弱点">
+                  <div className="course-weakness-header">
+                    <div>
+                      <p className="course-answer-label">待复习弱点</p>
+                      <h2>待复习弱点</h2>
+                    </div>
+                    <dl className="course-weakness-counts" aria-label="弱点统计">
+                      <div>
+                        <dt>待确认</dt>
+                        <dd>{weaknessSummary?.pending_count ?? 0}</dd>
+                      </div>
+                      <div>
+                        <dt>候选证据</dt>
+                        <dd>{weaknessSummary?.candidate_event_count ?? 0}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                  <InlineFeedback
+                    message={learningStateQuery.isError ? "课程学习状态读取失败，请稍后重试。" : null}
+                    tone="warning"
+                    className="course-inline-feedback"
+                  />
+                  {pendingWeaknessItems.length > 0 ? (
+                    <ul className="course-weakness-list">
+                      {pendingWeaknessItems.map((item) => (
+                        <li key={item.id}>
+                          <span>{item.title}</span>
+                          <em>{weaknessStatusLabel(item.status)}</em>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : learningStateQuery.isError ? null : (
+                    <p className="course-weakness-empty">还没有待确认弱点</p>
+                  )}
+                </aside>
 
                 {hasDisplayedCourseMessages ? (
                   <>

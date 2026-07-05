@@ -7,6 +7,7 @@ export const COURSE_ENDPOINTS = {
   overview: (courseId: number) => `/courses/${courseId}/overview`,
   knowledgePoints: (courseId: number) => `/courses/${courseId}/knowledge-points`,
   masteryMap: (courseId: number) => `/courses/${courseId}/mastery-map`,
+  learningState: (courseId: number) => `/courses/${courseId}/learning-state`,
   fromMaterials: "/courses/from-materials"
 } as const;
 
@@ -49,6 +50,54 @@ export type CreateCourseFromMaterialsResult = {
   knowledge_points: ApiCourseKnowledgePoint[];
 };
 
+export type CourseProfileOverlay = {
+  learning_goal: string;
+  knowledge_foundation: string;
+  weak_points: string[];
+};
+
+export type CourseWeaknessSummary = {
+  candidate_event_count: number;
+  pending_count: number;
+  reviewing_count: number;
+  completed_count: number;
+  latest_evidence_at: string | null;
+};
+
+export type CourseWeaknessReviewItem = {
+  id: string;
+  title: string;
+  status: "pending" | "reviewing" | "completed";
+  source_type: string;
+  course_id: string;
+  knowledge_point_id: string | null;
+  next_review_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CoursePlaceholderSummary = {
+  status: string;
+  message: string;
+};
+
+export type CourseEvidenceSummary = {
+  candidate_event_count: number;
+  latest_trace_id: string | null;
+  latest_source_title: string | null;
+  latest_section_title: string | null;
+};
+
+export type CourseLearningState = {
+  course_id: string;
+  profile_overlay: CourseProfileOverlay;
+  weakness_summary: CourseWeaknessSummary;
+  weakness_review_queue: CourseWeaknessReviewItem[];
+  path_summary: CoursePlaceholderSummary;
+  mastery_summary: CoursePlaceholderSummary;
+  evidence_summary: CourseEvidenceSummary;
+};
+
 export async function listCourses(sourceType?: "builtin" | "uploaded") {
   const response = await apiClient.get<ApiListEnvelope<ApiCourseSummary>>(COURSE_ENDPOINTS.list, {
     params: sourceType ? { source_type: sourceType } : undefined
@@ -75,6 +124,11 @@ export async function getMasteryMap(courseId: number) {
   const response = await apiClient.get<ApiEnvelope<{ course_id: string; points: ApiCourseKnowledgePoint[] }>>(
     COURSE_ENDPOINTS.masteryMap(courseId)
   );
+  return response.data;
+}
+
+export async function getCourseLearningState(courseId: number) {
+  const response = await apiClient.get<ApiEnvelope<CourseLearningState>>(COURSE_ENDPOINTS.learningState(courseId));
   return response.data;
 }
 

@@ -494,25 +494,34 @@ Authorization: Bearer <token>
 
 ### GET `/courses/{course_id}/learning-state`
 
-状态：后续预留。Phase 7.2 仅确定接口方向，当前后端未实现。
+状态：Phase 7.3 已实现第一刀。
 
-用途：聚合某一门课程下的学习状态，用于课程空间、学习路径和复习队列。
+用途：聚合某一门课程下的学习状态，并把课程问答产生的弱点候选画像事件确定性同步为待确认复习项。当前只实现课程级弱点追踪第一刀，不生成学习路径、资源、练习评估或报告。
 
 规则：
 
 - 必须携带 JWT，只允许访问当前用户自己的课程。
 - 读取用户级 `student_profiles` 作为长期偏好和背景，不复制完整画像。
-- 聚合该课程相关 `profile_events`、后续 `weakness_review_queue`、`learning_paths`、练习评估和掌握度结果。
-- 课程问答候选事件只能作为候选证据，正式弱点以后续弱点队列为准。
+- 请求时执行一次确定性同步：只处理当前课程下 `dimension="weak_points"`、`evidence_json.source_type="course_question"` 的画像候选事件。
+- 有 `knowledge_point_id` 时按知识点去重；无知识点时按安全标题去重，标题优先使用 `section_title`、`source_title`，否则使用“课程问答薄弱点”。
+- 新入队项写入 `weakness_review_queue`，状态为 `pending`，产品语义是“待确认/待复习”，不是系统已经完成正式诊断。
+- 已存在同课程同知识点或同标题的 `pending/reviewing/completed` 项时不重复创建。
+- 队列和响应不包含完整用户问题、系统提示词、模型输入或资料原文。
 
-计划响应字段：
+响应字段：
 
 - `course_id`。
-- `profile_overlay`：课程级目标、知识基础和候选薄弱点摘要。
-- `weakness_summary`：已确认复习项数量、候选事件数量和最近证据。
-- `path_summary`：当前路径 ID、阶段任务数量和下一步行动。
-- `mastery_summary`：知识点掌握概览。
-- `evidence_summary`：用于解释推荐的安全证据摘要。
+- `profile_overlay`：用户级画像中的 `learning_goal`、`knowledge_foundation`、`weak_points`。
+- `weakness_summary`：`candidate_event_count`、`pending_count`、`reviewing_count`、`completed_count`、`latest_evidence_at`。
+- `weakness_review_queue`：复习项数组，包含 `id`、`title`、`status`、`source_type`、`course_id`、`knowledge_point_id`、`next_review_at`、`created_at`、`updated_at`。
+- `path_summary`：空摘要，当前返回学习路径尚未生成。
+- `mastery_summary`：空摘要，当前返回掌握度尚未接入。
+- `evidence_summary`：候选事件数量、最新 `trace_id` 和最新安全来源标题/章节摘要。
+
+错误：
+
+- 未登录返回 401。
+- 课程不存在或不属于当前用户返回 404。
 
 ## 8. Materials 接口
 
@@ -1142,7 +1151,7 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 
 ## 15. Weakness Review 接口
 
-状态：后续预留。Phase 7.2 已明确弱点复习队列是课程级可执行任务，不等同于 `profile_events` 中的候选事件。
+状态：独立弱点复习操作接口仍为后续预留。Phase 7.3 已通过 `GET /courses/{course_id}/learning-state` 实现从课程问答画像候选事件到 `weakness_review_queue` 的待确认入队第一刀，但尚未提供开始、完成、删除或用户确认接口。
 
 ### GET `/weakness-review-queue`
 

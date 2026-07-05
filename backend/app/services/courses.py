@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Protocol
@@ -16,15 +17,26 @@ from backend.app.models import (
     KnowledgeChunk,
     KnowledgePoint,
     Material,
+    ProfileEvent,
+    StudentProfile,
     User,
+    WeaknessReviewItem,
 )
 from backend.app.schemas.courses import (
+    CourseEvidenceSummary,
     CourseKnowledgePoint,
+    CourseLearningState,
     CourseListResponse,
     CourseOverview,
+    CoursePlaceholderSummary,
+    CourseProfileOverlay,
     CourseSummary,
+    CourseWeaknessSummary,
     CreateCourseFromMaterialsResult,
+    iso_timestamp,
+    weakness_item_to_api,
 )
+from backend.app.schemas.profiles import normalize_profile_json
 
 
 class CourseGenerationError(Exception):
@@ -41,6 +53,15 @@ class ParsedSection:
     chapter: str | None
     content: str
     material: Material
+
+
+@dataclass(frozen=True)
+class WeaknessCandidate:
+    title: str
+    knowledge_point_id: int | None
+    trace_id: str | None
+    source_title: str | None
+    section_title: str | None
 
 
 class CourseRepository(Protocol):
@@ -65,6 +86,14 @@ class CourseRepository(Protocol):
     def list_knowledge_points(self, course_id: int) -> list[KnowledgePoint]: ...
 
     def list_knowledge_chunks(self, course_id: int) -> list[KnowledgeChunk]: ...
+
+    def get_profile(self, user_id: int) -> StudentProfile | None: ...
+
+    def list_weakness_candidate_events(self, user_id: int, course_id: int) -> list[ProfileEvent]: ...
+
+    def list_weakness_review_items(self, user_id: int, course_id: int) -> list[WeaknessReviewItem]: ...
+
+    def add_weakness_review_item(self, item: WeaknessReviewItem) -> None: ...
 
     def commit(self) -> None: ...
 
@@ -153,6 +182,37 @@ class SqlAlchemyCourseRepository:
 
     def list_knowledge_chunks(self, course_id: int) -> list[KnowledgeChunk]:
         return list(self.db.scalars(select(KnowledgeChunk).where(KnowledgeChunk.course_id == course_id).order_by(KnowledgeChunk.id)))
+
+    def get_profile(self, user_id: int) -> StudentProfile | None:
+        return self.db.scalar(select(StudentProfile).where(StudentProfile.user_id == user_id))
+
+    def list_weakness_candidate_events(self, user_id: int, course_id: int) -> list[ProfileEvent]:
+        events = list(
+            self.db.scalars(
+                select(ProfileEvent)
+                .where(ProfileEvent.user_id == user_id, ProfileEvent.dimension == "weak_points")
+                .order_by(ProfileEvent.created_at.desc(), ProfileEvent.id.desc())
+            )
+        )
+        return [
+            event
+            for event in events
+            if (event.evidence_json or {}).get("source_type") == "course_question"
+            and (event.evidence_json or {}).get("course_id") == course_id
+        ]
+
+    def list_weakness_review_items(self, user_id: int, course_id: int) -> list[WeaknessReviewItem]:
+        return list(
+            self.db.scalars(
+                select(WeaknessReviewItem)
+                .where(WeaknessReviewItem.user_id == user_id, WeaknessReviewItem.course_id == course_id)
+                .order_by(WeaknessReviewItem.created_at.desc(), WeaknessReviewItem.id.desc())
+            )
+        )
+
+    def add_weakness_review_item(self, item: WeaknessReviewItem) -> None:
+        self.db.add(item)
+        self.db.flush()
 
     def commit(self) -> None:
         self.db.commit()
@@ -263,6 +323,79 @@ class CourseService:
     def get_knowledge_points(self, user: User, course_id: int) -> list[CourseKnowledgePoint]:
         course = self._require_course(user, course_id)
         return [self._build_knowledge_point(point) for point in self.repository.list_knowledge_points(course.id)]
+
+    def get_learning_state(self, user: User, course_id: int) -> CourseLearningState:
+        course = self._require_course(user, course_id)
+        candidate_events = self.repository.list_weakness_candidate_events(user.id, course.id)
+        self._sync_weakness_review_queue(user, course.id, candidate_events)
+        review_items = self.repository.list_weakness_review_items(user.id, course.id)
+        profile = self.repository.get_profile(user.id)
+        profile_json = normalize_profile_json(profile.profile_json if profile is not None else None)
+        latest_event = max(candidate_events, key=lambda event: (event.created_at, event.id), default=None)
+        latest_candidate = self._candidate_from_event(latest_event) if latest_event is not None else None
+
+        return CourseLearningState(
+            course_id=str(course.id),
+            profile_overlay=CourseProfileOverlay(
+                learning_goal=profile_json["learning_goal"],
+                knowledge_foundation=profile_json["knowledge_foundation"],
+                weak_points=profile_json["weak_points"],
+            ),
+            weakness_summary=self._build_weakness_summary(candidate_events, review_items),
+            weakness_review_queue=[weakness_item_to_api(item) for item in review_items],
+            path_summary=CoursePlaceholderSummary(status="not_started", message="学习路径尚未生成。"),
+            mastery_summary=CoursePlaceholderSummary(status="not_started", message="掌握度尚未接入。"),
+            evidence_summary=CourseEvidenceSummary(
+                candidate_event_count=len(candidate_events),
+                latest_trace_id=latest_candidate.trace_id if latest_candidate is not None else None,
+                latest_source_title=latest_candidate.source_title if latest_candidate is not None else None,
+                latest_section_title=latest_candidate.section_title if latest_candidate is not None else None,
+            ),
+        )
+
+    def _sync_weakness_review_queue(self, user: User, course_id: int, candidate_events: list[ProfileEvent]) -> None:
+        existing_items = self.repository.list_weakness_review_items(user.id, course_id)
+        existing_knowledge_point_ids = {item.knowledge_point_id for item in existing_items if item.knowledge_point_id is not None}
+        existing_titles = {self._normalize_weakness_title(item.title) for item in existing_items if item.title.strip()}
+        created_any = False
+
+        try:
+            for event in sorted(candidate_events, key=lambda item: (item.created_at, item.id)):
+                candidate = self._candidate_from_event(event)
+                if candidate is None:
+                    continue
+
+                normalized_title = self._normalize_weakness_title(candidate.title)
+                if candidate.knowledge_point_id is not None:
+                    if candidate.knowledge_point_id in existing_knowledge_point_ids:
+                        continue
+                    existing_knowledge_point_ids.add(candidate.knowledge_point_id)
+                elif normalized_title in existing_titles:
+                    continue
+
+                now = datetime.now(UTC)
+                self.repository.add_weakness_review_item(
+                    WeaknessReviewItem(
+                        user_id=user.id,
+                        course_id=course_id,
+                        knowledge_point_id=candidate.knowledge_point_id,
+                        title=candidate.title,
+                        source_type="course_question",
+                        status="pending",
+                        recommended_resource_ids=[],
+                        next_review_at=None,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                existing_titles.add(normalized_title)
+                created_any = True
+
+            if created_any:
+                self.repository.commit()
+        except Exception:
+            self.repository.rollback()
+            raise
 
     def _ordered_materials(self, user_id: int, material_ids: list[int]) -> list[Material]:
         materials = self.repository.get_materials_for_user(user_id, material_ids)
@@ -410,6 +543,56 @@ class CourseService:
         if course is None:
             raise CourseNotFoundError("课程不存在或无权访问。")
         return course
+
+    @classmethod
+    def _candidate_from_event(cls, event: ProfileEvent | None) -> WeaknessCandidate | None:
+        if event is None:
+            return None
+        evidence = event.evidence_json or {}
+        if evidence.get("source_type") != "course_question":
+            return None
+        citations = evidence.get("citations")
+        citation = next((item for item in citations if isinstance(item, dict)), {}) if isinstance(citations, list) else {}
+        section_title = cls._safe_title(citation.get("section_title"))
+        source_title = cls._safe_title(citation.get("source_title"))
+        title = section_title or source_title or "课程问答薄弱点"
+        return WeaknessCandidate(
+            title=title,
+            knowledge_point_id=cls._safe_int(citation.get("knowledge_point_id")),
+            trace_id=cls._safe_title(evidence.get("trace_id")) or None,
+            source_title=source_title or None,
+            section_title=section_title or None,
+        )
+
+    @staticmethod
+    def _build_weakness_summary(candidate_events: list[ProfileEvent], review_items: list[WeaknessReviewItem]) -> CourseWeaknessSummary:
+        latest_event = max(candidate_events, key=lambda event: (event.created_at, event.id), default=None)
+        return CourseWeaknessSummary(
+            candidate_event_count=len(candidate_events),
+            pending_count=sum(1 for item in review_items if item.status == "pending"),
+            reviewing_count=sum(1 for item in review_items if item.status == "reviewing"),
+            completed_count=sum(1 for item in review_items if item.status == "completed"),
+            latest_evidence_at=iso_timestamp(latest_event.created_at) if latest_event is not None else None,
+        )
+
+    @staticmethod
+    def _safe_title(value: object) -> str:
+        if value is None:
+            return ""
+        return " ".join(str(value).split())[:120]
+
+    @staticmethod
+    def _safe_int(value: object) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _normalize_weakness_title(cls, value: str) -> str:
+        return cls._safe_title(value).casefold()
 
     def _build_summary(
         self,

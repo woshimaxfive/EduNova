@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -20,7 +21,10 @@ from backend.app.models import (
     KnowledgeChunk,
     KnowledgePoint,
     Material,
+    ProfileEvent,
+    StudentProfile,
     User,
+    WeaknessReviewItem,
 )
 from backend.app.services.auth import AuthService
 from backend.app.services.courses import CourseService
@@ -43,12 +47,16 @@ class FakeCourseRepository:
     material_links: list[CourseMaterialLink] = field(default_factory=list)
     knowledge_points: list[KnowledgePoint] = field(default_factory=list)
     knowledge_chunks: list[KnowledgeChunk] = field(default_factory=list)
+    profiles: dict[int, StudentProfile] = field(default_factory=dict)
+    profile_events: list[ProfileEvent] = field(default_factory=list)
+    weakness_items: list[WeaknessReviewItem] = field(default_factory=list)
     next_course_id: int = 101
     next_enrollment_id: int = 201
     next_course_material_id: int = 301
     next_link_id: int = 401
     next_knowledge_point_id: int = 501
     next_chunk_id: int = 601
+    next_weakness_item_id: int = 701
 
     def get_materials_for_user(self, user_id: int, material_ids: list[int]) -> list[Material]:
         material_id_set = set(material_ids)
@@ -117,6 +125,33 @@ class FakeCourseRepository:
 
     def list_knowledge_chunks(self, course_id: int) -> list[KnowledgeChunk]:
         return [chunk for chunk in self.knowledge_chunks if chunk.course_id == course_id]
+
+    def get_profile(self, user_id: int) -> StudentProfile | None:
+        return self.profiles.get(user_id)
+
+    def list_weakness_candidate_events(self, user_id: int, course_id: int) -> list[ProfileEvent]:
+        result: list[ProfileEvent] = []
+        for event in self.profile_events:
+            evidence = event.evidence_json or {}
+            if (
+                event.user_id == user_id
+                and event.dimension == "weak_points"
+                and evidence.get("source_type") == "course_question"
+                and evidence.get("course_id") == course_id
+            ):
+                result.append(event)
+        return sorted(result, key=lambda event: (event.created_at, event.id), reverse=True)
+
+    def list_weakness_review_items(self, user_id: int, course_id: int) -> list[WeaknessReviewItem]:
+        result = [item for item in self.weakness_items if item.user_id == user_id and item.course_id == course_id]
+        return sorted(result, key=lambda item: (item.created_at, item.id), reverse=True)
+
+    def add_weakness_review_item(self, item: WeaknessReviewItem) -> None:
+        item.id = self.next_weakness_item_id
+        self.next_weakness_item_id += 1
+        item.created_at = item.created_at or datetime(2026, 7, 5, 8, 0, tzinfo=UTC)
+        item.updated_at = item.updated_at or item.created_at
+        self.weakness_items.append(item)
 
     def commit(self) -> None:
         return None
@@ -189,13 +224,92 @@ def as_dict(model: Any) -> dict[str, Any]:
     return model.model_dump() if hasattr(model, "model_dump") else model
 
 
+def make_course(course_id: int = 101, owner_id: int = 1, title: str = "AI 搜索复习") -> Course:
+    return Course(
+        id=course_id,
+        owner_id=owner_id,
+        title=title,
+        description="由资料生成",
+        subject="人工智能",
+        source_type="uploaded",
+        visibility="private",
+        status="ready",
+    )
+
+
+def make_candidate_event(
+    event_id: int,
+    user_id: int,
+    course_id: int,
+    *,
+    knowledge_point_id: int | None = 401,
+    section_title: str | None = "启发式搜索",
+    source_title: str | None = "人工智能导论讲义.md",
+    trace_id: str = "trace_candidate",
+    created_at: datetime | None = None,
+) -> ProfileEvent:
+    event = ProfileEvent(
+        id=event_id,
+        user_id=user_id,
+        profile_id=None,
+        dimension="weak_points",
+        change_summary="课程问答提示可能存在薄弱点",
+        evidence_json={
+            "source_type": "course_question",
+            "course_id": course_id,
+            "session_id": 3,
+            "user_message_id": 11,
+            "assistant_message_id": 12,
+            "trace_id": trace_id,
+            "citations": [
+                {
+                    "chunk_id": 501,
+                    "knowledge_point_id": knowledge_point_id,
+                    "source_title": source_title,
+                    "section_title": section_title,
+                }
+            ],
+        },
+    )
+    event.created_at = created_at or datetime(2026, 7, 5, 8, 0, tzinfo=UTC)
+    return event
+
+
+def make_weakness_item(
+    item_id: int,
+    user_id: int,
+    course_id: int,
+    *,
+    title: str = "启发式搜索",
+    knowledge_point_id: int | None = 401,
+    status: str = "pending",
+) -> WeaknessReviewItem:
+    item = WeaknessReviewItem(
+        id=item_id,
+        user_id=user_id,
+        course_id=course_id,
+        knowledge_point_id=knowledge_point_id,
+        title=title,
+        source_type="course_question",
+        status=status,
+        recommended_resource_ids=[],
+        next_review_at=None,
+    )
+    item.created_at = datetime(2026, 7, 5, 8, 10, tzinfo=UTC)
+    item.updated_at = datetime(2026, 7, 5, 8, 12, tzinfo=UTC)
+    return item
+
+
 def test_course_routes_require_login() -> None:
     client = TestClient(create_app())
 
     response = client.get("/api/v1/courses")
+    learning_state_response = client.get("/api/v1/courses/101/learning-state")
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
+    assert learning_state_response.status_code == 401
+    assert learning_state_response.json()["error"]["code"] == "UNAUTHORIZED"
 
 
 def test_create_course_from_txt_material_builds_course_graph() -> None:
@@ -332,6 +446,128 @@ def test_course_read_apis_are_scoped_to_current_user() -> None:
         service.get_course(make_user(2), 101)
 
 
+def test_learning_state_returns_empty_course_state_without_candidates() -> None:
+    repo = FakeCourseRepository(courses=[make_course()])
+    user = make_user()
+
+    state = as_dict(make_service(repo).get_learning_state(user, 101))
+
+    assert state["course_id"] == "101"
+    assert state["profile_overlay"] == {
+        "learning_goal": "",
+        "knowledge_foundation": "",
+        "weak_points": [],
+    }
+    assert state["weakness_summary"]["candidate_event_count"] == 0
+    assert state["weakness_summary"]["pending_count"] == 0
+    assert state["weakness_review_queue"] == []
+    assert state["path_summary"]["status"] == "not_started"
+    assert state["mastery_summary"]["status"] == "not_started"
+
+
+def test_learning_state_promotes_course_question_candidate_to_pending_review_item() -> None:
+    event_time = datetime(2026, 7, 5, 8, 30, tzinfo=UTC)
+    repo = FakeCourseRepository(
+        courses=[make_course()],
+        profiles={
+            1: StudentProfile(
+                id=9,
+                user_id=1,
+                profile_json={
+                    "learning_goal": "期末前掌握搜索算法",
+                    "knowledge_foundation": "机器学习刚入门",
+                    "weak_points": ["链式法则"],
+                },
+                confidence_score=Decimal("0.64"),
+            )
+        },
+        profile_events=[make_candidate_event(1, 1, 101, created_at=event_time)],
+    )
+
+    state = as_dict(make_service(repo).get_learning_state(make_user(), 101))
+
+    assert len(repo.weakness_items) == 1
+    created_item = repo.weakness_items[0]
+    assert created_item.user_id == 1
+    assert created_item.course_id == 101
+    assert created_item.knowledge_point_id == 401
+    assert created_item.title == "启发式搜索"
+    assert created_item.source_type == "course_question"
+    assert created_item.status == "pending"
+    assert created_item.recommended_resource_ids == []
+    assert created_item.next_review_at is None
+    assert state["profile_overlay"]["learning_goal"] == "期末前掌握搜索算法"
+    assert state["profile_overlay"]["weak_points"] == ["链式法则"]
+    assert state["weakness_summary"]["candidate_event_count"] == 1
+    assert state["weakness_summary"]["pending_count"] == 1
+    assert state["weakness_summary"]["latest_evidence_at"] == "2026-07-05T08:30:00Z"
+    assert state["weakness_review_queue"][0]["title"] == "启发式搜索"
+    assert state["weakness_review_queue"][0]["status"] == "pending"
+    assert state["evidence_summary"]["latest_trace_id"] == "trace_candidate"
+
+
+def test_learning_state_deduplicates_by_knowledge_point_and_title() -> None:
+    repo = FakeCourseRepository(
+        courses=[make_course()],
+        profile_events=[
+            make_candidate_event(1, 1, 101, knowledge_point_id=401, section_title="启发式搜索"),
+            make_candidate_event(2, 1, 101, knowledge_point_id=401, section_title="A* 搜索"),
+            make_candidate_event(3, 1, 101, knowledge_point_id=None, section_title="反向传播"),
+            make_candidate_event(4, 1, 101, knowledge_point_id=None, section_title="反向传播"),
+        ],
+    )
+
+    state = as_dict(make_service(repo).get_learning_state(make_user(), 101))
+
+    assert [item.title for item in repo.weakness_items] == ["启发式搜索", "反向传播"]
+    assert state["weakness_summary"]["candidate_event_count"] == 4
+    assert state["weakness_summary"]["pending_count"] == 2
+
+
+def test_learning_state_isolates_users_courses_and_existing_items() -> None:
+    existing = make_weakness_item(55, 1, 101, title="启发式搜索", knowledge_point_id=401, status="completed")
+    repo = FakeCourseRepository(
+        courses=[make_course(101, owner_id=1), make_course(202, owner_id=1, title="其他课程"), make_course(303, owner_id=2)],
+        weakness_items=[existing, make_weakness_item(56, 2, 303, title="别人弱点", knowledge_point_id=999)],
+        profile_events=[
+            make_candidate_event(1, 1, 101, knowledge_point_id=401, section_title="启发式搜索"),
+            make_candidate_event(2, 1, 202, knowledge_point_id=402, section_title="其他课程弱点"),
+            make_candidate_event(3, 2, 101, knowledge_point_id=403, section_title="别人事件"),
+        ],
+    )
+
+    state = as_dict(make_service(repo).get_learning_state(make_user(1), 101))
+
+    assert len(repo.weakness_items) == 2
+    assert state["weakness_summary"]["candidate_event_count"] == 1
+    assert state["weakness_summary"]["pending_count"] == 0
+    assert state["weakness_summary"]["completed_count"] == 1
+    assert [item["title"] for item in state["weakness_review_queue"]] == ["启发式搜索"]
+
+    from backend.app.services.courses import CourseNotFoundError
+
+    with pytest.raises(CourseNotFoundError):
+        make_service(repo).get_learning_state(make_user(1), 303)
+
+
+def test_learning_state_response_does_not_expose_private_prompt_or_source_text() -> None:
+    event = make_candidate_event(1, 1, 101, section_title=None, source_title="神经网络讲义.md")
+    event.evidence_json["raw_question"] = "为什么反向传播这么难？这是完整用户问题"
+    event.evidence_json["system_prompt"] = "系统提示词"
+    event.evidence_json["model_input"] = "模型输入"
+    event.evidence_json["citations"][0]["content"] = "资料原文里很长的一段内容"
+    repo = FakeCourseRepository(courses=[make_course()], profile_events=[event])
+
+    state = as_dict(make_service(repo).get_learning_state(make_user(), 101))
+    serialized = str(state)
+
+    assert state["weakness_review_queue"][0]["title"] == "神经网络讲义.md"
+    assert "完整用户问题" not in serialized
+    assert "系统提示词" not in serialized
+    assert "模型输入" not in serialized
+    assert "资料原文" not in serialized
+
+
 def test_create_course_route_returns_envelope() -> None:
     repo = FakeCourseRepository(materials=[make_material(1, 1, "route.md", "# 路由测试\n正文")])
     user = make_user()
@@ -353,3 +589,34 @@ def test_create_course_route_returns_envelope() -> None:
 
     assert response.status_code == 200
     assert response.json()["data"]["course"]["title"] == "路由课程"
+
+
+def test_learning_state_route_returns_envelope_and_scopes_course() -> None:
+    repo = FakeCourseRepository(
+        courses=[make_course()],
+        profile_events=[make_candidate_event(1, 1, 101)],
+    )
+    user = make_user()
+    settings = Settings(_env_file=None, jwt_secret="courses-test-secret-with-32-bytes", jwt_expire_minutes=30)
+    app = create_app()
+    app.dependency_overrides[get_auth_service] = lambda: AuthService(
+        repository=TokenAuthRepository(user),
+        settings=settings,
+    )
+    app.dependency_overrides[get_course_service] = lambda: CourseService(repository=repo)
+    client = TestClient(app)
+    token = create_access_token(str(user.id), settings=settings)
+
+    response = client.get(
+        "/api/v1/courses/101/learning-state",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    missing_response = client.get(
+        "/api/v1/courses/202/learning-state",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["course_id"] == "101"
+    assert response.json()["data"]["weakness_summary"]["pending_count"] == 1
+    assert missing_response.status_code == 404

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { AGENT_ENDPOINTS } from "./agents";
 import { AUTH_ENDPOINTS, login } from "./auth";
 import { apiClient } from "./client";
-import { COURSE_ENDPOINTS } from "./courses";
+import { COURSE_ENDPOINTS, getCourseLearningState } from "./courses";
 import { DASHBOARD_ENDPOINTS } from "./dashboard";
 import { DEMO_ENDPOINTS } from "./demo";
 import { MATERIAL_ENDPOINTS } from "./materials";
@@ -41,6 +41,7 @@ describe("frontend API contracts", () => {
     expect(PROFILE_ENDPOINTS.events).toBe("/profiles/events");
     expect(COURSE_ENDPOINTS.fromMaterials).toBe("/courses/from-materials");
     expect(COURSE_ENDPOINTS.masteryMap(7)).toBe("/courses/7/mastery-map");
+    expect(COURSE_ENDPOINTS.learningState(7)).toBe("/courses/7/learning-state");
     expect(MATERIAL_ENDPOINTS.upload).toBe("/materials/upload");
     expect(MATERIAL_ENDPOINTS.progress(3)).toBe("/materials/3/progress");
     expect(RAG_ENDPOINTS.search).toBe("/rag/search");
@@ -294,6 +295,80 @@ describe("frontend API contracts", () => {
         }
       ]);
       expect(response.data).toEqual([]);
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("gets course learning state through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method
+      });
+
+      return {
+        data: {
+          data: {
+            course_id: "7",
+            profile_overlay: {
+              learning_goal: "期末前掌握搜索算法",
+              knowledge_foundation: "机器学习刚入门",
+              weak_points: ["启发式搜索"]
+            },
+            weakness_summary: {
+              candidate_event_count: 1,
+              pending_count: 1,
+              reviewing_count: 0,
+              completed_count: 0,
+              latest_evidence_at: "2026-07-05T08:30:00Z"
+            },
+            weakness_review_queue: [
+              {
+                id: "701",
+                title: "启发式搜索",
+                status: "pending",
+                source_type: "course_question",
+                course_id: "7",
+                knowledge_point_id: "401",
+                next_review_at: null,
+                created_at: "2026-07-05T08:30:00Z",
+                updated_at: "2026-07-05T08:30:00Z"
+              }
+            ],
+            path_summary: {
+              status: "not_started",
+              message: "学习路径尚未生成。"
+            },
+            mastery_summary: {
+              status: "not_started",
+              message: "掌握度尚未接入。"
+            },
+            evidence_summary: {
+              candidate_event_count: 1,
+              latest_trace_id: "trace_candidate",
+              latest_source_title: "人工智能导论讲义.md",
+              latest_section_title: "启发式搜索"
+            }
+          },
+          trace_id: "trace_learning_state"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const response = await getCourseLearningState(7);
+
+      expect(calls).toEqual([{ url: COURSE_ENDPOINTS.learningState(7), method: "get" }]);
+      expect(response.data.weakness_summary.pending_count).toBe(1);
+      expect(response.data.weakness_review_queue[0].title).toBe("启发式搜索");
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

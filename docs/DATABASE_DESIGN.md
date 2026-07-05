@@ -295,6 +295,8 @@ Phase 7.1 中课程问答只会在 `scope=course` 且用户问题出现明确困
 
 Phase 7.2 明确 `profile_events` 是证据流，不等同于正式弱点或学习事件总线。带课程来源的事件可作为课程学习状态候选证据，后续是否进入 `weakness_review_queue` 需要去重、合并或用户/练习结果确认。本阶段不新增通用 `learning_events` 表。
 
+Phase 7.3 中 `GET /courses/{course_id}/learning-state` 会读取当前用户当前课程下的弱点候选事件，并按知识点或安全标题同步到 `weakness_review_queue` 的 `pending` 项。该同步不读取完整用户问题、系统提示词、模型输入或资料原文。
+
 ### 4.9 `learning_paths`
 
 用途：保存学习路径。
@@ -455,6 +457,8 @@ Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状�
 用途：保存薄弱点复习队列。
 
 Phase 7.2 明确本表承载课程级可执行复习任务。每个复习项必须绑定 `course_id`，候选来源可以来自画像事件、课程问答或练习评估，但进入队列前必须去重或合并，避免同一知识点反复生成多条任务。
+
+Phase 7.3 复用本表，不新增迁移。虽然历史模型允许 `course_id` 为空，本阶段服务层强制课程问答候选事件入队时写入非空 `course_id`；`source_type="course_question"`，`status="pending"` 表示待确认/待复习，不表示系统已经完成正式诊断。当前不写推荐资源、不设置下次复习时间，也不提供状态流转操作接口。
 
 字段：
 
@@ -702,6 +706,7 @@ Demo 数据要求：
 13. Phase 6.2 后，用户模型 Key 必须按配置独立加密保存，读取设置只能返回来源、模型、默认配置、脱敏 Key 和可用性；课程 RAG 回答的 `trace_id` 和 `citation_json` 必须可追溯。
 14. Phase 6.4 后，知识切片向量必须保持 1536 维合同，外部 embedding 失败不得阻断建课或问答，fallback 来源必须写入 metadata。
 15. Phase 7.2 后，用户级画像只保留一份，课程级学习状态通过课程相关事件、弱点队列、路径和后续聚合接口表达，不新增通用 `learning_events` 表。
+16. Phase 7.3 后，课程问答弱点候选事件可通过 `/courses/{course_id}/learning-state` 同步为当前课程 `weakness_review_queue` 的 `pending` 项，服务层强制绑定 `course_id`。
 
 当前已验证：
 
@@ -720,3 +725,4 @@ Demo 数据要求：
 - Phase 6.4 已验证 OpenAI-compatible embedding 请求、`dimensions` 重试、维度不匹配拒绝、本地 `local-hash-1536` fallback、课程生成 best-effort 写入向量和 RAG 混合排序字段。
 - Phase 7.1 已验证 `student_profiles` 和 `profile_events` 支持当前用户画像读取、画像对话更新、事件倒序、多用户隔离，以及课程问答弱点候选事件的隐私安全证据写入。
 - Phase 7.2 已完成用户级画像与课程级学习状态的数据库边界设计；本阶段不新增迁移，不新增 `learning_events`。
+- Phase 7.3 已验证课程学习状态服务能读取当前课程弱点候选事件、按知识点或标题去重生成 `pending` 复习项，并保持多用户、跨课程和隐私隔离。

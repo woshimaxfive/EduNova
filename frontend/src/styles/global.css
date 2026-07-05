@@ -6473,7 +6473,7 @@ a {
 
   .course-chat-mode {
     width: 100%;
-    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
     height: clamp(430px, calc(100dvh - 320px), 560px);
     min-height: 0;
     overflow: hidden;
@@ -6483,6 +6483,7 @@ a {
   .course-thread-list,
   .course-knowledge-strip,
   .course-action-links,
+  .course-weakness-panel,
   .course-answer,
   .course-composer {
     width: 100%;
@@ -6589,7 +6590,7 @@ a {
 }
 
 .course-chat-mode {
-  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
   height: calc(100dvh - 116px);
   width: min(760px, 100%);
 }
@@ -6628,6 +6629,99 @@ a {
   border-color: rgba(15, 143, 122, 0.26);
   background: var(--accent-soft);
   transform: translateY(-1px);
+}
+
+.course-weakness-panel {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 10px;
+  width: min(760px, 100%);
+  margin: 0 auto 8px;
+  padding: 14px 16px;
+  border: 1px solid rgba(16, 24, 32, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 18px 40px rgba(16, 24, 32, 0.07);
+}
+
+.course-weakness-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.course-weakness-header h2 {
+  margin: 2px 0 0;
+  color: var(--text-strong);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.course-weakness-counts {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+}
+
+.course-weakness-counts div {
+  display: grid;
+  min-width: 74px;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(16, 24, 32, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.course-weakness-counts dt {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.course-weakness-counts dd {
+  margin: 0;
+  color: var(--accent-strong);
+  font-size: 1.05rem;
+  font-weight: 840;
+}
+
+.course-weakness-list {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.course-weakness-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(15, 143, 122, 0.08);
+  color: var(--text-strong);
+  font-weight: 780;
+}
+
+.course-weakness-list em {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 820;
+}
+
+.course-weakness-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 720;
 }
 
 .course-start-panel {

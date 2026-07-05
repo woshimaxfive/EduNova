@@ -25,6 +25,8 @@ type CoursePageOptions = {
   sessions?: TutorSessionSummary[];
   sendDetail?: TutorSessionDetail;
   historyDetail?: TutorSessionDetail;
+  learningState?: unknown;
+  failLearningState?: boolean;
   failSend?: boolean;
   streamEvents?: Array<{ event: string; data: unknown }>;
   controlledStream?: boolean;
@@ -51,6 +53,67 @@ const citationItem: TutorCitation = {
   vector_score: 6,
   retrieval_source: "hybrid",
   embedding_status: "local_fallback"
+};
+
+const emptyLearningState = {
+  course_id: "808",
+  profile_overlay: {
+    learning_goal: "",
+    knowledge_foundation: "",
+    weak_points: []
+  },
+  weakness_summary: {
+    candidate_event_count: 0,
+    pending_count: 0,
+    reviewing_count: 0,
+    completed_count: 0,
+    latest_evidence_at: null
+  },
+  weakness_review_queue: [],
+  path_summary: {
+    status: "not_started",
+    message: "学习路径尚未生成。"
+  },
+  mastery_summary: {
+    status: "not_started",
+    message: "掌握度尚未接入。"
+  },
+  evidence_summary: {
+    candidate_event_count: 0,
+    latest_trace_id: null,
+    latest_source_title: null,
+    latest_section_title: null
+  }
+};
+
+const learningStateWithWeakness = {
+  ...emptyLearningState,
+  weakness_summary: {
+    candidate_event_count: 2,
+    pending_count: 1,
+    reviewing_count: 0,
+    completed_count: 0,
+    latest_evidence_at: "2026-07-05T08:30:00Z"
+  },
+  weakness_review_queue: [
+    {
+      id: "701",
+      title: "启发式搜索",
+      status: "pending",
+      source_type: "course_question",
+      course_id: "808",
+      knowledge_point_id: "401",
+      next_review_at: null,
+      created_at: "2026-07-05T08:30:00Z",
+      updated_at: "2026-07-05T08:30:00Z"
+    }
+  ],
+  evidence_summary: {
+    candidate_event_count: 2,
+    latest_trace_id: "trace_candidate",
+    latest_source_title: "人工智能导论讲义.md",
+    latest_section_title: "启发式搜索"
+  }
 };
 
 function parsePayload(data: unknown) {
@@ -158,6 +221,23 @@ function renderCoursePage(options: CoursePageOptions = {}) {
       [COURSE_ENDPOINTS.detail(808), COURSE_ENDPOINTS.overview(808), COURSE_ENDPOINTS.knowledgePoints(808)].includes(url)
     ) {
       return new Promise(() => {});
+    }
+
+    if (url === COURSE_ENDPOINTS.learningState(808)) {
+      if (options.failLearningState) {
+        throw new Error("课程学习状态读取失败。");
+      }
+
+      return {
+        data: {
+          data: options.learningState ?? emptyLearningState,
+          trace_id: "trace_learning_state"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
     }
 
     if (url === COURSE_ENDPOINTS.detail(808)) {
@@ -399,6 +479,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     renderCoursePage();
 
     expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "待复习弱点" })).toHaveTextContent("还没有待确认弱点");
     expect(screen.getByRole("region", { name: "课程提问引导" })).toBeInTheDocument();
     expect(screen.getByText("推荐问题")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "知识学习画布" })).not.toBeInTheDocument();
@@ -406,6 +487,26 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.queryByRole("region", { name: "资源生成区" })).not.toBeInTheDocument();
     expect(screen.queryByText("监督学习先抓住“数据、目标、泛化”三件事")).not.toBeInTheDocument();
     expect(screen.queryByText("AI 辅导回答")).not.toBeInTheDocument();
+  });
+
+  it("renders pending course weakness review items from learning state", async () => {
+    renderCoursePage({ learningState: learningStateWithWeakness });
+
+    const weaknessRegion = await screen.findByRole("region", { name: "待复习弱点" });
+    await within(weaknessRegion).findByText("启发式搜索");
+
+    expect(weaknessRegion).toHaveTextContent(/待确认\s*1/);
+    expect(weaknessRegion).toHaveTextContent(/候选证据\s*2/);
+    expect(within(weaknessRegion).getByText("启发式搜索")).toBeInTheDocument();
+    expect(within(weaknessRegion).getAllByText("待确认").length).toBeGreaterThanOrEqual(2);
+    expect(within(weaknessRegion).queryByText("学习路径尚未生成")).not.toBeInTheDocument();
+  });
+
+  it("shows local feedback when course learning state fails to load", async () => {
+    renderCoursePage({ failLearningState: true });
+
+    expect(await screen.findByText("课程学习状态读取失败，请稍后重试。")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
   });
 
   it("does not show demo course fallback while real course data is loading", () => {
@@ -454,6 +555,19 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.getAllByText(/本地 fallback/)).not.toHaveLength(0);
     expect(screen.getByText(/启发函数估计路径代价/)).toBeInTheDocument();
     expect(screen.queryByText("监督学习先抓住“数据、目标、泛化”三件事")).not.toBeInTheDocument();
+  });
+
+  it("refreshes course learning state after a course question is sent", async () => {
+    const user = userEvent.setup();
+    const { calls } = renderCoursePage();
+
+    await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await user.type(screen.getByRole("textbox", { name: "课程问题输入" }), "为什么启发式搜索这么难？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    await waitFor(() => {
+      expect(calls.filter((call) => call.url === COURSE_ENDPOINTS.learningState(808))).toHaveLength(2);
+    });
   });
 
   it("opens study mode from a course knowledge point", async () => {

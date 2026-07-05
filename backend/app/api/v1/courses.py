@@ -83,6 +83,18 @@ def get_course_knowledge_points(
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
 
 
+@router.get("/{course_id}/learning-state")
+def get_course_learning_state(
+    course_id: int,
+    current_user: User = Depends(get_current_user),
+    service: CourseService = Depends(get_course_service),
+) -> dict:
+    try:
+        return api_response(service.get_learning_state(current_user, course_id).model_dump())
+    except CourseNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+
+
 @router.post("/from-materials")
 def create_course_from_materials(
     payload: CreateCourseFromMaterialsRequest,

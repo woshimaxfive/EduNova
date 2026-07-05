@@ -801,11 +801,19 @@ Authorization: Bearer <token>
 
 ## 10. Resource 接口
 
-状态：后续预留。当前后端未挂载 `resources` router，`StudioPage` 只提供资源工坊前端骨架和本地预备交互。
+状态：Phase 8.2 已实现。当前后端已挂载 `resources` router，第一刀只生成课程资源：`course_id != null` 表示课程资源；`course_id == null` 仅作为后续个人全局资源读取语义预留，本阶段不提供全局资源生成入口。
+
+统一规则：
+
+- 所有接口必须携带 JWT。
+- 只能生成和读取当前用户自己的课程、知识点、资源和质量分；非本人资源或课程返回 404。
+- `resource_type` 只支持 `doc`、`mindmap`、`quiz`、`code`、`slide`。
+- 生成采用模型优先：优先当前用户默认模型，其次服务器默认模型；模型未配置或调用失败时，使用课程引用驱动的确定性 fallback，`review_status="low_evidence"`，不伪装成模型输出。
+- 响应、资源内容、质量分和 Agent trace 只保存安全摘要、引用标题和白名单 metadata，不返回系统提示词、完整模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
 ### POST `/resources/generate`
 
-用途：生成个性化学习资源。
+用途：为当前用户的一门课程同步生成 1 到 5 类学习资源。
 
 请求：
 
@@ -819,22 +827,65 @@ Authorization: Bearer <token>
 }
 ```
 
+字段规则：
+
+- `course_id` 必填。
+- `knowledge_point_id` 可选；填写时必须属于该课程。
+- `resource_types` 必须为 1 到 5 个，服务端会去重。
+- `learning_goal` 可选，最长 500 字，只用于本次生成，不作为完整用户资料保存到日志。
+- `difficulty` 默认为 `medium`，可选 `easy`、`medium`、`hard`。
+
 响应：
 
 ```json
 {
   "data": {
-    "trace_id": "trace_20260701_resource_001",
+    "agent_trace_id": "trace_20260705_resource_001",
     "resources": [
       {
-        "id": 1,
+        "id": "1",
+        "course_id": "1",
+        "knowledge_point_id": "8",
         "resource_type": "doc",
         "title": "反向传播个性化讲解",
+        "content_json": {
+          "markdown": "# 反向传播个性化讲解\n\n先理解链式法则，再看计算图中的梯度传递。",
+          "metadata": {
+            "agent_trace_id": "trace_20260705_resource_001",
+            "generation_mode": "model",
+            "difficulty": "medium",
+            "has_learning_goal": true
+          }
+        },
+        "citation_json": [
+          {
+            "chunk_id": 501,
+            "knowledge_point_id": 8,
+            "source_title": "神经网络讲义.md",
+            "section_title": "反向传播",
+            "page_number": null
+          }
+        ],
+        "status": "completed",
         "review_status": "passed",
-        "confidence_score": 0.91,
-        "citation_refs": []
+        "confidence_score": 0.82,
+        "agent_trace_id": "trace_20260705_resource_001",
+        "created_at": "2026-07-05T14:00:00Z",
+        "updated_at": "2026-07-05T14:00:00Z"
       }
-    ]
+    ],
+    "quality_scores": {
+      "1": [
+        {
+          "id": "3001",
+          "resource_id": "1",
+          "score_name": "source_match",
+          "score_value": 0.82,
+          "rationale": "基于课程引用摘要生成。",
+          "created_at": "2026-07-05T14:00:00Z"
+        }
+      ]
+    }
   },
   "trace_id": "trace_20260701_009"
 }
@@ -842,19 +893,58 @@ Authorization: Bearer <token>
 
 ### GET `/resources`
 
-用途：获取资源列表。
+用途：获取当前用户资源列表。可通过 `course_id` 和 `resource_type` 过滤；不传 `course_id` 时返回当前用户全部资源，包含后续可能出现的个人全局资源。
+
+查询参数：
+
+- `course_id`：可选，限制为某门课程资源。
+- `resource_type`：可选，限制为 `doc`、`mindmap`、`quiz`、`code` 或 `slide`。
+
+响应为分页列表 envelope：
+
+```json
+{
+  "data": [
+    {
+      "id": "1",
+      "course_id": "1",
+      "knowledge_point_id": "8",
+      "resource_type": "quiz",
+      "title": "反向传播练习",
+      "content_json": {
+        "markdown": "# 反向传播练习",
+        "metadata": {
+          "agent_trace_id": "trace_20260705_resource_001",
+          "generation_mode": "fallback"
+        }
+      },
+      "citation_json": [],
+      "status": "completed",
+      "review_status": "low_evidence",
+      "confidence_score": 0.55,
+      "agent_trace_id": "trace_20260705_resource_001",
+      "created_at": "2026-07-05T14:00:00Z",
+      "updated_at": "2026-07-05T14:00:00Z"
+    }
+  ],
+  "page": 1,
+  "page_size": 1,
+  "total": 1,
+  "trace_id": "trace_20260705_011"
+}
+```
 
 ### GET `/resources/{resource_id}`
 
-用途：获取资源详情。
+用途：获取当前用户自己的资源详情。不存在或不属于当前用户时返回 404。
 
 ### GET `/resources/{resource_id}/quality`
 
-用途：获取资源质量评分。
+用途：获取当前用户自己的资源质量评分。评分项包括 `source_match`、`profile_fit`、`fact_confidence`、`difficulty_fit` 和 `completeness`。
 
 ## 11. Agent Trace 接口
 
-状态：Phase 8.1 已实现。当前后端已挂载 `agents` router，先提供隐私安全的 Agent trace 查询底座；资源生成、学习路径、练习评估和报告导出仍未接入。
+状态：Phase 8.1 已实现 trace 查询底座，Phase 8.2 已由资源生成流程写入 `profile -> retrieve -> diagnosis -> resource -> review -> persist` 六步 Agent 日志；学习路径、练习评估和报告导出仍未接入。
 
 ### GET `/agents/traces/{trace_id}`
 

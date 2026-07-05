@@ -12,7 +12,13 @@ import { PRACTICE_ENDPOINTS } from "./practice";
 import { RAG_ENDPOINTS, searchRag } from "./rag";
 import { getMyProfile, listProfileEvents, PROFILE_ENDPOINTS, updateProfileByChat } from "./profiles";
 import { REPORT_ENDPOINTS } from "./reports";
-import { RESOURCE_ENDPOINTS } from "./resources";
+import {
+  generateResources,
+  getResource,
+  getResourceQuality,
+  listResources,
+  RESOURCE_ENDPOINTS
+} from "./resources";
 import {
   createModelConfig,
   deleteModelConfig,
@@ -474,6 +480,146 @@ describe("frontend API contracts", () => {
       expect(calls).toEqual([{ url: AGENT_ENDPOINTS.trace("trace_candidate"), method: "get" }]);
       expect(response.data.steps[0].agent_name).toBe("retrieve");
       expect(response.data.steps[0].metadata.citation_count).toBe(2);
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("uses typed resources API requests through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown; params?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data,
+        params: config.params
+      });
+
+      const resource = {
+        id: "901",
+        course_id: "7",
+        knowledge_point_id: "401",
+        resource_type: "doc",
+        title: "启发式搜索个性化讲解",
+        content_json: {
+          markdown: "# 启发式搜索个性化讲解",
+          metadata: {
+            agent_trace_id: "trace_resource"
+          }
+        },
+        citation_json: [
+          {
+            chunk_id: 501,
+            source_title: "人工智能导论讲义.md",
+            section_title: "启发式搜索"
+          }
+        ],
+        status: "completed",
+        review_status: "passed",
+        confidence_score: 0.82,
+        agent_trace_id: "trace_resource",
+        created_at: "2026-07-05T14:00:00Z",
+        updated_at: "2026-07-05T14:00:00Z"
+      };
+      const quality = [
+        {
+          id: "3001",
+          resource_id: "901",
+          score_name: "source_match",
+          score_value: 0.82,
+          rationale: "基于课程引用摘要生成。",
+          created_at: "2026-07-05T14:00:00Z"
+        }
+      ];
+
+      return {
+        data:
+          config.url === RESOURCE_ENDPOINTS.list
+            ? {
+                data: [resource],
+                page: 1,
+                page_size: 1,
+                total: 1,
+                trace_id: "trace_resources_list"
+              }
+            : config.url === RESOURCE_ENDPOINTS.quality(901)
+              ? {
+                  data: quality,
+                  trace_id: "trace_resource_quality"
+                }
+              : {
+                  data:
+                    config.url === RESOURCE_ENDPOINTS.generate
+                      ? {
+                          agent_trace_id: "trace_resource",
+                          resources: [resource],
+                          quality_scores: {
+                            "901": quality
+                          }
+                        }
+                      : resource,
+                  trace_id: "trace_resources_contract"
+                },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const generated = await generateResources({
+        course_id: 7,
+        knowledge_point_id: 401,
+        resource_types: ["doc", "quiz"],
+        learning_goal: "期末前掌握搜索算法",
+        difficulty: "medium"
+      });
+      const listed = await listResources({ courseId: 7, resourceType: "doc" });
+      const detail = await getResource(901);
+      const quality = await getResourceQuality(901);
+
+      expect(calls).toEqual([
+        {
+          url: RESOURCE_ENDPOINTS.generate,
+          method: "post",
+          data: {
+            course_id: 7,
+            knowledge_point_id: 401,
+            resource_types: ["doc", "quiz"],
+            learning_goal: "期末前掌握搜索算法",
+            difficulty: "medium"
+          },
+          params: undefined
+        },
+        {
+          url: RESOURCE_ENDPOINTS.list,
+          method: "get",
+          data: undefined,
+          params: {
+            course_id: 7,
+            resource_type: "doc"
+          }
+        },
+        {
+          url: RESOURCE_ENDPOINTS.detail(901),
+          method: "get",
+          data: undefined,
+          params: undefined
+        },
+        {
+          url: RESOURCE_ENDPOINTS.quality(901),
+          method: "get",
+          data: undefined,
+          params: undefined
+        }
+      ]);
+      expect(generated.data.resources[0].agent_trace_id).toBe("trace_resource");
+      expect(listed.data[0].resource_type).toBe("doc");
+      expect(detail.data.title).toBe("启发式搜索个性化讲解");
+      expect(quality.data[0].score_name).toBe("source_match");
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

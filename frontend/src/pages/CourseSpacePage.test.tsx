@@ -749,6 +749,24 @@ describe("CourseSpacePage course tutor sessions", () => {
     );
   });
 
+  it("links the resources panel to the real studio with the current course preselected", async () => {
+    const user = userEvent.setup();
+    renderCoursePage({
+      sessions: [makeSession("777", "已有课程历史")],
+      learningState: learningStateWithWeakness
+    });
+
+    await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await user.click(await screen.findByRole("button", { name: "生成资源" }));
+
+    const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
+    expect(within(detailPanel).getByRole("link", { name: "进入资源工坊" })).toHaveAttribute(
+      "href",
+      `${PATHS.studio}?course_id=808`
+    );
+    expect(within(detailPanel).queryByText(/后续阶段接入/)).not.toBeInTheDocument();
+  });
+
   it("renders a real empty state when the agent trace has no steps", async () => {
     const user = userEvent.setup();
     renderCoursePage({

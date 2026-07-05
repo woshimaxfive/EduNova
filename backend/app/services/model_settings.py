@@ -378,7 +378,7 @@ class ModelSettingsService:
             can_use_model=False,
         )
 
-    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str:
+    def chat_completion_with_timeout(self, user: User, messages: list[dict[str, str]], timeout_seconds: float) -> str:
         runtime = self.resolve_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
             raise ModelNotConfiguredError(MODEL_NOT_CONFIGURED_MESSAGE)
@@ -389,6 +389,13 @@ class ModelSettingsService:
                 chat_model=runtime.chat_model,
             ),
             messages=messages,
+            timeout_seconds=timeout_seconds,
+        )
+
+    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str:
+        return self.chat_completion_with_timeout(
+            user,
+            messages,
             timeout_seconds=self.settings.model_request_timeout_seconds,
         )
 

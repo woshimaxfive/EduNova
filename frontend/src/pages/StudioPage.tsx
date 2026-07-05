@@ -1,103 +1,349 @@
-import { ClockCounterClockwise, Sparkle } from "@phosphor-icons/react";
-import { useState } from "react";
+import { Sparkle } from "@phosphor-icons/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
+import { getKnowledgePoints, listCourses } from "../api/courses";
+import {
+  generateResources,
+  listResources,
+  type GeneratedResource,
+  type ResourceDifficulty,
+  type ResourceQualityScore,
+  type ResourceType
+} from "../api/resources";
+import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { StudioDock } from "../components/studio/StudioDock";
 import { WorkspaceStateStrip } from "../components/states/WorkspaceStateStrip";
 import { getWorkspaceStatePanels } from "../features/workspace/workflowState";
-import { type StudioOutput } from "../types/api";
 import { PageFrame } from "./PageFrame";
 
-const resourceTypes: StudioOutput["resourceType"][] = ["讲解", "练习", "思维导图", "代码实操", "PPT 大纲"];
-const knowledgeOptions = ["监督学习", "反向传播", "神经网络", "搜索与知识表示"];
+const resourceTypes: Array<{ type: ResourceType; label: string }> = [
+  { type: "doc", label: "讲解" },
+  { type: "quiz", label: "练习" },
+  { type: "mindmap", label: "思维导图" },
+  { type: "code", label: "代码实操" },
+  { type: "slide", label: "PPT 大纲" }
+];
+
+const difficultyOptions: Array<{ value: ResourceDifficulty; label: string }> = [
+  { value: "easy", label: "基础" },
+  { value: "medium", label: "标准" },
+  { value: "hard", label: "进阶" }
+];
+
+const qualityLabels: Record<string, string> = {
+  source_match: "来源匹配",
+  profile_fit: "画像贴合",
+  fact_confidence: "事实置信",
+  difficulty_fit: "难度贴合",
+  completeness: "完整度"
+};
+
+function parseCourseId(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function markdownPreview(resource: GeneratedResource) {
+  const markdown = resource.content_json.markdown;
+  if (!markdown) {
+    return "资源内容已生成。";
+  }
+  return markdown.replace(/^#+\s*/gm, "").split("\n").find((line) => line.trim()) ?? "资源内容已生成。";
+}
 
 export function StudioPage() {
+  const [searchParams] = useSearchParams();
+  const queryClient = useQueryClient();
   const evidencePanels = getWorkspaceStatePanels().filter((panel) =>
     ["loading", "low_evidence", "local_preview"].includes(panel.kind)
   );
-  const [selectedKnowledge, setSelectedKnowledge] = useState(knowledgeOptions[0]);
-  const [selectedResourceType, setSelectedResourceType] = useState<StudioOutput["resourceType"]>("讲解");
-  const [queueItems, setQueueItems] = useState<Array<{ title: string; meta: string; icon: typeof ClockCounterClockwise }>>([]);
-  const [outputs, setOutputs] = useState<StudioOutput[]>([]);
+  const initialCourseId = parseCourseId(searchParams.get("course_id"));
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(initialCourseId);
+  const [selectedKnowledgePointId, setSelectedKnowledgePointId] = useState<number | null>(null);
+  const [selectedResourceTypes, setSelectedResourceTypes] = useState<ResourceType[]>(["doc"]);
+  const [learningGoal, setLearningGoal] = useState("");
+  const [difficulty, setDifficulty] = useState<ResourceDifficulty>("medium");
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [latestQualityScores, setLatestQualityScores] = useState<Record<string, ResourceQualityScore[]>>({});
 
-  function generateResource() {
-    const title = `${selectedKnowledge}${selectedResourceType}`;
-    const nextOutput: StudioOutput = {
-      id: Date.now(),
-      title,
-      resourceType: selectedResourceType,
-      reviewStatus: "审核中"
-    };
+  const coursesQuery = useQuery({
+    queryKey: ["courses", "studio"],
+    queryFn: () => listCourses(),
+    staleTime: 30_000
+  });
+  const courses = useMemo(
+    () => (Array.isArray(coursesQuery.data?.data) ? coursesQuery.data.data : []),
+    [coursesQuery.data]
+  );
+  const effectiveCourseId = useMemo(() => {
+    if (courses.length === 0) {
+      return null;
+    }
 
-    setQueueItems((current) => [
-      {
-        title,
-        meta: `${selectedResourceType} · 已加入队列`,
-        icon: ClockCounterClockwise
-      },
-      ...current
-    ]);
-    setOutputs((current) => [nextOutput, ...current]);
+    const selectedExists = selectedCourseId !== null && courses.some((course) => Number.parseInt(course.id, 10) === selectedCourseId);
+    if (selectedExists) {
+      return selectedCourseId;
+    }
+
+    const initialExists = initialCourseId !== null && courses.some((course) => Number.parseInt(course.id, 10) === initialCourseId);
+    return initialExists ? initialCourseId : Number.parseInt(courses[0].id, 10);
+  }, [courses, initialCourseId, selectedCourseId]);
+  const selectedCourse = courses.find((course) => Number.parseInt(course.id, 10) === effectiveCourseId) ?? null;
+
+  const knowledgePointsQuery = useQuery({
+    queryKey: ["courses", "knowledge-points", effectiveCourseId],
+    queryFn: () => getKnowledgePoints(effectiveCourseId ?? 0),
+    enabled: effectiveCourseId !== null,
+    staleTime: 30_000
+  });
+  const knowledgePoints = useMemo(
+    () => (Array.isArray(knowledgePointsQuery.data?.data) ? knowledgePointsQuery.data.data : []),
+    [knowledgePointsQuery.data]
+  );
+  const effectiveKnowledgePointId = useMemo(() => {
+    if (knowledgePoints.length === 0) {
+      return null;
+    }
+
+    const selectedExists =
+      selectedKnowledgePointId !== null && knowledgePoints.some((point) => Number.parseInt(point.id, 10) === selectedKnowledgePointId);
+    return selectedExists ? selectedKnowledgePointId : Number.parseInt(knowledgePoints[0].id, 10);
+  }, [knowledgePoints, selectedKnowledgePointId]);
+
+  const resourceCourseId = effectiveCourseId ?? selectedCourseId;
+  const resourcesQuery = useQuery({
+    queryKey: ["resources", "list", resourceCourseId],
+    queryFn: () => listResources(resourceCourseId !== null ? { courseId: resourceCourseId } : undefined),
+    staleTime: 10_000
+  });
+  const resources = useMemo(
+    () => (Array.isArray(resourcesQuery.data?.data) ? resourcesQuery.data.data : []),
+    [resourcesQuery.data]
+  );
+
+  const latestResource = useMemo(() => resources[0] ?? null, [resources]);
+  const latestResourceQuality = latestResource ? latestQualityScores[latestResource.id] ?? [] : [];
+
+  const generateMutation = useMutation({
+    mutationFn: () => {
+      if (effectiveCourseId === null) {
+        throw new Error("missing course");
+      }
+      return generateResources({
+        course_id: effectiveCourseId,
+        knowledge_point_id: effectiveKnowledgePointId,
+        resource_types: selectedResourceTypes,
+        learning_goal: learningGoal,
+        difficulty
+      });
+    },
+    onSuccess: (response) => {
+      setFeedback(null);
+      setLatestQualityScores(response.data.quality_scores);
+      void queryClient.invalidateQueries({ queryKey: ["resources", "list", effectiveCourseId] });
+    },
+    onError: () => {
+      setFeedback("资源生成失败，请稍后重试。");
+    }
+  });
+
+  function toggleResourceType(type: ResourceType) {
+    setSelectedResourceTypes((current) => {
+      if (current.includes(type)) {
+        return current.length === 1 ? current : current.filter((item) => item !== type);
+      }
+      return [...current, type];
+    });
   }
+
+  function handleCourseChange(value: string) {
+    setSelectedCourseId(value ? Number.parseInt(value, 10) : null);
+    setSelectedKnowledgePointId(null);
+    setLatestQualityScores({});
+  }
+
+  function handleGenerate() {
+    if (effectiveCourseId === null || generateMutation.isPending) {
+      return;
+    }
+    generateMutation.mutate();
+  }
+
+  const canGenerate = effectiveCourseId !== null && selectedResourceTypes.length > 0 && !generateMutation.isPending;
 
   return (
     <PageFrame title="资源工坊">
       <section className="student-panel studio-workbench" role="region" aria-label="资源生成工作台">
         <div className="student-panel-heading">
           <div>
-            <h2>选择知识点，生成资源</h2>
+            <h2>选择课程和知识点，生成资源</h2>
           </div>
-          <button className="primary-action" type="button" onClick={generateResource}>
+          <button className="primary-action" type="button" onClick={handleGenerate} disabled={!canGenerate}>
             <Sparkle size={18} weight="fill" aria-hidden="true" />
-            <span>生成资源</span>
+            <span>{generateMutation.isPending ? "生成中" : "生成资源"}</span>
           </button>
         </div>
 
         <div className="studio-control-grid">
           <label>
+            <span>课程</span>
+            <select
+              value={effectiveCourseId ?? ""}
+              onChange={(event) => handleCourseChange(event.target.value)}
+              disabled={courses.length === 0}
+            >
+              {courses.length > 0 ? (
+                courses.map((course) => (
+                  <option key={course.id} value={Number.parseInt(course.id, 10)}>
+                    {course.title}
+                  </option>
+                ))
+              ) : (
+                <option value="">还没有可生成资源的课程</option>
+              )}
+            </select>
+          </label>
+          <label>
             <span>知识点</span>
-            <select value={selectedKnowledge} onChange={(event) => setSelectedKnowledge(event.target.value)}>
-              {knowledgeOptions.map((option) => (
-                <option key={option}>{option}</option>
+            <select
+              value={effectiveKnowledgePointId ?? ""}
+              onChange={(event) => setSelectedKnowledgePointId(event.target.value ? Number.parseInt(event.target.value, 10) : null)}
+              disabled={knowledgePoints.length === 0}
+            >
+              {knowledgePoints.length > 0 ? (
+                knowledgePoints.map((point) => (
+                  <option key={point.id} value={Number.parseInt(point.id, 10)}>
+                    {point.title}
+                  </option>
+                ))
+              ) : (
+                <option value="">按整门课程生成</option>
+              )}
+            </select>
+          </label>
+          <label>
+            <span>生成目标</span>
+            <input
+              aria-label="生成目标"
+              value={learningGoal}
+              onChange={(event) => setLearningGoal(event.target.value)}
+              placeholder="例如：期末前掌握搜索题"
+            />
+          </label>
+          <label>
+            <span>难度</span>
+            <select value={difficulty} onChange={(event) => setDifficulty(event.target.value as ResourceDifficulty)}>
+              {difficultyOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
               ))}
             </select>
           </label>
           <div className="resource-type-row" aria-label="资源类型">
-            {resourceTypes.map((type) => (
+            {resourceTypes.map((item) => (
               <button
-                className={selectedResourceType === type ? "active" : ""}
-                key={type}
+                className={selectedResourceTypes.includes(item.type) ? "active" : ""}
+                key={item.type}
                 type="button"
-                aria-pressed={selectedResourceType === type}
-                onClick={() => setSelectedResourceType(type)}
+                aria-pressed={selectedResourceTypes.includes(item.type)}
+                onClick={() => toggleResourceType(item.type)}
               >
-                {type}
+                {item.label}
               </button>
             ))}
           </div>
         </div>
 
+        <InlineFeedback message={feedback} tone="warning" className="library-inline-feedback" />
+        {coursesQuery.isError || resourcesQuery.isError ? (
+          <InlineFeedback message="资源工坊数据读取失败，请稍后重试。" tone="warning" className="library-inline-feedback" />
+        ) : null}
+
         <WorkspaceStateStrip panels={evidencePanels} />
 
         <section className="generation-queue" role="region" aria-label="生成队列">
-          {queueItems.length > 0 ? queueItems.map((item) => {
-            const Icon = item.icon;
-
-            return (
-              <article className="queue-row" key={item.title}>
-                <span className="queue-row-icon" aria-hidden="true">
-                  <Icon size={19} weight="duotone" />
-                </span>
-                <span>
-                  <strong>{item.title}</strong>
-                  <small>{item.meta}</small>
-                </span>
-              </article>
-            );
-          }) : <p className="empty-inline-note">还没有生成任务。选择知识点和资源类型后再生成。</p>}
+          {selectedCourse ? (
+            <article className="queue-row">
+              <span className="queue-row-icon" aria-hidden="true">
+                <Sparkle size={19} weight="duotone" />
+              </span>
+              <span>
+                <strong>{selectedCourse.title}</strong>
+                <small>{selectedResourceTypes.length} 类资源 · {knowledgePoints.length > 0 ? "知识点生成" : "整课生成"}</small>
+              </span>
+            </article>
+          ) : (
+            <p className="empty-inline-note">还没有可生成资源的课程</p>
+          )}
         </section>
       </section>
 
-      <StudioDock outputs={outputs} onGenerate={generateResource} showGenerateAction={false} />
+      <StudioDock outputs={resources} onGenerate={handleGenerate} showGenerateAction={false} />
+
+      {latestResource ? (
+        <>
+          <section className="student-panel generation-queue" role="region" aria-label="资源质量">
+            <div className="student-panel-heading">
+              <div>
+                <h2>资源质量</h2>
+              </div>
+            </div>
+            {latestResourceQuality.length > 0 ? (
+              latestResourceQuality.map((score) => (
+                <article className="queue-row" key={score.id}>
+                  <span>
+                    <strong>{qualityLabels[score.score_name] ?? score.score_name}</strong>
+                    <small>{score.rationale ?? "已记录质量分"}</small>
+                  </span>
+                  <em>{score.score_value.toFixed(2)}</em>
+                </article>
+              ))
+            ) : (
+              <p className="empty-inline-note">资源质量分会在生成后显示。</p>
+            )}
+          </section>
+
+          <section className="student-panel generation-queue" role="region" aria-label="引用来源">
+            <div className="student-panel-heading">
+              <div>
+                <h2>引用来源</h2>
+              </div>
+            </div>
+            {latestResource.citation_json.length > 0 ? (
+              latestResource.citation_json.map((citation, index) => (
+                <article className="queue-row" key={`${citation.chunk_id ?? index}-${citation.section_title ?? "citation"}`}>
+                  <span>
+                    <strong>{citation.section_title ?? "课程引用"}</strong>
+                    <small>{citation.source_title ?? "课程资料"}</small>
+                  </span>
+                </article>
+              ))
+            ) : (
+              <p className="empty-inline-note">当前资源没有可展示引用。</p>
+            )}
+          </section>
+
+          <section className="student-panel generation-queue" role="region" aria-label="资源内容预览">
+            <div className="student-panel-heading">
+              <div>
+                <h2>内容预览</h2>
+              </div>
+            </div>
+            <article className="queue-row">
+              <span>
+                <strong>{latestResource.title}</strong>
+                <small>{markdownPreview(latestResource)}</small>
+              </span>
+            </article>
+          </section>
+        </>
+      ) : null}
     </PageFrame>
   );
 }

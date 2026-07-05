@@ -11,6 +11,7 @@ import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
 import { PROFILE_ENDPOINTS, type StudentProfileResponse, type ProfileEventResponse } from "../api/profiles";
+import { RESOURCE_ENDPOINTS, type GeneratedResource, type ResourceQualityScore } from "../api/resources";
 import { SETTINGS_ENDPOINTS, type ModelConfigSummary, type ModelSettingsListResponse } from "../api/settings";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
@@ -473,21 +474,180 @@ describe("student interaction affordances", () => {
     expect(screen.getByRole("region", { name: "薄弱点复习队列" })).toHaveTextContent("下一题");
   });
 
-  it("generates studio resources into the local queue and output track", async () => {
+  it("generates studio resources through the real resource API", async () => {
     const user = userEvent.setup();
+    const calls: Array<{ url?: string; method?: string; data?: unknown; params?: unknown }> = [];
+    let resources: GeneratedResource[] = [];
+    const quality: ResourceQualityScore[] = [
+      {
+        id: "3001",
+        resource_id: "901",
+        score_name: "source_match",
+        score_value: 0.55,
+        rationale: "模型未配置，使用课程引用 fallback。",
+        created_at: "2026-07-05T14:00:00Z"
+      }
+    ];
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+      const payload = parsePayload(config.data);
+      calls.push({ url, method, data: payload, params: config.params });
+
+      if (url === COURSE_ENDPOINTS.list) {
+        return {
+          data: {
+            data: [
+              {
+                id: "808",
+                title: "机器学习期末复习",
+                description: "由 1 份资料生成",
+                subject: "机器学习",
+                source_type: "uploaded",
+                status: "ready",
+                progress_percent: 0,
+                material_count: 1,
+                knowledge_point_count: 1,
+                chunk_count: 2
+              }
+            ],
+            page: 1,
+            page_size: 1,
+            total: 1,
+            trace_id: "trace_studio_courses"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === COURSE_ENDPOINTS.knowledgePoints(808)) {
+        return {
+          data: {
+            data: [
+              {
+                id: "401",
+                title: "反向传播",
+                summary: "理解链式法则和梯度传递。",
+                chapter: "神经网络",
+                order_index: 1,
+                difficulty: "标准"
+              }
+            ],
+            trace_id: "trace_studio_points"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === RESOURCE_ENDPOINTS.list) {
+        return {
+          data: {
+            data: resources,
+            page: 1,
+            page_size: resources.length,
+            total: resources.length,
+            trace_id: "trace_studio_resources"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === RESOURCE_ENDPOINTS.generate && method === "post") {
+        resources = [
+          {
+            id: "901",
+            course_id: "808",
+            knowledge_point_id: "401",
+            resource_type: "quiz",
+            title: "反向传播练习",
+            content_json: {
+              markdown: "# 反向传播练习\n\n解释链式法则在计算图里的作用。",
+              metadata: {
+                agent_trace_id: "trace_resource_studio"
+              }
+            },
+            citation_json: [
+              {
+                chunk_id: 501,
+                source_title: "神经网络讲义.md",
+                section_title: "反向传播"
+              }
+            ],
+            status: "completed",
+            review_status: "low_evidence",
+            confidence_score: 0.55,
+            agent_trace_id: "trace_resource_studio",
+            created_at: "2026-07-05T14:00:00Z",
+            updated_at: "2026-07-05T14:00:00Z"
+          }
+        ];
+
+        return {
+          data: {
+            data: {
+              agent_trace_id: "trace_resource_studio",
+              resources,
+              quality_scores: {
+                "901": quality
+              }
+            },
+            trace_id: "trace_studio_generate"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_studio_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
 
     renderPage(<StudioPage />);
 
-    expect(screen.getByRole("region", { name: "生成队列" })).not.toHaveTextContent("监督学习个性化讲解");
-    expect(screen.getByRole("region", { name: "资源生成区" })).not.toHaveTextContent("反向传播薄弱点练习");
+    await waitFor(() => expect(screen.getByRole("region", { name: "生成队列" })).toHaveTextContent("机器学习期末复习"));
+    expect(screen.getByRole("region", { name: "资源生成区" })).not.toHaveTextContent("反向传播练习");
 
-    await user.selectOptions(screen.getByLabelText("知识点"), "反向传播");
+    await waitFor(() => expect(screen.getByLabelText("知识点")).not.toBeDisabled());
+    await user.selectOptions(screen.getByLabelText("知识点"), "401");
     await user.click(screen.getByRole("button", { name: "练习" }));
-    await user.click(screen.getAllByRole("button", { name: "生成资源" })[0]);
+    await user.click(screen.getByRole("button", { name: "生成资源" }));
 
+    await waitFor(() => {
+      expect(calls).toContainEqual(
+        expect.objectContaining({
+          url: RESOURCE_ENDPOINTS.generate,
+          method: "post",
+          data: {
+            course_id: 808,
+            knowledge_point_id: 401,
+            resource_types: ["doc", "quiz"],
+            learning_goal: "",
+            difficulty: "medium"
+          }
+        })
+      );
+    });
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "生成队列" })).toHaveTextContent("反向传播练习");
     expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("反向传播练习");
+    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("低依据");
+    expect(screen.getByRole("region", { name: "引用来源" })).toHaveTextContent("神经网络讲义.md");
   });
 
   it("updates profile goals and evidence through the real profile API", async () => {

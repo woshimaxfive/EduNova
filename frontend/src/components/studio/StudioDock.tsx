@@ -1,12 +1,33 @@
 import { Notebook, Sparkle } from "@phosphor-icons/react";
 
-import { type StudioOutput } from "../../types/api";
+import { type GeneratedResource } from "../../api/resources";
 
 type StudioDockProps = {
-  outputs: StudioOutput[];
+  outputs: GeneratedResource[];
   onGenerate?: () => void;
   showGenerateAction?: boolean;
 };
+
+const resourceTypeLabels: Record<GeneratedResource["resource_type"], string> = {
+  doc: "讲解",
+  mindmap: "思维导图",
+  quiz: "练习",
+  code: "代码实操",
+  slide: "PPT 大纲"
+};
+
+function reviewStatusLabel(status: string) {
+  if (status === "passed") {
+    return "可使用";
+  }
+  if (status === "low_evidence") {
+    return "低依据";
+  }
+  if (status === "failed") {
+    return "生成失败";
+  }
+  return "待生成";
+}
 
 export function StudioDock({ outputs, onGenerate, showGenerateAction = true }: StudioDockProps) {
   const handleGenerate = onGenerate ?? (() => undefined);
@@ -25,16 +46,24 @@ export function StudioDock({ outputs, onGenerate, showGenerateAction = true }: S
         ) : null}
       </div>
       <div className="studio-track">
-        {outputs.map((output) => (
-          <article className={`studio-item ${output.reviewStatus === "低依据" ? "low-evidence" : ""}`} key={output.id}>
-            <Notebook size={18} weight="duotone" aria-hidden="true" />
-            <div>
-              <small>{output.resourceType}</small>
-              <strong>{output.title}</strong>
-            </div>
-            <span>{output.reviewStatus}</span>
-          </article>
-        ))}
+        {outputs.length > 0 ? (
+          outputs.map((output) => {
+            const statusLabel = reviewStatusLabel(output.review_status);
+
+            return (
+              <article className={`studio-item ${output.review_status === "low_evidence" ? "low-evidence" : ""}`} key={output.id}>
+                <Notebook size={18} weight="duotone" aria-hidden="true" />
+                <div>
+                  <small>{resourceTypeLabels[output.resource_type]}</small>
+                  <strong>{output.title}</strong>
+                </div>
+                <span>{statusLabel}</span>
+              </article>
+            );
+          })
+        ) : (
+          <p className="empty-inline-note">还没有生成资源</p>
+        )}
       </div>
     </section>
   );

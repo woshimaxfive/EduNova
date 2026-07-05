@@ -607,6 +607,7 @@ export function CourseSpacePage() {
                       </div>
                       <AnswerDetailPanel
                         activePanel={activeAnswerPanel}
+                        courseId={hasRealCourseId ? numericCourseId : null}
                         citations={latestRagResults}
                         hasRealCourse={Boolean(apiCourse)}
                         hasSearched={hasRetrievalResult}
@@ -775,6 +776,7 @@ export function CourseSpacePage() {
 
 type AnswerDetailPanelProps = {
   activePanel: AnswerPanelKind;
+  courseId: number | null;
   citations: RagSearchResultItem[];
   hasRealCourse: boolean;
   hasSearched: boolean;
@@ -787,6 +789,7 @@ type AnswerDetailPanelProps = {
 
 function AnswerDetailPanel({
   activePanel,
+  courseId,
   citations,
   hasRealCourse,
   hasSearched,
@@ -797,10 +800,13 @@ function AnswerDetailPanel({
   onOpenCitation
 }: AnswerDetailPanelProps) {
   if (activePanel === "resources") {
+    const studioHref = courseId !== null ? `${PATHS.studio}?course_id=${courseId}` : PATHS.studio;
+
     return (
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
         <strong>生成资源</strong>
-        <p>真实资源生成会在后续阶段接入。当前可以先基于这次回答的来源，准备讲解、练习、思维导图、代码实操和 PPT 大纲。</p>
+        <p>资源工坊会基于当前课程和知识点生成讲解、练习、思维导图、代码实操和 PPT 大纲。</p>
+        <Link to={studioHref}>进入资源工坊</Link>
       </section>
     );
   }

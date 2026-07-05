@@ -342,6 +342,16 @@ Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状�
 
 用途：保存 AI 生成学习资源。
 
+Phase 8.2 开始实际复用该表保存 5 类课程资源。资源分层规则固定为：`course_id != null` 是课程资源，本阶段只生成这一类；`course_id == null` 预留为后续个人全局资源，不在本阶段生成。当前表没有独立 `trace_id` 字段，本阶段不新增迁移，生成 trace 写入 `content_json.metadata.agent_trace_id`，接口响应也显式返回 `agent_trace_id`。
+
+服务层必须保证：
+
+- 新建课程资源时强制写入当前用户自己的 `user_id` 和非空 `course_id`。
+- `knowledge_point_id` 若存在，必须属于同一课程。
+- `citation_json` 只保存安全引用摘要，不保存完整课程资料原文。
+- `content_json` 不保存系统提示词、完整模型输入、API Key 或完整用户画像原文。
+- 模型未配置或调用失败时可以写入确定性 fallback 内容，但 `review_status` 必须标为 `low_evidence`。
+
 字段：
 
 | 字段 | 类型 | 说明 |
@@ -364,6 +374,8 @@ Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状�
 
 用途：保存资源质量评分。
 
+Phase 8.2 生成资源时同步写入质量分。当前评分项为 `source_match`、`profile_fit`、`fact_confidence`、`difficulty_fit` 和 `completeness`。评分说明只保存可展示的安全摘要，不保存模型提示词、完整资料原文或用户隐私原文。
+
 字段：
 
 | 字段 | 类型 | 说明 |
@@ -379,7 +391,7 @@ Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状�
 
 用途：保存多智能体轨迹。
 
-Phase 8.1 开始实际复用该表提供 `/agents/traces/{trace_id}` 查询。服务层必须按当前用户隔离 trace，响应只返回安全摘要和白名单元数据，不返回系统提示词、模型输入、API Key、完整资料原文或用户隐私原文。本阶段不新增迁移，后续资源生成 worker 继续写入同一张表。
+Phase 8.1 开始实际复用该表提供 `/agents/traces/{trace_id}` 查询。Phase 8.2 的资源生成流程继续写入同一张表，步骤固定为 `profile`、`retrieve`、`diagnosis`、`resource`、`review`、`persist`。服务层必须按当前用户隔离 trace，响应只返回安全摘要和白名单元数据，不返回系统提示词、模型输入、API Key、完整资料原文或用户隐私原文。本阶段不新增迁移。
 
 字段：
 

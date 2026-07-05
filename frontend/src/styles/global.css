@@ -2223,6 +2223,7 @@ a {
 }
 
 .studio-control-grid select,
+.studio-control-grid input,
 .settings-form-row select,
 .settings-form-row input,
 .settings-inline-input input,
@@ -2246,6 +2247,7 @@ a {
 }
 
 .studio-control-grid select:focus,
+.studio-control-grid input:focus,
 .settings-form-row select:focus,
 .settings-form-row input:focus,
 .settings-inline-input input:focus,

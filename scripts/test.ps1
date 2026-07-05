@@ -70,7 +70,7 @@ else {
 
 if (Test-Path -LiteralPath "$repoRoot\docker-compose.yml") {
   Write-Host "== Docker Compose config =="
-  Invoke-CheckedCommand "docker" compose config
+  Invoke-CheckedCommand "docker" compose config --quiet
 }
 else {
   Write-Host "docker-compose.yml not found; skipped"

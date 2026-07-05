@@ -108,6 +108,8 @@ MODEL_REQUEST_TIMEOUT_SECONDS=20
 
 `SYSTEM_MODEL_*` 是服务器统一兜底配置，当前只保留一套。
 
+Docker Compose 会把仓库根目录的 `.env` 作为 backend 容器的可选运行时环境文件读取，用于注入 `SYSTEM_MODEL_*`、`MODEL_SETTINGS_ENCRYPTION_KEY` 等服务器配置。`.env` 已被 `.gitignore` 忽略，不能提交真实密钥。为了避免把密钥展开到终端日志，统一验证脚本只运行 `docker compose config --quiet`。
+
 个人模型配置通过 `/settings/model/configs` 保存到 `model_settings`：
 
 - 课程回答优先使用当前用户默认配置。

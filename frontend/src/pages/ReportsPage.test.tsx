@@ -112,7 +112,7 @@ describe("ReportsPage", () => {
     clickSpy.mockRestore();
   });
 
-  it("renders empty latest report, generates a real report, and exports Markdown", async () => {
+  it("renders empty latest report, generates a real report, and exports Markdown through an async job", async () => {
     const user = userEvent.setup();
     const calls: Array<{ method: string; url: string; payload: unknown; params: unknown }> = [];
     let generated = false;
@@ -139,27 +139,57 @@ describe("ReportsPage", () => {
         generated = true;
         return { data: { data: readyReport, trace_id: "trace_report" }, status: 200, statusText: "OK", headers: {}, config };
       }
-      if (url === EXPORT_ENDPOINTS.learningDossier) {
+      if (url === EXPORT_ENDPOINTS.learningDossierJob) {
         return {
           data: {
             data: {
-              course_id: "808",
+              job_id: "901",
+              status: "queued",
+              format: "markdown",
               filename: "edunova-人工智能导论-learning-dossier.md",
               content_type: "text/markdown; charset=utf-8",
-              markdown: "# 人工智能导论 学习档案\n\n本次评估得分 67，基于真实练习作答生成。",
-              generated_at: "2026-07-05T15:00:00Z",
-              source_summary: {
-                has_report: true,
-                report_id: "801",
-                knowledge_point_count: 2,
-                weakness_count: 1,
-                path_task_count: 0,
-                resource_count: 0,
-                practice_answer_count: 1
-              }
+              agent_trace_id: null,
+              error_message: null,
+              created_at: "2026-07-05T15:00:00Z",
+              updated_at: "2026-07-05T15:00:00Z",
+              completed_at: null
             },
-            trace_id: "trace_export"
+            trace_id: "trace_export_job"
           },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+      if (url === EXPORT_ENDPOINTS.job(901)) {
+        return {
+          data: {
+            data: {
+              job_id: "901",
+              status: "completed",
+              format: "markdown",
+              filename: "edunova-人工智能导论-learning-dossier.md",
+              content_type: "text/markdown; charset=utf-8",
+              agent_trace_id: null,
+              error_message: null,
+              created_at: "2026-07-05T15:00:00Z",
+              updated_at: "2026-07-05T15:00:01Z",
+              completed_at: "2026-07-05T15:00:01Z"
+            },
+            trace_id: "trace_export_job_done"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+      if (url === EXPORT_ENDPOINTS.download(901)) {
+        return {
+          data: new Blob(["# 人工智能导论 学习档案\n\n本次评估得分 67，基于真实练习作答生成。"], {
+            type: "text/markdown; charset=utf-8"
+          }),
           status: 200,
           statusText: "OK",
           headers: {},
@@ -198,8 +228,15 @@ describe("ReportsPage", () => {
     expect(calls).toContainEqual(
       expect.objectContaining({
         method: "post",
-        url: EXPORT_ENDPOINTS.learningDossier,
-        payload: { course_id: 808 }
+        url: EXPORT_ENDPOINTS.learningDossierJob,
+        payload: { course_id: 808, format: "markdown" }
+      })
+    );
+    expect(calls).toContainEqual(expect.objectContaining({ method: "get", url: EXPORT_ENDPOINTS.job(901) }));
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        method: "get",
+        url: EXPORT_ENDPOINTS.download(901)
       })
     );
   });
@@ -227,7 +264,7 @@ describe("ReportsPage", () => {
       if (config.url === REPORT_ENDPOINTS.latest) {
         return { data: { data: readyReport, trace_id: "trace_latest_report" }, status: 200, statusText: "OK", headers: {}, config };
       }
-      if (config.url === EXPORT_ENDPOINTS.learningDossier) {
+      if (config.url === EXPORT_ENDPOINTS.learningDossierJob) {
         throw new Error("export failed");
       }
       throw new Error(`Unexpected request ${config.url}`);

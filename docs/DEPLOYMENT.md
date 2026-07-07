@@ -6,22 +6,24 @@
 
 本文档记录 EduNova 的本地开发、Docker Compose 和部署准备方式。
 
-当前部署范围覆盖到 Phase 12.2：
+当前部署范围覆盖到 Phase 13.2：
 
 - 工程骨架和 Docker Compose。
 - 数据库迁移和内置课程包导入。
-- 真实认证、首页、资料库、规则建课、课程 RAG 和课程会话。
+- 真实认证、首页、资料库、PDF/DOCX/PPTX 解析、规则建课、课程 RAG 和课程会话。
 - 模型配置、课程流式回答、Embedding、混合检索和课程空间双模式前端。
 - 学习画像、课程学习状态、弱点复习队列和状态流转。
 - Agent trace 查询和资源生成 trace。
 - 5 类课程资源生成、质量分、本地可用稿和模型增强。
-- 学习路径、规则掌握度图、练习评估、学习报告、期末冲刺、资料对比和 Markdown 学习档案导出。
+- 学习路径、规则掌握度图、练习评估、学习报告、期末冲刺、资料对比和 Markdown/PDF/DOCX 学习档案导出。
+- 主页联网搜索、深度回答指令、浏览器语音输入/朗读和 `home_tutor` trace。
 - 交付基线文档、开源说明、MIT 许可证和验收证据索引。
 - 前端本地开发、生产构建和 Nginx 统一入口草案。
 
 - FastAPI backend。
 - PostgreSQL + pgvector。
 - Redis。
+- RQ export worker。
 - React 前端静态服务。
 - Nginx 统一入口。
 - Alembic 迁移。
@@ -35,7 +37,7 @@
 - 受保护课程接口 `/api/v1/courses/from-materials`、`/api/v1/courses`、`/api/v1/courses/{course_id}`、`/api/v1/courses/{course_id}/overview`、`/api/v1/courses/{course_id}/knowledge-points`、`/api/v1/courses/{course_id}/learning-state` 和 `/api/v1/courses/{course_id}/mastery-map`。
 - 受保护 RAG 检索接口 `/api/v1/rag/search`，支持关键词/向量混合召回和本地 fallback 状态。
 - 受保护模型设置接口 `/api/v1/settings/model`、`/api/v1/settings/model/test` 和 `/api/v1/settings/model/configs` 系列接口。
-- 受保护画像、Agent trace、资源、学习路径、练习、报告、期末冲刺、资料对比和 Markdown 导出接口。
+- 受保护画像、Agent trace、资源、学习路径、练习、报告、期末冲刺、资料对比、Markdown 同步导出和异步导出任务接口。
 - React + TypeScript + Vite 前端本地开发服务器。
 - 前端 lint、Vitest 和生产构建命令。
 - 前端 API 合同模块，默认请求基础路径 `/api/v1`。
@@ -43,7 +45,7 @@
 
 以下能力还未接入当前部署：
 
-- 讯飞原生 Embeddingp/Embeddingq、OCR、PDF/PPT/DOCX 深度解析、PDF/Word 导出、异步导出任务和完整浏览器 E2E。
+- 讯飞原生 Embeddingp/Embeddingq、OCR、旧版 Office 解析、扫描件解析和完整浏览器 E2E。
 
 这些能力会在后续阶段逐步加入，并同步更新本文档。
 
@@ -99,6 +101,19 @@ MATERIAL_MAX_UPLOAD_MB=25
 ```
 
 `MATERIAL_STORAGE_DIR` 是运行时用户资料目录，已加入 `.gitignore`。本地或 Docker 卷清空后，上传文件会随运行时数据消失，需要重新上传；生产部署后续会评估对象存储。
+
+联网搜索和导出相关变量：
+
+```text
+WEB_SEARCH_PROVIDER=tavily
+WEB_SEARCH_ENDPOINT=https://api.tavily.com/search
+WEB_SEARCH_API_KEY=
+WEB_SEARCH_MAX_RESULTS=5
+EXPORT_DIR=storage/exports
+EXPORT_QUEUE_NAME=edunova_exports
+```
+
+`WEB_SEARCH_API_KEY` 为空时，主页联网搜索只返回“未配置” warning，不生成假来源。Docker Compose 中 backend 和 `export-worker` 共享导出卷，确保 worker 生成的学习档案可由下载接口读取；数据库迁移由 backend 启动命令执行，`export-worker` 等 backend 健康后只消费 RQ 队列。
 
 模型 Provider 相关变量：
 
@@ -269,7 +284,7 @@ docker compose exec -T backend python -m backend.app.cli seed-ai-intro
 13. 注册、登录、读取当前用户、退出登录和未登录受保护路由跳转可在浏览器中走通。
 14. 登录后的 `/app` 首页通过 `/api/v1/dashboard/summary` 读取当前用户最近课程、主页历史、资料库摘要和空状态。
 15. 登录后的 `/app` 上传资料会写入当前用户个人资料库，`/app/library` 通过 `/api/v1/materials` 读取真实资料列表。
-16. 已解析 TXT/Markdown 资料可以通过 `/api/v1/courses/from-materials` 生成当前用户自己的课程结构，成功后前端进入 `/app/courses/{course_id}` 并读取真实标题和知识点。
+16. 已解析 TXT/Markdown/PDF/DOCX/PPTX 资料可以通过 `/api/v1/courses/from-materials` 生成当前用户自己的课程结构，成功后前端进入 `/app/courses/{course_id}` 并读取真实标题和知识点；旧版 DOC/PPT、图片和扫描件不伪装解析。
 17. `/app/settings` 可以读取模型配置摘要和多配置列表，保存个人 OpenAI-compatible 配置，设为默认、删除并测试连接；前端不显示明文 Key。
 18. 课程空间命中资料引用且模型配置可用时，可以通过 `/api/v1/tutor/sessions/{session_id}/messages` 或流式接口保存真实模型回答和引用；模型未配置时显示明确提示。
 19. Phase 6.4 后，课程空间命中资料问题时引用区应显示混合检索状态；没有外部 embedding 配置时应显示本地 fallback，并明确 `local-hash-1536` 不是外部语义向量，刷新后消息、引用和状态仍可恢复。
@@ -280,7 +295,7 @@ docker compose exec -T backend python -m backend.app.cli seed-ai-intro
 部署层重点只保留以下口径：
 
 - `docker compose config` 必须通过。
-- `backend`、`postgres`、`redis`、`frontend`、`nginx` 服务必须可解析。
+- `backend`、`export-worker`、`postgres`、`redis`、`frontend`、`nginx` 服务必须可解析。
 - 数据库必须能 `alembic upgrade head`。
 - 前端必须能 `pnpm lint`、`pnpm test`、`pnpm build`。
 - 真实用户链路需要通过浏览器验收。
@@ -319,12 +334,12 @@ http://127.0.0.1:5173
 - `/app` 通过 `/dashboard/summary` 读取最近课程、主页历史、资料库摘要和空状态。
 - 主页消息发送会写入 `/tutor/sessions`。
 - 主页上传和 `/app/library` 会调用 `/materials`。
-- 已解析 TXT/Markdown 资料可通过 `/courses/from-materials` 生成课程。
+- 已解析 TXT/Markdown/PDF/DOCX/PPTX 资料可通过 `/courses/from-materials` 生成课程。
 - 课程空间问题会持久化真实引用，并在默认模型可用时生成流式 RAG 回答。
 - Phase 6.4 后引用区会显示混合检索或本地 fallback 状态。
 - Phase 6.5 后课程空间默认问答模式和学习模式都在同一路由内完成，不新增部署入口。
 - `/app/settings` 可管理多套用户模型配置。
-- `/app/profile`、`/app/studio`、`/app/path`、`/app/practice` 和 `/app/reports` 已接入真实画像、资源、路径、练习、报告和 Markdown 导出接口。
+- `/app/profile`、`/app/studio`、`/app/path`、`/app/practice` 和 `/app/reports` 已接入真实画像、资源、路径、练习、报告和 Markdown/PDF/DOCX 异步导出接口。
 
 本地开发时 Vite 会把 `/api` 代理到 `http://127.0.0.1:8000`。
 如果后端端口变化，可以设置 `VITE_API_PROXY_TARGET`。
@@ -338,4 +353,4 @@ http://127.0.0.1:5173
 - 完整浏览器 E2E 和更细粒度部署验收截图。
 - 公网部署、TLS、反向代理和生产环境变量建议。
 - 对象存储、日志轮转、备份恢复和监控建议。
-- PDF/PPTX/DOCX 深度解析、OCR 和异步任务队列接入后的部署说明。
+- OCR、旧版 Office 解析、扫描件解析和生产级 worker 监控接入后的部署说明。

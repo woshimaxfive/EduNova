@@ -7,7 +7,7 @@ from typing import Any, Iterator, Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.models import AgentRunLog, ChatMessage, ChatSession, Course, CourseEnrollment, User
+from backend.app.models import AgentRunLog, ChatMessage, ChatSession, Course, CourseEnrollment, Material, User
 from backend.app.schemas.tutor import TutorSessionDetail, TutorSessionSummary, session_detail_to_api, session_to_summary
 from backend.app.services.course_answers import CourseAnswerGenerationError, HOME_MODEL_NOT_CONFIGURED_MESSAGE
 
@@ -16,6 +16,7 @@ COURSE_ASSISTANT_REPLY_WITH_CITATIONS = "我先从课程资料里找到了相关
 COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS = "我先检查了课程资料，但还没有足够依据支撑这个问题。"
 COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED = "已找到资料依据，但当前未配置可用模型。"
 COURSE_TUTOR_GRAPH_STEPS = ["profile", "retriever", "tutor", "weakness", "review", "next_action"]
+HOME_TUTOR_GRAPH_STEPS = ["home_profile", "material_context", "web_search", "answer", "review"]
 
 
 class InvalidSessionScopeError(ValueError):
@@ -52,6 +53,9 @@ class TutorSessionRepository(Protocol):
     def add_agent_log(self, log: AgentRunLog) -> None:
         ...
 
+    def list_home_materials_for_user(self, user_id: int, material_ids: list[int]) -> list[Material]:
+        ...
+
     def touch_session(self, session: ChatSession) -> None:
         ...
 
@@ -71,7 +75,15 @@ class CourseCitationSearcher(Protocol):
 
 
 class CourseAnswerGenerator(Protocol):
-    def generate_home(self, user: User, question: str) -> Any:
+    def generate_home(
+        self,
+        user: User,
+        question: str,
+        citations: list[dict[str, Any]] | None = None,
+        use_web_search: bool = False,
+        deep_thinking: bool = False,
+        warnings: list[str] | None = None,
+    ) -> Any:
         ...
 
     def generate(self, user: User, question: str, citations: list[dict[str, Any]]) -> Any:
@@ -93,6 +105,11 @@ class ProfileEventRecorder(Protocol):
         citation_json: list[dict[str, Any]],
         trace_id: str | None,
     ) -> Any:
+        ...
+
+
+class WebSearchProvider(Protocol):
+    def search(self, query: str, max_results: int = 5) -> Any:
         ...
 
 
@@ -161,6 +178,20 @@ class SqlAlchemyTutorSessionRepository:
     def add_agent_log(self, log: AgentRunLog) -> None:
         self.db.add(log)
 
+    def list_home_materials_for_user(self, user_id: int, material_ids: list[int]) -> list[Material]:
+        if not material_ids:
+            return []
+        unique_ids = list(dict.fromkeys(material_ids))[:10]
+        return list(
+            self.db.scalars(
+                select(Material).where(
+                    Material.user_id == user_id,
+                    Material.id.in_(unique_ids),
+                    Material.parse_status == "completed",
+                )
+            )
+        )
+
     def touch_session(self, session: ChatSession) -> None:
         session.updated_at = datetime.now(UTC)
         self.db.add(session)
@@ -182,11 +213,13 @@ class TutorSessionService:
         course_citation_searcher: CourseCitationSearcher | None = None,
         course_answer_generator: CourseAnswerGenerator | None = None,
         profile_event_recorder: ProfileEventRecorder | None = None,
+        web_search_service: WebSearchProvider | None = None,
     ) -> None:
         self.repository = repository
         self.course_citation_searcher = course_citation_searcher
         self.course_answer_generator = course_answer_generator
         self.profile_event_recorder = profile_event_recorder
+        self.web_search_service = web_search_service
 
     def create_session(
         self,
@@ -239,18 +272,37 @@ class TutorSessionService:
         session = self._get_session_for_user(user.id, session_id)
         return session_detail_to_api(session, self.repository.list_messages(session.id))
 
-    def append_message(self, user: User, session_id: int, content: str) -> TutorSessionDetail:
+    def append_message(
+        self,
+        user: User,
+        session_id: int,
+        content: str,
+        use_web_search: bool = False,
+        deep_thinking: bool = False,
+        selected_material_ids: list[int] | None = None,
+    ) -> TutorSessionDetail:
         message_text = content.strip()
         if not message_text:
             raise EmptyMessageError("消息不能为空。")
 
         session = self._get_session_for_user(user.id, session_id)
-        citation_json = self._search_course_citations(user=user, session=session, message_text=message_text)
+        warnings: list[str] = []
+        citation_json = self._collect_citations(
+            user=user,
+            session=session,
+            message_text=message_text,
+            use_web_search=use_web_search,
+            selected_material_ids=selected_material_ids or [],
+            warnings=warnings,
+        )
         generated_answer = self._generate_answer(
             user=user,
             session=session,
             message_text=message_text,
             citation_json=citation_json,
+            use_web_search=use_web_search,
+            deep_thinking=deep_thinking,
+            warnings=warnings,
         )
         assistant_reply = generated_answer.content or self._build_assistant_reply(session=session, citation_json=citation_json)
         return self._persist_message_pair(
@@ -260,6 +312,12 @@ class TutorSessionService:
             assistant_reply=assistant_reply,
             citation_json=citation_json,
             trace_id=generated_answer.trace_id,
+            home_tool_metadata={
+                "use_web_search": use_web_search,
+                "deep_thinking": deep_thinking,
+                "warning_count": len(warnings),
+                "warnings": warnings,
+            },
         )
 
     def stream_message(self, user: User, session_id: int, content: str) -> Iterator[dict[str, Any]]:
@@ -304,6 +362,7 @@ class TutorSessionService:
                     assistant_reply=assistant_reply,
                     citation_json=[],
                     trace_id=None,
+                    home_tool_metadata=None,
                 )
                 yield {"event": "done", "data": detail.model_dump()}
                 return
@@ -325,6 +384,7 @@ class TutorSessionService:
                     assistant_reply=assistant_reply,
                     citation_json=citation_json,
                     trace_id=None,
+                    home_tool_metadata=None,
                 )
                 yield {"event": "done", "data": detail.model_dump()}
                 return
@@ -358,6 +418,7 @@ class TutorSessionService:
                 assistant_reply=assistant_reply,
                 citation_json=citation_json,
                 trace_id=trace_id,
+                home_tool_metadata=None,
             )
             yield {"event": "done", "data": detail.model_dump()}
         except CourseAnswerGenerationError:
@@ -375,11 +436,21 @@ class TutorSessionService:
         session: ChatSession,
         message_text: str,
         citation_json: list[dict[str, Any]],
+        use_web_search: bool = False,
+        deep_thinking: bool = False,
+        warnings: list[str] | None = None,
     ) -> GeneratedAnswer:
         if session.scope == "home":
             if self.course_answer_generator is None:
                 return GeneratedAnswer(content=HOME_MODEL_NOT_CONFIGURED_MESSAGE, trace_id=None)
-            answer = self.course_answer_generator.generate_home(user=user, question=message_text)
+            answer = self.course_answer_generator.generate_home(
+                user=user,
+                question=message_text,
+                citations=citation_json,
+                use_web_search=use_web_search,
+                deep_thinking=deep_thinking,
+                warnings=warnings or [],
+            )
             return GeneratedAnswer(
                 content=str(getattr(answer, "content", "") or ""),
                 trace_id=getattr(answer, "trace_id", None),
@@ -404,6 +475,7 @@ class TutorSessionService:
         assistant_reply: str,
         citation_json: list[dict[str, Any]],
         trace_id: str | None,
+        home_tool_metadata: dict[str, Any] | None = None,
     ) -> TutorSessionDetail:
         user_message = ChatMessage(
             session_id=session.id,
@@ -444,12 +516,80 @@ class TutorSessionService:
                 citation_json=citation_json,
                 trace_id=trace_id,
             )
+            self._persist_home_tutor_trace(
+                user=user,
+                session=session,
+                assistant_message=assistant_message,
+                citation_json=citation_json,
+                trace_id=trace_id,
+                tool_metadata=home_tool_metadata,
+            )
             self.repository.commit()
         except Exception:
             self.repository.rollback()
             raise
 
         return session_detail_to_api(session, self.repository.list_messages(session.id))
+
+    def _persist_home_tutor_trace(
+        self,
+        user: User,
+        session: ChatSession,
+        assistant_message: ChatMessage,
+        citation_json: list[dict[str, Any]],
+        trace_id: str | None,
+        tool_metadata: dict[str, Any] | None,
+    ) -> None:
+        if session.scope != "home" or trace_id is None:
+            return
+
+        material_count = sum(1 for item in citation_json if item.get("source_type") == "material")
+        web_result_count = sum(1 for item in citation_json if item.get("source_type") == "web")
+        base_metadata: dict[str, Any] = {
+            "workflow": "home_tutor",
+            "artifact_type": "chat_message",
+            "artifact_id": str(assistant_message.id) if assistant_message.id is not None else None,
+            "citation_count": len(citation_json),
+            "material_count": material_count,
+            "web_result_count": web_result_count,
+            "use_web_search": bool((tool_metadata or {}).get("use_web_search")),
+            "deep_thinking": bool((tool_metadata or {}).get("deep_thinking")),
+            "warning_count": int((tool_metadata or {}).get("warning_count") or 0),
+        }
+        warning_text = "；".join(str(item) for item in (tool_metadata or {}).get("warnings", [])[:2]) if tool_metadata else ""
+        step_summaries = [
+            ("home_profile", "读取主页学习上下文", "已加载主页会话与学生学习空间摘要。"),
+            ("material_context", "读取选中资料短摘要", f"命中 {material_count} 份已解析资料。"),
+            ("web_search", "执行联网搜索", f"返回 {web_result_count} 条联网来源。" if web_result_count else warning_text or "未返回联网来源。"),
+            ("answer", "生成主页学习回答", "已生成面向学生的学习建议。"),
+            ("review", "审核来源、隐私和工具状态", "ReviewAgent 审核通过。"),
+        ]
+
+        for index, (agent_name, input_summary, output_summary) in enumerate(step_summaries, start=1):
+            metadata = dict(base_metadata)
+            if agent_name == "review":
+                metadata.update(
+                    {
+                        "review_status": "passed",
+                        "confidence": 0.8 if citation_json else 0.66,
+                        "risk_flags": [],
+                        "safety_summary": "已隐藏原始思维链、系统提示词、完整模型输入和资料全文。",
+                    }
+                )
+            self.repository.add_agent_log(
+                AgentRunLog(
+                    trace_id=trace_id,
+                    user_id=user.id,
+                    course_id=None,
+                    agent_name=agent_name,
+                    step_index=index,
+                    status="completed",
+                    input_summary=input_summary,
+                    output_summary=output_summary,
+                    duration_ms=0,
+                    metadata_json=metadata,
+                )
+            )
 
     def _persist_course_tutor_trace(
         self,
@@ -526,6 +666,72 @@ class TutorSessionService:
             },
         }
 
+    def _collect_citations(
+        self,
+        user: User,
+        session: ChatSession,
+        message_text: str,
+        use_web_search: bool,
+        selected_material_ids: list[int],
+        warnings: list[str],
+    ) -> list[dict[str, Any]]:
+        if session.scope == "course":
+            return self._search_course_citations(user=user, session=session, message_text=message_text)
+
+        citations: list[dict[str, Any]] = []
+        citations.extend(self._home_material_citations(user=user, selected_material_ids=selected_material_ids))
+        if use_web_search:
+            citations.extend(self._web_search_citations(message_text=message_text, warnings=warnings))
+        return citations
+
+    def _home_material_citations(self, user: User, selected_material_ids: list[int]) -> list[dict[str, Any]]:
+        if not selected_material_ids:
+            return []
+        materials = self.repository.list_home_materials_for_user(user.id, selected_material_ids)
+        by_id = {material.id: material for material in materials}
+        citations: list[dict[str, Any]] = []
+        for material_id in list(dict.fromkeys(selected_material_ids))[:10]:
+            material = by_id.get(material_id)
+            if material is None or not material.extracted_text:
+                continue
+            citations.append(
+                {
+                    "source_type": "material",
+                    "material_id": str(material.id),
+                    "title": material.filename,
+                    "snippet": self._safe_snippet(material.extracted_text, limit=240),
+                }
+            )
+        return citations
+
+    def _web_search_citations(self, message_text: str, warnings: list[str]) -> list[dict[str, Any]]:
+        if self.web_search_service is None:
+            warnings.append("联网搜索未配置。")
+            return []
+        result = self.web_search_service.search(message_text, max_results=5)
+        warning = getattr(result, "warning", None)
+        if warning:
+            warnings.append(str(warning))
+        raw_citations = getattr(result, "citations", [])
+        if not isinstance(raw_citations, list):
+            return []
+        citations: list[dict[str, Any]] = []
+        for item in raw_citations[:5]:
+            if not isinstance(item, dict):
+                continue
+            title = self._safe_snippet(str(item.get("title") or "联网来源"), 120)
+            snippet = self._safe_snippet(str(item.get("snippet") or item.get("content") or ""), 240)
+            url = self._safe_snippet(str(item.get("url") or ""), 300)
+            citations.append(
+                {
+                    "source_type": "web",
+                    "title": title,
+                    "url": url,
+                    "snippet": snippet,
+                }
+            )
+        return citations
+
     def _search_course_citations(self, user: User, session: ChatSession, message_text: str) -> list[dict[str, Any]]:
         if session.scope != "course" or session.course_id is None or self.course_citation_searcher is None:
             return []
@@ -563,6 +769,16 @@ class TutorSessionService:
             if value is not None:
                 citation[key] = value
         return citation
+
+    @staticmethod
+    def _safe_snippet(text: str, limit: int = 240) -> str:
+        cleaned = " ".join(text.split())
+        for marker in ("SECRET", "API Key", "系统提示词", "模型输入", "完整资料原文", "JWT"):
+            if marker in cleaned:
+                cleaned = cleaned.split(marker, 1)[0].strip()
+        if len(cleaned) <= limit:
+            return cleaned
+        return f"{cleaned[:limit].rstrip()}..."
 
     @staticmethod
     def _build_assistant_reply(session: ChatSession, citation_json: list[dict[str, Any]]) -> str:

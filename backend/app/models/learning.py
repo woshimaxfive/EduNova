@@ -276,6 +276,35 @@ class AssessmentReport(IdMixin, CreatedAtMixin, Base):
     score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
 
 
+class ExportJob(IdMixin, TimestampMixin, Base):
+    __tablename__ = "export_jobs"
+    __table_args__ = (
+        Index("ix_export_jobs_user_status", "user_id", "status"),
+        Index("ix_export_jobs_agent_trace_id", "agent_trace_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    export_type: Mapped[str] = mapped_column(String(80), nullable=False, default="learning_dossier")
+    export_format: Mapped[str] = mapped_column(String(40), nullable=False, default="markdown")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="queued")
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    agent_trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
 class WeaknessReviewItem(IdMixin, TimestampMixin, Base):
     __tablename__ = "weakness_review_queue"
     __table_args__ = (

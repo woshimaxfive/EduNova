@@ -23,6 +23,7 @@ from backend.app.schemas.materials import (
     MaterialProgress,
     MaterialUploadResult,
 )
+from backend.app.services.material_parsers import DocumentParseError, DocumentParser
 
 
 class MaterialValidationError(Exception):
@@ -145,12 +146,15 @@ class SqlAlchemyMaterialRepository:
 class MaterialService:
     allowed_extensions = {".txt", ".md", ".markdown", ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".png", ".jpg", ".jpeg", ".webp"}
     light_parse_extensions = {".txt", ".md", ".markdown"}
+    deep_parse_extensions = {".pdf", ".docx", ".pptx"}
+    parsed_text_extensions = light_parse_extensions | deep_parse_extensions
     image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
     exam_title_keywords = ("期末", "复习", "试题", "样题", "真题", "考试", "练习")
 
-    def __init__(self, repository: MaterialRepository, settings: Settings | None = None) -> None:
+    def __init__(self, repository: MaterialRepository, settings: Settings | None = None, parser: DocumentParser | None = None) -> None:
         self.repository = repository
         self.settings = settings or get_settings()
+        self.parser = parser or DocumentParser()
 
     def upload_material(
         self,
@@ -378,7 +382,7 @@ class MaterialService:
         for material in materials:
             if material.id in material_ids_with_chunks:
                 continue
-            if material.parse_status != "completed" or not material.extracted_text or self._extension(material.filename) not in self.light_parse_extensions:
+            if material.parse_status != "completed" or not material.extracted_text or self._extension(material.filename) not in self.parsed_text_extensions:
                 continue
             evidence.extend(self._fallback_text_evidence(material, knowledge_points))
 
@@ -550,8 +554,14 @@ class MaterialService:
             raise MaterialValidationError(f"文件不能超过 {self.settings.material_max_upload_mb} MB。")
 
     def _extract_text(self, extension: str, content: bytes) -> tuple[str, str | None]:
-        if extension in self.light_parse_extensions:
-            return "completed", content.decode("utf-8", errors="replace")
+        if extension in self.parsed_text_extensions:
+            try:
+                extracted_text = self.parser.extract_text(extension, content)
+            except DocumentParseError:
+                return "failed", None
+            if extracted_text.strip():
+                return "completed", extracted_text
+            return "uploaded", None
         return "uploaded", None
 
     def _store_file(self, user_id: int, filename: str, content: bytes) -> str:
@@ -581,14 +591,15 @@ class MaterialService:
 
     def _build_list_item(self, material: Material) -> MaterialListItem:
         extension = self._extension(material.filename)
+        metadata = material.metadata_json or {}
         course_ids = sorted({str(link.course_id) for link in material.course_links})
         return MaterialListItem(
             id=str(material.id),
             title=material.filename,
             type=self._material_type(material),
-            detail=self._detail_for_status(material.parse_status, extension),
+            detail=str(metadata.get("detail") or self._detail_for_status(material.parse_status, extension)),
             modified=self._date_label(material.created_at),
-            size=str((material.metadata_json or {}).get("size_label") or ""),
+            size=str(metadata.get("size_label") or ""),
             category="image" if extension in self.image_extensions else "document",
             extension=extension.lstrip(".").upper() or "FILE",
             parse_status=material.parse_status,
@@ -599,6 +610,10 @@ class MaterialService:
     def _detail_for_status(cls, parse_status: str, extension: str) -> str:
         if extension in cls.image_extensions:
             return "仅入库，暂不做 OCR"
+        if parse_status == "uploaded" and extension in {".doc", ".ppt"}:
+            return "旧版 Office 格式暂不支持深度解析"
+        if parse_status == "uploaded" and extension in cls.deep_parse_extensions:
+            return "未检测到可抽取文本，暂不支持扫描件 OCR"
         labels = {
             "completed": "已解析",
             "uploaded": "等待解析",

@@ -26,11 +26,19 @@ class CreateTutorSessionRequest(BaseModel):
 
 class SendTutorMessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
+    use_web_search: bool = False
+    deep_thinking: bool = False
+    selected_material_ids: list[int] = Field(default_factory=list)
 
     @field_validator("message")
     @classmethod
     def normalize_message(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("selected_material_ids")
+    @classmethod
+    def normalize_selected_material_ids(cls, value: list[int]) -> list[int]:
+        return list(dict.fromkeys(item for item in value if item > 0))[:10]
 
 
 class TutorSessionSummary(BaseModel):

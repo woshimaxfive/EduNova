@@ -584,8 +584,10 @@ Authorization: Bearer <token>
 支持类型：
 
 - TXT、Markdown：轻解析为 `completed`，保存原文到 `extracted_text`。
-- PDF、DOC、DOCX、PPT、PPTX：仅入库为 `uploaded`，暂不做正文解析。
+- PDF、DOCX、PPTX：抽取可读文本并写入 `extracted_text`，成功后 `parse_status=completed`，可用于资料建课、资料对比和课程 RAG 切片。
+- DOC、PPT：旧版 Office 格式仅入库为 `uploaded`，提示旧版格式暂不支持深度解析。
 - PNG、JPG、JPEG、WEBP：仅入库为 `uploaded`，提示“仅入库，暂不做 OCR”。
+- 损坏或无法读取的 PDF/DOCX/PPTX 标记为 `failed`，错误信息只返回脱敏提示，不暴露底层异常或文件路径。
 
 响应：
 
@@ -716,7 +718,7 @@ Authorization: Bearer <token>
 
 ### POST `/courses/from-materials`
 
-用途：根据资料库中的一个或多个资料生成课程。Phase 5.1 已实现，必须携带 JWT。当前只支持当前用户个人资料库里 `parse_status=completed` 且已有 `extracted_text` 的 TXT/Markdown 资料；PDF/DOCX/PPTX/图片会返回 400，提示“当前仅支持已解析的 TXT/Markdown 生成课程”。
+用途：根据资料库中的一个或多个资料生成课程。Phase 5.1 已实现，必须携带 JWT。Phase 13.2 后支持当前用户个人资料库里 `parse_status=completed` 且已有 `extracted_text` 的 TXT、Markdown、PDF、DOCX 和 PPTX 资料；未解析、解析失败、旧版 DOC/PPT、图片或扫描件会返回 400，提示“当前仅支持已解析资料生成课程”。
 
 请求：
 
@@ -788,7 +790,7 @@ Authorization: Bearer <token>
 - `material_ids` 使用资料库 `materials.id`，去重后至少 2 份。
 - 每个资料必须属于当前用户，并且已通过 `course_material_links` 绑定到当前课程。
 - 少于 2 份可比较资料返回 400；非本人课程、非本人资料或未绑定当前课程资料返回 404。
-- 优先读取 `knowledge_chunks.metadata_json.source_material_id` 和 `course_materials.metadata_json.source_material_id` 做课程切片对比；若没有切片且资料是已解析 TXT/Markdown，则只使用 `Material.extracted_text` 的安全短摘录 fallback。
+- 优先读取 `knowledge_chunks.metadata_json.source_material_id` 和 `course_materials.metadata_json.source_material_id` 做课程切片对比；若没有切片且资料已解析完成，则只使用 `Material.extracted_text` 的安全短摘录 fallback。
 
 响应：
 
@@ -1338,13 +1340,16 @@ Authorization: Bearer <token>
 
 ### POST `/tutor/sessions/{session_id}/messages`
 
-用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条 `assistant` 回复。当前 `scope=home` 会调用当前用户默认模型配置生成普通学习回答，用户配置不存在时回退服务器 `.env` 配置；主页不做资料 RAG、不做真实联网搜索、不做流式输出。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。Phase 6.1 后，课程会话在命中引用且模型配置可用时，会通过 OpenAI-compatible Chat Completions 生成非流式真实回答。Phase 6.3 后，课程空间前端默认优先使用流式接口，本接口保留为兼容路径和自动化测试路径。Phase 6.4 后，课程 RAG 默认使用关键词/向量混合检索，旧关键词字段继续兼容。
+用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条 `assistant` 回复。Phase 13.2 后，`scope=home` 可按需合并已选资料短摘录、Tavily-compatible 联网搜索摘要和深度回答指令，回答会写入安全 `citation_json` 和 `home_tutor` trace；用户模型配置不存在时回退服务器 `.env` 配置。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。Phase 6.1 后，课程会话在命中引用且模型配置可用时，会通过 OpenAI-compatible Chat Completions 生成非流式真实回答。Phase 6.3 后，课程空间前端默认优先使用流式接口，本接口保留为兼容路径和自动化测试路径。Phase 6.4 后，课程 RAG 默认使用关键词/向量混合检索，旧关键词字段继续兼容。
 
 请求：
 
 ```json
 {
-  "message": "为什么反向传播要用链式法则？"
+  "message": "为什么反向传播要用链式法则？",
+  "use_web_search": true,
+  "deep_thinking": true,
+  "selected_material_ids": [12, 15]
 }
 ```
 
@@ -1352,10 +1357,12 @@ Authorization: Bearer <token>
 
 主页会话规则：
 
-- assistant 内容来自普通模型回答；无可用模型配置时保存清晰提示。
-- `citation_json=[]`；模型成功时 `trace_id` 写入本次模型调用 trace，未配置模型时为 `null`。
-- 不调用课程 RAG，不读取已选资料内容，不伪造引用。
-- 联网搜索和深度思考仍是前端预备开关，本接口不会因为按钮高亮而进行真实联网搜索或推理参数透传。
+- assistant 内容来自模型回答；无可用模型配置时保存清晰提示。
+- `selected_material_ids` 只允许当前用户资料，最多 10 个；后端只取短摘录作为上下文，不返回完整资料原文。
+- `use_web_search=true` 时调用 `WebSearchService`。未配置 `WEB_SEARCH_API_KEY` 时返回“联网搜索未配置” warning，不生成假网页来源。
+- `deep_thinking=true` 只改变回答组织要求和安全处理摘要，不展示原始思维链、系统提示词或完整模型输入。
+- `citation_json` 允许三类安全来源：课程引用、资料短摘录和网页来源，可包含 `source_type`、`title`、`url`、`snippet` 等字段。
+- 成功时 `trace_id` 写入本次 `home_tutor` trace，步骤为 `home_profile -> material_context -> web_search -> answer -> review`。
 - 模型调用失败时返回可恢复错误，不写入半截 assistant 消息。
 
 课程会话规则：
@@ -1793,7 +1800,7 @@ course_id=101
 
 ## 17. Export 接口
 
-状态：Phase 12.1 已实现 Markdown 学习档案导出第一刀。Phase 13.1 后同步导出响应会携带 `ExportDossierGraph` 的 `agent_trace_id`。当前仍为同步 JSON 返回，不创建导出任务、不保存服务器端文件、不做 PDF/Word，也不调用外部模型。
+状态：Phase 12.1 已实现 Markdown 学习档案导出第一刀。Phase 13.2 后新增异步导出任务，支持 Markdown、PDF 和 DOCX 三种格式；旧 `POST /exports/learning-dossier` Markdown 同步接口保留兼容。异步任务写入 `export_jobs`，由 Redis/RQ worker 渲染文件，完成后通过下载接口返回。
 
 统一规则：
 
@@ -1805,7 +1812,7 @@ course_id=101
 
 ### POST `/exports/learning-dossier`
 
-用途：导出课程级 Markdown 学习档案。前端用返回的 `markdown` 和 `filename` 在浏览器端创建 `.md` 下载。
+用途：兼容导出课程级 Markdown 学习档案。前端新版报告页默认使用异步 job，本接口保留给旧调用和自动化兼容路径。
 
 请求：
 
@@ -1845,9 +1852,46 @@ course_id=101
 - 未登录返回 401。
 - 课程不存在或不属于当前用户返回 404。
 
+### POST `/exports/learning-dossier/jobs`
+
+用途：创建学习档案异步导出任务。`format` 支持 `markdown`、`pdf`、`docx`。任务创建后入队 RQ；测试环境可同步执行。
+
+请求：
+
+```json
+{
+  "course_id": 1,
+  "format": "pdf"
+}
+```
+
+响应：
+
+```json
+{
+  "data": {
+    "job_id": "901",
+    "status": "queued",
+    "format": "pdf",
+    "filename": "edunova-人工智能导论-learning-dossier.pdf",
+    "content_type": "application/pdf",
+    "agent_trace_id": "trace_export_job",
+    "error_message": null,
+    "created_at": "2026-07-07T10:00:00Z",
+    "updated_at": "2026-07-07T10:00:00Z",
+    "completed_at": null
+  },
+  "trace_id": "trace_export_job"
+}
+```
+
 ### GET `/exports/{job_id}`
 
-状态：后续异步导出预留，Phase 12.1 不实现。当前 Markdown 学习档案通过 `POST /exports/learning-dossier` 同步返回。
+响应字段同创建任务响应。`status` 为 `queued`、`running`、`completed` 或 `failed`；失败时 `error_message` 只返回安全摘要。
+
+### GET `/exports/{job_id}/download`
+
+用途：下载已完成的学习档案文件。只允许下载当前用户自己的 `completed` 任务；未完成或失败返回 400/404。`Content-Type` 根据格式返回 `text/markdown; charset=utf-8`、`application/pdf` 或 DOCX 对应 MIME。
 
 ## 18. Demo 接口
 

@@ -4,12 +4,18 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { listCourses } from "../api/courses";
-import { exportLearningDossier } from "../api/exports";
+import {
+  createLearningDossierExportJob,
+  downloadExportJob,
+  getExportJob,
+  type ExportFormat,
+  type ExportJob
+} from "../api/exports";
 import { generateReport, getLatestReport } from "../api/reports";
 import { PageFrame } from "./PageFrame";
 
-function downloadMarkdownFile(filename: string, markdown: string, contentType: string) {
-  const blob = new Blob([markdown], { type: contentType });
+function downloadDossierFile(filename: string, file: Blob, contentType: string) {
+  const blob = file instanceof Blob ? file : new Blob([file], { type: contentType });
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -20,6 +26,20 @@ function downloadMarkdownFile(filename: string, markdown: string, contentType: s
   window.URL.revokeObjectURL(url);
 }
 
+function exportFormatLabel(format: ExportFormat) {
+  if (format === "pdf") {
+    return "PDF";
+  }
+  if (format === "docx") {
+    return "DOCX";
+  }
+  return "Markdown";
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 export function ReportsPage() {
   const [searchParams] = useSearchParams();
   const initialCourseId = searchParams.get("course_id") ?? "";
@@ -27,6 +47,7 @@ export function ReportsPage() {
   const [localError, setLocalError] = useState("");
   const [exportError, setExportError] = useState("");
   const [exportMessage, setExportMessage] = useState("");
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("markdown");
 
   const coursesQuery = useQuery({
     queryKey: ["report-courses"],
@@ -55,14 +76,32 @@ export function ReportsPage() {
   });
 
   const exportMutation = useMutation({
-    mutationFn: () => exportLearningDossier({ course_id: numericCourseId }),
-    onSuccess: (response) => {
+    mutationFn: async () => {
+      const created = await createLearningDossierExportJob({ course_id: numericCourseId, format: exportFormat });
+      let job = created.data;
+
+      for (let attempt = 0; attempt < 20 && job.status !== "completed" && job.status !== "failed"; attempt += 1) {
+        const refreshed = await getExportJob(job.job_id);
+        job = refreshed.data;
+        if (job.status !== "completed" && job.status !== "failed") {
+          await delay(800);
+        }
+      }
+
+      if (job.status !== "completed") {
+        throw new Error(job.error_message || "learning dossier export failed");
+      }
+
+      const file = await downloadExportJob(job.job_id);
+      return { job, file };
+    },
+    onSuccess: ({ job, file }: { job: ExportJob; file: Blob }) => {
       setExportError("");
-      downloadMarkdownFile(response.data.filename, response.data.markdown, response.data.content_type);
+      downloadDossierFile(job.filename, file, job.content_type);
       setExportMessage(
-        response.data.agent_trace_id
-          ? `已生成 Markdown 学习档案。ExportDossierGraph · ${response.data.agent_trace_id}`
-          : "已生成 Markdown 学习档案。"
+        job.agent_trace_id
+          ? `已生成 ${exportFormatLabel(job.format)} 学习档案。ExportDossierGraph · ${job.agent_trace_id}`
+          : `已生成 ${exportFormatLabel(job.format)} 学习档案。`
       );
     },
     onError: () => {
@@ -158,9 +197,22 @@ export function ReportsPage() {
             <FileText size={17} aria-hidden="true" />
             <span>生成学习报告</span>
           </button>
+          <label className="report-export-format">
+            <span>导出格式</span>
+            <select
+              aria-label="导出格式"
+              value={exportFormat}
+              disabled={exportMutation.isPending}
+              onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
+            >
+              <option value="markdown">Markdown</option>
+              <option value="pdf">PDF</option>
+              <option value="docx">DOCX</option>
+            </select>
+          </label>
           <button className="soft-button" type="button" disabled={!canUseCourse || exportMutation.isPending} onClick={() => exportMutation.mutate()}>
             <DownloadSimple size={17} aria-hidden="true" />
-            <span>导出学习档案</span>
+            <span>{exportMutation.isPending ? "正在导出" : "导出学习档案"}</span>
           </button>
           {exportMessage ? <p className="inline-feedback inline-feedback-success">{exportMessage}</p> : null}
           {exportError ? <p className="form-error">{exportError}</p> : null}

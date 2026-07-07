@@ -235,7 +235,7 @@ export function LibraryPage() {
       setIsCourseDialogOpen(false);
       navigate(buildCoursePath(created.data.course.id));
     } catch (error) {
-      setCourseDialogFeedback(getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析的 TXT 或 Markdown 资料。"));
+      setCourseDialogFeedback(getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析资料。"));
     } finally {
       setIsCreatingCourse(false);
     }

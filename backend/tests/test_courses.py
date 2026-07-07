@@ -492,6 +492,29 @@ def test_create_course_from_txt_material_builds_course_graph() -> None:
     assert all(chunk.embedding is None for chunk in repo.knowledge_chunks)
 
 
+def test_create_course_from_parsed_pdf_material_builds_course_graph() -> None:
+    repo = FakeCourseRepository(
+        materials=[
+            make_material(
+                1,
+                1,
+                "search-notes.pdf",
+                "Heuristic search review\n\nA star search uses a heuristic function.\n\nLocal search explores nearby states.",
+            )
+        ]
+    )
+
+    result = make_service(repo).create_course_from_materials(make_user(), [1], "AI 搜索 PDF 课程")
+
+    data = as_dict(result)
+
+    assert data["course"]["title"] == "AI 搜索 PDF 课程"
+    assert data["course"]["material_count"] == 1
+    assert data["course"]["knowledge_point_count"] >= 2
+    assert repo.course_materials[0].filename == "search-notes.pdf"
+    assert repo.knowledge_chunks[0].metadata_json["source_filename"] == "search-notes.pdf"
+
+
 def test_markdown_headings_generate_chapters_and_knowledge_points() -> None:
     repo = FakeCourseRepository(
         materials=[
@@ -563,10 +586,10 @@ def test_rejects_other_user_or_unparsed_materials() -> None:
     with pytest.raises(CourseGenerationError, match="资料不存在或无权访问"):
         service.create_course_from_materials(user, [1], "非法资料")
 
-    with pytest.raises(CourseGenerationError, match="当前仅支持已解析的 TXT/Markdown 生成课程"):
+    with pytest.raises(CourseGenerationError, match="当前仅支持已解析资料生成课程"):
         service.create_course_from_materials(user, [2], "PDF 课程")
 
-    with pytest.raises(CourseGenerationError, match="当前仅支持已解析的 TXT/Markdown 生成课程"):
+    with pytest.raises(CourseGenerationError, match="当前仅支持已解析资料生成课程"):
         service.create_course_from_materials(user, [3], "空资料")
 
     with pytest.raises(CourseGenerationError, match="至少选择一份资料"):

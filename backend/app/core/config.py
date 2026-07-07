@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     system_embedding_model: str = "example-embedding-model"
     model_settings_encryption_key: str = ""
     model_request_timeout_seconds: float = 20.0
+    web_search_provider: str = "tavily"
+    web_search_endpoint: str = "https://api.tavily.com/search"
+    web_search_api_key: str = ""
+    web_search_max_results: int = 5
+    export_dir: str = "storage/exports"
+    export_queue_name: str = "edunova_exports"
 
     model_config = SettingsConfigDict(
         env_file=".env",

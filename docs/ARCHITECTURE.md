@@ -84,17 +84,18 @@ Nginx
 - 注册登录和 `starter_mode` 初始化。
 - 主页 summary、主页历史和资料库浮层。
 - 个人资料库上传、列表、详情和进度。
-- TXT/Markdown 资料生成课程。
+- TXT/Markdown/PDF/DOCX/PPTX 已解析资料生成课程。
 - 课程详情、知识点、课程会话、RAG 引用和流式回答。
 - 多模型配置管理、默认配置和连接测试。
+- 主页已选资料、联网搜索、深度回答指令、`home_tutor` trace、浏览器语音输入和朗读。
+- 资源工坊、画像、路径、练习、报告、期末冲刺、资料对比和学习档案导出。
 
-当前仍是前端预备交互的区域：
+当前仍需继续打磨的区域：
 
-- 资源工坊真实生成。
-- 学习画像真实更新。
-- 练习真实出题和批改。
-- 报告真实导出。
-- 多智能体真实轨迹。
+- Graph trace 视觉表达和更多浏览器 E2E。
+- OCR、旧版 Office 和扫描件解析。
+- 资料对比结果与期末冲刺联动。
+- 导出文件版式细节。
 
 深度思考和联网搜索只属于对话输入区的运行期工具，不属于模型连接设置。
 
@@ -144,7 +145,7 @@ frontend/src/
 | --- | --- |
 | 登录/注册 | 进入系统 |
 | 学习主页 | 第一屏主体验，承载贴边可收起主页历史、侧栏账号入口、轻量输入框、发送后主页对话态、资料选择、文件上传和最近课程 |
-| 资料库 | 文件库式独立资料管理，支持真实上传、搜索、文档/图片筛选、查看详情反馈、作为主页参考和从 TXT/Markdown 资料生成真实课程；生成课程以浮层覆盖当前页面 |
+| 资料库 | 文件库式独立资料管理，支持真实上传、搜索、文档/图片筛选、查看详情反馈、作为主页参考和从已解析资料生成真实课程；生成课程以浮层覆盖当前页面 |
 | 课程空间 | 默认问答模式 + 按需学习模式，承载课程内历史对话、真实引用、混合检索状态、知识点/引用学习内容、AI 辅导、练习和报告等学习闭环入口 |
 | 学习路径 | 独立路径工作区，展示阶段任务、路径依据和下一步行动，后续接 `learning_paths` 与 `learning_tasks` |
 | 资源工坊 | 查看和管理生成的学习资源；当前已补资源生成工作台、生成队列和输出区 |
@@ -209,7 +210,8 @@ frontend/src/
 - `materials.ts`：上传、列表、详情、进度和课程关联。
 - `courses.ts`：课程列表、详情、概览、知识点和规则建课。
 - `rag.ts`：课程知识库检索和混合检索字段。
-- `tutor.ts`：主页/课程会话、消息、引用和课程消息流式读取。
+- `tutor.ts`：主页/课程会话、消息、引用、主页联网/深思/资料参数和课程消息流式读取。
+- `exports.ts`：旧同步 Markdown 学习档案导出和 Markdown/PDF/DOCX 异步导出任务。
 - `settings.ts`：模型配置读取、保存、测试、多配置管理和默认配置。
 
 当前边界：
@@ -218,17 +220,17 @@ frontend/src/
 - Phase 4.2 已完成受保护的 `/dashboard/summary` 首页总览；当前 `/app` 左侧主页历史、最近课程、主页资料库浮层资料和 blank/ai_intro 空状态来自当前登录用户的真实 summary，不再使用前端假课程、假资料和假历史伪装真实数据。
 - Phase 4.3 已完成受保护的 `/tutor/sessions` 主页会话与消息持久化；当前 `/app` 首次发送会创建 home session，连续追问复用当前 session，主页 assistant 调用当前用户默认模型生成普通回答，点击左侧历史会从后端读取真实 messages，刷新后历史由 `/dashboard/summary` 保留。
 - Phase 4.4 已完成受保护的 `/materials` 真实资料库闭环；当前 `/app` 上传资料会写入个人资料库并刷新 `/dashboard/summary`，`/app/library` 从 `/materials` 读取当前用户资料，支持文档/图片筛选、搜索、详情反馈和上传刷新。
-- Phase 5.1 已完成受保护的 `/courses/from-materials` 规则建课闭环；当前 `/app` 和 `/app/library` 可用已解析 TXT/Markdown 资料生成课程，并跳转 `/app/courses/:courseId`。
+- Phase 13.2 已完成 PDF/DOCX/PPTX 文本解析；当前 `/app` 和 `/app/library` 可用已解析 TXT/Markdown/PDF/DOCX/PPTX 资料生成课程，并跳转 `/app/courses/:courseId`。旧版 DOC/PPT、图片和扫描件不伪装解析完成。
 - Phase 5.2 已完成受保护的 `/rag/search` 课程知识库检索；Phase 6.4 后检索会优先融合关键词分数和向量分数，并把真实资料、章节、切片引用和检索状态保存到 assistant 消息。
 - Phase 5.3 已完成课程空间 `scope=course` 会话持久化；课程侧栏历史来自 `/tutor/sessions?scope=course&course_id=...`，点击历史会恢复真实 messages 和 `citation_json`。
-- 当前主页 assistant 已接入普通模型回答，但不做资料 RAG、真实联网搜索或流式输出；`citation_json=[]`。
+- 当前主页 assistant 已接入普通模型回答、已选资料短摘录、Tavily-compatible 联网搜索、深度回答指令和 `home_tutor` trace；未配置搜索 Key 时只返回 warning，不伪造网页来源。主页仍不使用课程 RAG 和流式输出。
 - 当前 `/app/courses/:courseId` 的课程标题、知识点、课程历史、课程消息和课程引用来自真实接口。
 - 命中引用且模型可用时，课程 assistant 内容来自 OpenAI-compatible 模型回答。
 - 课程页优先使用 `fetch` + `ReadableStream` 消费 SSE。
 - Phase 6.4 起课程引用来自混合检索，缺少外部 embedding 配置时显式显示本地 fallback。
 - Phase 6.5 起课程页默认不再常驻知识画布、资源区、证据层、横向知识点条或主区重复历史；来源、生成资源、学习路径和课堂协作轨迹收敛到回答下方，知识点入口和引用可进入学习模式。
-- 资源、真实学习路径和 Agent 轨迹仍使用前端预备交互，后续由资源生成、路径和 Agent 日志接口替换。
-- 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面使用前端样例数据；后续由资料、画像、RAG、练习评估、掌握度报告和设置接口替换。
+- 资源、学习路径和 Agent 轨迹已经接入真实接口；后续重点是体验和验收打磨。
+- 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面均不再依赖核心样例数据兜底；后续只保留空态和错误态。
 - 当前前端已移除 `ActionNotice` 类全局横向提示条；按钮反馈优先通过选中态、列表刷新、详情面板、输入内容和真实路由跳转表达。失败、校验错误和模型不可用等需要用户处理的状态使用局部 `InlineFeedback`，模型配置保存、设默认、删除和连接测试等短确认使用右下角 toast；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
 - 上传建课状态轨道和状态条当前使用前端样例状态，后续由 `/materials/{material_id}/progress`、`/courses/from-materials` 和长任务接口驱动。
 - React Flow、ECharts、Mermaid 和 Markmap 已作为依赖准备，复杂图谱和可视化在后续阶段逐步接入。
@@ -256,18 +258,22 @@ backend/app/
 | 模块 | 当前状态 |
 | --- | --- |
 | `backend/app/main.py` | FastAPI 应用和 `/api/health` |
-| `backend/app/core/config.py` | 环境配置，读取数据库、Redis、JWT、上传资料和模型 Provider 配置 |
+| `backend/app/core/config.py` | 环境配置，读取数据库、Redis、JWT、上传资料、联网搜索、导出队列和模型 Provider 配置 |
 | `backend/app/db/base.py` | SQLAlchemy Declarative Base |
 | `backend/app/db/session.py` | 数据库 engine、Session 工厂和依赖入口 |
 | `backend/app/models` | 用户、课程、资料、知识点、知识切片核心模型，以及画像、路径、资源、Agent 轨迹、练习、报告、对话和模型设置基础模型 |
 | `backend/app/data/builtin_courses` | 内置课程包数据 |
 | `backend/app/services/course_seed.py` | 内置课程导入服务 |
-| `backend/app/services/tutor.py` | 主页/课程会话服务，负责当前用户会话创建、列表、详情、追加消息、主页通用模型回答、课程会话混合检索引用持久化、非流式课程回答生成编排，以及 Phase 6.3 的课程消息流式输出和完成后持久化 |
+| `backend/app/services/tutor.py` | 主页/课程会话服务，负责当前用户会话创建、列表、详情、追加消息、主页资料/联网/深度回答工具、`home_tutor` trace、课程会话混合检索引用持久化、非流式课程回答生成编排，以及 Phase 6.3 的课程消息流式输出和完成后持久化 |
 | `backend/app/services/model_settings.py` | 模型设置服务，负责用户多模型配置、系统兜底配置解析、Fernet 加密保存用户 Key、脱敏摘要、连接测试、默认配置切换、聊天模型和 embedding 模型运行时配置优先级 |
 | `backend/app/services/embeddings.py` | Embedding 服务，负责 OpenAI-compatible `/embeddings` 调用编排、本地 `local-hash-1536` fallback、知识切片向量写入和 metadata 标记 |
-| `backend/app/services/course_answers.py` | 回答服务，负责主页普通学习 prompt、课程引用受控 prompt、非流式或流式模型 Provider 调用、未配置和模型失败处理 |
-| `backend/app/services/materials.py` | 个人资料库服务，负责上传保存、轻解析、列表、详情、进度和课程资料关联 |
-| `backend/app/services/courses.py` | 课程服务，负责 TXT/Markdown 规则建课、课程列表、详情、概览、知识点读取和课程生成后的 best-effort 向量补齐 |
+| `backend/app/services/course_answers.py` | 回答服务，负责主页学习 prompt、资料/网页来源摘要、深度回答指令、课程引用受控 prompt、非流式或流式模型 Provider 调用、未配置和模型失败处理 |
+| `backend/app/services/material_parsers.py` | 资料解析器，负责 TXT/Markdown/PDF/DOCX/PPTX 文本抽取，并明确 OCR、旧版 Office 和扫描件边界 |
+| `backend/app/services/materials.py` | 个人资料库服务，负责上传保存、解析、列表、详情、进度和课程资料关联 |
+| `backend/app/services/web_search.py` | Tavily-compatible 联网搜索服务，未配置 Key 时返回 warning，不生成假来源 |
+| `backend/app/services/courses.py` | 课程服务，负责已解析资料规则建课、课程列表、详情、概览、知识点读取和课程生成后的 best-effort 向量补齐 |
+| `backend/app/services/exports.py` | 学习档案导出服务，负责旧同步 Markdown 兼容接口和 Markdown/PDF/DOCX 异步 job 渲染 |
+| `backend/app/workers/export_jobs.py` | Redis/RQ 导出 worker 入口 |
 | `backend/app/api/v1/tutor.py` | `/api/v1/tutor/sessions` 受保护会话接口 |
 | `backend/app/api/v1/materials.py` | `/api/v1/materials/*` 和 `/api/v1/courses/{course_id}/materials` 受保护资料接口 |
 | `backend/app/api/v1/courses.py` | `/api/v1/courses/*` 和 `/api/v1/courses/from-materials` 受保护课程接口 |

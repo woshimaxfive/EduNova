@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -49,6 +50,8 @@ class FakeLearningDossierRepository:
     practice_sessions: list[PracticeSession] = field(default_factory=list)
     practice_answers: list[PracticeAnswer] = field(default_factory=list)
     reports: list[AssessmentReport] = field(default_factory=list)
+    export_jobs: list[Any] = field(default_factory=list)
+    next_export_job_id: int = 1
 
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return next((course for course in self.courses if course.id == course_id and course.owner_id == user_id), None)
@@ -95,6 +98,29 @@ class FakeLearningDossierRepository:
     def get_latest_report(self, user_id: int, course_id: int) -> AssessmentReport | None:
         reports = [report for report in self.reports if report.user_id == user_id and report.course_id == course_id]
         return sorted(reports, key=lambda report: (report.created_at, report.id), reverse=True)[0] if reports else None
+
+    def add_export_job(self, job: Any) -> Any:
+        job.id = self.next_export_job_id
+        self.next_export_job_id += 1
+        job.created_at = NOW + timedelta(minutes=job.id)
+        job.updated_at = job.created_at
+        self.export_jobs.append(job)
+        return job
+
+    def get_export_job_for_user(self, user_id: int, job_id: int) -> Any | None:
+        return next((job for job in self.export_jobs if job.id == job_id and job.user_id == user_id), None)
+
+    def get_export_job(self, job_id: int) -> Any | None:
+        return next((job for job in self.export_jobs if job.id == job_id), None)
+
+    def commit(self) -> None:
+        return None
+
+    def rollback(self) -> None:
+        return None
+
+    def refresh(self, _instance: object) -> None:
+        return None
 
 
 def make_user(user_id: int = 1) -> User:
@@ -265,6 +291,15 @@ def as_dict(model: Any) -> dict[str, Any]:
     return model.model_dump() if hasattr(model, "model_dump") else model
 
 
+def make_export_settings(tmp_path: Path) -> Settings:
+    return Settings(
+        _env_file=None,
+        jwt_secret="export-test-secret-with-32-bytes-long",
+        jwt_expire_minutes=30,
+        export_dir=str(tmp_path / "exports"),
+    )
+
+
 def test_learning_dossier_exports_ready_report_path_resources_and_safe_markdown() -> None:
     from backend.app.services.exports import ExportService
 
@@ -342,3 +377,94 @@ def test_learning_dossier_route_requires_login_and_returns_envelope() -> None:
     assert exported.json()["data"]["filename"].endswith(".md")
     assert "人工智能导论 学习档案" in exported.json()["data"]["markdown"]
     assert missing.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("export_format", "expected_content_type", "magic"),
+    [
+        ("markdown", "text/markdown; charset=utf-8", b"# "),
+        ("pdf", "application/pdf", b"%PDF"),
+        ("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", b"PK"),
+    ],
+)
+def test_learning_dossier_export_jobs_generate_files(
+    tmp_path: Path,
+    export_format: str,
+    expected_content_type: str,
+    magic: bytes,
+) -> None:
+    from backend.app.services.exports import ExportService
+
+    repo = make_repo(with_report=True)
+    service = ExportService(repo, settings=make_export_settings(tmp_path), run_jobs_inline=True)
+
+    job = as_dict(service.create_learning_dossier_job(make_user(), course_id=101, export_format=export_format))
+
+    assert job["job_id"] == "1"
+    assert job["status"] == "completed"
+    assert job["format"] == export_format
+    assert job["content_type"] == expected_content_type
+    assert job["agent_trace_id"]
+    assert job["error_message"] is None
+    saved_path = Path(repo.export_jobs[0].file_path)
+    assert saved_path.exists()
+    assert saved_path.read_bytes().startswith(magic)
+    assert "系统提示词" not in saved_path.read_bytes().decode("utf-8", errors="ignore")
+
+
+def test_learning_dossier_pdf_falls_back_when_cjk_font_is_not_tt_compatible(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app.services.exports import ExportService
+
+    service = ExportService(make_repo(with_report=True), settings=make_export_settings(tmp_path))
+    incompatible_font = tmp_path / "unsupported-cjk-font.ttc"
+    incompatible_font.write_bytes(b"not a real TrueType font")
+    monkeypatch.setattr(service, "_find_cjk_font", lambda: incompatible_font)
+
+    rendered = service._render_pdf("# 人工智能导论 学习档案\n\n- 中文可读测试\n")
+
+    assert rendered.startswith(b"%PDF")
+
+
+def test_learning_dossier_export_job_rejects_other_users_job(tmp_path: Path) -> None:
+    from backend.app.services.exports import ExportNotFoundError, ExportService
+
+    service = ExportService(make_repo(with_report=True), settings=make_export_settings(tmp_path), run_jobs_inline=True)
+    service.create_learning_dossier_job(make_user(1), course_id=101, export_format="markdown")
+
+    with pytest.raises(ExportNotFoundError):
+        service.get_export_job(make_user(2), job_id=1)
+
+
+def test_learning_dossier_export_job_route_creates_reads_and_downloads(tmp_path: Path) -> None:
+    from backend.app.api.v1.exports import get_export_service
+    from backend.app.services.exports import ExportService
+
+    repo = make_repo(with_report=True)
+    user = make_user()
+    settings = make_export_settings(tmp_path)
+    app = create_app()
+    app.dependency_overrides[get_auth_service] = lambda: AuthService(repository=TokenAuthRepository(user), settings=settings)
+    app.dependency_overrides[get_export_service] = lambda: ExportService(repo, settings=settings, run_jobs_inline=True)
+    client = TestClient(app)
+    token = create_access_token(str(user.id), settings=settings)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    created = client.post(
+        "/api/v1/exports/learning-dossier/jobs",
+        headers=headers,
+        json={"course_id": 101, "format": "pdf"},
+    )
+    job_id = created.json()["data"]["job_id"]
+    status_response = client.get(f"/api/v1/exports/{job_id}", headers=headers)
+    download_response = client.get(f"/api/v1/exports/{job_id}/download", headers=headers)
+
+    assert created.status_code == 200
+    assert created.json()["data"]["status"] == "completed"
+    assert status_response.status_code == 200
+    assert status_response.json()["data"]["format"] == "pdf"
+    assert download_response.status_code == 200
+    assert download_response.headers["content-type"].startswith("application/pdf")
+    assert download_response.content.startswith(b"%PDF")

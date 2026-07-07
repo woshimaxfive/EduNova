@@ -50,7 +50,7 @@ A：第一版确定性优先。客观题按标准答案批改，简答题按关�
 
 **Q：报告从哪里来？**
 
-A：报告聚合课程、练习结果、掌握度、弱点队列和下一步建议，并携带 `ReportGraph` trace。Phase 12.1 已支持导出课程级 Markdown 学习档案，Phase 13.1 后导出响应会携带 `ExportDossierGraph` 的 `agent_trace_id`。
+A：报告聚合课程、练习结果、掌握度、弱点队列和下一步建议，并携带 `ReportGraph` trace。Phase 12.1 已支持导出课程级 Markdown 学习档案，Phase 13.2 后报告页默认创建异步导出任务，可下载 Markdown、PDF 或 DOCX，并携带 `ExportDossierGraph` 的 `agent_trace_id`。
 
 ## 6. 部署和开源
 
@@ -72,7 +72,7 @@ A：当前快速演示走注册页“带一个示例课程开始”。这种方�
 
 **Q：现在最主要的限制是什么？**
 
-A：PDF/PPTX/DOCX 深度解析、OCR、PDF/Word 导出、异步任务队列、资料对比结果联动期末冲刺、错题驱动深度薄弱点追溯还没有做。当前版本是可运行学习闭环，不是完整商业产品。
+A：OCR、扫描件解析、旧版 DOC/PPT 解析、资料对比结果联动期末冲刺、错题驱动深度薄弱点追溯和完整浏览器 E2E 还没有做。PDF/DOCX/PPTX 文本解析、主页联网/深思/浏览器语音和 Markdown/PDF/DOCX 异步导出已经接入。当前版本是可运行学习闭环，不是完整商业产品。
 
 **Q：下一步怎么打磨？**
 

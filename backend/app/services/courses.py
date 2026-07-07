@@ -304,7 +304,7 @@ class SqlAlchemyCourseRepository:
 
 
 class CourseService:
-    text_extensions = {".txt", ".md", ".markdown"}
+    text_extensions = {".txt", ".md", ".markdown", ".pdf", ".docx", ".pptx"}
     chunk_size = 900
     weakness_action_target_status = {
         "confirm": "confirmed",
@@ -338,7 +338,7 @@ class CourseService:
         self._validate_materials(materials, unique_material_ids)
         sections = self._parse_sections(materials)
         if not sections:
-            raise CourseGenerationError("当前仅支持已解析的 TXT/Markdown 生成课程。")
+            raise CourseGenerationError("当前仅支持已解析资料生成课程。")
 
         agent_trace_id = make_trace_id()
         title = course_title.strip() or Path(materials[0].filename).stem
@@ -571,7 +571,7 @@ class CourseService:
                 or not material.extracted_text
                 or self._extension(material.filename) not in self.text_extensions
             ):
-                raise CourseGenerationError("当前仅支持已解析的 TXT/Markdown 生成课程。")
+                raise CourseGenerationError("当前仅支持已解析资料生成课程。")
 
     def _parse_sections(self, materials: list[Material]) -> list[ParsedSection]:
         sections: list[ParsedSection] = []

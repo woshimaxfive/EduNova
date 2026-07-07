@@ -18,6 +18,9 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 - Embedding 服务、`local-hash-1536` fallback 和混合检索字段。
 - 课程空间双模式前端已接入，覆盖默认问答模式、按需学习模式、引用渐进展开和移动端布局。
 - 真实学习画像、画像事件、画像页真实接口和课程问答画像候选事件。
+- PDF/DOCX/PPTX 文本解析、损坏文件失败分支、旧版 Office/图片/OCR 边界。
+- 主页联网搜索、深度回答指令、已选资料来源、`home_tutor` trace 和浏览器语音输入/朗读。
+- Markdown/PDF/DOCX 异步学习档案导出任务、下载和用户隔离。
 - 前端 API 合同模块、核心页面测试、Vitest、lint 和生产构建。
 
 当前阶段的完整状态见 [STATUS.md](STATUS.md)。
@@ -56,7 +59,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 | 练习评估 | 出题、作答、批改、错题讲解、报告生成 |
 | 期末冲刺 | 3/7/14 天计划、高频考点、必刷题、易错提醒 |
 | 资料对比 | 多资料重复重点、试卷独有考点、优先复习顺序 |
-| 导出 | Markdown 学习档案导出 |
+| 导出 | Markdown 同步兼容接口、Markdown/PDF/DOCX 异步学习档案导出 |
 | 演示模式 | 独立演示数据、注册示例课程入口、fallback 标记、重置能力 |
 | 部署 | Docker Compose 启动、环境变量、Nginx 入口 |
 | 文档 | README、部署说明、开发说明、测试说明、开源说明、答辩问答、用户指南、AI 辅助开发说明和验收证据 |
@@ -144,18 +147,18 @@ cd ..
 | `/auth/login` | 登录成功、密码错误 |
 | `/auth/me` | 有 token 成功，无 token 失败 |
 | `/dashboard/summary` | 无 token 401、blank 用户空状态、ai_intro 用户返回当前用户课程和资料、真实进度显示、主页历史和资源摘要、多用户隔离 |
-| `/materials/upload`、`/materials`、`/materials/{material_id}`、`/materials/{material_id}/progress`、`/courses/{course_id}/materials` | 无 token 401、当前用户隔离、TXT/Markdown 轻解析、图片仅入库且不 OCR、不支持扩展名、大小限制、未归属筛选、课程关联唯一性、进度状态稳定 |
-| `/courses/from-materials`、`/courses/*` | 无 token 401、用户隔离、TXT/Markdown 建课、知识点和知识切片创建、非文本资料拒绝、课程只返回当前用户数据 |
+| `/materials/upload`、`/materials`、`/materials/{material_id}`、`/materials/{material_id}/progress`、`/courses/{course_id}/materials` | 无 token 401、当前用户隔离、TXT/Markdown 轻解析、PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT uploaded、图片仅入库且不 OCR、不支持扩展名、大小限制、未归属筛选、课程关联唯一性、进度状态稳定 |
+| `/courses/from-materials`、`/courses/*` | 无 token 401、用户隔离、已解析 TXT/Markdown/PDF/DOCX/PPTX 建课、知识点和知识切片创建、未解析/失败/旧版 Office/图片资料拒绝、课程只返回当前用户数据 |
 | `/rag/search` | 无 token 401、用户隔离、关键词命中、向量命中、混合排序、懒加载、fallback、无命中和新增分数字段 |
 | `/settings/model`、`/settings/model/test`、`/settings/model/configs` | 无 token 401、多配置隔离、默认配置、Key 加密、脱敏返回、连接测试、OpenAI-compatible embedding 和不泄露 Key |
-| `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、模型回答、SSE 流式、错误回滚和历史恢复 |
+| `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、主页已选资料/联网/深思字段、无搜索 Key 不伪造来源、`home_tutor` trace、模型回答、SSE 流式、错误回滚和历史恢复 |
 | `/profiles/me`、`/profiles/chat`、`/profiles/events` | 无 token 401、空画像稳定 8 维结构、画像对话更新、画像事件写入、事件倒序、多用户隔离、课程问答候选事件隐私安全 |
 | `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要和 metadata 白名单 |
 | `/resources/generate`、`/resources`、`/resources/{resource_id}`、`/resources/{resource_id}/quality` | 无 token 401、课程/知识点/资源用户隔离、5 类课程资源持久化、质量分、Agent trace、模型增强、本地可用稿、低依据 fallback、隐私安全 |
 | `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}`、`/courses/{course_id}/mastery-map` | 无 token 401、课程/任务用户隔离、空路径、路径生成、旧路径归档、任务状态更新、掌握度映射、推荐资源、隐私安全 |
 | `/practice/sessions`、`/practice/sessions/{session_id}`、`/practice/sessions/{session_id}/answers` | 无 token 401、课程/练习用户隔离、知识点过滤、题型生成、确定性批改、空答案校验、弱点队列反哺、掌握度回归、隐私安全 |
 | `/reports/generate`、`/reports/latest` | 无 token 401、课程/练习/报告用户隔离、空报告、报告生成、最新报告读取、掌握度摘要、下一步建议、隐私安全 |
-| `/exports/learning-dossier` | 无 token 401、课程用户隔离、无报告真实空状态、有报告 Markdown 导出、路径/资源/练习证据摘要、文件名安全、隐私安全 |
+| `/exports/learning-dossier`、`/exports/learning-dossier/jobs`、`/exports/{job_id}`、`/exports/{job_id}/download` | 无 token 401、课程/任务用户隔离、无报告真实空状态、有报告 Markdown 同步导出、异步 job 创建和状态流转、Markdown/PDF/DOCX 文件下载、失败分支、路径/资源/练习证据摘要、文件名安全、隐私安全 |
 
 后续预留接口还没有挂载后端 router，当前只保留前端常量和目标合同，不能计入已通过的后端接口测试：
 
@@ -196,7 +199,7 @@ cd ..
 - 学习画像的画像摘要、证据和对话入口。
 - `/app/tutor` 的课程辅导入口、课程列表和空状态；真实课程问答、引用来源和追问输入在 `/app/courses/:courseId` 中测试。
 - 练习页的作答、批改反馈和薄弱点复习队列。
-- 报告页的掌握度地图、学习报告和导出学习档案。
+- 报告页的掌握度地图、学习报告、异步导出任务、格式选择和下载反馈。
 - 设置页的模型设置、隐私与数据和账号设置边界。
 - 课程内提问发送、课程内历史追加和 Enter/Shift+Enter 输入习惯。
 - 主页发送后新增并高亮左侧历史、快捷学习建议填入输入框、回答下方来源/学习路径/课堂协作轨迹展开。
@@ -206,7 +209,7 @@ cd ..
 - 资料库浮层和资料库页未选择资料时，作为对话参考和生成课程等主按钮必须禁用；从资料库进入生成课程时页面上只能保留一个上层浮层。
 - 资源工坊按课程、知识点和资源类型调用真实资源接口，生成后刷新资源列表、引用、生成模式标签、低依据状态和质量分。
 - 学习画像目标编辑、画像问题回答和证据追加。
-- 练习提交后的本地批改态、报告页 Markdown 导出反馈和设置表单保存反馈。
+- 练习提交后的本地批改态、报告页导出任务创建/轮询/下载/失败反馈和设置表单保存反馈。
 - 命令栏快捷建议、空输入提示、发送反馈和可复用组件状态。
 - 首次进入引导。
 - 受保护路由跳转。
@@ -251,7 +254,7 @@ cd ..
 - Phase 4.3 后，`/app` 主页发送必须走 `/tutor/sessions`：首次发送先创建 home session，再发送消息；当前主页 assistant 内容来自普通模型回答，未配置模型时给出清晰提示；连续追问不创建第二条历史；点击左侧历史必须从后端恢复 messages；发送失败必须提示且保留输入；刷新后左侧历史仍由 `/dashboard/summary` 保留。
 - 主页输入区状态必须贴近 composer：选择资料后只显示“已选择 N 份资料”，联网搜索和深度思考只通过按钮高亮与 `aria-pressed` 表达，不出现“联网搜索已开”文字。
 - Phase 4.4 后，资料上传和资料库必须走 `/materials`：主页上传文件调用 `/materials/upload` 并刷新 `/dashboard/summary`；`/app/library` 调用 `/materials` 渲染真实列表，不再出现静态假资料；文档/图片筛选、搜索、详情反馈、上传失败局部提示、建课失败弹层提示和空状态必须可用。
-- Phase 5.1 后，从资料生成课程必须走 `/courses/from-materials`：`/app` 主页资料库浮层和 `/app/library` 都调用真实建课接口，成功后刷新 summary/materials 并跳转 `/app/courses/{course_id}`；选择图片、PDF、DOCX、PPTX 或未解析资料时必须显示后端错误并保留用户选择；课程空间标题、资料数、知识点数和知识点列表来自课程接口。
+- Phase 13.2 后，从资料生成课程必须走 `/courses/from-materials`：`/app` 主页资料库浮层和 `/app/library` 都调用真实建课接口，成功后刷新 summary/materials 并跳转 `/app/courses/{course_id}`；选择未解析、解析失败、旧版 DOC/PPT、图片或扫描件资料时必须显示后端错误并保留用户选择；课程空间标题、资料数、知识点数和知识点列表来自课程接口。
 
 ### 3.5 浏览器端到端测试
 
@@ -657,7 +660,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - 首页总览测试覆盖无 token `/dashboard/summary` 返回 401、授权路由返回当前用户 summary、blank 用户空状态、ai_intro 用户课程和资料、真实进度/画像/主页历史/资源摘要，以及 summary 服务只请求当前用户数据。
 - Tutor 会话测试覆盖无 token `/tutor/sessions` 返回 401、创建 home session、课程 session 缺少 `course_id` 校验、多用户隔离、追加消息写入 user 和 assistant、主页 assistant 调用普通模型且不调用课程检索、未配置模型提示、模型失败不写入半截消息、详情按时间返回 messages、列表只返回当前用户当前 scope；Phase 5.3 起还覆盖课程会话发送命中问题后写入真实 `citation_json`、无命中写入空引用和资料不足提示。
 - 模型设置测试覆盖 `/settings/model` 无 token 401、服务器配置摘要不泄露明文 Key、用户配置加密保存、空 `api_key` 保留原密钥、缺少 `MODEL_SETTINGS_ENCRYPTION_KEY` 时拒绝保存用户 Key、连接测试 fake Provider 成功、Provider 超时/401/非 JSON/空内容稳定错误，以及课程会话模型回答、模型未配置和模型失败回滚；Phase 6.4 起额外覆盖 OpenAI-compatible embedding 请求、`dimensions` 重试、维度不匹配拒绝和配置解析。
-- 课程生成测试覆盖无 token 访问课程接口返回 401、TXT/Markdown 资料生成课程、Markdown 标题知识点、无标题 TXT 分段知识点、多用户资料隔离、拒绝未解析和非文本资料、课程列表/详情/概览/知识点只返回当前用户课程；Phase 6.4 起覆盖建课后 best-effort 生成 chunks embedding，embedding 失败不导致建课失败。
+- 课程生成测试覆盖无 token 访问课程接口返回 401、TXT/Markdown/PDF/DOCX/PPTX 已解析资料生成课程、Markdown 标题知识点、无标题 TXT 分段知识点、多用户资料隔离、拒绝未解析/失败/旧版 Office/图片资料、课程列表/详情/概览/知识点只返回当前用户课程；Phase 6.4 起覆盖建课后 best-effort 生成 chunks embedding，embedding 失败不导致建课失败。
 - Phase 0 到 Phase 3 补完测试覆盖学习闭环表 metadata、第三条迁移文件、frontend/nginx Compose 服务和学习路径路由。
 - 后端 ruff 检查。
 - Alembic revision head 解析检查。
@@ -703,6 +706,8 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 12.2 文档验收覆盖 `docs/AGENT_DESIGN.md`、`docs/DEVELOPMENT_GUIDE.md`、`docs/OPEN_SOURCE_NOTICE.md`、`docs/DEFENSE_QA.md`、`docs/DEVELOPMENT_REPORT.md`、`docs/TEST_REPORT.md`、`docs/USER_GUIDE.md`、`docs/AI_CODING_USAGE.md`、`LICENSE` 和 `docs/evidence/PHASE_12_2_ACCEPTANCE.md`；新增文档必须与当前实现一致，不把未实现的 PDF/Word、OCR、深度解析、独立 demo reset 或完整 E2E 写成已完成。
 - Phase 13.1 后端测试覆盖学习产物 nullable `agent_trace_id` 迁移、trace 索引、`/agents/traces/{trace_id}` 扩展响应、资源生成真实节点顺序、ReviewAgent 风险标记、资源持久化 trace、课程问答 SSE metadata、路径/冲刺/练习/报告/导出 trace 兼容字段和 metadata 脱敏。
 - Phase 13.1 前端测试覆盖课程空间展示真实课堂协作轨迹、资源工坊展示 `ResourceGenerationGraph`、路径/练习/报告页显示轻量 trace 入口、报告空态不误报失败，以及新增 `agent_trace_id` API 合同。
+- Phase 13.2 后端测试覆盖 PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT 和图片 uploaded、不支持 OCR、已解析资料建课、主页联网/深思/资料参数、无搜索 Key 不伪造来源、`home_tutor` trace、`export_jobs` 创建/状态流转/Markdown/PDF/DOCX 下载/失败分支和用户隔离。
+- Phase 13.2 前端测试覆盖主页联网/深思 payload、真实来源和 trace 展示、浏览器语音输入和朗读、资料库已解析资料文案、报告页异步导出任务创建/轮询/下载/失败提示，以及新增导出 job API 合同。
 - 路由测试覆盖 `/app/courses/:courseId` 课程空间壳子，确认默认问答模式可见，并确认无效课程不会回落到 demo 课程、常驻知识画布、证据层或资源区；覆盖 `/app/path` 学习路径页，确认学习路径、阶段任务和路径依据可见。
 - 学生核心页面测试覆盖文件库式资料库、文档/图片筛选、真实资料列表、资源工坊、学习画像、AI 辅导入口、练习、报告和设置页面的核心区域。
 - P3.7/P3.14/Phase 4.4 交互测试覆盖主页上传资料文件、资料库默认未选中与点选高亮、联网搜索激活态、资料状态贴近输入区且不显示“联网搜索已开”文案、发送后进入主页对话且不显示持久“已生成回答”状态条、课程回答展开、知识点详情、AI 辅导入口、练习提交校验、资料库上传、文档/图片筛选、生成课程资料选择、资料库详情面板和设置页真实状态；Phase 4.4 起资料库上传和列表断言真实 `/materials` 调用。
@@ -748,7 +753,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 12.2 浏览器验收需要优先使用 `agent-browser` 覆盖桌面和 390px 主链路抽查：注册示例课程、资料库、课程空间问答、资源工坊、学习路径、练习、报告和 Markdown 导出可见；验收结果写入 `docs/evidence/PHASE_12_2_ACCEPTANCE.md`，非阻断问题进入 Phase 13 backlog。
 - Phase 13.1 浏览器验收需要优先使用 `agent-browser` 覆盖 Docker 入口 `http://127.0.0.1:8080` 桌面和 390px：课程空间课堂协作轨迹、资源工坊 Graph 轨迹、路径/练习/报告 trace 入口可见，页面不展示组件说明式假轨迹且无水平溢出。
 - Docker Compose 配置校验。
-- 当前未接入讯飞原生 Embeddingp/Embeddingq、OCR、PDF/PPT/DOCX 深度解析、资料对比结果持久化、资料对比与期末冲刺联动、PDF/Word 导出、异步导出任务和完整浏览器 E2E；真实资源生成 worker 已经进入 Phase 8.2 验证范围，但还没有资源编辑、异步任务队列或个人全局资源生成入口。弱点复习队列已支持课程问答候选事件入队、用户确认/开始/完成/软忽略、推荐资源、下次复习时间和练习评估来源。真实后端认证已经进入 Phase 4.1 验证范围，首页真实总览已经进入 Phase 4.2 验证范围，主页会话持久化已经进入 Phase 4.3 验证范围，真实资料库上传与列表已经进入 Phase 4.4 验证范围，真实 TXT/Markdown 规则建课已经进入 Phase 5.1 验证范围，课程知识库检索引用已经进入 Phase 5.2 验证范围，课程空间会话引用持久化已经进入 Phase 5.3 验证范围，模型配置和非流式真实课程 RAG 回答已经进入 Phase 6.1 验证范围，多模型配置隔离已经进入 Phase 6.2 验证范围，课程问答流式输出已经进入 Phase 6.3 验证范围，课程知识库 embedding 与混合检索已经进入 Phase 6.4 验证范围，课程空间双模式前端已经进入 Phase 6.5 验证范围，真实学习画像和画像候选事件已经进入 Phase 7.1 验证范围，学习事件语义与课程学习状态边界已经进入 Phase 7.2 验证范围，课程级学习状态和待确认弱点队列已经进入 Phase 7.3 验证范围，课程级弱点复习队列状态流转已经进入 Phase 7.4 验证范围，Agent Graph 与可观测轨迹底座已经进入 Phase 8.1 验证范围，多智能体生成 5 类课程资源已经进入 Phase 8.2 验证范围，课程级学习路径、掌握度图和弱点队列完善已经进入 Phase 9 验证范围，练习评估与学习报告闭环第一刀已经进入 Phase 10 验证范围，期末冲刺模式第一刀已经进入 Phase 11.1 验证范围，资料对比第一刀已经进入 Phase 11.2 验证范围，Markdown 学习档案导出已经进入 Phase 12.1 验证范围，交付基线和开源准备已经进入 Phase 12.2 验证范围，全学习闭环 LangGraph 生产编排已经进入 Phase 13.1 验证范围。
+- 当前未接入讯飞原生 Embeddingp/Embeddingq、OCR、旧版 Office 解析、扫描件解析、资料对比结果持久化、资料对比与期末冲刺联动和完整浏览器 E2E；真实资源生成 worker 还没有资源编辑、异步任务队列或个人全局资源生成入口。弱点复习队列已支持课程问答候选事件入队、用户确认/开始/完成/软忽略、推荐资源、下次复习时间和练习评估来源。真实后端认证已经进入 Phase 4.1 验证范围，首页真实总览已经进入 Phase 4.2 验证范围，主页会话持久化已经进入 Phase 4.3 验证范围，真实资料库上传与列表已经进入 Phase 4.4 验证范围，真实已解析资料规则建课已经进入 Phase 13.2 验证范围，课程知识库检索引用已经进入 Phase 5.2 验证范围，课程空间会话引用持久化已经进入 Phase 5.3 验证范围，模型配置和非流式真实课程 RAG 回答已经进入 Phase 6.1 验证范围，多模型配置隔离已经进入 Phase 6.2 验证范围，课程问答流式输出已经进入 Phase 6.3 验证范围，课程知识库 embedding 与混合检索已经进入 Phase 6.4 验证范围，课程空间双模式前端已经进入 Phase 6.5 验证范围，真实学习画像和画像候选事件已经进入 Phase 7.1 验证范围，学习事件语义与课程学习状态边界已经进入 Phase 7.2 验证范围，课程级学习状态和待确认弱点队列已经进入 Phase 7.3 验证范围，课程级弱点复习队列状态流转已经进入 Phase 7.4 验证范围，Agent Graph 与可观测轨迹底座已经进入 Phase 8.1 验证范围，多智能体生成 5 类课程资源已经进入 Phase 8.2 验证范围，课程级学习路径、掌握度图和弱点队列完善已经进入 Phase 9 验证范围，练习评估与学习报告闭环第一刀已经进入 Phase 10 验证范围，期末冲刺模式第一刀已经进入 Phase 11.1 验证范围，资料对比第一刀已经进入 Phase 11.2 验证范围，Markdown 学习档案导出已经进入 Phase 12.1 验证范围，交付基线和开源准备已经进入 Phase 12.2 验证范围，全学习闭环 LangGraph 生产编排已经进入 Phase 13.1 验证范围，PDF/DOCX/PPTX 解析、主页联网/深思/语音和异步导出已经进入 Phase 13.2 验证范围。
 
 统一验证脚本是日常轻量门禁，不会自动启动 Docker 容器。
 

@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，对应第十五届�
 ```text
 注册登录 -> 示例课程或上传资料 -> 课程 RAG 问答 -> 学习画像
 -> 弱点追踪 -> 资源生成 -> 学习路径 -> 练习评估
--> 学习报告 -> Markdown 学习档案导出
+-> 学习报告 -> Markdown/PDF/DOCX 学习档案导出
 ```
 
 ## 2. 系统设计
@@ -23,7 +23,7 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 - 数据：PostgreSQL、pgvector、Redis、本地文件存储。
 - AI：OpenAI-compatible Chat Completions、SSE、OpenAI-compatible Embeddings、本地 hash fallback。
 - Agent 编排：LangGraph 学习闭环生产编排，Service 层作为 API 边界和依赖装配层。
-- 部署：backend、frontend、postgres、redis、nginx 五服务。
+- 部署：backend、export-worker、frontend、postgres、redis、nginx 六服务。
 
 核心设计原则：
 
@@ -50,6 +50,7 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 | Phase 12.1 | Markdown 学习档案导出 |
 | Phase 12.2 | 交付基线、开源准备和验收证据 |
 | Phase 13.1 | 全学习闭环 LangGraph 生产编排、学习产物 trace 字段和前端轨迹入口 |
+| Phase 13.2 | PDF/DOCX/PPTX 资料解析、主页联网/深思/浏览器语音、Markdown/PDF/DOCX 异步导出 |
 
 ## 4. 核心创新
 
@@ -79,7 +80,7 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 
 - 真实用户认证和受保护路由。
 - 注册时选择示例课程。
-- 资料上传、列表和 TXT/Markdown 建课。
+- 资料上传、列表和 TXT/Markdown/PDF/DOCX/PPTX 建课。
 - 课程 RAG 问答、SSE 流式回答和引用持久化。
 - 8 维学习画像和画像事件。
 - 课程级弱点队列和状态流转。
@@ -88,7 +89,7 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 - 练习评估和学习报告。
 - 期末冲刺计划。
 - 同课程资料对比。
-- Markdown 学习档案导出。
+- Markdown/PDF/DOCX 学习档案异步导出，旧 Markdown 同步接口保留兼容。
 - 学习闭环 LangGraph 生产编排和安全 trace 查询。
 - Docker Compose 一键启动。
 
@@ -96,10 +97,9 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 
 当前没有实现：
 
-- PDF/PPTX/DOCX 深度解析。
 - OCR 和图片题目识别。
-- PDF/Word 导出。
-- 异步资源或导出任务队列。
+- 旧版 DOC/PPT 和扫描件解析。
+- 异步资源任务队列。
 - 资料对比结果持久化和期末冲刺联动。
 - 错题驱动的深度薄弱点追溯。
 - 完整教师端、家长端、支付和移动端 App。
@@ -112,4 +112,4 @@ Phase 13 进入 Verification and Hardening / 产品打磨：
 - 汇总并修复 Phase 12.2 验收发现的问题。
 - 打磨资源质量、路径排序、练习题质量和报告表达。
 - 优化移动端和交互细节。
-- 评估深度文档解析、PDF/Word 导出和异步任务队列。
+- 打磨导出版式、Graph 轨迹视觉和浏览器验收证据。

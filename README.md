@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 13.1：全学习闭环 LangGraph 生产编排**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询、5 类课程资源生成和资源质量收口，Phase 9 已完成课程级路径、规则掌握度图、弱点推荐资源和复习时间第一版，Phase 10 已完成真实课程练习、确定性批改、弱点/掌握度反哺和学习报告展示第一刀，Phase 11.1 已完成课程级 3/7/14 天期末冲刺计划，Phase 11.2 已完成同课程多资料对比，Phase 12.1 已完成课程级 Markdown 学习档案导出，Phase 12.2 已补齐交付文档、开源说明、MIT 许可证和验收证据索引，Phase 13.1 已把学习闭环 Agent 从“Service 分工 + 手写 trace”升级为 LangGraph 生产编排与真实 trace 展示。
+当前最新完成到 **Phase 13.2：资料解析、主页智能工具和异步导出增强**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询、5 类课程资源生成和资源质量收口，Phase 9 已完成课程级路径、规则掌握度图、弱点推荐资源和复习时间第一版，Phase 10 已完成真实课程练习、确定性批改、弱点/掌握度反哺和学习报告展示第一刀，Phase 11.1 已完成课程级 3/7/14 天期末冲刺计划，Phase 11.2 已完成同课程多资料对比，Phase 12.1 已完成课程级 Markdown 学习档案导出，Phase 12.2 已补齐交付文档、开源说明、MIT 许可证和验收证据索引，Phase 13.1 已把学习闭环 Agent 从“Service 分工 + 手写 trace”升级为 LangGraph 生产编排与真实 trace 展示；Phase 13.2 补齐 PDF/DOCX/PPTX 文本解析、主页联网搜索/深度思考/浏览器语音和 Markdown/PDF/DOCX 异步学习档案导出。
 
 LangGraph 现在接管学习闭环生产编排：画像、资料建课/对比、课程问答、弱点识别、资源生成、学习路径、期末冲刺、练习评估、学习报告和学习档案导出都会生成或携带安全 `agent_trace_id`。认证、设置、Dashboard 等非学习 Agent 能力仍保持普通服务，不伪装成智能体。
 
@@ -20,7 +20,7 @@ LangGraph 现在接管学习闭环生产编排：画像、资料建课/对比、
 - 真实注册、登录、退出和受保护路由。
 - 主页真实总览、主页会话、主页消息持久化和通用模型回答。
 - 当前用户个人资料库上传、列表、详情和进度查询。
-- 已解析 TXT/Markdown 资料生成真实课程结构。
+- 已解析 TXT/Markdown/PDF/DOCX/PPTX 资料生成真实课程结构；`.doc`、`.ppt`、图片和扫描件不伪装解析，图片与扫描件明确提示暂不支持 OCR。
 - 课程知识点、知识切片、课程内历史和引用持久化。
 - 课程空间真实模型 RAG 回答、SSE 流式输出、刷新恢复和双模式前端。
 - 真实 8 维学习画像、画像对话更新、画像事件列表和课程问答弱点候选事件。
@@ -32,23 +32,22 @@ LangGraph 现在接管学习闭环生产编排：画像、资料建课/对比、
 - `/paths/generate`、`/paths/current` 和 `/paths/tasks/{task_id}` 已实现课程级学习路径生成、当前路径读取和任务状态更新；`/app/path` 已接入真实课程、任务、路径依据和掌握度图。
 - `/courses/{course_id}/mastery-map` 已实现规则掌握度图，`/courses/{course_id}/learning-state` 已返回真实 `path_summary`、`mastery_summary`、弱点推荐资源和下次复习时间。
 - `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已实现真实课程练习创建、作答提交和确定性批改；错题或低分题会以 `practice_assessment` 来源反哺课程级弱点队列和掌握度图。
-- `/reports/generate` 和 `/reports/latest` 已实现课程学习报告生成与读取；`/exports/learning-dossier` 已实现课程级 Markdown 学习档案同步导出；`/app/reports` 展示真实分数、掌握度更新、薄弱点、证据摘要和下一步建议，并可下载 `.md` 学习档案。
+- `/reports/generate` 和 `/reports/latest` 已实现课程学习报告生成与读取；`/exports/learning-dossier` 保留课程级 Markdown 同步导出兼容接口，`/exports/learning-dossier/jobs`、`/exports/{job_id}` 和 `/exports/{job_id}/download` 已实现 Markdown/PDF/DOCX 异步学习档案导出；`/app/reports` 展示真实分数、掌握度更新、薄弱点、证据摘要和下一步建议，并可选择格式下载学习档案。
 - `/exam-sprint/plans` 已实现期末冲刺计划生成和读取；复用 `learning_paths` / `learning_tasks`，用 `sprint_active` / `sprint_archived` 避免影响普通学习路径，`/app/path` 可生成并展示每日任务、高频点、薄弱点、必刷题、易错提醒和推荐资源。
-- `/materials/compare` 已实现同课程资料对比第一刀；`/app/library` 可选择已绑定课程的两份以上 TXT/Markdown 资料，展示重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序和安全引用摘要。
+- `/materials/compare` 已实现同课程资料对比第一刀；`/app/library` 可选择已绑定课程的两份以上已解析资料，展示重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序和安全引用摘要。
 - `/app/tutor` 已收敛为课程辅导入口，真实提问统一进入课程空间。
 - 多套个人模型配置、默认配置切换、服务器 `.env` 兜底。
 - OpenAI-compatible Embeddings 与 `local-hash-1536` 本地 fallback。
 - Phase 12.2 已补交付基线文档、测试报告、用户指南、开源说明、答辩问答、AI 辅助开发说明和 MIT 许可证。
 
-当前主页回答是普通模型问答，不做资料 RAG、真实联网搜索或流式输出；课程空间才会使用课程引用、混合检索和流式 RAG。课程空间默认是问答模式，知识点入口和引用可进入学习模式。课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件，并通过课程学习状态同步为待确认复习项；这仍是“待确认/待复习”，不是已完成正式诊断。学生确认后才进入待复习、复习中或已完成语义，Phase 9 路径生成只消费已确认/复习中的弱点，不直接消费 `pending` 候选项。后续不会为每门课复制完整画像，而是通过课程级学习状态聚合目标、薄弱点、掌握度、复习队列和路径依据。
+主页回答已支持按需合并已选资料短摘录、Tavily-compatible 联网搜索摘要和深度回答指令，并通过 `home_tutor` trace 展示 `home_profile -> material_context -> web_search -> answer -> review` 课堂协作轨迹；未配置搜索 Key 时只返回清晰 warning，不伪造网页来源。主页语音输入和朗读使用浏览器 Web Speech API，不上传音频。课程空间继续使用课程引用、混合检索和流式 RAG。课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件，并通过课程学习状态同步为待确认复习项；这仍是“待确认/待复习”，不是已完成正式诊断。学生确认后才进入待复习、复习中或已完成语义，Phase 9 路径生成只消费已确认/复习中的弱点，不直接消费 `pending` 候选项。后续不会为每门课复制完整画像，而是通过课程级学习状态聚合目标、薄弱点、掌握度、复习队列和路径依据。
 
 还没有进入的能力：
 
-- PDF、PPTX、DOCX 深度解析。
 - OCR 和图片题目识别。
 - 讯飞原生 Embeddingp/Embeddingq。
 - 个人全局资源生成入口、资源编辑、异步资源任务队列。
-- 资料对比结果持久化、资料对比与期末冲刺联动、错题驱动深度薄弱点追溯、PDF/Word 导出、异步导出任务和深度解析。
+- 资料对比结果持久化、资料对比与期末冲刺联动、错题驱动深度薄弱点追溯。
 - 完整浏览器 E2E 自动化套件和 Phase 13 产品打磨专项。
 
 详细状态见 [docs/STATUS.md](docs/STATUS.md)，后续任务看 [docs/PROJECT_BOARD.md](docs/PROJECT_BOARD.md)。
@@ -98,11 +97,11 @@ LangGraph 现在接管学习闭环生产编排：画像、资料建课/对比、
 - AI 辅导和苏格拉底追问。
 - 练习评估、掌握度地图和薄弱点复习队列。
 - 期末冲刺和资料对比。
-- Markdown 学习档案导出。
+- Markdown/PDF/DOCX 学习档案异步导出，旧 Markdown 同步接口保留兼容。
 - 快速演示通过注册页示例课程模式完成；独立共享 demo reset 不作为当前主线。
 - Docker Compose 部署。
 
-当前代码已经具备第一版主学习闭环和交付基线，但仍不是完整商业产品。不要把“第一版目标”误读成 PDF/Word、OCR、深度解析、教师端和完整 E2E 都已经完成。
+当前代码已经具备第一版主学习闭环和交付基线，但仍不是完整商业产品。不要把“第一版目标”误读成 OCR、扫描件解析、旧版 Office 格式解析、教师端和完整 E2E 都已经完成。
 
 ## 技术栈
 

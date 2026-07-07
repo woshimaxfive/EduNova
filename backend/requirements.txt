@@ -11,3 +11,8 @@ python-multipart
 httpx
 cryptography
 langgraph
+pypdf
+reportlab
+python-docx
+redis
+rq

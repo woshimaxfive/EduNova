@@ -23,6 +23,9 @@ export type CreateTutorSessionRequest = {
 
 export type SendTutorMessageRequest = {
   message: string;
+  use_web_search?: boolean;
+  deep_thinking?: boolean;
+  selected_material_ids?: number[];
 };
 
 export type TutorSessionSummary = {
@@ -36,7 +39,14 @@ export type TutorSessionSummary = {
   updated_at: string;
 };
 
-export type TutorCitation = RagSearchResultItem;
+export type TutorCitation = Partial<RagSearchResultItem> & {
+  source_type?: "course" | "material" | "web" | string;
+  title?: string;
+  url?: string;
+  snippet?: string;
+  material_id?: string | number;
+  warning?: string;
+};
 
 export type TutorMessage = {
   id: string;
@@ -58,6 +68,9 @@ export type TutorStreamMetadata = {
   trace_id: string | null;
   citation_count: number;
   used_model: boolean;
+  workflow?: string;
+  artifact_type?: string;
+  steps?: string[];
 };
 
 export type TutorStreamError = {

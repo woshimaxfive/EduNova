@@ -152,14 +152,33 @@ function courseQuestionTitle(question: string) {
   return normalized.length > 30 ? `${normalized.slice(0, 30)}...` : normalized;
 }
 
+function isRagCitation(citation: unknown): citation is RagSearchResultItem {
+  if (typeof citation !== "object" || citation === null) {
+    return false;
+  }
+
+  const item = citation as Partial<RagSearchResultItem>;
+  return (
+    typeof item.chunk_id === "number" &&
+    typeof item.course_id === "number" &&
+    typeof item.material_id === "number" &&
+    typeof item.content === "string" &&
+    typeof item.source_title === "string"
+  );
+}
+
 function mapTutorMessagesToCourseMessages(messages: TutorMessage[]): CourseMessage[] {
-  return messages.map((message) => ({
-    id: message.id,
-    role: message.role,
-    content: message.content,
-    citations: message.role === "assistant" ? message.citation_json : undefined,
-    traceId: message.role === "assistant" ? message.trace_id : null
-  }));
+  return messages.map((message) => {
+    const citations = message.role === "assistant" ? message.citation_json.filter(isRagCitation) : [];
+
+    return {
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      citations: message.role === "assistant" ? citations : undefined,
+      traceId: message.role === "assistant" ? message.trace_id : null
+    };
+  });
 }
 
 function mapCourseSessionsToConversations(sessions: TutorSessionSummary[]) {

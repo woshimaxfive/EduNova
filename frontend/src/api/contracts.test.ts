@@ -7,7 +7,13 @@ import { COURSE_ENDPOINTS, getCourseLearningState, getMasteryMap, updateCourseWe
 import { DASHBOARD_ENDPOINTS } from "./dashboard";
 import { DEMO_ENDPOINTS } from "./demo";
 import { EXAM_SPRINT_ENDPOINTS, generateExamSprintPlan, getExamSprintPlan } from "./examSprint";
-import { exportLearningDossier, EXPORT_ENDPOINTS } from "./exports";
+import {
+  createLearningDossierExportJob,
+  downloadExportJob,
+  exportLearningDossier,
+  EXPORT_ENDPOINTS,
+  getExportJob
+} from "./exports";
 import { compareMaterials, MATERIAL_ENDPOINTS } from "./materials";
 import { generatePath, getCurrentPath, PATH_ENDPOINTS, updatePathTask } from "./paths";
 import { createPracticeSession, getPracticeSession, PRACTICE_ENDPOINTS, submitPracticeAnswers } from "./practice";
@@ -33,7 +39,7 @@ import {
   testModelSettings,
   updateModelConfig
 } from "./settings";
-import { listTutorSessions, TUTOR_ENDPOINTS } from "./tutor";
+import { listTutorSessions, sendTutorMessage, TUTOR_ENDPOINTS } from "./tutor";
 
 describe("frontend API contracts", () => {
   it("uses the documented API v1 base path", () => {
@@ -65,6 +71,9 @@ describe("frontend API contracts", () => {
     expect(EXAM_SPRINT_ENDPOINTS.generate).toBe("/exam-sprint/plans");
     expect(EXAM_SPRINT_ENDPOINTS.detail(12)).toBe("/exam-sprint/plans/12");
     expect(EXPORT_ENDPOINTS.learningDossier).toBe("/exports/learning-dossier");
+    expect(EXPORT_ENDPOINTS.learningDossierJob).toBe("/exports/learning-dossier/jobs");
+    expect(EXPORT_ENDPOINTS.job(44)).toBe("/exports/44");
+    expect(EXPORT_ENDPOINTS.download(44)).toBe("/exports/44/download");
     expect(TUTOR_ENDPOINTS.message(4)).toBe("/tutor/sessions/4/messages");
     expect(PRACTICE_ENDPOINTS.answers(8)).toBe("/practice/sessions/8/answers");
     expect(REPORT_ENDPOINTS.latest).toBe("/reports/latest");
@@ -389,6 +398,85 @@ describe("frontend API contracts", () => {
         }
       ]);
       expect(response.data).toEqual([]);
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("sends home tutor tool options through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
+      });
+
+      return {
+        data: {
+          data: {
+            session: {
+              id: "501",
+              scope: "home",
+              course_id: null,
+              title: "主页联网问题",
+              mode: "chat",
+              archived_from_home: false,
+              created_at: "2026-07-07T09:00:00Z",
+              updated_at: "2026-07-07T09:00:01Z"
+            },
+            messages: [
+              {
+                id: "m1",
+                session_id: "501",
+                role: "assistant",
+                content: "已结合资料和网页来源回答。",
+                citation_json: [
+                  {
+                    source_type: "web",
+                    title: "Tavily Result",
+                    url: "https://example.com/source",
+                    snippet: "联网摘要"
+                  }
+                ],
+                trace_id: "trace_home_tutor",
+                created_at: "2026-07-07T09:00:01Z"
+              }
+            ]
+          },
+          trace_id: "trace_home_tutor"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const response = await sendTutorMessage(501, {
+        message: "帮我结合资料和最新信息",
+        use_web_search: true,
+        deep_thinking: true,
+        selected_material_ids: [201, 202]
+      });
+
+      expect(calls).toEqual([
+        {
+          url: TUTOR_ENDPOINTS.message(501),
+          method: "post",
+          data: {
+            message: "帮我结合资料和最新信息",
+            use_web_search: true,
+            deep_thinking: true,
+            selected_material_ids: [201, 202]
+          }
+        }
+      ]);
+      expect(response.data.messages[0].citation_json[0].source_type).toBe("web");
+      expect(response.data.messages[0].trace_id).toBe("trace_home_tutor");
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }
@@ -1000,6 +1088,107 @@ describe("frontend API contracts", () => {
       ]);
       expect(response.data.content_type).toBe("text/markdown; charset=utf-8");
       expect(response.data.markdown).toContain("学习档案");
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("uses typed async learning dossier export job APIs through the shared client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown; responseType?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data,
+        responseType: config.responseType
+      });
+
+      if (config.url === EXPORT_ENDPOINTS.learningDossierJob) {
+        return {
+          data: {
+            data: {
+              job_id: "44",
+              status: "queued",
+              format: "pdf",
+              filename: "edunova-人工智能导论-learning-dossier.pdf",
+              content_type: "application/pdf",
+              agent_trace_id: "trace_export_job",
+              error_message: null,
+              created_at: "2026-07-07T10:00:00Z",
+              updated_at: "2026-07-07T10:00:00Z",
+              completed_at: null
+            },
+            trace_id: "trace_export_job_create"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (config.url === EXPORT_ENDPOINTS.job(44)) {
+        return {
+          data: {
+            data: {
+              job_id: "44",
+              status: "completed",
+              format: "pdf",
+              filename: "edunova-人工智能导论-learning-dossier.pdf",
+              content_type: "application/pdf",
+              agent_trace_id: "trace_export_job",
+              error_message: null,
+              created_at: "2026-07-07T10:00:00Z",
+              updated_at: "2026-07-07T10:00:01Z",
+              completed_at: "2026-07-07T10:00:01Z"
+            },
+            trace_id: "trace_export_job_get"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: new Blob(["pdf"], { type: "application/pdf" }),
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const created = await createLearningDossierExportJob({ course_id: 7, format: "pdf" });
+      const job = await getExportJob(created.data.job_id);
+      const file = await downloadExportJob(job.data.job_id);
+
+      expect(calls).toEqual([
+        {
+          url: EXPORT_ENDPOINTS.learningDossierJob,
+          method: "post",
+          data: { course_id: 7, format: "pdf" },
+          responseType: undefined
+        },
+        {
+          url: EXPORT_ENDPOINTS.job(44),
+          method: "get",
+          data: undefined,
+          responseType: undefined
+        },
+        {
+          url: EXPORT_ENDPOINTS.download(44),
+          method: "get",
+          data: undefined,
+          responseType: "blob"
+        }
+      ]);
+      expect(job.data.status).toBe("completed");
+      expect(file.type).toBe("application/pdf");
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

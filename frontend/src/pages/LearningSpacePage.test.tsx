@@ -2,9 +2,10 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PATHS } from "../app/routePaths";
+import { AGENT_ENDPOINTS } from "../api/agents";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
@@ -146,7 +147,17 @@ function parsePayload(data: unknown) {
   }
 }
 
-function makeSessionDetail(sessionId: string, title: string, messages: Array<{ id: string; role: "user" | "assistant"; content: string }>) {
+function makeSessionDetail(
+  sessionId: string,
+  title: string,
+  messages: Array<{
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    citation_json?: unknown[];
+    trace_id?: string | null;
+  }>
+) {
   return {
     session: {
       id: sessionId,
@@ -160,8 +171,8 @@ function makeSessionDetail(sessionId: string, title: string, messages: Array<{ i
     },
     messages: messages.map((message, index) => ({
       ...message,
-      citation_json: [],
-      trace_id: null,
+      citation_json: message.citation_json ?? [],
+      trace_id: message.trace_id ?? null,
       created_at: `2026-07-03T12:0${index}:00Z`
     }))
   };
@@ -176,7 +187,13 @@ function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, 
     }
   });
   const calls: ApiCall[] = [];
-  const sentMessages: Array<{ id: string; role: "user" | "assistant"; content: string }> = [];
+  const sentMessages: Array<{
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    citation_json?: unknown[];
+    trace_id?: string | null;
+  }> = [];
   const createdSession = {
     id: "501",
     scope: "home",
@@ -252,7 +269,21 @@ function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, 
         {
           id: `a-${sentMessages.length + 2}`,
           role: "assistant",
-          content: "模型回答：先把学习目标拆成三步，再按资料和题型复习。"
+          content: "模型回答：先把学习目标拆成三步，再按资料和题型复习。",
+          citation_json: [
+            {
+              source_type: "material",
+              title: "真实资料讲义.md",
+              snippet: "资料短摘录：反向传播需要先理解链式法则。"
+            },
+            {
+              source_type: "web",
+              title: "联网搜索结果",
+              url: "https://example.com/latest-ai-learning",
+              snippet: "网页摘要：把概念复习和练习反馈结合起来。"
+            }
+          ],
+          trace_id: "trace_home_tutor_test"
         }
       );
 
@@ -260,6 +291,50 @@ function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, 
         data: {
           data: makeSessionDetail("501", createdSession.title, sentMessages),
           trace_id: "trace_message_test"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (url === AGENT_ENDPOINTS.trace("trace_home_tutor_test") && method === "get") {
+      return {
+        data: {
+          data: {
+            trace_id: "trace_home_tutor_test",
+            workflow: "home_tutor",
+            artifact_type: "home_answer",
+            artifact_id: "a-2",
+            course_id: null,
+            status: "completed",
+            steps: [
+              {
+                id: "step-profile",
+                agent_name: "home_profile",
+                step_index: 1,
+                status: "completed",
+                input_summary: "读取主页画像",
+                output_summary: "识别学习目标和当前问题",
+                duration_ms: 12,
+                metadata: {},
+                created_at: "2026-07-03T12:00:02Z"
+              },
+              {
+                id: "step-review",
+                agent_name: "review",
+                step_index: 5,
+                status: "completed",
+                input_summary: "审核回答",
+                output_summary: "确认不展示原始思维链",
+                duration_ms: 9,
+                metadata: {},
+                created_at: "2026-07-03T12:00:03Z"
+              }
+            ]
+          },
+          trace_id: "trace_home_tutor_test"
         },
         status: 200,
         statusText: "OK",
@@ -339,6 +414,10 @@ describe("LearningSpacePage", () => {
 
   afterEach(() => {
     apiClient.defaults.adapter = previousAdapter;
+    Reflect.deleteProperty(window, "SpeechRecognition");
+    Reflect.deleteProperty(window, "webkitSpeechRecognition");
+    Reflect.deleteProperty(window, "speechSynthesis");
+    Reflect.deleteProperty(globalThis, "SpeechSynthesisUtterance");
     useAuthStore.getState().clearSession();
   });
 
@@ -502,6 +581,107 @@ describe("LearningSpacePage", () => {
     expect(screen.getByRole("button", { name: "联网搜索" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("sends selected materials with web search and deep thinking, then shows citations and graph trace", async () => {
+    const user = userEvent.setup();
+    const { calls } = renderWithDashboardSummary(materialRichSummary);
+
+    await user.click(screen.getByRole("button", { name: "打开资料库" }));
+    await user.click(screen.getByRole("button", { name: /期末复习题 2025/ }));
+    await user.click(screen.getByRole("button", { name: "关闭资料库" }));
+    await user.click(screen.getByRole("button", { name: "联网搜索" }));
+    await user.click(screen.getByRole("button", { name: "深度思考" }));
+    await user.type(screen.getByRole("textbox", { name: "学习问题输入" }), "结合资料和最新趋势怎么复习？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    const messageCall = calls.find((call) => call.method === "post" && call.url === TUTOR_ENDPOINTS.message(501));
+
+    expect(messageCall?.payload).toMatchObject({
+      message: "结合资料和最新趋势怎么复习？",
+      use_web_search: true,
+      deep_thinking: true,
+      selected_material_ids: [202]
+    });
+
+    const thread = screen.getByRole("region", { name: "主页对话" });
+
+    await user.click(within(thread).getByRole("button", { name: "来源" }));
+    expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("真实资料讲义.md");
+    expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("联网搜索结果");
+
+    await user.click(within(thread).getByRole("button", { name: "思考过程" }));
+
+    expect(await within(thread).findByText("home_profile")).toBeInTheDocument();
+    expect(within(thread).getByText("确认不展示原始思维链")).toBeInTheDocument();
+    expect(calls).toContainEqual(expect.objectContaining({ method: "get", url: AGENT_ENDPOINTS.trace("trace_home_tutor_test") }));
+  });
+
+  it("uses browser speech recognition for voice input and browser speech synthesis for read aloud", async () => {
+    const user = userEvent.setup();
+    const speakSpy = vi.fn();
+
+    class MockSpeechRecognition {
+      lang = "";
+      interimResults = false;
+      maxAlternatives = 1;
+      onresult: ((event: { results: Array<Array<{ transcript: string }>> }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      onend: (() => void) | null = null;
+
+      start() {
+        this.onresult?.({ results: [[{ transcript: "语音输入的问题" }]] });
+        this.onend?.();
+      }
+
+      stop() {
+        this.onend?.();
+      }
+    }
+
+    Object.defineProperty(window, "webkitSpeechRecognition", {
+      configurable: true,
+      value: MockSpeechRecognition
+    });
+    Object.defineProperty(window, "speechSynthesis", {
+      configurable: true,
+      value: {
+        cancel: vi.fn(),
+        speak: speakSpy
+      }
+    });
+    Object.defineProperty(globalThis, "SpeechSynthesisUtterance", {
+      configurable: true,
+      value: class {
+        lang = "";
+
+        constructor(public text: string) {}
+      }
+    });
+
+    renderWithDashboardSummary();
+
+    await user.click(screen.getByRole("button", { name: "语音输入" }));
+
+    expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("语音输入的问题");
+    expect(await screen.findByText("已识别语音输入。")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    await user.click(await screen.findByRole("button", { name: "朗读回答" }));
+
+    expect(speakSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("正在朗读回答。")).toBeInTheDocument();
+  });
+
+  it("shows a non-blocking warning when the browser does not support voice input", async () => {
+    const user = userEvent.setup();
+
+    renderWithDashboardSummary();
+
+    await user.click(screen.getByRole("button", { name: "语音输入" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("当前浏览器不支持语音输入。");
+    expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("");
+  });
+
   it("creates a persistent home session before the first send and reuses it for follow-ups", async () => {
     const user = userEvent.setup();
 
@@ -607,7 +787,8 @@ describe("LearningSpacePage", () => {
 
     await user.click(screen.getByRole("button", { name: "思考过程" }));
 
-    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("处理摘要");
+    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("课堂协作轨迹");
+    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("确认不展示原始思维链");
   });
 
   it("creates a real course from the library drawer and enters the new course space", async () => {

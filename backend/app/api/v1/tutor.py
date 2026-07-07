@@ -24,6 +24,7 @@ from backend.app.services.tutor import (
     SqlAlchemyTutorSessionRepository,
     TutorSessionService,
 )
+from backend.app.services.web_search import WebSearchService
 
 
 router = APIRouter(prefix="/tutor", tags=["tutor"])
@@ -43,6 +44,7 @@ def get_tutor_session_service(db=Depends(get_db_session)) -> TutorSessionService
         ),
         course_answer_generator=CourseAnswerService(model_settings_service),
         profile_event_recorder=ProfileService(SqlAlchemyProfileRepository(db)),
+        web_search_service=WebSearchService(get_settings()),
     )
 
 
@@ -135,7 +137,14 @@ def send_message(
     service: TutorSessionService = Depends(get_tutor_session_service),
 ) -> dict:
     try:
-        detail = service.append_message(user=current_user, session_id=session_id, content=payload.message)
+        detail = service.append_message(
+            user=current_user,
+            session_id=session_id,
+            content=payload.message,
+            use_web_search=payload.use_web_search,
+            deep_thinking=payload.deep_thinking,
+            selected_material_ids=payload.selected_material_ids,
+        )
     except EmptyMessageError as exc:
         raise ApiError(
             status_code=status.HTTP_400_BAD_REQUEST,

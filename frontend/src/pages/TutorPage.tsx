@@ -54,7 +54,7 @@ export function TutorPage() {
           {!coursesQuery.isLoading && !hasCourses ? (
             <div className="tutor-empty-state">
               <strong>还没有可辅导的课程</strong>
-              <p>先上传 TXT 或 Markdown 资料生成课程，再进入课程空间提问。这样回答才能带上真实引用。</p>
+              <p>先上传可解析资料生成课程，再进入课程空间提问。这样回答才能带上真实引用。</p>
               <div className="tutor-empty-actions">
                 <Link className="primary-action" to={PATHS.library}>
                   <UploadSimple size={17} weight="bold" aria-hidden="true" />

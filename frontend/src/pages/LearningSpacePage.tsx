@@ -7,6 +7,7 @@ import {
   LinkSimple,
   MagnifyingGlass,
   Microphone,
+  SpeakerHigh,
   Sparkle,
   X
 } from "@phosphor-icons/react";
@@ -15,6 +16,7 @@ import { type ChangeEvent, type KeyboardEvent, useEffect, useMemo, useRef, useSt
 import { Link, useNavigate } from "react-router-dom";
 
 import { PATHS, buildCoursePath } from "../app/routePaths";
+import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import { createCourseFromMaterials } from "../api/courses";
 import { getDashboardSummary, type DashboardMaterial } from "../api/dashboard";
 import { getApiErrorMessage } from "../api/errors";
@@ -23,6 +25,7 @@ import {
   createTutorSession,
   getTutorSession,
   sendTutorMessage,
+  type TutorCitation,
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
@@ -37,9 +40,38 @@ type HomeMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  citation_json: TutorCitation[];
+  trace_id: string | null;
 };
 
 type HomeAnswerPanel = "sources" | "path" | "thinking";
+
+type SpeechRecognitionEventLike = {
+  results: ArrayLike<ArrayLike<{ transcript: string }>>;
+};
+
+type SpeechRecognitionErrorEventLike = {
+  error?: string;
+};
+
+type BrowserSpeechRecognition = {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+
+type SpeechWindow = Window &
+  typeof globalThis & {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  };
 
 const fallbackSuggestedPrompts = ["帮我制定 7 天期末复习计划", "把反向传播讲到我能做题", "根据资料生成一门冲刺课"];
 
@@ -49,6 +81,7 @@ export function LearningSpacePage() {
   const navigate = useNavigate();
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const homeChatStageRef = useRef<HTMLElement | null>(null);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
   const [localHomeThreads, setLocalHomeThreads] = useState<DashboardSummaryThread[]>([]);
@@ -62,6 +95,7 @@ export function LearningSpacePage() {
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isDeepThinkingEnabled, setIsDeepThinkingEnabled] = useState(false);
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>("sources");
   const [expandedAnswerId, setExpandedAnswerId] = useState<string | null>(null);
   const [composerFeedback, setComposerFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
@@ -105,6 +139,12 @@ export function LearningSpacePage() {
       }
     });
   }, [hasHomeThread, messages.length]);
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+    };
+  }, []);
 
   function openLibrary() {
     setIsLibraryOpen(true);
@@ -153,7 +193,9 @@ export function LearningSpacePage() {
     return apiMessages.map((message) => ({
       id: message.id,
       role: message.role,
-      content: message.content
+      content: message.content,
+      citation_json: message.citation_json ?? [],
+      trace_id: message.trace_id ?? null
     }));
   }
 
@@ -202,7 +244,15 @@ export function LearningSpacePage() {
         setActiveHomeThreadId(sessionId);
       }
 
-      const detail = await sendTutorMessage(sessionId, { message: question });
+      const selectedMaterialIdsAsNumbers = effectiveSelectedMaterialIds
+        .map((materialId) => Number.parseInt(materialId, 10))
+        .filter((materialId) => Number.isFinite(materialId));
+      const detail = await sendTutorMessage(sessionId, {
+        message: question,
+        use_web_search: isWebSearchEnabled,
+        deep_thinking: isDeepThinkingEnabled,
+        selected_material_ids: selectedMaterialIdsAsNumbers
+      });
 
       setMessages(mapTutorMessages(detail.data.messages));
       setActiveHomeThreadId(detail.data.session.id);
@@ -222,6 +272,69 @@ export function LearningSpacePage() {
       event.preventDefault();
       void handleSendQuestion();
     }
+  }
+
+  function getSpeechRecognitionConstructor() {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    const speechWindow = window as SpeechWindow;
+    return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition ?? null;
+  }
+
+  function handleVoiceInput() {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognitionConstructor = getSpeechRecognitionConstructor();
+    if (!SpeechRecognitionConstructor) {
+      setComposerFeedback({ message: "当前浏览器不支持语音输入。", tone: "warning" });
+      return;
+    }
+
+    const recognition = new SpeechRecognitionConstructor();
+    recognition.lang = "zh-CN";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript ?? "")
+        .join("")
+        .trim();
+
+      if (transcript) {
+        setPrompt((current) => (current.trim() ? `${current.trim()} ${transcript}` : transcript));
+        setComposerFeedback({ message: "已识别语音输入。", tone: "success" });
+      }
+    };
+    recognition.onerror = () => {
+      setComposerFeedback({ message: "语音输入暂时不可用，请改用键盘输入。", tone: "warning" });
+      setIsListening(false);
+    };
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+    recognitionRef.current = recognition;
+    setComposerFeedback({ message: "正在聆听，请说出你的学习问题。", tone: "info" });
+    setIsListening(true);
+    recognition.start();
+  }
+
+  function handleSpeakMessage(content: string) {
+    if (typeof window === "undefined" || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+      setComposerFeedback({ message: "当前浏览器不支持朗读回答。", tone: "warning" });
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(content);
+    utterance.lang = "zh-CN";
+    window.speechSynthesis.speak(utterance);
+    setComposerFeedback({ message: "正在朗读回答。", tone: "info" });
   }
 
   async function selectHomeConversation(conversation: DashboardSummaryThread) {
@@ -267,7 +380,7 @@ export function LearningSpacePage() {
       navigate(buildCoursePath(created.data.course.id));
     } catch (error) {
       setCourseDialogFeedback({
-        message: getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析的 TXT 或 Markdown 资料。"),
+        message: getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析资料。"),
         tone: "warning"
       });
     } finally {
@@ -308,8 +421,14 @@ export function LearningSpacePage() {
                   {message.role === "assistant" ? <span className="message-thinking">已思考若干秒</span> : null}
                   <p>{message.content}</p>
                   {message.role === "assistant" ? (
+                    <button className="message-speak-button" type="button" aria-label="朗读回答" onClick={() => handleSpeakMessage(message.content)}>
+                      <SpeakerHigh size={15} weight="duotone" aria-hidden="true" />
+                      <span>朗读</span>
+                    </button>
+                  ) : null}
+                  {message.role === "assistant" ? (
                     <HomeAnswerInsights
-                      messageId={message.id}
+                      message={message}
                       activePanel={activeAnswerPanel}
                       expandedAnswerId={expandedAnswerId}
                       selectedMaterialCount={effectiveSelectedMaterialIds.length}
@@ -394,7 +513,13 @@ export function LearningSpacePage() {
                   </button>
                 </div>
                 <div className="composer-submit-row">
-                  <button className="voice-button" type="button" aria-label="语音输入">
+                  <button
+                    className={isListening ? "voice-button active" : "voice-button"}
+                    type="button"
+                    aria-label="语音输入"
+                    aria-pressed={isListening}
+                    onClick={handleVoiceInput}
+                  >
                     <Microphone size={18} weight="duotone" aria-hidden="true" />
                   </button>
                   <button className="ask-button" type="button" disabled={isSendingQuestion} onClick={() => void handleSendQuestion()}>
@@ -501,7 +626,7 @@ type DashboardSummaryThread = {
 };
 
 type HomeAnswerInsightsProps = {
-  messageId: string;
+  message: HomeMessage;
   activePanel: HomeAnswerPanel;
   expandedAnswerId: string | null;
   selectedMaterialCount: number;
@@ -511,7 +636,7 @@ type HomeAnswerInsightsProps = {
 };
 
 function HomeAnswerInsights({
-  messageId,
+  message,
   activePanel,
   expandedAnswerId,
   selectedMaterialCount,
@@ -519,19 +644,34 @@ function HomeAnswerInsights({
   onChangePanel,
   onSetExpandedAnswer
 }: HomeAnswerInsightsProps) {
+  const messageId = message.id;
   const isExpanded = expandedAnswerId === messageId;
+  const traceQuery = useQuery({
+    queryKey: ["agents", "trace", message.trace_id],
+    queryFn: () => getAgentTrace(message.trace_id ?? ""),
+    enabled: Boolean(message.trace_id) && isExpanded && activePanel === "thinking",
+    staleTime: 10_000
+  });
+  const traceEvents = useMemo(
+    () => traceQuery.data?.data.steps.map(mapAgentTraceStepToEvent) ?? [],
+    [traceQuery.data?.data.steps]
+  );
   const handleInsightClick = (panel: HomeAnswerPanel) => {
     const shouldCollapse = isExpanded && activePanel === panel;
 
     onChangePanel(panel);
     onSetExpandedAnswer(shouldCollapse ? null : messageId);
   };
+  const citations = message.citation_json ?? [];
+  const hasCitations = citations.length > 0;
   const sourceText =
-    selectedMaterialCount > 0
-      ? `本次回答参考了 ${selectedMaterialCount} 份已选资料${isWebSearchEnabled ? "，并补充联网搜索线索" : ""}。`
-      : isWebSearchEnabled
-        ? "本次回答会优先显示联网来源，资料库内容未被选入。"
-        : "未选择资料时，回答先使用通用学习策略；选择资料后会显示更具体的引用。";
+    hasCitations
+      ? `本次回答返回 ${citations.length} 条真实来源。`
+      : selectedMaterialCount > 0
+        ? `本次回答请求了 ${selectedMaterialCount} 份已选资料${isWebSearchEnabled ? "和联网搜索" : ""}，但没有返回可展示来源。`
+        : isWebSearchEnabled
+          ? "联网搜索已请求，但没有返回可展示网页来源。"
+          : "本次回答没有绑定资料或网页来源。";
 
   return (
     <section className="home-answer-insights" aria-label="回答附加信息">
@@ -577,6 +717,24 @@ function HomeAnswerInsights({
                 来源
               </span>
               <p>{sourceText}</p>
+              {hasCitations ? (
+                <ul className="insight-source-list">
+                  {citations.map((citation, index) => (
+                    <li key={`${citation.source_type ?? "source"}-${citation.url ?? citation.source_title ?? citation.title ?? index}`}>
+                      <div>
+                        <strong>{citation.title ?? citation.source_title ?? `来源 ${index + 1}`}</strong>
+                        <span>{sourceTypeLabel(citation.source_type)}</span>
+                      </div>
+                      {citation.snippet || citation.content ? <p>{citation.snippet ?? citation.content}</p> : null}
+                      {citation.url ? (
+                        <a href={citation.url} target="_blank" rel="noreferrer">
+                          {citation.url}
+                        </a>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </>
           ) : null}
           {activePanel === "path" ? (
@@ -592,15 +750,40 @@ function HomeAnswerInsights({
             <>
               <span className="insight-mark">
                 <Sparkle size={16} weight="fill" aria-hidden="true" />
-                处理摘要
+                课堂协作轨迹
               </span>
-              <p>已按“目标识别、资料线索、复习动作”整理，真实 Agent 接入后会替换为可追踪执行记录。</p>
+              {message.trace_id ? <p>{`Trace ${message.trace_id}`}</p> : <p>当前回答没有返回可追踪 Agent 记录。</p>}
+              {traceQuery.isLoading ? <p>正在读取协作轨迹。</p> : null}
+              {traceQuery.isError ? <p>Agent 轨迹读取失败，请稍后重试。</p> : null}
+              {traceEvents.length > 0 ? (
+                <ol className="insight-trace-list">
+                  {traceEvents.map((event) => (
+                    <li key={event.id}>
+                      <strong>{event.agentName}</strong>
+                      <span>{event.summary}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
             </>
           ) : null}
         </div>
       ) : null}
     </section>
   );
+}
+
+function sourceTypeLabel(sourceType: TutorCitation["source_type"]) {
+  if (sourceType === "web") {
+    return "网页";
+  }
+  if (sourceType === "material") {
+    return "资料";
+  }
+  if (sourceType === "course") {
+    return "课程";
+  }
+  return "来源";
 }
 
 type CourseGenerationDialogProps = {

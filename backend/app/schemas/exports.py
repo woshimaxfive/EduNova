@@ -7,6 +7,11 @@ class LearningDossierExportRequest(BaseModel):
     course_id: int
 
 
+class LearningDossierExportJobRequest(BaseModel):
+    course_id: int
+    format: str = "markdown"
+
+
 class LearningDossierSourceSummary(BaseModel):
     has_report: bool
     report_id: str | None
@@ -25,3 +30,16 @@ class LearningDossierExport(BaseModel):
     markdown: str
     generated_at: str
     source_summary: LearningDossierSourceSummary
+
+
+class ExportJobResponse(BaseModel):
+    job_id: str
+    status: str
+    format: str
+    filename: str | None = None
+    content_type: str | None = None
+    agent_trace_id: str | None = None
+    error_message: str | None = None
+    created_at: str
+    updated_at: str
+    completed_at: str | None = None

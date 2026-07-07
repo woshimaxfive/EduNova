@@ -3260,6 +3260,24 @@ a {
   gap: 18px;
 }
 
+.report-export-format {
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 760;
+}
+
+.report-export-format select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid rgba(16, 24, 32, 0.08);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .export-ready-note {
   margin: 0;
   color: var(--accent-strong);
@@ -5099,6 +5117,11 @@ a {
   border-radius: 999px;
 }
 
+.voice-button.active {
+  color: var(--accent-strong);
+  background: rgba(8, 127, 115, 0.1);
+}
+
 .ask-button,
 .dialog-primary-button {
   display: inline-flex;
@@ -5178,6 +5201,28 @@ a {
   font-size: 0.86rem;
 }
 
+.message-speak-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  min-height: 26px;
+  margin: 0 0 3px;
+  padding: 0 8px;
+  border: 1px solid rgba(16, 24, 32, 0.06);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.46);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.message-speak-button:hover {
+  color: var(--accent-strong);
+  border-color: rgba(8, 127, 115, 0.18);
+  background: rgba(8, 127, 115, 0.08);
+}
+
 .home-answer-insights {
   display: grid;
   gap: 6px;
@@ -5233,6 +5278,51 @@ a {
 .answer-insight-panel p {
   margin: 0;
   line-height: 1.65;
+}
+
+.insight-source-list,
+.insight-trace-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.insight-source-list li,
+.insight-trace-list li {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(247, 251, 250, 0.72);
+}
+
+.insight-source-list li > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.insight-source-list strong,
+.insight-trace-list strong {
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.insight-source-list span,
+.insight-trace-list span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.insight-source-list a {
+  overflow-wrap: anywhere;
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  text-decoration: none;
 }
 
 .insight-mark {

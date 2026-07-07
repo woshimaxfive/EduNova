@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.api.errors import make_trace_id
+from backend.app.core.config import Settings, get_settings
 from backend.app.models import (
     AssessmentReport,
     Course,
+    ExportJob,
     GeneratedResource,
     KnowledgePoint,
     LearningPath,
@@ -20,12 +24,21 @@ from backend.app.models import (
     User,
     WeaknessReviewItem,
 )
-from backend.app.schemas.exports import LearningDossierExport, LearningDossierSourceSummary
+from backend.app.schemas.exports import ExportJobResponse, LearningDossierExport, LearningDossierSourceSummary
 from backend.app.schemas.reports import empty_report, iso_timestamp
 
 
 class ExportNotFoundError(Exception):
     pass
+
+
+class ExportValidationError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class ExportUserRef:
+    id: int
 
 
 class ExportRepository(Protocol):
@@ -44,6 +57,45 @@ class ExportRepository(Protocol):
     def list_practice_answers(self, user_id: int, course_id: int) -> list[PracticeAnswer]: ...
 
     def get_latest_report(self, user_id: int, course_id: int) -> AssessmentReport | None: ...
+
+    def add_export_job(self, job: ExportJob) -> ExportJob: ...
+
+    def get_export_job_for_user(self, user_id: int, job_id: int) -> ExportJob | None: ...
+
+    def get_export_job(self, job_id: int) -> ExportJob | None: ...
+
+    def commit(self) -> None: ...
+
+    def rollback(self) -> None: ...
+
+    def refresh(self, instance: object) -> None: ...
+
+
+class ExportJobQueue(Protocol):
+    def enqueue(self, job_id: int) -> None: ...
+
+
+@dataclass(frozen=True)
+class RenderedExport:
+    filename: str
+    content_type: str
+    content: bytes
+
+
+class RqExportJobQueue:
+    def __init__(self, redis_url: str, queue_name: str) -> None:
+        self.redis_url = redis_url
+        self.queue_name = queue_name
+
+    def enqueue(self, job_id: int) -> None:
+        from redis import Redis
+        from rq import Queue
+
+        from backend.app.workers.export_jobs import run_export_job
+
+        connection = Redis.from_url(self.redis_url)
+        queue = Queue(self.queue_name, connection=connection)
+        queue.enqueue(run_export_job, job_id)
 
 
 class SqlAlchemyExportRepository:
@@ -111,10 +163,41 @@ class SqlAlchemyExportRepository:
             .order_by(AssessmentReport.created_at.desc(), AssessmentReport.id.desc())
         )
 
+    def add_export_job(self, job: ExportJob) -> ExportJob:
+        self.db.add(job)
+        self.db.flush()
+        return job
+
+    def get_export_job_for_user(self, user_id: int, job_id: int) -> ExportJob | None:
+        return self.db.scalar(select(ExportJob).where(ExportJob.id == job_id, ExportJob.user_id == user_id))
+
+    def get_export_job(self, job_id: int) -> ExportJob | None:
+        return self.db.scalar(select(ExportJob).where(ExportJob.id == job_id))
+
+    def commit(self) -> None:
+        self.db.commit()
+
+    def rollback(self) -> None:
+        self.db.rollback()
+
+    def refresh(self, instance: object) -> None:
+        self.db.refresh(instance)
+
 
 class ExportService:
-    def __init__(self, repository: ExportRepository) -> None:
+    allowed_formats = {"markdown", "pdf", "docx"}
+
+    def __init__(
+        self,
+        repository: ExportRepository,
+        settings: Settings | None = None,
+        job_queue: ExportJobQueue | None = None,
+        run_jobs_inline: bool = False,
+    ) -> None:
         self.repository = repository
+        self.settings = settings or get_settings()
+        self.job_queue = job_queue
+        self.run_jobs_inline = run_jobs_inline
 
     def export_learning_dossier(self, user: User, course_id: int) -> LearningDossierExport:
         course = self.repository.get_course_for_user(user.id, course_id)
@@ -163,6 +246,236 @@ class ExportService:
             generated_at=iso_timestamp(generated_at) or "",
             source_summary=source_summary,
         )
+
+    def create_learning_dossier_job(self, user: User, course_id: int, export_format: str = "markdown") -> ExportJobResponse:
+        normalized_format = self._normalize_format(export_format)
+        course = self.repository.get_course_for_user(user.id, course_id)
+        if course is None:
+            raise ExportNotFoundError("课程不存在或无权访问。")
+
+        job = ExportJob(
+            user_id=user.id,
+            course_id=course.id,
+            export_type="learning_dossier",
+            export_format=normalized_format,
+            status="queued",
+            filename=None,
+            content_type=None,
+            file_path=None,
+            error_message=None,
+            agent_trace_id=make_trace_id(),
+            metadata_json={"course_title": self._text(course.title), "source": "learning_dossier"},
+        )
+
+        try:
+            self.repository.add_export_job(job)
+            self.repository.commit()
+            self.repository.refresh(job)
+        except Exception:
+            self.repository.rollback()
+            raise
+
+        if self.run_jobs_inline:
+            self.run_export_job(int(job.id))
+            refreshed = self.repository.get_export_job_for_user(user.id, int(job.id)) or job
+            return self._job_response(refreshed)
+
+        if self.job_queue is not None:
+            try:
+                self.job_queue.enqueue(int(job.id))
+            except Exception:
+                self._mark_job_failed(job, "导出任务排队失败，请稍后重试。")
+                return self._job_response(job)
+        return self._job_response(job)
+
+    def run_export_job(self, job_id: int) -> ExportJobResponse:
+        job = self.repository.get_export_job(job_id)
+        if job is None:
+            raise ExportNotFoundError("导出任务不存在。")
+        if job.status == "completed":
+            return self._job_response(job)
+
+        try:
+            job.status = "running"
+            job.updated_at = datetime.now(UTC)
+            self.repository.commit()
+            rendered = self._render_learning_dossier_job(job)
+            export_dir = Path(self.settings.export_dir)
+            export_dir.mkdir(parents=True, exist_ok=True)
+            file_path = export_dir / f"job-{job.id}-{rendered.filename}"
+            file_path.write_bytes(rendered.content)
+            job.status = "completed"
+            job.filename = rendered.filename
+            job.content_type = rendered.content_type
+            job.file_path = str(file_path)
+            job.error_message = None
+            job.completed_at = datetime.now(UTC)
+            job.updated_at = job.completed_at
+            self.repository.commit()
+            self.repository.refresh(job)
+        except Exception:
+            self.repository.rollback()
+            failed_job = self.repository.get_export_job(job_id)
+            if failed_job is not None:
+                self._mark_job_failed(failed_job, "学习档案导出失败，请稍后重试。")
+                job = failed_job
+        return self._job_response(job)
+
+    def get_export_job(self, user: User, job_id: int) -> ExportJobResponse:
+        job = self.repository.get_export_job_for_user(user.id, job_id)
+        if job is None:
+            raise ExportNotFoundError("导出任务不存在或无权访问。")
+        return self._job_response(job)
+
+    def get_export_job_file(self, user: User, job_id: int) -> ExportJob:
+        job = self.repository.get_export_job_for_user(user.id, job_id)
+        if job is None:
+            raise ExportNotFoundError("导出任务不存在或无权访问。")
+        if job.status != "completed" or not job.file_path:
+            raise ExportNotFoundError("导出任务尚未完成。")
+        return job
+
+    def _render_learning_dossier_job(self, job: ExportJob) -> RenderedExport:
+        if job.course_id is None:
+            raise ExportNotFoundError("导出任务缺少课程。")
+        dossier = self.export_learning_dossier(ExportUserRef(int(job.user_id)), int(job.course_id))  # type: ignore[arg-type]
+        export_format = self._normalize_format(job.export_format)
+        base_filename = self._replace_suffix(dossier.filename, ".md")
+        if export_format == "markdown":
+            return RenderedExport(
+                filename=f"{base_filename}.md",
+                content_type="text/markdown; charset=utf-8",
+                content=dossier.markdown.encode("utf-8"),
+            )
+        if export_format == "pdf":
+            return RenderedExport(
+                filename=f"{base_filename}.pdf",
+                content_type="application/pdf",
+                content=self._render_pdf(dossier.markdown),
+            )
+        return RenderedExport(
+            filename=f"{base_filename}.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            content=self._render_docx(dossier.markdown),
+        )
+
+    def _render_pdf(self, markdown: str) -> bytes:
+        from io import BytesIO
+
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+
+        font_name = self._resolve_pdf_font()
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        left = 48
+        y = height - 52
+        pdf.setFont(font_name, 11)
+        for raw_line in markdown.splitlines():
+            line = raw_line.strip() or " "
+            for segment in self._wrap_text(line, 48):
+                if y < 48:
+                    pdf.showPage()
+                    pdf.setFont(font_name, 11)
+                    y = height - 52
+                pdf.drawString(left, y, segment)
+                y -= 17
+        pdf.save()
+        return buffer.getvalue()
+
+    def _resolve_pdf_font(self) -> str:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+        from reportlab.pdfbase.ttfonts import TTFont
+
+        font_name = "EduNovaCJK"
+        font_path = self._find_cjk_font()
+        if font_path is not None:
+            try:
+                if font_name not in pdfmetrics.getRegisteredFontNames():
+                    pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
+                return font_name
+            except Exception:
+                pass
+
+        cid_font_name = "STSong-Light"
+        if cid_font_name not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(UnicodeCIDFont(cid_font_name))
+        return cid_font_name
+
+    def _render_docx(self, markdown: str) -> bytes:
+        from io import BytesIO
+
+        from docx import Document
+
+        document = Document()
+        for line in markdown.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                document.add_paragraph("")
+            elif stripped.startswith("# "):
+                document.add_heading(stripped[2:].strip(), level=1)
+            elif stripped.startswith("## "):
+                document.add_heading(stripped[3:].strip(), level=2)
+            else:
+                document.add_paragraph(stripped)
+        buffer = BytesIO()
+        document.save(buffer)
+        return buffer.getvalue()
+
+    def _mark_job_failed(self, job: ExportJob, message: str) -> None:
+        try:
+            job.status = "failed"
+            job.error_message = message
+            job.updated_at = datetime.now(UTC)
+            self.repository.commit()
+            self.repository.refresh(job)
+        except Exception:
+            self.repository.rollback()
+            raise
+
+    def _job_response(self, job: ExportJob) -> ExportJobResponse:
+        return ExportJobResponse(
+            job_id=str(job.id),
+            status=job.status,
+            format=job.export_format,
+            filename=job.filename,
+            content_type=job.content_type,
+            agent_trace_id=job.agent_trace_id,
+            error_message=job.error_message,
+            created_at=iso_timestamp(job.created_at) or "",
+            updated_at=iso_timestamp(job.updated_at) or "",
+            completed_at=iso_timestamp(job.completed_at),
+        )
+
+    def _normalize_format(self, export_format: str) -> str:
+        normalized = export_format.strip().lower()
+        if normalized == "md":
+            normalized = "markdown"
+        if normalized not in self.allowed_formats:
+            raise ExportValidationError("导出格式只能是 markdown、pdf 或 docx。")
+        return normalized
+
+    @staticmethod
+    def _replace_suffix(filename: str, suffix: str) -> str:
+        return filename[: -len(suffix)] if filename.endswith(suffix) else filename
+
+    @staticmethod
+    def _wrap_text(text: str, width: int) -> list[str]:
+        if len(text) <= width:
+            return [text]
+        return [text[index : index + width] for index in range(0, len(text), width)]
+
+    @staticmethod
+    def _find_cjk_font() -> Path | None:
+        candidates = [
+            Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+            Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
+            Path("C:/Windows/Fonts/msyh.ttc"),
+            Path("C:/Windows/Fonts/simhei.ttf"),
+        ]
+        return next((path for path in candidates if path.exists()), None)
 
     def _build_markdown(
         self,

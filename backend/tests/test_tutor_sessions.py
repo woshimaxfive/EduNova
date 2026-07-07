@@ -13,7 +13,7 @@ from backend.app.api.v1.deps import get_auth_service
 from backend.app.core.config import Settings
 from backend.app.core.security import create_access_token
 from backend.app.main import create_app
-from backend.app.models import ChatMessage, ChatSession, User
+from backend.app.models import ChatMessage, ChatSession, Material, User
 from backend.app.services.auth import AuthService
 
 
@@ -39,6 +39,7 @@ class FakeTutorRepository:
     sessions: list[ChatSession] = field(default_factory=list)
     messages: list[ChatMessage] = field(default_factory=list)
     agent_logs: list[Any] = field(default_factory=list)
+    materials: list[Material] = field(default_factory=list)
     allowed_course_ids: set[int] = field(default_factory=set)
     next_session_id: int = 1
     next_message_id: int = 1
@@ -92,6 +93,14 @@ class FakeTutorRepository:
         log.created_at = NOW + timedelta(minutes=log.id)
         self.agent_logs.append(log)
 
+    def list_home_materials_for_user(self, user_id: int, material_ids: list[int]) -> list[Material]:
+        material_id_set = set(material_ids)
+        return [
+            material
+            for material in self.materials
+            if material.user_id == user_id and material.id in material_id_set and material.parse_status == "completed"
+        ]
+
     def touch_session(self, session: ChatSession) -> None:
         session.updated_at = NOW + timedelta(minutes=self.next_message_id + 5)
 
@@ -142,14 +151,29 @@ class FakeCourseAnswerGenerator:
             raise self.should_raise
         return SimpleNamespace(content=self.content, trace_id=self.trace_id)
 
-    def generate_home(self, user: User, question: str) -> SimpleNamespace:
-        self.calls.append(
-            {
-                "user_id": user.id,
-                "question": question,
-                "citations": [],
-            }
-        )
+    def generate_home(
+        self,
+        user: User,
+        question: str,
+        citations: list[dict[str, Any]] | None = None,
+        use_web_search: bool = False,
+        deep_thinking: bool = False,
+        warnings: list[str] | None = None,
+    ) -> SimpleNamespace:
+        call = {
+            "user_id": user.id,
+            "question": question,
+            "citations": citations or [],
+        }
+        if use_web_search or deep_thinking or citations or warnings:
+            call.update(
+                {
+                    "use_web_search": use_web_search,
+                    "deep_thinking": deep_thinking,
+                    "warnings": warnings or [],
+                }
+            )
+        self.calls.append(call)
         if self.should_raise is not None:
             raise self.should_raise
         return SimpleNamespace(content=self.content, trace_id=self.trace_id)
@@ -214,6 +238,39 @@ def make_user(user_id: int, display_name: str = "测试学生") -> User:
         role="student",
         starter_mode="blank",
     )
+
+
+def make_home_material(material_id: int = 301, user_id: int = 1) -> Material:
+    return Material(
+        id=material_id,
+        user_id=user_id,
+        filename="主页复习资料.pdf",
+        content_type="application/pdf",
+        storage_path=f"user_{user_id}/home.pdf",
+        parse_status="completed",
+        extracted_text="主页资料提示：启发式搜索要结合 A* 和估价函数一起复习。",
+        metadata_json={"size_label": "12 KB", "extension": "PDF"},
+    )
+
+
+@dataclass
+class FakeWebSearchService:
+    results: list[dict[str, Any]] = field(
+        default_factory=lambda: [
+            {
+                "source_type": "web",
+                "title": "A* search overview",
+                "url": "https://example.com/a-star",
+                "snippet": "A* search combines path cost and a heuristic estimate.",
+            }
+        ]
+    )
+    warning: str | None = None
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def search(self, query: str, max_results: int = 5) -> SimpleNamespace:
+        self.calls.append({"query": query, "max_results": max_results})
+        return SimpleNamespace(citations=self.results, warning=self.warning)
 
 
 def as_dict(value: Any) -> dict[str, Any]:
@@ -495,6 +552,65 @@ def test_append_home_message_uses_model_reply_but_does_not_call_course_searcher(
     assert detail["messages"][1]["content"] == "模型回答：启发式搜索要先理解启发函数，再练 A 星算法。"
     assert detail["messages"][1]["citation_json"] == []
     assert detail["messages"][1]["trace_id"] == "trace_model_test"
+
+
+def test_append_home_message_with_tools_persists_material_web_citations_and_trace() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(materials=[make_home_material()])
+    web_searcher = FakeWebSearchService()
+    answer_generator = FakeCourseAnswerGenerator(content="模型回答：先看 A* 的估价函数，再做三道搜索题。")
+    service = module.TutorSessionService(
+        repo,
+        course_answer_generator=answer_generator,
+        web_search_service=web_searcher,
+    )
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="主页答疑")
+
+    detail = as_dict(
+        service.append_message(
+            user=user,
+            session_id=session.id,
+            content="启发式搜索怎么复习？",
+            use_web_search=True,
+            deep_thinking=True,
+            selected_material_ids=[301],
+        )
+    )
+
+    assert web_searcher.calls == [{"query": "启发式搜索怎么复习？", "max_results": 5}]
+    assert answer_generator.calls == [
+        {
+            "user_id": 1,
+            "question": "启发式搜索怎么复习？",
+            "citations": [
+                {
+                    "source_type": "material",
+                    "material_id": "301",
+                    "title": "主页复习资料.pdf",
+                    "snippet": "主页资料提示：启发式搜索要结合 A* 和估价函数一起复习。",
+                },
+                {
+                    "source_type": "web",
+                    "title": "A* search overview",
+                    "url": "https://example.com/a-star",
+                    "snippet": "A* search combines path cost and a heuristic estimate.",
+                },
+            ],
+            "use_web_search": True,
+            "deep_thinking": True,
+            "warnings": [],
+        }
+    ]
+    assistant = detail["messages"][1]
+    assert assistant["citation_json"][0]["source_type"] == "material"
+    assert assistant["citation_json"][1]["source_type"] == "web"
+    assert assistant["trace_id"] == "trace_model_test"
+    assert [log.agent_name for log in repo.agent_logs] == ["home_profile", "material_context", "web_search", "answer", "review"]
+    assert repo.agent_logs[0].metadata_json["workflow"] == "home_tutor"
+    assert repo.agent_logs[1].metadata_json["material_count"] == 1
+    assert repo.agent_logs[2].metadata_json["web_result_count"] == 1
+    assert repo.agent_logs[4].metadata_json["review_status"] == "passed"
 
 
 def test_append_home_message_does_not_record_profile_candidate_event() -> None:
@@ -892,6 +1008,49 @@ def test_tutor_session_routes_create_send_and_read_messages() -> None:
     list_response = client.get("/api/v1/tutor/sessions?scope=home", headers=headers)
     assert list_response.status_code == 200
     assert [item["title"] for item in list_response.json()["data"]] == ["主页第一问"]
+
+
+def test_tutor_message_route_accepts_home_tool_options() -> None:
+    module = load_tutor_module()
+    api_module = load_tutor_api_module()
+    user = make_user(1, "接口学生")
+    settings = Settings(
+        _env_file=None,
+        jwt_secret="tutor-session-test-secret-with-32-bytes",
+        jwt_expire_minutes=30,
+    )
+    repo = FakeTutorRepository(materials=[make_home_material()])
+    answer_generator = FakeCourseAnswerGenerator()
+    app = create_app()
+    app.dependency_overrides[get_auth_service] = lambda: AuthService(
+        repository=TokenAuthRepository(user),
+        settings=settings,
+    )
+    app.dependency_overrides[api_module.get_tutor_session_service] = lambda: module.TutorSessionService(
+        repo,
+        course_answer_generator=answer_generator,
+        web_search_service=FakeWebSearchService(warning="联网搜索未配置。"),
+    )
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {make_token(user, settings)}"}
+    session = module.TutorSessionService(repo).create_session(user=user, scope="home", course_id=None, mode="chat", title="主页第一问")
+
+    response = client.post(
+        f"/api/v1/tutor/sessions/{session.id}/messages",
+        headers=headers,
+        json={
+            "message": "启发式搜索怎么复习？",
+            "use_web_search": True,
+            "deep_thinking": True,
+            "selected_material_ids": [301],
+        },
+    )
+
+    assert response.status_code == 200
+    assert answer_generator.calls[0]["use_web_search"] is True
+    assert answer_generator.calls[0]["deep_thinking"] is True
+    assert answer_generator.calls[0]["warnings"] == ["联网搜索未配置。"]
+    assert response.json()["data"]["messages"][1]["citation_json"][0]["source_type"] == "material"
 
 
 def test_tutor_stream_route_requires_login() -> None:

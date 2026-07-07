@@ -40,6 +40,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260701_0003_create_learning_closure_tables.py`：创建画像、学习路径、生成资源、Agent 轨迹、练习、报告、对话和模型设置基础表。
 - `backend/migrations/versions/20260701_0004_add_user_starter_mode.py`：创建注册初始化方式字段。
 - `backend/migrations/versions/20260703_0005_create_material_library.py`：创建独立个人资料库 `materials` 和课程资料关联表 `course_material_links`，并从旧 `course_materials` 兼容回填。
+- `backend/migrations/versions/20260707_0008_create_export_jobs.py`：创建异步学习档案导出任务表 `export_jobs`。
 
 Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
@@ -69,7 +70,7 @@ erDiagram
     users ||--o{ chat_sessions : chats
     chat_sessions ||--o{ chat_messages : contains
     users ||--o{ model_settings : configures
-    users ||--o{ learning_export_jobs : exports
+    users ||--o{ export_jobs : exports
 ```
 
 ## 4. 表设计
@@ -147,9 +148,9 @@ course_material_links  课程与资料的关联表，支持同一资料加入多
 knowledge_chunks       仍绑定 course_id，同时引用 material_id
 ```
 
-迁移后，`course_materials` 暂时保留，用于兼容内置课程和已有 `knowledge_chunks.material_id` 关系；新上传资料写入 `materials`，加入课程时写入 `course_material_links`。Phase 5.1 从 TXT/Markdown 资料生成课程时，会为新课程创建兼容旧链路的 `course_materials` 副本，同时用 `course_material_links.usage_type=course_source` 关联原个人资料库资料，保证后续 RAG 可以沿 `knowledge_chunks -> course_materials` 接入。
+迁移后，`course_materials` 暂时保留，用于兼容内置课程和已有 `knowledge_chunks.material_id` 关系；新上传资料写入 `materials`，加入课程时写入 `course_material_links`。Phase 13.2 后，从已解析 TXT/Markdown/PDF/DOCX/PPTX 资料生成课程时，会为新课程创建兼容旧链路的 `course_materials` 副本，同时用 `course_material_links.usage_type=course_source` 关联原个人资料库资料，保证后续 RAG 可以沿 `knowledge_chunks -> course_materials` 接入。
 
-Phase 11.2 的资料对比第一刀不新增表和迁移，也不持久化对比结果。`POST /materials/compare` 复用 `materials` 做当前用户资料所有权校验，复用 `course_material_links` 校验资料已绑定当前课程，优先读取 `knowledge_chunks.metadata_json.source_material_id` 与 `course_materials.metadata_json.source_material_id` 做课程切片对比；缺少切片时，仅对已解析 TXT/Markdown 的 `materials.extracted_text` 做短摘录 fallback。服务层只返回重复重点、疑似考点、独有点、遗漏点、优先顺序和安全引用摘要，不保存完整资料原文、系统提示词、模型输入或 API Key。
+Phase 11.2 的资料对比第一刀不新增表和迁移，也不持久化对比结果。`POST /materials/compare` 复用 `materials` 做当前用户资料所有权校验，复用 `course_material_links` 校验资料已绑定当前课程，优先读取 `knowledge_chunks.metadata_json.source_material_id` 与 `course_materials.metadata_json.source_material_id` 做课程切片对比；缺少切片时，仅对已解析资料的 `materials.extracted_text` 做短摘录 fallback。服务层只返回重复重点、疑似考点、独有点、遗漏点、优先顺序和安全引用摘要，不保存完整资料原文、系统提示词、模型输入或 API Key。
 
 字段：
 
@@ -169,7 +170,7 @@ Phase 11.2 的资料对比第一刀不新增表和迁移，也不持久化对比
 
 ### 4.4.1 `materials`
 
-用途：保存用户上传到个人资料库的原始资料和解析结果。Phase 4.4 已落地；`.txt`、`.md` 会轻解析为 `completed`，PDF/DOCX/PPTX/图片先保存为 `uploaded`，图片不做 OCR。
+用途：保存用户上传到个人资料库的原始资料和解析结果。Phase 13.2 后，`.txt`、`.md`、`.pdf`、`.docx`、`.pptx` 可解析为 `completed`；损坏 PDF/DOCX/PPTX 标记为 `failed`；旧版 `.doc`、`.ppt` 和图片先保存为 `uploaded`，图片和扫描件不做 OCR。
 
 字段：
 
@@ -238,7 +239,7 @@ Phase 11.2 的资料对比第一刀不新增表和迁移，也不持久化对比
 
 ### 4.6 `knowledge_chunks`
 
-用途：RAG 检索切片。Phase 5.1 会把 TXT/Markdown 资料按知识点切成文本片段写入本表，Phase 6.4 会复用既有 `Vector(1536)` 字段保存 OpenAI-compatible embedding 或显式本地 fallback 向量。
+用途：RAG 检索切片。Phase 13.2 会把已解析 TXT/Markdown/PDF/DOCX/PPTX 资料按知识点切成文本片段写入本表，Phase 6.4 会复用既有 `Vector(1536)` 字段保存 OpenAI-compatible embedding 或显式本地 fallback 向量。
 
 字段：
 
@@ -590,11 +591,11 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - 设置页 Provider 预设首位为讯飞星火 Spark；预设只负责填充 OpenAI-compatible 连接参数，不改变后端协议。
 - `20260704_0006` 迁移为旧数据补 `display_name` 和 `is_default=true`，保证 Phase 6.1 的旧单配置继续可用。
 
-### 4.20 `learning_export_jobs`
+### 4.20 `export_jobs`
 
-用途：预留给后续异步学习档案导出任务。
+用途：保存学习档案异步导出任务。
 
-Phase 12.1 的 Markdown 学习档案导出不使用本表、不新增迁移，也不在服务器端持久化导出文件。`POST /exports/learning-dossier` 同步读取当前用户课程、最新报告、弱点队列、学习路径、资源和练习证据摘要，直接返回 Markdown 字符串与安全文件名，由前端创建浏览器下载。当前导出只保存可展示摘要，不保存完整资料原文、完整作答原文、内部指令、模型请求内容、密钥、登录令牌或完整用户画像。
+Phase 13.2 后，`POST /exports/learning-dossier/jobs` 创建本表记录并入队 Redis/RQ worker。worker 复用学习档案聚合逻辑生成 Markdown、PDF 或 DOCX 文件，写入 `file_path`、`filename`、`content_type`、`completed_at` 和 `agent_trace_id`。旧 `POST /exports/learning-dossier` 仍同步返回 Markdown，兼容旧前端和测试。导出只保存可展示摘要，不保存完整资料原文、完整作答原文、内部指令、模型请求内容、密钥、登录令牌或完整用户画像。
 
 字段：
 
@@ -603,11 +604,18 @@ Phase 12.1 的 Markdown 学习档案导出不使用本表、不新增迁移，�
 | `id` | bigint | 主键 |
 | `user_id` | bigint | 用户 |
 | `course_id` | bigint | 课程 |
-| `status` | varchar | 导出状态 |
-| `export_type` | varchar | `markdown` |
-| `output_path` | text | 输出路径 |
+| `export_type` | varchar | `learning_dossier` |
+| `export_format` | varchar | `markdown`、`pdf`、`docx` |
+| `status` | varchar | `queued`、`running`、`completed`、`failed` |
+| `filename` | varchar | 下载文件名 |
+| `content_type` | varchar | 下载 MIME |
+| `file_path` | text | 输出文件路径 |
+| `error_message` | text | 脱敏失败摘要 |
+| `agent_trace_id` | varchar | `ExportDossierGraph` trace |
+| `metadata_json` | jsonb | 安全任务 metadata |
 | `created_at` | timestamptz | 创建时间 |
-| `finished_at` | timestamptz | 完成时间 |
+| `updated_at` | timestamptz | 更新时间 |
+| `completed_at` | timestamptz | 完成时间 |
 
 ## 5. JSON 字段约定
 
@@ -753,7 +761,7 @@ Demo 数据要求：
 5. 内置人工智能导论课程可导入。
 6. 当前内置课程资料能写入课程、材料、知识点和知识切片。
 7. Phase 4.4 后，上传资料能先进入用户资料库，再选择加入课程。
-8. Phase 5.1 后，已解析 TXT/Markdown 资料能生成用户自己的课程、课程资料副本、资料关联、知识点和知识切片；非文本和未解析资料不得生成课程。
+8. Phase 13.2 后，已解析 TXT/Markdown/PDF/DOCX/PPTX 资料能生成用户自己的课程、课程资料副本、资料关联、知识点和知识切片；未解析、解析失败、旧版 Office、图片和扫描件不得伪装成可建课资料。
 9. RAG 检索能读取向量数据。
 10. 资源、报告、课程内对话都能追溯用户、课程和 trace；主页对话能追溯用户和 trace。
 11. 两个不同用户的数据互不可见。
@@ -767,6 +775,7 @@ Demo 数据要求：
 19. Phase 11.1 后，期末冲刺计划复用 `learning_paths` 和 `learning_tasks`，使用 `sprint_active` / `sprint_archived` 与 `plan_json.kind="exam_sprint"` 区分普通学习路径，不新增表或迁移。
 20. Phase 11.2 后，资料对比复用 `materials`、`course_material_links`、`course_materials` 和 `knowledge_chunks`，不新增表、不持久化结果；`material_ids` 指资料库 `materials.id`，服务层强制校验当前用户所有权和课程绑定关系。
 21. Phase 13.1 后，课程、资料、资源、路径、冲刺、练习和报告等学习产物可通过 nullable `agent_trace_id` 反查对应 Graph；字段为空时仍保持旧数据兼容。
+22. Phase 13.2 后，`export_jobs` 可记录 Markdown/PDF/DOCX 异步导出任务状态、文件路径、脱敏失败摘要和 `agent_trace_id`；下载接口必须按 `user_id` 隔离。
 
 当前已验证：
 
@@ -780,11 +789,12 @@ Demo 数据要求：
 - 内置课程导入具备幂等性，重复执行不会创建重复课程。
 - Phase 4.2 首页总览服务已验证只请求当前用户数据：blank 用户返回空课程/空资料/空历史，ai_intro 用户返回自己空间中的人工智能导论课程和资料，已有进度时显示真实进度，没有进度时显示“未开始”。
 - Phase 4.4 资料库服务已验证上传、列表、详情、进度和加入课程都只访问当前用户数据；迁移 `0005` 会把旧 `course_materials` 兼容复制为 `materials` 与 `course_material_links`。
-- Phase 5.1 课程生成服务已验证 TXT/Markdown 资料能创建 `courses`、`course_enrollments`、`course_materials`、`course_material_links`、`knowledge_points` 和 `knowledge_chunks`；A 用户不能用 B 用户资料建课，也不能读取 B 用户课程。
+- Phase 13.2 资料解析和课程生成服务已验证 TXT/Markdown/PDF/DOCX/PPTX 资料能创建 `courses`、`course_enrollments`、`course_materials`、`course_material_links`、`knowledge_points` 和 `knowledge_chunks`；损坏 PDF/DOCX/PPTX 标记 `failed`，旧版 DOC/PPT 和图片不伪装解析完成；A 用户不能用 B 用户资料建课，也不能读取 B 用户课程。
 - Phase 6.2 模型设置服务已验证用户 API Key 不以明文进入数据库，同一用户多套模型配置互相隔离，空 `api_key` 保存会保留原密钥，缺少加密 Key 时拒绝保存用户 Key；课程会话命中引用且默认模型配置可用时，assistant 内容来自模型回答，`citation_json` 保留真实引用，`trace_id` 非空。
 - Phase 6.4 已验证 OpenAI-compatible embedding 请求、`dimensions` 重试、维度不匹配拒绝、本地 `local-hash-1536` fallback、课程生成 best-effort 写入向量和 RAG 混合排序字段。
 - Phase 7.1 已验证 `student_profiles` 和 `profile_events` 支持当前用户画像读取、画像对话更新、事件倒序、多用户隔离，以及课程问答弱点候选事件的隐私安全证据写入。
 - Phase 7.2 已完成用户级画像与课程级学习状态的数据库边界设计；本阶段不新增迁移，不新增 `learning_events`。
 - Phase 7.3 已验证课程学习状态服务能读取当前课程弱点候选事件、按知识点或标题去重生成 `pending` 复习项，并保持多用户、跨课程和隐私隔离。
 - Phase 7.4 已验证弱点复习项状态流转、多用户和跨课程隔离、非法流转拦截、`dismissed` 防重新入队以及主列表过滤。
-- Phase 11.2 已验证资料对比服务只访问当前用户自己的课程和资料，未绑定当前课程资料返回 404，少于两份可比较资料返回 400；课程切片和 TXT/Markdown fallback 都只返回安全短摘录，不泄露完整资料原文、系统提示词、模型输入或 API Key。
+- Phase 11.2 已验证资料对比服务只访问当前用户自己的课程和资料，未绑定当前课程资料返回 404，少于两份可比较资料返回 400；课程切片和已解析资料 fallback 都只返回安全短摘录，不泄露完整资料原文、系统提示词、模型输入或 API Key。
+- Phase 13.2 已验证 `export_jobs` 创建、状态流转、Markdown/PDF/DOCX 文件生成、下载、失败分支和用户隔离。

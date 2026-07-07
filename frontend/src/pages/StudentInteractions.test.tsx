@@ -1498,7 +1498,7 @@ describe("student interaction affordances", () => {
     await user.click(materialButton);
     await user.click(within(dialog).getByRole("button", { name: "生成课程" }));
 
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("课程生成失败，请确认选择的是已解析的 TXT 或 Markdown 资料。");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("课程生成失败，请确认选择的是已解析资料。");
     expect(materialButton).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });

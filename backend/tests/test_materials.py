@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
 from typing import Any
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -129,6 +131,64 @@ def as_dict(model: Any) -> dict[str, Any]:
     return model.model_dump() if hasattr(model, "model_dump") else model
 
 
+def make_minimal_pdf_bytes(text: str = "heuristic search review") -> bytes:
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 612 792] /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode("ascii")
+    objects.append(b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream")
+
+    content = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for index, body in enumerate(objects, start=1):
+        offsets.append(len(content))
+        content.extend(f"{index} 0 obj\n".encode("ascii"))
+        content.extend(body)
+        content.extend(b"\nendobj\n")
+    xref_offset = len(content)
+    content.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    content.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        content.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    content.extend(
+        f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode("ascii")
+    )
+    return bytes(content)
+
+
+def make_docx_bytes(text: str = "反向传播复习重点") -> bytes:
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "word/document.xml",
+            (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                f"<w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>"
+            ),
+        )
+    return buffer.getvalue()
+
+
+def make_pptx_bytes(text: str = "启发式搜索课件重点") -> bytes:
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "ppt/slides/slide1.xml",
+            (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" '
+                'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+                f"<p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>{text}</a:t></a:r></a:p>"
+                "</p:txBody></p:sp></p:spTree></p:cSld></p:sld>"
+            ),
+        )
+    return buffer.getvalue()
+
+
 def test_material_routes_require_login() -> None:
     client = TestClient(create_app())
 
@@ -184,6 +244,53 @@ def test_image_upload_is_saved_without_ocr(tmp_path: Path) -> None:
 
     assert data["parse_status"] == "uploaded"
     assert data["detail"] == "仅入库，暂不做 OCR"
+    assert repo.materials[0].extracted_text is None
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "expected_text"),
+    [
+        ("slides.pdf", make_minimal_pdf_bytes("heuristic search review"), "heuristic search review"),
+        ("notes.docx", make_docx_bytes("反向传播复习重点"), "反向传播复习重点"),
+        ("lecture.pptx", make_pptx_bytes("启发式搜索课件重点"), "启发式搜索课件重点"),
+    ],
+)
+def test_pdf_docx_and_pptx_uploads_are_deep_parsed(
+    tmp_path: Path,
+    filename: str,
+    content: bytes,
+    expected_text: str,
+) -> None:
+    repo = FakeMaterialRepository()
+    user = make_user()
+
+    result = upload_bytes(make_service(repo, tmp_path), user, filename, content, "application/octet-stream")
+
+    assert as_dict(result)["parse_status"] == "completed"
+    assert expected_text in (repo.materials[0].extracted_text or "")
+
+
+def test_broken_deep_parse_file_is_saved_as_failed_without_raw_error(tmp_path: Path) -> None:
+    repo = FakeMaterialRepository()
+    user = make_user()
+
+    result = upload_bytes(make_service(repo, tmp_path), user, "broken.docx", b"not-a-zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+    data = as_dict(result)
+
+    assert data["parse_status"] == "failed"
+    assert data["detail"] == "解析失败"
+    assert repo.materials[0].extracted_text is None
+    assert "not-a-zip" not in str(repo.materials[0].metadata_json)
+
+
+def test_legacy_office_files_are_not_marked_as_parsed(tmp_path: Path) -> None:
+    repo = FakeMaterialRepository()
+    user = make_user()
+
+    result = upload_bytes(make_service(repo, tmp_path), user, "old-slides.ppt", b"legacy", "application/vnd.ms-powerpoint")
+
+    assert as_dict(result)["parse_status"] == "uploaded"
     assert repo.materials[0].extracted_text is None
 
 

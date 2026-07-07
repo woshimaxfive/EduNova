@@ -70,7 +70,7 @@ artifact_refs
 - `practice_sessions.agent_trace_id`
 - `assessment_reports.agent_trace_id`
 
-`chat_messages.trace_id` 保持既有字段。导出学习档案不新建表，响应携带本次 `ExportDossierGraph` 的 `agent_trace_id`。
+`chat_messages.trace_id` 保持既有字段。Phase 13.2 新增 `export_jobs.agent_trace_id`，异步 Markdown/PDF/DOCX 学习档案导出任务和旧同步 Markdown 兼容接口都会携带本次 `ExportDossierGraph` 的 `agent_trace_id`。
 
 ## 5. Metadata 白名单
 
@@ -106,6 +106,7 @@ EduNova 的第一版坚持确定性可用稿优先：
 - 课程空间把回答下方“思考过程”改为“课堂协作轨迹”，展示 Profile、Retriever、Tutor、Weakness、Review、NextAction。
 - 资源工坊生成后展示 `ResourceGenerationGraph` 全链路，并把资源质量、引用来源和资源内容放在成果优先区域。
 - 学习路径、练习和报告页面显示轻量 Graph 入口；报告页可解释本报告由哪些 Agent 证据生成。
+- 主页回答展示真实 `home_tutor` 课堂协作轨迹和安全 citations；深度思考只展示处理摘要，不展示原始思维链。
 - 所有 trace 读取失败都只影响局部轨迹区，不阻断学习主流程。
 
 ## 8. 答辩解释口径

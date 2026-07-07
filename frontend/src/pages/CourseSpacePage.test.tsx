@@ -34,6 +34,7 @@ type CoursePageOptions = {
   failSend?: boolean;
   streamEvents?: Array<{ event: string; data: unknown }>;
   controlledStream?: boolean;
+  delayCourseDetail?: boolean;
   delayCourseData?: boolean;
 };
 
@@ -394,10 +395,11 @@ function renderCoursePage(options: CoursePageOptions = {}) {
     const payload = parsePayload(config.data);
     calls.push({ method, url, payload, params: config.params });
 
-    if (
-      options.delayCourseData &&
-      [COURSE_ENDPOINTS.detail(808), COURSE_ENDPOINTS.overview(808), COURSE_ENDPOINTS.knowledgePoints(808)].includes(url)
-    ) {
+    if (options.delayCourseDetail && url === COURSE_ENDPOINTS.detail(808)) {
+      return new Promise(() => {});
+    }
+
+    if (options.delayCourseData && [COURSE_ENDPOINTS.detail(808), COURSE_ENDPOINTS.overview(808), COURSE_ENDPOINTS.knowledgePoints(808)].includes(url)) {
       return new Promise(() => {});
     }
 
@@ -913,6 +915,15 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.queryByRole("heading", { name: "人工智能导论" })).not.toBeInTheDocument();
     expect(screen.queryByText("AI 导论内置讲义")).not.toBeInTheDocument();
     expect(screen.queryByText("监督学习与泛化")).not.toBeInTheDocument();
+  });
+
+  it("keeps the real course title when detail is pending but overview is available", async () => {
+    renderCoursePage({ delayCourseDetail: true });
+
+    expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "课程加载中" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("课程状态")).toHaveTextContent("资料1");
+    expect(screen.getByLabelText("课程状态")).toHaveTextContent("知识点2");
   });
 
   it("creates a course session before sending the first course question and renders persisted citations", async () => {

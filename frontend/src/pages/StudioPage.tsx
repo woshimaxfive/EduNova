@@ -193,13 +193,133 @@ export function StudioPage() {
   }
 
   const canGenerate = effectiveCourseId !== null && selectedResourceTypes.length > 0 && !generateMutation.isPending;
+  const selectedKnowledgePoint = knowledgePoints.find((point) => Number.parseInt(point.id, 10) === effectiveKnowledgePointId) ?? null;
+  const selectedKnowledgePointTitle = selectedKnowledgePoint?.title ?? "整门课程";
+  const selectedResourceTypeSummary = selectedResourceTypes
+    .map((type) => resourceTypes.find((item) => item.type === type)?.label ?? type)
+    .join("、");
+  const hasResourceResult = selectedResource !== null;
+
+  const studioDock = (
+    <StudioDock
+      outputs={resources}
+      selectedResourceId={selectedResource?.id ?? null}
+      onGenerate={handleGenerate}
+      onSelectResource={setSelectedResourceId}
+      showGenerateAction={false}
+    />
+  );
+
+  const resourceResultSections = selectedResource ? (
+    <>
+      <section className="student-panel resource-detail-panel" role="region" aria-label="资源完整内容">
+        <div className="student-panel-heading">
+          <div>
+            <h2>资源内容</h2>
+          </div>
+        </div>
+        {isLowEvidenceResource(selectedResource) ? (
+          <InlineFeedback
+            message="资料依据不足，这份资源是低依据草稿，请补充课程资料后重新生成。"
+            tone="warning"
+            className="library-inline-feedback"
+          />
+        ) : null}
+        <article className="resource-reader">
+          <strong>{selectedResource.title}</strong>
+          <pre className="resource-markdown-viewer">{resourceMarkdown(selectedResource)}</pre>
+        </article>
+      </section>
+
+      <section className="student-panel generation-queue" role="region" aria-label="资源质量">
+        <div className="student-panel-heading">
+          <div>
+            <h2>资源质量</h2>
+          </div>
+        </div>
+        {selectedResourceQuality.length > 0 ? (
+          selectedResourceQuality.map((score) => (
+            <article className="queue-row" key={score.id}>
+              <span>
+                <strong>{qualityLabels[score.score_name] ?? score.score_name}</strong>
+                <small>{score.rationale ?? "已记录质量分"}</small>
+              </span>
+              <em>{score.score_value.toFixed(2)}</em>
+            </article>
+          ))
+        ) : (
+          <p className="empty-inline-note">资源质量分会在生成后显示。</p>
+        )}
+      </section>
+
+      <section className="student-panel generation-queue" role="region" aria-label="引用来源">
+        <div className="student-panel-heading">
+          <div>
+            <h2>引用来源</h2>
+          </div>
+        </div>
+        {selectedResource.citation_json.length > 0 ? (
+          selectedResource.citation_json.map((citation, index) => (
+            <article className="queue-row" key={`${citation.chunk_id ?? index}-${citation.section_title ?? "citation"}`}>
+              <span>
+                <strong>{citation.section_title ?? "课程引用"}</strong>
+                <small>{citation.source_title ?? "课程资料"}</small>
+              </span>
+            </article>
+          ))
+        ) : (
+          <p className="empty-inline-note">当前资源没有可展示引用。</p>
+        )}
+      </section>
+    </>
+  ) : null;
 
   return (
     <PageFrame title="资源工坊">
-      <section className="student-panel studio-workbench" role="region" aria-label="资源生成工作台">
+      {hasResourceResult ? (
+        <div className="studio-results-first">
+          <section className="student-panel studio-result-summary" role="region" aria-label="资源生成摘要">
+            <div className="studio-result-summary-copy">
+              <span>已生成资源</span>
+              <strong>{selectedResource.title}</strong>
+            </div>
+            <dl className="studio-result-meta" aria-label="当前生成条件">
+              <div>
+                <dt>课程</dt>
+                <dd>{selectedCourse?.title ?? "暂无课程"}</dd>
+              </div>
+              <div>
+                <dt>知识点</dt>
+                <dd>{selectedKnowledgePointTitle}</dd>
+              </div>
+              <div>
+                <dt>类型</dt>
+                <dd>{selectedResourceTypeSummary}</dd>
+              </div>
+            </dl>
+            <button className="primary-action" type="button" onClick={handleGenerate} disabled={!canGenerate}>
+              <Sparkle size={18} weight="fill" aria-hidden="true" />
+              <span>{generateMutation.isPending ? "生成中" : "重新生成"}</span>
+            </button>
+            <InlineFeedback message={feedback} tone="warning" className="library-inline-feedback" />
+            {coursesQuery.isError || resourcesQuery.isError ? (
+              <InlineFeedback message="资源工坊数据读取失败，请稍后重试。" tone="warning" className="library-inline-feedback" />
+            ) : null}
+          </section>
+
+          {studioDock}
+          {resourceResultSections}
+        </div>
+      ) : null}
+
+      <section
+        className={hasResourceResult ? "student-panel studio-workbench studio-workbench-secondary" : "student-panel studio-workbench"}
+        role="region"
+        aria-label="资源生成工作台"
+      >
         <div className="student-panel-heading">
           <div>
-            <h2>选择课程和知识点，生成资源</h2>
+            <h2>{hasResourceResult ? "调整生成设置" : "选择课程和知识点，生成资源"}</h2>
           </div>
           <button className="primary-action" type="button" onClick={handleGenerate} disabled={!canGenerate}>
             <Sparkle size={18} weight="fill" aria-hidden="true" />
@@ -278,101 +398,33 @@ export function StudioPage() {
           </div>
         </div>
 
-        <InlineFeedback message={feedback} tone="warning" className="library-inline-feedback" />
-        {coursesQuery.isError || resourcesQuery.isError ? (
+        {!hasResourceResult ? <InlineFeedback message={feedback} tone="warning" className="library-inline-feedback" /> : null}
+        {!hasResourceResult && (coursesQuery.isError || resourcesQuery.isError) ? (
           <InlineFeedback message="资源工坊数据读取失败，请稍后重试。" tone="warning" className="library-inline-feedback" />
         ) : null}
 
-        <WorkspaceStateStrip panels={evidencePanels} />
+        {!hasResourceResult ? <WorkspaceStateStrip panels={evidencePanels} /> : null}
 
-        <section className="generation-queue" role="region" aria-label="生成队列">
-          {selectedCourse ? (
-            <article className="queue-row">
-              <span className="queue-row-icon" aria-hidden="true">
-                <Sparkle size={19} weight="duotone" />
-              </span>
-              <span>
-                <strong>{selectedCourse.title}</strong>
-                <small>{selectedResourceTypes.length} 类资源 · {knowledgePoints.length > 0 ? "知识点生成" : "整课生成"}</small>
-              </span>
-            </article>
-          ) : (
-            <p className="empty-inline-note">还没有可生成资源的课程</p>
-          )}
-        </section>
+        {!hasResourceResult ? (
+          <section className="generation-queue" role="region" aria-label="生成队列">
+            {selectedCourse ? (
+              <article className="queue-row">
+                <span className="queue-row-icon" aria-hidden="true">
+                  <Sparkle size={19} weight="duotone" />
+                </span>
+                <span>
+                  <strong>{selectedCourse.title}</strong>
+                  <small>{selectedResourceTypes.length} 类资源 · {knowledgePoints.length > 0 ? "知识点生成" : "整课生成"}</small>
+                </span>
+              </article>
+            ) : (
+              <p className="empty-inline-note">还没有可生成资源的课程</p>
+            )}
+          </section>
+        ) : null}
       </section>
 
-      <StudioDock
-        outputs={resources}
-        selectedResourceId={selectedResource?.id ?? null}
-        onGenerate={handleGenerate}
-        onSelectResource={setSelectedResourceId}
-        showGenerateAction={false}
-      />
-
-      {selectedResource ? (
-        <>
-          <section className="student-panel generation-queue" role="region" aria-label="资源质量">
-            <div className="student-panel-heading">
-              <div>
-                <h2>资源质量</h2>
-              </div>
-            </div>
-            {selectedResourceQuality.length > 0 ? (
-              selectedResourceQuality.map((score) => (
-                <article className="queue-row" key={score.id}>
-                  <span>
-                    <strong>{qualityLabels[score.score_name] ?? score.score_name}</strong>
-                    <small>{score.rationale ?? "已记录质量分"}</small>
-                  </span>
-                  <em>{score.score_value.toFixed(2)}</em>
-                </article>
-              ))
-            ) : (
-              <p className="empty-inline-note">资源质量分会在生成后显示。</p>
-            )}
-          </section>
-
-          <section className="student-panel generation-queue" role="region" aria-label="引用来源">
-            <div className="student-panel-heading">
-              <div>
-                <h2>引用来源</h2>
-              </div>
-            </div>
-            {selectedResource.citation_json.length > 0 ? (
-              selectedResource.citation_json.map((citation, index) => (
-                <article className="queue-row" key={`${citation.chunk_id ?? index}-${citation.section_title ?? "citation"}`}>
-                  <span>
-                    <strong>{citation.section_title ?? "课程引用"}</strong>
-                    <small>{citation.source_title ?? "课程资料"}</small>
-                  </span>
-                </article>
-              ))
-            ) : (
-              <p className="empty-inline-note">当前资源没有可展示引用。</p>
-            )}
-          </section>
-
-          <section className="student-panel resource-detail-panel" role="region" aria-label="资源完整内容">
-            <div className="student-panel-heading">
-              <div>
-                <h2>资源内容</h2>
-              </div>
-            </div>
-            {isLowEvidenceResource(selectedResource) ? (
-              <InlineFeedback
-                message="资料依据不足，这份资源是低依据草稿，请补充课程资料后重新生成。"
-                tone="warning"
-                className="library-inline-feedback"
-              />
-            ) : null}
-            <article className="resource-reader">
-              <strong>{selectedResource.title}</strong>
-              <pre className="resource-markdown-viewer">{resourceMarkdown(selectedResource)}</pre>
-            </article>
-          </section>
-        </>
-      ) : null}
+      {!hasResourceResult ? studioDock : null}
     </PageFrame>
   );
 }

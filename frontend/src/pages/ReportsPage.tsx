@@ -69,7 +69,13 @@ export function ReportsPage() {
 
   const report = latestReportQuery.data?.data;
   const reportBody = report?.report;
-  const readError = latestReportQuery.isError ? "学习报告读取失败，请稍后重试。" : "";
+  const isReadyReport = report?.status === "ready";
+  const isEmptyReport = report?.status === "empty";
+  const reportTitle = isReadyReport ? "课程学习报告" : "还没有真实学习报告";
+  const reportSummary = isEmptyReport
+    ? "完成一次课程练习后可生成报告"
+    : reportBody?.summary ?? "还没有真实学习报告";
+  const readError = latestReportQuery.isError && !isEmptyReport ? "学习报告读取失败，请稍后重试。" : "";
 
   return (
     <PageFrame title="学习报告">
@@ -117,8 +123,8 @@ export function ReportsPage() {
           <div className="report-brief">
             <FileText size={24} weight="duotone" aria-hidden="true" />
             <div>
-              <strong>{report?.status === "ready" ? "课程学习报告" : "还没有真实学习报告"}</strong>
-              <p>{reportBody?.summary ?? "还没有真实学习报告。"}</p>
+              <strong>{reportTitle}</strong>
+              <p>{reportSummary}</p>
             </div>
           </div>
           {readError || localError ? <p className="form-error">{readError || localError}</p> : null}

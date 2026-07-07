@@ -171,7 +171,9 @@ describe("ReportsPage", () => {
 
     renderWithProviders(<ReportsPage />);
 
-    expect(await screen.findByText("还没有真实学习报告。")).toBeInTheDocument();
+    expect(await screen.findByText("还没有真实学习报告")).toBeInTheDocument();
+    expect(screen.getByText("完成一次课程练习后可生成报告")).toBeInTheDocument();
+    expect(screen.queryByText("学习报告读取失败，请稍后重试。")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出学习档案" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "生成学习报告" }));

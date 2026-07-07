@@ -212,6 +212,9 @@ describe("StudioPage resource generation", () => {
     renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808`);
 
     expect(await screen.findByRole("heading", { name: "资源工坊" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "资源生成工作台" })).toHaveTextContent("选择课程和知识点，生成资源");
+    await waitFor(() => expect(screen.getByRole("region", { name: "生成队列" })).toHaveTextContent("AI 搜索复习"));
+    expect(screen.queryByRole("region", { name: "资源生成摘要" })).not.toBeInTheDocument();
     await user.type(screen.getByRole("textbox", { name: "生成目标" }), "期末前掌握搜索题");
     await user.click(screen.getByRole("button", { name: "讲解" }));
     await user.click(screen.getByRole("button", { name: "生成资源" }));
@@ -231,8 +234,16 @@ describe("StudioPage resource generation", () => {
         })
       );
     });
+    const resultSummary = screen.getByRole("region", { name: "资源生成摘要" });
+    expect(resultSummary).toHaveTextContent("已生成资源");
+    expect(resultSummary).toHaveTextContent("AI 搜索复习");
+    expect(resultSummary).toHaveTextContent("启发式搜索");
+    expect(resultSummary).toHaveTextContent("讲解");
+    expect(within(resultSummary).getByRole("button", { name: "重新生成" })).toBeEnabled();
     expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("启发式搜索个性化讲解");
     expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("模型增强");
+    expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("先理解启发函数");
+    expect(screen.getByRole("region", { name: "资源生成工作台" })).toHaveTextContent("调整生成设置");
     expect(screen.getByRole("region", { name: "资源质量" })).toHaveTextContent("来源匹配");
     expect(screen.getByRole("region", { name: "引用来源" })).toHaveTextContent("人工智能导论讲义.md");
     expect(calls.filter((call) => call.url === RESOURCE_ENDPOINTS.list).length).toBeGreaterThanOrEqual(2);
@@ -411,6 +422,7 @@ describe("StudioPage resource generation", () => {
 
     renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808`);
 
+    expect(await screen.findByRole("region", { name: "资源生成摘要" })).toHaveTextContent("启发式搜索个性化讲解");
     expect(await screen.findByRole("button", { name: "查看资源 启发式搜索个性化讲解" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("本地可用稿");
     expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("第二段复习建议。");
@@ -506,6 +518,7 @@ describe("StudioPage resource generation", () => {
     renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808`);
 
     await screen.findByRole("heading", { name: "资源工坊" });
+    expect(screen.getByRole("region", { name: "资源生成工作台" })).toHaveTextContent("选择课程和知识点，生成资源");
     await user.click(screen.getByRole("button", { name: "生成资源" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("资源生成失败，请稍后重试。");

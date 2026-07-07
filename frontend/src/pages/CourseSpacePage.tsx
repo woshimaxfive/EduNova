@@ -217,6 +217,8 @@ export function CourseSpacePage() {
   const [updatingWeaknessItemId, setUpdatingWeaknessItemId] = useState<string | null>(null);
   const optimisticMessageSequence = useRef(0);
   const apiCourse = courseQuery.data?.data;
+  const overviewCourse = courseOverviewQuery.data?.data.course;
+  const fallbackCourse = apiCourse ?? overviewCourse;
   const apiKnowledgePoints = useMemo(
     () => knowledgePointsQuery.data?.data ?? [],
     [knowledgePointsQuery.data?.data]
@@ -259,15 +261,15 @@ export function CourseSpacePage() {
         ? persistedCourseMessages
         : courseMessages;
   const hasDisplayedCourseMessages = displayedCourseMessages.length > 0;
-  const isCourseLoading = hasRealCourseId && courseQuery.isPending && !apiCourse;
-  const courseSummary = apiCourse
+  const isCourseLoading = hasRealCourseId && courseQuery.isPending && !fallbackCourse;
+  const courseSummary = fallbackCourse
     ? {
-        id: Number.parseInt(apiCourse.id, 10),
-        title: apiCourse.title,
-        description: apiCourse.description,
-        subject: apiCourse.subject,
-        sourceType: apiCourse.source_type,
-        progressPercent: apiCourse.progress_percent
+        id: Number.parseInt(fallbackCourse.id, 10),
+        title: fallbackCourse.title,
+        description: fallbackCourse.description,
+        subject: fallbackCourse.subject,
+        sourceType: fallbackCourse.source_type,
+        progressPercent: fallbackCourse.progress_percent
       }
     : {
         id: Number.isFinite(numericCourseId) ? numericCourseId : 0,
@@ -286,8 +288,8 @@ export function CourseSpacePage() {
     studyTarget?.type === "citation"
       ? latestRagResults.find((citation) => citation.chunk_id === studyTarget.chunkId) ?? null
       : null;
-  const materialCount = apiCourse?.material_count ?? overviewMaterials.length;
-  const knowledgePointCount = apiCourse?.knowledge_point_count ?? apiKnowledgePoints.length;
+  const materialCount = fallbackCourse?.material_count ?? overviewMaterials.length;
+  const knowledgePointCount = fallbackCourse?.knowledge_point_count ?? apiKnowledgePoints.length;
 
   function selectCourseConversation(sessionId: string) {
     if (!hasRealCourseId) {

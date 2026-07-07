@@ -1,7 +1,9 @@
 import { type ReactNode, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
+import { getDashboardSummary } from "../api/dashboard";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 
@@ -13,6 +15,21 @@ type PageFrameProps = {
 export function PageFrame({ title, children }: PageFrameProps) {
   const navigate = useNavigate();
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+  const dashboardQuery = useQuery({
+    queryKey: ["dashboard", "summary"],
+    queryFn: getDashboardSummary,
+    staleTime: 30_000
+  });
+  const recentConversations = dashboardQuery.data?.data.recent_conversations ?? [];
+  const homeThreads = recentConversations.map(({ id, title: threadTitle, meta }) => ({
+    id,
+    title: threadTitle,
+    meta
+  }));
+
+  function goHome() {
+    navigate(PATHS.app, { state: null });
+  }
 
   return (
     <LearningSpaceShell hideTopNavigation>
@@ -24,9 +41,17 @@ export function PageFrame({ title, children }: PageFrameProps) {
         </div>
         <AppSidebar
           isCollapsed={isHistoryCollapsed}
-          conversations={[]}
+          conversations={homeThreads}
           onToggleCollapsed={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
-          onNewChat={() => navigate(PATHS.app)}
+          onHomeClick={goHome}
+          onNewChat={goHome}
+          onSelectConversation={(conversation) =>
+            navigate(PATHS.app, {
+              state: {
+                selectedHomeThreadId: conversation.id
+              }
+            })
+          }
         />
         <section className="route-main-surface">
           <header className="route-titlebar">

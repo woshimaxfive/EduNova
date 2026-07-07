@@ -7,10 +7,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildCoursePath } from "../app/routePaths";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS, type ApiCourseSummary } from "../api/courses";
+import { DASHBOARD_ENDPOINTS } from "../api/dashboard";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
 import { PRACTICE_ENDPOINTS } from "../api/practice";
 import { PROFILE_ENDPOINTS } from "../api/profiles";
 import { REPORT_ENDPOINTS } from "../api/reports";
+import { SETTINGS_ENDPOINTS } from "../api/settings";
 import { LibraryPage } from "./LibraryPage";
 import { PracticePage } from "./PracticePage";
 import { ProfilePage } from "./ProfilePage";
@@ -79,6 +81,81 @@ describe("student core pages", () => {
 
         return {
           data: { data: materials, trace_id: "trace_core_materials" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (config.url === DASHBOARD_ENDPOINTS.summary) {
+        return {
+          data: {
+            data: {
+              profile_summary: {
+                display_name: "核心页面学生",
+                starter_mode: "ai_intro",
+                has_profile: true,
+                knowledge_foundation: "机器学习刚入门",
+                learning_goal: "期末前掌握神经网络"
+              },
+              recent_conversations: [
+                {
+                  id: "701",
+                  title: "主页历史会话",
+                  meta: "今天",
+                  scope: "home",
+                  updated_at: "2026-07-07T09:00:00Z"
+                }
+              ],
+              recent_courses: [],
+              material_library_summary: {
+                material_count: 1,
+                unassigned_count: 0
+              },
+              recent_materials: [],
+              recent_resources: [],
+              command_suggestions: [],
+              evidence_summary: {
+                citation_count: 0,
+                latest_trace_id: null,
+                low_evidence_count: 0
+              },
+              empty_state: {
+                kind: "active",
+                title: "继续学习",
+                description: "从最近内容继续。",
+                action_label: "继续学习"
+              }
+            },
+            trace_id: "trace_core_dashboard"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (config.url === SETTINGS_ENDPOINTS.configs) {
+        return {
+          data: {
+            data: {
+              configs: [],
+              default_config_id: null,
+              system_summary: {
+                source: "none",
+                provider: "openai_compatible",
+                base_url: null,
+                chat_model: null,
+                embedding_model: null,
+                has_api_key: false,
+                api_key_masked: null,
+                can_use_model: false
+              }
+            },
+            trace_id: "trace_core_settings"
+          },
           status: 200,
           statusText: "OK",
           headers: {},
@@ -342,7 +419,7 @@ describe("student core pages", () => {
     expect(screen.getByRole("button", { name: "保存设置" })).toBeInTheDocument();
   });
 
-  it("keeps secondary routes inside the same shell without injecting demo history", () => {
+  it("keeps secondary routes inside the same shell with home history", async () => {
     renderRoutePage(<SettingsPage />, "/app/settings");
 
     const historyRail = screen.getByRole("region", { name: "历史对话" });
@@ -352,7 +429,8 @@ describe("student core pages", () => {
     expect(within(historyRail).getByRole("link", { name: "设置" })).toHaveAttribute("href", "/app/settings");
     expect(within(historyRail).getByRole("link", { name: "设置" })).toHaveAttribute("aria-current", "page");
     expect(within(historyRail).queryByRole("button", { name: /神经网络反向传播怎么复习/ })).not.toBeInTheDocument();
-    expect(within(historyRail).getByText("还没有历史对话")).toBeInTheDocument();
+    expect(await within(historyRail).findByRole("button", { name: /主页历史会话/ })).toBeInTheDocument();
+    expect(within(historyRail).queryByText("还没有历史对话")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "应用导航" })).not.toBeInTheDocument();
   });
 });

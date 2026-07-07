@@ -23,6 +23,11 @@ export function AgentTimeline({ events }: AgentTimelineProps) {
           <span>
             <strong>{event.agentName}</strong>
             <small>{event.summary}</small>
+            {event.contextMessageCount ? (
+              <small className="timeline-context">
+                {`已参考最近 ${event.contextMessageCount} 条会话${event.contextSummaryUsed ? "，并使用历史摘要" : ""}`}
+              </small>
+            ) : null}
           </span>
           {event.durationMs ? <em>{event.durationMs} ms</em> : null}
         </li>

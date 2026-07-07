@@ -1,7 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, type MemoryRouterProps } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PATHS } from "../app/routePaths";
@@ -133,6 +133,7 @@ type ApiCall = {
 type TutorMockOptions = {
   failMessageSend?: boolean;
   historyDetail?: unknown;
+  historyDetails?: Record<string, unknown>;
 };
 
 function parsePayload(data: unknown) {
@@ -178,7 +179,11 @@ function makeSessionDetail(
   };
 }
 
-function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, tutorOptions: TutorMockOptions = {}) {
+function renderWithDashboardSummary(
+  summary: DashboardSummary = starterSummary,
+  tutorOptions: TutorMockOptions = {},
+  initialEntries: MemoryRouterProps["initialEntries"] = [PATHS.app]
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -204,6 +209,7 @@ function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, 
     created_at: "2026-07-03T12:00:00Z",
     updated_at: "2026-07-03T12:00:00Z"
   };
+  let recentConversations: DashboardSummary["recent_conversations"] = [...summary.recent_conversations];
 
   apiClient.defaults.adapter = async (config) => {
     const method = (config.method ?? "get").toLowerCase();
@@ -214,7 +220,10 @@ function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, 
     if (url === DASHBOARD_ENDPOINTS.summary) {
       return {
         data: {
-          data: summary,
+          data: {
+            ...summary,
+            recent_conversations: recentConversations
+          },
           trace_id: "trace_dashboard_test"
         },
         status: 200,
@@ -240,16 +249,69 @@ function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, 
       };
     }
 
-    if (url === TUTOR_ENDPOINTS.detail(501) && method === "get") {
+    const sessionDetailMatch = url.match(/^\/tutor\/sessions\/([^/]+)$/);
+    if (sessionDetailMatch && method === "get") {
+      const sessionId = sessionDetailMatch[1];
+      const summaryThread = recentConversations.find((thread) => thread.id === sessionId);
+      const fallbackTitle = summaryThread?.title ?? "接口里的主页历史";
       return {
         data: {
           data:
+            tutorOptions.historyDetails?.[sessionId] ??
             tutorOptions.historyDetail ??
-            makeSessionDetail("501", "接口里的主页历史", [
-              { id: "m1", role: "user", content: "后端保存的问题" },
-              { id: "m2", role: "assistant", content: "后端保存的回答" }
+            makeSessionDetail(sessionId, fallbackTitle, [
+              { id: `u-${sessionId}`, role: "user", content: "后端保存的问题" },
+              { id: `a-${sessionId}`, role: "assistant", content: "后端保存的回答" }
             ]),
           trace_id: "trace_session_detail_test"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (sessionDetailMatch && method === "patch") {
+      const sessionId = sessionDetailMatch[1];
+      const title = typeof payload === "object" && payload !== null && "title" in payload ? String(payload.title).trim() : "";
+      recentConversations = recentConversations.map((thread) => (thread.id === sessionId ? { ...thread, title } : thread));
+      if (createdSession.id === sessionId) {
+        createdSession.title = title;
+      }
+
+      return {
+        data: {
+          data: {
+            id: sessionId,
+            scope: "home",
+            course_id: null,
+            title,
+            mode: "chat",
+            archived_from_home: false,
+            created_at: "2026-07-03T12:00:00Z",
+            updated_at: "2026-07-03T12:02:00Z"
+          },
+          trace_id: "trace_session_rename_test"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (sessionDetailMatch && method === "delete") {
+      const sessionId = sessionDetailMatch[1];
+      recentConversations = recentConversations.filter((thread) => thread.id !== sessionId);
+
+      return {
+        data: {
+          data: {
+            session_id: sessionId,
+            deleted: true
+          },
+          trace_id: "trace_session_delete_test"
         },
         status: 200,
         statusText: "OK",
@@ -318,7 +380,11 @@ function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, 
                 input_summary: "读取主页画像",
                 output_summary: "识别学习目标和当前问题",
                 duration_ms: 12,
-                metadata: {},
+                metadata: {
+                  context_message_count: 2,
+                  context_summary_used: false,
+                  retrieval_query_mode: "contextual"
+                },
                 created_at: "2026-07-03T12:00:02Z"
               },
               {
@@ -393,7 +459,7 @@ function renderWithDashboardSummary(summary: DashboardSummary = starterSummary, 
 
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[PATHS.app]}>
+      <MemoryRouter initialEntries={initialEntries}>
         <Routes>
           <Route path={PATHS.app} element={<LearningSpacePage />} />
           <Route path={PATHS.courseDetail} element={<div>已进入生成课程</div>} />
@@ -512,6 +578,74 @@ describe("LearningSpacePage", () => {
     expect(within(searchDialog).getByRole("button", { name: /接口里的主页历史/ })).toBeInTheDocument();
   });
 
+  it("keeps an older home history item in place after selecting it", async () => {
+    const user = userEvent.setup();
+    const firstThread = {
+      id: "501",
+      title: "上方主页历史",
+      meta: "刚刚",
+      scope: "home" as const,
+      updated_at: "2026-07-03T12:00:00Z"
+    };
+    const secondThread = {
+      id: "502",
+      title: "下方主页历史",
+      meta: "昨天",
+      scope: "home" as const,
+      updated_at: "2026-07-02T12:00:00Z"
+    };
+
+    renderWithDashboardSummary(
+      {
+        ...starterSummary,
+        recent_conversations: [firstThread, secondThread]
+      },
+      {
+        historyDetails: {
+          "502": makeSessionDetail("502", "下方主页历史", [
+            { id: "u-502", role: "user", content: "下方历史问题" },
+            { id: "a-502", role: "assistant", content: "下方历史回答" }
+          ])
+        }
+      }
+    );
+
+    const historyRail = await screen.findByRole("region", { name: "历史对话" });
+    expect((await within(historyRail).findAllByRole("button", { name: /主页历史/ })).map((button) => button.textContent)).toEqual([
+      "上方主页历史刚刚",
+      "下方主页历史昨天"
+    ]);
+
+    await user.click(within(historyRail).getByRole("button", { name: /下方主页历史/ }));
+
+    expect(await screen.findByText("下方历史问题")).toBeInTheDocument();
+    expect(within(historyRail).getAllByRole("button", { name: /主页历史/ }).map((button) => button.textContent)).toEqual([
+      "上方主页历史刚刚",
+      "下方主页历史昨天"
+    ]);
+  });
+
+  it("opens a home history thread passed from secondary route navigation", async () => {
+    renderWithDashboardSummary(
+      starterSummary,
+      {
+        historyDetails: {
+          "501": makeSessionDetail("501", "接口里的主页历史", [
+            { id: "u-501", role: "user", content: "从画像页点回来的问题" },
+            { id: "a-501", role: "assistant", content: "从画像页点回来的回答" }
+          ])
+        }
+      },
+      [{ pathname: PATHS.app, state: { selectedHomeThreadId: "501" } }]
+    );
+
+    const thread = await screen.findByRole("region", { name: "主页对话" });
+
+    expect(within(thread).getByText("从画像页点回来的问题")).toBeInTheDocument();
+    expect(within(thread).getByText("从画像页点回来的回答")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /接口里的主页历史/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("filters materials inside the home library drawer", async () => {
     const user = userEvent.setup();
 
@@ -612,6 +746,7 @@ describe("LearningSpacePage", () => {
 
     expect(await within(thread).findByText("home_profile")).toBeInTheDocument();
     expect(within(thread).getByText("确认不展示原始思维链")).toBeInTheDocument();
+    expect(within(thread).getByText("已参考最近 2 条会话")).toBeInTheDocument();
     expect(calls).toContainEqual(expect.objectContaining({ method: "get", url: AGENT_ENDPOINTS.trace("trace_home_tutor_test") }));
   });
 
@@ -725,6 +860,77 @@ describe("LearningSpacePage", () => {
     expect(within(thread).getByText("后端保存的问题")).toBeInTheDocument();
     expect(within(thread).getByText("后端保存的回答")).toBeInTheDocument();
     expect(calls).toContainEqual(expect.objectContaining({ method: "get", url: TUTOR_ENDPOINTS.detail(501) }));
+  });
+
+  it("renames a home history conversation from the sidebar menu", async () => {
+    const user = userEvent.setup();
+    const { calls } = renderWithDashboardSummary(starterSummary);
+
+    const historyRail = await screen.findByRole("region", { name: "历史对话" });
+    expect(await within(historyRail).findByRole("button", { name: /接口里的主页历史/ })).toBeInTheDocument();
+
+    await user.click(within(historyRail).getByRole("button", { name: "打开会话操作菜单 501" }));
+    await user.click(screen.getByRole("menuitem", { name: "重命名" }));
+
+    const titleInput = screen.getByRole("textbox", { name: "会话名称" });
+    await user.clear(titleInput);
+    await user.type(titleInput, "改名后的主页历史");
+    await user.click(screen.getByRole("button", { name: "保存会话名称" }));
+
+    expect(await within(historyRail).findByRole("button", { name: /改名后的主页历史/ })).toBeInTheDocument();
+    expect(within(historyRail).queryByRole("button", { name: /接口里的主页历史/ })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(calls).toContainEqual(
+        expect.objectContaining({
+          method: "patch",
+          url: TUTOR_ENDPOINTS.detail(501),
+          payload: { title: "改名后的主页历史" }
+        })
+      );
+    });
+  });
+
+  it("deletes the active home history conversation and returns to the default home", async () => {
+    const user = userEvent.setup();
+    const { calls } = renderWithDashboardSummary(starterSummary);
+
+    const historyRail = await screen.findByRole("region", { name: "历史对话" });
+    await user.click(await within(historyRail).findByRole("button", { name: /接口里的主页历史/ }));
+    expect(await screen.findByRole("region", { name: "主页对话" })).toBeInTheDocument();
+
+    await user.click(within(historyRail).getByRole("button", { name: "打开会话操作菜单 501" }));
+    await user.click(screen.getByRole("menuitem", { name: "删除" }));
+    await user.click(screen.getByRole("menuitem", { name: "确认删除" }));
+
+    expect(await screen.findByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "主页对话" })).not.toBeInTheDocument();
+    expect(within(historyRail).queryByRole("button", { name: /接口里的主页历史/ })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(calls).toContainEqual(
+        expect.objectContaining({
+          method: "delete",
+          url: TUTOR_ENDPOINTS.detail(501)
+        })
+      );
+    });
+  });
+
+  it("returns to the default learning home when clicking the EduNova brand from a thread", async () => {
+    const user = userEvent.setup();
+
+    renderWithDashboardSummary(starterSummary);
+
+    await user.click(await screen.findByRole("button", { name: /接口里的主页历史/ }));
+
+    expect(await screen.findByRole("region", { name: "主页对话" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "EduNova 首页" }));
+
+    expect(screen.getByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "主页对话" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("");
+    expect(screen.getByRole("region", { name: "历史对话" })).toHaveAttribute("data-collapsed", "false");
+    expect(screen.getByRole("button", { name: /接口里的主页历史/ })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("keeps the typed question when persistent message sending fails", async () => {

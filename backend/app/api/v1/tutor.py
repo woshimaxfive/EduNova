@@ -11,7 +11,12 @@ from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.models import User
 from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
-from backend.app.schemas.tutor import CreateTutorSessionRequest, SendTutorMessageRequest
+from backend.app.schemas.tutor import (
+    CreateTutorSessionRequest,
+    DeleteTutorSessionResponse,
+    SendTutorMessageRequest,
+    UpdateTutorSessionRequest,
+)
 from backend.app.services.course_answers import CourseAnswerGenerationError, CourseAnswerService
 from backend.app.services.embeddings import EmbeddingService
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
@@ -127,6 +132,49 @@ def get_session(
         ) from exc
 
     return api_response(detail.model_dump())
+
+
+@router.patch("/sessions/{session_id}")
+def rename_session(
+    session_id: int,
+    payload: UpdateTutorSessionRequest,
+    current_user: User = Depends(get_current_user),
+    service: TutorSessionService = Depends(get_tutor_session_service),
+) -> dict:
+    try:
+        session = service.rename_session(user=current_user, session_id=session_id, title=payload.title)
+    except EmptyMessageError as exc:
+        raise ApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="VALIDATION_ERROR",
+            message=str(exc),
+        ) from exc
+    except SessionNotFoundError as exc:
+        raise ApiError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="NOT_FOUND",
+            message="会话不存在或无权访问。",
+        ) from exc
+
+    return api_response(session.model_dump())
+
+
+@router.delete("/sessions/{session_id}")
+def delete_session(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    service: TutorSessionService = Depends(get_tutor_session_service),
+) -> dict:
+    try:
+        deleted = service.delete_session(user=current_user, session_id=session_id)
+    except SessionNotFoundError as exc:
+        raise ApiError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="NOT_FOUND",
+            message="会话不存在或无权访问。",
+        ) from exc
+
+    return api_response(DeleteTutorSessionResponse(session_id=deleted.id, deleted=True).model_dump())
 
 
 @router.post("/sessions/{session_id}/messages")

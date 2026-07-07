@@ -24,6 +24,20 @@ class CreateTutorSessionRequest(BaseModel):
         return value.strip()
 
 
+class UpdateTutorSessionRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str) -> str:
+        return value.strip()
+
+
+class DeleteTutorSessionResponse(BaseModel):
+    session_id: str
+    deleted: bool
+
+
 class SendTutorMessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
     use_web_search: bool = False

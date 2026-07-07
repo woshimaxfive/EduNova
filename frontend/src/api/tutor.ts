@@ -21,6 +21,15 @@ export type CreateTutorSessionRequest = {
   title: string;
 };
 
+export type UpdateTutorSessionRequest = {
+  title: string;
+};
+
+export type DeleteTutorSessionResponse = {
+  session_id: string;
+  deleted: boolean;
+};
+
 export type SendTutorMessageRequest = {
   message: string;
   use_web_search?: boolean;
@@ -101,6 +110,16 @@ export async function listTutorSessions(scope: TutorSessionScope = "home", cours
 
 export async function getTutorSession(sessionId: number | string) {
   const response = await apiClient.get<ApiEnvelope<TutorSessionDetail>>(TUTOR_ENDPOINTS.detail(sessionId));
+  return response.data;
+}
+
+export async function renameTutorSession(sessionId: number | string, payload: UpdateTutorSessionRequest) {
+  const response = await apiClient.patch<ApiEnvelope<TutorSessionSummary>>(TUTOR_ENDPOINTS.detail(sessionId), payload);
+  return response.data;
+}
+
+export async function deleteTutorSession(sessionId: number | string) {
+  const response = await apiClient.delete<ApiEnvelope<DeleteTutorSessionResponse>>(TUTOR_ENDPOINTS.detail(sessionId));
   return response.data;
 }
 

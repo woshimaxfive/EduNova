@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AGENT_ENDPOINTS, getAgentTrace } from "./agents";
+import { AGENT_ENDPOINTS, getAgentTrace, mapAgentTraceStepToEvent } from "./agents";
 import { AUTH_ENDPOINTS, login } from "./auth";
 import { apiClient } from "./client";
 import { COURSE_ENDPOINTS, getCourseLearningState, getMasteryMap, updateCourseWeaknessReviewItem } from "./courses";
@@ -39,7 +39,7 @@ import {
   testModelSettings,
   updateModelConfig
 } from "./settings";
-import { listTutorSessions, sendTutorMessage, TUTOR_ENDPOINTS } from "./tutor";
+import { deleteTutorSession, listTutorSessions, renameTutorSession, sendTutorMessage, TUTOR_ENDPOINTS } from "./tutor";
 
 describe("frontend API contracts", () => {
   it("uses the documented API v1 base path", () => {
@@ -74,6 +74,7 @@ describe("frontend API contracts", () => {
     expect(EXPORT_ENDPOINTS.learningDossierJob).toBe("/exports/learning-dossier/jobs");
     expect(EXPORT_ENDPOINTS.job(44)).toBe("/exports/44");
     expect(EXPORT_ENDPOINTS.download(44)).toBe("/exports/44/download");
+    expect(TUTOR_ENDPOINTS.detail(4)).toBe("/tutor/sessions/4");
     expect(TUTOR_ENDPOINTS.message(4)).toBe("/tutor/sessions/4/messages");
     expect(PRACTICE_ENDPOINTS.answers(8)).toBe("/practice/sessions/8/answers");
     expect(REPORT_ENDPOINTS.latest).toBe("/reports/latest");
@@ -477,6 +478,64 @@ describe("frontend API contracts", () => {
       ]);
       expect(response.data.messages[0].citation_json[0].source_type).toBe("web");
       expect(response.data.messages[0].trace_id).toBe("trace_home_tutor");
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("renames and deletes tutor sessions through the shared API client", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
+      });
+
+      return {
+        data: {
+          data:
+            config.method === "delete"
+              ? { session_id: "501", deleted: true }
+              : {
+                  id: "501",
+                  scope: "home",
+                  course_id: null,
+                  title: "改名后的主页历史",
+                  mode: "chat",
+                  archived_from_home: false,
+                  created_at: "2026-07-07T09:00:00Z",
+                  updated_at: "2026-07-07T09:00:01Z"
+                },
+          trace_id: "trace_tutor_session_manage"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const renamed = await renameTutorSession(501, { title: "改名后的主页历史" });
+      const deleted = await deleteTutorSession(501);
+
+      expect(calls).toEqual([
+        {
+          url: TUTOR_ENDPOINTS.detail(501),
+          method: "patch",
+          data: { title: "改名后的主页历史" }
+        },
+        {
+          url: TUTOR_ENDPOINTS.detail(501),
+          method: "delete",
+          data: undefined
+        }
+      ]);
+      expect(renamed.data.title).toBe("改名后的主页历史");
+      expect(deleted.data.deleted).toBe(true);
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }
@@ -1221,6 +1280,9 @@ describe("frontend API contracts", () => {
                 duration_ms: 25,
                 metadata: {
                   citation_count: 2,
+                  context_message_count: 4,
+                  context_summary_used: true,
+                  retrieval_query_mode: "contextual",
                   review_result: "pass"
                 },
                 created_at: "2026-07-05T10:00:01Z"
@@ -1242,6 +1304,11 @@ describe("frontend API contracts", () => {
       expect(calls).toEqual([{ url: AGENT_ENDPOINTS.trace("trace_candidate"), method: "get" }]);
       expect(response.data.steps[0].agent_name).toBe("retrieve");
       expect(response.data.steps[0].metadata.citation_count).toBe(2);
+      expect(mapAgentTraceStepToEvent(response.data.steps[0])).toMatchObject({
+        contextMessageCount: 4,
+        contextSummaryUsed: true,
+        retrievalQueryMode: "contextual"
+      });
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

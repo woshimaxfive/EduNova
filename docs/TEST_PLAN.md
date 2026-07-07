@@ -19,7 +19,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 - 课程空间双模式前端已接入，覆盖默认问答模式、按需学习模式、引用渐进展开和移动端布局。
 - 真实学习画像、画像事件、画像页真实接口和课程问答画像候选事件。
 - PDF/DOCX/PPTX 文本解析、损坏文件失败分支、旧版 Office/图片/OCR 边界。
-- 主页联网搜索、深度回答指令、已选资料来源、`home_tutor` trace 和浏览器语音输入/朗读。
+- 主页联网搜索、深度回答指令、已选资料来源、多轮会话上下文、`home_tutor` trace 和浏览器语音输入/朗读。
 - Markdown/PDF/DOCX 异步学习档案导出任务、下载和用户隔离。
 - 前端 API 合同模块、核心页面测试、Vitest、lint 和生产构建。
 
@@ -151,9 +151,9 @@ cd ..
 | `/courses/from-materials`、`/courses/*` | 无 token 401、用户隔离、已解析 TXT/Markdown/PDF/DOCX/PPTX 建课、知识点和知识切片创建、未解析/失败/旧版 Office/图片资料拒绝、课程只返回当前用户数据 |
 | `/rag/search` | 无 token 401、用户隔离、关键词命中、向量命中、混合排序、懒加载、fallback、无命中和新增分数字段 |
 | `/settings/model`、`/settings/model/test`、`/settings/model/configs` | 无 token 401、多配置隔离、默认配置、Key 加密、脱敏返回、连接测试、OpenAI-compatible embedding 和不泄露 Key |
-| `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、主页已选资料/联网/深思字段、无搜索 Key 不伪造来源、`home_tutor` trace、模型回答、SSE 流式、错误回滚和历史恢复 |
+| `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、会话改名、软删除归档、删除后列表/详情隐藏、主页已选资料/联网/深思字段、同一 session 多轮上下文、上下文化 RAG/联网 query、无搜索 Key 不伪造来源、`home_tutor` trace、模型回答、SSE 流式、错误回滚和历史恢复 |
 | `/profiles/me`、`/profiles/chat`、`/profiles/events` | 无 token 401、空画像稳定 8 维结构、画像对话更新、画像事件写入、事件倒序、多用户隔离、课程问答候选事件隐私安全 |
-| `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要和 metadata 白名单 |
+| `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要、上下文计数 metadata 和 metadata 白名单 |
 | `/resources/generate`、`/resources`、`/resources/{resource_id}`、`/resources/{resource_id}/quality` | 无 token 401、课程/知识点/资源用户隔离、5 类课程资源持久化、质量分、Agent trace、模型增强、本地可用稿、低依据 fallback、隐私安全 |
 | `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}`、`/courses/{course_id}/mastery-map` | 无 token 401、课程/任务用户隔离、空路径、路径生成、旧路径归档、任务状态更新、掌握度映射、推荐资源、隐私安全 |
 | `/practice/sessions`、`/practice/sessions/{session_id}`、`/practice/sessions/{session_id}/answers` | 无 token 401、课程/练习用户隔离、知识点过滤、题型生成、确定性批改、空答案校验、弱点队列反哺、掌握度回归、隐私安全 |
@@ -189,7 +189,7 @@ cd ..
 
 - 贴边工作区侧栏和可收起主页历史。
 - 中央 AI 学习输入和回答区。
-- 主页历史。
+- 主页历史、课程空间历史、历史改名和删除当前会话后的默认态恢复。
 - 输入区资料库浮层入口。
 - 最近课程或最近学习空间。
 - 生成课程浮层。
@@ -251,7 +251,7 @@ cd ..
 - P3.16 Phase 4 前口径对齐后，前端测试必须覆盖：登录页不预填 demo 邮箱和密码，资源工坊资源类型包含代码实操且不把复盘报告作为五类资源入口，课程空间 Agent 过程显示 PathAgent 而不是 PlannerAgent，图片资料上传后显示“仅入库，暂不做 OCR”。
 - P3 收尾补完后，`/app/path` 必须按浏览器验收规则通过桌面和 390px 移动宽度可见验收：学习路径、阶段任务、路径依据、下一步行动和开始练习入口可见，页面无水平溢出。
 - Phase 4.2 后，`/app` 必须通过 `/dashboard/summary` 渲染最近学习、主页历史和主页资料库浮层资料：blank summary 不得出现前端假课程、假资料或假历史；ai_intro summary 应显示当前用户自己的人工智能导论课程和资料；资料库浮层默认未选中。
-- Phase 4.3 后，`/app` 主页发送必须走 `/tutor/sessions`：首次发送先创建 home session，再发送消息；当前主页 assistant 内容来自普通模型回答，未配置模型时给出清晰提示；连续追问不创建第二条历史；点击左侧历史必须从后端恢复 messages；发送失败必须提示且保留输入；刷新后左侧历史仍由 `/dashboard/summary` 保留。
+- Phase 4.3 后，`/app` 主页发送必须走 `/tutor/sessions`：首次发送先创建 home session，再发送消息；当前主页 assistant 内容来自普通模型回答，未配置模型时给出清晰提示；连续追问不创建第二条历史；点击左侧历史必须从后端恢复 messages；历史菜单必须能改名和软删除，删除当前会话后回到默认主页；发送失败必须提示且保留输入；刷新后左侧历史仍由 `/dashboard/summary` 保留。
 - 主页输入区状态必须贴近 composer：选择资料后只显示“已选择 N 份资料”，联网搜索和深度思考只通过按钮高亮与 `aria-pressed` 表达，不出现“联网搜索已开”文字。
 - Phase 4.4 后，资料上传和资料库必须走 `/materials`：主页上传文件调用 `/materials/upload` 并刷新 `/dashboard/summary`；`/app/library` 调用 `/materials` 渲染真实列表，不再出现静态假资料；文档/图片筛选、搜索、详情反馈、上传失败局部提示、建课失败弹层提示和空状态必须可用。
 - Phase 13.2 后，从资料生成课程必须走 `/courses/from-materials`：`/app` 主页资料库浮层和 `/app/library` 都调用真实建课接口，成功后刷新 summary/materials 并跳转 `/app/courses/{course_id}`；选择未解析、解析失败、旧版 DOC/PPT、图片或扫描件资料时必须显示后端错误并保留用户选择；课程空间标题、资料数、知识点数和知识点列表来自课程接口。
@@ -708,6 +708,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 13.1 前端测试覆盖课程空间展示真实课堂协作轨迹、资源工坊展示 `ResourceGenerationGraph`、路径/练习/报告页显示轻量 trace 入口、报告空态不误报失败，以及新增 `agent_trace_id` API 合同。
 - Phase 13.2 后端测试覆盖 PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT 和图片 uploaded、不支持 OCR、已解析资料建课、主页联网/深思/资料参数、无搜索 Key 不伪造来源、`home_tutor` trace、`export_jobs` 创建/状态流转/Markdown/PDF/DOCX 下载/失败分支和用户隔离。
 - Phase 13.2 前端测试覆盖主页联网/深思 payload、真实来源和 trace 展示、浏览器语音输入和朗读、资料库已解析资料文案、报告页异步导出任务创建/轮询/下载/失败提示，以及新增导出 job API 合同。
+- 2026-07-07 会话上下文增强后，后端测试覆盖主页/课程连续追问、长历史截断与摘要、课程流式 SSE 上下文 metadata、无历史单轮兼容和 trace metadata 脱敏；前端测试覆盖主页与课程空间轨迹展示“已参考最近 N 条会话”，API contract 覆盖 `context_message_count`、`context_summary_used` 和 `retrieval_query_mode`。
 - 路由测试覆盖 `/app/courses/:courseId` 课程空间壳子，确认默认问答模式可见，并确认无效课程不会回落到 demo 课程、常驻知识画布、证据层或资源区；覆盖 `/app/path` 学习路径页，确认学习路径、阶段任务和路径依据可见。
 - 学生核心页面测试覆盖文件库式资料库、文档/图片筛选、真实资料列表、资源工坊、学习画像、AI 辅导入口、练习、报告和设置页面的核心区域。
 - P3.7/P3.14/Phase 4.4 交互测试覆盖主页上传资料文件、资料库默认未选中与点选高亮、联网搜索激活态、资料状态贴近输入区且不显示“联网搜索已开”文案、发送后进入主页对话且不显示持久“已生成回答”状态条、课程回答展开、知识点详情、AI 辅导入口、练习提交校验、资料库上传、文档/图片筛选、生成课程资料选择、资料库详情面板和设置页真实状态；Phase 4.4 起资料库上传和列表断言真实 `/materials` 调用。

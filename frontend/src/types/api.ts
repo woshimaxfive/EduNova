@@ -103,6 +103,9 @@ export type AgentTraceEvent = {
   summary: string;
   status: "pending" | "running" | "completed" | "warning";
   durationMs?: number;
+  contextMessageCount?: number;
+  contextSummaryUsed?: boolean;
+  retrievalQueryMode?: "direct" | "contextual";
 };
 
 export type LearningSpaceSnapshot = {

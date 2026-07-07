@@ -9,6 +9,9 @@ import { PATHS } from "../app/routePaths";
 import { AGENT_ENDPOINTS, type AgentTrace } from "../api/agents";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
+import { PATH_ENDPOINTS } from "../api/paths";
+import { REPORT_ENDPOINTS } from "../api/reports";
+import { RESOURCE_ENDPOINTS } from "../api/resources";
 import { TUTOR_ENDPOINTS, type TutorCitation, type TutorSessionDetail, type TutorSessionSummary } from "../api/tutor";
 import { CourseSpacePage } from "./CourseSpacePage";
 
@@ -31,11 +34,16 @@ type CoursePageOptions = {
   failLearningState?: boolean;
   failAgentTrace?: boolean;
   failWeaknessAction?: boolean;
+  failResourceGeneration?: boolean;
   failSend?: boolean;
   streamEvents?: Array<{ event: string; data: unknown }>;
   controlledStream?: boolean;
   delayCourseDetail?: boolean;
   delayCourseData?: boolean;
+  resources?: unknown[];
+  currentPath?: unknown;
+  latestReport?: unknown;
+  historyDetails?: Record<string, TutorSessionDetail>;
 };
 
 type FetchCall = {
@@ -153,6 +161,9 @@ const agentTraceWithSteps: AgentTrace = {
       duration_ms: 25,
       metadata: {
         citation_count: 2,
+        context_message_count: 4,
+        context_summary_used: true,
+        retrieval_query_mode: "contextual",
         review_result: "pass"
       },
       created_at: "2026-07-05T10:00:01Z"
@@ -298,6 +309,78 @@ const learningStateWithPath = {
   ]
 };
 
+const generatedResourceItems = [
+  {
+    id: "801",
+    course_id: "808",
+    knowledge_point_id: "401",
+    resource_type: "doc",
+    title: "启发式搜索讲解",
+    content_json: {
+      markdown: "## 启发式搜索讲解",
+      metadata: {
+        agent_trace_id: "trace_resource"
+      }
+    },
+    citation_json: [],
+    status: "ready",
+    review_status: "passed",
+    confidence_score: 0.88,
+    agent_trace_id: "trace_resource",
+    created_at: "2026-07-05T08:40:00Z",
+    updated_at: "2026-07-05T08:40:00Z"
+  }
+];
+
+const activePathDetail = {
+  course_id: "808",
+  status: "active",
+  message: "当前学习路径进行中。",
+  agent_trace_id: "trace_path",
+  path: {
+    id: "901",
+    course_id: "808",
+    title: "启发式搜索复习路径",
+    goal: "补强启发式搜索",
+    status: "active",
+    agent_trace_id: "trace_path",
+    plan_json: {},
+    created_at: "2026-07-05T08:40:00Z",
+    updated_at: "2026-07-05T08:40:00Z"
+  },
+  tasks: [],
+  evidence_summary: {
+    knowledge_point_count: 1,
+    confirmed_or_reviewing_weakness_count: 1,
+    pending_weakness_count: 1,
+    resource_count: 1,
+    basis: ["启发式搜索"]
+  }
+};
+
+const emptyReport = {
+  id: null,
+  course_id: "808",
+  practice_session_id: null,
+  status: "empty",
+  agent_trace_id: null,
+  score: null,
+  report: {
+    summary: "还没有真实学习报告。",
+    mastery_update: {
+      weak_count: 0,
+      mastered_count: 0,
+      learning_count: 0
+    },
+    weakness_list: [],
+    evidence_refs: [],
+    next_step_suggestions: [],
+    review_queue_updates: [],
+    profile_changes: []
+  },
+  created_at: null
+};
+
 function parsePayload(data: unknown) {
   if (typeof data !== "string") {
     return data;
@@ -387,6 +470,7 @@ function renderCoursePage(options: CoursePageOptions = {}) {
   let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
   const encoder = new TextEncoder();
   const createdSession = makeSession("901", "启发式搜索怎么复习？");
+  let courseSessions = [...(options.sessions ?? [])];
   const defaultSendDetail = makeDetail(
     createdSession,
     "启发式搜索怎么复习？",
@@ -434,6 +518,83 @@ function renderCoursePage(options: CoursePageOptions = {}) {
         data: {
           data: options.agentTrace ? { ...options.agentTrace, trace_id: traceId } : { ...agentTraceWithSteps, trace_id: traceId },
           trace_id: "trace_agent_page"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (url === RESOURCE_ENDPOINTS.list && method === "get") {
+      return {
+        data: {
+          data: options.resources ?? generatedResourceItems,
+          total: (options.resources ?? generatedResourceItems).length,
+          trace_id: "trace_course_resources"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (url === RESOURCE_ENDPOINTS.generate && method === "post") {
+      if (options.failResourceGeneration) {
+        throw new Error("课程资源生成失败。");
+      }
+
+      return {
+        data: {
+          data: {
+            agent_trace_id: "trace_course_resource_generation",
+            resources: generatedResourceItems,
+            quality_scores: {}
+          },
+          trace_id: "trace_course_resource_generation"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (url === PATH_ENDPOINTS.current && method === "get") {
+      return {
+        data: {
+          data:
+            options.currentPath ??
+            {
+              course_id: "808",
+              status: "not_started",
+              message: "学习路径尚未生成。",
+              agent_trace_id: null,
+              path: null,
+              tasks: [],
+              evidence_summary: {
+                knowledge_point_count: 1,
+                confirmed_or_reviewing_weakness_count: 0,
+                pending_weakness_count: 0,
+                resource_count: 0,
+                basis: []
+              }
+            },
+          trace_id: "trace_current_path"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (url === REPORT_ENDPOINTS.latest && method === "get") {
+      return {
+        data: {
+          data: options.latestReport ?? emptyReport,
+          trace_id: "trace_latest_report"
         },
         status: 200,
         statusText: "OK",
@@ -549,8 +710,45 @@ function renderCoursePage(options: CoursePageOptions = {}) {
     if (url === TUTOR_ENDPOINTS.sessions && method === "get") {
       return {
         data: {
-          data: options.sessions ?? [],
+          data: courseSessions,
           trace_id: "trace_course_sessions"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    const sessionDetailMatch = url.match(/^\/tutor\/sessions\/([^/]+)$/);
+    if (sessionDetailMatch && method === "patch") {
+      const sessionId = sessionDetailMatch[1];
+      const title = typeof payload === "object" && payload !== null && "title" in payload ? String(payload.title).trim() : "";
+      courseSessions = courseSessions.map((session) => (session.id === sessionId ? { ...session, title } : session));
+
+      return {
+        data: {
+          data: courseSessions.find((session) => session.id === sessionId) ?? { ...makeSession(sessionId, title), title },
+          trace_id: "trace_course_session_rename"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (sessionDetailMatch && method === "delete") {
+      const sessionId = sessionDetailMatch[1];
+      courseSessions = courseSessions.filter((session) => session.id !== sessionId);
+
+      return {
+        data: {
+          data: {
+            session_id: sessionId,
+            deleted: true
+          },
+          trace_id: "trace_course_session_delete"
         },
         status: 200,
         statusText: "OK",
@@ -575,13 +773,21 @@ function renderCoursePage(options: CoursePageOptions = {}) {
       };
     }
 
-    if (url === TUTOR_ENDPOINTS.detail("777") && method === "get") {
+    if (
+      sessionDetailMatch &&
+      method === "get" &&
+      (sessionDetailMatch[1] === "777" || Boolean(options.historyDetails?.[sessionDetailMatch[1]]) || Boolean(options.sessions?.some((session) => session.id === sessionDetailMatch[1])))
+    ) {
+      const sessionId = sessionDetailMatch[1];
+      const fallbackSession =
+        options.sessions?.find((session) => session.id === sessionId) ?? makeSession(sessionId, "已有课程历史");
       return {
         data: {
           data:
+            options.historyDetails?.[sessionId] ??
             options.historyDetail ??
             makeDetail(
-              makeSession("777", "已有课程历史"),
+              fallbackSession,
               "历史里的问题",
               "历史里的回答保留真实引用。",
               [citationItem]
@@ -706,11 +912,90 @@ describe("CourseSpacePage course tutor sessions", () => {
     );
   });
 
+  it("keeps course history order when selecting an older session", async () => {
+    const user = userEvent.setup();
+    const firstSession = makeSession("777", "上方课程历史");
+    const secondSession = makeSession("778", "下方课程历史");
+
+    renderCoursePage({
+      sessions: [firstSession, secondSession],
+      historyDetails: {
+        "778": makeDetail(secondSession, "下方课程问题", "下方课程回答保留在原位置。")
+      }
+    });
+
+    const courseHistory = await screen.findByLabelText("历史对话");
+    expect((await within(courseHistory).findAllByRole("button", { name: /课程历史/ })).map((button) => button.textContent)).toEqual([
+      "上方课程历史课程内",
+      "下方课程历史课程内"
+    ]);
+
+    await user.click(within(courseHistory).getByRole("button", { name: /下方课程历史/ }));
+
+    expect(await screen.findByText("下方课程问题")).toBeInTheDocument();
+    expect(within(courseHistory).getAllByRole("button", { name: /课程历史/ }).map((button) => button.textContent)).toEqual([
+      "上方课程历史课程内",
+      "下方课程历史课程内"
+    ]);
+  });
+
+  it("renames a course history conversation from the sidebar menu", async () => {
+    const user = userEvent.setup();
+    const { calls } = renderCoursePage({ sessions: [makeSession("777", "已有课程历史")] });
+
+    const courseHistory = await screen.findByLabelText("历史对话");
+    expect(await within(courseHistory).findByRole("button", { name: /已有课程历史/ })).toBeInTheDocument();
+
+    await user.click(within(courseHistory).getByRole("button", { name: "打开会话操作菜单 777" }));
+    await user.click(screen.getByRole("menuitem", { name: "重命名" }));
+
+    const titleInput = screen.getByRole("textbox", { name: "会话名称" });
+    await user.clear(titleInput);
+    await user.type(titleInput, "A 星算法追问");
+    await user.click(screen.getByRole("button", { name: "保存会话名称" }));
+
+    expect(await within(courseHistory).findByRole("button", { name: /A 星算法追问/ })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(calls).toContainEqual(
+        expect.objectContaining({
+          method: "patch",
+          url: TUTOR_ENDPOINTS.detail(777),
+          payload: { title: "A 星算法追问" }
+        })
+      );
+    });
+  });
+
+  it("deletes the active course history conversation and returns to course guidance", async () => {
+    const user = userEvent.setup();
+    const { calls } = renderCoursePage({ sessions: [makeSession("777", "已有课程历史")] });
+
+    const courseHistory = await screen.findByLabelText("历史对话");
+    await user.click(await within(courseHistory).findByRole("button", { name: /已有课程历史/ }));
+    expect(await screen.findByRole("region", { name: "课程即时对话" })).toBeInTheDocument();
+
+    await user.click(within(courseHistory).getByRole("button", { name: "打开会话操作菜单 777" }));
+    await user.click(screen.getByRole("menuitem", { name: "删除" }));
+    await user.click(screen.getByRole("menuitem", { name: "确认删除" }));
+
+    expect(await screen.findByRole("region", { name: "课程提问引导" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "课程即时对话" })).not.toBeInTheDocument();
+    expect(within(courseHistory).queryByRole("button", { name: /已有课程历史/ })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(calls).toContainEqual(
+        expect.objectContaining({
+          method: "delete",
+          url: TUTOR_ENDPOINTS.detail(777)
+        })
+      );
+    });
+  });
+
   it("shows start guidance instead of a fixed assistant answer before any course message exists", async () => {
     renderCoursePage();
 
     expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
-    expect(await screen.findByRole("region", { name: "待复习弱点" })).toHaveTextContent("还没有待确认弱点");
+    expect(screen.queryByRole("region", { name: "待复习弱点" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "课程提问引导" })).toBeInTheDocument();
     expect(screen.getByText("推荐问题")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "知识学习画布" })).not.toBeInTheDocument();
@@ -718,6 +1003,140 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.queryByRole("region", { name: "资源生成区" })).not.toBeInTheDocument();
     expect(screen.queryByText("监督学习先抓住“数据、目标、泛化”三件事")).not.toBeInTheDocument();
     expect(screen.queryByText("AI 辅导回答")).not.toBeInTheDocument();
+  });
+
+  it("shows the A3 learning loop in course space without replacing course chat", async () => {
+    renderCoursePage({ learningState: learningStateWithWeakness, currentPath: activePathDetail });
+
+    expect(await screen.findByRole("region", { name: "课程学习闭环" })).toBeInTheDocument();
+    expect(screen.getByText("A3 个性化学习闭环")).toBeInTheDocument();
+    expect(screen.getByText(/围绕最新问题|从课程资料和知识点开始建立学习闭环/)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "A3 学习步骤" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "课程对话空间" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "进入你的学习空间" })).not.toBeInTheDocument();
+  });
+
+  it("shows course closed-loop actions after a real course answer", async () => {
+    renderCoursePage({
+      sessions: [makeSession("777", "已有课程历史")],
+      learningState: learningStateWithPath,
+      currentPath: activePathDetail
+    });
+
+    expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
+    const loopActions = await screen.findByRole("region", { name: "课程闭环行动" });
+
+    expect(within(loopActions).getByRole("button", { name: /来源/ })).toBeInTheDocument();
+    expect(within(loopActions).getByRole("button", { name: /生成资源/ })).toBeInTheDocument();
+    expect(within(loopActions).getByRole("button", { name: /学习路径/ })).toBeInTheDocument();
+    expect(within(loopActions).getByRole("link", { name: /进入练习/ })).toHaveAttribute(
+      "href",
+      `${PATHS.practice}?course_id=808`
+    );
+    expect(within(loopActions).getByRole("link", { name: /学习报告/ })).toHaveAttribute(
+      "href",
+      `${PATHS.reports}?course_id=808`
+    );
+    expect(within(loopActions).getByRole("button", { name: /课堂协作轨迹/ })).toBeInTheDocument();
+  });
+
+  it("hides echoed model context from persisted course answers", async () => {
+    renderCoursePage({
+      sessions: [makeSession("777", "已有课程历史")],
+      historyDetail: makeDetail(
+        makeSession("777", "已有课程历史"),
+        "这门课最适合先复习哪些知识点？",
+        [
+          "学生问题：这门课最适合先复习哪些知识点？",
+          "",
+          "课程引用：",
+          "[1] 来源：人工智能导论讲义.md",
+          "章节：启发式搜索",
+          "匹配度：9.5",
+          "片段：启发式搜索利用启发函数估计路径代价。",
+          "",
+          "根据上述引用，可以先复习启发式搜索，再通过练习确认掌握度。"
+        ].join("\n")
+      )
+    });
+
+    expect(await screen.findByText("根据上述引用，可以先复习启发式搜索，再通过练习确认掌握度。")).toBeInTheDocument();
+    expect(screen.queryByText(/学生问题：/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/课程引用：/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/匹配度：9.5/)).not.toBeInTheDocument();
+  });
+
+  it("keeps inline source metadata out of persisted answer text", async () => {
+    renderCoursePage({
+      sessions: [makeSession("777", "已有课程历史")],
+      historyDetail: makeDetail(
+        makeSession("777", "已有课程历史"),
+        "请给我排序",
+        "1. 符号知识表达（匹配度：2.4667） - 来源：[1] - 片段：知识表示关注如何把事实、概念、关系和规则编码成机器可处理的结构。"
+      )
+    });
+
+    expect(await screen.findByText(/符号知识表达：知识表示关注/)).toBeInTheDocument();
+    expect(screen.queryByText(/匹配度：2.4667/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/来源：\[1\]/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/片段：/)).not.toBeInTheDocument();
+  });
+
+  it("keeps numbered source detail sections out of persisted answer text", async () => {
+    renderCoursePage({
+      sessions: [makeSession("777", "已有课程历史")],
+      historyDetail: makeDetail(
+        makeSession("777", "已有课程历史"),
+        "请解释一个知识点",
+        [
+          "**概念解释：** 符号知识表达关注如何把事实、概念、关系和规则编码成机器可处理的结构。",
+          "**依据：** 1. 来源：人工智能导论内置课程包.md 2. 章节：符号知识表达 3. 片段：知识表示关注如何把事实、概念、关系和规则编码成机器可处理的结构。",
+          "**易错点：** 不要把符号规则和统计学习混为一谈。",
+          "**下一步练习：** 用自己的话写出一个 IF-THEN 规则。"
+        ].join(" ")
+      )
+    });
+
+    expect(await screen.findByText(/符号知识表达关注/)).toBeInTheDocument();
+    expect(screen.getByText(/易错点/)).toBeInTheDocument();
+    expect(screen.getByText(/下一步练习/)).toBeInTheDocument();
+    expect(screen.queryByText(/来源：人工智能导论内置课程包/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/章节：符号知识表达/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/片段：知识表示/)).not.toBeInTheDocument();
+  });
+
+  it("lets the student generate five A3 resource types from course space", async () => {
+    const user = userEvent.setup();
+    const { calls } = renderCoursePage({
+      sessions: [makeSession("777", "已有课程历史")],
+      learningState: learningStateWithWeakness,
+      resources: []
+    });
+
+    await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await user.click(await screen.findByRole("button", { name: /生成资源/ }));
+
+    const resourcePanel = await screen.findByRole("region", { name: "课程资源生成" });
+    expect(within(resourcePanel).getByLabelText("讲解文档")).toBeChecked();
+    expect(within(resourcePanel).getByLabelText("思维导图")).toBeChecked();
+    expect(within(resourcePanel).getByLabelText("练习题")).toBeChecked();
+    expect(within(resourcePanel).getByLabelText("代码实操")).toBeChecked();
+    expect(within(resourcePanel).getByLabelText("PPT 大纲")).toBeChecked();
+
+    await user.click(within(resourcePanel).getByRole("button", { name: "生成 5 类个性化资源" }));
+
+    await waitFor(() => {
+      expect(calls).toContainEqual(
+        expect.objectContaining({
+          method: "post",
+          url: RESOURCE_ENDPOINTS.generate,
+          payload: expect.objectContaining({
+            course_id: 808,
+            resource_types: ["doc", "mindmap", "quiz", "code", "slide"]
+          })
+        })
+      );
+    });
   });
 
   it("links practice and reports entries with the current course preselected", async () => {
@@ -824,12 +1243,13 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
-    await user.click(await screen.findByRole("button", { name: "课堂协作轨迹" }));
+    await user.click(await screen.findByRole("button", { name: /课堂协作轨迹/ }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
     expect(await within(detailPanel).findByLabelText("Agent 执行轨迹")).toBeInTheDocument();
     expect(within(detailPanel).getByText("retrieve")).toBeInTheDocument();
     expect(within(detailPanel).getByText("命中 2 条引用")).toBeInTheDocument();
+    expect(within(detailPanel).getByText("已参考最近 4 条会话，并使用历史摘要")).toBeInTheDocument();
     expect(within(detailPanel).getByText("diagnosis")).toBeInTheDocument();
     expect(calls).toContainEqual(
       expect.objectContaining({
@@ -856,7 +1276,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
-    await user.click(await screen.findByRole("button", { name: "课堂协作轨迹" }));
+    await user.click(await screen.findByRole("button", { name: /课堂协作轨迹/ }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
     expect(await within(detailPanel).findByLabelText("Agent 执行轨迹")).toBeInTheDocument();
@@ -882,7 +1302,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
-    await user.click(await screen.findByRole("button", { name: "生成资源" }));
+    await user.click(await screen.findByRole("button", { name: /生成资源/ }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
     expect(within(detailPanel).getByRole("link", { name: "进入资源工坊" })).toHaveAttribute(
@@ -900,7 +1320,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
-    await user.click(await screen.findByRole("button", { name: "学习路径" }));
+    await user.click(await screen.findByRole("button", { name: /学习路径/ }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
     expect(within(detailPanel).getByText("当前学习路径进行中。")).toBeInTheDocument();
@@ -929,7 +1349,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
-    await user.click(await screen.findByRole("button", { name: "课堂协作轨迹" }));
+    await user.click(await screen.findByRole("button", { name: /课堂协作轨迹/ }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
     expect(await within(detailPanel).findByText("当前 Agent trace 暂无可展示步骤。")).toBeInTheDocument();
@@ -945,7 +1365,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
-    await user.click(await screen.findByRole("button", { name: "课堂协作轨迹" }));
+    await user.click(await screen.findByRole("button", { name: /课堂协作轨迹/ }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
     expect(await within(detailPanel).findByText("Agent 轨迹读取失败，请稍后重试。")).toBeInTheDocument();

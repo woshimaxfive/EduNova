@@ -1068,7 +1068,7 @@ Authorization: Bearer <token>
 - `course_id`：关联课程，可能为空。
 - `status`：由步骤状态派生，可能为 `running`、`completed`、`warning` 或 `failed`。
 - `steps`：按 `step_index`、`created_at`、`id` 排序的步骤列表。
-- `metadata`：仅返回白名单安全摘要，例如引用数量、审核结果、资源数量等；不返回系统提示词、模型输入、完整资料原文、API Key 或用户隐私原文。
+- `metadata`：仅返回白名单安全摘要，例如引用数量、审核结果、资源数量、`context_message_count`、`context_summary_used`、`retrieval_query_mode` 等；不返回系统提示词、模型输入、完整历史消息、完整资料原文、API Key 或用户隐私原文。
 
 响应：
 
@@ -1092,6 +1092,9 @@ Authorization: Bearer <token>
         "duration_ms": 25,
         "metadata": {
           "citation_count": 2,
+          "context_message_count": 4,
+          "context_summary_used": true,
+          "retrieval_query_mode": "contextual",
           "review_status": "passed",
           "risk_flags": [],
           "workflow": "resource_generation"
@@ -1296,7 +1299,7 @@ Authorization: Bearer <token>
 
 ### GET `/tutor/sessions`
 
-用途：查看会话列表。支持按 `scope` 和 `course_id` 筛选主页历史或课程内历史。Phase 4.3 已接入 `scope=home`，用于左侧主页历史；Phase 5.3 已接入 `scope=course&course_id=...`，用于课程空间侧栏和课程内历史；只返回当前用户自己的会话。
+用途：查看会话列表。支持按 `scope` 和 `course_id` 筛选主页历史或课程内历史。Phase 4.3 已接入 `scope=home`，用于左侧主页历史；Phase 5.3 已接入 `scope=course&course_id=...`，用于课程空间侧栏和课程内历史；只返回当前用户自己的未归档会话。
 
 查询参数：
 
@@ -1305,7 +1308,7 @@ Authorization: Bearer <token>
 
 ### GET `/tutor/sessions/{session_id}`
 
-用途：查看会话详情。Phase 4.3 已用于点击左侧主页历史后恢复主页消息列表；Phase 5.3 已用于点击课程内历史后恢复课程消息和 `citation_json` 引用。只能访问当前用户自己的会话。
+用途：查看会话详情。Phase 4.3 已用于点击左侧主页历史后恢复主页消息列表；Phase 5.3 已用于点击课程内历史后恢复课程消息和 `citation_json` 引用。只能访问当前用户自己的未归档会话。
 
 响应：
 
@@ -1338,6 +1341,46 @@ Authorization: Bearer <token>
 }
 ```
 
+### PATCH `/tutor/sessions/{session_id}`
+
+用途：重命名 AI 学习会话。用于主页历史和课程空间历史的会话菜单；必须携带 JWT，只能修改当前用户自己的未归档会话。
+
+请求：
+
+```json
+{
+  "title": "反向传播薄弱点复习"
+}
+```
+
+规则：
+
+- `title` 会去掉首尾空白，不能为空，最长 255 个字符。
+- 成功后返回更新后的 `TutorSessionSummary`。
+- 会话不存在、属于其他用户或已归档时返回 404。
+
+### DELETE `/tutor/sessions/{session_id}`
+
+用途：删除历史会话。当前实现为软删除：会话会从主页历史或课程空间历史隐藏，后续列表、详情和继续发送都不可再访问；消息数据不作为页面历史返回。
+
+响应：
+
+```json
+{
+  "data": {
+    "session_id": "12",
+    "deleted": true
+  },
+  "trace_id": "trace_xxx"
+}
+```
+
+规则：
+
+- 必须携带 JWT，只能删除当前用户自己的未归档会话。
+- 会话不存在、属于其他用户或已归档时返回 404。
+- 删除当前前端选中的会话后，主页回到默认学习入口；课程空间回到课程问答引导态。
+
 ### POST `/tutor/sessions/{session_id}/messages`
 
 用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条 `assistant` 回复。Phase 13.2 后，`scope=home` 可按需合并已选资料短摘录、Tavily-compatible 联网搜索摘要和深度回答指令，回答会写入安全 `citation_json` 和 `home_tutor` trace；用户模型配置不存在时回退服务器 `.env` 配置。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。Phase 6.1 后，课程会话在命中引用且模型配置可用时，会通过 OpenAI-compatible Chat Completions 生成非流式真实回答。Phase 6.3 后，课程空间前端默认优先使用流式接口，本接口保留为兼容路径和自动化测试路径。Phase 6.4 后，课程 RAG 默认使用关键词/向量混合检索，旧关键词字段继续兼容。
@@ -1364,10 +1407,12 @@ Authorization: Bearer <token>
 - `citation_json` 允许三类安全来源：课程引用、资料短摘录和网页来源，可包含 `source_type`、`title`、`url`、`snippet` 等字段。
 - 成功时 `trace_id` 写入本次 `home_tutor` trace，步骤为 `home_profile -> material_context -> web_search -> answer -> review`。
 - 模型调用失败时返回可恢复错误，不写入半截 assistant 消息。
+- 同一 `session_id` 内默认启用多轮上下文。后端会读取最近 12 条 user/assistant 消息，单条最多 1200 字，总历史上下文最多 6000 字；更早历史只生成最多 1500 字的安全摘要。请求体不新增字段，前端不展示历史原文。
 
 课程会话规则：
 
 - 命中课程知识切片时，assistant `citation_json` 采用 `/rag/search` 的结果字段结构：`chunk_id`、`course_id`、`material_id`、`knowledge_point_id`、`content`、`source_title`、`page_number`、`section_title`、`score`；Phase 6.4 后可额外包含 `keyword_score`、`vector_score`、`retrieval_source`、`embedding_status`。
+- 课程 RAG 查询会把最近 2 条用户问题和当前问题合成上下文化 query，改善“这个”“继续”“刚才那个”等追问的召回；主页联网搜索也使用同样的上下文化 query，但网页来源必须来自真实搜索结果。
 - 无命中时 `citation_json=[]`，assistant 内容提示“资料依据不足”，前端不得伪造引用。
 - 有命中且可解析模型配置时，assistant `content` 保存模型基于引用生成的回答，`trace_id` 写入本次 `CourseTutorGraph` trace。
 - 有命中但无可用模型配置时，assistant 保存“已找到资料依据，但当前未配置可用模型。”，引用仍保留。
@@ -1396,7 +1441,7 @@ Content-Type: text/event-stream
 
 ```text
 event: metadata
-data: {"session_id":"12","trace_id":"trace_xxx","workflow":"course_tutor","artifact_type":"chat_message","steps":["profile","retriever","tutor","weakness","review","next_action"],"citation_count":2,"used_model":true}
+data: {"session_id":"12","trace_id":"trace_xxx","workflow":"course_tutor","artifact_type":"chat_message","steps":["profile","retriever","tutor","weakness","review","next_action"],"citation_count":2,"used_model":true,"context_message_count":4,"context_summary_used":false,"retrieval_query_mode":"contextual"}
 
 event: token
 data: {"content":"可以先从启发函数的作用看起。"}

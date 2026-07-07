@@ -12,8 +12,8 @@ import {
   X
 } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ChangeEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { PATHS, buildCoursePath } from "../app/routePaths";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
@@ -23,7 +23,9 @@ import { getApiErrorMessage } from "../api/errors";
 import { uploadMaterial } from "../api/materials";
 import {
   createTutorSession,
+  deleteTutorSession,
   getTutorSession,
+  renameTutorSession,
   sendTutorMessage,
   type TutorCitation,
   type TutorMessage,
@@ -43,6 +45,12 @@ type HomeMessage = {
   citation_json: TutorCitation[];
   trace_id: string | null;
 };
+
+type LearningSpaceNavigationState = {
+  selectedHomeThreadId?: string;
+};
+
+type DashboardSummaryResponse = Awaited<ReturnType<typeof getDashboardSummary>>;
 
 type HomeAnswerPanel = "sources" | "path" | "thinking";
 
@@ -75,17 +83,31 @@ type SpeechWindow = Window &
 
 const fallbackSuggestedPrompts = ["帮我制定 7 天期末复习计划", "把反向传播讲到我能做题", "根据资料生成一门冲刺课"];
 
+function mapTutorMessages(apiMessages: TutorMessage[]) {
+  return apiMessages.map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    citation_json: message.citation_json ?? [],
+    trace_id: message.trace_id ?? null
+  }));
+}
+
 export function LearningSpacePage() {
   const token = useAuthStore((state) => state.token);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
+  const navigationState = location.state as LearningSpaceNavigationState | null;
+  const selectedHomeThreadIdFromNavigation =
+    typeof navigationState?.selectedHomeThreadId === "string" ? navigationState.selectedHomeThreadId : null;
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const homeChatStageRef = useRef<HTMLElement | null>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
   const [localHomeThreads, setLocalHomeThreads] = useState<DashboardSummaryThread[]>([]);
-  const [activeHomeThreadId, setActiveHomeThreadId] = useState<string | null>(null);
+  const [activeHomeThreadId, setActiveHomeThreadId] = useState<string | null>(() => selectedHomeThreadIdFromNavigation);
   const [isSendingQuestion, setIsSendingQuestion] = useState(false);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
@@ -189,16 +211,6 @@ export function LearningSpacePage() {
     return Array.from(question).slice(0, 30).join("");
   }
 
-  function mapTutorMessages(apiMessages: TutorMessage[]) {
-    return apiMessages.map((message) => ({
-      id: message.id,
-      role: message.role,
-      content: message.content,
-      citation_json: message.citation_json ?? [],
-      trace_id: message.trace_id ?? null
-    }));
-  }
-
   function toHomeThread(session: TutorSessionSummary): DashboardSummaryThread {
     return {
       id: session.id,
@@ -213,6 +225,64 @@ export function LearningSpacePage() {
 
       return [nextThread, ...current.filter((thread) => thread.id !== nextThread.id)];
     });
+  }
+
+  function updateDashboardHomeThreads(
+    updater: (threads: DashboardSummaryResponse["data"]["recent_conversations"]) => DashboardSummaryResponse["data"]["recent_conversations"]
+  ) {
+    queryClient.setQueryData<DashboardSummaryResponse>(["dashboard", "summary"], (current) =>
+      current
+        ? {
+            ...current,
+            data: {
+              ...current.data,
+              recent_conversations: updater(current.data.recent_conversations)
+            }
+          }
+        : current
+    );
+  }
+
+  function renameCachedHomeThread(sessionId: string, title: string) {
+    setLocalHomeThreads((current) =>
+      current.map((thread) => (thread.id === sessionId ? { ...thread, title } : thread))
+    );
+    updateDashboardHomeThreads((threads) =>
+      threads.map((thread) => (thread.id === sessionId ? { ...thread, title } : thread))
+    );
+  }
+
+  async function renameHomeConversation(conversation: DashboardSummaryThread, title: string) {
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) {
+      return;
+    }
+
+    try {
+      const renamed = await renameTutorSession(conversation.id, { title: normalizedTitle });
+
+      renameCachedHomeThread(conversation.id, renamed.data.title);
+      setComposerFeedback(null);
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+    } catch {
+      setComposerFeedback({ message: "会话改名失败，请稍后再试。", tone: "warning" });
+    }
+  }
+
+  async function deleteHomeConversation(conversation: DashboardSummaryThread) {
+    try {
+      await deleteTutorSession(conversation.id);
+      setLocalHomeThreads((current) => current.filter((thread) => thread.id !== conversation.id));
+      updateDashboardHomeThreads((threads) => threads.filter((thread) => thread.id !== conversation.id));
+
+      if (activeHomeThreadId === conversation.id) {
+        resetHomeEntry();
+      }
+
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+    } catch {
+      setComposerFeedback({ message: "会话删除失败，请稍后再试。", tone: "warning" });
+    }
   }
 
   async function handleSendQuestion() {
@@ -337,19 +407,72 @@ export function LearningSpacePage() {
     setComposerFeedback({ message: "正在朗读回答。", tone: "info" });
   }
 
-  async function selectHomeConversation(conversation: DashboardSummaryThread) {
+  function resetHomeEntry() {
+    recognitionRef.current?.stop();
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    setPrompt("");
+    setMessages([]);
+    setActiveHomeThreadId(null);
+    setSelectedMaterialIds([]);
+    setIsHistoryCollapsed(false);
+    setIsLibraryOpen(false);
+    setIsCourseDialogOpen(false);
+    setIsDeepThinkingEnabled(false);
+    setIsWebSearchEnabled(false);
+    setIsListening(false);
+    setActiveAnswerPanel("sources");
+    setExpandedAnswerId(null);
+    setComposerFeedback(null);
+    setCourseDialogFeedback(null);
+    window.requestAnimationFrame(() => {
+      document.documentElement.scrollTop = 0;
+      document.documentElement.scrollLeft = 0;
+      document.body.scrollTop = 0;
+      document.body.scrollLeft = 0;
+      if (homeChatStageRef.current) {
+        homeChatStageRef.current.scrollTop = 0;
+        homeChatStageRef.current.scrollLeft = 0;
+      }
+    });
+  }
+
+  const selectHomeConversation = useCallback(async (conversation: DashboardSummaryThread) => {
     setActiveHomeThreadId(conversation.id);
 
     try {
       const detail = await getTutorSession(conversation.id);
 
       setMessages(mapTutorMessages(detail.data.messages));
-      upsertHomeThread(detail.data.session);
     } catch (error) {
       void error;
       setComposerFeedback({ message: "历史对话读取失败，请稍后再试。", tone: "warning" });
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedHomeThreadIdFromNavigation || messages.length > 0) {
+      return;
+    }
+
+    const conversation = homeThreads.find((thread) => thread.id === selectedHomeThreadIdFromNavigation);
+    if (!conversation) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const detail = await getTutorSession(conversation.id);
+
+        setMessages(mapTutorMessages(detail.data.messages));
+        setActiveHomeThreadId(conversation.id);
+      } catch (error) {
+        void error;
+        setComposerFeedback({ message: "历史对话读取失败，请稍后再试。", tone: "warning" });
+      }
+    })();
+  }, [homeThreads, messages.length, selectedHomeThreadIdFromNavigation]);
 
   async function createCourseFromSelectedMaterials(courseTitle: string) {
     const selectedMaterialIdsAsNumbers = effectiveSelectedMaterialIds
@@ -401,12 +524,11 @@ export function LearningSpacePage() {
           conversations={homeThreads}
           activeConversationId={activeHomeThreadId}
           onToggleCollapsed={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
-          onNewChat={() => {
-            setPrompt("");
-            setMessages([]);
-            setActiveHomeThreadId(null);
-          }}
+          onHomeClick={resetHomeEntry}
+          onNewChat={resetHomeEntry}
           onSelectConversation={(conversation) => void selectHomeConversation(conversation)}
+          onRenameConversation={renameHomeConversation}
+          onDeleteConversation={deleteHomeConversation}
         />
 
         <section
@@ -761,6 +883,11 @@ function HomeAnswerInsights({
                     <li key={event.id}>
                       <strong>{event.agentName}</strong>
                       <span>{event.summary}</span>
+                      {event.contextMessageCount ? (
+                        <span className="trace-context-note">
+                          {`已参考最近 ${event.contextMessageCount} 条会话${event.contextSummaryUsed ? "，并使用历史摘要" : ""}`}
+                        </span>
+                      ) : null}
                     </li>
                   ))}
                 </ol>

@@ -61,7 +61,7 @@ class FakeTutorRepository:
             (
                 session
                 for session in self.sessions
-                if session.id == session_id and session.user_id == user_id
+                if session.id == session_id and session.user_id == user_id and not session.archived_from_home
             ),
             None,
         )
@@ -139,14 +139,17 @@ class FakeCourseAnswerGenerator:
     should_raise: Exception | None = None
     calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def generate(self, user: User, question: str, citations: list[dict[str, Any]]) -> SimpleNamespace:
-        self.calls.append(
-            {
-                "user_id": user.id,
-                "question": question,
-                "citations": citations,
-            }
-        )
+    def generate(
+        self,
+        user: User,
+        question: str,
+        citations: list[dict[str, Any]],
+        conversation_context: Any | None = None,
+    ) -> SimpleNamespace:
+        call: dict[str, Any] = {"user_id": user.id, "question": question, "citations": citations}
+        if conversation_context is not None:
+            call["conversation_context"] = conversation_context
+        self.calls.append(call)
         if self.should_raise is not None:
             raise self.should_raise
         return SimpleNamespace(content=self.content, trace_id=self.trace_id)
@@ -159,12 +162,15 @@ class FakeCourseAnswerGenerator:
         use_web_search: bool = False,
         deep_thinking: bool = False,
         warnings: list[str] | None = None,
+        conversation_context: Any | None = None,
     ) -> SimpleNamespace:
         call = {
             "user_id": user.id,
             "question": question,
             "citations": citations or [],
         }
+        if conversation_context is not None:
+            call["conversation_context"] = conversation_context
         if use_web_search or deep_thinking or citations or warnings:
             call.update(
                 {
@@ -178,13 +184,20 @@ class FakeCourseAnswerGenerator:
             raise self.should_raise
         return SimpleNamespace(content=self.content, trace_id=self.trace_id)
 
-    def stream(self, user: User, question: str, citations: list[dict[str, Any]]) -> SimpleNamespace:
+    def stream(
+        self,
+        user: User,
+        question: str,
+        citations: list[dict[str, Any]],
+        conversation_context: Any | None = None,
+    ) -> SimpleNamespace:
         self.calls.append(
             {
                 "user_id": user.id,
                 "question": question,
                 "citations": citations,
                 "stream": True,
+                **({"conversation_context": conversation_context} if conversation_context is not None else {}),
             }
         )
         if self.should_raise is not None:
@@ -238,6 +251,22 @@ def make_user(user_id: int, display_name: str = "测试学生") -> User:
         role="student",
         starter_mode="blank",
     )
+
+
+def add_history_message(repo: FakeTutorRepository, session: ChatSession, role: str, content: str) -> ChatMessage:
+    message = ChatMessage(
+        id=repo.next_message_id,
+        session_id=session.id,
+        user_id=session.user_id,
+        role=role,
+        content=content,
+        citation_json=[],
+        trace_id=None,
+        created_at=NOW + timedelta(minutes=repo.next_message_id),
+    )
+    repo.next_message_id += 1
+    repo.messages.append(message)
+    return message
 
 
 def make_home_material(material_id: int = 301, user_id: int = 1) -> Material:
@@ -347,6 +376,53 @@ def test_create_course_session_requires_course_id_and_accessible_course() -> Non
     assert session.course_id == 7
 
 
+def test_rename_session_updates_title_for_current_user() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    service = module.TutorSessionService(repo)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="旧会话名")
+    repo.committed = False
+
+    renamed = as_dict(service.rename_session(user=user, session_id=session.id, title="  反向传播复习计划  "))
+
+    assert renamed["id"] == str(session.id)
+    assert renamed["title"] == "反向传播复习计划"
+    assert repo.sessions[0].title == "反向传播复习计划"
+    assert repo.committed is True
+
+
+def test_rename_session_rejects_blank_title() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    service = module.TutorSessionService(repo)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="旧会话名")
+
+    with pytest.raises(module.EmptyMessageError):
+        service.rename_session(user=user, session_id=session.id, title="   ")
+
+
+def test_delete_session_archives_and_hides_it_from_history() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    service = module.TutorSessionService(repo)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="要删除的会话")
+    add_history_message(repo, session, "user", "这轮学习先做什么？")
+    repo.committed = False
+
+    deleted = as_dict(service.delete_session(user=user, session_id=session.id))
+
+    assert deleted["id"] == str(session.id)
+    assert deleted["archived_from_home"] is True
+    assert repo.sessions[0].archived_from_home is True
+    assert service.list_sessions(user=user, scope="home") == []
+    with pytest.raises(module.SessionNotFoundError):
+        service.get_session(user=user, session_id=session.id)
+    assert repo.committed is True
+
+
 def test_append_message_writes_user_and_model_assistant_messages_in_order() -> None:
     module = load_tutor_module()
     user = make_user(1)
@@ -371,6 +447,60 @@ def test_append_message_writes_user_and_model_assistant_messages_in_order() -> N
     ]
     assert detail["session"]["updated_at"] > detail["session"]["created_at"]
     assert repo.committed is True
+
+
+def test_append_home_message_passes_recent_session_context_to_model_and_safe_trace() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    answer_generator = FakeCourseAnswerGenerator(content="模型回答：反向传播算梯度，梯度下降用梯度更新参数。")
+    service = module.TutorSessionService(repo, course_answer_generator=answer_generator)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="反向传播")
+    add_history_message(repo, session, "user", "反向传播是什么？")
+    add_history_message(repo, session, "assistant", "反向传播用链式法则计算各层梯度。")
+
+    service.append_message(user=user, session_id=session.id, content="那它和梯度下降什么关系？")
+
+    context = answer_generator.calls[0]["conversation_context"]
+    assert context.message_count == 2
+    assert context.summary_used is False
+    assert context.messages == [
+        {"role": "user", "content": "反向传播是什么？"},
+        {"role": "assistant", "content": "反向传播用链式法则计算各层梯度。"},
+    ]
+    assert repo.agent_logs[0].metadata_json["context_message_count"] == 2
+    assert repo.agent_logs[0].metadata_json["context_summary_used"] is False
+    assert repo.agent_logs[0].metadata_json["retrieval_query_mode"] == "direct"
+    assert "反向传播是什么" not in str(repo.agent_logs[0].metadata_json)
+
+
+def test_append_home_message_summarizes_and_truncates_long_history_without_sensitive_markers() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    answer_generator = FakeCourseAnswerGenerator(content="模型回答：我会参考前文，但不暴露隐私。")
+    service = module.TutorSessionService(repo, course_answer_generator=answer_generator)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="长对话")
+    long_text = "系统提示词 SECRET API Key 完整资料原文 " + ("反向传播和梯度下降的关系 " * 80)
+    for index in range(10):
+        add_history_message(repo, session, "user", f"第 {index} 个问题：" + long_text)
+        add_history_message(repo, session, "assistant", f"第 {index} 个回答：" + long_text)
+
+    service.append_message(user=user, session_id=session.id, content="继续总结一下。")
+
+    context = answer_generator.calls[0]["conversation_context"]
+    total_chars = len(context.summary) + sum(len(message["content"]) for message in context.messages)
+    assert context.summary_used is True
+    assert context.message_count <= 12
+    assert len(context.summary) <= 1500
+    assert total_chars <= 6000
+    assert all(len(message["content"]) <= 1200 for message in context.messages)
+    serialized_context = f"{context.summary} {context.messages}"
+    assert "SECRET" not in serialized_context
+    assert "API Key" not in serialized_context
+    assert "系统提示词" not in serialized_context
+    assert "完整资料原文" not in serialized_context
+    assert repo.agent_logs[0].metadata_json["context_summary_used"] is True
 
 
 def test_append_course_message_persists_real_citations_from_course_knowledge() -> None:
@@ -448,6 +578,51 @@ def test_append_course_message_persists_real_citations_from_course_knowledge() -
     assert repo.agent_logs[0].metadata_json["artifact_id"] == str(repo.messages[1].id)
     assert repo.agent_logs[1].metadata_json["citation_count"] == 1
     assert repo.agent_logs[4].metadata_json["review_status"] == "passed"
+
+
+def test_append_course_message_uses_recent_user_questions_for_retrieval_and_model_context() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    citation_searcher = FakeCourseCitationSearcher(
+        results=[
+            {
+                "chunk_id": 501,
+                "course_id": 7,
+                "material_id": 301,
+                "knowledge_point_id": 401,
+                "content": "A 星算法用估价函数选择更可能接近目标的节点。",
+                "source_title": "人工智能导论讲义.md",
+                "page_number": None,
+                "section_title": "启发式搜索",
+                "score": 9.5,
+            }
+        ]
+    )
+    answer_generator = FakeCourseAnswerGenerator()
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=citation_searcher,
+        course_answer_generator=answer_generator,
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+    add_history_message(repo, session, "user", "启发式搜索是什么？")
+    add_history_message(repo, session, "assistant", "它用启发函数估计搜索方向。")
+    add_history_message(repo, session, "user", "A 星算法为什么要估价函数？")
+    add_history_message(repo, session, "assistant", "估价函数帮助排序待扩展节点。")
+
+    service.append_message(user=user, session_id=session.id, content="这个怎么做题？")
+
+    assert citation_searcher.calls[0]["query"] == "启发式搜索是什么？\nA 星算法为什么要估价函数？\n这个怎么做题？"
+    context = answer_generator.calls[0]["conversation_context"]
+    assert context.message_count == 4
+    assert context.messages[-2:] == [
+        {"role": "user", "content": "A 星算法为什么要估价函数？"},
+        {"role": "assistant", "content": "估价函数帮助排序待扩展节点。"},
+    ]
+    assert repo.agent_logs[0].metadata_json["context_message_count"] == 4
+    assert repo.agent_logs[0].metadata_json["retrieval_query_mode"] == "contextual"
+    assert "A 星算法为什么" not in str(repo.agent_logs[0].metadata_json)
 
 
 def test_append_course_message_records_profile_candidate_event_after_messages_have_ids() -> None:
@@ -611,6 +786,28 @@ def test_append_home_message_with_tools_persists_material_web_citations_and_trac
     assert repo.agent_logs[1].metadata_json["material_count"] == 1
     assert repo.agent_logs[2].metadata_json["web_result_count"] == 1
     assert repo.agent_logs[4].metadata_json["review_status"] == "passed"
+
+
+def test_append_home_message_uses_contextual_query_for_web_search() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    web_searcher = FakeWebSearchService()
+    answer_generator = FakeCourseAnswerGenerator(content="模型回答：结合上一问继续解释。")
+    service = module.TutorSessionService(
+        repo,
+        course_answer_generator=answer_generator,
+        web_search_service=web_searcher,
+    )
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="主页答疑")
+    add_history_message(repo, session, "user", "A 星算法为什么要估价函数？")
+    add_history_message(repo, session, "assistant", "估价函数帮助排序待扩展节点。")
+
+    service.append_message(user=user, session_id=session.id, content="这个有没有最新例子？", use_web_search=True)
+
+    assert web_searcher.calls == [{"query": "A 星算法为什么要估价函数？\n这个有没有最新例子？", "max_results": 5}]
+    assert answer_generator.calls[0]["conversation_context"].message_count == 2
+    assert repo.agent_logs[0].metadata_json["retrieval_query_mode"] == "contextual"
 
 
 def test_append_home_message_does_not_record_profile_candidate_event() -> None:
@@ -788,6 +985,48 @@ def test_stream_course_message_emits_tokens_and_persists_final_messages() -> Non
     ]
     assert repo.agent_logs[0].metadata_json["artifact_id"] == str(repo.messages[1].id)
     assert repo.agent_logs[4].metadata_json["risk_flags"] == []
+
+
+def test_stream_course_message_passes_context_to_retrieval_model_and_metadata() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    citation_searcher = FakeCourseCitationSearcher(
+        results=[
+            {
+                "chunk_id": 501,
+                "course_id": 7,
+                "material_id": 301,
+                "knowledge_point_id": 401,
+                "content": "A 星算法用估价函数选择更可能接近目标的节点。",
+                "source_title": "人工智能导论讲义.md",
+                "page_number": None,
+                "section_title": "启发式搜索",
+                "score": 9.5,
+            }
+        ]
+    )
+    answer_generator = FakeCourseAnswerGenerator(tokens=["模型回答：", "结合刚才的 A* 继续做题。"])
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=citation_searcher,
+        course_answer_generator=answer_generator,
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+    add_history_message(repo, session, "user", "A 星算法为什么要估价函数？")
+    add_history_message(repo, session, "assistant", "估价函数帮助排序待扩展节点。")
+
+    events = list(service.stream_message(user=user, session_id=session.id, content="那这个怎么做题？"))
+
+    assert citation_searcher.calls[0]["query"] == "A 星算法为什么要估价函数？\n那这个怎么做题？"
+    context = answer_generator.calls[0]["conversation_context"]
+    assert context.message_count == 2
+    assert context.messages[0]["content"] == "A 星算法为什么要估价函数？"
+    assert events[0]["data"]["context_message_count"] == 2
+    assert events[0]["data"]["context_summary_used"] is False
+    assert events[0]["data"]["retrieval_query_mode"] == "contextual"
+    assert repo.agent_logs[0].metadata_json["context_message_count"] == 2
+    assert repo.agent_logs[0].metadata_json["retrieval_query_mode"] == "contextual"
 
 
 def test_stream_course_message_records_profile_candidate_event_on_done() -> None:
@@ -1008,6 +1247,29 @@ def test_tutor_session_routes_create_send_and_read_messages() -> None:
     list_response = client.get("/api/v1/tutor/sessions?scope=home", headers=headers)
     assert list_response.status_code == 200
     assert [item["title"] for item in list_response.json()["data"]] == ["主页第一问"]
+
+    rename_response = client.patch(
+        f"/api/v1/tutor/sessions/{session_id}",
+        headers=headers,
+        json={"title": "  改名后的主页历史  "},
+    )
+    assert rename_response.status_code == 200
+    assert rename_response.json()["data"]["title"] == "改名后的主页历史"
+
+    renamed_list_response = client.get("/api/v1/tutor/sessions?scope=home", headers=headers)
+    assert renamed_list_response.status_code == 200
+    assert [item["title"] for item in renamed_list_response.json()["data"]] == ["改名后的主页历史"]
+
+    delete_response = client.delete(f"/api/v1/tutor/sessions/{session_id}", headers=headers)
+    assert delete_response.status_code == 200
+    assert delete_response.json()["data"] == {"session_id": session_id, "deleted": True}
+
+    deleted_list_response = client.get("/api/v1/tutor/sessions?scope=home", headers=headers)
+    assert deleted_list_response.status_code == 200
+    assert deleted_list_response.json()["data"] == []
+
+    deleted_detail_response = client.get(f"/api/v1/tutor/sessions/{session_id}", headers=headers)
+    assert deleted_detail_response.status_code == 404
 
 
 def test_tutor_message_route_accepts_home_tool_options() -> None:

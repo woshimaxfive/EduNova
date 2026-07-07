@@ -625,6 +625,39 @@ describe("LearningSpacePage", () => {
     ]);
   });
 
+  it("keeps the open history menu layered above neighboring conversations", async () => {
+    const user = userEvent.setup();
+    const firstThread = {
+      id: "501",
+      title: "上方主页历史",
+      meta: "刚刚",
+      scope: "home" as const,
+      updated_at: "2026-07-03T12:00:00Z"
+    };
+    const secondThread = {
+      id: "502",
+      title: "下方主页历史",
+      meta: "昨天",
+      scope: "home" as const,
+      updated_at: "2026-07-02T12:00:00Z"
+    };
+
+    renderWithDashboardSummary({
+      ...starterSummary,
+      recent_conversations: [firstThread, secondThread]
+    });
+
+    const historyRail = await screen.findByRole("region", { name: "历史对话" });
+    const upperThreadButton = await within(historyRail).findByRole("button", { name: /上方主页历史/ });
+    const lowerThreadButton = within(historyRail).getByRole("button", { name: /下方主页历史/ });
+
+    await user.click(within(historyRail).getByRole("button", { name: "打开会话操作菜单 501" }));
+
+    expect(screen.getByRole("menu", { name: "会话操作" })).toBeInTheDocument();
+    expect(upperThreadButton.closest(".home-thread")).toHaveAttribute("data-menu-open", "true");
+    expect(lowerThreadButton.closest(".home-thread")).toHaveAttribute("data-menu-open", "false");
+  });
+
   it("opens a home history thread passed from secondary route navigation", async () => {
     renderWithDashboardSummary(
       starterSummary,

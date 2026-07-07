@@ -4873,6 +4873,7 @@ a {
 
 .home-thread {
   position: relative;
+  z-index: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -4888,6 +4889,16 @@ a {
   transition:
     background 0.2s ease,
     transform 0.2s ease;
+}
+
+.home-thread:hover,
+.home-thread:focus-within {
+  z-index: 2;
+}
+
+.home-thread[data-menu-open="true"] {
+  z-index: 40;
+  transform: none;
 }
 
 .home-thread-main {

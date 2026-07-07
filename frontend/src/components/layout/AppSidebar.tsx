@@ -265,6 +265,7 @@ export function AppSidebar({
                 className={activeConversationId === conversation.id ? "home-thread active" : "home-thread"}
                 key={conversation.id}
                 data-editing={editingConversationId === conversation.id ? "true" : "false"}
+                data-menu-open={openConversationMenuId === conversation.id ? "true" : "false"}
               >
                 {editingConversationId === conversation.id ? (
                   <form className="home-thread-editor" onSubmit={(event) => void submitRename(event, conversation)}>

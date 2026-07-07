@@ -234,6 +234,38 @@ Authorization: Bearer <token>
 }
 ```
 
+### PATCH `/auth/me`
+
+用途：更新当前学生账号的基础资料。当前只允许修改昵称，不修改邮箱、密码、角色或 starter mode。更新后前端会刷新本地登录态和侧栏账号名。
+
+请求：
+
+```json
+{
+  "display_name": "小新"
+}
+```
+
+响应：
+
+```json
+{
+  "data": {
+    "id": 1,
+    "email": "student@example.com",
+    "display_name": "小新",
+    "role": "student",
+    "starter_mode": "ai_intro"
+  },
+  "trace_id": "trace_20260707_001"
+}
+```
+
+错误：
+
+- HTTP 422：昵称为空或超过长度限制。
+- `401 UNAUTHORIZED`：未登录或 token 失效。
+
 ### POST `/auth/logout`
 
 用途：退出登录。第一版前端清理 token，后端返回成功。

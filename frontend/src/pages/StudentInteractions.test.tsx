@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildCoursePath, PATHS } from "../app/routePaths";
+import { AUTH_ENDPOINTS } from "../api/auth";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
@@ -1539,6 +1540,17 @@ describe("student interaction affordances", () => {
     };
     const calls: Array<{ method: string; url: string; payload: unknown }> = [];
 
+    useAuthStore.getState().setSession({
+      token: "settings-token",
+      user: {
+        id: 77,
+        email: "settings@edunova.local",
+        displayName: "设置学生",
+        role: "student",
+        starterMode: "blank"
+      }
+    });
+
     apiClient.defaults.adapter = async (config) => {
       const method = (config.method ?? "get").toLowerCase();
       const url = config.url ?? "";
@@ -1658,6 +1670,25 @@ describe("student interaction affordances", () => {
         };
       }
 
+      if (url === AUTH_ENDPOINTS.me && method === "patch") {
+        return {
+          data: {
+            data: {
+              id: 77,
+              email: "settings@edunova.local",
+              display_name: (payload as { display_name: string }).display_name,
+              role: "student",
+              starter_mode: "blank"
+            },
+            trace_id: "trace_auth_update"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
       return {
         data: { data: {}, trace_id: "trace_settings_default" },
         status: 200,
@@ -1672,6 +1703,7 @@ describe("student interaction affordances", () => {
     expect(await screen.findByRole("button", { name: /星火 Lite/ })).toBeInTheDocument();
     expect(screen.getByText("默认配置")).toBeInTheDocument();
     expect(screen.getByText("sp-u...oken")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "昵称" })).toHaveValue("设置学生");
     expect(screen.queryByText("sk-••••••••")).not.toBeInTheDocument();
     expect(screen.queryByText("深度思考")).not.toBeInTheDocument();
     expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();
@@ -1734,6 +1766,20 @@ describe("student interaction affordances", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: /腾讯混元默认/ })).not.toBeInTheDocument());
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("模型配置已删除。"));
+
+    await user.clear(screen.getByRole("textbox", { name: "昵称" }));
+    await user.type(screen.getByRole("textbox", { name: "昵称" }), "新设置学生");
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
+
+    await waitFor(() => expect(calls).toContainEqual({
+      method: "patch",
+      url: AUTH_ENDPOINTS.me,
+      payload: {
+        display_name: "新设置学生"
+      }
+    }));
+    expect(useAuthStore.getState().user?.displayName).toBe("新设置学生");
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("账号设置已保存。"));
   });
 
   it("creates a real course from the library page and enters the new course", async () => {

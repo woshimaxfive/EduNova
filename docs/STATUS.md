@@ -52,6 +52,7 @@ Phase 13.1 后，LangGraph 不再只是可观测骨架：画像、资料建课/�
 | RAG 检索 | 当前用户课程内关键词/向量混合检索 | `/api/v1/rag/search` |
 | 课程会话 | 课程内历史、消息、引用持久化、历史改名、软删除和刷新恢复 | `/api/v1/tutor/sessions?scope=course` |
 | 模型设置 | 多套个人模型配置、默认配置、连接测试、服务器兜底 | `/api/v1/settings/model/configs` |
+| 账号设置 | 当前用户昵称真实保存并同步侧栏账号入口 | `PATCH /api/v1/auth/me` |
 | 课程回答 | 非流式与流式课程 RAG 回答 | `/messages`、`/messages/stream` |
 | Embedding | OpenAI-compatible `/embeddings` 与本地 fallback | `EmbeddingService` |
 | 学习画像 | 8 维用户级画像、画像对话更新、画像事件、课程问答候选事件和课程状态分层边界 | `/api/v1/profiles/*` |

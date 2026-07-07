@@ -3347,6 +3347,54 @@ a {
   line-height: 1.5;
 }
 
+.settings-boundary-list,
+.settings-account-meta {
+  margin: 12px 0 0;
+}
+
+.settings-boundary-list {
+  display: grid;
+  gap: 7px;
+  padding-left: 18px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.settings-account-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-account-meta div {
+  min-width: 0;
+  border: 1px solid rgba(12, 34, 38, 0.08);
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.settings-account-meta dt {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 820;
+}
+
+.settings-account-meta dd {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-inline-link {
+  width: fit-content;
+  margin-top: 12px;
+  text-decoration: none;
+}
+
 .settings-model-summary {
   display: flex;
   flex-wrap: wrap;
@@ -4507,7 +4555,7 @@ a {
   display: grid;
   grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto;
   align-content: stretch;
-  gap: 10px;
+  gap: 8px;
   height: 100dvh;
   min-height: 0;
   padding: 14px 10px;
@@ -4571,13 +4619,13 @@ a {
 
 .home-sidebar-nav {
   display: grid;
-  gap: 2px;
-  margin-bottom: 4px;
+  gap: 6px;
+  margin-bottom: 0;
 }
 
 .home-sidebar-nav a {
   gap: 9px;
-  min-height: 38px;
+  min-height: 40px;
   padding: 0 10px;
   border-radius: 10px;
   color: var(--text-muted);
@@ -4634,7 +4682,8 @@ a {
 
 .home-rail-heading {
   justify-content: space-between;
-  padding: 12px 10px 6px;
+  margin-top: 8px;
+  padding: 10px 10px 4px;
   color: var(--text-muted);
   font-size: 0.86rem;
   font-weight: 780;
@@ -4644,7 +4693,7 @@ a {
 .history-search-button {
   justify-content: flex-start;
   gap: 8px;
-  min-height: 38px;
+  min-height: 40px;
   padding: 0 10px;
   border: 0;
   border-radius: 8px;
@@ -6260,6 +6309,10 @@ a {
 @media (max-width: 820px) {
   .settings-action-stack {
     justify-items: stretch;
+  }
+
+  .settings-account-meta {
+    grid-template-columns: 1fr;
   }
 }
 

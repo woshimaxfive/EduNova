@@ -38,6 +38,18 @@ class RegisterRequest(BaseModel):
         return value.strip()
 
 
+class UpdateCurrentUserRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=100)
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_display_name(cls, value: str) -> str:
+        display_name = value.strip()
+        if not display_name:
+            raise ValueError("昵称不能为空。")
+        return display_name
+
+
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=1, max_length=255)

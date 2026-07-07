@@ -20,6 +20,10 @@ export type LoginRequest = {
   password: string;
 };
 
+export type UpdateCurrentUserRequest = {
+  display_name: string;
+};
+
 export type LoginResponse = {
   access_token: string;
   token_type: "bearer";
@@ -38,6 +42,11 @@ export async function login(payload: LoginRequest) {
 
 export async function getCurrentUser() {
   const response = await apiClient.get<ApiEnvelope<ApiUser>>(AUTH_ENDPOINTS.me);
+  return response.data;
+}
+
+export async function updateCurrentUser(payload: UpdateCurrentUserRequest) {
+  const response = await apiClient.patch<ApiEnvelope<ApiUser>>(AUTH_ENDPOINTS.me, payload);
   return response.data;
 }
 

@@ -34,6 +34,10 @@ class UserNotFoundError(Exception):
     pass
 
 
+class InvalidDisplayNameError(Exception):
+    pass
+
+
 class AuthRepository(Protocol):
     def get_user_by_email(self, email: str) -> User | None:
         ...
@@ -195,6 +199,23 @@ class AuthService:
         user = self.repository.get_user_by_id(user_id)
         if user is None:
             raise UserNotFoundError("登录凭证中的用户不存在。")
+        return user
+
+    def update_display_name(self, user: User, display_name: str) -> User:
+        normalized_name = display_name.strip()
+        if not normalized_name:
+            raise InvalidDisplayNameError("昵称不能为空。")
+        if len(normalized_name) > 100:
+            raise InvalidDisplayNameError("昵称不能超过 100 个字符。")
+
+        user.display_name = normalized_name
+        try:
+            self.repository.commit()
+            self.repository.refresh(user)
+        except Exception:
+            self.repository.rollback()
+            raise
+
         return user
 
     def _copy_ai_intro_course(self, user: User) -> Course:

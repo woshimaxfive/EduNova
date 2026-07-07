@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, status
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_auth_service, get_current_user
 from backend.app.models import User
-from backend.app.schemas.auth import LoginRequest, RegisterRequest, user_to_api
+from backend.app.schemas.auth import LoginRequest, RegisterRequest, UpdateCurrentUserRequest, user_to_api
 from backend.app.services.auth import (
     DuplicateEmailError,
     InvalidCredentialsError,
+    InvalidDisplayNameError,
     WeakPasswordError,
 )
 
@@ -70,6 +71,24 @@ def login(
 @router.get("/me")
 def me(current_user: User = Depends(get_current_user)) -> dict:
     return api_response(user_to_api(current_user).model_dump())
+
+
+@router.patch("/me")
+def update_me(
+    payload: UpdateCurrentUserRequest,
+    current_user: User = Depends(get_current_user),
+    service=Depends(get_auth_service),
+) -> dict:
+    try:
+        user = service.update_display_name(current_user, payload.display_name)
+    except InvalidDisplayNameError as exc:
+        raise ApiError(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            code="VALIDATION_ERROR",
+            message=str(exc),
+        ) from exc
+
+    return api_response(user_to_api(user).model_dump())
 
 
 @router.post("/logout")

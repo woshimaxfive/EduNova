@@ -19,6 +19,7 @@ from backend.app.models import Course, CourseMaterialLink, Material, User
 from backend.app.services.auth import (
     AuthService,
     DuplicateEmailError,
+    InvalidDisplayNameError,
     InvalidCredentialsError,
     WeakPasswordError,
 )
@@ -200,6 +201,25 @@ def test_login_rejects_wrong_password() -> None:
         service.login(email="student@edunova.local", password="WrongPassword123")
 
 
+def test_update_display_name_trims_and_rejects_blank() -> None:
+    repo = InMemoryAuthRepository()
+    service = make_service(repo)
+    user = service.register(
+        email="nickname@edunova.local",
+        password="Password123",
+        display_name="旧昵称",
+        starter_mode="blank",
+    )
+
+    updated_user = service.update_display_name(user, "  新昵称  ")
+
+    assert updated_user.display_name == "新昵称"
+    assert repo.users_by_id[user.id].display_name == "新昵称"
+
+    with pytest.raises(InvalidDisplayNameError):
+        service.update_display_name(user, "   ")
+
+
 def test_auth_routes_register_login_me_and_logout() -> None:
     repo = InMemoryAuthRepository()
     app = create_app()
@@ -244,6 +264,23 @@ def test_auth_routes_register_login_me_and_logout() -> None:
 
     assert me_response.status_code == 200
     assert me_response.json()["data"]["email"] == "api@edunova.local"
+
+    update_response = client.patch(
+        "/api/v1/auth/me",
+        json={"display_name": "  新接口学生  "},
+        headers={"Authorization": f"Bearer {login_data['access_token']}"},
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["data"]["display_name"] == "新接口学生"
+
+    updated_me_response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {login_data['access_token']}"},
+    )
+
+    assert updated_me_response.status_code == 200
+    assert updated_me_response.json()["data"]["display_name"] == "新接口学生"
 
     logout_response = client.post(
         "/api/v1/auth/logout",

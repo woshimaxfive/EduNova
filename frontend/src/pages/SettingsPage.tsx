@@ -1,7 +1,9 @@
 import { Database, GearSix, Key, ShieldCheck, Trash, UserCircle } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
+import { updateCurrentUser } from "../api/auth";
 import {
   createModelConfig,
   deleteModelConfig,
@@ -21,6 +23,9 @@ import {
   inferProviderPresetId,
   MODEL_PROVIDER_PRESETS
 } from "../config/modelProviders";
+import { PATHS } from "../app/routePaths";
+import { mapApiUserToStudentUser } from "../features/auth/authMappers";
+import { useAuthStore } from "../features/auth/authStore";
 import { PageFrame } from "./PageFrame";
 
 type ModelConfigDraft = {
@@ -80,10 +85,14 @@ function formatTestState(config: ModelConfigSummary) {
 }
 
 export function SettingsPage() {
-  const [nickname, setNickname] = useState("演示学生");
+  const authUser = useAuthStore((state) => state.user);
+  const authToken = useAuthStore((state) => state.token);
+  const setSession = useAuthStore((state) => state.setSession);
+  const [nickname, setNickname] = useState(authUser?.displayName ?? "");
   const [selectedConfigId, setSelectedConfigId] = useState<number | "new" | null>(null);
   const [draft, setDraft] = useState<ModelConfigDraft>(EMPTY_CONFIG_DRAFT);
   const [settingsFeedback, setSettingsFeedback] = useState<string | null>(null);
+  const [accountFeedback, setAccountFeedback] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { toast, showToast, dismissToast } = useToastQueue();
   const modelConfigsQuery = useQuery({
@@ -110,6 +119,9 @@ export function SettingsPage() {
   const activeConfigId = typeof selectedConfigId === "number" ? selectedConfigId : selectedConfig?.id ?? null;
   const isCreating = selectedConfigId === "new" || !selectedConfig;
   const canSave = Boolean(currentDraft.display_name.trim() && currentDraft.base_url.trim() && currentDraft.chat_model.trim());
+  const starterModeLabel = authUser
+    ? authUser.starterMode === "ai_intro" ? "示例课程开始" : "空白开始"
+    : "未读取";
 
   const createConfigMutation = useMutation({
     mutationFn: (payload: ModelConfigRequest) => createModelConfig(payload),
@@ -180,10 +192,33 @@ export function SettingsPage() {
       showToast("模型配置删除失败，请稍后重试。", "warning");
     }
   });
+  const updateAccountMutation = useMutation({
+    mutationFn: updateCurrentUser,
+    onSuccess: (response) => {
+      if (authToken) {
+        setSession({
+          token: authToken,
+          user: mapApiUserToStudentUser(response.data)
+        });
+      }
+      setNickname(response.data.display_name);
+      setAccountFeedback(null);
+      showToast("账号设置已保存。", "success");
+    },
+    onError: () => {
+      showToast("账号设置保存失败，请稍后重试。", "warning");
+    }
+  });
 
   function saveSettings() {
-    void nickname;
-    showToast(`${nickname || "学生"} 的设置已保存。`, "success");
+    const nextNickname = nickname.trim();
+    if (!nextNickname) {
+      setAccountFeedback("昵称不能为空。");
+      return;
+    }
+
+    setAccountFeedback(null);
+    updateAccountMutation.mutate({ display_name: nextNickname });
   }
 
   function updateDraft(field: keyof ModelConfigDraft, value: string) {
@@ -451,13 +486,21 @@ export function SettingsPage() {
           <div className="settings-section-icon" aria-hidden="true">
             <ShieldCheck size={22} weight="duotone" />
           </div>
-          <div>
+          <div className="settings-section-main">
             <h2>隐私与数据边界</h2>
-            <p>不记录密钥、密码、提示词或资料原文。</p>
+            <p>这里不是开关区，而是当前账号的数据边界说明：系统只保存学习闭环需要的安全摘要和产物索引。</p>
+            <ul className="settings-boundary-list">
+              <li>模型 Key 加密保存，页面和接口只返回脱敏摘要。</li>
+              <li>Agent 轨迹只展示节点、耗时、引用数量和审核摘要，不展示原始提示词或完整资料原文。</li>
+              <li>学习档案导出在报告页按课程生成，支持 Markdown、PDF 和 DOCX。</li>
+            </ul>
+            <Link className="secondary-action settings-inline-link" to={PATHS.reports}>
+              去学习报告导出
+            </Link>
           </div>
           <span className="settings-status">
             <Database size={16} weight="duotone" aria-hidden="true" />
-            本地演示数据
+            只读边界
           </span>
         </section>
 
@@ -465,17 +508,40 @@ export function SettingsPage() {
           <div className="settings-section-icon" aria-hidden="true">
             <UserCircle size={22} weight="duotone" />
           </div>
-          <div>
+          <div className="settings-section-main">
             <h2>学生账号</h2>
-            <p>学生身份、昵称和学习偏好。</p>
+            <p>昵称会同步到侧栏账号入口；邮箱和登录方式当前只读。</p>
+            <dl className="settings-account-meta">
+              <div>
+                <dt>邮箱</dt>
+                <dd>{authUser?.email ?? "当前登录账号"}</dd>
+              </div>
+              <div>
+                <dt>身份</dt>
+                <dd>{authUser ? authUser.role === "admin" ? "管理员" : "学生" : "未读取"}</dd>
+              </div>
+              <div>
+                <dt>初始方式</dt>
+                <dd>{starterModeLabel}</dd>
+              </div>
+            </dl>
             <label className="settings-inline-input">
               <span>昵称</span>
-              <input value={nickname} onChange={(event) => setNickname(event.target.value)} />
+              <input
+                value={nickname}
+                onChange={(event) => {
+                  setNickname(event.target.value);
+                  if (accountFeedback) {
+                    setAccountFeedback(null);
+                  }
+                }}
+              />
             </label>
+            <InlineFeedback message={accountFeedback} tone="warning" className="settings-inline-feedback" />
           </div>
           <div className="settings-action-stack">
-            <button className="primary-action" type="button" onClick={saveSettings}>
-              保存设置
+            <button className="primary-action" type="button" onClick={saveSettings} disabled={updateAccountMutation.isPending}>
+              {updateAccountMutation.isPending ? "保存中" : "保存设置"}
             </button>
           </div>
         </section>

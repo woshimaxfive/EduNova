@@ -478,6 +478,8 @@ Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已
 - Embedding 模型字段，折叠在高级项中；Phase 6.4 起用于课程知识库向量化，缺省时自动使用显式本地 fallback。
 - 指定配置的连通性测试。
 - 默认配置选择。
+- 学生账号昵称通过 `PATCH /auth/me` 真实保存，并同步到侧栏账号入口；邮箱、角色和 starter mode 保持只读。
+- 隐私与数据边界作为只读说明展示，学习档案导出仍从报告页按课程生成。
 
 配置解析优先级：
 

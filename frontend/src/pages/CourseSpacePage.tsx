@@ -144,6 +144,7 @@ type CourseMessage = {
   role: "user" | "assistant";
   content: string;
   citations?: RagSearchResultItem[];
+  traceId?: string | null;
 };
 
 function courseQuestionTitle(question: string) {
@@ -156,7 +157,8 @@ function mapTutorMessagesToCourseMessages(messages: TutorMessage[]): CourseMessa
     id: message.id,
     role: message.role,
     content: message.content,
-    citations: message.role === "assistant" ? message.citation_json : undefined
+    citations: message.role === "assistant" ? message.citation_json : undefined,
+    traceId: message.role === "assistant" ? message.trace_id : null
   }));
 }
 
@@ -227,17 +229,6 @@ export function CourseSpacePage() {
   const learningState = learningStateQuery.data?.data;
   const weaknessSummary = learningState?.weakness_summary;
   const weaknessItems = (learningState?.weakness_review_queue ?? []).filter((item) => item.status !== "dismissed");
-  const latestAgentTraceId = learningState?.evidence_summary?.latest_trace_id ?? null;
-  const agentTraceQuery = useQuery({
-    queryKey: ["agents", "trace", latestAgentTraceId],
-    queryFn: () => getAgentTrace(latestAgentTraceId ?? ""),
-    enabled: Boolean(latestAgentTraceId) && activeAnswerPanel === "thinking",
-    staleTime: 10_000
-  });
-  const agentTraceEvents = useMemo(
-    () => agentTraceQuery.data?.data.steps.map(mapAgentTraceStepToEvent) ?? [],
-    [agentTraceQuery.data?.data.steps]
-  );
   const courseSessions = Array.isArray(courseSessionsQuery.data?.data) ? courseSessionsQuery.data.data : [];
   const latestCourseSessionId = courseSessions[0]?.id ?? null;
   const selectedCourseSessionId = hasRealCourseId ? (activeCourseSessionId ?? latestCourseSessionId) : null;
@@ -282,6 +273,17 @@ export function CourseSpacePage() {
   const latestAssistantWithRetrieval = [...displayedCourseMessages].reverse().find((message) => message.role === "assistant" && message.citations !== undefined);
   const latestRagResults = latestAssistantWithRetrieval?.citations ?? [];
   const hasRetrievalResult = Boolean(latestAssistantWithRetrieval);
+  const latestAgentTraceId = latestAssistantWithRetrieval?.traceId ?? learningState?.evidence_summary?.latest_trace_id ?? null;
+  const agentTraceQuery = useQuery({
+    queryKey: ["agents", "trace", latestAgentTraceId],
+    queryFn: () => getAgentTrace(latestAgentTraceId ?? ""),
+    enabled: Boolean(latestAgentTraceId) && activeAnswerPanel === "thinking",
+    staleTime: 10_000
+  });
+  const agentTraceEvents = useMemo(
+    () => agentTraceQuery.data?.data.steps.map(mapAgentTraceStepToEvent) ?? [],
+    [agentTraceQuery.data?.data.steps]
+  );
   const selectedKnowledgePoint =
     studyTarget?.type === "knowledge" ? apiKnowledgePoints.find((point) => point.id === studyTarget.id) ?? null : null;
   const selectedCitation =
@@ -621,7 +623,7 @@ export function CourseSpacePage() {
                           onClick={() => setActiveAnswerPanel("thinking")}
                         >
                           <Compass size={17} weight="duotone" aria-hidden="true" />
-                          <span>思考过程</span>
+                          <span>课堂协作轨迹</span>
                         </button>
                       </div>
                       <AnswerDetailPanel
@@ -865,7 +867,7 @@ function AnswerDetailPanel({
     if (isAgentTraceError) {
       return (
         <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-          <strong>思考过程</strong>
+          <strong>课堂协作轨迹</strong>
           <InlineFeedback message="Agent 轨迹读取失败，请稍后重试。" tone="warning" className="course-inline-feedback" />
         </section>
       );
@@ -874,8 +876,8 @@ function AnswerDetailPanel({
     if (isAgentTraceLoading) {
       return (
         <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-          <strong>思考过程</strong>
-          <p>正在读取 Agent 执行轨迹。</p>
+          <strong>课堂协作轨迹</strong>
+          <p>正在读取课堂协作轨迹。</p>
         </section>
       );
     }
@@ -883,7 +885,7 @@ function AnswerDetailPanel({
     if (agentTraceId && agentTraceEvents.length > 0) {
       return (
         <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-          <strong>思考过程</strong>
+          <strong>课堂协作轨迹</strong>
           <AgentTimeline events={agentTraceEvents} />
         </section>
       );
@@ -891,13 +893,13 @@ function AnswerDetailPanel({
 
     return (
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-        <strong>思考过程</strong>
+        <strong>课堂协作轨迹</strong>
         <p>
           {agentTraceId
             ? "当前 Agent trace 暂无可展示步骤。"
             : hasSearched
-              ? `已完成课程资料检索，命中 ${citations.length} 条引用。暂未记录完整 Agent 轨迹。`
-              : "发送课程问题后，会先检索当前课程资料，再决定是否调用模型回答。"}
+              ? `Profile、Retriever、Tutor、Weakness、Review、NextAction 已围绕本次回答协作，命中 ${citations.length} 条引用。`
+              : "发送课程问题后，会按 Profile、Retriever、Tutor、Weakness、Review、NextAction 记录课堂协作轨迹。"}
         </p>
       </section>
     );

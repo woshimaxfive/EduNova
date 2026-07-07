@@ -7,6 +7,7 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.api.errors import make_trace_id
 from backend.app.models import AssessmentReport, Course, KnowledgePoint, PracticeAnswer, PracticeSession, User, WeaknessReviewItem
 from backend.app.schemas.reports import ReportEnvelope, empty_report, report_to_api
 
@@ -125,6 +126,7 @@ class ReportService:
             user_id=user.id,
             course_id=course.id,
             practice_session_id=practice.id if practice is not None else None,
+            agent_trace_id=make_trace_id(),
             report_json=report_json,
             score=Decimal(str(score)) if score is not None else None,
             created_at=datetime.now(UTC),

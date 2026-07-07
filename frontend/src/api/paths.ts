@@ -26,6 +26,7 @@ export type LearningPath = {
   title: string;
   goal: string;
   status: "active" | "archived" | string;
+  agent_trace_id?: string | null;
   plan_json: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -60,6 +61,7 @@ export type LearningPathDetail = {
   course_id: string;
   status: "not_started" | "active" | string;
   message: string;
+  agent_trace_id?: string | null;
   path: LearningPath | null;
   tasks: LearningPathTask[];
   evidence_summary: PathEvidenceSummary;

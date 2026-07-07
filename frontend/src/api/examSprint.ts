@@ -72,6 +72,7 @@ export type ExamSprintEvidenceSummary = {
 export type ExamSprintPlan = {
   id: string;
   course_id: string;
+  agent_trace_id?: string | null;
   duration_days: ExamSprintDuration | number;
   goal: string | null;
   status: "sprint_active" | "sprint_archived" | string;

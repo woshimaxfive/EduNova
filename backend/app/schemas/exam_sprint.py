@@ -85,6 +85,7 @@ class ExamSprintEvidenceSummary(BaseModel):
 class ExamSprintPlanResponse(BaseModel):
     id: str
     course_id: str
+    agent_trace_id: str | None = None
     duration_days: int
     goal: str | None
     status: str

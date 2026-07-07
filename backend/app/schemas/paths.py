@@ -56,6 +56,7 @@ class LearningPathResponse(BaseModel):
     title: str
     goal: str | None
     status: str
+    agent_trace_id: str | None = None
     plan_json: dict
     created_at: str
     updated_at: str
@@ -73,6 +74,7 @@ class LearningPathDetail(BaseModel):
     course_id: str
     status: str
     message: str
+    agent_trace_id: str | None = None
     path: LearningPathResponse | None
     tasks: list[LearningPathTaskResponse]
     evidence_summary: PathEvidenceSummary
@@ -101,6 +103,7 @@ def path_to_api(path: LearningPath) -> LearningPathResponse:
         title=path.title,
         goal=path.goal,
         status=path.status,
+        agent_trace_id=getattr(path, "agent_trace_id", None),
         plan_json=path.plan_json or {},
         created_at=iso_timestamp(path.created_at) or "",
         updated_at=iso_timestamp(path.updated_at) or "",

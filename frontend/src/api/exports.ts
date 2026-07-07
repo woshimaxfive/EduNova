@@ -21,6 +21,7 @@ export type LearningDossierSourceSummary = {
 
 export type LearningDossierExport = {
   course_id: string;
+  agent_trace_id?: string | null;
   filename: string;
   content_type: "text/markdown; charset=utf-8";
   markdown: string;

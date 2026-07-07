@@ -9,13 +9,21 @@ from backend.app.models import AgentRunLog
 
 
 SAFE_AGENT_METADATA_KEYS = {
+    "artifact_id",
+    "artifact_type",
     "citation_count",
     "confidence",
     "error_code",
+    "generation_mode",
     "knowledge_point_id",
     "resource_count",
+    "review_status",
     "review_result",
+    "risk_flags",
+    "safety_summary",
     "source_count",
+    "warning_count",
+    "workflow",
 }
 
 SENSITIVE_TEXT_MARKERS = (
@@ -45,6 +53,9 @@ class AgentTraceStep(BaseModel):
 
 class AgentTraceResponse(BaseModel):
     trace_id: str
+    workflow: str | None
+    artifact_type: str | None
+    artifact_id: str | None
     course_id: str | None
     status: str
     steps: list[AgentTraceStep]

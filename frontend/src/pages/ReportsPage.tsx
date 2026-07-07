@@ -59,7 +59,11 @@ export function ReportsPage() {
     onSuccess: (response) => {
       setExportError("");
       downloadMarkdownFile(response.data.filename, response.data.markdown, response.data.content_type);
-      setExportMessage("已生成 Markdown 学习档案。");
+      setExportMessage(
+        response.data.agent_trace_id
+          ? `已生成 Markdown 学习档案。ExportDossierGraph · ${response.data.agent_trace_id}`
+          : "已生成 Markdown 学习档案。"
+      );
     },
     onError: () => {
       setExportMessage("");
@@ -128,6 +132,7 @@ export function ReportsPage() {
             </div>
           </div>
           {readError || localError ? <p className="form-error">{readError || localError}</p> : null}
+          {report?.agent_trace_id ? <p className="empty-inline-note">ReportGraph · {report.agent_trace_id}</p> : null}
           <ul className="report-evidence-list">
             {(reportBody?.weakness_list ?? []).map((item) => (
               <li key={`${item.knowledge_point_id}-${item.title}`}>

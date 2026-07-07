@@ -66,6 +66,7 @@ class PracticeSessionDetail(BaseModel):
     course_id: str
     title: str
     status: str
+    agent_trace_id: str | None = None
     score: int | None
     questions: list[PracticeQuestion]
     answers: list[PracticeAnswerResponse]
@@ -89,6 +90,7 @@ def session_to_api(session: PracticeSession, answers: list[PracticeAnswer]) -> P
         course_id=str(session.course_id),
         title=session.title,
         status=session.status,
+        agent_trace_id=getattr(session, "agent_trace_id", None),
         score=int(session.score) if session.score is not None else None,
         questions=questions,
         answers=answer_items,

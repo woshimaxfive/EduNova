@@ -1,6 +1,6 @@
 # EduNova 答辩问答
 
-更新时间：2026-07-05
+更新时间：2026-07-07
 
 ## 1. 项目定位
 
@@ -26,7 +26,7 @@ A：系统支持 OpenAI-compatible embeddings。未配置或不可用时使用�
 
 **Q：多智能体是否只是概念？**
 
-A：当前已实现 Agent trace 查询和资源生成六步日志。资源生成会记录 `profile -> retrieve -> diagnosis -> resource -> review -> persist`，但 LangGraph 仍是可观测骨架，不夸大为所有流程的成熟生产编排。
+A：不是。当前学习闭环已经由 LangGraph 生产编排接管，覆盖画像、资料建课/对比、课程问答、资源生成、路径/冲刺、练习评估、报告和导出。资源生成会记录 `profile -> retrieve -> diagnosis -> resource -> review -> persist`，课程问答会记录 `profile -> retriever -> tutor -> weakness -> review -> next_action`。认证、设置、Dashboard 这类非学习能力仍是普通服务，不伪装成 Agent。
 
 **Q：为什么不用模型直接生成全部内容？**
 
@@ -50,7 +50,7 @@ A：第一版确定性优先。客观题按标准答案批改，简答题按关�
 
 **Q：报告从哪里来？**
 
-A：报告聚合课程、练习结果、掌握度、弱点队列和下一步建议。Phase 12.1 已支持导出课程级 Markdown 学习档案。
+A：报告聚合课程、练习结果、掌握度、弱点队列和下一步建议，并携带 `ReportGraph` trace。Phase 12.1 已支持导出课程级 Markdown 学习档案，Phase 13.1 后导出响应会携带 `ExportDossierGraph` 的 `agent_trace_id`。
 
 ## 6. 部署和开源
 

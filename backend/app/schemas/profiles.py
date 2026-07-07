@@ -66,6 +66,7 @@ class ProfileEventResponse(BaseModel):
 
 class ProfileChatResponse(BaseModel):
     reply: str
+    agent_trace_id: str | None = None
     profile: StudentProfileResponse
     event: ProfileEventResponse
 

@@ -7,6 +7,7 @@ class MaterialUploadResult(BaseModel):
     id: str
     material_id: int
     course_id: int | None
+    agent_trace_id: str | None = None
     filename: str
     title: str
     type: str
@@ -87,6 +88,7 @@ class MaterialComparisonPoint(BaseModel):
 class MaterialComparisonResult(BaseModel):
     course_id: str
     material_ids: list[str]
+    agent_trace_id: str | None = None
     summary: MaterialComparisonSummary
     repeated_concepts: list[MaterialComparisonPoint]
     exam_likely_points: list[MaterialComparisonPoint]

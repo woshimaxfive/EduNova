@@ -113,6 +113,7 @@ erDiagram
 | `source_type` | varchar | `builtin`、`uploaded`、`demo` |
 | `visibility` | varchar | `private`、`public` |
 | `status` | varchar | `draft`、`ready`、`failed` |
+| `agent_trace_id` | varchar | 建课 Graph 轨迹，可为空 |
 | `created_at` | timestamptz | 创建时间 |
 
 ### 4.3 `course_enrollments`
@@ -163,6 +164,7 @@ Phase 11.2 的资料对比第一刀不新增表和迁移，也不持久化对比
 | `parse_status` | varchar | 解析状态 |
 | `extracted_text` | text | 提取文本 |
 | `metadata_json` | jsonb | 页码、标题、字数等元数据 |
+| `agent_trace_id` | varchar | 建课或资料处理 Graph 轨迹，可为空 |
 | `created_at` | timestamptz | 创建时间 |
 
 ### 4.4.1 `materials`
@@ -181,6 +183,7 @@ Phase 11.2 的资料对比第一刀不新增表和迁移，也不持久化对比
 | `parse_status` | varchar | 解析状态 |
 | `extracted_text` | text | 提取文本 |
 | `metadata_json` | jsonb | 页码、标题、字数等元数据 |
+| `agent_trace_id` | varchar | 上传解析或资料 Graph 轨迹，可为空 |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -320,6 +323,7 @@ Phase 11.1 继续复用本表保存课程级期末冲刺计划，不新增迁移
 | `goal` | text | 学习目标 |
 | `status` | varchar | 状态 |
 | `plan_json` | jsonb | 路径结构 |
+| `agent_trace_id` | varchar | 路径或冲刺 Graph 轨迹，可为空 |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -352,7 +356,7 @@ Phase 11.1 期末冲刺计划也复用本表保存每日任务，`task_type` 使
 
 用途：保存 AI 生成学习资源。
 
-Phase 8.2 开始实际复用该表保存 5 类课程资源。Phase 8.2.1 不新增迁移，改为课程引用驱动的确定性可用稿优先，模型只做增强。资源分层规则固定为：`course_id != null` 是课程资源，本阶段只生成这一类；`course_id == null` 预留为后续个人全局资源，不在本阶段生成。当前表没有独立 `trace_id` 字段，本阶段不新增迁移，生成 trace 写入 `content_json.metadata.agent_trace_id`，接口响应也显式返回 `agent_trace_id`。
+Phase 8.2 开始实际复用该表保存 5 类课程资源。Phase 8.2.1 不新增迁移，改为课程引用驱动的确定性可用稿优先，模型只做增强。资源分层规则固定为：`course_id != null` 是课程资源，本阶段只生成这一类；`course_id == null` 预留为后续个人全局资源，不在本阶段生成。Phase 13.1 新增 nullable `agent_trace_id`，资源生成 trace 同时写入独立字段和 `content_json.metadata.agent_trace_id`，接口响应继续显式返回 `agent_trace_id` 以兼容旧前端。
 
 服务层必须保证：
 
@@ -379,6 +383,7 @@ Phase 8.2 开始实际复用该表保存 5 类课程资源。Phase 8.2.1 不新�
 | `status` | varchar | 生成状态 |
 | `review_status` | varchar | 审核状态 |
 | `confidence_score` | numeric | 可信度 |
+| `agent_trace_id` | varchar | ResourceGenerationGraph 轨迹，可为空 |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -403,7 +408,7 @@ Phase 8.2 生成资源时同步写入质量分。Phase 8.2.1 后，质量分由�
 
 用途：保存多智能体轨迹。
 
-Phase 8.1 开始实际复用该表提供 `/agents/traces/{trace_id}` 查询。Phase 8.2 的资源生成流程继续写入同一张表，步骤固定为 `profile`、`retrieve`、`diagnosis`、`resource`、`review`、`persist`。服务层必须按当前用户隔离 trace，响应只返回安全摘要和白名单元数据，不返回系统提示词、模型输入、API Key、完整资料原文或用户隐私原文。本阶段不新增迁移。
+Phase 8.1 开始实际复用该表提供 `/agents/traces/{trace_id}` 查询。Phase 13.1 后学习闭环生产 Graph 均使用同一张表记录节点轨迹，资源生成步骤固定为 `profile`、`retrieve`、`diagnosis`、`resource`、`review`、`persist`，课程问答步骤固定为 `profile`、`retriever`、`tutor`、`weakness`、`review`、`next_action`。服务层必须按当前用户隔离 trace，响应只返回安全摘要和白名单元数据，不返回系统提示词、模型输入、API Key、完整资料原文或用户隐私原文。
 
 字段：
 
@@ -444,6 +449,7 @@ Phase 10 开始实际复用本表保存课程级练习会话，不新增迁移�
 | `title` | varchar | 练习标题 |
 | `status` | varchar | 进行中、已完成 |
 | `score` | numeric | 得分 |
+| `agent_trace_id` | varchar | AssessmentGraph 轨迹，可为空 |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -482,6 +488,7 @@ Phase 10 开始实际复用本表保存课程学习报告，不新增迁移。�
 | `practice_session_id` | bigint | 来源练习，可为空 |
 | `report_json` | jsonb | 报告内容 |
 | `score` | numeric | 综合得分 |
+| `agent_trace_id` | varchar | ReportGraph 轨迹，可为空 |
 | `created_at` | timestamptz | 创建时间 |
 
 ### 4.17 `weakness_review_queue`
@@ -652,19 +659,26 @@ Phase 12.1 的 Markdown 学习档案导出不使用本表、不新增迁移，�
 - `users.email` 唯一索引。
 - `course_enrollments(user_id, course_id)` 唯一索引。
 - `courses.owner_id`。
+- `courses.agent_trace_id`。
 - `course_materials(user_id, course_id)`，用于当前 Phase 2 已落地的课程资料表。
+- `course_materials.agent_trace_id`。
 - `materials(user_id, parse_status, created_at)`，用于当前用户资料库列表和状态筛选。
+- `materials.agent_trace_id`。
 - `course_material_links(course_id, material_id)` 唯一索引，用于避免同一资料重复加入同一课程。
 - `knowledge_points(course_id)`。
 - `knowledge_chunks(course_id)`。
 - `knowledge_chunks(knowledge_point_id)`。
 - `knowledge_chunks.embedding` 向量索引。
 - `student_profiles.user_id`。
+- `learning_paths.agent_trace_id`。
 - `learning_tasks(user_id, course_id, status)`。
 - `generated_resources(user_id, course_id)`。
+- `generated_resources.agent_trace_id`。
 - `agent_run_logs.trace_id`。
 - `practice_sessions(user_id, course_id)`。
+- `practice_sessions.agent_trace_id`。
 - `assessment_reports(user_id, course_id)`。
+- `assessment_reports.agent_trace_id`。
 - `weakness_review_queue(user_id, course_id, status)`。
 - `chat_sessions(user_id, scope, course_id)`，支持主页会话和课程会话分开查询。
 
@@ -720,6 +734,7 @@ Demo 数据要求：
 9. 学习闭环基础表由迁移 `20260701_0003_create_learning_closure_tables.py` 创建。
 10. 用户注册初始化方式由迁移 `20260701_0004_add_user_starter_mode.py` 创建。
 11. 独立资料库和课程资料关联由迁移 `20260703_0005_create_material_library.py` 创建。
+12. 学习产物 Graph trace 字段由迁移 `20260707_0007_add_learning_artifact_agent_trace_ids.py` 创建。
 
 当前迁移命令：
 
@@ -751,6 +766,7 @@ Demo 数据要求：
 18. Phase 10 后，练习会话、作答、报告和练习评估来源弱点都复用已有表；练习错题或低分题可生成 `practice_assessment` 来源的 `confirmed` 队列项，并影响 `/courses/{course_id}/mastery-map` 和 `/courses/{course_id}/learning-state`。
 19. Phase 11.1 后，期末冲刺计划复用 `learning_paths` 和 `learning_tasks`，使用 `sprint_active` / `sprint_archived` 与 `plan_json.kind="exam_sprint"` 区分普通学习路径，不新增表或迁移。
 20. Phase 11.2 后，资料对比复用 `materials`、`course_material_links`、`course_materials` 和 `knowledge_chunks`，不新增表、不持久化结果；`material_ids` 指资料库 `materials.id`，服务层强制校验当前用户所有权和课程绑定关系。
+21. Phase 13.1 后，课程、资料、资源、路径、冲刺、练习和报告等学习产物可通过 nullable `agent_trace_id` 反查对应 Graph；字段为空时仍保持旧数据兼容。
 
 当前已验证：
 

@@ -6,9 +6,12 @@ from backend.app.models import (
     AssessmentReport,
     ChatMessage,
     ChatSession,
+    Course,
+    CourseMaterial,
     GeneratedResource,
     LearningPath,
     LearningTask,
+    Material,
     ModelSetting,
     PracticeAnswer,
     PracticeSession,
@@ -55,6 +58,48 @@ def test_phase_two_learning_closure_tables_are_registered() -> None:
     assert ChatSession.__tablename__ == "chat_sessions"
     assert ChatMessage.__tablename__ == "chat_messages"
     assert ModelSetting.__tablename__ == "model_settings"
+
+
+def test_learning_artifacts_expose_nullable_agent_trace_columns() -> None:
+    expected_columns = {
+        Course: "courses",
+        Material: "materials",
+        CourseMaterial: "course_materials",
+        GeneratedResource: "generated_resources",
+        LearningPath: "learning_paths",
+        PracticeSession: "practice_sessions",
+        AssessmentReport: "assessment_reports",
+    }
+
+    for model, table_name in expected_columns.items():
+        column = model.__table__.c.get("agent_trace_id")
+        assert column is not None, f"{table_name} 缺少 agent_trace_id"
+        assert column.nullable is True
+
+
+def test_agent_trace_migration_adds_nullable_trace_columns_and_indexes() -> None:
+    migration_path = (
+        REPO_ROOT
+        / "backend"
+        / "migrations"
+        / "versions"
+        / "20260707_0007_add_learning_artifact_agent_trace_ids.py"
+    )
+
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    for table_name in (
+        "courses",
+        "materials",
+        "course_materials",
+        "generated_resources",
+        "learning_paths",
+        "practice_sessions",
+        "assessment_reports",
+    ):
+        assert f'"{table_name}"' in migration_text
+        assert f'"ix_{table_name}_agent_trace_id"' in migration_text
+    assert '"agent_trace_id"' in migration_text
 
 
 def test_phase_two_learning_closure_migration_creates_required_tables() -> None:

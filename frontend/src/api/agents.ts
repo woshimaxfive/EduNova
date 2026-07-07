@@ -15,12 +15,15 @@ export type AgentTraceStep = {
   input_summary: string | null;
   output_summary: string | null;
   duration_ms: number | null;
-  metadata: Record<string, string | number | boolean | null>;
+  metadata: Record<string, string | number | boolean | string[] | null>;
   created_at: string;
 };
 
 export type AgentTrace = {
   trace_id: string;
+  workflow: string | null;
+  artifact_type: string | null;
+  artifact_id: string | null;
   course_id: string | null;
   status: AgentTraceStatus;
   steps: AgentTraceStep[];

@@ -8,6 +8,7 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.api.errors import make_trace_id
 from backend.app.models import (
     Course,
     GeneratedResource,
@@ -152,12 +153,14 @@ class PracticeService:
         if not questions:
             raise PracticeValidationError("当前课程还没有可用于生成练习的知识点。")
 
+        agent_trace_id = make_trace_id()
         now = datetime.now(UTC)
         session = PracticeSession(
             user_id=user.id,
             course_id=course.id,
             title=f"{course.title} 练习",
             status="in_progress",
+            agent_trace_id=agent_trace_id,
             score=None,
             created_at=now,
             updated_at=now,
@@ -215,6 +218,8 @@ class PracticeService:
             raise PracticeValidationError("至少提交一道题。")
 
         now = datetime.now(UTC)
+        if not session.agent_trace_id:
+            session.agent_trace_id = make_trace_id()
         score = round(sum(item.feedback["score"] for item in evaluated) / len(evaluated))
         practice_answers = [
             PracticeAnswer(

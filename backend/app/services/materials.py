@@ -9,6 +9,7 @@ from uuid import uuid4
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
+from backend.app.api.errors import make_trace_id
 from backend.app.core.config import Settings, get_settings
 from backend.app.models import Course, CourseMaterial, CourseMaterialLink, KnowledgeChunk, KnowledgePoint, Material, User
 from backend.app.schemas.materials import (
@@ -165,11 +166,13 @@ class MaterialService:
         course = self._require_course(user, course_id) if course_id is not None else None
         parse_status, extracted_text = self._extract_text(extension, content)
         relative_path = self._store_file(user.id, clean_name, content)
+        agent_trace_id = make_trace_id()
         metadata = {
             "size_bytes": len(content),
             "size_label": self._format_size(len(content)),
             "extension": extension.lstrip(".").upper() or "FILE",
             "detail": self._detail_for_status(parse_status, extension),
+            "agent_trace_id": agent_trace_id,
         }
         material = Material(
             user_id=user.id,
@@ -177,6 +180,7 @@ class MaterialService:
             content_type=content_type or "application/octet-stream",
             storage_path=relative_path,
             parse_status=parse_status,
+            agent_trace_id=agent_trace_id,
             extracted_text=extracted_text,
             metadata_json=metadata,
         )
@@ -287,6 +291,7 @@ class MaterialService:
             if len(point.material_ids) == 1 and all(self._is_exam_material(title) for title in point.source_titles)
         ]
         covered_titles = {self._normalize_title(point.title) for point in points}
+        agent_trace_id = make_trace_id()
         missing_review = [
             MaterialComparisonPoint(
                 title=point.title,
@@ -304,6 +309,7 @@ class MaterialService:
         return MaterialComparisonResult(
             course_id=str(course.id),
             material_ids=[str(material_id) for material_id in unique_material_ids],
+            agent_trace_id=agent_trace_id,
             summary=MaterialComparisonSummary(
                 compared_material_count=len(unique_material_ids),
                 comparable_material_count=len(material_ids_with_evidence),
@@ -563,6 +569,7 @@ class MaterialService:
             id=item.id,
             material_id=material.id,
             course_id=course_id,
+            agent_trace_id=getattr(material, "agent_trace_id", None),
             filename=material.filename,
             title=item.title,
             type=item.type,

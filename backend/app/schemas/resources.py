@@ -81,10 +81,10 @@ def decimal_to_float(value: Decimal | None) -> float | None:
 def generated_resource_to_api(resource: GeneratedResource) -> GeneratedResourceResponse:
     content_json = resource.content_json or {}
     metadata = content_json.get("metadata")
-    agent_trace_id = None
+    agent_trace_id = getattr(resource, "agent_trace_id", None)
     if isinstance(metadata, dict):
         raw_trace_id = metadata.get("agent_trace_id")
-        agent_trace_id = str(raw_trace_id) if raw_trace_id else None
+        agent_trace_id = str(agent_trace_id or raw_trace_id) if agent_trace_id or raw_trace_id else None
     return GeneratedResourceResponse(
         id=str(resource.id),
         course_id=str(resource.course_id) if resource.course_id is not None else None,

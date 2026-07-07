@@ -19,6 +19,7 @@ export type UploadMaterialResult = {
   id: string;
   material_id: number;
   course_id: number | null;
+  agent_trace_id?: string | null;
   filename: string;
   title: string;
   type: string;
@@ -89,6 +90,7 @@ export type MaterialComparisonCitation = {
 export type MaterialComparisonResult = {
   course_id: string;
   material_ids: string[];
+  agent_trace_id?: string | null;
   summary: MaterialComparisonSummary;
   repeated_concepts: MaterialComparisonPoint[];
   exam_likely_points: MaterialComparisonPoint[];

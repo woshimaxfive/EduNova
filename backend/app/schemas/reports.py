@@ -17,6 +17,7 @@ class ReportEnvelope(BaseModel):
     course_id: str
     practice_session_id: str | None
     status: str
+    agent_trace_id: str | None = None
     score: int | None
     report: dict
     created_at: str | None
@@ -36,6 +37,7 @@ def empty_report(course_id: int) -> ReportEnvelope:
         course_id=str(course_id),
         practice_session_id=None,
         status="empty",
+        agent_trace_id=None,
         score=None,
         report={
             "summary": "还没有真实学习报告。",
@@ -56,6 +58,7 @@ def report_to_api(report: AssessmentReport) -> ReportEnvelope:
         course_id=str(report.course_id),
         practice_session_id=str(report.practice_session_id) if report.practice_session_id is not None else None,
         status="ready",
+        agent_trace_id=getattr(report, "agent_trace_id", None),
         score=int(report.score) if report.score is not None else None,
         report=report.report_json or {},
         created_at=iso_timestamp(report.created_at),

@@ -331,8 +331,12 @@ def test_generate_five_resource_types_persists_resources_quality_scores_and_trac
     assert all(resource.user_id == 1 and resource.course_id == 101 for resource in repo.resources)
     assert all(resource.status == "completed" for resource in repo.resources)
     assert all(resource.review_status == "passed" for resource in repo.resources)
+    assert all(resource.agent_trace_id == result["agent_trace_id"] for resource in repo.resources)
     assert all(resource.content_json["metadata"]["agent_trace_id"] == result["agent_trace_id"] for resource in repo.resources)
     assert all(resource.content_json["metadata"]["generation_mode"] == "model_enhanced" for resource in repo.resources)
+    assert all(resource["agent_trace_id"] == result["agent_trace_id"] for resource in result["resources"])
+    assert all(log.metadata_json["workflow"] == "resource_generation" for log in repo.agent_logs)
+    assert all(log.metadata_json["artifact_type"] == "generated_resource" for log in repo.agent_logs)
     assert set(result["quality_scores"].keys()) == {resource["id"] for resource in result["resources"]}
     assert len(model_service.calls) == 1
     assert model_service.timeout_calls == [5.0]
@@ -365,6 +369,7 @@ def test_generate_uses_usable_deterministic_source_when_model_is_unavailable() -
     assert "易错点" in resource["content_json"]["markdown"]
     assert "启发式搜索" in resource["title"]
     assert repo.agent_logs[4].status == "completed"
+    assert repo.agent_logs[4].metadata_json["risk_flags"] == ["model_fallback"]
 
 
 def test_generate_provider_failure_keeps_all_resource_types_usable_without_repeated_model_calls() -> None:

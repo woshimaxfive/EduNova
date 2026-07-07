@@ -226,7 +226,7 @@ frontend/src/
 - 命中引用且模型可用时，课程 assistant 内容来自 OpenAI-compatible 模型回答。
 - 课程页优先使用 `fetch` + `ReadableStream` 消费 SSE。
 - Phase 6.4 起课程引用来自混合检索，缺少外部 embedding 配置时显式显示本地 fallback。
-- Phase 6.5 起课程页默认不再常驻知识画布、资源区、证据层、横向知识点条或主区重复历史；来源、生成资源、学习路径和思考过程收敛到回答下方，知识点入口和引用可进入学习模式。
+- Phase 6.5 起课程页默认不再常驻知识画布、资源区、证据层、横向知识点条或主区重复历史；来源、生成资源、学习路径和课堂协作轨迹收敛到回答下方，知识点入口和引用可进入学习模式。
 - 资源、真实学习路径和 Agent 轨迹仍使用前端预备交互，后续由资源生成、路径和 Agent 日志接口替换。
 - 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面使用前端样例数据；后续由资料、画像、RAG、练习评估、掌握度报告和设置接口替换。
 - 当前前端已移除 `ActionNotice` 类全局横向提示条；按钮反馈优先通过选中态、列表刷新、详情面板、输入内容和真实路由跳转表达。失败、校验错误和模型不可用等需要用户处理的状态使用局部 `InlineFeedback`，模型配置保存、设默认、删除和连接测试等短确认使用右下角 toast；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
@@ -319,7 +319,7 @@ backend/app/
 
 ## 6. 多智能体架构
 
-EduNova 使用 LangGraph 编排多智能体。
+EduNova 使用 LangGraph 编排学习闭环多智能体。Service 层继续作为 API 边界和依赖装配层，认证、设置和 Dashboard 等非学习能力保持普通服务，不包装成 Agent。
 
 核心 Agent：
 
@@ -354,6 +354,8 @@ ReviewAgent 审核内容
   ↓
 前端展示资源、引用和轨迹
 ```
+
+当前生产 Graph 覆盖 `ProfileGraph`、`CourseBuilderGraph`、`MaterialComparisonGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`ExamSprintGraph`、`AssessmentGraph`、`ReportGraph` 和 `ExportDossierGraph`。所有生成型 Graph 都必须经过 ReviewAgent 节点，并输出 `review_status`、`confidence`、`risk_flags` 和安全摘要。
 
 资源 Worker：
 
@@ -395,7 +397,7 @@ ReviewAgent 审核
 - Phase 6.3 已新增课程消息流式路径：后端通过 `event: metadata/token/done/error` 输出 SSE，完成后一次性持久化完整 assistant；失败时不保存半截内容。
 - Phase 6.4 已新增 `EmbeddingService`：优先使用当前用户默认配置或服务器兜底的 OpenAI-compatible `/embeddings`，缺少配置时使用显式 `local-hash-1536` 本地 fallback；课程生成后 best-effort 写入向量，RAG 搜索时懒加载补齐。
 - Phase 6.4 已把 RAG 检索升级为 `keyword_score + vector_score` 混合排序，API 和前端引用区会展示 `retrieval_mode`、`embedding_status`、`retrieval_source` 等轻量状态。
-- 后续再接数据库侧近邻召回、批量重建任务、讯飞原生 2560 维 Embedding 专项和 ReviewAgent。
+- 后续再接数据库侧近邻召回、批量重建任务和讯飞原生 2560 维 Embedding 专项；ReviewAgent 已作为生成型 Graph 的审核节点接入学习闭环 trace。
 
 可信机制：
 

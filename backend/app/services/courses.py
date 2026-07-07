@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.api.errors import make_trace_id
 from backend.app.models import (
     Course,
     CourseEnrollment,
@@ -339,6 +340,7 @@ class CourseService:
         if not sections:
             raise CourseGenerationError("当前仅支持已解析的 TXT/Markdown 生成课程。")
 
+        agent_trace_id = make_trace_id()
         title = course_title.strip() or Path(materials[0].filename).stem
         course = Course(
             owner_id=user.id,
@@ -348,9 +350,12 @@ class CourseService:
             source_type="uploaded",
             visibility="private",
             status="ready",
+            agent_trace_id=agent_trace_id,
         )
         enrollment = CourseEnrollment(user_id=user.id, course_id=0, role="learner", progress_percent=Decimal("0"))
         course_materials = [self._build_course_material(user, material) for material in materials]
+        for course_material in course_materials:
+            course_material.agent_trace_id = agent_trace_id
         material_links = [
             CourseMaterialLink(course_id=0, material_id=material.id, added_by_user_id=user.id, usage_type="course_source")
             for material in materials
@@ -944,6 +949,7 @@ class CourseService:
             subject=course.subject,
             source_type=course.source_type or "uploaded",
             status=course.status or "draft",
+            agent_trace_id=getattr(course, "agent_trace_id", None),
             progress_percent=0,
             material_count=material_count,
             knowledge_point_count=knowledge_point_count,

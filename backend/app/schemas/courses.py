@@ -19,6 +19,7 @@ class CourseSummary(BaseModel):
     subject: str | None
     source_type: str
     status: str
+    agent_trace_id: str | None = None
     progress_percent: int
     material_count: int
     knowledge_point_count: int

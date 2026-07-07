@@ -43,6 +43,7 @@ export type ProfileEventResponse = {
 
 export type ProfileChatResponse = {
   reply: string;
+  agent_trace_id?: string | null;
   profile: StudentProfileResponse;
   event: ProfileEventResponse;
 };

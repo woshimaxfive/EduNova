@@ -54,6 +54,7 @@ export type PracticeSessionDetail = {
   course_id: string;
   title: string;
   status: "in_progress" | "completed" | string;
+  agent_trace_id?: string | null;
   score: number | null;
   questions: PracticeQuestion[];
   answers: PracticeAnswerResult[];

@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.app.api.errors import make_trace_id
 from backend.app.models import ChatMessage, ChatSession, ProfileEvent, StudentProfile, User
 from backend.app.schemas.profiles import (
     ProfileChatResponse,
@@ -110,6 +111,7 @@ class ProfileService:
         message_text = message.strip()
         updates = self._extract_profile_updates(message_text)
         changed_labels = self._changed_labels(updates)
+        agent_trace_id = make_trace_id()
         profile = self.repository.get_profile(user.id)
         if profile is None:
             profile = StudentProfile(
@@ -135,6 +137,7 @@ class ProfileService:
                 "source_type": "profile_chat",
                 "summary": "学生画像对话",
                 "updated_dimensions": list(updates.keys()),
+                "trace_id": agent_trace_id,
             },
         )
 
@@ -153,6 +156,7 @@ class ProfileService:
         )
         return ProfileChatResponse(
             reply="已更新你的学习画像。",
+            agent_trace_id=agent_trace_id,
             profile=profile_response,
             event=event_to_api(event),
         )

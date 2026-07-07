@@ -7,6 +7,7 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.api.errors import make_trace_id
 from backend.app.models import (
     AssessmentReport,
     Course,
@@ -252,6 +253,7 @@ class ExamSprintService:
             raise ExamSprintValidationError("当前课程还没有可用于生成冲刺计划的知识点。")
 
         effective_goal = " ".join(goal.split())[:500] or f"完成《{course.title}》期末冲刺复习"
+        agent_trace_id = make_trace_id()
         now = datetime.now(UTC)
         plan_payload = self._build_plan_payload(
             course=course,
@@ -271,6 +273,7 @@ class ExamSprintService:
                     title=f"{course.title} 期末冲刺计划",
                     goal=effective_goal,
                     status="sprint_active",
+                    agent_trace_id=agent_trace_id,
                     plan_json={key: value for key, value in plan_payload.items() if key != "task_specs"},
                     created_at=now,
                     updated_at=now,
@@ -583,6 +586,7 @@ class ExamSprintService:
         return ExamSprintPlanResponse(
             id=str(path.id),
             course_id=str(path.course_id),
+            agent_trace_id=getattr(path, "agent_trace_id", None),
             duration_days=int(plan_json.get("duration_days") or 0),
             goal=path.goal,
             status=path.status,

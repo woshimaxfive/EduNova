@@ -225,7 +225,7 @@ docker compose up -d postgres redis
 .\.venv\Scripts\python -m alembic upgrade head
 ```
 
-完整 Docker 栈启动后，也可以直接在后端容器中执行。后端镜像已复制 `alembic.ini`，容器工作目录为 `/app`：
+完整 Docker 栈启动时，backend 容器会先执行 `python -m alembic upgrade head`，再启动 Uvicorn，确保已有本地 Docker 数据卷也能自动补齐最新迁移。需要排障或确认版本时，也可以直接在后端容器中执行。后端镜像已复制 `alembic.ini`，容器工作目录为 `/app`：
 
 ```powershell
 docker compose exec -T backend python -m alembic upgrade head

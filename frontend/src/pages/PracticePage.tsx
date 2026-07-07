@@ -260,6 +260,9 @@ export function PracticePage() {
                 <small>{currentSession?.score !== null && currentSession?.score !== undefined ? `本次得分 ${currentSession.score}` : "提交后会生成即时反馈和复习线索。"}</small>
               </span>
             </div>
+            {currentSession?.agent_trace_id ? (
+              <p className="empty-inline-note">AssessmentGraph · {currentSession.agent_trace_id}</p>
+            ) : null}
           </section>
 
           <section className="student-panel review-queue" role="region" aria-label="薄弱点复习队列">

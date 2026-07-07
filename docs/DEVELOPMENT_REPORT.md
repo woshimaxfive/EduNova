@@ -1,6 +1,6 @@
 # EduNova 开发报告
 
-更新时间：2026-07-05
+更新时间：2026-07-07
 
 ## 1. 项目概述
 
@@ -22,6 +22,7 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 - 后端：FastAPI、SQLAlchemy、Alembic、Pydantic。
 - 数据：PostgreSQL、pgvector、Redis、本地文件存储。
 - AI：OpenAI-compatible Chat Completions、SSE、OpenAI-compatible Embeddings、本地 hash fallback。
+- Agent 编排：LangGraph 学习闭环生产编排，Service 层作为 API 边界和依赖装配层。
 - 部署：backend、frontend、postgres、redis、nginx 五服务。
 
 核心设计原则：
@@ -42,12 +43,13 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 | Phase 5 | TXT/Markdown 规则建课、课程 RAG 检索和课程会话引用 |
 | Phase 6 | 模型配置、流式课程回答、embedding 和课程空间双模式 |
 | Phase 7 | 用户级画像、画像事件、课程级弱点队列和状态流转 |
-| Phase 8 | Agent trace、LangGraph 骨架、5 类课程资源和资源质量收口 |
+| Phase 8 | Agent trace、5 类课程资源和资源质量收口 |
 | Phase 9 | 课程级学习路径、规则掌握度图和复习时间 |
 | Phase 10 | 练习生成、确定性批改、弱点反哺和学习报告 |
 | Phase 11 | 期末冲刺计划和资料对比第一刀 |
 | Phase 12.1 | Markdown 学习档案导出 |
 | Phase 12.2 | 交付基线、开源准备和验收证据 |
+| Phase 13.1 | 全学习闭环 LangGraph 生产编排、学习产物 trace 字段和前端轨迹入口 |
 
 ## 4. 核心创新
 
@@ -63,9 +65,9 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 
 资源生成不依赖强模型。系统先构造确定性可用稿，再让模型做可选增强；模型失败时仍保留可读、可练、可复用的资源。
 
-### 4.4 可观测 Agent 轨迹
+### 4.4 LangGraph 可观测编排
 
-资源生成等流程会写入安全 trace，前端可展示思考过程。trace 不记录系统提示词、完整模型输入、API Key 或完整资料原文。
+画像、资料建课/对比、课程问答、资源生成、路径/冲刺、练习评估、报告和导出会生成或携带安全 trace。前端展示课堂协作轨迹和 Graph 轨迹入口。trace 不记录系统提示词、完整模型输入、API Key、完整资料原文或完整用户画像原文。
 
 ### 4.5 练习和报告反哺
 
@@ -87,6 +89,7 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 - 期末冲刺计划。
 - 同课程资料对比。
 - Markdown 学习档案导出。
+- 学习闭环 LangGraph 生产编排和安全 trace 查询。
 - Docker Compose 一键启动。
 
 ## 6. 当前限制

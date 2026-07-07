@@ -19,6 +19,7 @@ class LearningDossierSourceSummary(BaseModel):
 
 class LearningDossierExport(BaseModel):
     course_id: str
+    agent_trace_id: str | None = None
     filename: str
     content_type: str
     markdown: str

@@ -42,6 +42,7 @@ export type AssessmentReport = {
   course_id: string;
   practice_session_id: string | null;
   status: "empty" | "ready" | string;
+  agent_trace_id?: string | null;
   score: number | null;
   report: AssessmentReportContent;
   created_at: string | null;

@@ -45,12 +45,26 @@ class AgentTraceService:
 
         steps = [agent_log_to_api(log) for log in logs]
         course_id = next((log.course_id for log in logs if log.course_id is not None), None)
+        workflow = self._first_metadata_value(logs, "workflow")
+        artifact_type = self._first_metadata_value(logs, "artifact_type")
+        artifact_id = self._first_metadata_value(logs, "artifact_id")
         return AgentTraceResponse(
             trace_id=trace_id,
+            workflow=str(workflow) if workflow is not None else None,
+            artifact_type=str(artifact_type) if artifact_type is not None else None,
+            artifact_id=str(artifact_id) if artifact_id is not None else None,
             course_id=str(course_id) if course_id is not None else None,
             status=self._derive_trace_status(logs),
             steps=steps,
         )
+
+    @staticmethod
+    def _first_metadata_value(logs: list[AgentRunLog], key: str) -> object | None:
+        for log in logs:
+            metadata = log.metadata_json or {}
+            if key in metadata and metadata[key] not in {"", None}:
+                return metadata[key]
+        return None
 
     @staticmethod
     def _derive_trace_status(logs: list[AgentRunLog]) -> str:

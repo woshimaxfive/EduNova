@@ -68,6 +68,7 @@ class LearningPath(IdMixin, TimestampMixin, Base):
     __tablename__ = "learning_paths"
     __table_args__ = (
         Index("ix_learning_paths_user_course_status", "user_id", "course_id", "status"),
+        Index("ix_learning_paths_agent_trace_id", "agent_trace_id"),
     )
 
     user_id: Mapped[int] = mapped_column(
@@ -83,6 +84,7 @@ class LearningPath(IdMixin, TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     goal: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    agent_trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     plan_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
@@ -131,6 +133,7 @@ class GeneratedResource(IdMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_generated_resources_user_course", "user_id", "course_id"),
         Index("ix_generated_resources_status", "status"),
+        Index("ix_generated_resources_agent_trace_id", "agent_trace_id"),
     )
 
     user_id: Mapped[int] = mapped_column(
@@ -150,6 +153,7 @@ class GeneratedResource(IdMixin, TimestampMixin, Base):
     )
     resource_type: Mapped[str] = mapped_column(String(80), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    agent_trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     content_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     citation_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
@@ -204,6 +208,7 @@ class PracticeSession(IdMixin, TimestampMixin, Base):
     __tablename__ = "practice_sessions"
     __table_args__ = (
         Index("ix_practice_sessions_user_course", "user_id", "course_id"),
+        Index("ix_practice_sessions_agent_trace_id", "agent_trace_id"),
     )
 
     user_id: Mapped[int] = mapped_column(
@@ -218,6 +223,7 @@ class PracticeSession(IdMixin, TimestampMixin, Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
+    agent_trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
 
 
@@ -247,6 +253,7 @@ class AssessmentReport(IdMixin, CreatedAtMixin, Base):
     __tablename__ = "assessment_reports"
     __table_args__ = (
         Index("ix_assessment_reports_user_course", "user_id", "course_id"),
+        Index("ix_assessment_reports_agent_trace_id", "agent_trace_id"),
     )
 
     user_id: Mapped[int] = mapped_column(
@@ -264,6 +271,7 @@ class AssessmentReport(IdMixin, CreatedAtMixin, Base):
         ForeignKey("practice_sessions.id", ondelete="SET NULL"),
         nullable=True,
     )
+    agent_trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     report_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
 

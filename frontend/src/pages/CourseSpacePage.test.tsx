@@ -137,6 +137,9 @@ const learningStateWithWeakness = {
 
 const agentTraceWithSteps: AgentTrace = {
   trace_id: "trace_candidate",
+  workflow: "course_tutor",
+  artifact_type: "chat_message",
+  artifact_id: "2",
   course_id: "808",
   status: "completed",
   steps: [
@@ -324,7 +327,8 @@ function makeDetail(
   session: TutorSessionSummary,
   question: string,
   assistant: string,
-  citation_json: TutorCitation[] = [citationItem]
+  citation_json: TutorCitation[] = [citationItem],
+  traceId: string | null = null
 ): TutorSessionDetail {
   return {
     session,
@@ -344,7 +348,7 @@ function makeDetail(
         role: "assistant",
         content: assistant,
         citation_json,
-        trace_id: null,
+        trace_id: traceId,
         created_at: "2026-07-03T12:01:00Z"
       }
     ]
@@ -420,14 +424,15 @@ function renderCoursePage(options: CoursePageOptions = {}) {
       };
     }
 
-    if (url === AGENT_ENDPOINTS.trace("trace_candidate")) {
+    if (url.startsWith("/agents/traces/")) {
       if (options.failAgentTrace) {
         throw new Error("Agent 轨迹读取失败。");
       }
+      const traceId = decodeURIComponent(url.split("/").pop() ?? "trace_candidate");
 
       return {
         data: {
-          data: options.agentTrace ?? agentTraceWithSteps,
+          data: options.agentTrace ? { ...options.agentTrace, trace_id: traceId } : { ...agentTraceWithSteps, trace_id: traceId },
           trace_id: "trace_agent_page"
         },
         status: 200,
@@ -819,7 +824,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
-    await user.click(await screen.findByRole("button", { name: "思考过程" }));
+    await user.click(await screen.findByRole("button", { name: "课堂协作轨迹" }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
     expect(await within(detailPanel).findByLabelText("Agent 执行轨迹")).toBeInTheDocument();
@@ -827,6 +832,41 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(within(detailPanel).getByText("命中 2 条引用")).toBeInTheDocument();
     expect(within(detailPanel).getByText("diagnosis")).toBeInTheDocument();
     expect(calls).toContainEqual(
+      expect.objectContaining({
+        method: "get",
+        url: AGENT_ENDPOINTS.trace("trace_candidate")
+      })
+    );
+  });
+
+  it("prefers the current assistant trace over the learning-state fallback trace", async () => {
+    const user = userEvent.setup();
+    const session = makeSession("777", "已有课程历史");
+    const { calls } = renderCoursePage({
+      sessions: [session],
+      learningState: learningStateWithWeakness,
+      historyDetail: makeDetail(
+        session,
+        "A 星搜索和启发函数有什么关系？",
+        "模型回答：A* 会同时看 g(n) 和 h(n)。",
+        [citationItem],
+        "trace_message_current"
+      ),
+      agentTrace: { ...agentTraceWithSteps, trace_id: "trace_message_current" }
+    });
+
+    await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await user.click(await screen.findByRole("button", { name: "课堂协作轨迹" }));
+
+    const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
+    expect(await within(detailPanel).findByLabelText("Agent 执行轨迹")).toBeInTheDocument();
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        method: "get",
+        url: AGENT_ENDPOINTS.trace("trace_message_current")
+      })
+    );
+    expect(calls).not.toContainEqual(
       expect.objectContaining({
         method: "get",
         url: AGENT_ENDPOINTS.trace("trace_candidate")
@@ -879,6 +919,9 @@ describe("CourseSpacePage course tutor sessions", () => {
       learningState: learningStateWithWeakness,
       agentTrace: {
         trace_id: "trace_candidate",
+        workflow: "course_tutor",
+        artifact_type: "chat_message",
+        artifact_id: "2",
         course_id: "808",
         status: "completed",
         steps: []
@@ -886,7 +929,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
-    await user.click(await screen.findByRole("button", { name: "思考过程" }));
+    await user.click(await screen.findByRole("button", { name: "课堂协作轨迹" }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
     expect(await within(detailPanel).findByText("当前 Agent trace 暂无可展示步骤。")).toBeInTheDocument();
@@ -902,7 +945,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
-    await user.click(await screen.findByRole("button", { name: "思考过程" }));
+    await user.click(await screen.findByRole("button", { name: "课堂协作轨迹" }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
     expect(await within(detailPanel).findByText("Agent 轨迹读取失败，请稍后重试。")).toBeInTheDocument();

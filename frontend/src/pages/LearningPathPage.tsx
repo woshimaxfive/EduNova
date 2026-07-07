@@ -313,6 +313,7 @@ export function LearningPathPage() {
             <div className="path-current-summary">
               <strong>{pathDetail.message}</strong>
               <span>{selectedCourse ? selectedCourse.title : `课程 ${pathDetail.course_id}`}</span>
+              {pathDetail.agent_trace_id ? <small>PathPlanningGraph · {pathDetail.agent_trace_id}</small> : null}
             </div>
           ) : currentPathQuery.isPending && hasCourse ? (
             <p className="path-empty-state">正在读取学习路径。</p>
@@ -452,6 +453,7 @@ export function LearningPathPage() {
             {sprintPlan ? (
               <div className="exam-sprint-result">
                 <div className="exam-sprint-summary">
+                  {sprintPlan.agent_trace_id ? <span>ExamSprintGraph · {sprintPlan.agent_trace_id}</span> : null}
                   <span>{sprintPlan.evidence_summary.knowledge_point_count} 个知识点</span>
                   <span>{sprintPlan.evidence_summary.weakness_count} 个确认弱点</span>
                   <span>{sprintPlan.evidence_summary.practice_low_score_count} 条练习证据</span>

@@ -118,7 +118,14 @@ def test_agent_trace_route_returns_ordered_steps_for_current_user() -> None:
                 input_summary="检索课程知识点",
                 output_summary="命中 2 条引用",
                 duration_ms=25,
-                metadata_json={"citation_count": 2, "review_result": "pass", "raw_prompt": "不应返回"},
+                metadata_json={
+                    "workflow": "resource_generation",
+                    "artifact_type": "generated_resource",
+                    "artifact_id": "1001",
+                    "citation_count": 2,
+                    "review_result": "pass",
+                    "raw_prompt": "不应返回",
+                },
             ),
             make_log(11, 1, "trace_agent", "diagnosis", 2, status="completed"),
         ]
@@ -130,6 +137,9 @@ def test_agent_trace_route_returns_ordered_steps_for_current_user() -> None:
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["trace_id"] == "trace_agent"
+    assert data["workflow"] == "resource_generation"
+    assert data["artifact_type"] == "generated_resource"
+    assert data["artifact_id"] == "1001"
     assert data["course_id"] == "808"
     assert data["status"] == "completed"
     assert [step["agent_name"] for step in data["steps"]] == ["retrieve", "diagnosis", "review"]
@@ -141,7 +151,13 @@ def test_agent_trace_route_returns_ordered_steps_for_current_user() -> None:
         "input_summary": "检索课程知识点",
         "output_summary": "命中 2 条引用",
         "duration_ms": 25,
-        "metadata": {"citation_count": 2, "review_result": "pass"},
+        "metadata": {
+            "artifact_id": "1001",
+            "artifact_type": "generated_resource",
+            "citation_count": 2,
+            "review_result": "pass",
+            "workflow": "resource_generation",
+        },
         "created_at": "2026-07-05T10:00:01Z",
     }
 
@@ -198,7 +214,7 @@ def test_agent_trace_response_does_not_expose_private_prompts_or_source_text() -
     assert response.json()["data"]["steps"][0]["metadata"] == {"citation_count": 1}
 
 
-def test_agent_graph_builds_stable_phase_8_1_node_sequence() -> None:
+def test_resource_generation_graph_executes_real_node_sequence() -> None:
     try:
         from backend.app.agents.graph import AGENT_GRAPH_NODE_NAMES, build_agent_graph, create_agent_state
     except ModuleNotFoundError as exc:
@@ -209,7 +225,8 @@ def test_agent_graph_builds_stable_phase_8_1_node_sequence() -> None:
         user_id=1,
         course_id=808,
         knowledge_point_id=401,
-        intent="resource_generation",
+        workflow="resource_generation",
+        artifact_type="generated_resource",
     )
     graph = build_agent_graph()
     result = graph.invoke(state)
@@ -219,5 +236,13 @@ def test_agent_graph_builds_stable_phase_8_1_node_sequence() -> None:
     assert result["user_id"] == 1
     assert result["course_id"] == 808
     assert result["knowledge_point_id"] == 401
-    assert result["intent"] == "resource_generation"
+    assert result["workflow"] == "resource_generation"
+    assert result["artifact_type"] == "generated_resource"
+    assert result["review_result"] == {
+        "review_status": "passed",
+        "confidence": 0.82,
+        "risk_flags": [],
+        "safety_summary": "已完成资源生成依据、隐私和完整性审核。",
+    }
+    assert result["node_results"] == ["profile", "retrieve", "diagnosis", "resource", "review", "persist"]
     assert result["errors"] == []

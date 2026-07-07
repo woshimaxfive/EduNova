@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.api.errors import make_trace_id
+from backend.app.agents.runtime import build_trace_metadata
 from backend.app.models import (
     AgentRunLog,
     Course,
@@ -327,6 +328,7 @@ class ResourceGenerationService:
                         knowledge_point_id=knowledge_point.id if knowledge_point is not None else None,
                         resource_type=resource_type,
                         title=draft.title,
+                        agent_trace_id=agent_trace_id,
                         content_json=content_json,
                         citation_json=[citation.to_json() for citation in citations],
                         status="completed",
@@ -351,6 +353,11 @@ class ResourceGenerationService:
 
             review_status = "warning" if generation_warnings else "completed"
             review_result = "low_evidence" if generation_warnings else "passed"
+            risk_flags = []
+            if model_failed:
+                risk_flags.append("model_fallback")
+            if generation_warnings:
+                risk_flags.append("low_evidence")
             self._log(
                 agent_trace_id,
                 user,
@@ -372,8 +379,12 @@ class ResourceGenerationService:
                 status=review_status,
                 metadata={
                     "confidence": 0.55 if generation_warnings else 0.82,
+                    "review_status": review_result,
                     "review_result": review_result,
+                    "risk_flags": risk_flags,
+                    "safety_summary": "已完成资源依据、隐私和结构完整性审核。",
                     "resource_count": len(resources),
+                    "warning_count": generation_warnings,
                 },
             )
             self._log(
@@ -883,7 +894,11 @@ class ResourceGenerationService:
                 input_summary=input_summary,
                 output_summary=output_summary,
                 duration_ms=10 + step_index,
-                metadata_json=metadata or {},
+                metadata_json=build_trace_metadata(
+                    workflow="resource_generation",
+                    artifact_type="generated_resource",
+                    metadata=metadata,
+                ),
                 created_at=now,
             )
         )

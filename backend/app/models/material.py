@@ -33,6 +33,7 @@ class Material(IdMixin, CreatedAtMixin, Base):
         nullable=False,
         default="uploaded",
     )
+    agent_trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 

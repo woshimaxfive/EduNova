@@ -38,6 +38,7 @@ def load_tutor_api_module():
 class FakeTutorRepository:
     sessions: list[ChatSession] = field(default_factory=list)
     messages: list[ChatMessage] = field(default_factory=list)
+    agent_logs: list[Any] = field(default_factory=list)
     allowed_course_ids: set[int] = field(default_factory=set)
     next_session_id: int = 1
     next_message_id: int = 1
@@ -85,6 +86,11 @@ class FakeTutorRepository:
         self.next_message_id += 1
         message.created_at = NOW + timedelta(minutes=message.id)
         self.messages.append(message)
+
+    def add_agent_log(self, log: Any) -> None:
+        log.id = len(self.agent_logs) + 1
+        log.created_at = NOW + timedelta(minutes=log.id)
+        self.agent_logs.append(log)
 
     def touch_session(self, session: ChatSession) -> None:
         session.updated_at = NOW + timedelta(minutes=self.next_message_id + 5)
@@ -371,6 +377,20 @@ def test_append_course_message_persists_real_citations_from_course_knowledge() -
     assert detail["messages"][1]["citation_json"][0]["chunk_id"] == 501
     assert detail["messages"][1]["citation_json"][0]["source_title"] == "人工智能导论讲义.md"
     assert detail["messages"][1]["trace_id"] == "trace_model_test"
+    assert [log.agent_name for log in repo.agent_logs] == [
+        "profile",
+        "retriever",
+        "tutor",
+        "weakness",
+        "review",
+        "next_action",
+    ]
+    assert {log.trace_id for log in repo.agent_logs} == {"trace_model_test"}
+    assert repo.agent_logs[0].metadata_json["workflow"] == "course_tutor"
+    assert repo.agent_logs[0].metadata_json["artifact_type"] == "chat_message"
+    assert repo.agent_logs[0].metadata_json["artifact_id"] == str(repo.messages[1].id)
+    assert repo.agent_logs[1].metadata_json["citation_count"] == 1
+    assert repo.agent_logs[4].metadata_json["review_status"] == "passed"
 
 
 def test_append_course_message_records_profile_candidate_event_after_messages_have_ids() -> None:
@@ -630,8 +650,11 @@ def test_stream_course_message_emits_tokens_and_persists_final_messages() -> Non
     assert events[0]["data"] == {
         "session_id": str(session.id),
         "trace_id": "trace_model_test",
+        "workflow": "course_tutor",
+        "artifact_type": "chat_message",
         "citation_count": 1,
         "used_model": True,
+        "steps": ["profile", "retriever", "tutor", "weakness", "review", "next_action"],
     }
     assert "".join(event["data"]["content"] for event in events if event["event"] == "token") == "模型回答：先看启发函数，再练 A*。"
     assert [message.role for message in repo.messages] == ["user", "assistant"]
@@ -639,6 +662,16 @@ def test_stream_course_message_emits_tokens_and_persists_final_messages() -> Non
     assert repo.messages[1].citation_json[0]["chunk_id"] == 501
     assert repo.messages[1].trace_id == "trace_model_test"
     assert events[-1]["data"]["messages"][1]["content"] == repo.messages[1].content
+    assert [log.agent_name for log in repo.agent_logs] == [
+        "profile",
+        "retriever",
+        "tutor",
+        "weakness",
+        "review",
+        "next_action",
+    ]
+    assert repo.agent_logs[0].metadata_json["artifact_id"] == str(repo.messages[1].id)
+    assert repo.agent_logs[4].metadata_json["risk_flags"] == []
 
 
 def test_stream_course_message_records_profile_candidate_event_on_done() -> None:
@@ -702,6 +735,8 @@ def test_stream_course_message_without_citations_does_not_call_model_and_persist
     assert answer_generator.calls == []
     assert [event["event"] for event in events] == ["metadata", "token", "done"]
     assert events[0]["data"]["used_model"] is False
+    assert events[0]["data"]["workflow"] == "course_tutor"
+    assert events[0]["data"]["steps"][-1] == "next_action"
     assert events[0]["data"]["citation_count"] == 0
     assert "还没有足够依据" in events[1]["data"]["content"]
     assert repo.messages[1].citation_json == []

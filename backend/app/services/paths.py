@@ -7,6 +7,7 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.api.errors import make_trace_id
 from backend.app.models import (
     Course,
     GeneratedResource,
@@ -174,6 +175,7 @@ class PathService:
         pending_count = sum(1 for item in weakness_items if item.status == "pending")
         planned_tasks = self._build_planned_tasks(knowledge_points, active_weaknesses, resources)
         effective_goal = " ".join(goal.split())[:500] or profile["learning_goal"] or f"完成《{course.title}》阶段复习"
+        agent_trace_id = make_trace_id()
         now = datetime.now(UTC)
 
         try:
@@ -185,6 +187,7 @@ class PathService:
                     title=f"{course.title} 学习路径",
                     goal=effective_goal,
                     status="active",
+                    agent_trace_id=agent_trace_id,
                     plan_json={
                         "duration_days": duration_days,
                         "strategy": "reviewing_first_then_confirmed_then_uncovered",
@@ -237,6 +240,7 @@ class PathService:
                 course_id=str(course.id),
                 status="not_started",
                 message="学习路径尚未生成。",
+                agent_trace_id=None,
                 path=None,
                 tasks=[],
                 evidence_summary=self._build_evidence(knowledge_points, weakness_items, resources),
@@ -332,6 +336,7 @@ class PathService:
             course_id=str(course.id),
             status=path.status,
             message="当前学习路径进行中。" if path.status == "active" else "学习路径已归档。",
+            agent_trace_id=getattr(path, "agent_trace_id", None),
             path=path_to_api(path),
             tasks=[task_to_api(task, resources_by_id) for task in tasks],
             evidence_summary=self._build_evidence(knowledge_points, weakness_items, resources),

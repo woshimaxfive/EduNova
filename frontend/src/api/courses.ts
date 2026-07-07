@@ -25,6 +25,7 @@ export type ApiCourseSummary = {
   subject: string;
   source_type: "builtin" | "uploaded" | "generated";
   status: string;
+  agent_trace_id?: string | null;
   progress_percent: number;
   material_count: number;
   knowledge_point_count: number;

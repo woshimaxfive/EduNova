@@ -7,6 +7,7 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.api.errors import make_trace_id
 from backend.app.models import (
     AssessmentReport,
     Course,
@@ -129,6 +130,7 @@ class ExportService:
         answers = self.repository.list_practice_answers(user.id, course.id)
         report = self.repository.get_latest_report(user.id, course.id)
         report_body = report.report_json if report is not None else empty_report(course.id).report
+        agent_trace_id = make_trace_id()
 
         source_summary = LearningDossierSourceSummary(
             has_report=report is not None,
@@ -154,6 +156,7 @@ class ExportService:
         )
         return LearningDossierExport(
             course_id=str(course.id),
+            agent_trace_id=agent_trace_id,
             filename=self._safe_filename(course.title),
             content_type="text/markdown; charset=utf-8",
             markdown=markdown,

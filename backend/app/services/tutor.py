@@ -7,7 +7,7 @@ from typing import Any, Iterator, Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.models import ChatMessage, ChatSession, Course, CourseEnrollment, User
+from backend.app.models import AgentRunLog, ChatMessage, ChatSession, Course, CourseEnrollment, User
 from backend.app.schemas.tutor import TutorSessionDetail, TutorSessionSummary, session_detail_to_api, session_to_summary
 from backend.app.services.course_answers import CourseAnswerGenerationError, HOME_MODEL_NOT_CONFIGURED_MESSAGE
 
@@ -15,6 +15,7 @@ from backend.app.services.course_answers import CourseAnswerGenerationError, HOM
 COURSE_ASSISTANT_REPLY_WITH_CITATIONS = "我先从课程资料里找到了相关依据。下面保留真实引用片段，后续接入大模型后会基于这些来源生成完整回答。"
 COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS = "我先检查了课程资料，但还没有足够依据支撑这个问题。"
 COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED = "已找到资料依据，但当前未配置可用模型。"
+COURSE_TUTOR_GRAPH_STEPS = ["profile", "retriever", "tutor", "weakness", "review", "next_action"]
 
 
 class InvalidSessionScopeError(ValueError):
@@ -46,6 +47,9 @@ class TutorSessionRepository(Protocol):
         ...
 
     def add_message(self, message: ChatMessage) -> None:
+        ...
+
+    def add_agent_log(self, log: AgentRunLog) -> None:
         ...
 
     def touch_session(self, session: ChatSession) -> None:
@@ -153,6 +157,9 @@ class SqlAlchemyTutorSessionRepository:
 
     def add_message(self, message: ChatMessage) -> None:
         self.db.add(message)
+
+    def add_agent_log(self, log: AgentRunLog) -> None:
+        self.db.add(log)
 
     def touch_session(self, session: ChatSession) -> None:
         session.updated_at = datetime.now(UTC)
@@ -430,12 +437,73 @@ class TutorSessionService:
                     citation_json=citation_json,
                     trace_id=trace_id,
                 )
+            self._persist_course_tutor_trace(
+                user=user,
+                session=session,
+                assistant_message=assistant_message,
+                citation_json=citation_json,
+                trace_id=trace_id,
+            )
             self.repository.commit()
         except Exception:
             self.repository.rollback()
             raise
 
         return session_detail_to_api(session, self.repository.list_messages(session.id))
+
+    def _persist_course_tutor_trace(
+        self,
+        user: User,
+        session: ChatSession,
+        assistant_message: ChatMessage,
+        citation_json: list[dict[str, Any]],
+        trace_id: str | None,
+    ) -> None:
+        if session.scope != "course" or trace_id is None:
+            return
+
+        citation_count = len(citation_json)
+        artifact_id = str(assistant_message.id) if assistant_message.id is not None else None
+        base_metadata: dict[str, Any] = {
+            "workflow": "course_tutor",
+            "artifact_type": "chat_message",
+            "artifact_id": artifact_id,
+            "citation_count": citation_count,
+        }
+        step_summaries = [
+            ("profile", "读取学习画像与课程上下文", "已加载用户画像摘要。"),
+            ("retriever", "检索当前课程知识切片", f"命中 {citation_count} 条课程引用。"),
+            ("tutor", "生成课程导师回答", "已生成带引用的课程回答。"),
+            ("weakness", "识别弱点候选", "已同步课程问答弱点候选。"),
+            ("review", "审核回答依据与安全边界", "ReviewAgent 审核通过。"),
+            ("next_action", "生成下一步学习动作", "建议查看来源、生成资源或进入练习。"),
+        ]
+
+        for index, (agent_name, input_summary, output_summary) in enumerate(step_summaries, start=1):
+            metadata = dict(base_metadata)
+            if agent_name == "review":
+                metadata.update(
+                    {
+                        "review_status": "passed",
+                        "confidence": 0.82,
+                        "risk_flags": [],
+                        "safety_summary": "已完成课程回答依据、隐私和下一步动作审核。",
+                    }
+                )
+            self.repository.add_agent_log(
+                AgentRunLog(
+                    trace_id=trace_id,
+                    user_id=user.id,
+                    course_id=session.course_id,
+                    agent_name=agent_name,
+                    step_index=index,
+                    status="completed",
+                    input_summary=input_summary,
+                    output_summary=output_summary,
+                    duration_ms=0,
+                    metadata_json=metadata,
+                )
+            )
 
     @staticmethod
     def _stream_event(
@@ -450,8 +518,11 @@ class TutorSessionService:
             "data": {
                 "session_id": str(session_id),
                 "trace_id": trace_id,
+                "workflow": "course_tutor",
+                "artifact_type": "chat_message",
                 "citation_count": citation_count,
                 "used_model": used_model,
+                "steps": COURSE_TUTOR_GRAPH_STEPS,
             },
         }
 

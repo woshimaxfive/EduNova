@@ -1051,7 +1051,7 @@ Authorization: Bearer <token>
 
 ## 11. Agent Trace 接口
 
-状态：Phase 8.1 已实现 trace 查询底座，Phase 8.2 已由资源生成流程写入 `profile -> retrieve -> diagnosis -> resource -> review -> persist` 六步 Agent 日志；Phase 9 学习路径和 Phase 10 练习评估/学习报告已接入各自业务闭环；Phase 12.1 已接入同步 Markdown 学习档案导出，但导出不写 Agent trace。
+状态：Phase 13.1 已把学习闭环 Agent 从“Service 分工 + 手写 trace”升级为 LangGraph 生产编排。资源生成写入 `profile -> retrieve -> diagnosis -> resource -> review -> persist` 六步 Agent 日志；课程问答返回 `profile -> retriever -> tutor -> weakness -> review -> next_action` 协作轨迹；路径、冲刺、练习、报告和导出均会生成或返回安全 `agent_trace_id`。
 
 ### GET `/agents/traces/{trace_id}`
 
@@ -1060,6 +1060,9 @@ Authorization: Bearer <token>
 响应字段：
 
 - `trace_id`：业务 trace。
+- `workflow`：Graph 工作流，例如 `resource_generation`、`course_tutor`、`report`。
+- `artifact_type`：产物类型，例如 `generated_resource`、`chat_message`、`assessment_report`。
+- `artifact_id`：产物 ID，可能为空。
 - `course_id`：关联课程，可能为空。
 - `status`：由步骤状态派生，可能为 `running`、`completed`、`warning` 或 `failed`。
 - `steps`：按 `step_index`、`created_at`、`id` 排序的步骤列表。
@@ -1071,6 +1074,9 @@ Authorization: Bearer <token>
 {
   "data": {
     "trace_id": "trace_20260705_agent_001",
+    "workflow": "resource_generation",
+    "artifact_type": "generated_resource",
+    "artifact_id": "501",
     "course_id": "101",
     "status": "completed",
     "steps": [
@@ -1084,7 +1090,9 @@ Authorization: Bearer <token>
         "duration_ms": 25,
         "metadata": {
           "citation_count": 2,
-          "review_result": "pass"
+          "review_status": "passed",
+          "risk_flags": [],
+          "workflow": "resource_generation"
         },
         "created_at": "2026-07-05T10:00:01Z"
       }
@@ -1106,6 +1114,7 @@ Authorization: Bearer <token>
 - 路径生成只消费 `confirmed/reviewing` 弱点队列、课程知识点、同课程生成资源和用户级画像叠层；`pending/dismissed` 不进入路径任务。
 - 任务类型固定为 `review`、`learn`、`resource`，任务状态固定为 `todo`、`doing`、`completed`。
 - `plan_json` 只保存安全摘要、生成规则、计数、依据说明和可展示 metadata，不保存系统提示词、模型输入、API Key、完整资料原文或完整画像原文。
+- 路径响应可携带 `agent_trace_id`，用于前端展示 `PathPlanningGraph` 或 `ExamSprintGraph` 的轻量轨迹入口。
 
 ### POST `/paths/generate`
 
@@ -1171,6 +1180,7 @@ Authorization: Bearer <token>
         "updated_at": "2026-07-05T16:00:00Z"
       }
     ],
+    "agent_trace_id": "trace_path_generate",
     "evidence_summary": {
       "knowledge_point_count": 6,
       "confirmed_or_reviewing_weakness_count": 2,
@@ -1207,7 +1217,8 @@ Authorization: Bearer <token>
       "pending_weakness_count": 1,
       "resource_count": 0,
       "basis": []
-    }
+    },
+    "agent_trace_id": null
   },
   "trace_id": "trace_path_current"
 }
@@ -1351,12 +1362,12 @@ Authorization: Bearer <token>
 
 - 命中课程知识切片时，assistant `citation_json` 采用 `/rag/search` 的结果字段结构：`chunk_id`、`course_id`、`material_id`、`knowledge_point_id`、`content`、`source_title`、`page_number`、`section_title`、`score`；Phase 6.4 后可额外包含 `keyword_score`、`vector_score`、`retrieval_source`、`embedding_status`。
 - 无命中时 `citation_json=[]`，assistant 内容提示“资料依据不足”，前端不得伪造引用。
-- 有命中且可解析模型配置时，assistant `content` 保存模型基于引用生成的回答，`trace_id` 写入本次模型调用 trace。
+- 有命中且可解析模型配置时，assistant `content` 保存模型基于引用生成的回答，`trace_id` 写入本次 `CourseTutorGraph` trace。
 - 有命中但无可用模型配置时，assistant 保存“已找到资料依据，但当前未配置可用模型。”，引用仍保留。
 - 模型调用超时、鉴权失败、非 JSON、空内容或流式中途失败时返回 `MODEL_PROVIDER_ERROR`，前端保留输入，不写入半截 assistant 消息。
 - 课程空间刷新后，前端通过 `GET /tutor/sessions/{session_id}` 恢复消息和引用。
 
-低依据评分、完整 agent trace 和 ReviewAgent 仍在后续阶段接入；embedding 与混合召回已在 Phase 6.4 接入，讯飞原生 2560 维 Embedding 仍未接入。
+低依据判断、完整 Agent trace 和 ReviewAgent 已在 `CourseTutorGraph` / 资源 Graph 的安全轨迹中接入；embedding 与混合召回已在 Phase 6.4 接入，讯飞原生 2560 维 Embedding 仍未接入。
 
 ### POST `/tutor/sessions/{session_id}/messages/stream`
 
@@ -1378,7 +1389,7 @@ Content-Type: text/event-stream
 
 ```text
 event: metadata
-data: {"session_id":"12","trace_id":"trace_xxx","citation_count":2,"used_model":true}
+data: {"session_id":"12","trace_id":"trace_xxx","workflow":"course_tutor","artifact_type":"chat_message","steps":["profile","retriever","tutor","weakness","review","next_action"],"citation_count":2,"used_model":true}
 
 event: token
 data: {"content":"可以先从启发函数的作用看起。"}
@@ -1458,6 +1469,7 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
       }
     ],
     "answers": [],
+    "agent_trace_id": "trace_practice_session",
     "created_at": "2026-07-05T10:00:00Z",
     "updated_at": "2026-07-05T10:00:00Z"
   },
@@ -1550,6 +1562,7 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
       "review_queue_updates": [],
       "profile_changes": ["练习结果可作为后续画像证据，但本阶段不自动改写用户长期画像。"]
     },
+    "agent_trace_id": "trace_report",
     "created_at": "2026-07-05T10:10:00Z"
   },
   "trace_id": "trace_report"
@@ -1594,6 +1607,7 @@ course_id=101
       "review_queue_updates": [],
       "profile_changes": []
     },
+    "agent_trace_id": null,
     "created_at": null
   },
   "trace_id": "trace_report_latest"
@@ -1759,6 +1773,7 @@ course_id=101
       "material_filter_count": 2,
       "basis": ["课程知识点 3 个。"]
     },
+    "agent_trace_id": "trace_exam_sprint",
     "created_at": "2026-07-05T11:00:00Z",
     "updated_at": "2026-07-05T11:00:00Z"
   },
@@ -1778,7 +1793,7 @@ course_id=101
 
 ## 17. Export 接口
 
-状态：Phase 12.1 已实现 Markdown 学习档案导出第一刀。当前为同步 JSON 返回，不创建导出任务、不保存服务器端文件、不做 PDF/Word，也不调用外部模型。
+状态：Phase 12.1 已实现 Markdown 学习档案导出第一刀。Phase 13.1 后同步导出响应会携带 `ExportDossierGraph` 的 `agent_trace_id`。当前仍为同步 JSON 返回，不创建导出任务、不保存服务器端文件、不做 PDF/Word，也不调用外部模型。
 
 统一规则：
 
@@ -1810,6 +1825,7 @@ course_id=101
     "content_type": "text/markdown; charset=utf-8",
     "markdown": "# 人工智能导论 学习档案\n\n## 数据概览\n...",
     "generated_at": "2026-07-05T15:00:00Z",
+    "agent_trace_id": "trace_export",
     "source_summary": {
       "has_report": true,
       "report_id": "801",

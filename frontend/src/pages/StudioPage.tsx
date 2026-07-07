@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import { getKnowledgePoints, listCourses } from "../api/courses";
 import {
   generateResources,
@@ -14,6 +15,7 @@ import {
   type ResourceType
 } from "../api/resources";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
+import { AgentTimeline } from "../components/evidence/AgentTimeline";
 import { StudioDock } from "../components/studio/StudioDock";
 import { WorkspaceStateStrip } from "../components/states/WorkspaceStateStrip";
 import { getWorkspaceStatePanels } from "../features/workspace/workflowState";
@@ -145,6 +147,17 @@ export function StudioPage() {
   const selectedResourceQuality = selectedResource
     ? latestQualityScores[selectedResource.id] ?? resourceQualityQuery.data?.data ?? []
     : [];
+  const selectedResourceTraceId = selectedResource?.agent_trace_id ?? selectedResource?.content_json.metadata?.agent_trace_id ?? null;
+  const resourceTraceQuery = useQuery({
+    queryKey: ["agents", "trace", selectedResourceTraceId],
+    queryFn: () => getAgentTrace(selectedResourceTraceId ?? ""),
+    enabled: Boolean(selectedResourceTraceId),
+    staleTime: 30_000
+  });
+  const resourceTraceEvents = useMemo(
+    () => resourceTraceQuery.data?.data.steps.map(mapAgentTraceStepToEvent) ?? [],
+    [resourceTraceQuery.data?.data.steps]
+  );
 
   const generateMutation = useMutation({
     mutationFn: () => {
@@ -269,6 +282,25 @@ export function StudioPage() {
           ))
         ) : (
           <p className="empty-inline-note">当前资源没有可展示引用。</p>
+        )}
+      </section>
+
+      <section className="student-panel generation-queue" role="region" aria-label="资源生成链路">
+        <div className="student-panel-heading">
+          <div>
+            <h2>ResourceGenerationGraph</h2>
+          </div>
+        </div>
+        {resourceTraceQuery.isError ? (
+          <InlineFeedback message="资源生成轨迹读取失败，请稍后重试。" tone="warning" className="library-inline-feedback" />
+        ) : resourceTraceQuery.isPending && resourceTraceQuery.fetchStatus !== "idle" ? (
+          <p className="empty-inline-note">正在读取资源生成链路。</p>
+        ) : resourceTraceEvents.length > 0 ? (
+          <AgentTimeline events={resourceTraceEvents} />
+        ) : (
+          <p className="empty-inline-note">
+            {selectedResourceTraceId ? "当前资源 trace 暂无可展示步骤。" : "生成后会展示 Profile、Retriever、Diagnosis、Resource、Review、Persist 全链路。"}
+          </p>
         )}
       </section>
     </>

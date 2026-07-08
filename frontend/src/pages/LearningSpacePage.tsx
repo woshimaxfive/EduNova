@@ -32,6 +32,7 @@ import {
   type TutorSessionSummary
 } from "../api/tutor";
 import { InlineFeedback, type FeedbackTone } from "../components/feedback/InlineFeedback";
+import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { useAuthStore } from "../features/auth/authStore";
@@ -541,7 +542,7 @@ export function LearningSpacePage() {
               {messages.map((message) => (
                 <article className={`home-message ${message.role}`} key={message.id}>
                   {message.role === "assistant" ? <span className="message-thinking">已思考若干秒</span> : null}
-                  <p>{message.content}</p>
+                  {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : <p>{message.content}</p>}
                   {message.role === "assistant" ? (
                     <button className="message-speak-button" type="button" aria-label="朗读回答" onClick={() => handleSpeakMessage(message.content)}>
                       <SpeakerHigh size={15} weight="duotone" aria-hidden="true" />

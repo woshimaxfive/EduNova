@@ -44,6 +44,7 @@ import { CourseLoopHero } from "../components/course-space/CourseLoopHero";
 import { CourseStudyStepRail } from "../components/course-space/CourseStudyStepRail";
 import { AgentTimeline } from "../components/evidence/AgentTimeline";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
+import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { buildCourseLoopSummary, buildStudySteps } from "../features/course-space/a3Loop";
@@ -792,7 +793,11 @@ export function CourseSpacePage() {
                       <section className="course-message-stack" aria-label="课程即时对话">
                         {displayedCourseMessages.map((message) => (
                           <article className={`course-message ${message.role}`} key={message.id}>
-                            <p>{message.role === "assistant" ? sanitizeCourseAnswerContent(message.content) : message.content}</p>
+                            {message.role === "assistant" ? (
+                              <MarkdownMessage content={sanitizeCourseAnswerContent(message.content)} />
+                            ) : (
+                              <p>{message.content}</p>
+                            )}
                           </article>
                         ))}
                       </section>
@@ -966,7 +971,11 @@ export function CourseSpacePage() {
                   <section className="course-study-mini-thread" aria-label="当前课程对话摘要">
                     {displayedCourseMessages.slice(-2).map((message) => (
                       <article className={`course-message ${message.role}`} key={message.id}>
-                        <p>{message.content}</p>
+                        {message.role === "assistant" ? (
+                          <MarkdownMessage content={sanitizeCourseAnswerContent(message.content)} />
+                        ) : (
+                          <p>{message.content}</p>
+                        )}
                       </article>
                     ))}
                   </section>

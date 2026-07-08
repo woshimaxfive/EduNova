@@ -2,6 +2,7 @@
 .agents/
 .codex/
 .codegraph/
+.claude/
 .playwright-cli/
 .worktrees/
 
@@ -10,14 +11,22 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 .venv/
 venv/
+.coverage
+coverage/
+htmlcov/
 
 # Node
 node_modules/
 dist/
 build/
 .vite/
+.vite-temp/
+.pnpm-store/
+playwright-report/
+test-results/
 
 # Environment and local data
 .env

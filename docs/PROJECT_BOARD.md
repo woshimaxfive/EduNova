@@ -117,6 +117,18 @@ Phase 13.2 已完成资料解析、主页工具和异步导出增强：PDF/DOCX/
 - [x] 开源准备和提交材料文档专项第一刀。
 - [ ] Phase 13：Verification and Hardening / 产品打磨。
 
+#### 赛题命门补强记录（2026-07-08）
+
+这组问题来自 2026-07-08 结合赛题、代码、文档和评分标准后的复盘。当前项目工程完成度高，但若冲击更高奖项，优先补“多智能体协同”和“多模态资源”这两类评委最可能深挖的点。
+
+- [ ] LangGraph 真接管课程问答：优先实现 `CourseTutorGraph` 生产链路，让课程空间问答由 Graph 节点完成画像读取、课程检索、导师回答、弱点识别、ReviewAgent 审核、下一步动作和消息持久化；trace 必须来自真实节点执行，不再只靠 service 手写步骤。
+- [ ] LangGraph 真接管资源生成：实现 `ResourceGenerationGraph` 生产链路，把画像、检索、诊断、5 类资源生成、质量审核和资源持久化纳入 Graph；资源工坊展示的 `ResourceGenerationGraph` 轨迹要能对应真实节点。
+- [ ] 文档口径同步：在真 Graph 完成前，`docs/AGENT_DESIGN.md`、`docs/STATUS.md`、答辩材料不能继续把 LangGraph 写成已经完整接管全部学习闭环；完成后再统一更新为已实现口径。
+- [ ] 大模型参与度补强：画像、路径、练习评估和报告当前主要是确定性规则，后续至少选择 1-2 个赛题关键环节接入 LLM 审核或生成，保留规则 fallback，避免“只有问答用大模型”的答辩风险。
+- [ ] 检索能力升级：当前默认本地 hash embedding 可用但语义能力有限，后续优先把已配置 embedding 的向量检索迁移到 pgvector SQL 排序，并保留关键词/本地 fallback。
+- [ ] 多模态资源补强：在真 Graph 后排期前端可视化和多模态资源呈现，优先做可演示、可解释、不会伪装视频生成的“图解卡片 / 动画讲解 / mermaid 或 markmap 渲染”。
+- [ ] 星火口径说明：当前星火通过 OpenAI-compatible baseUrl 预设和后端通用 provider 接入，不是专用 SDK 适配；答辩和文档中应表述为“兼容 OpenAI 协议的星火网关接入”。
+
 #### 前端针对性打磨记录（2026-07-08）
 
 这组问题来自 2026-07-08 前端评审，用于后续单独排期，不混入已完成主链路。Markdown 渲染已在 `4f5e66f feat: render assistant answers as markdown` 完成；下面只记录仍需针对性打磨的可视化、多模态和依赖取舍。

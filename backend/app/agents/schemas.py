@@ -23,3 +23,29 @@ class AgentState(TypedDict, total=False):
     errors: list[str]
     node_results: list[str]
     artifact_refs: dict[str, Any]
+    user: Any
+    session: Any
+    course: Any
+    knowledge_point: Any
+    resource_types: list[str]
+    learning_goal: str
+    difficulty: str
+    context_points: list[Any]
+    contexts: list[Any]
+    resource_citations: list[Any]
+    drafts: dict[str, Any]
+    enhanced_markdown: dict[str, str]
+    model_failed: bool
+    resource_payloads: list[dict[str, Any]]
+    resource_objects: list[Any]
+    quality_scores: dict[str, Any]
+    generation_warnings: int
+    message_text: str
+    conversation_context: Any
+    retrieval_query: str
+    context_metadata: dict[str, Any]
+    citation_json: list[dict[str, Any]]
+    assistant_reply: str
+    used_model: bool
+    tokens: Any
+    pending_traces: list[Any]

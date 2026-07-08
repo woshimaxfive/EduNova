@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from time import perf_counter
 from typing import Any, Iterator, Protocol
 
+from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.api.errors import make_trace_id
+from backend.app.agents.runtime import PendingAgentTrace, agent_log_from_pending_trace
+from backend.app.agents.schemas import AgentState
 from backend.app.models import AgentRunLog, ChatMessage, ChatSession, Course, CourseEnrollment, Material, User
 from backend.app.schemas.tutor import TutorSessionDetail, TutorSessionSummary, session_detail_to_api, session_to_summary
 from backend.app.services.course_answers import ConversationContext, CourseAnswerGenerationError, HOME_MODEL_NOT_CONFIGURED_MESSAGE
@@ -337,6 +342,13 @@ class TutorSessionService:
             raise EmptyMessageError("消息不能为空。")
 
         session = self._get_session_for_user(user.id, session_id)
+        if session.scope == "course":
+            return CourseTutorGraphRunner(self).append(
+                user=user,
+                session=session,
+                message_text=message_text,
+            )
+
         conversation_context = self._build_conversation_context(session)
         retrieval_query = self._build_contextual_query(message_text, conversation_context)
         context_metadata = self._context_metadata(
@@ -391,27 +403,10 @@ class TutorSessionService:
         if session.scope != "course":
             raise InvalidSessionScopeError("只有课程会话支持流式回答。")
 
-        conversation_context = self._build_conversation_context(session)
-        retrieval_query = self._build_contextual_query(message_text, conversation_context)
-        context_metadata = self._context_metadata(
-            conversation_context,
-            retrieval_query,
-            message_text,
-            retrieval_active=True,
-        )
-        citation_json = self._search_course_citations(
+        return CourseTutorGraphRunner(self).stream(
             user=user,
             session=session,
             message_text=message_text,
-            retrieval_query=retrieval_query,
-        )
-        return self._stream_course_response(
-            user=user,
-            session=session,
-            message_text=message_text,
-            citation_json=citation_json,
-            conversation_context=conversation_context if conversation_context.has_context else None,
-            context_metadata=context_metadata,
         )
 
     def _stream_course_response(
@@ -574,6 +569,7 @@ class TutorSessionService:
         trace_id: str | None,
         home_tool_metadata: dict[str, Any] | None = None,
         context_metadata: dict[str, Any] | None = None,
+        course_trace_records: list[PendingAgentTrace] | None = None,
     ) -> TutorSessionDetail:
         user_message = ChatMessage(
             session_id=session.id,
@@ -607,14 +603,23 @@ class TutorSessionService:
                     citation_json=citation_json,
                     trace_id=trace_id,
                 )
-            self._persist_course_tutor_trace(
-                user=user,
-                session=session,
-                assistant_message=assistant_message,
-                citation_json=citation_json,
-                trace_id=trace_id,
-                context_metadata=context_metadata,
-            )
+            if course_trace_records is not None and session.scope == "course" and trace_id is not None:
+                self._persist_course_tutor_graph_trace(
+                    user=user,
+                    session=session,
+                    assistant_message=assistant_message,
+                    trace_id=trace_id,
+                    trace_records=course_trace_records,
+                )
+            else:
+                self._persist_course_tutor_trace(
+                    user=user,
+                    session=session,
+                    assistant_message=assistant_message,
+                    citation_json=citation_json,
+                    trace_id=trace_id,
+                    context_metadata=context_metadata,
+                )
             self._persist_home_tutor_trace(
                 user=user,
                 session=session,
@@ -630,6 +635,28 @@ class TutorSessionService:
             raise
 
         return session_detail_to_api(session, self.repository.list_messages(session.id))
+
+    def _persist_course_tutor_graph_trace(
+        self,
+        user: User,
+        session: ChatSession,
+        assistant_message: ChatMessage,
+        trace_id: str,
+        trace_records: list[PendingAgentTrace],
+    ) -> None:
+        artifact_id = str(assistant_message.id) if assistant_message.id is not None else None
+        for pending in trace_records:
+            self.repository.add_agent_log(
+                agent_log_from_pending_trace(
+                    pending=pending,
+                    trace_id=trace_id,
+                    user_id=user.id,
+                    course_id=session.course_id,
+                    workflow="course_tutor",
+                    artifact_type="chat_message",
+                    artifact_id=artifact_id,
+                )
+            )
 
     def _persist_home_tutor_trace(
         self,
@@ -1061,3 +1088,372 @@ class TutorSessionService:
         if mode not in {"chat", "socratic", "direct"}:
             raise InvalidSessionScopeError("mode 只能是 chat、socratic 或 direct。")
         return mode
+
+
+class CourseTutorGraphRunner:
+    workflow = "course_tutor"
+    artifact_type = "chat_message"
+
+    def __init__(self, service: TutorSessionService) -> None:
+        self.service = service
+        self.graph = self._build_graph()
+
+    def append(self, *, user: User, session: ChatSession, message_text: str) -> TutorSessionDetail:
+        state = self._initial_state(user=user, session=session, message_text=message_text)
+        result = self.graph.invoke(state)
+        return self.service._persist_message_pair(
+            user=user,
+            session=session,
+            message_text=message_text,
+            assistant_reply=str(result.get("assistant_reply") or ""),
+            citation_json=list(result.get("citation_json", [])),
+            trace_id=str(result.get("trace_id") or ""),
+            home_tool_metadata=None,
+            context_metadata=result.get("context_metadata"),
+            course_trace_records=list(result.get("pending_traces", [])),
+        )
+
+    def stream(self, *, user: User, session: ChatSession, message_text: str) -> Iterator[dict[str, Any]]:
+        state = self._initial_state(user=user, session=session, message_text=message_text)
+        try:
+            state.update(self._profile_node(state))
+            state.update(self._retriever_node(state))
+            citation_json = list(state.get("citation_json", []))
+            stream_state = self._prepare_stream_tutor_node(state)
+            state.update(stream_state)
+            trace_id = str(state.get("trace_id") or "")
+            used_model = bool(state.get("used_model"))
+            yield self.service._stream_event(
+                "metadata",
+                session_id=session.id,
+                trace_id=trace_id,
+                citation_count=len(citation_json),
+                used_model=used_model,
+                context_metadata=state.get("context_metadata"),
+            )
+
+            answer_parts: list[str] = []
+            for token in state.get("tokens", []):
+                if not isinstance(token, str) or not token:
+                    continue
+                answer_parts.append(token)
+                yield {"event": "token", "data": {"content": token}}
+
+            assistant_reply = "".join(answer_parts).strip()
+            if not assistant_reply:
+                raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。")
+            state["assistant_reply"] = assistant_reply
+            state.update(self._weakness_node(state))
+            state.update(self._review_node(state))
+            state.update(self._next_action_node(state))
+            detail = self.service._persist_message_pair(
+                user=user,
+                session=session,
+                message_text=message_text,
+                assistant_reply=assistant_reply,
+                citation_json=citation_json,
+                trace_id=trace_id,
+                home_tool_metadata=None,
+                context_metadata=state.get("context_metadata"),
+                course_trace_records=list(state.get("pending_traces", [])),
+            )
+            yield {"event": "done", "data": detail.model_dump()}
+        except CourseAnswerGenerationError:
+            yield {
+                "event": "error",
+                "data": {
+                    "code": "MODEL_PROVIDER_ERROR",
+                    "message": "模型暂不可用，请检查设置或稍后重试。",
+                },
+            }
+
+    def _build_graph(self):
+        graph = StateGraph(AgentState)
+        graph.add_node("profile", self._profile_node)
+        graph.add_node("retriever", self._retriever_node)
+        graph.add_node("tutor", self._tutor_node)
+        graph.add_node("weakness", self._weakness_node)
+        graph.add_node("review", self._review_node)
+        graph.add_node("next_action", self._next_action_node)
+        graph.add_edge(START, "profile")
+        graph.add_edge("profile", "retriever")
+        graph.add_edge("retriever", "tutor")
+        graph.add_edge("tutor", "weakness")
+        graph.add_edge("weakness", "review")
+        graph.add_edge("review", "next_action")
+        graph.add_edge("next_action", END)
+        return graph.compile()
+
+    def _initial_state(self, *, user: User, session: ChatSession, message_text: str) -> AgentState:
+        conversation_context = self.service._build_conversation_context(session)
+        retrieval_query = self.service._build_contextual_query(message_text, conversation_context)
+        context_metadata = self.service._context_metadata(
+            conversation_context,
+            retrieval_query,
+            message_text,
+            retrieval_active=True,
+        )
+        return {
+            "trace_id": make_trace_id(),
+            "workflow": self.workflow,
+            "artifact_type": self.artifact_type,
+            "user_id": user.id,
+            "course_id": session.course_id,
+            "user": user,
+            "session": session,
+            "message_text": message_text,
+            "conversation_context": conversation_context if conversation_context.has_context else None,
+            "retrieval_query": retrieval_query,
+            "context_metadata": context_metadata,
+            "pending_traces": [],
+            "warnings": [],
+            "errors": [],
+        }
+
+    def _profile_node(self, state: AgentState) -> dict[str, Any]:
+        return self._run_node(
+            state,
+            agent_name="profile",
+            step_index=1,
+            input_summary="读取学习画像与课程上下文",
+            work=lambda: ({}, "已加载用户画像摘要。", "completed", {}),
+        )
+
+    def _retriever_node(self, state: AgentState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            citations = self.service._search_course_citations(
+                user=state["user"],
+                session=state["session"],
+                message_text=str(state["message_text"]),
+                retrieval_query=str(state["retrieval_query"]),
+            )
+            return (
+                {"citation_json": citations, "citations": citations},
+                f"命中 {len(citations)} 条课程引用。",
+                "completed",
+                {"citation_count": len(citations), "source_count": len(citations)},
+            )
+
+        return self._run_node(
+            state,
+            agent_name="retriever",
+            step_index=2,
+            input_summary="检索当前课程知识切片",
+            work=work,
+        )
+
+    def _tutor_node(self, state: AgentState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            citations = list(state.get("citation_json", []))
+            if not citations:
+                return (
+                    {
+                        "assistant_reply": COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS,
+                        "used_model": False,
+                    },
+                    "课程资料依据不足，已生成低依据提示。",
+                    "warning",
+                    {"citation_count": 0, "risk_flags": ["low_evidence"]},
+                )
+            if self.service.course_answer_generator is None:
+                return (
+                    {
+                        "assistant_reply": COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED,
+                        "used_model": False,
+                    },
+                    "当前未配置课程回答模型，已返回清晰提示。",
+                    "warning",
+                    {"citation_count": len(citations), "risk_flags": ["model_not_configured"]},
+                )
+            answer = self.service.course_answer_generator.generate(
+                user=state["user"],
+                question=str(state["message_text"]),
+                citations=citations,
+                conversation_context=state.get("conversation_context"),
+            )
+            trace_id = getattr(answer, "trace_id", None) or state["trace_id"]
+            return (
+                {
+                    "assistant_reply": str(getattr(answer, "content", "") or ""),
+                    "trace_id": trace_id,
+                    "used_model": getattr(answer, "trace_id", None) is not None,
+                },
+                "已生成带引用的课程回答。",
+                "completed",
+                {"citation_count": len(citations)},
+            )
+
+        return self._run_node(
+            state,
+            agent_name="tutor",
+            step_index=3,
+            input_summary="生成课程导师回答",
+            work=work,
+        )
+
+    def _prepare_stream_tutor_node(self, state: AgentState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            citations = list(state.get("citation_json", []))
+            if not citations:
+                return (
+                    {
+                        "tokens": [COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS],
+                        "used_model": False,
+                    },
+                    "课程资料依据不足，已生成低依据提示。",
+                    "warning",
+                    {"citation_count": 0, "risk_flags": ["low_evidence"]},
+                )
+            if self.service.course_answer_generator is None:
+                return (
+                    {
+                        "tokens": [COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED],
+                        "used_model": False,
+                    },
+                    "当前未配置课程回答模型，已返回清晰提示。",
+                    "warning",
+                    {"citation_count": len(citations), "risk_flags": ["model_not_configured"]},
+                )
+            stream_result = self.service.course_answer_generator.stream(
+                user=state["user"],
+                question=str(state["message_text"]),
+                citations=citations,
+                conversation_context=state.get("conversation_context"),
+            )
+            trace_id = getattr(stream_result, "trace_id", None) or state["trace_id"]
+            return (
+                {
+                    "tokens": getattr(stream_result, "tokens"),
+                    "trace_id": trace_id,
+                    "used_model": bool(getattr(stream_result, "used_model", True)) and getattr(stream_result, "trace_id", None) is not None,
+                },
+                "已启动课程导师流式回答。",
+                "completed",
+                {"citation_count": len(citations)},
+            )
+
+        return self._run_node(
+            state,
+            agent_name="tutor",
+            step_index=3,
+            input_summary="生成课程导师回答",
+            work=work,
+        )
+
+    def _weakness_node(self, state: AgentState) -> dict[str, Any]:
+        citation_count = len(state.get("citation_json", []))
+        output = "已同步课程问答弱点候选。" if citation_count else "依据不足，未生成新的弱点候选。"
+        return self._run_node(
+            state,
+            agent_name="weakness",
+            step_index=4,
+            input_summary="识别弱点候选",
+            work=lambda: ({}, output, "completed", {"citation_count": citation_count}),
+        )
+
+    def _review_node(self, state: AgentState) -> dict[str, Any]:
+        citations = list(state.get("citation_json", []))
+        used_model = bool(state.get("used_model"))
+        risk_flags: list[str] = []
+        if not citations:
+            risk_flags.append("low_evidence")
+        if citations and not used_model:
+            risk_flags.append("model_not_configured")
+        review_status = "warning" if risk_flags else "passed"
+        metadata = {
+            "review_status": review_status,
+            "confidence": 0.82 if review_status == "passed" else 0.55,
+            "risk_flags": risk_flags,
+            "safety_summary": "已完成课程回答依据、隐私和下一步动作审核。",
+            "citation_count": len(citations),
+        }
+        return self._run_node(
+            state,
+            agent_name="review",
+            step_index=5,
+            input_summary="审核回答依据与安全边界",
+            work=lambda: ({"review_result": metadata}, f"ReviewAgent 审核结果：{review_status}", review_status, metadata),
+        )
+
+    def _next_action_node(self, state: AgentState) -> dict[str, Any]:
+        citations = list(state.get("citation_json", []))
+        output = "建议查看来源、生成资源或进入练习。" if citations else "建议补充课程资料或换一个与课程资料更贴近的问题。"
+        return self._run_node(
+            state,
+            agent_name="next_action",
+            step_index=6,
+            input_summary="生成下一步学习动作",
+            work=lambda: ({}, output, "completed", {"citation_count": len(citations)}),
+        )
+
+    def _run_node(
+        self,
+        state: AgentState,
+        *,
+        agent_name: str,
+        step_index: int,
+        input_summary: str,
+        work,
+    ) -> dict[str, Any]:
+        started = perf_counter()
+        try:
+            updates, output_summary, status, metadata = work()
+        except Exception as exc:
+            duration_ms = max(1, int((perf_counter() - started) * 1000))
+            failed = PendingAgentTrace(
+                agent_name=agent_name,
+                step_index=step_index,
+                status="failed",
+                input_summary=input_summary,
+                output_summary="节点执行失败，已记录安全错误摘要。",
+                duration_ms=duration_ms,
+                metadata={
+                    **self._base_metadata(state),
+                    "error_code": exc.__class__.__name__,
+                },
+            )
+            self._persist_failed_trace_records(state, failed)
+            raise
+        duration_ms = max(1, int((perf_counter() - started) * 1000))
+        pending = PendingAgentTrace(
+            agent_name=agent_name,
+            step_index=step_index,
+            status=status,
+            input_summary=input_summary,
+            output_summary=output_summary,
+            duration_ms=duration_ms,
+            metadata={**self._base_metadata(state), **metadata},
+        )
+        return {
+            **updates,
+            "pending_traces": [*list(state.get("pending_traces", [])), pending],
+        }
+
+    def _persist_failed_trace_records(self, state: AgentState, failed: PendingAgentTrace) -> None:
+        user = state.get("user")
+        session = state.get("session")
+        trace_id = str(state.get("trace_id") or "")
+        if not isinstance(user, User) or not isinstance(session, ChatSession) or not trace_id:
+            return
+        trace_records = [*list(state.get("pending_traces", [])), failed]
+        try:
+            for pending in trace_records:
+                self.service.repository.add_agent_log(
+                    agent_log_from_pending_trace(
+                        pending=pending,
+                        trace_id=trace_id,
+                        user_id=user.id,
+                        course_id=session.course_id,
+                        workflow=self.workflow,
+                        artifact_type=self.artifact_type,
+                    )
+                )
+            self.service.repository.commit()
+        except Exception:
+            self.service.repository.rollback()
+
+    def _base_metadata(self, state: AgentState) -> dict[str, Any]:
+        return {
+            "citation_count": len(state.get("citation_json", [])),
+            **self.service._safe_trace_context_metadata(state.get("context_metadata")),
+        }

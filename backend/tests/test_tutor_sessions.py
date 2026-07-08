@@ -890,7 +890,8 @@ def test_append_course_message_with_citations_and_missing_model_config_saves_cle
 
     assert "当前未配置可用模型" in detail["messages"][1]["content"]
     assert detail["messages"][1]["citation_json"][0]["chunk_id"] == 501
-    assert detail["messages"][1]["trace_id"] is None
+    assert detail["messages"][1]["trace_id"].startswith("trace_")
+    assert repo.agent_logs[4].metadata_json["risk_flags"] == ["model_not_configured"]
 
 
 def test_append_course_message_model_failure_rolls_back_without_half_messages() -> None:
@@ -928,6 +929,10 @@ def test_append_course_message_model_failure_rolls_back_without_half_messages() 
 
     assert repo.messages == []
     assert repo.rolled_back is False
+    assert [log.agent_name for log in repo.agent_logs] == ["profile", "retriever", "tutor"]
+    assert repo.agent_logs[-1].status == "failed"
+    assert repo.agent_logs[-1].metadata_json["workflow"] == "course_tutor"
+    assert repo.agent_logs[-1].metadata_json["error_code"] == "CourseAnswerGenerationError"
 
 
 def test_stream_course_message_emits_tokens_and_persists_final_messages() -> None:
@@ -1143,6 +1148,9 @@ def test_stream_course_message_model_failure_emits_error_without_half_messages()
     assert events[-1]["event"] == "error"
     assert events[-1]["data"]["code"] == "MODEL_PROVIDER_ERROR"
     assert repo.messages == []
+    assert [log.agent_name for log in repo.agent_logs] == ["profile", "retriever", "tutor"]
+    assert repo.agent_logs[-1].status == "failed"
+    assert repo.agent_logs[-1].metadata_json["error_code"] == "CourseAnswerGenerationError"
 
 
 def test_stream_course_message_model_failure_does_not_record_profile_candidate_event() -> None:

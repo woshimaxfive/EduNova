@@ -32,7 +32,7 @@ EduNova 坚持“基础不牢，地动山摇”的开发原则。
 | 项目 | 状态 |
 | --- | --- |
 | 最新完成阶段 | Phase 13.2 |
-| 当前主链路 | 认证、首页、资料库、PDF/DOCX/PPTX 解析、规则建课、课程 RAG、课程会话、模型配置、流式回答、混合检索、课程空间双模式、真实学习画像、课程学习状态、待确认弱点队列、状态流转、Agent trace 查询、5 类课程资源生成、模型无关资源质量收口、课程级学习路径、规则掌握度图、练习评估、学习报告第一刀、期末冲刺计划、资料对比第一刀、主页联网/深思/语音、Markdown/PDF/DOCX 异步学习档案导出、全学习闭环 LangGraph 生产编排和交付基线文档；`/app/tutor` 已收敛为课程辅导入口 |
+| 当前主链路 | 认证、首页、资料库、PDF/DOCX/PPTX 解析、规则建课、课程 RAG、课程会话、模型配置、流式回答、混合检索、课程空间双模式、真实学习画像、课程学习状态、待确认弱点队列、状态流转、Agent trace 查询、5 类课程资源生成、模型无关资源质量收口、课程级学习路径、规则掌握度图、练习评估、学习报告第一刀、期末冲刺计划、资料对比第一刀、主页联网/深思/语音、Markdown/PDF/DOCX 异步学习档案导出、课程问答和资源生成 LangGraph 真接管、交付基线文档；`/app/tutor` 已收敛为课程辅导入口 |
 | 当前主要缺口 | Graph trace 视觉打磨、错题驱动深度薄弱点追溯、OCR、旧版 Office 解析、扫描件解析、资料对比结果联动、完整浏览器 E2E 和 Phase 13 产品打磨 |
 | 下一步建议 | Phase 13：Verification and Hardening / 产品打磨 |
 
@@ -80,7 +80,8 @@ Phase 13.2 已完成资料解析、主页工具和异步导出增强：PDF/DOCX/
 | Phase 11.2 | 已完成 | 资料对比第一刀，输出同课程资料重复重点、疑似考点、独有点、遗漏点和安全引用 |
 | Phase 12.1 | 已完成 | Markdown 学习档案导出第一刀，报告页可下载课程级学习档案 |
 | Phase 12.2 | 已完成 | 交付基线、开源准备、MIT 许可证、测试报告、用户指南、答辩问答和验收证据 |
-| Phase 13.1 | 已完成 | 全学习闭环 LangGraph 生产编排、学习产物 trace 字段和前端轻量轨迹入口 |
+| Phase 13.1 | 已完成 | 学习产物 trace 字段、Graph 工作流口径和前端轻量轨迹入口 |
+| Phase 13 hardening | 已完成 | CourseTutorGraph 和 ResourceGenerationGraph 两条主链路真接管生产流程 |
 | Phase 13.2 | 已完成 | 资料解析、主页联网/深思/语音和异步学习档案导出 |
 
 ## 6. 当前待办
@@ -101,13 +102,13 @@ Phase 13.2 已完成资料解析、主页工具和异步导出增强：PDF/DOCX/
 - [x] Phase 11.2：资料对比第一刀，接入 `/materials/compare` 和 `/app/library` 资料对比区域。
 - [x] Phase 12.1：Markdown 学习档案导出第一刀，接入 `/exports/learning-dossier` 和 `/app/reports` 下载入口。
 - [x] Phase 12.2：交付基线、开源准备与验收证据，补齐提交前文档、MIT 许可证和验收索引。
-- [x] Phase 13.1：全学习闭环 LangGraph 生产编排，覆盖画像、资料建课/对比、课程问答、资源、路径/冲刺、练习、报告和导出 trace。
+- [x] Phase 13.1：学习闭环 trace 字段和前端轻量轨迹入口，覆盖画像、资料建课/对比、课程问答、资源、路径/冲刺、练习、报告和导出 trace 口径。
 - [x] Phase 13.2：PDF/DOCX/PPTX 资料解析、主页联网/深思/浏览器语音、Markdown/PDF/DOCX 异步导出。
 
 ### P1 可排期专项
 
 - [x] `practice/reports` 已从前端预留合同推进为真实后端 router，并补 API、权限、测试和页面接入；`agents` 已在 Phase 8.1 接入 trace 查询，`resources` 已在 Phase 8.2 接入，`paths` 已在 Phase 9 接入。
-- [x] Phase 13.1 LangGraph hardening：资源工坊直接展示资源生成 trace，AgentTimeline 补充白名单 metadata，LangGraph 接管学习闭环生产编排。
+- [x] Phase 13.1 LangGraph hardening：资源工坊直接展示资源生成 trace，AgentTimeline 补充白名单 metadata，两条主链路进入真实 LangGraph 接管专项。
 - [x] Phase 9 学习路径、掌握度图和弱点队列推荐资源第一刀。
 - [x] 练习评估和弱点队列来源扩展第一刀。
 - [x] 学习报告真实数据第一刀。
@@ -121,9 +122,9 @@ Phase 13.2 已完成资料解析、主页工具和异步导出增强：PDF/DOCX/
 
 这组问题来自 2026-07-08 结合赛题、代码、文档和评分标准后的复盘。当前项目工程完成度高，但若冲击更高奖项，优先补“多智能体协同”和“多模态资源”这两类评委最可能深挖的点。
 
-- [ ] LangGraph 真接管课程问答：优先实现 `CourseTutorGraph` 生产链路，让课程空间问答由 Graph 节点完成画像读取、课程检索、导师回答、弱点识别、ReviewAgent 审核、下一步动作和消息持久化；trace 必须来自真实节点执行，不再只靠 service 手写步骤。
-- [ ] LangGraph 真接管资源生成：实现 `ResourceGenerationGraph` 生产链路，把画像、检索、诊断、5 类资源生成、质量审核和资源持久化纳入 Graph；资源工坊展示的 `ResourceGenerationGraph` 轨迹要能对应真实节点。
-- [ ] 文档口径同步：在真 Graph 完成前，`docs/AGENT_DESIGN.md`、`docs/STATUS.md`、答辩材料不能继续把 LangGraph 写成已经完整接管全部学习闭环；完成后再统一更新为已实现口径。
+- [x] LangGraph 真接管课程问答：`CourseTutorGraph` 生产链路已接管课程非流式/流式问答，由 Graph 节点完成画像/上下文读取、课程检索、导师回答、弱点识别、ReviewAgent 审核、下一步动作和消息持久化；trace 来自真实节点执行。
+- [x] LangGraph 真接管资源生成：`ResourceGenerationGraph` 生产链路已接管资源生成，把画像、检索、诊断、5 类资源生成、质量审核和资源持久化纳入 Graph；资源工坊展示的 `ResourceGenerationGraph` 轨迹对应真实节点。
+- [x] 文档口径同步：`docs/AGENT_DESIGN.md` 和 `docs/STATUS.md` 已改为两条主链路真接管、其他闭环 Graph 后续专项的口径。
 - [ ] 大模型参与度补强：画像、路径、练习评估和报告当前主要是确定性规则，后续至少选择 1-2 个赛题关键环节接入 LLM 审核或生成，保留规则 fallback，避免“只有问答用大模型”的答辩风险。
 - [ ] 检索能力升级：当前默认本地 hash embedding 可用但语义能力有限，后续优先把已配置 embedding 的向量检索迁移到 pgvector SQL 排序，并保留关键词/本地 fallback。
 - [ ] 多模态资源补强：在真 Graph 后排期前端可视化和多模态资源呈现，优先做可演示、可解释、不会伪装视频生成的“图解卡片 / 动画讲解 / mermaid 或 markmap 渲染”。

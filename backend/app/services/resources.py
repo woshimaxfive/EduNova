@@ -4,13 +4,16 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from time import perf_counter
 from typing import Any, Protocol
 
+from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.api.errors import make_trace_id
-from backend.app.agents.runtime import build_trace_metadata
+from backend.app.agents.runtime import PendingAgentTrace, agent_log_from_pending_trace, build_trace_metadata
+from backend.app.agents.schemas import AgentState
 from backend.app.models import (
     AgentRunLog,
     Course,
@@ -243,172 +246,13 @@ class ResourceGenerationService:
         if difficulty not in {"easy", "medium", "hard"}:
             raise ResourceValidationError("不支持的资源难度。")
 
-        context_points = self.repository.list_knowledge_points(course.id)
-        chunks = self.repository.list_course_chunks(course.id, knowledge_point.id if knowledge_point is not None else None)
-        contexts = self._safe_resource_contexts(chunks, knowledge_point, context_points)
-        citations = [context.citation for context in contexts]
-        if not citations and knowledge_point is None and not context_points:
-            raise ResourceGenerationError("当前课程没有足够依据生成资源。")
-
-        profile = self.repository.get_profile(user.id)
-        profile_summary = self._profile_summary(profile)
-        agent_trace_id = make_trace_id()
-        resources: list[GeneratedResource] = []
-        quality_scores: dict[str, list[Any]] = {}
-        generation_warnings = 0
-
-        try:
-            self._log(agent_trace_id, user, course.id, "profile", 1, "读取用户级画像摘要", "画像已合入资源生成上下文")
-            self._log(
-                agent_trace_id,
-                user,
-                course.id,
-                "retrieve",
-                2,
-                "检索课程引用摘要",
-                f"命中 {len(citations)} 条安全引用摘要",
-                metadata={"citation_count": len(citations), "source_count": len(citations)},
-            )
-            self._log(
-                agent_trace_id,
-                user,
-                course.id,
-                "diagnosis",
-                3,
-                "分析资源类型、难度和课程上下文",
-                f"准备生成 {len(unique_types)} 类资源",
-                metadata={"knowledge_point_id": knowledge_point.id if knowledge_point is not None else None},
-            )
-
-            drafts: dict[str, ResourceDraft] = {}
-            for resource_type in unique_types:
-                drafts[resource_type] = self._build_draft(
-                    resource_type=resource_type,
-                    course=course,
-                    knowledge_point=knowledge_point,
-                    context_points=context_points,
-                    contexts=contexts,
-                    profile_summary=profile_summary,
-                    difficulty=difficulty,
-                )
-
-            enhanced_markdown, model_failed = self._enhance_resources_with_model(
-                user=user,
-                drafts=drafts,
-                contexts=contexts,
-                profile_summary=profile_summary,
-                learning_goal=learning_goal,
-                difficulty=difficulty,
-            )
-
-            for resource_type in unique_types:
-                draft = drafts[resource_type]
-                markdown = enhanced_markdown.get(resource_type) or draft.markdown
-                generation_mode = "model_enhanced" if resource_type in enhanced_markdown else self._deterministic_generation_mode(contexts)
-                review_status = self._review_status_for(markdown, resource_type, contexts)
-                confidence = self._confidence_score(review_status, generation_mode, contexts)
-                if review_status == "low_evidence":
-                    generation_warnings += 1
-                content_json = {
-                    **draft.content_json,
-                    "markdown": markdown,
-                    "metadata": {
-                        "agent_trace_id": agent_trace_id,
-                        "generation_mode": generation_mode,
-                        "difficulty": difficulty,
-                        "has_learning_goal": bool(learning_goal.strip()),
-                        "source_excerpt_count": len(contexts),
-                        "model_enhancement_failed": model_failed,
-                    },
-                }
-                resource = self.repository.add_resource(
-                    GeneratedResource(
-                        user_id=user.id,
-                        course_id=course.id,
-                        knowledge_point_id=knowledge_point.id if knowledge_point is not None else None,
-                        resource_type=resource_type,
-                        title=draft.title,
-                        agent_trace_id=agent_trace_id,
-                        content_json=content_json,
-                        citation_json=[citation.to_json() for citation in citations],
-                        status="completed",
-                        review_status=review_status,
-                        confidence_score=confidence,
-                    )
-                )
-                resources.append(resource)
-                scores = self._create_quality_scores(
-                    resource.id,
-                    resource_type=resource_type,
-                    markdown=markdown,
-                    review_status=review_status,
-                    generation_mode=generation_mode,
-                    context_count=len(contexts),
-                    profile_summary=profile_summary,
-                    difficulty=difficulty,
-                )
-                quality_scores[str(resource.id)] = [
-                    quality_score_to_api(self.repository.add_quality_score(score)) for score in scores
-                ]
-
-            review_status = "warning" if generation_warnings else "completed"
-            review_result = "low_evidence" if generation_warnings else "passed"
-            risk_flags = []
-            if model_failed:
-                risk_flags.append("model_fallback")
-            if generation_warnings:
-                risk_flags.append("low_evidence")
-            self._log(
-                agent_trace_id,
-                user,
-                course.id,
-                "resource",
-                4,
-                "生成课程资源",
-                f"生成 {len(resources)} 个课程资源",
-                metadata={"resource_count": len(resources)},
-            )
-            self._log(
-                agent_trace_id,
-                user,
-                course.id,
-                "review",
-                5,
-                "审核资源依据和画像贴合度",
-                f"审核结果：{review_result}",
-                status=review_status,
-                metadata={
-                    "confidence": 0.55 if generation_warnings else 0.82,
-                    "review_status": review_result,
-                    "review_result": review_result,
-                    "risk_flags": risk_flags,
-                    "safety_summary": "已完成资源依据、隐私和结构完整性审核。",
-                    "resource_count": len(resources),
-                    "warning_count": generation_warnings,
-                },
-            )
-            self._log(
-                agent_trace_id,
-                user,
-                course.id,
-                "persist",
-                6,
-                "保存资源、质量分和轨迹摘要",
-                f"保存 {len(resources)} 个资源",
-                metadata={"resource_count": len(resources)},
-            )
-
-            self.repository.commit()
-            for resource in resources:
-                self.repository.refresh(resource)
-        except Exception:
-            self.repository.rollback()
-            raise
-
-        return GenerateResourcesResult(
-            agent_trace_id=agent_trace_id,
-            resources=[generated_resource_to_api(resource) for resource in resources],
-            quality_scores=quality_scores,
+        return ResourceGenerationGraphRunner(self).generate(
+            user=user,
+            course=course,
+            knowledge_point=knowledge_point,
+            resource_types=unique_types,
+            learning_goal=learning_goal,
+            difficulty=difficulty,
         )
 
     def list_resources(
@@ -993,3 +837,347 @@ class ResourceGenerationService:
     def _contains_sensitive(value: str) -> bool:
         lowered = value.lower()
         return any(marker in lowered or marker in value for marker in SENSITIVE_MARKERS)
+
+
+class ResourceGenerationGraphRunner:
+    workflow = "resource_generation"
+    artifact_type = "generated_resource"
+
+    def __init__(self, service: ResourceGenerationService) -> None:
+        self.service = service
+        self.graph = self._build_graph()
+
+    def generate(
+        self,
+        *,
+        user: User,
+        course: Course,
+        knowledge_point: KnowledgePoint | None,
+        resource_types: list[str],
+        learning_goal: str,
+        difficulty: str,
+    ) -> GenerateResourcesResult:
+        trace_id = make_trace_id()
+        state: AgentState = {
+            "trace_id": trace_id,
+            "workflow": self.workflow,
+            "artifact_type": self.artifact_type,
+            "user_id": user.id,
+            "course_id": course.id,
+            "knowledge_point_id": knowledge_point.id if knowledge_point is not None else None,
+            "user": user,
+            "course": course,
+            "knowledge_point": knowledge_point,
+            "resource_types": resource_types,
+            "learning_goal": learning_goal,
+            "difficulty": difficulty,
+            "pending_traces": [],
+            "warnings": [],
+            "errors": [],
+        }
+        try:
+            result = self.graph.invoke(state)
+            self.service.repository.commit()
+            resources = list(result.get("resource_objects", []))
+            for resource in resources:
+                self.service.repository.refresh(resource)
+        except Exception:
+            self.service.repository.rollback()
+            raise
+
+        return GenerateResourcesResult(
+            agent_trace_id=trace_id,
+            resources=[generated_resource_to_api(resource) for resource in result.get("resource_objects", [])],
+            quality_scores=result.get("quality_scores", {}),
+        )
+
+    def _build_graph(self):
+        graph = StateGraph(AgentState)
+        graph.add_node("profile", self._profile_node)
+        graph.add_node("retrieve", self._retrieve_node)
+        graph.add_node("diagnosis", self._diagnosis_node)
+        graph.add_node("resource", self._resource_node)
+        graph.add_node("review", self._review_node)
+        graph.add_node("persist", self._persist_node)
+        graph.add_edge(START, "profile")
+        graph.add_edge("profile", "retrieve")
+        graph.add_edge("retrieve", "diagnosis")
+        graph.add_edge("diagnosis", "resource")
+        graph.add_edge("resource", "review")
+        graph.add_edge("review", "persist")
+        graph.add_edge("persist", END)
+        return graph.compile()
+
+    def _profile_node(self, state: AgentState) -> dict[str, Any]:
+        started = perf_counter()
+        profile = self.service.repository.get_profile(int(state["user_id"]))
+        profile_summary = self.service._profile_summary(profile)
+        return self._with_trace(
+            state,
+            agent_name="profile",
+            step_index=1,
+            input_summary="读取用户级画像摘要",
+            output_summary="画像已合入资源生成上下文",
+            updates={"profile_summary": profile_summary},
+            started_at=started,
+        )
+
+    def _retrieve_node(self, state: AgentState) -> dict[str, Any]:
+        started = perf_counter()
+        course = state["course"]
+        knowledge_point = state.get("knowledge_point")
+        context_points = self.service.repository.list_knowledge_points(course.id)
+        chunks = self.service.repository.list_course_chunks(
+            course.id,
+            knowledge_point.id if knowledge_point is not None else None,
+        )
+        contexts = self.service._safe_resource_contexts(chunks, knowledge_point, context_points)
+        citations = [context.citation for context in contexts]
+        if not citations and knowledge_point is None and not context_points:
+            raise ResourceGenerationError("当前课程没有足够依据生成资源。")
+        return self._with_trace(
+            state,
+            agent_name="retrieve",
+            step_index=2,
+            input_summary="检索课程引用摘要",
+            output_summary=f"命中 {len(citations)} 条安全引用摘要",
+            updates={
+                "context_points": context_points,
+                "contexts": contexts,
+                "resource_citations": citations,
+                "citations": [citation.to_json() for citation in citations],
+            },
+            metadata={"citation_count": len(citations), "source_count": len(citations)},
+            started_at=started,
+        )
+
+    def _diagnosis_node(self, state: AgentState) -> dict[str, Any]:
+        started = perf_counter()
+        resource_types = list(state.get("resource_types", []))
+        knowledge_point = state.get("knowledge_point")
+        diagnosis = {
+            "resource_count": len(resource_types),
+            "knowledge_point_id": knowledge_point.id if knowledge_point is not None else None,
+            "difficulty": state.get("difficulty"),
+        }
+        return self._with_trace(
+            state,
+            agent_name="diagnosis",
+            step_index=3,
+            input_summary="分析资源类型、难度和课程上下文",
+            output_summary=f"准备生成 {len(resource_types)} 类资源",
+            updates={"diagnosis": diagnosis},
+            metadata={"knowledge_point_id": diagnosis["knowledge_point_id"]},
+            started_at=started,
+        )
+
+    def _resource_node(self, state: AgentState) -> dict[str, Any]:
+        started = perf_counter()
+        course = state["course"]
+        knowledge_point = state.get("knowledge_point")
+        context_points = list(state.get("context_points", []))
+        contexts = list(state.get("contexts", []))
+        profile_summary = dict(state.get("profile_summary", {}))
+        difficulty = str(state.get("difficulty") or "medium")
+        drafts: dict[str, ResourceDraft] = {}
+        for resource_type in state.get("resource_types", []):
+            drafts[resource_type] = self.service._build_draft(
+                resource_type=resource_type,
+                course=course,
+                knowledge_point=knowledge_point,
+                context_points=context_points,
+                contexts=contexts,
+                profile_summary=profile_summary,
+                difficulty=difficulty,
+            )
+
+        enhanced_markdown, model_failed = self.service._enhance_resources_with_model(
+            user=state["user"],
+            drafts=drafts,
+            contexts=contexts,
+            profile_summary=profile_summary,
+            learning_goal=str(state.get("learning_goal") or ""),
+            difficulty=difficulty,
+        )
+        return self._with_trace(
+            state,
+            agent_name="resource",
+            step_index=4,
+            input_summary="生成课程资源",
+            output_summary=f"生成 {len(drafts)} 个课程资源草稿",
+            updates={
+                "drafts": drafts,
+                "enhanced_markdown": enhanced_markdown,
+                "model_failed": model_failed,
+            },
+            metadata={"resource_count": len(drafts)},
+            started_at=started,
+        )
+
+    def _review_node(self, state: AgentState) -> dict[str, Any]:
+        started = perf_counter()
+        contexts = list(state.get("contexts", []))
+        drafts: dict[str, ResourceDraft] = dict(state.get("drafts", {}))
+        enhanced_markdown: dict[str, str] = dict(state.get("enhanced_markdown", {}))
+        model_failed = bool(state.get("model_failed"))
+        generation_warnings = 0
+        resource_payloads: list[dict[str, Any]] = []
+        for resource_type in state.get("resource_types", []):
+            draft = drafts[resource_type]
+            markdown = enhanced_markdown.get(resource_type) or draft.markdown
+            generation_mode = "model_enhanced" if resource_type in enhanced_markdown else self.service._deterministic_generation_mode(contexts)
+            review_status = self.service._review_status_for(markdown, resource_type, contexts)
+            confidence = self.service._confidence_score(review_status, generation_mode, contexts)
+            if review_status == "low_evidence":
+                generation_warnings += 1
+            resource_payloads.append(
+                {
+                    "resource_type": resource_type,
+                    "draft": draft,
+                    "markdown": markdown,
+                    "generation_mode": generation_mode,
+                    "review_status": review_status,
+                    "confidence": confidence,
+                }
+            )
+
+        review_result = "low_evidence" if generation_warnings else "passed"
+        risk_flags: list[str] = []
+        if model_failed:
+            risk_flags.append("model_fallback")
+        if generation_warnings:
+            risk_flags.append("low_evidence")
+        review_metadata = {
+            "confidence": 0.55 if generation_warnings else 0.82,
+            "review_status": review_result,
+            "review_result": review_result,
+            "risk_flags": risk_flags,
+            "safety_summary": "已完成资源依据、隐私和结构完整性审核。",
+            "resource_count": len(resource_payloads),
+            "warning_count": generation_warnings,
+        }
+        return self._with_trace(
+            state,
+            agent_name="review",
+            step_index=5,
+            input_summary="审核资源依据和画像贴合度",
+            output_summary=f"审核结果：{review_result}",
+            updates={
+                "resource_payloads": resource_payloads,
+                "review_result": review_metadata,
+                "generation_warnings": generation_warnings,
+            },
+            status="warning" if generation_warnings else "completed",
+            metadata=review_metadata,
+            started_at=started,
+        )
+
+    def _persist_node(self, state: AgentState) -> dict[str, Any]:
+        started = perf_counter()
+        course = state["course"]
+        knowledge_point = state.get("knowledge_point")
+        contexts = list(state.get("contexts", []))
+        citations = list(state.get("resource_citations", []))
+        profile_summary = dict(state.get("profile_summary", {}))
+        difficulty = str(state.get("difficulty") or "medium")
+        model_failed = bool(state.get("model_failed"))
+        trace_id = str(state["trace_id"])
+        resources: list[GeneratedResource] = []
+        quality_scores: dict[str, list[Any]] = {}
+
+        for payload in state.get("resource_payloads", []):
+            draft: ResourceDraft = payload["draft"]
+            content_json = {
+                **draft.content_json,
+                "markdown": payload["markdown"],
+                "metadata": {
+                    "agent_trace_id": trace_id,
+                    "generation_mode": payload["generation_mode"],
+                    "difficulty": difficulty,
+                    "has_learning_goal": bool(str(state.get("learning_goal") or "").strip()),
+                    "source_excerpt_count": len(contexts),
+                    "model_enhancement_failed": model_failed,
+                },
+            }
+            resource = self.service.repository.add_resource(
+                GeneratedResource(
+                    user_id=int(state["user_id"]),
+                    course_id=course.id,
+                    knowledge_point_id=knowledge_point.id if knowledge_point is not None else None,
+                    resource_type=payload["resource_type"],
+                    title=draft.title,
+                    agent_trace_id=trace_id,
+                    content_json=content_json,
+                    citation_json=[citation.to_json() for citation in citations],
+                    status="completed",
+                    review_status=payload["review_status"],
+                    confidence_score=payload["confidence"],
+                )
+            )
+            resources.append(resource)
+            scores = self.service._create_quality_scores(
+                resource.id,
+                resource_type=payload["resource_type"],
+                markdown=payload["markdown"],
+                review_status=payload["review_status"],
+                generation_mode=payload["generation_mode"],
+                context_count=len(contexts),
+                profile_summary=profile_summary,
+                difficulty=difficulty,
+            )
+            quality_scores[str(resource.id)] = [
+                quality_score_to_api(self.service.repository.add_quality_score(score)) for score in scores
+            ]
+
+        updates = self._with_trace(
+            state,
+            agent_name="persist",
+            step_index=6,
+            input_summary="保存资源、质量分和轨迹摘要",
+            output_summary=f"保存 {len(resources)} 个资源",
+            updates={"resource_objects": resources, "quality_scores": quality_scores},
+            metadata={"resource_count": len(resources)},
+            started_at=started,
+        )
+        pending_traces = list(updates.get("pending_traces", []))
+        for pending in pending_traces:
+            self.service.repository.add_agent_log(
+                agent_log_from_pending_trace(
+                    pending=pending,
+                    trace_id=trace_id,
+                    user_id=int(state["user_id"]),
+                    course_id=course.id,
+                    workflow=self.workflow,
+                    artifact_type=self.artifact_type,
+                )
+            )
+        return updates
+
+    @staticmethod
+    def _with_trace(
+        state: AgentState,
+        *,
+        agent_name: str,
+        step_index: int,
+        input_summary: str,
+        output_summary: str,
+        updates: dict[str, Any],
+        status: str = "completed",
+        metadata: dict[str, Any] | None = None,
+        started_at: float | None = None,
+    ) -> dict[str, Any]:
+        started = started_at if started_at is not None else perf_counter()
+        duration_ms = max(1, int((perf_counter() - started) * 1000))
+        pending = PendingAgentTrace(
+            agent_name=agent_name,
+            step_index=step_index,
+            status=status,
+            input_summary=input_summary,
+            output_summary=output_summary,
+            duration_ms=duration_ms,
+            metadata=metadata or {},
+        )
+        return {
+            **updates,
+            "pending_traces": [*list(state.get("pending_traces", [])), pending],
+        }

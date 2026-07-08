@@ -1085,7 +1085,7 @@ Authorization: Bearer <token>
 
 ## 11. Agent Trace 接口
 
-状态：Phase 13.1 已把学习闭环 Agent 从“Service 分工 + 手写 trace”升级为 LangGraph 生产编排。资源生成写入 `profile -> retrieve -> diagnosis -> resource -> review -> persist` 六步 Agent 日志；课程问答返回 `profile -> retriever -> tutor -> weakness -> review -> next_action` 协作轨迹；路径、冲刺、练习、报告和导出均会生成或返回安全 `agent_trace_id`。
+状态：Phase 13 hardening 已把两条赛题主链路升级为真实 LangGraph 生产编排。资源生成由 `ResourceGenerationGraph` 执行 `profile -> retrieve -> diagnosis -> resource -> review -> persist` 六步；课程问答由 `CourseTutorGraph` 执行 `profile -> retriever -> tutor -> weakness -> review -> next_action` 六步。路径、冲刺、练习、报告和导出暂时保留现有服务逻辑，并继续返回安全 `agent_trace_id` 或轻量 trace，后续再做专项 Graph 接管。
 
 ### GET `/agents/traces/{trace_id}`
 

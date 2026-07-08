@@ -34,7 +34,7 @@ A：系统支持 OpenAI-compatible embeddings。未配置或不可用时使用�
 
 **Q：多智能体是否只是概念？**
 
-A：不是。当前学习闭环已经由 LangGraph 生产编排接管，覆盖画像、资料建课/对比、课程问答、资源生成、路径/冲刺、练习评估、报告和导出。资源生成会记录 `profile -> retrieve -> diagnosis -> resource -> review -> persist`，课程问答会记录 `profile -> retriever -> tutor -> weakness -> review -> next_action`。认证、设置、Dashboard 这类非学习能力仍是普通服务，不伪装成 Agent。
+A：不是。当前已经真接管两条赛题主链路：课程问答由 `CourseTutorGraph` 执行 `profile -> retriever -> tutor -> weakness -> review -> next_action`，资源生成由 `ResourceGenerationGraph` 执行 `profile -> retrieve -> diagnosis -> resource -> review -> persist`。路径、冲刺、练习、报告和导出仍保留现有服务逻辑与安全 trace，后续按专项继续图化；认证、设置、Dashboard 这类非学习能力仍是普通服务，不伪装成 Agent。
 
 **Q：为什么不用模型直接生成全部内容？**
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any
@@ -20,6 +21,17 @@ TRACE_METADATA_DEFAULTS = {
 }
 
 
+@dataclass(frozen=True)
+class PendingAgentTrace:
+    agent_name: str
+    step_index: int
+    status: str
+    input_summary: str
+    output_summary: str
+    duration_ms: int
+    metadata: dict[str, Any]
+
+
 def build_trace_metadata(
     *,
     workflow: str,
@@ -34,6 +46,37 @@ def build_trace_metadata(
     }
     merged.update(metadata or {})
     return {key: value for key, value in merged.items() if value is not None}
+
+
+def agent_log_from_pending_trace(
+    *,
+    pending: PendingAgentTrace,
+    trace_id: str,
+    user_id: int,
+    course_id: int | None,
+    workflow: str,
+    artifact_type: str | None = None,
+    artifact_id: str | None = None,
+) -> AgentRunLog:
+    metadata = build_trace_metadata(
+        workflow=workflow,
+        artifact_type=artifact_type,
+        artifact_id=artifact_id,
+        metadata=pending.metadata,
+    )
+    return AgentRunLog(
+        user_id=user_id,
+        course_id=course_id,
+        trace_id=trace_id,
+        agent_name=pending.agent_name,
+        step_index=pending.step_index,
+        status=pending.status,
+        input_summary=safe_agent_summary(pending.input_summary, "已隐藏敏感输入摘要"),
+        output_summary=safe_agent_summary(pending.output_summary, "已隐藏敏感输出摘要"),
+        duration_ms=pending.duration_ms,
+        metadata_json=safe_agent_metadata(metadata),
+        created_at=datetime.now(UTC),
+    )
 
 
 class AgentTraceRecorder:

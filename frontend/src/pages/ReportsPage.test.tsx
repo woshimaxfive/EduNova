@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../api/client";
+import { AGENT_ENDPOINTS } from "../api/agents";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { EXPORT_ENDPOINTS } from "../api/exports";
 import { REPORT_ENDPOINTS } from "../api/reports";
@@ -78,6 +79,7 @@ const readyReport = {
   course_id: "808",
   practice_session_id: "501",
   status: "ready",
+  agent_trace_id: "trace_report",
   score: 67,
   report: {
     summary: "本次评估得分 67，基于真实练习作答生成。",
@@ -86,7 +88,26 @@ const readyReport = {
     evidence_refs: [{ practice_answer_id: "601", knowledge_point_id: "401", score: 0 }],
     next_step_suggestions: ["优先复习薄弱点。"],
     review_queue_updates: [],
-    profile_changes: []
+    profile_changes: [],
+    trend: {
+      direction: "improved",
+      score_delta: 12,
+      sessions_compared: 3,
+      scores: [55, 61, 67]
+    },
+    evidence_summary: {
+      practice_count: 3,
+      answer_count: 15,
+      weakness_count: 1,
+      path_status: "active",
+      resource_count: 2
+    },
+    review_result: {
+      review_status: "passed",
+      confidence: 0.91,
+      risk_flags: [],
+      safety_summary: "统计数字与练习证据一致。"
+    }
   },
   created_at: "2026-07-05T10:10:00Z"
 };
@@ -138,6 +159,38 @@ describe("ReportsPage", () => {
       if (url === REPORT_ENDPOINTS.generate) {
         generated = true;
         return { data: { data: readyReport, trace_id: "trace_report" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === AGENT_ENDPOINTS.trace("trace_report")) {
+        return {
+          data: {
+            data: {
+              trace_id: "trace_report",
+              workflow: "report",
+              artifact_type: "assessment_report",
+              artifact_id: "801",
+              course_id: "808",
+              status: "completed",
+              steps: [
+                {
+                  id: "1",
+                  agent_name: "aggregate_evidence",
+                  step_index: 2,
+                  status: "completed",
+                  input_summary: "汇总练习与掌握度",
+                  output_summary: "已生成确定性趋势",
+                  duration_ms: 11,
+                  metadata: { practice_count: 3, trend_direction: "improved" },
+                  created_at: "2026-07-05T10:10:01Z"
+                }
+              ]
+            },
+            trace_id: "trace_api"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
       }
       if (url === EXPORT_ENDPOINTS.learningDossierJob) {
         return {
@@ -211,6 +264,11 @@ describe("ReportsPage", () => {
     expect(await screen.findByText("本次评估得分 67，基于真实练习作答生成。")).toBeInTheDocument();
     expect(screen.getByText("启发式搜索")).toBeInTheDocument();
     expect(screen.getByText("优先复习薄弱点。")).toBeInTheDocument();
+    expect(screen.getByText("较早期提升 12 分")).toBeInTheDocument();
+    expect(screen.getByText("3 次练习")).toBeInTheDocument();
+    expect(screen.getByText("15 条作答")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "查看 ReportGraph" }));
+    expect(await screen.findByText("aggregate_evidence")).toBeInTheDocument();
     expect(calls).toContainEqual(
       expect.objectContaining({
         method: "post",

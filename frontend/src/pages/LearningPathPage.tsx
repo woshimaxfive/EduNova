@@ -19,6 +19,7 @@ import {
   type LearningPathTask,
   type PathTaskStatus
 } from "../api/paths";
+import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { PageFrame } from "./PageFrame";
 
@@ -153,6 +154,11 @@ export function LearningPathPage() {
   );
   const pathDetail = currentPathQuery.data?.data ?? null;
   const tasks = pathDetail?.tasks ?? [];
+  const pathPlan = pathDetail?.path?.plan_json ?? {};
+  const pathTrigger = typeof pathPlan.trigger === "string" ? pathPlan.trigger : "manual";
+  const preservedTaskCount = typeof pathPlan.preserved_task_count === "number" ? pathPlan.preserved_task_count : 0;
+  const pathGenerationMode = pathPlan.generation_mode === "model_enhanced" ? "模型增强" : "规则底稿";
+  const pathReviewMode = pathPlan.review_mode === "model_and_rules" ? "模型与规则审核" : "规则审核";
   const evidenceBasis = pathDetail?.evidence_summary.basis ?? [];
   const masteryMap = masteryQuery.data?.data ?? null;
   const hasPath = Boolean(pathDetail?.path);
@@ -313,7 +319,9 @@ export function LearningPathPage() {
             <div className="path-current-summary">
               <strong>{pathDetail.message}</strong>
               <span>{selectedCourse ? selectedCourse.title : `课程 ${pathDetail.course_id}`}</span>
-              {pathDetail.agent_trace_id ? <small>PathPlanningGraph · {pathDetail.agent_trace_id}</small> : null}
+              {pathTrigger === "assessment" ? <small>由练习结果更新 · 保留 {preservedTaskCount} 个既有任务</small> : null}
+              <small>{pathGenerationMode} · {pathReviewMode}</small>
+              <AgentTraceDisclosure traceId={pathDetail.agent_trace_id} label="查看 PathPlanningGraph" />
             </div>
           ) : currentPathQuery.isPending && hasCourse ? (
             <p className="path-empty-state">正在读取学习路径。</p>

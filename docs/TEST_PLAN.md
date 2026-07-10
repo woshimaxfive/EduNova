@@ -709,6 +709,11 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 13.1 前端测试覆盖课程空间展示真实课堂协作轨迹、资源工坊展示 `ResourceGenerationGraph`、路径/练习/报告页显示轻量 trace 入口、报告空态不误报失败，以及新增 `agent_trace_id` API 合同。
 - Phase 13.2 后端测试覆盖 PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT 和图片 uploaded、不支持 OCR、已解析资料建课、主页联网/深思/资料参数、无搜索 Key 不伪造来源、`home_tutor` trace、`export_jobs` 创建/状态流转/Markdown/PDF/DOCX 下载/失败分支和用户隔离。
 - HomeTutorGraph hardening 后端测试覆盖资料稳定分块、Markdown 章节、普通文档 800/120 窗口、既有资料惰性补齐、用户隔离、选中资料限制、关键词/pgvector 混合排序和级联迁移合同；覆盖九节点顺序、条件规划、Prompt 回显、真实 Review、无效 Review warning、单次 Repair、第二次失败降级、流式 replace、模型失败不写半截消息和 trace metadata 脱敏。
+- Phase 14 后端测试覆盖 PathPlanning、Assessment、Report 三条真实 Graph 的节点顺序、耗时、模型调用、`rules_only` fallback、单次 Repair、独立 trace 和 metadata 脱敏；断言模型不能修改客观分数、掌握数量或趋势。
+- Phase 14 错题证据测试覆盖稳定 `PracticeAnswer.id` 绑定、同知识点弱点去重更新、诊断与最多 5 个证据 ID、用户隔离、路径重排保留进度、无路径不创建，以及路径失败不回滚练习。
+- Phase 14 课程 RAG 测试覆盖真实外部 embedding 的 pgvector SQL cosine 候选、来源/模型隔离、首次向量 commit、关键词合并、`local_fallback/provider_failed` 和多用户课程隔离。
+- Phase 14 前端测试覆盖共享 trace 展开、错因/缺失概念/复习动作、路径回流状态、报告趋势与证据摘要、失败空态和旧响应兼容。
+- `scripts/test_e2e.ps1` 使用独立 Compose project、独立端口和临时卷，显式禁用真实模型与联网 Key；覆盖注册示例课程、创建路径、两次错题练习、弱点诊断、路径重排、报告生成、三类真实轨迹和 `390px` 无横向溢出，结束后执行 `down -v`。
 - Phase 13.2 前端测试覆盖主页联网/深思 payload、真实来源和 trace 展示、浏览器语音输入和朗读、资料库已解析资料文案、报告页异步导出任务创建/轮询/下载/失败提示，以及新增导出 job API 合同。
 - HomeTutorGraph hardening 前端测试覆盖主页 SSE `metadata/status/sources/token/replace/done/error`、UTF-8 单字节分片、增量 Markdown、Review 替换、工具 warning、失败保留输入、持久化消息校准和旧 Prompt 回显历史安全清洗。
 - 2026-07-07 会话上下文增强后，后端测试覆盖主页/课程连续追问、长历史截断与摘要、课程流式 SSE 上下文 metadata、无历史单轮兼容和 trace metadata 脱敏；2026-07-10 补充超过 12 条历史后仍只发送一条 system 消息的 OpenAI-compatible 回归测试，避免安全摘要启用时出现固定轮次发送失败；前端测试覆盖主页与课程空间轨迹展示“已参考最近 N 条会话”，API contract 覆盖 `context_message_count`、`context_summary_used` 和 `retrieval_query_mode`。

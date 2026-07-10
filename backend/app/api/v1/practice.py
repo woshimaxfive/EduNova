@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
 
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
+from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.models import User
+from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.practice import CreatePracticeSessionRequest, SubmitPracticeAnswersRequest
+from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
+from backend.app.services.paths import PathService, SqlAlchemyPathRepository
 from backend.app.services.practice import PracticeNotFoundError, PracticeService, PracticeValidationError, SqlAlchemyPracticeRepository
 
 
@@ -14,7 +19,21 @@ router = APIRouter(prefix="/practice", tags=["practice"])
 
 
 def get_practice_service(db=Depends(get_db_session)) -> PracticeService:
-    return PracticeService(SqlAlchemyPracticeRepository(db))
+    model_service = ModelSettingsService(
+        repository=SqlAlchemyModelSettingsRepository(db),
+        settings=get_settings(),
+        provider=OpenAICompatibleChatProvider(),
+    )
+    return PracticeService(
+        SqlAlchemyPracticeRepository(db),
+        model_service=model_service,
+        trace_recorder=AgentTraceRecorder(),
+        path_service=PathService(
+            SqlAlchemyPathRepository(db),
+            model_service=model_service,
+            trace_recorder=AgentTraceRecorder(),
+        ),
+    )
 
 
 @router.post("/sessions")

@@ -1,19 +1,32 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from decimal import Decimal
 from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.api.errors import make_trace_id
-from backend.app.models import AssessmentReport, Course, KnowledgePoint, PracticeAnswer, PracticeSession, User, WeaknessReviewItem
+from backend.app.agents.runtime import AgentTraceRecorder
+from backend.app.models import (
+    AssessmentReport,
+    Course,
+    GeneratedResource,
+    KnowledgePoint,
+    LearningPath,
+    LearningTask,
+    PracticeAnswer,
+    PracticeSession,
+    User,
+    WeaknessReviewItem,
+)
 from backend.app.schemas.reports import ReportEnvelope, empty_report, report_to_api
 
 
 class ReportNotFoundError(Exception):
     pass
+
+
+class ReportModelService(Protocol):
+    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
 
 
 class ReportRepository(Protocol):
@@ -25,9 +38,17 @@ class ReportRepository(Protocol):
 
     def get_latest_completed_practice_session(self, user_id: int, course_id: int) -> PracticeSession | None: ...
 
+    def list_recent_completed_practice_sessions(self, user_id: int, course_id: int, limit: int = 5) -> list[PracticeSession]: ...
+
     def list_answers_for_session(self, session_id: int) -> list[PracticeAnswer]: ...
 
     def list_weakness_review_items(self, user_id: int, course_id: int) -> list[WeaknessReviewItem]: ...
+
+    def get_active_path(self, user_id: int, course_id: int) -> LearningPath | None: ...
+
+    def list_tasks_for_path(self, path_id: int) -> list[LearningTask]: ...
+
+    def list_generated_resources(self, user_id: int, course_id: int) -> list[GeneratedResource]: ...
 
     def add_assessment_report(self, report: AssessmentReport) -> AssessmentReport: ...
 
@@ -68,12 +89,45 @@ class SqlAlchemyReportRepository:
             .order_by(PracticeSession.updated_at.desc(), PracticeSession.id.desc())
         )
 
+    def list_recent_completed_practice_sessions(self, user_id: int, course_id: int, limit: int = 5) -> list[PracticeSession]:
+        return list(
+            self.db.scalars(
+                select(PracticeSession)
+                .where(
+                    PracticeSession.user_id == user_id,
+                    PracticeSession.course_id == course_id,
+                    PracticeSession.status == "completed",
+                )
+                .order_by(PracticeSession.updated_at.desc(), PracticeSession.id.desc())
+                .limit(limit)
+            )
+        )
+
     def list_answers_for_session(self, session_id: int) -> list[PracticeAnswer]:
         return list(self.db.scalars(select(PracticeAnswer).where(PracticeAnswer.session_id == session_id).order_by(PracticeAnswer.id)))
 
     def list_weakness_review_items(self, user_id: int, course_id: int) -> list[WeaknessReviewItem]:
         return list(
             self.db.scalars(select(WeaknessReviewItem).where(WeaknessReviewItem.user_id == user_id, WeaknessReviewItem.course_id == course_id))
+        )
+
+    def get_active_path(self, user_id: int, course_id: int) -> LearningPath | None:
+        return self.db.scalar(
+            select(LearningPath)
+            .where(LearningPath.user_id == user_id, LearningPath.course_id == course_id, LearningPath.status == "active")
+            .order_by(LearningPath.updated_at.desc(), LearningPath.id.desc())
+        )
+
+    def list_tasks_for_path(self, path_id: int) -> list[LearningTask]:
+        return list(self.db.scalars(select(LearningTask).where(LearningTask.path_id == path_id).order_by(LearningTask.id)))
+
+    def list_generated_resources(self, user_id: int, course_id: int) -> list[GeneratedResource]:
+        return list(
+            self.db.scalars(
+                select(GeneratedResource)
+                .where(GeneratedResource.user_id == user_id, GeneratedResource.course_id == course_id)
+                .order_by(GeneratedResource.updated_at.desc(), GeneratedResource.id.desc())
+            )
         )
 
     def add_assessment_report(self, report: AssessmentReport) -> AssessmentReport:
@@ -99,46 +153,20 @@ class SqlAlchemyReportRepository:
 
 
 class ReportService:
-    def __init__(self, repository: ReportRepository) -> None:
+    def __init__(
+        self,
+        repository: ReportRepository,
+        model_service: ReportModelService | None = None,
+        trace_recorder: AgentTraceRecorder | None = None,
+    ) -> None:
         self.repository = repository
+        self.model_service = model_service
+        self.trace_recorder = trace_recorder
 
     def generate_report(self, user: User, course_id: int, practice_session_id: int | None = None) -> ReportEnvelope:
-        course = self._require_course(user, course_id)
-        practice = None
-        answers: list[PracticeAnswer] = []
-        if practice_session_id is not None:
-            practice = self.repository.get_practice_session_for_user(user.id, practice_session_id)
-            if practice is None or practice.course_id != course.id:
-                raise ReportNotFoundError("练习不存在或无权访问。")
-            answers = self.repository.list_answers_for_session(practice.id)
-        else:
-            practice = self.repository.get_latest_completed_practice_session(user.id, course.id)
-            if practice is not None:
-                answers = self.repository.list_answers_for_session(practice.id)
-            elif self.repository.get_latest_report(user.id, course.id) is not None:
-                return report_to_api(self.repository.get_latest_report(user.id, course.id))  # type: ignore[arg-type]
+        from backend.app.agents.reporting import ReportGraphRunner
 
-        points = self.repository.list_knowledge_points(course.id)
-        weaknesses = self.repository.list_weakness_review_items(user.id, course.id)
-        score = int(practice.score) if practice is not None and practice.score is not None else self._score_from_answers(answers)
-        report_json = self._build_report(course, points, weaknesses, answers, score)
-        report = AssessmentReport(
-            user_id=user.id,
-            course_id=course.id,
-            practice_session_id=practice.id if practice is not None else None,
-            agent_trace_id=make_trace_id(),
-            report_json=report_json,
-            score=Decimal(str(score)) if score is not None else None,
-            created_at=datetime.now(UTC),
-        )
-        try:
-            self.repository.add_assessment_report(report)
-            self.repository.commit()
-            self.repository.refresh(report)
-        except Exception:
-            self.repository.rollback()
-            raise
-        return report_to_api(report)
+        return ReportGraphRunner(self).run(user=user, course_id=course_id, practice_session_id=practice_session_id)
 
     def get_latest_report(self, user: User, course_id: int) -> ReportEnvelope:
         course = self._require_course(user, course_id)

@@ -40,6 +40,16 @@ export type PracticeAnswerFeedback = {
   matched_keywords: string[];
   missing_keywords: string[];
   explanation: string;
+  diagnosis?: {
+    misconception: string;
+    missing_concepts: string[];
+    recommended_action: string;
+    confidence: number;
+    evidence_ref: {
+      type: "practice_answer";
+      id: string;
+    };
+  } | null;
 };
 
 export type PracticeAnswerResult = {
@@ -58,6 +68,13 @@ export type PracticeSessionDetail = {
   score: number | null;
   questions: PracticeQuestion[];
   answers: PracticeAnswerResult[];
+  closure_update?: {
+    weaknesses_added: number;
+    weaknesses_updated: number;
+    path_update_status: "not_started" | "replanned" | "unchanged" | "failed";
+    path_agent_trace_id?: string | null;
+    recommended_resource_ids: string[];
+  } | null;
   created_at: string;
   updated_at: string;
 };

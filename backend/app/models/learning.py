@@ -225,6 +225,7 @@ class PracticeSession(IdMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
     agent_trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    assessment_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
 class PracticeAnswer(IdMixin, CreatedAtMixin, Base):
@@ -320,6 +321,13 @@ class WeaknessReviewItem(IdMixin, TimestampMixin, Base):
             "course_id",
             "status",
         ),
+        Index(
+            "ix_weakness_review_queue_source_ref",
+            "user_id",
+            "course_id",
+            "source_ref_type",
+            "source_ref_id",
+        ),
     )
 
     user_id: Mapped[int] = mapped_column(
@@ -339,6 +347,9 @@ class WeaknessReviewItem(IdMixin, TimestampMixin, Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     source_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_ref_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_ref_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    diagnosis_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
     recommended_resource_ids: Mapped[list] = mapped_column(
         JSONB,

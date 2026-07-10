@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.api.errors import make_trace_id
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.models import (
     Course,
     GeneratedResource,
@@ -27,6 +26,14 @@ class PracticeNotFoundError(Exception):
 
 class PracticeValidationError(Exception):
     pass
+
+
+class PracticeModelService(Protocol):
+    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
+
+
+class PracticePathService(Protocol):
+    def replan_after_assessment(self, user: User, course_id: int, assessment_session_id: int): ...
 
 
 class PracticeRepository(Protocol):
@@ -129,8 +136,17 @@ class EvaluatedAnswer:
 class PracticeService:
     valid_difficulties = {"easy", "medium", "hard"}
 
-    def __init__(self, repository: PracticeRepository) -> None:
+    def __init__(
+        self,
+        repository: PracticeRepository,
+        model_service: PracticeModelService | None = None,
+        trace_recorder: AgentTraceRecorder | None = None,
+        path_service: PracticePathService | None = None,
+    ) -> None:
         self.repository = repository
+        self.model_service = model_service
+        self.trace_recorder = trace_recorder
+        self.path_service = path_service
 
     def create_session(
         self,
@@ -144,48 +160,15 @@ class PracticeService:
             raise PracticeValidationError("题目数量必须在 1 到 12 之间。")
         if difficulty not in self.valid_difficulties:
             raise PracticeValidationError("练习难度只能是 easy、medium 或 hard。")
+        from backend.app.agents.assessment import AssessmentGraphRunner
 
-        course = self._require_course(user, course_id)
-        points = self.repository.list_knowledge_points(course.id)
-        selected_points = self._select_points(points, knowledge_point_ids)
-        resources = self.repository.list_generated_resources(user.id, course.id)
-        questions = self._build_questions(selected_points, resources, question_count, difficulty)
-        if not questions:
-            raise PracticeValidationError("当前课程还没有可用于生成练习的知识点。")
-
-        agent_trace_id = make_trace_id()
-        now = datetime.now(UTC)
-        session = PracticeSession(
-            user_id=user.id,
-            course_id=course.id,
-            title=f"{course.title} 练习",
-            status="in_progress",
-            agent_trace_id=agent_trace_id,
-            score=None,
-            created_at=now,
-            updated_at=now,
+        return AssessmentGraphRunner(self).create_session(
+            user=user,
+            course_id=course_id,
+            knowledge_point_ids=knowledge_point_ids,
+            question_count=question_count,
+            difficulty=difficulty,
         )
-        try:
-            self.repository.add_practice_session(session)
-            placeholders = [
-                PracticeAnswer(
-                    session_id=session.id,
-                    user_id=user.id,
-                    question_json=question,
-                    answer_text=None,
-                    feedback_json={},
-                    is_correct=None,
-                    created_at=now,
-                )
-                for question in questions
-            ]
-            self.repository.replace_answers_for_session(session.id, placeholders)
-            self.repository.commit()
-            self.repository.refresh(session)
-        except Exception:
-            self.repository.rollback()
-            raise
-        return session_to_api(session, self.repository.list_answers_for_session(session.id))
 
     def get_session(self, user: User, session_id: int) -> PracticeSessionDetail:
         session = self._require_session(user, session_id)
@@ -197,56 +180,9 @@ class PracticeService:
         session_id: int,
         answers: list[SubmitPracticeAnswerItem | dict],
     ) -> PracticeSessionDetail:
-        session = self._require_session(user, session_id)
-        existing_answers = self.repository.list_answers_for_session(session.id)
-        questions = [answer.question_json for answer in existing_answers if isinstance(answer.question_json, dict)]
-        if not questions:
-            raise PracticeValidationError("练习题目不存在。")
-        normalized_answers = self._normalize_answers(answers)
-        by_id = {question["id"]: question for question in questions}
-        evaluated: list[EvaluatedAnswer] = []
-        for answer in normalized_answers:
-            question = by_id.get(answer["question_id"])
-            if question is None:
-                raise PracticeValidationError("提交的题目不属于当前练习。")
-            answer_text = " ".join(str(answer["answer_text"]).split())
-            if not answer_text:
-                raise PracticeValidationError("答案不能为空。")
-            evaluated.append(self._evaluate_answer(question, answer_text))
+        from backend.app.agents.assessment import AssessmentGraphRunner
 
-        if not evaluated:
-            raise PracticeValidationError("至少提交一道题。")
-
-        now = datetime.now(UTC)
-        if not session.agent_trace_id:
-            session.agent_trace_id = make_trace_id()
-        score = round(sum(item.feedback["score"] for item in evaluated) / len(evaluated))
-        practice_answers = [
-            PracticeAnswer(
-                session_id=session.id,
-                user_id=user.id,
-                question_json=item.question,
-                answer_text=item.answer_text,
-                feedback_json=item.feedback,
-                is_correct=item.is_correct,
-                created_at=now,
-            )
-            for item in evaluated
-        ]
-
-        try:
-            self.repository.replace_answers_for_session(session.id, practice_answers)
-            session.status = "completed"
-            session.score = Decimal(str(score))
-            session.updated_at = now
-            self._sync_practice_weaknesses(user, session, evaluated)
-            self.repository.commit()
-            self.repository.refresh(session)
-        except Exception:
-            self.repository.rollback()
-            raise
-
-        return session_to_api(session, self.repository.list_answers_for_session(session.id))
+        return AssessmentGraphRunner(self).submit_answers(user=user, session_id=session_id, answers=answers)
 
     def _require_course(self, user: User, course_id: int) -> Course:
         course = self.repository.get_course_for_user(user.id, course_id)

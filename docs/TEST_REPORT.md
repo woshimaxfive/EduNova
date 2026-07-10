@@ -1,6 +1,6 @@
 # EduNova 测试报告
 
-更新时间：2026-07-05
+更新时间：2026-07-10
 
 ## 1. 报告定位
 
@@ -19,6 +19,7 @@ docs/evidence/PHASE_12_2_ACCEPTANCE.md
 ```powershell
 .\scripts\verify_encoding.ps1
 .\scripts\test.ps1
+.\scripts\test_e2e.ps1
 ```
 
 `scripts/test.ps1` 覆盖：
@@ -30,6 +31,13 @@ docs/evidence/PHASE_12_2_ACCEPTANCE.md
 - Vite 生产构建。
 - Alembic head 检查。
 - Docker Compose 配置校验。
+
+Phase 14 当前全量结果：
+
+- 后端 pytest：220 项通过。
+- 前端 Vitest：19 个文件、166 项通过。
+- ESLint、ruff、TypeScript/Vite build：通过。
+- 隔离 Docker Playwright E2E：1 条完整学习闭环通过，包含空库迁移到 `20260710_0011`、两次错题、路径重排、报告、三类 Graph 轨迹和 `390px` 无水平溢出。
 
 ## 3. Docker 验证
 
@@ -80,11 +88,10 @@ Phase 12.2 主流程：
 
 当前仍未覆盖或未实现：
 
-- 完整浏览器 E2E 自动化套件。
 - OCR 和图片题目识别。
 - 旧版 DOC/PPT 和扫描件解析。
 - 异步资源任务队列。
 - 资料对比结果与期末冲刺联动。
-- 错题驱动深度薄弱点追溯。
+- 剩余 Profile/CourseBuilder/MaterialComparison/ExamSprint/ExportDossier Graph 生产接管。
 
-这些限制不阻塞当前 Phase 13.2 增强，但会进入 Phase 13 后续打磨清单。PDF/DOCX/PPTX 文本解析、主页联网/深思/浏览器语音和 Markdown/PDF/DOCX 异步导出已进入自动化验证范围。
+这些限制不阻塞当前 Phase 14。错题证据、已有路径重排、报告趋势、课程 pgvector SQL 候选和隔离 Docker E2E 已进入自动化验证范围。

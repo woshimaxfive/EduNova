@@ -1,6 +1,6 @@
 # EduNova 答辩问答
 
-更新时间：2026-07-07
+更新时间：2026-07-10
 
 ## 1. 项目定位
 
@@ -28,13 +28,13 @@ A：课程空间优先在当前用户课程资料中检索引用。回答、资�
 
 **Q：没有 embedding 服务怎么办？**
 
-A：系统支持 OpenAI-compatible embeddings。未配置或不可用时使用显式标记的 `local-hash-1536` fallback，并在前端说明它不是外部语义向量。
+A：系统支持 OpenAI-compatible embeddings。真实外部向量按用户课程、来源和模型隔离，通过 pgvector cosine SQL 召回并与中文关键词合并；未配置或 Provider 失败时只走明确标记的关键词 fallback，`local-hash-1536` 不再冒充语义命中。
 
 ## 3. 多智能体
 
 **Q：多智能体是否只是概念？**
 
-A：不是。当前三条主链路已经真接管：`HomeTutorGraph` 负责主页智能对话，`CourseTutorGraph` 负责课程问答，`ResourceGenerationGraph` 负责画像、检索、规划、六 Worker 并行生成、聚合、Review 和可选 Repair。每个 Worker 有独立模型调用和真实耗时，模型不可用时明确标记规则 fallback。路径、练习、报告等仍是现有服务逻辑，认证、设置、Dashboard 不伪装成 Agent。
+A：不是。当前六条主链路已经真接管：`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph` 和 `ReportGraph`。每个节点记录真实耗时和白名单 metadata，生成型流程都有规则与可选模型 Review/Repair；模型不可用时明确标记 `rules_only`。画像、资料建课/对比、冲刺和导出仍是普通服务，认证、设置、Dashboard 不伪装成 Agent。
 
 ### 资源里的“多模态”是否只是文本换皮？
 
@@ -62,11 +62,11 @@ A：不会。课程问答只生成 `pending` 候选复习项。学生确认后�
 
 **Q：练习批改是否依赖大模型？**
 
-A：第一版确定性优先。客观题按标准答案批改，简答题按关键词、课程引用覆盖和关键概念命中率评分。后续可接模型增强，但不能破坏可解释规则。
+A：客观题和简答题数字分数始终由规则决定，模型不得修改。`AssessmentGraph` 可增强题目并生成错因、缺失概念和复习动作；模型不可用时保留完整规则题稿和诊断。错题精确关联 `PracticeAnswer`，同知识点合并弱点，并只重排用户已建立的路径。
 
 **Q：报告从哪里来？**
 
-A：报告聚合课程、练习结果、掌握度、弱点队列和下一步建议，并携带 `ReportGraph` trace。Phase 12.1 已支持导出课程级 Markdown 学习档案，Phase 13.2 后报告页默认创建异步导出任务，可下载 Markdown、PDF 或 DOCX，并携带 `ExportDossierGraph` 的 `agent_trace_id`。
+A：`ReportGraph` 聚合当前课程最近 5 次已完成练习、掌握度、弱点、当前路径和资源。分数、数量和趋势由规则计算，模型只生成总结与下一步建议；模型失败仍保存可用规则报告。报告由用户主动生成，导出流程继续支持 Markdown、PDF 和 DOCX。
 
 ## 6. 部署和开源
 
@@ -88,8 +88,8 @@ A：当前快速演示走注册页“带一个示例课程开始”。这种方�
 
 **Q：现在最主要的限制是什么？**
 
-A：OCR、扫描件解析、旧版 DOC/PPT 解析、资料对比结果联动期末冲刺、错题驱动深度薄弱点追溯和完整浏览器 E2E 还没有做。PDF/DOCX/PPTX 文本解析、主页联网/深思/浏览器语音和 Markdown/PDF/DOCX 异步导出已经接入。当前版本是可运行学习闭环，不是完整商业产品。
+A：OCR、扫描件、旧版 DOC/PPT、资料对比联动冲刺，以及其余学习流程的真实 Graph 接管还没有做。Phase 14 已完成错题证据、已有路径重排、报告趋势和隔离 Docker E2E。当前版本是可运行学习闭环，不是完整商业产品。
 
 **Q：下一步怎么打磨？**
 
-A：Phase 13 继续做 Verification and Hardening：补浏览器 E2E、修验收中发现的断点、提升资源和练习质量、打磨移动端体验，并逐步补深度解析和导出增强。
+A：Phase 14 后继续做 Verification and Hardening：扩展六 Graph 的失败分支验收、打磨轨迹和移动端体验，并逐步补剩余 Graph、深度解析和资料对比联动。

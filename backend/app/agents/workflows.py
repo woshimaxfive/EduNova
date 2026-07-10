@@ -34,12 +34,12 @@ COURSE_TUTOR_GRAPH = WorkflowSpec(
 RESOURCE_GENERATION_GRAPH = WorkflowSpec(
     name="resource_generation",
     artifact_type="generated_resource",
-    steps=("profile", "retrieve", "diagnosis", "resource", "review", "persist"),
+    steps=("profile", "retrieve", "diagnosis", "planner", "resource_worker", "aggregate", "review", "repair", "persist"),
 )
 PATH_PLANNING_GRAPH = WorkflowSpec(
     name="path_planning",
     artifact_type="learning_path",
-    steps=("profile", "collect_weaknesses", "collect_resources", "rank_tasks", "review", "persist"),
+    steps=("profile", "collect_evidence", "deterministic_rank", "model_plan", "review", "repair", "persist"),
 )
 EXAM_SPRINT_GRAPH = WorkflowSpec(
     name="exam_sprint",
@@ -49,12 +49,24 @@ EXAM_SPRINT_GRAPH = WorkflowSpec(
 ASSESSMENT_GRAPH = WorkflowSpec(
     name="assessment",
     artifact_type="practice_session",
-    steps=("select_points", "generate_questions", "evaluate_answers", "sync_weaknesses", "review", "persist"),
+    steps=(
+        "context",
+        "question_plan",
+        "generate_questions",
+        "load",
+        "deterministic_score",
+        "diagnose_errors",
+        "sync_weaknesses",
+        "review",
+        "repair",
+        "persist",
+        "path_replan",
+    ),
 )
 REPORT_GRAPH = WorkflowSpec(
     name="report",
     artifact_type="assessment_report",
-    steps=("collect_practice", "collect_mastery", "generate_report", "review", "persist"),
+    steps=("collect_practice", "collect_mastery", "aggregate_evidence", "generate_narrative", "review", "repair", "persist"),
 )
 EXPORT_DOSSIER_GRAPH = WorkflowSpec(
     name="export_dossier",

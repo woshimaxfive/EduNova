@@ -35,6 +35,25 @@ export type AssessmentReportContent = {
     source_type: string;
   }>;
   profile_changes: string[];
+  trend?: {
+    direction: "improved" | "declined" | "stable" | "insufficient";
+    score_delta: number;
+    sessions_compared: number;
+    scores: number[];
+  };
+  evidence_summary?: {
+    practice_count: number;
+    answer_count: number;
+    weakness_count: number;
+    path_status: string;
+    resource_count: number;
+  };
+  review_result?: {
+    review_status: string;
+    confidence: number;
+    risk_flags: string[];
+    safety_summary: string;
+  };
 };
 
 export type AssessmentReport = {

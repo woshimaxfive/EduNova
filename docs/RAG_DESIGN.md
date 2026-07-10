@@ -11,7 +11,7 @@ Phase 5.2 已完成第一版课程知识库检索地基，Phase 5.3 已把检索
 - 返回结果包含知识切片、课程资料、知识点、章节和匹配分数。
 - 课程生成后会 best-effort 为 `knowledge_chunks.embedding` 写入 1536 维向量，RAG 搜索时也会懒加载补齐缺失或过期向量。
 - 检索优先融合关键词分数和 cosine 相似度分数；无可用向量或外部 embedding 失败时回退关键词检索。
-- 没有可用 embedding 配置时，系统显式使用 `local-hash-1536` 本地 fallback，保证开源和测试环境能跑通，但 UI 和文档必须标明它不是外部语义向量。
+- 没有可用 embedding 配置或 Provider 失败时，课程 RAG 显式退回关键词检索；`local-hash-1536` 不参与课程语义向量命中。真实外部向量通过 pgvector SQL cosine 候选并与中文关键词合并排序。
 - 课程空间发送课程问题时，会通过课程会话调用真实检索，并把引用写入 assistant 消息的 `citation_json`。
 - 刷新课程页或点击课程内历史后，前端从 `/tutor/sessions/{session_id}` 恢复消息和引用。
 - 当课程问题命中引用且模型配置可用时，后端使用 OpenAI-compatible Chat Completions 基于引用生成回答，并保存到 assistant `content`。

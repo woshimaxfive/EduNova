@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.api.errors import make_trace_id
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.models import (
     Course,
     GeneratedResource,
@@ -25,7 +25,6 @@ from backend.app.schemas.paths import (
     task_to_api,
     path_to_api,
 )
-from backend.app.schemas.profiles import normalize_profile_json
 
 
 class PathNotFoundError(Exception):
@@ -34,6 +33,10 @@ class PathNotFoundError(Exception):
 
 class PathValidationError(Exception):
     pass
+
+
+class PathModelService(Protocol):
+    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
 
 
 class PathRepository(Protocol):
@@ -155,79 +158,64 @@ class PlannedTask:
     reason: str
     resource_ids: list[int]
     next_review_at: datetime | None = None
+    status: str = "todo"
+    due_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class PathReplanResult:
+    status: str
+    trace_id: str | None
+    detail: LearningPathDetail | None
+    preserved_task_count: int = 0
 
 
 class PathService:
     valid_statuses = {"todo", "doing", "completed"}
 
-    def __init__(self, repository: PathRepository) -> None:
+    def __init__(
+        self,
+        repository: PathRepository,
+        model_service: PathModelService | None = None,
+        trace_recorder: AgentTraceRecorder | None = None,
+    ) -> None:
         self.repository = repository
+        self.model_service = model_service
+        self.trace_recorder = trace_recorder
 
     def generate_path(self, user: User, course_id: int, duration_days: int, goal: str = "") -> LearningPathDetail:
         if duration_days not in {3, 7, 14}:
             raise PathValidationError("学习路径时长只能是 3、7 或 14 天。")
-        course = self._require_course(user, course_id)
-        knowledge_points = self.repository.list_knowledge_points(course.id)
-        weakness_items = self.repository.list_weakness_review_items(user.id, course.id)
-        resources = self.repository.list_generated_resources(user.id, course.id)
-        profile = normalize_profile_json(self.repository.get_profile(user.id).profile_json if self.repository.get_profile(user.id) else None)
-        active_weaknesses = [item for item in weakness_items if item.status in {"reviewing", "confirmed"}]
-        pending_count = sum(1 for item in weakness_items if item.status == "pending")
-        planned_tasks = self._build_planned_tasks(knowledge_points, active_weaknesses, resources)
-        effective_goal = " ".join(goal.split())[:500] or profile["learning_goal"] or f"完成《{course.title}》阶段复习"
-        agent_trace_id = make_trace_id()
-        now = datetime.now(UTC)
+        from backend.app.agents.path_planning import PathPlanningGraphRunner
 
-        try:
-            self.repository.archive_active_paths(user.id, course.id)
-            path = self.repository.add_path(
-                LearningPath(
-                    user_id=user.id,
-                    course_id=course.id,
-                    title=f"{course.title} 学习路径",
-                    goal=effective_goal,
-                    status="active",
-                    agent_trace_id=agent_trace_id,
-                    plan_json={
-                        "duration_days": duration_days,
-                        "strategy": "reviewing_first_then_confirmed_then_uncovered",
-                        "source_counts": {
-                            "knowledge_points": len(knowledge_points),
-                            "confirmed_or_reviewing_weaknesses": len(active_weaknesses),
-                            "pending_weaknesses": pending_count,
-                            "resources": len(resources),
-                        },
-                        "basis": [
-                            "基于课程知识点顺序生成。",
-                            "优先安排已确认或复习中的薄弱点。",
-                            "待确认弱点只计数提示，不进入路径任务。",
-                        ],
-                    },
-                )
-            )
-            for index, planned in enumerate(planned_tasks):
-                self.repository.add_task(
-                    LearningTask(
-                        path_id=path.id,
-                        user_id=user.id,
-                        course_id=course.id,
-                        knowledge_point_id=planned.knowledge_point_id,
-                        title=planned.title,
-                        task_type=planned.task_type,
-                        reason=planned.reason,
-                        recommended_resource_ids=planned.resource_ids,
-                        status="doing" if index == 0 else "todo",
-                        due_at=now + timedelta(days=min(index + 1, duration_days)),
-                        next_review_at=planned.next_review_at,
-                    )
-                )
-            self.repository.commit()
-            self.repository.refresh(path)
-        except Exception:
-            self.repository.rollback()
-            raise
+        return PathPlanningGraphRunner(self).run(
+            user=user,
+            course_id=course_id,
+            duration_days=duration_days,
+            goal=goal,
+            trigger="manual",
+        ).detail  # type: ignore[return-value]
 
-        return self._build_detail(user, course, path, self.repository.list_tasks_for_path(path.id), resources, knowledge_points, weakness_items)
+    def replan_after_assessment(self, user: User, course_id: int, assessment_session_id: int) -> PathReplanResult:
+        active_path = self.repository.get_active_path(user.id, course_id)
+        if active_path is None:
+            return PathReplanResult(status="not_started", trace_id=None, detail=None)
+        plan_json = active_path.plan_json or {}
+        duration_days = int(plan_json.get("duration_days") or 7)
+        if duration_days not in {3, 7, 14}:
+            duration_days = 7
+
+        from backend.app.agents.path_planning import PathPlanningGraphRunner
+
+        return PathPlanningGraphRunner(self).run(
+            user=user,
+            course_id=course_id,
+            duration_days=duration_days,
+            goal=active_path.goal or "",
+            trigger="assessment",
+            assessment_session_id=assessment_session_id,
+            previous_path=active_path,
+        )
 
     def get_current_path(self, user: User, course_id: int) -> LearningPathDetail:
         course = self._require_course(user, course_id)
@@ -332,10 +320,15 @@ class PathService:
         weakness_items: list[WeaknessReviewItem],
     ) -> LearningPathDetail:
         resources_by_id = {resource.id: resource for resource in resources}
+        trigger = str((path.plan_json or {}).get("trigger") or "manual")
         return LearningPathDetail(
             course_id=str(course.id),
             status=path.status,
-            message="当前学习路径进行中。" if path.status == "active" else "学习路径已归档。",
+            message=(
+                "已根据练习结果更新学习路径。"
+                if path.status == "active" and trigger == "assessment"
+                else ("当前学习路径进行中。" if path.status == "active" else "学习路径已归档。")
+            ),
             agent_trace_id=getattr(path, "agent_trace_id", None),
             path=path_to_api(path),
             tasks=[task_to_api(task, resources_by_id) for task in tasks],

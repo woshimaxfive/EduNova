@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { apiClient } from "../api/client";
+import { AGENT_ENDPOINTS } from "../api/agents";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { PRACTICE_ENDPOINTS } from "../api/practice";
 import { PATHS } from "../app/routePaths";
@@ -124,7 +125,15 @@ describe("PracticePage", () => {
             data: {
               ...practiceSession,
               status: "completed",
+              agent_trace_id: "trace_assessment",
               score: 0,
+              closure_update: {
+                weaknesses_added: 1,
+                weaknesses_updated: 0,
+                path_update_status: "replanned",
+                path_agent_trace_id: "trace_path_replan",
+                recommended_resource_ids: ["801"]
+              },
               answers: [
                 {
                   question_id: "q1",
@@ -135,12 +144,51 @@ describe("PracticePage", () => {
                     message: "这道题暴露了需要复习的知识点。",
                     matched_keywords: [],
                     missing_keywords: ["启发式搜索"],
-                    explanation: "围绕课程引用复习。"
+                    explanation: "围绕课程引用复习。",
+                    diagnosis: {
+                      misconception: "混淆了启发式搜索与无信息搜索。",
+                      missing_concepts: ["启发函数"],
+                      recommended_action: "复习课程引用并完成同类题。",
+                      confidence: 0.88,
+                      evidence_ref: { type: "practice_answer", id: "601" }
+                    }
                   }
                 }
               ]
             },
             trace_id: "trace_feedback"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+      if (url === AGENT_ENDPOINTS.trace("trace_assessment")) {
+        return {
+          data: {
+            data: {
+              trace_id: "trace_assessment",
+              workflow: "assessment",
+              artifact_type: "practice_session",
+              artifact_id: "501",
+              course_id: "808",
+              status: "completed",
+              steps: [
+                {
+                  id: "1",
+                  agent_name: "diagnose_errors",
+                  step_index: 3,
+                  status: "completed",
+                  input_summary: "分析低分题",
+                  output_summary: "已生成错因诊断",
+                  duration_ms: 12,
+                  metadata: { weakness_count: 1 },
+                  created_at: "2026-07-05T10:00:01Z"
+                }
+              ]
+            },
+            trace_id: "trace_api"
           },
           status: 200,
           statusText: "OK",
@@ -162,6 +210,12 @@ describe("PracticePage", () => {
 
     expect((await screen.findAllByText("这道题暴露了需要复习的知识点。")).length).toBeGreaterThan(0);
     expect(screen.getByText("得分 0")).toBeInTheDocument();
+    expect(screen.getByText("混淆了启发式搜索与无信息搜索。")).toBeInTheDocument();
+    expect(screen.getByText("启发函数")).toBeInTheDocument();
+    expect(screen.getByText("已有路径已按本次练习重排")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看更新后的路径" })).toHaveAttribute("href", "/app/path?course_id=808");
+    await user.click(screen.getByRole("button", { name: "查看 AssessmentGraph" }));
+    expect(await screen.findByText("diagnose_errors")).toBeInTheDocument();
     expect(calls).toContainEqual(
       expect.objectContaining({
         method: "post",

@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.api.v1.deps import get_auth_service
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.core.config import Settings
 from backend.app.core.security import create_access_token
 from backend.app.main import create_app
@@ -27,6 +28,16 @@ from backend.app.services.paths import PathService
 
 
 NOW = datetime(2026, 7, 5, 9, 0, tzinfo=UTC)
+
+
+@dataclass
+class FakeModelService:
+    responses: list[str]
+    calls: list[list[dict[str, str]]] = field(default_factory=list)
+
+    def chat_completion(self, _user: User, messages: list[dict[str, str]]) -> str:
+        self.calls.append(messages)
+        return self.responses.pop(0)
 
 
 @dataclass
@@ -230,6 +241,14 @@ def make_repo() -> FakePathRepository:
     )
 
 
+def make_trace_recorder(logs: list[Any]) -> AgentTraceRecorder:
+    def add_log(log):
+        logs.append(log)
+        return log
+
+    return AgentTraceRecorder(repository_add_log=add_log)
+
+
 def test_generate_path_archives_previous_active_path_and_prioritizes_confirmed_reviewing_items() -> None:
     previous_path = LearningPath(
         id=800,
@@ -341,3 +360,62 @@ def test_paths_routes_require_login_and_return_envelopes() -> None:
     assert updated.status_code == 200
     assert updated.json()["data"]["status"] == "completed"
     assert missing.status_code == 404
+
+
+def test_path_planning_graph_runs_real_model_review_and_trace_nodes() -> None:
+    repo = make_repo()
+    logs: list[Any] = []
+    model = FakeModelService(
+        responses=[
+            '{"ordered_task_keys":["knowledge:401","knowledge:402","knowledge:403"],'
+            '"rationales":{"knowledge:401":"先处理确认弱点","knowledge:402":"再巩固复习中弱点"}}',
+            '{"review_status":"passed","confidence":0.91,"risk_flags":[],'
+            '"safety_summary":"任务顺序与弱点证据一致。"}',
+        ]
+    )
+    service = PathService(repo, model_service=model, trace_recorder=make_trace_recorder(logs))
+
+    detail = as_dict(service.generate_path(make_user(), 101, 7, "搜索算法冲刺"))
+
+    assert detail["path"]["plan_json"]["schema_version"] == 2
+    assert detail["path"]["plan_json"]["generation_mode"] == "model_enhanced"
+    assert detail["path"]["plan_json"]["review_mode"] == "model_and_rules"
+    assert [task["knowledge_point_id"] for task in detail["tasks"]] == ["401", "402", "403"]
+    assert detail["tasks"][0]["reason"] == "先处理确认弱点"
+    assert [log.agent_name for log in logs] == [
+        "profile",
+        "collect_evidence",
+        "deterministic_rank",
+        "model_plan",
+        "review",
+        "persist",
+    ]
+    assert all(log.duration_ms is not None and log.duration_ms >= 0 for log in logs)
+    assert len(model.calls) == 2
+
+
+def test_assessment_replan_preserves_completed_progress_and_does_not_create_missing_path() -> None:
+    repo = make_repo()
+    service = PathService(repo)
+    assert service.replan_after_assessment(make_user(), 101, 501).status == "not_started"
+
+    first = service.generate_path(make_user(), 101, 7, "保持原目标")
+    assert first.path is not None
+    old_path_id = int(first.path.id)
+    old_tasks = repo.list_tasks_for_path(old_path_id)
+    old_tasks[0].status = "completed"
+    old_tasks[1].status = "doing"
+    next(item for item in repo.weakness_items if item.knowledge_point_id == 403).status = "confirmed"
+
+    replanned = service.replan_after_assessment(make_user(), 101, 501)
+
+    assert replanned.status == "replanned"
+    assert replanned.detail is not None
+    assert replanned.detail.path is not None
+    assert replanned.detail.path.plan_json["trigger"] == "assessment"
+    assert replanned.detail.path.plan_json["revision_of"] == str(old_path_id)
+    assert replanned.detail.path.goal == "保持原目标"
+    assert replanned.detail.tasks[0].status == "completed"
+    assert replanned.detail.tasks[0].knowledge_point_id == "402"
+    assert any(task.knowledge_point_id == "403" and task.task_type == "review" for task in replanned.detail.tasks)
+    assert next(path for path in repo.paths if path.id == old_path_id).status == "archived"

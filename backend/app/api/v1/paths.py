@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
+from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.models import User
+from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.paths import GeneratePathRequest, UpdatePathTaskRequest
+from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 from backend.app.services.paths import PathNotFoundError, PathService, PathValidationError, SqlAlchemyPathRepository
 
 
@@ -14,7 +18,16 @@ router = APIRouter(prefix="/paths", tags=["paths"])
 
 
 def get_path_service(db=Depends(get_db_session)) -> PathService:
-    return PathService(SqlAlchemyPathRepository(db))
+    model_service = ModelSettingsService(
+        repository=SqlAlchemyModelSettingsRepository(db),
+        settings=get_settings(),
+        provider=OpenAICompatibleChatProvider(),
+    )
+    return PathService(
+        SqlAlchemyPathRepository(db),
+        model_service=model_service,
+        trace_recorder=AgentTraceRecorder(),
+    )
 
 
 @router.post("/generate")

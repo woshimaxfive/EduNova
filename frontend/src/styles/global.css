@@ -9330,3 +9330,94 @@ a {
   border: 0;
   border-top: 1px solid var(--line);
 }
+
+.agent-trace-disclosure {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.agent-trace-disclosure-trigger {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+  color: var(--text);
+  font-weight: 760;
+}
+
+.agent-trace-disclosure-trigger span {
+  overflow-wrap: anywhere;
+}
+
+.agent-trace-disclosure-content {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.practice-diagnosis {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px 0 2px;
+  border-top: 1px solid var(--line);
+}
+
+.practice-diagnosis p,
+.practice-diagnosis small,
+.practice-closure-update small,
+.report-trend-copy {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.practice-diagnosis-concepts,
+.report-evidence-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.practice-diagnosis-concepts span,
+.report-evidence-summary span {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.practice-closure-update {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.practice-closure-update .soft-button {
+  width: fit-content;
+}
+
+.report-trend-copy {
+  padding-top: 8px;
+  font-size: 0.82rem;
+}
+
+.report-evidence-summary {
+  margin: 12px 0;
+}
+
+@media (max-width: 600px) {
+  .agent-trace-disclosure-trigger,
+  .practice-closure-update .soft-button {
+    width: 100%;
+  }
+}

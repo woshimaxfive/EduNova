@@ -12,6 +12,7 @@ import {
   type ExportJob
 } from "../api/exports";
 import { generateReport, getLatestReport } from "../api/reports";
+import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { PageFrame } from "./PageFrame";
 
 function downloadDossierFile(filename: string, file: Blob, contentType: string) {
@@ -119,6 +120,16 @@ export function ReportsPage() {
     ? "完成一次课程练习后可生成报告"
     : reportBody?.summary ?? "还没有真实学习报告";
   const readError = latestReportQuery.isError && !isEmptyReport ? "学习报告读取失败，请稍后重试。" : "";
+  const trend = reportBody?.trend;
+  const trendLabel = trend
+    ? trend.direction === "improved"
+      ? `较早期提升 ${trend.score_delta} 分`
+      : trend.direction === "declined"
+        ? `较早期下降 ${Math.abs(trend.score_delta)} 分`
+        : trend.direction === "stable"
+          ? "近期表现稳定"
+          : "至少完成两次练习后显示趋势"
+    : "至少完成两次练习后显示趋势";
 
   return (
     <PageFrame title="学习报告">
@@ -159,6 +170,13 @@ export function ReportsPage() {
                 <span style={{ width: `${Math.min((reportBody?.mastery_update.mastered_count ?? 0) * 20, 100)}%` }} />
               </div>
             </article>
+            <article>
+              <div>
+                <strong>练习趋势</strong>
+                <span>{trend?.sessions_compared ?? 0} 次</span>
+              </div>
+              <p className="report-trend-copy">{trendLabel}</p>
+            </article>
           </div>
         </section>
 
@@ -171,7 +189,15 @@ export function ReportsPage() {
             </div>
           </div>
           {readError || localError ? <p className="form-error">{readError || localError}</p> : null}
-          {report?.agent_trace_id ? <p className="empty-inline-note">ReportGraph · {report.agent_trace_id}</p> : null}
+          <AgentTraceDisclosure traceId={report?.agent_trace_id} label="查看 ReportGraph" />
+          {reportBody?.evidence_summary ? (
+            <div className="report-evidence-summary" aria-label="报告证据摘要">
+              <span>{reportBody.evidence_summary.practice_count} 次练习</span>
+              <span>{reportBody.evidence_summary.answer_count} 条作答</span>
+              <span>{reportBody.evidence_summary.weakness_count} 个活跃弱点</span>
+              <span>{reportBody.evidence_summary.resource_count} 个课程资源</span>
+            </div>
+          ) : null}
           <ul className="report-evidence-list">
             {(reportBody?.weakness_list ?? []).map((item) => (
               <li key={`${item.knowledge_point_id}-${item.title}`}>

@@ -366,7 +366,20 @@ ReviewAgent 审核内容
 前端展示资源、引用和轨迹
 ```
 
-当前真实接管生产主流程的是 `HomeTutorGraph`、`CourseTutorGraph` 和 `ResourceGenerationGraph`。画像、资料建课/对比、路径/冲刺、练习评估、报告和导出仍使用现有服务逻辑与兼容 trace，不能写成已经全部 Graph 化。三个已接管的生成链路都落真实节点耗时和白名单 metadata；主页 Review 输出 `review_status`、`confidence`、`risk_flags` 和 `safety_summary`，失败时最多 Repair 一次。
+当前真实接管生产主流程的是 `HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph` 和 `ReportGraph`。画像、资料建课/对比、冲刺和导出仍使用现有服务逻辑与兼容 trace，不能写成已经全部 Graph 化。六条 Graph 都落真实节点耗时和白名单 metadata，生成型节点均有规则与可选模型审核，失败时最多 Repair 一次。
+
+后半程闭环：
+
+```text
+AssessmentGraph 规则评分
+  -> 错因诊断与 PracticeAnswer 证据
+  -> 合并更新 weakness_review_queue
+  -> 独立 PathPlanningGraph 重排已有路径
+  -> 再练习
+  -> 用户主动触发 ReportGraph 聚合最近 5 次练习与趋势
+```
+
+评分、掌握度数量和趋势始终由确定性规则负责。模型只能增强题目、诊断、路径排序理由和报告叙事。路径重排发生在练习事务提交之后，失败不会回滚练习与弱点；从未创建路径时返回 `not_started`，不擅自创建默认路径。
 
 资源 Worker：
 
@@ -409,9 +422,9 @@ ReviewAgent 审核
 - Phase 5.3 已让课程会话发送消息时复用该检索结果，并把引用写入 `chat_messages.citation_json`。
 - Phase 6.1 已让课程会话在有引用且模型配置可用时调用 OpenAI-compatible Chat Completions 生成非流式回答，并把模型内容保存到 `chat_messages.content`，引用继续保存在 `citation_json`。
 - Phase 6.3 已新增课程消息流式路径：后端通过 `event: metadata/token/done/error` 输出 SSE，完成后一次性持久化完整 assistant；失败时不保存半截内容。
-- Phase 6.4 已新增 `EmbeddingService`：优先使用当前用户默认配置或服务器兜底的 OpenAI-compatible `/embeddings`，缺少配置时使用显式 `local-hash-1536` 本地 fallback；课程生成后 best-effort 写入向量，RAG 搜索时懒加载补齐。
-- Phase 6.4 已把 RAG 检索升级为 `keyword_score + vector_score` 混合排序，API 和前端引用区会展示 `retrieval_mode`、`embedding_status`、`retrieval_source` 等轻量状态。
-- 后续再接数据库侧近邻召回、批量重建任务和讯飞原生 2560 维 Embedding 专项；ReviewAgent 已作为生成型 Graph 的审核节点接入学习闭环 trace。
+- `EmbeddingService` 优先使用当前用户默认配置或服务器兜底的 OpenAI-compatible `/embeddings`。外部 embedding 成功时，课程 RAG 按用户课程、embedding 来源和模型隔离执行 pgvector cosine SQL 候选，并与中文关键词候选合并排序；首次生成的真实课程向量会提交持久化。
+- 未配置外部 embedding 或 Provider 失败时只使用关键词检索，返回 `local_fallback` 或 `provider_failed`；`local-hash-1536` 不参与课程语义向量命中。API 和前端继续展示 `retrieval_mode`、`embedding_status`、`retrieval_source` 等轻量状态。
+- 后续保留批量向量重建任务和讯飞原生 2560 维 Embedding 专项；ReviewAgent 已作为生成型 Graph 的审核节点接入学习闭环 trace。
 
 可信机制：
 

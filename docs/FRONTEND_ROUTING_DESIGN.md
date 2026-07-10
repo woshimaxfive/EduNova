@@ -372,8 +372,8 @@ Phase 3A 为了工程清晰，可以先有对应路由，但视觉上不做复�
 | StudioPage | 资源生成和资源详情 | 不做卡片墙首页 |
 | ProfilePage | 从 `/profiles/me` 和 `/profiles/events` 读取真实画像与证据，通过 `/profiles/chat` 更新画像 | 不做复杂用户中心，不展示静态假画像 |
 | TutorPage | 课程辅导入口，读取当前用户课程并跳转课程空间 | 不伪造静态问答，不另建第二套课程问答系统 |
-| PracticePage | 真实课程练习、作答、批改反馈和复习线索 | 不做完整考试系统，不调用外部模型批改 |
-| ReportsPage | 最新报告读取、报告生成、掌握度更新、薄弱点、下一步建议和 Markdown 学习档案导出 | 不做运营报表，不做假导出，不做 PDF/Word |
+| PracticePage | 真实课程练习、确定性评分、错因诊断、弱点与已有路径回流、Graph 轨迹 | 不做完整考试系统，不让模型修改客观分数 |
+| ReportsPage | 最近 5 次练习趋势、证据摘要、ReportGraph 和 Markdown/PDF/DOCX 异步导出 | 不做运营报表，不做假导出，不在提交练习时自动生成报告 |
 | SettingsPage | 模型连接、个人资料、导出设置；Phase 6.2 已接入多模型配置列表、创建、测试、设默认和删除，Provider 预设收敛为国内常用和本地部署入口；账号昵称通过 `PATCH /auth/me` 真实保存，隐私与数据边界只做只读说明和报告页导出入口 | 不做复杂管理员后台，不放深度思考或联网搜索开关 |
 
 ## 11. 空状态与错误状态
@@ -505,13 +505,13 @@ Phase 5 以后：
 - Phase 4.3 已接真实 `/tutor/sessions`；`LearningSpacePage` 首次发送会创建 `scope=home` 会话，发送消息写入 user 和 assistant 消息，当前主页 assistant 来自普通模型回答，连续追问不重复创建历史，点击左侧主页历史会拉取后端 messages；主页历史菜单已接入会话改名和软删除。
 - Phase 4.4 已接真实 `/materials`；`LearningSpacePage` 上传按钮会调用 `/materials/upload` 并刷新 `/dashboard/summary`，`LibraryPage` 调用 `/materials` 渲染当前用户资料列表，上传成功后刷新列表和 summary。
 - Phase 5.1 已接真实 `/courses/from-materials`、`/courses`、`/courses/{course_id}`、`/courses/{course_id}/overview` 和 `/courses/{course_id}/knowledge-points`；`LearningSpacePage` 和 `LibraryPage` 的生成课程浮层会调用真实接口，成功后刷新数据并跳转新课程空间。
-- Phase 6.4 已让课程生成和 `/rag/search` 自动补齐知识切片 embedding；`CourseSpacePage` 会在引用来源区显示混合检索、关键词检索和本地 fallback 状态，并明确 `local-hash-1536` 不是外部语义向量。
+- Phase 14 后，课程生成和 `/rag/search` 只把真实外部 embedding 用作 pgvector SQL 候选；`CourseSpacePage` 会显示混合检索、关键词检索、`local_fallback` 或 `provider_failed`，本地 hash 不作为语义命中。
 - Phase 6.5 已把 `CourseSpacePage` 改造为双模式：默认问答模式不常驻知识画布、资源区、证据层、横向知识点条或主区重复历史；来源、生成资源、学习路径和课堂协作轨迹收敛到回答下方；知识点入口和引用会进入学习模式，右侧复用当前课程 AI 辅导输入。
 - Phase 7.1 已把 `ProfilePage` 接入真实 `/profiles/me`、`/profiles/chat` 和 `/profiles/events`；空画像显示待补充，画像证据来自后端事件，课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件。
 - Phase 13.1 已把 `CourseSpacePage` 的“课堂协作轨迹”接入真实 `/agents/traces/{trace_id}`；存在 `latest_trace_id` 时读取当前用户自己的 `CourseTutorGraph` trace，空 trace 和读取失败只在回答详情局部提示。
 - `StudioPage` 展示六类结构化资源、引用、质量分、Graph 轨迹和 PPTX 状态；`CourseSpacePage` 既可带课程进入资源工坊，也可在回答下方生成并内联预览资源。
 - Phase 9 已把 `LearningPathPage` 接入真实 `/paths` 和 `/courses/{course_id}/mastery-map`：支持课程预选、生成课程路径、任务状态更新、推荐资源展示、路径依据和规则掌握度图；`CourseSpacePage` 的“学习路径”入口读取真实 `path_summary` 并跳转 `/app/path?course_id=...`。
-- Phase 10 已把 `PracticePage` 接入真实 `/practice`：支持 `course_id` 查询参数预选课程，读取课程与知识点，创建练习、作答、提交并展示即时反馈；`ReportsPage` 接入真实 `/reports`，读取课程与最新报告，可生成学习报告并展示真实分数、掌握度更新、薄弱点、证据摘要和下一步建议；`CourseSpacePage` 的练习/报告入口会带当前课程进入对应页面。
+- Phase 14 已把 `PracticePage` 升级为错因诊断与闭环回流界面，展示缺失概念、复习动作、弱点新增/更新、路径状态和 Assessment/PathPlanning 轨迹；`LearningPathPage` 展示练习触发、保留任务数和真实 PathPlanningGraph；`ReportsPage` 展示最近练习趋势、证据摘要和 ReportGraph。旧响应缺少新增字段时仍正常渲染。
 - Phase 11.1 已把期末冲刺接入现有 `/app/path`：学习主页最近课程区域提供“期末冲刺”入口并跳转 `/app/path?course_id=...`；`LearningPathPage` 在普通学习路径之外新增独立冲刺区域，可选择 3/7/14 天生成计划，展示每日任务、高频点、薄弱点、必刷题、易错提醒和推荐资源。冲刺区域错误只局部提示，不影响普通学习路径任务状态更新。
 - Phase 11.2 已把资料对比接入 `/app/library`：页面读取课程和资料列表，选择课程后只展示已绑定该课程且可比较的文档资料，至少选择两份后调用 `/materials/compare`，展示重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先顺序和引用摘要。错误只在资料对比区域局部提示，不影响上传、资料列表和生成课程。
 - Phase 12.1 已把 `ReportsPage` 接入真实 `/exports/learning-dossier`：选择课程后可同步导出 Markdown 学习档案，前端用返回的 Markdown 和安全文件名创建浏览器下载；导出失败只在报告页导出区域局部提示，不影响报告读取和生成。
@@ -580,3 +580,10 @@ Phase 5 以后：
 - 普通路由导航后组件重新以收起状态进入；主页新建对话、历史选择和侧栏内部导航在紧凑视口完成动作后主动收起。
 - 首页历史与课程历史的作用域仍严格隔离；移动抽屉只是呈现方式变化，不改变会话查询或路由参数。
 - 390px 验收必须确认顶部条不遮挡标题、抽屉可展开/收起、主内容无水平溢出，且抽屉不作为页面底部的额外长内容出现。
+
+## 17. Phase 14 学习闭环页面更新（2026-07-10）
+
+- `/app/path`、`/app/practice`、`/app/reports` 共用 `AgentTraceDisclosure`，按需加载真实 trace，失败只影响局部区域。
+- 练习提交后刷新学习状态、掌握度、当前路径和最新报告缓存；报告仍由用户主动生成。
+- 路径页明确区分手动生成与练习回流，展示保留进度数量、模型/规则模式，不显示原始 trace ID。
+- Playwright 隔离 Docker E2E 覆盖桌面主链路与三页 `390px` 水平溢出检查。

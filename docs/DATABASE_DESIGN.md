@@ -466,7 +466,7 @@ Phase 8.2 生成资源时同步写入质量分。Phase 8.2.1 后，质量分由�
 
 用途：保存一次练习。
 
-Phase 10 开始实际复用本表保存课程级练习会话，不新增迁移。练习必须绑定 `user_id` 和 `course_id`，只能由当前用户访问。题目第一刀不新增单独题目表，而是在创建练习时用 `practice_answers.question_json` 保存安全题目结构，提交后再用同表保存作答和反馈。
+Phase 14 的迁移 `20260710_0011` 新增 `assessment_json`，持久化弱点新增/更新数、路径回流状态、路径 trace 和推荐资源 ID。练习必须绑定 `user_id` 和 `course_id`，只能由当前用户访问。
 
 字段：
 
@@ -479,6 +479,7 @@ Phase 10 开始实际复用本表保存课程级练习会话，不新增迁移�
 | `status` | varchar | 进行中、已完成 |
 | `score` | numeric | 得分 |
 | `agent_trace_id` | varchar | AssessmentGraph 轨迹，可为空 |
+| `assessment_json` | jsonb | 闭环回流摘要，非空，默认 `{}` |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -486,7 +487,7 @@ Phase 10 开始实际复用本表保存课程级练习会话，不新增迁移�
 
 用途：保存每道题作答和批改。
 
-Phase 10 中，创建练习时先写入 `answer_text=null`、`is_correct=null` 的占位行，用 `question_json` 保存 `single_choice`、`multiple_choice` 和 `short_answer` 题目；提交答案时替换为真实作答记录并写入确定性批改反馈。`question_json` 只保存题目、选项、知识点、关键词和安全解释，不保存系统提示词、模型输入、API Key 或完整课程资料原文。
+创建练习时先写入 `answer_text=null`、`is_correct=null` 的稳定占位行，用 `question_json` 保存安全题目结构；提交答案时更新原行而不是删除重建，使错题证据可精确引用同一个 `PracticeAnswer.id`。数字评分确定性写入 `feedback_json`，可同时保存脱敏错因、缺失概念、复习动作和置信度。
 
 字段：
 
@@ -534,6 +535,8 @@ Phase 9 继续复用本表，不新增字段。`GET /courses/{course_id}/learnin
 
 Phase 10 继续复用本表，不新增字段。练习评估中的错题或低分题会以 `source_type="practice_assessment"` 写入课程级 `confirmed` 复习项，因为它来自学生真实作答证据；课程问答候选事件仍保持 `pending` 待确认语义。练习来源入队按同课程同知识点或安全标题去重，不保存完整答案之外的隐私资料原文、系统提示词或模型输入。
 
+Phase 14 的迁移 `20260710_0011` 增加安全来源引用和诊断字段。同一知识点再次答错时更新已有队列项的诊断、证据列表和计数，不重复创建队列项；证据 ID 最多保留 5 个。
+
 字段：
 
 | 字段 | 类型 | 说明 |
@@ -544,6 +547,9 @@ Phase 10 继续复用本表，不新增字段。练习评估中的错题或低�
 | `knowledge_point_id` | bigint | 薄弱知识点 |
 | `title` | varchar | 复习项标题 |
 | `source_type` | varchar | 来源类型 |
+| `source_ref_type` | varchar | 精确证据类型，可为空 |
+| `source_ref_id` | bigint | 精确证据 ID，可为空 |
+| `diagnosis_json` | jsonb | 错因、缺失概念、动作、置信度和安全证据 ID，默认 `{}` |
 | `status` | varchar | `pending`、`confirmed`、`reviewing`、`completed`、`dismissed` |
 | `recommended_resource_ids` | jsonb | 推荐资源 |
 | `next_review_at` | timestamptz | 下次复习时间 |
@@ -716,6 +722,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - `agent_run_logs.trace_id`。
 - `practice_sessions(user_id, course_id)`。
 - `practice_sessions.agent_trace_id`。
+- `weakness_review_queue(user_id, course_id, source_ref_type, source_ref_id)`。
 - `assessment_reports(user_id, course_id)`。
 - `assessment_reports.agent_trace_id`。
 - `weakness_review_queue(user_id, course_id, status)`。
@@ -809,6 +816,7 @@ Demo 数据要求：
 21. Phase 13.1 后，课程、资料、资源、路径、冲刺、练习和报告等学习产物可通过 nullable `agent_trace_id` 反查对应 Graph；字段为空时仍保持旧数据兼容。
 22. Phase 13.2 后，`export_jobs` 可记录 Markdown/PDF/DOCX 异步导出任务状态、文件路径、脱敏失败摘要和 `agent_trace_id`；下载接口必须按 `user_id` 隔离。
 23. HomeTutorGraph 升级后，已解析资料生成稳定 `material_chunks`；既有资料可惰性补齐，检索只能读取当前用户本次选中的资料，删除资料必须级联删除切片。
+24. Phase 14 后，`practice_sessions.assessment_json` 保存可刷新恢复的闭环摘要；弱点通过来源引用精确绑定错题，但不保存原始模型输入。
 
 当前已验证：
 

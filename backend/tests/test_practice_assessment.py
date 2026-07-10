@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.v1.deps import get_auth_service
 from backend.app.core.config import Settings
 from backend.app.core.security import create_access_token
@@ -26,6 +27,21 @@ from backend.app.services.auth import AuthService
 
 
 NOW = datetime(2026, 7, 5, 10, 0, tzinfo=UTC)
+
+
+@dataclass
+class FakeModelService:
+    responses: list[str]
+    calls: list[list[dict[str, str]]] = field(default_factory=list)
+
+    def chat_completion(self, _user: User, messages: list[dict[str, str]]) -> str:
+        self.calls.append(messages)
+        return self.responses.pop(0)
+
+
+class FailingPathService:
+    def replan_after_assessment(self, _user: User, _course_id: int, _assessment_session_id: int):
+        raise RuntimeError("path failed")
 
 
 @dataclass
@@ -81,6 +97,14 @@ class FakePracticeRepository:
             if session.user_id == user_id and session.course_id == course_id and session.status == "completed"
         ]
         return sorted(sessions, key=lambda session: (session.updated_at, session.id), reverse=True)[0] if sessions else None
+
+    def list_recent_completed_practice_sessions(self, user_id: int, course_id: int, limit: int = 5) -> list[PracticeSession]:
+        sessions = [
+            session
+            for session in self.sessions
+            if session.user_id == user_id and session.course_id == course_id and session.status == "completed"
+        ]
+        return sorted(sessions, key=lambda session: (session.updated_at, session.id), reverse=True)[:limit]
 
     def list_answers_for_session(self, session_id: int) -> list[PracticeAnswer]:
         return sorted([answer for answer in self.answers if answer.session_id == session_id], key=lambda answer: answer.id)
@@ -195,6 +219,14 @@ def make_repo() -> FakePracticeRepository:
 
 def as_dict(model: Any) -> dict[str, Any]:
     return model.model_dump() if hasattr(model, "model_dump") else model
+
+
+def make_trace_recorder(logs: list[Any]) -> AgentTraceRecorder:
+    def add_log(log):
+        logs.append(log)
+        return log
+
+    return AgentTraceRecorder(repository_add_log=add_log)
 
 
 def test_create_practice_session_generates_deterministic_questions_and_validates_scope() -> None:
@@ -369,3 +401,111 @@ def test_latest_report_returns_empty_state_and_routes_require_login() -> None:
     assert latest.status_code == 200
     assert latest.json()["data"]["status"] == "ready"
     assert missing.status_code == 404
+
+
+def test_assessment_graph_keeps_rule_score_and_persists_model_diagnosis_with_trace() -> None:
+    from backend.app.services.practice import PracticeService
+
+    repo = make_repo()
+    created = PracticeService(repo).create_session(make_user(), 101, [401], 1, "medium")
+    logs: list[Any] = []
+    model = FakeModelService(
+        responses=[
+            '{"diagnoses":[{"question_id":"q1","misconception":"混淆了启发式搜索与无信息搜索",'
+            '"missing_concepts":["启发函数"],"recommended_action":"复习课程引用并完成同类题",'
+            '"confidence":0.88,"score":100}]}',
+            '{"review_status":"passed","confidence":0.92,"risk_flags":[],'
+            '"safety_summary":"诊断与规则分数一致。"}',
+        ]
+    )
+    service = PracticeService(repo, model_service=model, trace_recorder=make_trace_recorder(logs))
+
+    result = as_dict(
+        service.submit_answers(
+            make_user(),
+            int(created.id),
+            [{"question_id": "q1", "answer_text": "错误选项"}],
+        )
+    )
+
+    assert result["score"] == 0
+    diagnosis = result["answers"][0]["feedback"]["diagnosis"]
+    assert diagnosis["misconception"] == "混淆了启发式搜索与无信息搜索"
+    assert diagnosis["evidence_ref"]["type"] == "practice_answer"
+    assert repo.weakness_items[0].source_ref_type == "practice_answer"
+    assert repo.weakness_items[0].source_ref_id == int(diagnosis["evidence_ref"]["id"])
+    assert repo.weakness_items[0].diagnosis_json["evidence_count"] == 1
+    assert result["closure_update"]["path_update_status"] == "not_started"
+    assert [log.agent_name for log in logs] == [
+        "load",
+        "deterministic_score",
+        "diagnose_errors",
+        "sync_weaknesses",
+        "review",
+        "persist",
+        "path_replan",
+    ]
+    assert all("错误选项" not in str(log.metadata_json) for log in logs)
+
+
+def test_assessment_path_failure_does_not_rollback_completed_practice() -> None:
+    from backend.app.services.practice import PracticeService
+
+    repo = make_repo()
+    created = PracticeService(repo).create_session(make_user(), 101, [401], 1, "easy")
+    service = PracticeService(repo, path_service=FailingPathService())
+
+    result = as_dict(
+        service.submit_answers(
+            make_user(),
+            int(created.id),
+            [{"question_id": "q1", "answer_text": "错误选项"}],
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["score"] == 0
+    assert result["closure_update"]["path_update_status"] == "failed"
+    assert len(repo.weakness_items) == 1
+
+
+def test_report_graph_aggregates_recent_trend_without_allowing_model_to_change_numbers() -> None:
+    from backend.app.services.practice import PracticeService
+    from backend.app.services.reports import ReportService
+
+    repo = make_repo()
+    practice = PracticeService(repo)
+    first = practice.create_session(make_user(), 101, [401], 1, "easy")
+    practice.submit_answers(make_user(), int(first.id), [{"question_id": "q1", "answer_text": "错误选项"}])
+    second = practice.create_session(make_user(), 101, [401], 1, "easy")
+    practice.submit_answers(make_user(), int(second.id), [{"question_id": "q1", "answer_text": "人工智能概述"}])
+    logs: list[Any] = []
+    model = FakeModelService(
+        responses=[
+            '{"summary":"近期练习表现明显提升。","next_step_suggestions":["继续巩固课程引用"]}',
+            '{"review_status":"passed","confidence":0.9,"risk_flags":[],'
+            '"safety_summary":"叙事与趋势证据一致。"}',
+        ]
+    )
+    report_service = ReportService(repo, model_service=model, trace_recorder=make_trace_recorder(logs))
+
+    report = as_dict(report_service.generate_report(make_user(), 101))
+
+    assert report["score"] == 100
+    assert report["report"]["summary"] == "近期练习表现明显提升。"
+    assert report["report"]["trend"] == {
+        "direction": "improved",
+        "score_delta": 100,
+        "sessions_compared": 2,
+        "scores": [0, 100],
+    }
+    assert report["report"]["evidence_summary"]["practice_count"] == 2
+    assert report["report"]["review_result"]["review_status"] == "passed"
+    assert [log.agent_name for log in logs] == [
+        "collect_practice",
+        "collect_mastery",
+        "aggregate_evidence",
+        "generate_narrative",
+        "review",
+        "persist",
+    ]

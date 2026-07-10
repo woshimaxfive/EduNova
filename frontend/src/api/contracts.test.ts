@@ -1057,6 +1057,7 @@ describe("frontend API contracts", () => {
         course_id: "7",
         title: "人工智能导论 练习",
         status: "completed",
+        agent_trace_id: "trace_assessment_contract",
         score: 67,
         questions: [
           {
@@ -1082,10 +1083,24 @@ describe("frontend API contracts", () => {
               message: "这道题暴露了需要复习的知识点。",
               matched_keywords: [],
               missing_keywords: ["启发式搜索"],
-              explanation: "围绕课程引用复习。"
+              explanation: "围绕课程引用复习。",
+              diagnosis: {
+                misconception: "混淆了启发式搜索与无信息搜索。",
+                missing_concepts: ["启发函数"],
+                recommended_action: "复习课程引用并完成同类题。",
+                confidence: 0.88,
+                evidence_ref: { type: "practice_answer", id: "601" }
+              }
             }
           }
         ],
+        closure_update: {
+          weaknesses_added: 1,
+          weaknesses_updated: 0,
+          path_update_status: "replanned",
+          path_agent_trace_id: "trace_path_replan_contract",
+          recommended_resource_ids: ["801"]
+        },
         created_at: "2026-07-05T10:00:00Z",
         updated_at: "2026-07-05T10:01:00Z"
       };
@@ -1125,6 +1140,8 @@ describe("frontend API contracts", () => {
       expect(created.data.questions[0].correct_answer).toBeNull();
       expect(detail.data.id).toBe("501");
       expect(submitted.data.answers[0].feedback.score).toBe(0);
+      expect(submitted.data.answers[0].feedback.diagnosis?.evidence_ref.id).toBe("601");
+      expect(submitted.data.closure_update?.path_update_status).toBe("replanned");
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }
@@ -1156,6 +1173,9 @@ describe("frontend API contracts", () => {
               weakness_list: [{ knowledge_point_id: "401", title: "启发式搜索", source_type: "practice_assessment" }],
               evidence_refs: [{ practice_answer_id: "601", knowledge_point_id: "401", score: 0 }],
               next_step_suggestions: ["优先复习薄弱点。"],
+              trend: { direction: "improved", score_delta: 12, sessions_compared: 3, scores: [55, 61, 67] },
+              evidence_summary: { practice_count: 3, answer_count: 15, weakness_count: 1, path_status: "active", resource_count: 2 },
+              review_result: { review_status: "passed", confidence: 0.91, risk_flags: [], safety_summary: "统计数字与练习证据一致。" },
               review_queue_updates: [],
               profile_changes: []
             },
@@ -1179,6 +1199,8 @@ describe("frontend API contracts", () => {
         { url: REPORT_ENDPOINTS.latest, method: "get", data: undefined, params: { course_id: 7 } }
       ]);
       expect(generated.data.report.weakness_list[0].source_type).toBe("practice_assessment");
+      expect(generated.data.report.trend?.direction).toBe("improved");
+      expect(generated.data.report.evidence_summary?.practice_count).toBe(3);
       expect(latest.data.score).toBe(67);
     } finally {
       apiClient.defaults.adapter = previousAdapter;
@@ -1371,6 +1393,8 @@ describe("frontend API contracts", () => {
                   context_message_count: 4,
                   context_summary_used: true,
                   retrieval_query_mode: "contextual",
+                  candidate_count: 5,
+                  trend_direction: "improved",
                   review_result: "pass"
                 },
                 created_at: "2026-07-05T10:00:01Z"
@@ -1392,6 +1416,7 @@ describe("frontend API contracts", () => {
       expect(calls).toEqual([{ url: AGENT_ENDPOINTS.trace("trace_candidate"), method: "get" }]);
       expect(response.data.steps[0].agent_name).toBe("retrieve");
       expect(response.data.steps[0].metadata.citation_count).toBe(2);
+      expect(response.data.steps[0].metadata.candidate_count).toBe(5);
       expect(mapAgentTraceStepToEvent(response.data.steps[0])).toMatchObject({
         contextMessageCount: 4,
         contextSummaryUsed: true,

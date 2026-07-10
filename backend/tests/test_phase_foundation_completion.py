@@ -121,6 +121,31 @@ def test_agent_trace_migration_adds_nullable_trace_columns_and_indexes() -> None
     assert '"agent_trace_id"' in migration_text
 
 
+def test_learning_closure_evidence_migration_adds_safe_references_and_defaults() -> None:
+    migration_path = (
+        REPO_ROOT
+        / "backend"
+        / "migrations"
+        / "versions"
+        / "20260710_0011_add_learning_closure_evidence.py"
+    )
+
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert '"assessment_json"' in migration_text
+    assert '"source_ref_type"' in migration_text
+    assert '"source_ref_id"' in migration_text
+    assert '"diagnosis_json"' in migration_text
+    assert '"ix_weakness_review_queue_source_ref"' in migration_text
+    assert "nullable=False" in migration_text
+    assert "'{}'::jsonb" in migration_text
+
+    assert PracticeSession.__table__.c.assessment_json.nullable is False
+    assert WeaknessReviewItem.__table__.c.source_ref_type.nullable is True
+    assert WeaknessReviewItem.__table__.c.source_ref_id.nullable is True
+    assert WeaknessReviewItem.__table__.c.diagnosis_json.nullable is False
+
+
 def test_phase_two_learning_closure_migration_creates_required_tables() -> None:
     migration_path = (
         REPO_ROOT

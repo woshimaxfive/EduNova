@@ -4,7 +4,7 @@
 
 ## 1. 定位
 
-EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多智能体”概念本身。当前版本有三条 **LangGraph 生产级编排**：`HomeTutorGraph` 接管主页智能对话，`CourseTutorGraph` 接管课程问答，`ResourceGenerationGraph` 接管资源生成；其他学习闭环 Graph 暂时保持现有服务逻辑和安全 trace，后续再逐步真接管。
+EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多智能体”概念本身。当前版本有六条 **LangGraph 生产级编排**：`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph` 和 `ReportGraph`。其他学习流程保持现有服务逻辑和安全 trace，后续再逐步真接管。
 
 本轮不把认证、模型设置、Dashboard 总览等非学习能力包装成 Agent。
 
@@ -18,13 +18,13 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 | `HomeTutorGraph` | 已真接管：安全上下文、问题路由、选中资料检索、按需联网、深度规划、回答、审核/修订和消息持久化 | context、route、material_retriever、web_search、planner、answer、review、repair、persist |
 | `CourseTutorGraph` | 已真接管：画像/上下文读取、课程检索、导师回答、弱点候选、审核、下一步动作、消息持久化 | profile、retriever、tutor、weakness、review、next_action |
 | `ResourceGenerationGraph` | 已真接管：画像、检索、诊断、规划、六 Worker 并行生成、聚合、模型与规则审核、单次修订、持久化 | profile、retrieve、diagnosis、planner、resource_worker、aggregate、review、repair、persist |
-| `PathPlanningGraph` | 后续专项：画像/弱点/资源证据收集、路径排序、任务生成、审核、持久化 | profile、evidence、rank、tasks、review、persist |
+| `PathPlanningGraph` | 已真接管：画像与证据收集、确定性排序、模型排序理由、审核/修订、事务持久化 | profile、collect_evidence、deterministic_rank、model_plan、review、repair、persist |
 | `ExamSprintGraph` | 后续专项：冲刺证据收集、高频点/必刷题/易错提醒生成、审核、持久化 | evidence、high_frequency、must_practice、mistakes、review、persist |
-| `AssessmentGraph` | 后续专项：出题、作答评估、弱点同步、审核、持久化 | question_plan、evaluate、weakness_sync、review、persist |
-| `ReportGraph` | 后续专项：练习/掌握度/弱点聚合、报告生成、审核、持久化 | aggregate、report、review、persist |
+| `AssessmentGraph` | 已真接管：规则题稿、可选模型增强、确定性评分、错因诊断、弱点同步和路径回流 | context/question_plan/generate_questions/review/repair/persist；load/deterministic_score/diagnose_errors/sync_weaknesses/review/repair/persist/path_replan |
+| `ReportGraph` | 已真接管：最近练习、掌握度、弱点、路径和资源聚合，叙事增强、审核/修订、持久化 | collect_practice、collect_mastery、aggregate_evidence、generate_narrative、review、repair、persist |
 | `ExportDossierGraph` | 后续专项：学习档案聚合、Markdown 渲染、隐私审核、返回下载内容 | aggregate、render_markdown、privacy_review、return |
 
-`Service` 仍然是 API 边界和依赖装配层。主页问答、课程问答和资源生成的核心流程已经委托给对应 Graph runner；其他学习流程暂时通过服务逻辑产出兼容 trace，不把它们写成已经真接管。
+`Service` 仍然是 API 边界和依赖装配层。六条主链路的核心流程已经委托给对应 Graph runner；画像、资料建课/对比、冲刺和导出暂时通过服务逻辑产出兼容 trace，不把它们写成已经真接管。
 
 ## 3. AgentState
 
@@ -111,6 +111,9 @@ EduNova 的第一版坚持确定性可用稿优先：
 - 模型 Review JSON 无效或 Provider 暂不可用时，Review 节点记录 `warning`，不得伪装为 `passed`。
 - 生成型 Graph 必须经过 ReviewAgent 节点，输出审核状态、置信度、风险标记和安全摘要。
 - 资源 Graph 的每个类型由独立 Worker 调用模型；Worker 失败时只降级该类型，其他分支继续。ReviewAgent 批量复核六类产物，失败内容最多进入一次 RepairAgent，仍不安全则不持久化。
+- `AssessmentGraph` 的客观分数不可被模型覆盖；模型只增强题目、错因、缺失概念和复习动作。评估先提交练习和弱点事务，再用独立 `PathPlanningGraph` trace 重排已有路径，路径失败不回滚练习。
+- `PathPlanningGraph` 不自动创建用户从未建立的路径；重排保留已完成任务和未受影响的当前任务，审核成功后才归档旧 active 路径。
+- `ReportGraph` 的分数、掌握数量、证据数和趋势均为确定性聚合；模型只生成总结和建议，模型不可用时保存完整 `rules_only` 报告。
 
 ## 7. 前端呈现
 
@@ -119,7 +122,7 @@ EduNova 的第一版坚持确定性可用稿优先：
 - 课程回答展示层和生成层都必须过滤 `学生问题`、`课程引用`、`匹配度`、资料片段等模型输入字段；引用证据只进入来源面板，不作为回答正文泄露。
 - 主页会话和课程空间会话默认使用同一 `session_id` 内最近 12 条消息作为多轮上下文；更早历史只生成确定性安全摘要。课程 RAG、主页资料上下文和联网搜索会用最近用户问题 + 当前问题做上下文化查询，前端只展示“已参考最近 N 条会话”等安全提示。
 - 资源工坊和课程空间共用结构化资源渲染器，展示 Markmap、交互练习、浏览器 Python、PPT、动画图解和 `ResourceGenerationGraph` 全链路；旧 Markdown/Mermaid 资源继续降级可读。
-- 学习路径、练习和报告页面显示轻量 trace 入口；这些页面后续再升级为真实 Graph 编排。
+- 学习路径、练习和报告页面通过共享 `AgentTraceDisclosure` 展开真实 PathPlanning、Assessment、Report 节点轨迹；局部轨迹失败不阻断主流程。
 - 主页发送后通过 SSE 展示安全 Graph 状态、真实来源、Markdown token 和可选 Review 替换；`done` 后用持久化消息校准。深度思考只展示规划和处理摘要，不展示原始思维链。
 - 所有 trace 读取失败都只影响局部轨迹区，不阻断学习主流程。
 
@@ -136,5 +139,5 @@ EduNova 不是把所有逻辑都交给大模型，而是把学生学习链路拆
 ## 9. 后续打磨
 
 - 增强资料对比结果和期末冲刺、路径排序之间的证据联动。
-- 补浏览器 E2E，把 Graph trace 可见性纳入主链路验收。
+- 扩展隔离 Docker E2E，把六条 Graph 的跨页面回流和失败分支持续纳入验收。
 - 在不泄露原始输入的前提下继续丰富 AgentTimeline 的白名单 metadata。

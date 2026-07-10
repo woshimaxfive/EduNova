@@ -57,7 +57,31 @@ class SqlAlchemyRagRepository:
     def save_chunk_embeddings(self, chunks: list[KnowledgeChunk]) -> None:
         for chunk in chunks:
             self.db.add(chunk)
-        self.db.flush()
+        self.db.commit()
+
+    def vector_candidates(
+        self,
+        course_id: int,
+        query_vector: list[float],
+        *,
+        embedding_source: str,
+        embedding_model: str,
+        limit: int,
+    ) -> list[tuple[KnowledgeChunk, float]]:
+        distance = KnowledgeChunk.embedding.cosine_distance(query_vector)
+        statement = (
+            select(KnowledgeChunk, distance.label("distance"))
+            .where(
+                KnowledgeChunk.course_id == course_id,
+                KnowledgeChunk.embedding.is_not(None),
+                KnowledgeChunk.metadata_json["embedding_source"].as_string() == embedding_source,
+                KnowledgeChunk.metadata_json["embedding_model"].as_string() == embedding_model,
+            )
+            .options(selectinload(KnowledgeChunk.material), selectinload(KnowledgeChunk.knowledge_point))
+            .order_by(distance.asc(), KnowledgeChunk.id.asc())
+            .limit(limit)
+        )
+        return [(row[0], float(row[1])) for row in self.db.execute(statement).all()]
 
 
 class RagService:
@@ -84,15 +108,30 @@ class RagService:
         retrieval_mode = "keyword"
         if self.embedding_service is not None:
             self._ensure_chunk_embeddings(user, chunks)
-        query_vector = self._query_embedding(user, cleaned_query)
-        if query_vector is not None:
-            embedding_status = query_vector["status"]
+        query_embedding = self._query_embedding(user, cleaned_query)
+        vector_candidates: dict[int, tuple[KnowledgeChunk, float]] = {}
+        if query_embedding is not None:
+            embedding_status = query_embedding["status"]
+        if query_embedding is not None and query_embedding.get("vector") is not None:
+            embedding_status = query_embedding["status"]
             retrieval_mode = "hybrid"
+            vector_search = getattr(self.repository, "vector_candidates", None)
+            if callable(vector_search):
+                rows = vector_search(
+                    course.id,
+                    query_embedding["vector"],
+                    embedding_source=query_embedding["source"],
+                    embedding_model=query_embedding["model"],
+                    limit=max(top_k * 4, 12),
+                )
+                vector_candidates = {chunk.id: (chunk, max(0.0, 1.0 - distance)) for chunk, distance in rows}
 
+        chunks_by_id = {chunk.id: chunk for chunk in chunks}
+        chunks_by_id.update({chunk_id: row[0] for chunk_id, row in vector_candidates.items()})
         scored_chunks = []
-        for chunk in chunks:
+        for chunk in chunks_by_id.values():
             keyword_score = self._score_chunk(chunk, cleaned_query, terms)
-            vector_score = self._vector_score(query_vector["vector"], chunk.embedding) if query_vector is not None else 0.0
+            vector_score = round(vector_candidates.get(chunk.id, (chunk, 0.0))[1] * 6.0, 4)
             score = round(keyword_score + vector_score, 4)
             if keyword_score <= 0 and vector_score < 0.25:
                 continue
@@ -136,15 +175,24 @@ class RagService:
             return None
         vectors = list(getattr(batch, "vectors", []))
         status = str(getattr(batch, "status", "unavailable"))
+        source = str(getattr(batch, "source", "unknown"))
+        model = str(getattr(batch, "model", "unknown"))
         dimension = int(getattr(batch, "dimension", EMBEDDING_DIMENSION))
+        if status != "completed":
+            return {"vector": None, "status": status, "source": source, "model": model}
         if len(vectors) != 1 or dimension != EMBEDDING_DIMENSION or not self._valid_vector(vectors[0]):
-            return None
-        return {"vector": vectors[0], "status": status}
+            return {"vector": None, "status": "provider_failed", "source": source, "model": model}
+        return {"vector": vectors[0], "status": status, "source": source, "model": model}
 
     def _ensure_chunk_embeddings(self, user: User, chunks: list[KnowledgeChunk]) -> None:
         if self.embedding_service is None or not chunks:
             return
         try:
+            expected_metadata = getattr(self.embedding_service, "expected_metadata", None)
+            if callable(expected_metadata):
+                expected_source, expected_model, _ = expected_metadata(user)
+                if expected_source == "local" or expected_model == "local-hash-1536":
+                    return
             needs_embedding = getattr(self.embedding_service, "chunk_needs_embedding", None)
             if callable(needs_embedding):
                 target_chunks = [chunk for chunk in chunks if needs_embedding(user, chunk)]

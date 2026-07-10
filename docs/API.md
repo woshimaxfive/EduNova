@@ -931,7 +931,7 @@ Authorization: Bearer <token>
 - 访问他人课程返回 404。
 - 无命中时 `results=[]`，前端必须显示资料不足，不得伪造引用。
 - Phase 6.4 后，后端会优先使用当前用户默认模型配置中的 `embedding_model` 调用 OpenAI-compatible `{base_url}/embeddings`，请求维度为 1536；如果服务不支持 `dimensions` 参数，会自动重试一次不带该字段。
-- 如果用户默认配置和服务器兜底都没有可用 embedding 模型，后端会使用显式标记的 `local-hash-1536` 确定性 fallback，保证开源和测试环境仍可检索；前端必须把它显示为本地 fallback，不能伪装成真实语义向量。
+- 如果用户默认配置和服务器兜底都没有可用 embedding 模型，或 Provider 调用失败，后端使用关键词 fallback 保证开源和测试环境仍可检索；返回 `local_fallback` 或 `provider_failed`，`local-hash-1536` 不进入课程向量候选。
 - 外部 embedding 失败时不阻断问答，接口会退回关键词检索并通过 `embedding_status` 暴露状态。
 - 本轮不接讯飞原生 Embeddingp/Embeddingq；其独立授权、签名鉴权和 2560 维输出放到后续专项。
 
@@ -1106,7 +1106,7 @@ Authorization: Bearer <token>
 
 ## 11. Agent Trace 接口
 
-状态：主页问答、课程问答和资源生成三条主链路已进入真实 LangGraph。资源生成执行 `profile -> retrieve -> diagnosis -> planner -> resource_worker* -> aggregate -> review -> repair? -> persist`，并返回各 Worker 的真实耗时；课程问答执行 `profile -> retriever -> tutor -> weakness -> review -> next_action`。其他学习流程继续使用现有服务逻辑和兼容 trace。
+状态：六条主链路已进入真实 LangGraph：主页问答、课程问答、资源生成、路径、练习评估和报告。其他学习流程继续使用现有服务逻辑和兼容 trace。
 
 ### GET `/agents/traces/{trace_id}`
 
@@ -1537,16 +1537,16 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 
 ## 14. Practice 与 Report 接口
 
-状态：Phase 10 已实现。当前后端已挂载 `practice` 与 `reports` router，`/app/practice` 和 `/app/reports` 已接入真实接口。
+状态：Phase 14 已升级。路由保持不变，`AssessmentGraph` 和 `ReportGraph` 已接管生产流程，`PathPlanningGraph` 负责练习后的独立路径回流。
 
 统一规则：
 
 - 所有接口必须携带 JWT。
 - 只能创建、读取和提交当前用户自己课程下的练习。
 - 只能生成和读取当前用户自己课程下的报告。
-- 练习生成和批改采用确定性规则，不依赖外部模型。
+- 练习题先生成确定性底稿，模型可增强题干和解析；数字评分始终采用确定性规则，模型不得修改。
 - 练习题第一刀支持 `single_choice`、`multiple_choice`、`short_answer`。
-- 练习提交后，低分或错误题会按课程和知识点合并进入 `weakness_review_queue`，`source_type="practice_assessment"`，`status="confirmed"`。
+- 练习提交后，低分或错误题会按课程和知识点合并进入 `weakness_review_queue`，并用 `source_ref_type="practice_answer"`、`source_ref_id` 和 `diagnosis_json` 保存安全证据；已有普通路径会在独立 trace 中重排，无路径时不自动创建。
 - 响应不返回标准答案，不保存或返回系统提示词、模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
 ### POST `/practice/sessions`
@@ -1632,11 +1632,37 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 - 空答案或提交不属于当前练习的题目返回 400。
 - 当前实现允许重复提交同一练习，后一次提交会替换本练习的作答记录并重算分数。
 
-响应仍为 `PracticeSessionDetail`，`status` 变为 `completed`，`score` 为本次平均分，`answers` 含逐题 `score`、`message`、`matched_keywords`、`missing_keywords` 和 `explanation`。
+响应仍为 `PracticeSessionDetail`，`status` 变为 `completed`，`score` 为本次规则平均分。每条反馈可选增加：
+
+```json
+{
+  "diagnosis": {
+    "misconception": "回答尚未覆盖启发式搜索的关键依据。",
+    "missing_concepts": ["启发函数"],
+    "recommended_action": "先复习课程引用，再完成一道同类练习。",
+    "confidence": 0.66,
+    "evidence_ref": {"type": "practice_answer", "id": "601"}
+  }
+}
+```
+
+会话级可选 `closure_update`：
+
+```json
+{
+  "weaknesses_added": 1,
+  "weaknesses_updated": 0,
+  "path_update_status": "replanned",
+  "path_agent_trace_id": "trace_path_replan",
+  "recommended_resource_ids": ["801"]
+}
+```
+
+`path_update_status` 为 `not_started | replanned | unchanged | failed`。路径失败不影响已完成练习和弱点更新。
 
 ### POST `/reports/generate`
 
-用途：基于当前用户课程和可选练习生成课程学习报告，写入 `assessment_reports`。
+用途：由 `ReportGraph` 聚合当前课程最近 5 次已完成练习、掌握度、弱点、当前路径和资源，写入 `assessment_reports`。数字统计和趋势由规则产生，模型只增强总结与建议。
 
 请求：
 
@@ -1679,6 +1705,25 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
         }
       ],
       "next_step_suggestions": ["优先复习《人工智能导论》中得分较低的知识点。"],
+      "trend": {
+        "direction": "improved",
+        "score_delta": 12,
+        "sessions_compared": 3,
+        "scores": [55, 61, 67]
+      },
+      "evidence_summary": {
+        "practice_count": 3,
+        "answer_count": 15,
+        "weakness_count": 1,
+        "path_status": "active",
+        "resource_count": 2
+      },
+      "review_result": {
+        "review_status": "passed",
+        "confidence": 0.91,
+        "risk_flags": [],
+        "safety_summary": "统计数字与练习证据一致。"
+      },
       "review_queue_updates": [],
       "profile_changes": ["练习结果可作为后续画像证据，但本阶段不自动改写用户长期画像。"]
     },

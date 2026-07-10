@@ -38,6 +38,25 @@ class FakeRagRepository:
     def save_chunk_embeddings(self, chunks: list[KnowledgeChunk]) -> None:
         self.saved_chunks.extend(chunks)
 
+    def vector_candidates(
+        self,
+        course_id: int,
+        query_vector: list[float],
+        *,
+        embedding_source: str,
+        embedding_model: str,
+        limit: int,
+    ) -> list[tuple[KnowledgeChunk, float]]:
+        candidates: list[tuple[KnowledgeChunk, float]] = []
+        for chunk in self.chunks:
+            metadata = chunk.metadata_json or {}
+            if chunk.course_id != course_id or metadata.get("embedding_source") != embedding_source or metadata.get("embedding_model") != embedding_model:
+                continue
+            vector = chunk.embedding or []
+            similarity = sum(left * right for left, right in zip(query_vector, vector, strict=True))
+            candidates.append((chunk, 1.0 - similarity))
+        return sorted(candidates, key=lambda item: (item[1], item[0].id))[:limit]
+
 
 @dataclass
 class FakeEmbeddingBatch:
@@ -56,6 +75,10 @@ class FakeEmbeddingService:
     def embed_texts(self, _user: User, texts: list[str]) -> FakeEmbeddingBatch:
         self.calls.append(texts)
         return self.batches.pop(0)
+
+    def expected_metadata(self, _user: User) -> tuple[str, str, int]:
+        batch = self.batches[0]
+        return batch.source, batch.model, batch.dimension
 
 
 def make_user(user_id: int = 1) -> User:
@@ -184,23 +207,23 @@ def test_rag_search_returns_current_user_citations_sorted_by_score() -> None:
     assert result.results[0].score >= result.results[1].score
 
 
-def test_rag_search_uses_hybrid_scores_and_returns_embedding_metadata() -> None:
+def test_rag_search_uses_external_embedding_sql_candidates_and_returns_metadata() -> None:
     repo = make_repository()
     embedding_service = FakeEmbeddingService(
         batches=[
             FakeEmbeddingBatch(
                 vectors=[unit_vector(1), unit_vector(0), unit_vector(0)],
-                source="local",
-                model="local-hash-1536",
+                source="user",
+                model="text-embedding-3-small",
                 dimension=1536,
-                status="local_fallback",
+                status="completed",
             ),
             FakeEmbeddingBatch(
                 vectors=[unit_vector(1)],
-                source="local",
-                model="local-hash-1536",
+                source="user",
+                model="text-embedding-3-small",
                 dimension=1536,
-                status="local_fallback",
+                status="completed",
             ),
         ]
     )
@@ -209,14 +232,42 @@ def test_rag_search_uses_hybrid_scores_and_returns_embedding_metadata() -> None:
     result = service.search(make_user(), course_id=101, query="语义向量问题", top_k=3)
 
     assert result.retrieval_mode == "hybrid"
-    assert result.embedding_status == "local_fallback"
+    assert result.embedding_status == "completed"
     assert result.results[0].chunk_id == 501
     assert result.results[0].retrieval_source == "vector"
     assert result.results[0].keyword_score == 0
     assert result.results[0].vector_score > 0
     assert repo.saved_chunks == repo.chunks
-    assert repo.chunks[0].metadata_json["embedding_model"] == "local-hash-1536"
+    assert repo.chunks[0].metadata_json["embedding_model"] == "text-embedding-3-small"
     assert repo.chunks[0].metadata_json["embedding_dimension"] == 1536
+
+
+def test_rag_search_keeps_local_hash_as_keyword_fallback_only() -> None:
+    repo = make_repository()
+    embedding_service = FakeEmbeddingService(
+        batches=[
+            FakeEmbeddingBatch(
+                vectors=[unit_vector(1)],
+                source="local",
+                model="local-hash-1536",
+                dimension=1536,
+                status="local_fallback",
+            )
+        ]
+    )
+
+    result = RagService(repository=repo, embedding_service=embedding_service).search(
+        make_user(),
+        course_id=101,
+        query="启发式搜索",
+        top_k=3,
+    )
+
+    assert result.retrieval_mode == "keyword"
+    assert result.embedding_status == "local_fallback"
+    assert result.results[0].retrieval_source == "keyword"
+    assert result.results[0].vector_score == 0
+    assert repo.saved_chunks == []
 
 
 def test_rag_search_denies_other_user_course() -> None:

@@ -288,7 +288,7 @@ docker compose exec -T backend python -m backend.app.cli seed-ai-intro
 16. 已解析 TXT/Markdown/PDF/DOCX/PPTX 资料可以通过 `/api/v1/courses/from-materials` 生成当前用户自己的课程结构，成功后前端进入 `/app/courses/{course_id}` 并读取真实标题和知识点；旧版 DOC/PPT、图片和扫描件不伪装解析。
 17. `/app/settings` 可以读取模型配置摘要和多配置列表，保存个人 OpenAI-compatible 配置，设为默认、删除并测试连接；前端不显示明文 Key。
 18. 课程空间命中资料引用且模型配置可用时，可以通过 `/api/v1/tutor/sessions/{session_id}/messages` 或流式接口保存真实模型回答和引用；模型未配置时显示明确提示。
-19. Phase 6.4 后，课程空间命中资料问题时引用区应显示混合检索状态；没有外部 embedding 配置时应显示本地 fallback，并明确 `local-hash-1536` 不是外部语义向量，刷新后消息、引用和状态仍可恢复。
+19. Phase 14 后，课程空间命中资料问题时引用区应显示外部向量混合检索或关键词 fallback；`local-hash-1536` 不作为课程语义命中，刷新后消息、引用和状态仍可恢复。
 20. Phase 6.5 后，课程空间默认进入问答模式，知识点入口和引用可进入学习模式，默认首屏不常驻知识画布、资源区、证据层、横向知识点条或主区重复历史。
 
 当前已验证记录按阶段存放在 [TEST_PLAN.md](TEST_PLAN.md)。
@@ -337,7 +337,7 @@ http://127.0.0.1:5173
 - 主页上传和 `/app/library` 会调用 `/materials`。
 - 已解析 TXT/Markdown/PDF/DOCX/PPTX 资料可通过 `/courses/from-materials` 生成课程。
 - 课程空间问题会持久化真实引用，并在默认模型可用时生成流式 RAG 回答。
-- Phase 6.4 后引用区会显示混合检索或本地 fallback 状态。
+- Phase 14 后，外部 embedding 可用时课程检索使用 pgvector SQL cosine 候选；本地或 Provider 失败显示关键词 fallback，不把 hash 标记为语义命中。
 - Phase 6.5 后课程空间默认问答模式和学习模式都在同一路由内完成，不新增部署入口。
 - `/app/settings` 可管理多套用户模型配置。
 - `/app/profile`、`/app/studio`、`/app/path`、`/app/practice` 和 `/app/reports` 已接入真实画像、资源、路径、练习、报告和 Markdown/PDF/DOCX 异步导出接口。
@@ -347,11 +347,21 @@ http://127.0.0.1:5173
 
 前端不应再用静态假资源、假画像、假练习或假报告填充真实数据缺口。模型未配置、资料不足或接口失败时，应展示真实空状态、低依据提示或局部错误。
 
-## 9. 后续部署计划
+## 9. 隔离 Docker E2E
+
+Phase 14 提供独立验收脚本：
+
+```powershell
+.\scripts\test_e2e.ps1
+```
+
+脚本使用 Compose project `edunova-e2e`、独立端口和临时卷，显式用安全占位配置覆盖真实模型和联网 Key。它会从空库升级到 Alembic head，运行 Playwright 学习闭环，并在 `finally` 中执行 `down -v --remove-orphans`。默认入口为 `http://127.0.0.1:18080`，不会操作正式 `edunova` Compose 数据卷。
+
+## 10. 后续部署计划
 
 后续阶段将补充：
 
-- 完整浏览器 E2E 和更细粒度部署验收截图。
+- 扩展 E2E 失败分支和更细粒度部署验收截图。
 - 公网部署、TLS、反向代理和生产环境变量建议。
 - 对象存储、日志轮转、备份恢复和监控建议。
 - OCR、旧版 Office 解析、扫描件解析和生产级 worker 监控接入后的部署说明。

@@ -52,6 +52,28 @@ class PracticeFeedback(BaseModel):
     matched_keywords: list[str]
     missing_keywords: list[str]
     explanation: str
+    diagnosis: "PracticeDiagnosis | None" = None
+
+
+class PracticeEvidenceRef(BaseModel):
+    type: Literal["practice_answer"] = "practice_answer"
+    id: str
+
+
+class PracticeDiagnosis(BaseModel):
+    misconception: str
+    missing_concepts: list[str]
+    recommended_action: str
+    confidence: float = Field(ge=0, le=1)
+    evidence_ref: PracticeEvidenceRef
+
+
+class PracticeClosureUpdate(BaseModel):
+    weaknesses_added: int = 0
+    weaknesses_updated: int = 0
+    path_update_status: Literal["not_started", "replanned", "unchanged", "failed"] = "not_started"
+    path_agent_trace_id: str | None = None
+    recommended_resource_ids: list[str] = Field(default_factory=list)
 
 
 class PracticeAnswerResponse(BaseModel):
@@ -70,6 +92,7 @@ class PracticeSessionDetail(BaseModel):
     score: int | None
     questions: list[PracticeQuestion]
     answers: list[PracticeAnswerResponse]
+    closure_update: PracticeClosureUpdate | None = None
     created_at: str
     updated_at: str
 
@@ -94,6 +117,7 @@ def session_to_api(session: PracticeSession, answers: list[PracticeAnswer]) -> P
         score=int(session.score) if session.score is not None else None,
         questions=questions,
         answers=answer_items,
+        closure_update=_closure_update(getattr(session, "assessment_json", None)),
         created_at=iso_timestamp(session.created_at) or "",
         updated_at=iso_timestamp(session.updated_at) or "",
     )
@@ -122,5 +146,24 @@ def answer_to_api(answer: PracticeAnswer) -> PracticeAnswerResponse:
             matched_keywords=[str(item) for item in feedback.get("matched_keywords") or []],
             missing_keywords=[str(item) for item in feedback.get("missing_keywords") or []],
             explanation=str(feedback.get("explanation") or ""),
+            diagnosis=_diagnosis(feedback.get("diagnosis")),
         ),
     )
+
+
+def _diagnosis(value: object) -> PracticeDiagnosis | None:
+    if not isinstance(value, dict):
+        return None
+    try:
+        return PracticeDiagnosis(**value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _closure_update(value: object) -> PracticeClosureUpdate | None:
+    if not isinstance(value, dict) or not value:
+        return None
+    try:
+        return PracticeClosureUpdate(**value)
+    except (TypeError, ValueError):
+        return None

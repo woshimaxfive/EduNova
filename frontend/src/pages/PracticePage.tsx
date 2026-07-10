@@ -1,7 +1,7 @@
 import { CheckCircle, ListChecks, WarningCircle } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { getKnowledgePoints, listCourses } from "../api/courses";
 import {
@@ -10,6 +10,8 @@ import {
   type PracticeSessionDetail,
   submitPracticeAnswers
 } from "../api/practice";
+import { PATHS } from "../app/routePaths";
+import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { PageFrame } from "./PageFrame";
 
 type PracticeSessionEnvelope = PracticeSessionDetail | { data?: PracticeSessionDetail };
@@ -94,6 +96,8 @@ export function PracticePage() {
       setCurrentSession(resolvePracticeSession(response));
       void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
       void queryClient.invalidateQueries({ queryKey: ["courses", "mastery-map", numericCourseId] });
+      void queryClient.invalidateQueries({ queryKey: ["paths", "current", numericCourseId] });
+      void queryClient.invalidateQueries({ queryKey: ["latest-report", numericCourseId] });
     },
     onError: () => {
       setLocalError("答案提交失败，请检查作答后重试。");
@@ -231,13 +235,29 @@ export function PracticePage() {
                       />
                     </label>
                     {feedback ? (
-                      <div className={feedback.is_correct ? "feedback-status mastered" : "feedback-status"}>
-                        {feedback.is_correct ? <CheckCircle size={22} weight="duotone" aria-hidden="true" /> : <WarningCircle size={22} weight="duotone" aria-hidden="true" />}
-                        <span>
-                          <strong>得分 {feedback.feedback.score}</strong>
-                          <small>{feedback.feedback.message}</small>
-                        </span>
-                      </div>
+                      <>
+                        <div className={feedback.is_correct ? "feedback-status mastered" : "feedback-status"}>
+                          {feedback.is_correct ? <CheckCircle size={22} weight="duotone" aria-hidden="true" /> : <WarningCircle size={22} weight="duotone" aria-hidden="true" />}
+                          <span>
+                            <strong>得分 {feedback.feedback.score}</strong>
+                            <small>{feedback.feedback.message}</small>
+                          </span>
+                        </div>
+                        {feedback.feedback.diagnosis ? (
+                          <div className="practice-diagnosis" aria-label={`${question.id} 错因诊断`}>
+                            <strong>错因诊断</strong>
+                            <p>{feedback.feedback.diagnosis.misconception}</p>
+                            {feedback.feedback.diagnosis.missing_concepts.length > 0 ? (
+                              <div className="practice-diagnosis-concepts">
+                                {feedback.feedback.diagnosis.missing_concepts.map((concept) => (
+                                  <span key={concept}>{concept}</span>
+                                ))}
+                              </div>
+                            ) : null}
+                            <small>{feedback.feedback.diagnosis.recommended_action}</small>
+                          </div>
+                        ) : null}
+                      </>
                     ) : null}
                   </article>
                 );
@@ -260,8 +280,29 @@ export function PracticePage() {
                 <small>{currentSession?.score !== null && currentSession?.score !== undefined ? `本次得分 ${currentSession.score}` : "提交后会生成即时反馈和复习线索。"}</small>
               </span>
             </div>
-            {currentSession?.agent_trace_id ? (
-              <p className="empty-inline-note">AssessmentGraph · {currentSession.agent_trace_id}</p>
+            <AgentTraceDisclosure traceId={currentSession?.agent_trace_id} label="查看 AssessmentGraph" />
+            {currentSession?.closure_update ? (
+              <div className="practice-closure-update">
+                <strong>
+                  {currentSession.closure_update.path_update_status === "replanned"
+                    ? "已有路径已按本次练习重排"
+                    : currentSession.closure_update.path_update_status === "failed"
+                      ? "路径暂未更新，练习结果已保留"
+                      : currentSession.closure_update.path_update_status === "not_started"
+                        ? "课程还没有学习路径"
+                        : "学习状态已更新"}
+                </strong>
+                <small>
+                  新增 {currentSession.closure_update.weaknesses_added} 个弱点，更新 {currentSession.closure_update.weaknesses_updated} 个弱点
+                </small>
+                <Link className="soft-button" to={`${PATHS.path}?course_id=${numericCourseId}`}>
+                  {currentSession.closure_update.path_update_status === "replanned" ? "查看更新后的路径" : "前往学习路径"}
+                </Link>
+                <AgentTraceDisclosure
+                  traceId={currentSession.closure_update.path_agent_trace_id}
+                  label="查看 PathPlanningGraph"
+                />
+              </div>
             ) : null}
           </section>
 

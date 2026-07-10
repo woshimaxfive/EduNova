@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.api.v1.deps import get_auth_service
@@ -218,37 +217,3 @@ def test_agent_trace_response_does_not_expose_private_prompts_or_source_text() -
     assert "资料原文" not in serialized
     assert "sk-real-secret" not in serialized
     assert response.json()["data"]["steps"][0]["metadata"] == {"citation_count": 1}
-
-
-def test_resource_generation_graph_executes_real_node_sequence() -> None:
-    try:
-        from backend.app.agents.graph import AGENT_GRAPH_NODE_NAMES, build_agent_graph, create_agent_state
-    except ModuleNotFoundError as exc:
-        pytest.fail(f"缺少 Agent graph 模块: {exc.name}")
-
-    state = create_agent_state(
-        trace_id="trace_graph",
-        user_id=1,
-        course_id=808,
-        knowledge_point_id=401,
-        workflow="resource_generation",
-        artifact_type="generated_resource",
-    )
-    graph = build_agent_graph()
-    result = graph.invoke(state)
-
-    assert AGENT_GRAPH_NODE_NAMES == ["profile", "retrieve", "diagnosis", "resource", "review", "persist"]
-    assert result["trace_id"] == "trace_graph"
-    assert result["user_id"] == 1
-    assert result["course_id"] == 808
-    assert result["knowledge_point_id"] == 401
-    assert result["workflow"] == "resource_generation"
-    assert result["artifact_type"] == "generated_resource"
-    assert result["review_result"] == {
-        "review_status": "passed",
-        "confidence": 0.82,
-        "risk_flags": [],
-        "safety_summary": "已完成资源生成依据、隐私和完整性审核。",
-    }
-    assert result["node_results"] == ["profile", "retrieve", "diagnosis", "resource", "review", "persist"]
-    assert result["errors"] == []

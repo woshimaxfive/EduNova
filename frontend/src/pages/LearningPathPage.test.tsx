@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { PATHS } from "../app/routePaths";
+import { AGENT_ENDPOINTS } from "../api/agents";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { EXAM_SPRINT_ENDPOINTS } from "../api/examSprint";
@@ -62,7 +63,8 @@ const courseListResponse = {
 const activePathResponse = {
   course_id: "808",
   status: "active",
-  message: "当前学习路径进行中。",
+  message: "已根据练习结果更新学习路径。",
+  agent_trace_id: "trace_path",
   path: {
     id: "901",
     course_id: "808",
@@ -70,7 +72,11 @@ const activePathResponse = {
     goal: "期末前掌握搜索算法",
     status: "active",
     plan_json: {
-      duration_days: 7
+      duration_days: 7,
+      trigger: "assessment",
+      preserved_task_count: 2,
+      generation_mode: "model_enhanced",
+      review_mode: "model_and_rules"
     },
     created_at: "2026-07-05T09:00:00Z",
     updated_at: "2026-07-05T09:00:00Z"
@@ -259,6 +265,38 @@ describe("LearningPathPage", () => {
       if (url === COURSE_ENDPOINTS.masteryMap(808)) {
         return { data: { data: masteryResponse, trace_id: "trace_mastery" }, status: 200, statusText: "OK", headers: {}, config };
       }
+      if (url === AGENT_ENDPOINTS.trace("trace_path")) {
+        return {
+          data: {
+            data: {
+              trace_id: "trace_path",
+              workflow: "path_planning",
+              artifact_type: "learning_path",
+              artifact_id: "901",
+              course_id: "808",
+              status: "completed",
+              steps: [
+                {
+                  id: "1",
+                  agent_name: "deterministic_rank",
+                  step_index: 2,
+                  status: "completed",
+                  input_summary: "整理弱点与既有进度",
+                  output_summary: "已保留进度并重排任务",
+                  duration_ms: 9,
+                  metadata: { preserved_task_count: 2 },
+                  created_at: "2026-07-05T09:00:01Z"
+                }
+              ]
+            },
+            trace_id: "trace_api"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
       if (url === PATH_ENDPOINTS.updateTask(1001)) {
         return {
           data: {
@@ -282,9 +320,14 @@ describe("LearningPathPage", () => {
 
     expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
     expect(screen.getByText("启发式搜索讲解")).toBeInTheDocument();
+    expect(screen.getByText("由练习结果更新 · 保留 2 个既有任务")).toBeInTheDocument();
+    expect(screen.getByText("模型增强 · 模型与规则审核")).toBeInTheDocument();
     const masteryRegion = screen.getByRole("region", { name: "掌握度图" });
     expect(within(masteryRegion).getByText("启发式搜索")).toBeInTheDocument();
     expect(within(masteryRegion).getByText("薄弱")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "查看 PathPlanningGraph" }));
+    expect(await screen.findByText("deterministic_rank")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "完成 复习启发式搜索" }));
 

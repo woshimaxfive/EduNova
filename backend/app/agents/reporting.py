@@ -1,0 +1,349 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from decimal import Decimal
+from time import perf_counter
+from typing import Any, Callable, TypedDict
+
+from langgraph.graph import END, START, StateGraph
+
+from backend.app.agents.learning_review import contains_sensitive_text, parse_json_object, review_contract, safe_string_list, safe_text
+from backend.app.api.errors import make_trace_id
+from backend.app.models import AssessmentReport, PracticeAnswer, PracticeSession, User
+from backend.app.schemas.reports import ReportEnvelope, report_to_api
+from backend.app.services.reports import ReportNotFoundError, ReportService
+
+
+class ReportState(TypedDict, total=False):
+    trace_id: str
+    user: User
+    user_id: int
+    course_id: int
+    practice_session_id: int | None
+    course: Any
+    practices: list[PracticeSession]
+    latest_practice: PracticeSession | None
+    answers_by_session: dict[int, list[PracticeAnswer]]
+    points: list[Any]
+    weaknesses: list[Any]
+    active_path: Any
+    path_tasks: list[Any]
+    resources: list[Any]
+    score: int | None
+    deterministic_report: dict[str, Any]
+    report_json: dict[str, Any]
+    generation_mode: str
+    review_mode: str
+    review_result: dict[str, Any]
+    needs_repair: bool
+    repair_count: int
+    report: AssessmentReport
+    detail: ReportEnvelope
+
+
+class ReportGraphRunner:
+    workflow = "report"
+
+    def __init__(self, service: ReportService) -> None:
+        self.service = service
+        self.graph = self._build_graph()
+
+    def run(self, *, user: User, course_id: int, practice_session_id: int | None) -> ReportEnvelope:
+        self.service._require_course(user, course_id)
+        if practice_session_id is None and self.service.repository.get_latest_completed_practice_session(user.id, course_id) is None:
+            existing = self.service.repository.get_latest_report(user.id, course_id)
+            if existing is not None:
+                return report_to_api(existing)
+        state: ReportState = {
+            "trace_id": make_trace_id(),
+            "user": user,
+            "user_id": user.id,
+            "course_id": course_id,
+            "practice_session_id": practice_session_id,
+            "repair_count": 0,
+        }
+        return self.graph.invoke(state)["detail"]
+
+    def _build_graph(self):
+        graph = StateGraph(ReportState)
+        graph.add_node("collect_practice", self._collect_practice_node)
+        graph.add_node("collect_mastery", self._collect_mastery_node)
+        graph.add_node("aggregate_evidence", self._aggregate_node)
+        graph.add_node("generate_narrative", self._generate_node)
+        graph.add_node("review", self._review_node)
+        graph.add_node("repair", self._repair_node)
+        graph.add_node("persist", self._persist_node)
+        graph.add_edge(START, "collect_practice")
+        graph.add_edge("collect_practice", "collect_mastery")
+        graph.add_edge("collect_mastery", "aggregate_evidence")
+        graph.add_edge("aggregate_evidence", "generate_narrative")
+        graph.add_edge("generate_narrative", "review")
+        graph.add_conditional_edges("review", self._review_route, {"repair": "repair", "persist": "persist"})
+        graph.add_edge("repair", "persist")
+        graph.add_edge("persist", END)
+        return graph.compile()
+
+    def _collect_practice_node(self, state: ReportState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            course = self.service._require_course(state["user"], int(state["course_id"]))
+            requested_id = state.get("practice_session_id")
+            if requested_id is not None:
+                practice = self.service.repository.get_practice_session_for_user(int(state["user_id"]), requested_id)
+                if practice is None or practice.course_id != course.id:
+                    raise ReportNotFoundError("练习不存在或无权访问。")
+                practices = [practice]
+            else:
+                list_recent = getattr(self.service.repository, "list_recent_completed_practice_sessions", None)
+                practices = list_recent(int(state["user_id"]), course.id, 5) if callable(list_recent) else []
+                if not practices:
+                    latest = self.service.repository.get_latest_completed_practice_session(int(state["user_id"]), course.id)
+                    practices = [latest] if latest is not None else []
+            latest_practice = practices[0] if practices else None
+            answers_by_session = {practice.id: self.service.repository.list_answers_for_session(practice.id) for practice in practices}
+            return {"course": course, "practices": practices, "latest_practice": latest_practice, "answers_by_session": answers_by_session}, f"已聚合最近 {len(practices)} 次已完成练习。", "completed", {"practice_count": len(practices)}
+
+        return self._run_node(state, "collect_practice", 1, "读取最近练习与安全作答证据", work)
+
+    def _collect_mastery_node(self, state: ReportState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            course_id = int(state["course_id"])
+            user_id = int(state["user_id"])
+            points = self.service.repository.list_knowledge_points(course_id)
+            weaknesses = self.service.repository.list_weakness_review_items(user_id, course_id)
+            get_path = getattr(self.service.repository, "get_active_path", None)
+            path = get_path(user_id, course_id) if callable(get_path) else None
+            list_tasks = getattr(self.service.repository, "list_tasks_for_path", None)
+            tasks = list_tasks(path.id) if path is not None and callable(list_tasks) else []
+            list_resources = getattr(self.service.repository, "list_generated_resources", None)
+            resources = list_resources(user_id, course_id) if callable(list_resources) else []
+            active_weaknesses = sum(1 for item in weaknesses if item.status in {"confirmed", "reviewing"})
+            return {"points": points, "weaknesses": weaknesses, "active_path": path, "path_tasks": tasks, "resources": resources}, f"已聚合 {len(points)} 个知识点、{active_weaknesses} 个活跃弱点和 {len(tasks)} 个路径任务。", "completed", {"weakness_count": active_weaknesses, "resource_count": len(resources)}
+
+        return self._run_node(state, "collect_mastery", 2, "聚合掌握度、弱点、路径与资源", work)
+
+    def _aggregate_node(self, state: ReportState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            latest = state.get("latest_practice")
+            answers = state.get("answers_by_session", {}).get(latest.id, []) if latest is not None else []
+            score = int(latest.score) if latest is not None and latest.score is not None else self.service._score_from_answers(answers)
+            report = self.service._build_report(
+                state["course"],
+                list(state.get("points", [])),
+                list(state.get("weaknesses", [])),
+                answers,
+                score,
+            )
+            scores = [int(item.score) for item in reversed(state.get("practices", [])) if item.score is not None]
+            if len(scores) >= 2:
+                delta = scores[-1] - scores[0]
+                direction = "improved" if delta > 0 else ("declined" if delta < 0 else "stable")
+            else:
+                delta = 0
+                direction = "insufficient"
+            answered_count = sum(
+                1
+                for rows in state.get("answers_by_session", {}).values()
+                for answer in rows
+                if answer.answer_text is not None
+            )
+            report["trend"] = {
+                "direction": direction,
+                "score_delta": delta,
+                "sessions_compared": len(scores),
+                "scores": scores,
+            }
+            report["evidence_summary"] = {
+                "practice_count": len(state.get("practices", [])),
+                "answer_count": answered_count,
+                "weakness_count": sum(1 for item in state.get("weaknesses", []) if item.status in {"confirmed", "reviewing"}),
+                "path_status": state.get("active_path").status if state.get("active_path") is not None else "not_started",
+                "resource_count": len(state.get("resources", [])),
+            }
+            return {"score": score, "deterministic_report": report, "report_json": report}, f"已形成 {len(report.get('evidence_refs', []))} 条报告证据，趋势为 {direction}。", "completed", {"practice_count": len(scores), "trend_direction": direction}
+
+        return self._run_node(state, "aggregate_evidence", 3, "计算不可篡改的分数、掌握度与趋势", work)
+
+    def _generate_node(self, state: ReportState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            narrative = self._model_narrative(state, repair=False)
+            if narrative is None:
+                return {"report_json": dict(state["deterministic_report"]), "generation_mode": "deterministic_source"}, "模型不可用或叙事结构无效，保留规则报告。", "warning", {"model_used": False, "generation_mode": "deterministic_source"}
+            report = {**state["deterministic_report"], **narrative}
+            return {"report_json": report, "generation_mode": "model_enhanced"}, "模型已生成基于证据的报告总结与建议。", "completed", {"model_used": True, "generation_mode": "model_enhanced"}
+
+        return self._run_node(state, "generate_narrative", 4, "生成不改写统计数据的报告叙事", work)
+
+    def _review_node(self, state: ReportState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            risks = self._report_risks(state)
+            model_review = None
+            if state.get("generation_mode") == "model_enhanced" and self.service.model_service is not None:
+                try:
+                    raw = self.service.model_service.chat_completion(
+                        state["user"],
+                        [
+                            {"role": "system", "content": "你是 ReportGraph 的 ReviewAgent。只输出 JSON，不得修改统计数据。"},
+                            {"role": "user", "content": f"审核报告总结是否与证据一致。练习数={len(state.get('practices', []))}，趋势={state['deterministic_report'].get('trend', {}).get('direction')}。返回 {{\"review_status\":\"passed|revise\",\"confidence\":0.0,\"risk_flags\":[],\"safety_summary\":\"\"}}。"},
+                        ],
+                    )
+                    model_review = review_contract(parse_json_object(raw), default_summary="已完成报告证据和隐私审核。")
+                except Exception:
+                    model_review = None
+            if model_review and model_review["review_status"] == "revise":
+                risks.extend(str(item) for item in model_review["risk_flags"])
+            risks = list(dict.fromkeys(risks))
+            if risks:
+                review = {"review_status": "revise", "confidence": model_review["confidence"] if model_review else 0.42, "risk_flags": risks, "safety_summary": model_review["safety_summary"] if model_review else "规则审核发现报告需要修订。"}
+                return {"review_result": review, "review_mode": "model_and_rules" if model_review else "rules_only", "needs_repair": True}, "报告需要修订。", "warning", review
+            if model_review is None:
+                review = {"review_status": "warning", "confidence": 0.62, "risk_flags": [], "safety_summary": "模型审核不可用，已完成统计、证据引用和隐私规则审核。"}
+                return {"review_result": review, "review_mode": "rules_only", "needs_repair": False}, review["safety_summary"], "warning", review
+            review = {**model_review, "review_status": "passed", "risk_flags": []}
+            return {"review_result": review, "review_mode": "model_and_rules", "needs_repair": False}, "ReviewAgent 审核通过。", "completed", review
+
+        return self._run_node(state, "review", 5, "审核报告统计、趋势、来源和隐私", work)
+
+    @staticmethod
+    def _review_route(state: ReportState) -> str:
+        return "repair" if state.get("needs_repair") else "persist"
+
+    def _repair_node(self, state: ReportState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            narrative = self._model_narrative(state, repair=True)
+            report = {**state["deterministic_report"], **narrative} if narrative is not None else dict(state["deterministic_report"])
+            repaired_state = {**state, "report_json": report}
+            if self._report_risks(repaired_state):
+                report = dict(state["deterministic_report"])
+                mode = "deterministic_source"
+            else:
+                mode = "model_enhanced" if narrative is not None else "deterministic_source"
+            review = {"review_status": "passed", "confidence": 0.72 if mode == "model_enhanced" else 0.65, "risk_flags": [], "safety_summary": "已修订一次并通过统计、证据和隐私规则复核。"}
+            return {"report_json": report, "generation_mode": mode, "review_result": review, "repair_count": 1}, review["safety_summary"], "completed", {**review, "repair_count": 1}
+
+        return self._run_node(state, "repair", 6, "按审核风险修订一次报告叙事", work)
+
+    def _persist_node(self, state: ReportState) -> dict[str, Any]:
+        started = perf_counter()
+        latest = state.get("latest_practice")
+        report_json = {**state["report_json"], "review_result": state.get("review_result", {})}
+        report = AssessmentReport(
+            user_id=int(state["user_id"]),
+            course_id=int(state["course_id"]),
+            practice_session_id=latest.id if latest is not None else None,
+            agent_trace_id=state["trace_id"],
+            report_json=report_json,
+            score=Decimal(str(state["score"])) if state.get("score") is not None else None,
+            created_at=datetime.now(UTC),
+        )
+        try:
+            self.service.repository.add_assessment_report(report)
+            self.service.repository.commit()
+            self.service.repository.refresh(report)
+            detail = report_to_api(report)
+        except Exception as exc:
+            self.service.repository.rollback()
+            self._record_failure(state, "persist", 7, "保存审核通过的学习报告", exc, started)
+            raise
+        self._record(state, "persist", 7, "completed", "保存审核通过的学习报告", "学习报告已保存。", {"artifact_id": str(report.id), "repair_count": int(state.get("repair_count") or 0)}, started)
+        return {"report": report, "detail": detail}
+
+    def _model_narrative(self, state: ReportState, *, repair: bool) -> dict[str, Any] | None:
+        if self.service.model_service is None:
+            return None
+        deterministic = state["deterministic_report"]
+        evidence = {
+            "score": state.get("score"),
+            "mastery_update": deterministic.get("mastery_update"),
+            "trend": deterministic.get("trend"),
+            "weakness_titles": [safe_text(item.get("title"), limit=120) for item in deterministic.get("weakness_list", [])],
+            "evidence_summary": deterministic.get("evidence_summary"),
+        }
+        instruction = "这是唯一一次修订机会。" if repair else "根据结构化证据生成简洁学习总结和 2 到 4 条下一步建议。"
+        try:
+            raw = self.service.model_service.chat_completion(
+                state["user"],
+                [
+                    {"role": "system", "content": "你是 ReportGraph 报告 Agent。不得修改数字、编造练习或输出隐私，只输出 JSON。"},
+                    {"role": "user", "content": f"{instruction} 证据={evidence}。返回 {{\"summary\":\"\",\"next_step_suggestions\":[]}}。"},
+                ],
+            )
+        except Exception:
+            return None
+        payload = parse_json_object(raw)
+        if payload is None:
+            return None
+        summary = safe_text(payload.get("summary"), limit=600)
+        suggestions = safe_string_list(payload.get("next_step_suggestions"), limit=4, item_limit=240)
+        if not summary or not suggestions or contains_sensitive_text(payload):
+            return None
+        return {"summary": summary, "next_step_suggestions": suggestions}
+
+    @staticmethod
+    def _report_risks(state: ReportState) -> list[str]:
+        report = state.get("report_json", {})
+        deterministic = state.get("deterministic_report", {})
+        risks: list[str] = []
+        for key in ("mastery_update", "weakness_list", "evidence_refs", "trend", "evidence_summary"):
+            if report.get(key) != deterministic.get(key):
+                risks.append("deterministic_evidence_changed")
+        if contains_sensitive_text(report.get("summary")) or contains_sensitive_text(report.get("next_step_suggestions")):
+            risks.append("sensitive_output")
+        valid_answer_ids = {
+            str(answer.id)
+            for rows in state.get("answers_by_session", {}).values()
+            for answer in rows
+        }
+        for ref in report.get("evidence_refs", []):
+            if str(ref.get("practice_answer_id")) not in valid_answer_ids:
+                risks.append("invalid_evidence_reference")
+        return list(dict.fromkeys(risks))
+
+    def _run_node(
+        self,
+        state: ReportState,
+        agent_name: str,
+        step_index: int,
+        input_summary: str,
+        work: Callable[[], tuple[dict[str, Any], str, str, dict[str, Any]]],
+    ) -> dict[str, Any]:
+        started = perf_counter()
+        try:
+            result, output_summary, status, metadata = work()
+        except Exception as exc:
+            self._record_failure(state, agent_name, step_index, input_summary, exc, started)
+            raise
+        self._record(state, agent_name, step_index, status, input_summary, output_summary, metadata, started)
+        return result
+
+    def _record_failure(self, state: ReportState, agent_name: str, step_index: int, input_summary: str, exc: Exception, started: float) -> None:
+        self._record(state, agent_name, step_index, "failed", input_summary, "节点执行失败，已记录安全错误摘要。", {"error_code": exc.__class__.__name__}, started)
+
+    def _record(
+        self,
+        state: ReportState,
+        agent_name: str,
+        step_index: int,
+        status: str,
+        input_summary: str,
+        output_summary: str,
+        metadata: dict[str, Any],
+        started: float,
+    ) -> None:
+        recorder = self.service.trace_recorder
+        if recorder is None:
+            return
+        recorder.record(
+            trace_id=state["trace_id"],
+            user_id=int(state["user_id"]),
+            course_id=int(state["course_id"]),
+            agent_name=agent_name,
+            step_index=step_index,
+            status=status,
+            input_summary=input_summary,
+            output_summary=output_summary,
+            duration_ms=max(0, int((perf_counter() - started) * 1000)),
+            workflow=self.workflow,
+            artifact_type="assessment_report",
+            artifact_id=metadata.get("artifact_id"),
+            metadata=metadata,
+        )

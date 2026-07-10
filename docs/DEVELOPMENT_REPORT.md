@@ -1,6 +1,6 @@
 # EduNova 开发报告
 
-更新时间：2026-07-07
+更新时间：2026-07-10
 
 ## 1. 项目概述
 
@@ -21,7 +21,7 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 - 前端：React、TypeScript、Vite、React Router、React Query。
 - 后端：FastAPI、SQLAlchemy、Alembic、Pydantic。
 - 数据：PostgreSQL、pgvector、Redis、本地文件存储。
-- AI：OpenAI-compatible Chat Completions、SSE、OpenAI-compatible Embeddings、本地 hash fallback。
+- AI：OpenAI-compatible Chat Completions、SSE、OpenAI-compatible Embeddings、pgvector SQL 候选与关键词 fallback。
 - Agent 编排：LangGraph 学习闭环生产编排，Service 层作为 API 边界和依赖装配层。
 - 部署：backend、export-worker、frontend、postgres、redis、nginx 六服务。
 
@@ -51,6 +51,7 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 | Phase 12.2 | 交付基线、开源准备和验收证据 |
 | Phase 13.1 | 全学习闭环 LangGraph 生产编排、学习产物 trace 字段和前端轨迹入口 |
 | Phase 13.2 | PDF/DOCX/PPTX 资料解析、主页联网/深思/浏览器语音、Markdown/PDF/DOCX 异步导出 |
+| Phase 14 | PathPlanningGraph、AssessmentGraph、ReportGraph，错题证据、路径回流、报告趋势、课程 pgvector SQL 和隔离 E2E |
 
 ## 4. 核心创新
 
@@ -68,11 +69,11 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 
 ### 4.4 LangGraph 可观测编排
 
-画像、资料建课/对比、课程问答、资源生成、路径/冲刺、练习评估、报告和导出会生成或携带安全 trace。前端展示课堂协作轨迹和 Graph 轨迹入口。trace 不记录系统提示词、完整模型输入、API Key、完整资料原文或完整用户画像原文。
+当前六条生产主链路由真实 LangGraph runner 接管：主页问答、课程问答、资源生成、路径、练习评估和报告。画像、资料建课/对比、冲刺和导出仍保留服务逻辑与兼容 trace。前端通过共享披露组件展示真实节点轨迹；trace 不记录系统提示词、完整模型输入、API Key、完整资料原文或完整用户画像原文。
 
 ### 4.5 练习和报告反哺
 
-练习结果会影响课程级弱点队列和掌握度，报告和导出基于真实学习证据生成。
+练习结果会精确绑定到作答证据，更新课程级弱点与掌握度，并用独立路径 Graph 重排已有路径；报告确定性聚合最近 5 次练习、趋势和证据，模型只增强解释。
 
 ## 5. 当前能力
 
@@ -101,14 +102,14 @@ EduNova 采用前后端分离和 Docker Compose 部署：
 - 旧版 DOC/PPT 和扫描件解析。
 - 异步资源任务队列。
 - 资料对比结果持久化和期末冲刺联动。
-- 错题驱动的深度薄弱点追溯。
+- Profile、CourseBuilder、MaterialComparison、ExamSprint 和 ExportDossier 的真实 Graph 接管。
 - 完整教师端、家长端、支付和移动端 App。
 
 ## 7. 后续计划
 
-Phase 13 进入 Verification and Hardening / 产品打磨：
+Phase 14 后进入 Verification and Hardening / 产品打磨：
 
-- 补完整浏览器 E2E。
+- 扩展隔离 Docker E2E 的失败分支和六 Graph 跨页面覆盖。
 - 汇总并修复 Phase 12.2 验收发现的问题。
 - 打磨资源质量、路径排序、练习题质量和报告表达。
 - 优化移动端和交互细节。

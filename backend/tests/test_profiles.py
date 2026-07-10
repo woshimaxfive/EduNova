@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.v1.deps import get_auth_service
 from backend.app.core.config import Settings
 from backend.app.core.security import create_access_token
@@ -117,6 +118,14 @@ def make_token(user: User, settings: Settings) -> str:
     return create_access_token(str(user.id), settings=settings)
 
 
+def make_trace_recorder(logs: list[Any]) -> AgentTraceRecorder:
+    def add_log(log):
+        logs.append(log)
+        return log
+
+    return AgentTraceRecorder(repository_add_log=add_log)
+
+
 def test_profile_route_requires_login() -> None:
     client = TestClient(create_app())
 
@@ -176,6 +185,59 @@ def test_profile_chat_creates_profile_and_event_from_deterministic_extraction() 
     assert result["profile"]["version"] == 1
     assert repo.events[0].profile_id == repo.profiles[user.id].id
     assert repo.committed is True
+
+
+def test_profile_graph_records_real_nodes_and_dimension_confidence() -> None:
+    module = load_profile_module()
+    user = make_user(1)
+    repo = FakeProfileRepository()
+    logs: list[Any] = []
+    service = module.ProfileService(repo, now=NOW, trace_recorder=make_trace_recorder(logs))
+
+    result = as_dict(service.update_by_chat(user, "我是计算机专业大二学生，机器学习刚入门，想掌握神经网络。"))
+
+    assert [log.agent_name for log in logs] == [
+        "collect_context",
+        "extract",
+        "evidence_gate",
+        "review",
+        "apply",
+        "persist_event",
+    ]
+    assert len({log.trace_id for log in logs}) == 1
+    assert result["event"]["agent_trace_id"] == logs[0].trace_id
+    assert result["event"]["status"] == "applied"
+    assert result["profile"]["dimension_confidence"]["major_background"] >= 70
+    assert "计算机专业大二学生" not in str(logs[0].metadata_json)
+
+
+def test_learning_signal_requires_two_independent_sources_before_applying() -> None:
+    module = load_profile_module()
+    user = make_user(1)
+    repo = FakeProfileRepository()
+    service = module.ProfileService(repo, now=NOW)
+
+    first = service.ingest_learning_signal(
+        user=user,
+        source_type="practice_assessment",
+        source_ref_type="practice_session",
+        source_ref_id=501,
+        suggested_updates={"weak_points": ["反向传播"]},
+        course_id=101,
+    )
+    second = service.ingest_learning_signal(
+        user=user,
+        source_type="course_tutor",
+        source_ref_type="chat_message",
+        source_ref_id=502,
+        suggested_updates={"weak_points": ["反向传播"]},
+        course_id=101,
+    )
+
+    assert first is not None and first.status == "candidate"
+    assert second is not None and second.status == "applied"
+    assert repo.profiles[user.id].profile_json["weak_points"] == ["反向传播"]
+    assert {event.source_ref_id for event in repo.events} == {501, 502}
 
 
 def test_profile_events_are_current_user_only_and_descending() -> None:

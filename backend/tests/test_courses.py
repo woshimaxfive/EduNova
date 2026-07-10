@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.v1.deps import get_auth_service
 from backend.app.api.v1.courses import get_course_service
 from backend.app.core.config import Settings
@@ -106,9 +107,23 @@ class FakeCourseRepository:
             self.next_knowledge_point_id += 1
             self.knowledge_points.append(knowledge_point)
 
+        point_by_key = {
+            str(getattr(point, "builder_key", f"kp-{index + 1}")): point
+            for index, point in enumerate(knowledge_points)
+        }
+        for knowledge_point in knowledge_points:
+            knowledge_point.prerequisites_json = [
+                point_by_key[key].id
+                for key in list(knowledge_point.prerequisites_json or [])
+                if key in point_by_key and point_by_key[key].id != knowledge_point.id
+            ]
+
         for index, chunk in enumerate(knowledge_chunks):
             chunk.id = self.next_chunk_id
             chunk.course_id = course.id
+            point_key = str((chunk.metadata_json or {}).get("knowledge_point_key") or "")
+            if point_key in point_by_key:
+                chunk.knowledge_point_id = point_by_key[point_key].id
             if chunk.material_id is None:
                 chunk.material_id = self.course_materials[min(index, len(self.course_materials) - 1)].id
             self.next_chunk_id += 1
@@ -245,6 +260,14 @@ def make_material(
 
 def make_service(repo: FakeCourseRepository) -> CourseService:
     return CourseService(repository=repo)
+
+
+def make_trace_recorder(logs: list[Any]) -> AgentTraceRecorder:
+    def add_log(log):
+        logs.append(log)
+        return log
+
+    return AgentTraceRecorder(repository_add_log=add_log)
 
 
 @dataclass
@@ -492,6 +515,42 @@ def test_create_course_from_txt_material_builds_course_graph() -> None:
     assert all(chunk.embedding is None for chunk in repo.knowledge_chunks)
 
 
+def test_course_builder_graph_records_nodes_structure_and_prerequisites() -> None:
+    repo = FakeCourseRepository(
+        materials=[
+            make_material(
+                1,
+                1,
+                "ai.md",
+                "# 搜索问题\n状态空间是搜索的基础。\n## 启发式搜索\nA* 使用启发函数。",
+            )
+        ]
+    )
+    logs: list[Any] = []
+    service = CourseService(repository=repo, trace_recorder=make_trace_recorder(logs))
+
+    result = as_dict(service.create_course_from_materials(make_user(), [1], "AI 搜索复习"))
+
+    assert [log.agent_name for log in logs] == [
+        "read_materials",
+        "source_outline",
+        "structure_course",
+        "knowledge_points",
+        "chunk",
+        "embed",
+        "review",
+        "persist",
+    ]
+    assert result["course"]["agent_trace_id"] == logs[0].trace_id
+    assert repo.courses[0].structure_json["schema_version"] == 2
+    assert repo.courses[0].structure_json["source_coverage"] == {
+        "source_unit_count": 2,
+        "mapped_source_count": 2,
+    }
+    assert result["knowledge_points"][1]["prerequisite_ids"] == [result["knowledge_points"][0]["id"]]
+    assert all(chunk.knowledge_point_id is not None for chunk in repo.knowledge_chunks)
+
+
 def test_create_course_from_parsed_pdf_material_builds_course_graph() -> None:
     repo = FakeCourseRepository(
         materials=[
@@ -533,6 +592,18 @@ def test_markdown_headings_generate_chapters_and_knowledge_points() -> None:
     assert [point["title"] for point in points] == ["搜索问题", "启发式搜索", "对抗搜索"]
     assert points[1]["chapter"] == "搜索问题"
     assert "A*" in repo.knowledge_chunks[1].content
+
+
+def test_long_markdown_section_keeps_multiple_chunks_under_one_knowledge_point() -> None:
+    repo = FakeCourseRepository(
+        materials=[make_material(1, 1, "long.md", "# 长章节\n" + "神经网络训练需要理解梯度与优化。" * 160)]
+    )
+
+    result = as_dict(make_service(repo).create_course_from_materials(make_user(), [1], "长章节课程"))
+
+    assert [point["title"] for point in result["knowledge_points"]] == ["长章节"]
+    assert len(repo.knowledge_chunks) > 1
+    assert {chunk.knowledge_point_id for chunk in repo.knowledge_chunks} == {int(result["knowledge_points"][0]["id"])}
 
 
 def test_create_course_best_effort_generates_chunk_embeddings() -> None:

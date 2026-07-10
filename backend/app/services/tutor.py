@@ -190,6 +190,18 @@ class ProfileEventRecorder(Protocol):
     ) -> Any:
         ...
 
+    def ingest_course_question_signal(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        user_message: ChatMessage,
+        message_text: str,
+        citation_json: list[dict[str, Any]],
+        trace_id: str | None,
+    ) -> Any:
+        ...
+
 
 class WebSearchProvider(Protocol):
     def search(self, query: str, max_results: int = 5) -> Any:
@@ -633,16 +645,6 @@ class TutorSessionService:
             self.repository.add_message(assistant_message)
             self.repository.touch_session(session)
             self.repository.flush()
-            if self.profile_event_recorder is not None and session.scope == "course":
-                self.profile_event_recorder.record_course_question_event(
-                    user=user,
-                    session=session,
-                    user_message=user_message,
-                    assistant_message=assistant_message,
-                    message_text=message_text,
-                    citation_json=citation_json,
-                    trace_id=trace_id,
-                )
             if home_trace_records is not None and session.scope == "home" and trace_id is not None:
                 self._persist_home_tutor_graph_trace(
                     user=user,
@@ -681,6 +683,32 @@ class TutorSessionService:
         except Exception:
             self.repository.rollback()
             raise
+
+        if self.profile_event_recorder is not None and session.scope == "course":
+            try:
+                ingest = getattr(self.profile_event_recorder, "ingest_course_question_signal", None)
+                if callable(ingest):
+                    ingest(
+                        user=user,
+                        session=session,
+                        user_message=user_message,
+                        message_text=message_text,
+                        citation_json=citation_json,
+                        trace_id=trace_id,
+                    )
+                else:
+                    self.profile_event_recorder.record_course_question_event(
+                        user=user,
+                        session=session,
+                        user_message=user_message,
+                        assistant_message=assistant_message,
+                        message_text=message_text,
+                        citation_json=citation_json,
+                        trace_id=trace_id,
+                    )
+                    self.repository.commit()
+            except Exception:
+                self.repository.rollback()
 
         return session_detail_to_api(session, self.repository.list_messages(session.id))
 

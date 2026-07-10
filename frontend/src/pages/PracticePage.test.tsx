@@ -224,7 +224,7 @@ describe("PracticePage", () => {
           course_id: 808,
           knowledge_point_ids: [401],
           question_count: 5,
-          difficulty: "medium"
+          difficulty: "adaptive"
         }
       })
     );
@@ -255,5 +255,95 @@ describe("PracticePage", () => {
     expect(await screen.findByText("选择课程和知识点后生成练习。")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "生成练习" }));
     expect(await screen.findByText("练习生成失败，请稍后重试。")).toBeInTheDocument();
+  });
+
+  it("restores the session selected by the URL instead of creating a new practice", async () => {
+    const calls: string[] = [];
+    const completedSession = {
+      ...practiceSession,
+      status: "completed",
+      requested_difficulty: "adaptive",
+      effective_difficulty: "easy",
+      score: 86,
+      answers: [
+        {
+          question_id: "q1",
+          answer_text: "启发函数用于估计剩余代价",
+          is_correct: true,
+          feedback: {
+            score: 100,
+            message: "作答正确。",
+            matched_keywords: ["启发函数"],
+            missing_keywords: [],
+            explanation: "已命中课程关键概念。"
+          }
+        }
+      ]
+    };
+
+    apiClient.defaults.adapter = async (config) => {
+      const url = config.url ?? "";
+      calls.push(`${(config.method ?? "get").toLowerCase()} ${url}`);
+      if (url === COURSE_ENDPOINTS.list) {
+        return { data: coursesResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === COURSE_ENDPOINTS.knowledgePoints(808)) {
+        return { data: pointsResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === PRACTICE_ENDPOINTS.detail(501)) {
+        return { data: { data: completedSession, trace_id: "trace_restore" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      throw new Error(`Unexpected request ${url}`);
+    };
+
+    renderWithProviders(<PracticePage />, `${PATHS.practice}?course_id=808&session_id=501`);
+
+    expect(await screen.findByText("关于启发式搜索，哪一项最符合课程复习重点？")).toBeInTheDocument();
+    expect(screen.getByText("本次得分 86 · 智能适配为基础")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("启发函数用于估计剩余代价")).toBeDisabled();
+    expect(calls).not.toContain(`post ${PRACTICE_ENDPOINTS.sessions}`);
+  });
+
+  it("restores draft answers without showing an unevaluated zero score", async () => {
+    const draftSession = {
+      ...practiceSession,
+      requested_difficulty: "adaptive",
+      effective_difficulty: "easy",
+      draft_saved_at: "2026-07-05T10:01:00Z",
+      answers: [
+        {
+          question_id: "q1",
+          answer_text: "先写下启发函数的作用",
+          is_correct: null,
+          feedback: {
+            score: 0,
+            message: "",
+            matched_keywords: [],
+            missing_keywords: [],
+            explanation: ""
+          }
+        }
+      ]
+    };
+
+    apiClient.defaults.adapter = async (config) => {
+      const url = config.url ?? "";
+      if (url === COURSE_ENDPOINTS.list) {
+        return { data: coursesResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === COURSE_ENDPOINTS.knowledgePoints(808)) {
+        return { data: pointsResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === PRACTICE_ENDPOINTS.detail(501)) {
+        return { data: { data: draftSession, trace_id: "trace_draft" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      throw new Error(`Unexpected request ${url}`);
+    };
+
+    renderWithProviders(<PracticePage />, `${PATHS.practice}?course_id=808&session_id=501`);
+
+    expect(await screen.findByDisplayValue("先写下启发函数的作用")).toBeEnabled();
+    expect(screen.queryByText("得分 0")).not.toBeInTheDocument();
+    expect(screen.getByText("实际难度：基础")).toBeInTheDocument();
   });
 });

@@ -41,6 +41,7 @@ class StudentProfile(IdMixin, TimestampMixin, Base):
         default=0,
     )
     updated_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dimension_confidence_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
 class ProfileEvent(IdMixin, CreatedAtMixin, Base):
@@ -62,6 +63,14 @@ class ProfileEvent(IdMixin, CreatedAtMixin, Base):
     dimension: Mapped[str] = mapped_column(String(80), nullable=False)
     change_summary: Mapped[str] = mapped_column(Text, nullable=False)
     evidence_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    agent_trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False, default="legacy")
+    source_ref_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_ref_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="applied")
+    confidence_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    proposal_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class LearningPath(IdMixin, TimestampMixin, Base):

@@ -28,6 +28,12 @@ export type StudentProfileResponse = {
   has_profile: boolean;
   profile_json: ProfileJson;
   confidence_score: number;
+  dimension_confidence?: Partial<Record<keyof ProfileJson, number>>;
+  evidence_summary?: {
+    candidate_count?: number;
+    applied_count?: number;
+    last_trace_id?: string | null;
+  };
   updated_reason: string | null;
   updated_at: string | null;
   next_question: string;
@@ -38,6 +44,12 @@ export type ProfileEventResponse = {
   dimension: string;
   change_summary: string;
   evidence_json: Record<string, unknown>;
+  agent_trace_id?: string | null;
+  source_type?: string;
+  source_ref_type?: string | null;
+  source_ref_id?: string | null;
+  status?: "candidate" | "applied" | string;
+  confidence_score?: number | null;
   created_at: string;
 };
 

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from backend.app.models import PracticeAnswer, PracticeSession
 
 
-PracticeDifficulty = Literal["easy", "medium", "hard"]
+PracticeDifficulty = Literal["easy", "medium", "hard", "adaptive"]
 PracticeQuestionType = Literal["single_choice", "multiple_choice", "short_answer"]
 
 
@@ -31,6 +31,10 @@ class SubmitPracticeAnswerItem(BaseModel):
 
 class SubmitPracticeAnswersRequest(BaseModel):
     answers: list[SubmitPracticeAnswerItem] = Field(min_length=1)
+
+
+class SavePracticeDraftRequest(BaseModel):
+    answers: list[SubmitPracticeAnswerItem] = Field(default_factory=list)
 
 
 class PracticeQuestion(BaseModel):
@@ -90,6 +94,9 @@ class PracticeSessionDetail(BaseModel):
     status: str
     agent_trace_id: str | None = None
     score: int | None
+    requested_difficulty: PracticeDifficulty = "medium"
+    effective_difficulty: Literal["easy", "medium", "hard"] = "medium"
+    draft_saved_at: str | None = None
     questions: list[PracticeQuestion]
     answers: list[PracticeAnswerResponse]
     closure_update: PracticeClosureUpdate | None = None
@@ -108,6 +115,13 @@ def iso_timestamp(value: datetime | None) -> str | None:
 def session_to_api(session: PracticeSession, answers: list[PracticeAnswer]) -> PracticeSessionDetail:
     questions = [PracticeQuestion(**public_question(item)) for item in (session_questions(session, answers) or [])]
     answer_items = [answer_to_api(answer) for answer in answers if answer.answer_text is not None or answer.is_correct is not None]
+    assessment = session.assessment_json if isinstance(getattr(session, "assessment_json", None), dict) else {}
+    requested_difficulty = str(assessment.get("requested_difficulty") or assessment.get("difficulty") or "medium")
+    if requested_difficulty not in {"easy", "medium", "hard", "adaptive"}:
+        requested_difficulty = "medium"
+    effective_difficulty = str(assessment.get("effective_difficulty") or ("medium" if requested_difficulty == "adaptive" else requested_difficulty))
+    if effective_difficulty not in {"easy", "medium", "hard"}:
+        effective_difficulty = "medium"
     return PracticeSessionDetail(
         id=str(session.id),
         course_id=str(session.course_id),
@@ -115,6 +129,9 @@ def session_to_api(session: PracticeSession, answers: list[PracticeAnswer]) -> P
         status=session.status,
         agent_trace_id=getattr(session, "agent_trace_id", None),
         score=int(session.score) if session.score is not None else None,
+        requested_difficulty=requested_difficulty,
+        effective_difficulty=effective_difficulty,
+        draft_saved_at=str(assessment.get("draft_saved_at")) if assessment.get("draft_saved_at") else None,
         questions=questions,
         answers=answer_items,
         closure_update=_closure_update(getattr(session, "assessment_json", None)),

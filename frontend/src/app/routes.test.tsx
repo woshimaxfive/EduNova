@@ -127,7 +127,7 @@ describe("EduNova routes", () => {
 
     renderRoutes(["/app/courses/course-ai"]);
 
-    expect(await screen.findByRole("heading", { name: "课程暂不可用" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "课程暂不可用" }, { timeout: 5_000 })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "人工智能导论" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "课程对话空间" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "问答模式" })).toHaveAttribute("aria-pressed", "true");

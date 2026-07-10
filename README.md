@@ -11,19 +11,19 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 14 学习闭环后半程智能化**。Phase 13 已让主页问答、课程问答和资源生成进入真实 LangGraph 编排，并补齐资料级 RAG、资料解析、主页工具、异步导出和六类结构化多模态资源；Phase 14 进一步让学习路径、练习评估和学习报告进入真实生产 Graph。
+当前最新完成到 **Phase 15 个性化根基与智能课程生产**。Phase 13 已让主页问答、课程问答和资源生成进入真实 LangGraph 编排，Phase 14 让学习路径、练习评估和学习报告进入真实生产 Graph，Phase 15 继续让动态画像和资料建课由生产 Graph 接管，并补齐课程知识图谱、掌握度/趋势图和练习草稿恢复。
 
-当前六条真实生产 Graph 为 `HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph` 和 `ReportGraph`。画像、资料建课/对比、期末冲刺和学习档案导出仍使用普通服务与兼容 trace，不把“有 trace”夸大为“已由 LangGraph 接管”。认证、设置、Dashboard 等非学习能力保持普通服务。
+当前八条真实生产 Graph 为 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph` 和 `ReportGraph`。资料对比、期末冲刺和学习档案导出仍使用普通服务与兼容 trace，不把“有 trace”夸大为“已由 LangGraph 接管”。认证、设置、Dashboard 等非学习能力保持普通服务。
 
 已经具备的主链路：
 
 - 真实注册、登录、退出和受保护路由。
 - 主页真实总览、主页会话、主页消息持久化和通用模型回答。
 - 当前用户个人资料库上传、列表、详情和进度查询。
-- 已解析 TXT/Markdown/PDF/DOCX/PPTX 资料生成真实课程结构；`.doc`、`.ppt`、图片和扫描件不伪装解析，图片与扫描件明确提示暂不支持 OCR。
+- 已解析 TXT/Markdown/PDF/DOCX/PPTX 资料通过 `CourseBuilderGraph` 生成带来源覆盖、学习目标、先修关系和安全审核的课程结构；`.doc`、`.ppt`、图片和扫描件不伪装解析。
 - 课程知识点、知识切片、课程内历史和引用持久化。
 - 课程空间真实模型 RAG 回答、SSE 流式输出、刷新恢复和双模式前端。
-- 真实 8 维学习画像、画像对话更新、画像事件列表和课程问答弱点候选事件。
+- `ProfileGraph` 管理真实 8 维学习画像、逐维可信度和证据事件；显式回答立即更新，隐式学习信号满足双来源与置信度门槛后才进入长期画像。
 - 学习画像与课程学习状态的边界已经明确：用户级画像只保留一份，课程级弱点、路径和复习队列按课程聚合。
 - `/courses/{course_id}/learning-state` 已实现课程级学习状态第一刀，可把课程问答弱点候选事件同步为 `pending` 待确认复习项，并在课程空间展示待复习弱点摘要。
 - 课程级弱点复习项已支持确认、开始、完成和软忽略状态流转；软忽略项不在主列表展示，但继续参与去重。
@@ -31,7 +31,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - `/resources/generate` 已实现讲解、思维导图、练习、代码实操、PPT、动画图解六类结构化课程资源；`ResourceGenerationGraph` 通过独立 Worker 并行生成并执行规则与模型审核。资源工坊和课程空间可直接渲染 Markmap、交互练习、浏览器 Python、PPT 页面和 Mermaid 动画，PPT 可通过 Redis/RQ 异步生成真实 `.pptx`。
 - `/paths/generate`、`/paths/current` 和 `/paths/tasks/{task_id}` 已实现课程级学习路径生成、当前路径读取和任务状态更新；`PathPlanningGraph` 会综合画像、确认弱点、练习诊断、掌握度、资源和旧路径进度，练习回流只重排已有路径并保留已完成任务。
 - `/courses/{course_id}/mastery-map` 已实现规则掌握度图，`/courses/{course_id}/learning-state` 已返回真实 `path_summary`、`mastery_summary`、弱点推荐资源和下次复习时间。
-- `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已由 `AssessmentGraph` 编排出题和评估。客观分数始终由规则决定；模型只增强题目和错因诊断。错题精确关联 `PracticeAnswer`，合并更新课程弱点，并触发已有路径的独立 `PathPlanningGraph` 重排。
+- `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已由 `AssessmentGraph` 编排出题和评估，支持 `adaptive` 难度；最近练习与未提交草稿可通过 URL、最近会话接口和草稿接口恢复。客观分数始终由规则决定。
 - `/reports/generate` 和 `/reports/latest` 已由 `ReportGraph` 聚合最近 5 次练习、掌握度、弱点、路径和资源。分数与趋势由规则计算，模型只增强叙事和建议；报告继续由用户主动生成。学习档案同步/异步导出接口保持兼容。
 - `/exam-sprint/plans` 已实现期末冲刺计划生成和读取；复用 `learning_paths` / `learning_tasks`，用 `sprint_active` / `sprint_archived` 避免影响普通学习路径，`/app/path` 可生成并展示每日任务、高频点、薄弱点、必刷题、易错提醒和推荐资源。
 - `/materials/compare` 已实现同课程资料对比第一刀；`/app/library` 可选择已绑定课程的两份以上已解析资料，展示重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序和安全引用摘要。
@@ -48,7 +48,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - 讯飞原生 Embeddingp/Embeddingq。
 - 个人全局资源生成入口和资源版本化编辑；当前只有 PPTX 文件渲染进入异步任务，结构化资源生成仍为同步 Graph。
 - 资料对比结果持久化、资料对比与期末冲刺联动。
-- Profile、CourseBuilder、MaterialComparison、ExamSprint 和 ExportDossier 的真实 LangGraph 接管。
+- MaterialComparison、ExamSprint 和 ExportDossier 的真实 LangGraph 接管。
 
 详细状态见 [docs/STATUS.md](docs/STATUS.md)，后续任务看 [docs/PROJECT_BOARD.md](docs/PROJECT_BOARD.md)。
 

@@ -20,6 +20,7 @@ from backend.app.models import (
     KnowledgePoint,
     PracticeAnswer,
     PracticeSession,
+    StudentProfile,
     User,
     WeaknessReviewItem,
 )
@@ -61,6 +62,7 @@ class FakePracticeRepository:
     answers: list[PracticeAnswer] = field(default_factory=list)
     weakness_items: list[WeaknessReviewItem] = field(default_factory=list)
     reports: list[AssessmentReport] = field(default_factory=list)
+    profiles: dict[int, StudentProfile] = field(default_factory=dict)
     next_session_id: int = 501
     next_answer_id: int = 601
     next_weakness_id: int = 701
@@ -98,6 +100,18 @@ class FakePracticeRepository:
         ]
         return sorted(sessions, key=lambda session: (session.updated_at, session.id), reverse=True)[0] if sessions else None
 
+    def get_latest_practice_session_for_user(self, user_id: int, course_id: int) -> PracticeSession | None:
+        sessions = [
+            session
+            for session in self.sessions
+            if session.user_id == user_id and session.course_id == course_id
+        ]
+        return sorted(
+            sessions,
+            key=lambda session: (session.status == "in_progress", session.updated_at, session.id),
+            reverse=True,
+        )[0] if sessions else None
+
     def list_recent_completed_practice_sessions(self, user_id: int, course_id: int, limit: int = 5) -> list[PracticeSession]:
         sessions = [
             session
@@ -108,6 +122,17 @@ class FakePracticeRepository:
 
     def list_answers_for_session(self, session_id: int) -> list[PracticeAnswer]:
         return sorted([answer for answer in self.answers if answer.session_id == session_id], key=lambda answer: answer.id)
+
+    def list_answers_for_course(self, user_id: int, course_id: int) -> list[PracticeAnswer]:
+        session_ids = {
+            session.id
+            for session in self.sessions
+            if session.user_id == user_id and session.course_id == course_id
+        }
+        return [answer for answer in self.answers if answer.session_id in session_ids]
+
+    def get_profile(self, user_id: int) -> StudentProfile | None:
+        return self.profiles.get(user_id)
 
     def replace_answers_for_session(self, session_id: int, answers: list[PracticeAnswer]) -> list[PracticeAnswer]:
         self.answers = [answer for answer in self.answers if answer.session_id != session_id]
@@ -266,6 +291,37 @@ def test_create_practice_session_generates_deterministic_questions_and_validates
 
     with pytest.raises(PracticeValidationError):
         service.create_session(make_user(), course_id=101, knowledge_point_ids=[401], question_count=0, difficulty="medium")
+
+
+def test_adaptive_practice_uses_profile_and_restores_saved_draft() -> None:
+    from backend.app.services.practice import PracticeService
+
+    repo = make_repo()
+    repo.profiles[1] = StudentProfile(
+        id=41,
+        user_id=1,
+        profile_json={"knowledge_foundation": "机器学习刚入门"},
+        confidence_score=Decimal("72"),
+    )
+    service = PracticeService(repo)
+
+    created = as_dict(service.create_session(make_user(), 101, [401], 1, "adaptive"))
+    question_id = created["questions"][0]["id"]
+    saved = as_dict(
+        service.save_draft(
+            make_user(),
+            int(created["id"]),
+            [{"question_id": question_id, "answer_text": "先写下启发函数的作用"}],
+        )
+    )
+    latest = as_dict(service.get_latest_session(make_user(), 101))
+
+    assert created["requested_difficulty"] == "adaptive"
+    assert created["effective_difficulty"] == "easy"
+    assert created["questions"][0]["difficulty"] == "easy"
+    assert saved["draft_saved_at"] is not None
+    assert latest["id"] == created["id"]
+    assert latest["answers"][0]["answer_text"] == "先写下启发函数的作用"
 
 
 def test_submit_practice_answers_scores_and_writes_confirmed_weakness_items() -> None:

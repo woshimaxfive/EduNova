@@ -14,12 +14,12 @@ class WorkflowSpec:
 PROFILE_GRAPH = WorkflowSpec(
     name="profile",
     artifact_type="student_profile",
-    steps=("extract_profile", "review", "persist_event"),
+    steps=("collect_context", "extract", "evidence_gate", "review", "repair", "apply", "persist_event"),
 )
 COURSE_BUILDER_GRAPH = WorkflowSpec(
     name="course_builder",
     artifact_type="course",
-    steps=("read_materials", "structure_course", "knowledge_points", "chunk", "embed", "review", "persist"),
+    steps=("read_materials", "source_outline", "structure_course", "knowledge_points", "chunk", "embed", "review", "repair", "persist"),
 )
 MATERIAL_COMPARISON_GRAPH = WorkflowSpec(
     name="material_comparison",

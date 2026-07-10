@@ -19,6 +19,7 @@ import {
   getCourseLearningState,
   getCourseOverview,
   getKnowledgePoints,
+  getMasteryMap,
   updateCourseWeaknessReviewItem,
   type CoursePathSummary,
   type CourseWeaknessReviewAction,
@@ -40,9 +41,11 @@ import {
 } from "../api/tutor";
 import { CourseClosedLoopActions } from "../components/course-space/CourseClosedLoopActions";
 import { CourseInlineResourcePanel } from "../components/course-space/CourseInlineResourcePanel";
+import { CourseKnowledgeGraph } from "../components/course-space/CourseKnowledgeGraph";
 import { CourseLoopHero } from "../components/course-space/CourseLoopHero";
 import { CourseStudyStepRail } from "../components/course-space/CourseStudyStepRail";
 import { AgentTimeline } from "../components/evidence/AgentTimeline";
+import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
 import { AppSidebar } from "../components/layout/AppSidebar";
@@ -256,6 +259,13 @@ export function CourseSpacePage() {
     queryFn: () => getCourseLearningState(numericCourseId),
     enabled: hasRealCourseId,
     staleTime: 10_000
+  });
+  const masteryMapQuery = useQuery({
+    queryKey: ["courses", "mastery-map", numericCourseId],
+    queryFn: () => getMasteryMap(numericCourseId),
+    enabled: hasRealCourseId,
+    staleTime: 10_000,
+    retry: false
   });
   const courseSessionsQuery = useQuery({
     queryKey: ["tutor", "sessions", "course", numericCourseId],
@@ -667,6 +677,7 @@ export function CourseSpacePage() {
               </dl>
             </header>
             <CourseStudyStepRail steps={courseStudySteps} />
+            <AgentTraceDisclosure traceId={fallbackCourse?.agent_trace_id} label="查看 CourseBuilderGraph" />
 
             <div className="course-mode-tabs" aria-label="课程空间模式">
               <button
@@ -945,6 +956,11 @@ export function CourseSpacePage() {
                       <p>先选一个课程知识点，中间看内容，右侧继续追问。回答里的来源也可以带你进入同一个学习模式。</p>
                     </>
                   )}
+                  <CourseKnowledgeGraph
+                    points={masteryMapQuery.data?.data.points ?? []}
+                    selectedId={selectedKnowledgePoint?.id}
+                    onSelect={openKnowledgeStudy}
+                  />
                   {apiKnowledgePoints.length > 0 ? (
                     <div className="course-study-picker" aria-label="课程知识点">
                       <span>知识点</span>

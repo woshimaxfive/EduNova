@@ -37,6 +37,7 @@ class ArtifactBuildInput:
     weak_points: str
     profile_goal: str
     foundation: str
+    learning_preference: str
     citation_refs: list[int]
 
 
@@ -53,7 +54,7 @@ def build_resource_content(source: ArtifactBuildInput) -> dict[str, Any]:
         "markdown": markdown,
         "artifact": artifact,
         "citation_summaries": list(source.citation_lines),
-        "metadata": {},
+        "metadata": {"learning_preference": source.learning_preference},
     }
 
 
@@ -203,7 +204,10 @@ def _build_document(source: ArtifactBuildInput) -> dict[str, Any]:
             },
             {
                 "heading": "复习建议",
-                "body": f"当前基础：{source.foundation}。学习目标：{source.profile_goal}。完成复述、做题、标记卡点三个动作。",
+                "body": (
+                    f"当前基础：{source.foundation}。学习目标：{source.profile_goal}。"
+                    f"偏好方式：{source.learning_preference or '综合学习'}。完成复述、做题、标记卡点三个动作。"
+                ),
             },
         ],
         "citation_refs": _citation_ref(source),

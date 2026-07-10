@@ -13,6 +13,7 @@ import {
 } from "../api/exports";
 import { generateReport, getLatestReport } from "../api/reports";
 import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
+import { PracticeTrendChart } from "../components/visualization/LearningCharts";
 import { PageFrame } from "./PageFrame";
 
 function downloadDossierFile(filename: string, file: Blob, contentType: string) {
@@ -151,6 +152,7 @@ export function ReportsPage() {
               ))}
             </select>
           </label>
+          {trend?.scores?.length ? <PracticeTrendChart scores={trend.scores} /> : null}
           <div className="mastery-list">
             <article>
               <div>

@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 from typing import Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.api.errors import make_trace_id
 from backend.app.models import (
     Course,
     CourseEnrollment,
@@ -21,6 +19,7 @@ from backend.app.models import (
     LearningPath,
     LearningTask,
     Material,
+    MaterialChunk,
     PracticeAnswer,
     PracticeSession,
     ProfileEvent,
@@ -40,6 +39,7 @@ from backend.app.schemas.courses import (
     CoursePathSummary,
     CourseProfileOverlay,
     CourseSummary,
+    CourseStructureSummary,
     CourseWeaknessReviewItem,
     CourseWeaknessSummary,
     CreateCourseFromMaterialsResult,
@@ -47,6 +47,8 @@ from backend.app.schemas.courses import (
     weakness_item_to_api,
 )
 from backend.app.schemas.profiles import normalize_profile_json
+from backend.app.services.material_retrieval import MaterialChunkingService
+from backend.app.services.model_settings import ModelSettingsService
 
 
 class CourseGenerationError(Exception):
@@ -80,6 +82,10 @@ class WeaknessCandidate:
 
 class CourseRepository(Protocol):
     def get_materials_for_user(self, user_id: int, material_ids: list[int]) -> list[Material]: ...
+
+    def list_material_chunks(self, material_ids: list[int]) -> list[MaterialChunk]: ...
+
+    def add_material_chunks(self, chunks: list[MaterialChunk]) -> None: ...
 
     def add_course_graph(
         self,
@@ -143,6 +149,21 @@ class SqlAlchemyCourseRepository:
             return []
         return list(self.db.scalars(select(Material).where(Material.user_id == user_id, Material.id.in_(material_ids))))
 
+    def list_material_chunks(self, material_ids: list[int]) -> list[MaterialChunk]:
+        if not material_ids:
+            return []
+        return list(
+            self.db.scalars(
+                select(MaterialChunk)
+                .where(MaterialChunk.material_id.in_(material_ids))
+                .order_by(MaterialChunk.material_id, MaterialChunk.chunk_index)
+            )
+        )
+
+    def add_material_chunks(self, chunks: list[MaterialChunk]) -> None:
+        self.db.add_all(chunks)
+        self.db.flush()
+
     def add_course_graph(
         self,
         course: Course,
@@ -170,17 +191,30 @@ class SqlAlchemyCourseRepository:
             link.course_id = course.id
             self.db.add(link)
 
-        for knowledge_point in knowledge_points:
+        point_by_key: dict[str, KnowledgePoint] = {}
+        for index, knowledge_point in enumerate(knowledge_points):
             knowledge_point.course_id = course.id
             self.db.add(knowledge_point)
             self.db.flush()
+            point_by_key[str(getattr(knowledge_point, "builder_key", f"kp-{index + 1}"))] = knowledge_point
+
+        for knowledge_point in knowledge_points:
+            local_prerequisites = list(knowledge_point.prerequisites_json or [])
+            knowledge_point.prerequisites_json = [
+                point_by_key[key].id
+                for key in local_prerequisites
+                if key in point_by_key and point_by_key[key].id != knowledge_point.id
+            ]
 
         for chunk in knowledge_chunks:
             source_material_id = int((chunk.metadata_json or {}).get("source_material_id"))
             source_order = int((chunk.metadata_json or {}).get("knowledge_point_order", 0))
+            source_key = str((chunk.metadata_json or {}).get("knowledge_point_key") or "")
             chunk.course_id = course.id
             chunk.material_id = source_to_course_material[source_material_id].id
-            if 0 <= source_order < len(knowledge_points):
+            if source_key in point_by_key:
+                chunk.knowledge_point_id = point_by_key[source_key].id
+            elif 0 <= source_order < len(knowledge_points):
                 chunk.knowledge_point_id = knowledge_points[source_order].id
             self.db.add(chunk)
 
@@ -304,6 +338,7 @@ class SqlAlchemyCourseRepository:
 
 
 class CourseService:
+    generation_error = CourseGenerationError
     text_extensions = {".txt", ".md", ".markdown", ".pdf", ".docx", ".pptx"}
     chunk_size = 900
     weakness_action_target_status = {
@@ -320,9 +355,20 @@ class CourseService:
         "dismissed": {"dismiss"},
     }
 
-    def __init__(self, repository: CourseRepository, embedding_service: CourseEmbeddingService | None = None) -> None:
+    def __init__(
+        self,
+        repository: CourseRepository,
+        embedding_service: CourseEmbeddingService | None = None,
+        *,
+        model_service: ModelSettingsService | None = None,
+        trace_recorder: Any | None = None,
+        chunking_service: MaterialChunkingService | None = None,
+    ) -> None:
         self.repository = repository
         self.embedding_service = embedding_service
+        self.model_service = model_service
+        self.trace_recorder = trace_recorder
+        self.chunking_service = chunking_service or MaterialChunkingService()
 
     def create_course_from_materials(
         self,
@@ -330,70 +376,9 @@ class CourseService:
         material_ids: list[int],
         course_title: str = "",
     ) -> CreateCourseFromMaterialsResult:
-        unique_material_ids = list(dict.fromkeys(material_ids))
-        if not unique_material_ids:
-            raise CourseGenerationError("至少选择一份资料。")
+        from backend.app.agents.course_builder import CourseBuilderGraphRunner
 
-        materials = self._ordered_materials(user.id, unique_material_ids)
-        self._validate_materials(materials, unique_material_ids)
-        sections = self._parse_sections(materials)
-        if not sections:
-            raise CourseGenerationError("当前仅支持已解析资料生成课程。")
-
-        agent_trace_id = make_trace_id()
-        title = course_title.strip() or Path(materials[0].filename).stem
-        course = Course(
-            owner_id=user.id,
-            title=title,
-            description=f"由 {len(materials)} 份资料生成",
-            subject="自动生成课程",
-            source_type="uploaded",
-            visibility="private",
-            status="ready",
-            agent_trace_id=agent_trace_id,
-        )
-        enrollment = CourseEnrollment(user_id=user.id, course_id=0, role="learner", progress_percent=Decimal("0"))
-        course_materials = [self._build_course_material(user, material) for material in materials]
-        for course_material in course_materials:
-            course_material.agent_trace_id = agent_trace_id
-        material_links = [
-            CourseMaterialLink(course_id=0, material_id=material.id, added_by_user_id=user.id, usage_type="course_source")
-            for material in materials
-        ]
-        knowledge_points = [
-            KnowledgePoint(
-                course_id=0,
-                title=section.title,
-                summary=self._summary(section.content),
-                chapter=section.chapter,
-                order_index=index,
-                difficulty=None,
-                prerequisites_json=[],
-            )
-            for index, section in enumerate(sections)
-        ]
-        knowledge_chunks = self._build_chunks(sections)
-
-        try:
-            created = self.repository.add_course_graph(
-                course,
-                enrollment,
-                course_materials,
-                material_links,
-                knowledge_points,
-                knowledge_chunks,
-            )
-            self._best_effort_embed_chunks(user, knowledge_chunks)
-            self.repository.commit()
-            self.repository.refresh(created)
-        except Exception:
-            self.repository.rollback()
-            raise
-
-        return CreateCourseFromMaterialsResult(
-            course=self._build_summary(created, len(course_materials), len(knowledge_points), len(knowledge_chunks)),
-            knowledge_points=[self._build_knowledge_point(point) for point in knowledge_points],
-        )
+        return CourseBuilderGraphRunner(self).generate(user=user, material_ids=material_ids, course_title=course_title)
 
     def list_courses(self, user: User, source_type: str | None = None) -> CourseListResponse:
         courses = self.repository.list_courses_for_user(user.id, source_type)
@@ -414,6 +399,7 @@ class CourseService:
             materials=[material.filename for material in materials],
             knowledge_points=[self._build_knowledge_point(point) for point in points],
             chunk_count=len(chunks),
+            structure=CourseStructureSummary(**course.structure_json) if getattr(course, "structure_json", None) else None,
         )
 
     def get_knowledge_points(self, user: User, course_id: int) -> list[CourseKnowledgePoint]:
@@ -965,6 +951,7 @@ class CourseService:
             chapter=point.chapter,
             order_index=point.order_index,
             difficulty=point.difficulty,
+            prerequisite_ids=[str(item) for item in (point.prerequisites_json or [])],
         )
 
     @classmethod

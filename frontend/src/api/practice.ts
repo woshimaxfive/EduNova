@@ -3,7 +3,9 @@ import { type ApiEnvelope } from "../types/api";
 
 export const PRACTICE_ENDPOINTS = {
   sessions: "/practice/sessions",
+  latest: "/practice/sessions/latest",
   detail: (sessionId: number) => `/practice/sessions/${sessionId}`,
+  draft: (sessionId: number) => `/practice/sessions/${sessionId}/draft`,
   answers: (sessionId: number) => `/practice/sessions/${sessionId}/answers`
 } as const;
 
@@ -11,7 +13,7 @@ export type CreatePracticeSessionRequest = {
   course_id: number;
   knowledge_point_ids: number[];
   question_count: number;
-  difficulty: "easy" | "medium" | "hard";
+  difficulty: "adaptive" | "easy" | "medium" | "hard";
 };
 
 export type SubmitPracticeAnswersRequest = {
@@ -66,6 +68,9 @@ export type PracticeSessionDetail = {
   status: "in_progress" | "completed" | string;
   agent_trace_id?: string | null;
   score: number | null;
+  requested_difficulty: "adaptive" | "easy" | "medium" | "hard";
+  effective_difficulty: "easy" | "medium" | "hard";
+  draft_saved_at?: string | null;
   questions: PracticeQuestion[];
   answers: PracticeAnswerResult[];
   closure_update?: {
@@ -86,6 +91,18 @@ export async function createPracticeSession(payload: CreatePracticeSessionReques
 
 export async function getPracticeSession(sessionId: number) {
   const response = await apiClient.get<ApiEnvelope<PracticeSessionDetail>>(PRACTICE_ENDPOINTS.detail(sessionId));
+  return response.data;
+}
+
+export async function getLatestPracticeSession(courseId: number) {
+  const response = await apiClient.get<ApiEnvelope<PracticeSessionDetail | null>>(PRACTICE_ENDPOINTS.latest, {
+    params: { course_id: courseId }
+  });
+  return response.data;
+}
+
+export async function savePracticeDraft(sessionId: number, payload: SubmitPracticeAnswersRequest) {
+  const response = await apiClient.patch<ApiEnvelope<PracticeSessionDetail>>(PRACTICE_ENDPOINTS.draft(sessionId), payload);
   return response.data;
 }
 

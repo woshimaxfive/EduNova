@@ -13,11 +13,11 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 - FastAPI、`/api/health`、pytest、ruff 和编码检查。
 - Docker Compose 配置、PostgreSQL、Redis、frontend、backend 和 Nginx。
 - SQLAlchemy、Alembic、pgvector、核心业务表和学习闭环基础表。
-- 真实认证、首页 summary、主页会话、资料库、规则建课、RAG 检索和课程会话。
+- 真实认证、首页 summary、主页会话、资料库、CourseBuilderGraph 智能建课、RAG 检索和课程会话。
 - 模型设置、多模型配置、非流式课程 RAG 回答、SSE 流式回答。
 - Embedding 服务、`local-hash-1536` fallback 和混合检索字段。
 - 课程空间双模式前端已接入，覆盖默认问答模式、按需学习模式、引用渐进展开和移动端布局。
-- 真实学习画像、画像事件、画像页真实接口和课程问答画像候选事件。
+- ProfileGraph 节点顺序、显式画像更新、隐式信号双来源门槛、逐维可信度、画像事件和用户隔离。
 - PDF/DOCX/PPTX 文本解析、损坏文件失败分支、旧版 Office/图片/OCR 边界。
 - 主页联网搜索、深度回答指令、已选资料来源、多轮会话上下文、`home_tutor` trace 和浏览器语音输入/朗读。
 - Markdown/PDF/DOCX 异步学习档案导出任务、下载和用户隔离。
@@ -46,9 +46,9 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 | --- | --- |
 | 用户系统 | 注册、登录、退出、鉴权、访问保护 |
 | AI 学习空间 | AI 对话主页、贴边可收起历史侧栏、侧栏账号入口、发送后主页对话态、底部学习输入区、输入区资料库浮层入口、文件上传、联网搜索/深度思考激活态、最近学习轻量列表、课程空间、引用来源和 Agent 过程展开 |
-| 对话式画像 | 8 维画像生成、画像更新、画像事件记录 |
+| 对话式画像 | ProfileGraph 8 维提案、证据门控、审核/修订、逐维可信度和事件记录 |
 | 课程系统 | 内置人工智能导论课程、课程列表、课程详情 |
-| 上传建课 | PDF、PPTX、DOCX、Markdown、TXT 解析与课程生成 |
+| 上传建课 | PDF、PPTX、DOCX、Markdown、TXT 解析，CourseBuilderGraph 来源覆盖、先修 DAG、审核与事务生成 |
 | RAG 检索 | 切片、向量化、检索、引用来源展示 |
 | 多智能体 | Agent 流程、trace_id、agent_run_logs、失败记录 |
 | 资源生成 | 讲解、Markmap 思维导图、交互练习、Pyodide 代码实操、真实 PPTX、动画图解 |
@@ -148,11 +148,11 @@ cd ..
 | `/auth/me` | 有 token 成功，无 token 失败 |
 | `/dashboard/summary` | 无 token 401、blank 用户空状态、ai_intro 用户返回当前用户课程和资料、真实进度显示、主页历史和资源摘要、多用户隔离 |
 | `/materials/upload`、`/materials`、`/materials/{material_id}`、`/materials/{material_id}/progress`、`/courses/{course_id}/materials` | 无 token 401、当前用户隔离、TXT/Markdown 轻解析、PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT uploaded、图片仅入库且不 OCR、不支持扩展名、大小限制、未归属筛选、课程关联唯一性、进度状态稳定 |
-| `/courses/from-materials`、`/courses/*` | 无 token 401、用户隔离、已解析 TXT/Markdown/PDF/DOCX/PPTX 建课、知识点和知识切片创建、未解析/失败/旧版 Office/图片资料拒绝、课程只返回当前用户数据 |
+| `/courses/from-materials`、`/courses/*` | 无 token 401、用户隔离、五类已解析资料建课、v2 结构、来源覆盖、先修 ID 映射、环路拦截、embedding warning、事务回滚和旧课程兼容 |
 | `/rag/search` | 无 token 401、用户隔离、关键词命中、向量命中、混合排序、懒加载、fallback、无命中和新增分数字段 |
 | `/settings/model`、`/settings/model/test`、`/settings/model/configs` | 无 token 401、多配置隔离、默认配置、Key 加密、脱敏返回、连接测试、OpenAI-compatible embedding 和不泄露 Key |
 | `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、会话改名、软删除归档、删除后列表/详情隐藏、主页已选资料/联网/深思字段、同一 session 多轮上下文、上下文化 RAG/联网 query、无搜索 Key 不伪造来源、`home_tutor` trace、模型回答、SSE 流式、错误回滚和历史恢复 |
-| `/profiles/me`、`/profiles/chat`、`/profiles/events` | 无 token 401、空画像稳定 8 维结构、画像对话更新、画像事件写入、事件倒序、多用户隔离、课程问答候选事件隐私安全 |
+| `/profiles/me`、`/profiles/chat`、`/profiles/events` | 无 token 401、稳定 8 维结构、显式更新、候选阈值、来源去重、自动应用、Review/Repair、逐维可信度、事件倒序、用户隔离和 metadata 脱敏 |
 | `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要、上下文计数 metadata 和 metadata 白名单 |
 | `/resources/generate`、资源详情/质量、`/resources/{resource_id}/exports` | 无 token 401、用户隔离、六类 v2 资源、并行 Worker、模型/规则审核、单次修订、部分失败、PPTX 任务和隐私安全 |
 | `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}`、`/courses/{course_id}/mastery-map` | 无 token 401、课程/任务用户隔离、空路径、路径生成、旧路径归档、任务状态更新、掌握度映射、推荐资源、隐私安全 |
@@ -234,6 +234,8 @@ cd ..
 - 学习画布、资源输出区、证据层和 Agent 轨迹已进入课程空间或回答展开区素材，不作为首页验收主体。
 - Phase 6.5 后，已登录学生访问 `/app/courses/:courseId` 应默认看到课程问答模式；知识画布、资源生成区、证据与 Agent 轨迹不再作为常驻区域出现，主区不重复渲染课程历史，也不常驻横向知识点条。
 - Phase 7.1 后，已登录学生访问 `/app/profile` 应从 `/profiles/me` 和 `/profiles/events` 渲染真实 8 维画像与画像事件，空画像显示待补充；提交“更新目标”和“画像问题回答”必须调用 `/profiles/chat` 并刷新画像和事件。
+- Phase 15 后，画像页还必须展示逐维可信度、候选/已应用证据、来源类型和 ProfileGraph 轨迹；学习模式知识图谱、路径掌握度图和报告趋势图需保留可访问文本降级。
+- `/app/practice` 必须支持 `adaptive` 请求、实际难度展示、`course_id/session_id` URL 恢复、最近练习恢复、650ms 防抖草稿保存和已完成练习回看；草稿失败不得清空本地答案。
 - P3 补完后，已登录学生访问 `/app/path` 应能看到学习路径、阶段任务和路径依据。
 - P3.6 补完后，文件库式资料库、资源工坊、学习画像、AI 辅导入口、练习、报告和设置必须通过页面测试确认核心区域存在，不允许退回简单占位页。
 - P3.6 已用本地 Edge + Playwright 检查文件库式资料库、资源工坊、学习画像、AI 辅导入口、练习、报告和设置在桌面与 390px 移动宽度下核心区域可见，且无水平溢出。

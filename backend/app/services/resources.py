@@ -413,6 +413,7 @@ class ResourceGenerationService:
                 weak_points=weak_points,
                 profile_goal=profile_goal,
                 foundation=foundation,
+                learning_preference=str(profile_summary.get("learning_preference") or ""),
                 citation_refs=[context.citation.chunk_id for context in contexts],
             )
         )

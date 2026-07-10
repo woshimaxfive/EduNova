@@ -31,12 +31,12 @@ EduNova 坚持“基础不牢，地动山摇”的开发原则。
 
 | 项目 | 状态 |
 | --- | --- |
-| 最新完成阶段 | Phase 14 |
-| 当前主链路 | 六类结构化资源和完整学习闭环；主页问答、课程问答、资源生成、路径、练习评估、学习报告已由六条真实 LangGraph 接管 |
-| 当前主要缺口 | Profile/CourseBuilder/MaterialComparison/ExamSprint/ExportDossier 真接管、OCR、旧版 Office、扫描件、资料对比与冲刺联动、Graph 视觉和产品打磨 |
-| 下一步建议 | Phase 14 后 Verification and Hardening / 产品打磨 |
+| 最新完成阶段 | Phase 15 |
+| 当前主链路 | 动态画像、智能建课、主页/课程问答、资源、路径、练习评估和报告已由八条真实 LangGraph 接管 |
+| 当前主要缺口 | MaterialComparison/ExamSprint/ExportDossier 真接管、OCR、旧版 Office、扫描件、资料对比与冲刺联动及持续产品打磨 |
+| 下一步建议 | Phase 15 后剩余学习流程接管与端到端体验硬化 |
 
-Phase 13.2 已完成资料解析、主页工具和异步导出增强；Phase 14 已完成路径、评估、报告三条真实 Graph、错题证据回流、课程 pgvector SQL 检索和隔离 E2E。后续继续做六条 Graph 的可见证据、移动体验和剩余流程接管。
+Phase 13.2 已完成资料解析、主页工具和异步导出增强；Phase 14 已完成路径、评估、报告三条真实 Graph；Phase 15 已完成 ProfileGraph、CourseBuilderGraph、个性化策略、练习恢复和 React Flow/ECharts 可视化。后续继续做八条 Graph 的可见证据、移动体验和剩余流程接管。
 
 ## 4. 里程碑
 
@@ -132,7 +132,9 @@ Phase 13.2 已完成资料解析、主页工具和异步导出增强；Phase 14 
 - [x] LangGraph 真接管课程问答：`CourseTutorGraph` 生产链路已接管课程非流式/流式问答，由 Graph 节点完成画像/上下文读取、课程检索、导师回答、弱点识别、ReviewAgent 审核、下一步动作和消息持久化；trace 来自真实节点执行。
 - [x] LangGraph 真接管资源生成：`ResourceGenerationGraph` 已覆盖画像、检索、诊断、规划、六 Worker 并行生成、聚合、审核、可选修订和持久化；展示轨迹对应真实节点。
 - [x] LangGraph 真接管主页问答：`HomeTutorGraph` 生产链路已接管 context、route、material_retriever、web_search、planner、answer、review、repair、persist；主页资料来源来自 `material_chunks` 相关片段，SSE 失败不写半截消息。
-- [x] 文档口径同步：统一为六条真实生产 Graph，其余学习流程继续保持服务逻辑和兼容 trace。
+- [x] Phase 15：`ProfileGraph` 真接管画像更新与学习信号门控，`CourseBuilderGraph` 真接管资料建课，生产 Graph 增至八条。
+- [x] Phase 15：adaptive 练习、最近会话、草稿恢复、React Flow 课程知识图谱和 ECharts 掌握度/趋势图落地。
+- [x] 文档口径同步：统一为八条真实生产 Graph，其余学习流程继续保持服务逻辑和兼容 trace。
 - [x] 大模型参与度补强：路径使用模型排序理由，练习使用题目增强与错因诊断，报告使用叙事增强；客观数字保持确定性规则，模型失败完整 fallback。
 - [x] 检索能力升级：主页资料级和课程级 RAG 都可使用 pgvector SQL cosine 候选；课程侧按 embedding 来源/模型隔离，本地 hash 不宣称语义命中。
 - [x] 多模态资源补强：已完成 Markmap 思维导图、Mermaid 动画图解、交互练习、Pyodide Python 和真实 PPTX；不宣称生成视频。
@@ -143,8 +145,8 @@ Phase 13.2 已完成资料解析、主页工具和异步导出增强；Phase 14 
 这组问题来自 2026-07-08 前端评审，用于后续单独排期，不混入已完成主链路。Markdown 渲染已在 `4f5e66f feat: render assistant answers as markdown` 完成；下面只记录仍需针对性打磨的可视化、多模态和依赖取舍。
 
 - [x] 思维导图真实渲染：资源工坊和课程空间共用 Markmap 渲染器，旧 Mermaid 资源保留 fallback。
-- [ ] 掌握度可视化升级：在报告页或课程空间闭环摘要中使用 `echarts` 展示掌握度雷达、柱状趋势或环形进度之一；现有 CSS bar 可保留为轻量 fallback。
-- [ ] 知识画布技术取舍：确认 `@xyflow/react` 是否用于课程知识画布升级。若升级，则替换当前 CSS 绝对定位节点；若不升级，后续清理依赖并避免答辩时出现“装了不用”的风险。
+- [x] 掌握度可视化升级：学习路径页使用 ECharts 柱状图，报告页使用 ECharts 练习趋势图，同时保留可访问文本内容。
+- [x] 知识画布技术取舍：课程学习模式使用 `@xyflow/react` 展示先修关系与掌握状态，旧 CSS 绝对定位画布及死代码已清理。
 - [x] Mermaid 图解：动画资源按场景渲染严格模式 Mermaid 流程图，支持播放、暂停、前后步和减动效。
 - [x] 动画图解：作为第六类独立资源接入；它是交互式教学场景，不伪装为视频生成。
 

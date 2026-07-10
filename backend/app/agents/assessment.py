@@ -31,6 +31,7 @@ class AssessmentState(TypedDict, total=False):
     knowledge_point_ids: list[int]
     question_count: int
     difficulty: str
+    requested_difficulty: str
     submitted_answers: list[SubmitPracticeAnswerItem | dict]
     course: Any
     points: list[Any]
@@ -81,6 +82,7 @@ class AssessmentGraphRunner:
             "knowledge_point_ids": knowledge_point_ids,
             "question_count": question_count,
             "difficulty": difficulty,
+            "requested_difficulty": difficulty,
             "repair_count": 0,
         }
         return self.create_graph.invoke(state)["detail"]
@@ -149,11 +151,12 @@ class AssessmentGraphRunner:
             resources = self.service.repository.list_generated_resources(int(state["user_id"]), course.id)
             if not selected:
                 raise PracticeValidationError("当前课程还没有可用于生成练习的知识点。")
+            effective_difficulty = self.service.resolve_difficulty(state["user"], course.id, selected, str(state.get("requested_difficulty") or state["difficulty"]))
             return (
-                {"course": course, "points": points, "selected_points": selected, "resources": resources},
+                {"course": course, "points": points, "selected_points": selected, "resources": resources, "difficulty": effective_difficulty},
                 f"已选择 {len(selected)} 个知识点和 {len(resources)} 个课程资源。",
                 "completed",
-                {"knowledge_point_id": selected[0].id if len(selected) == 1 else None, "resource_count": len(resources)},
+                {"knowledge_point_id": selected[0].id if len(selected) == 1 else None, "resource_count": len(resources), "requested_difficulty": state.get("requested_difficulty"), "effective_difficulty": effective_difficulty},
             )
 
         return self._run_node(state, "context", 1, "读取课程、知识点和资源证据", work)
@@ -218,7 +221,10 @@ class AssessmentGraphRunner:
             status="in_progress",
             agent_trace_id=state["trace_id"],
             score=None,
-            assessment_json={},
+            assessment_json={
+                "requested_difficulty": state.get("requested_difficulty", state.get("difficulty", "medium")),
+                "effective_difficulty": state.get("difficulty", "medium"),
+            },
             created_at=now,
             updated_at=now,
         )
@@ -335,6 +341,7 @@ class AssessmentGraphRunner:
             session.agent_trace_id = state["trace_id"]
             session.updated_at = datetime.now(UTC)
             session.assessment_json = {
+                **(session.assessment_json or {}),
                 "weaknesses_added": int(state.get("weaknesses_added") or 0),
                 "weaknesses_updated": int(state.get("weaknesses_updated") or 0),
                 "path_update_status": "not_started",
@@ -368,6 +375,23 @@ class AssessmentGraphRunner:
             session.assessment_json = {**(session.assessment_json or {}), "path_update_status": status, "path_agent_trace_id": path_trace_id}
             self.service.repository.commit()
             self.service.repository.refresh(session)
+            if self.service.profile_service is not None:
+                try:
+                    weak_points = list(dict.fromkeys(item.title for item in state.get("touched_weaknesses", {}).values() if item.title))
+                    if weak_points:
+                        ingest = getattr(self.service.profile_service, "ingest_learning_signal", None)
+                        if callable(ingest):
+                            ingest(
+                                user=state["user"],
+                                source_type="practice_assessment",
+                                source_ref_type="practice_session",
+                                source_ref_id=session.id,
+                                suggested_updates={"weak_points": weak_points[:5]},
+                                course_id=int(state["course_id"]),
+                                parent_trace_id=state["trace_id"],
+                            )
+                except Exception:
+                    pass
             detail = session_to_api(session, self.service.repository.list_answers_for_session(session.id))
             node_status = "warning" if status in {"not_started", "failed"} else "completed"
             summary = "当前课程尚未建立路径，未自动创建。" if status == "not_started" else ("路径重排失败，练习结果已保留。" if status == "failed" else "已有路径已根据练习结果重排。")

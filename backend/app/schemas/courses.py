@@ -33,6 +33,16 @@ class CourseKnowledgePoint(BaseModel):
     chapter: str | None
     order_index: int
     difficulty: str | None
+    prerequisite_ids: list[str] = Field(default_factory=list)
+
+
+class CourseStructureSummary(BaseModel):
+    schema_version: int = 1
+    learning_objectives: list[str] = Field(default_factory=list)
+    chapters: list[dict] = Field(default_factory=list)
+    supplemental_refs: list[dict] = Field(default_factory=list)
+    generation_mode: str = "deterministic_source"
+    review_result: dict = Field(default_factory=dict)
 
 
 class CourseOverview(BaseModel):
@@ -40,6 +50,7 @@ class CourseOverview(BaseModel):
     materials: list[str]
     knowledge_points: list[CourseKnowledgePoint]
     chunk_count: int
+    structure: CourseStructureSummary | None = None
 
 
 class CreateCourseFromMaterialsResult(BaseModel):

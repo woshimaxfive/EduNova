@@ -40,6 +40,7 @@ class Course(IdMixin, TimestampMixin, Base):
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
     agent_trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    structure_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     owner: Mapped["User | None"] = relationship(back_populates="owned_courses")
     enrollments: Mapped[list["CourseEnrollment"]] = relationship(

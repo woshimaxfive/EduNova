@@ -11,12 +11,15 @@ import {
 } from "../api/profiles";
 import { type ApiEnvelope } from "../types/api";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
+import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { PageFrame } from "./PageFrame";
 
 type ProfileDimension = {
+  key: keyof StudentProfileResponse["profile_json"];
   label: string;
   value: string;
   tone: string;
+  confidence: number;
 };
 
 const EMPTY_PROFILE: StudentProfileResponse = {
@@ -34,6 +37,8 @@ const EMPTY_PROFILE: StudentProfileResponse = {
     motivation_interest: ""
   },
   confidence_score: 0,
+  dimension_confidence: {},
+  evidence_summary: {},
   updated_reason: null,
   updated_at: null,
   next_question: "这门课你最想先解决什么问题？"
@@ -42,19 +47,28 @@ const EMPTY_PROFILE: StudentProfileResponse = {
 function buildDimensions(profile: StudentProfileResponse): ProfileDimension[] {
   const profileJson = profile.profile_json;
   return [
-    { label: "目标", value: profileJson.learning_goal || "待补充", tone: "focus" },
-    { label: "基础", value: profileJson.knowledge_foundation || "未填写", tone: "ready" },
+    { key: "learning_goal", label: "目标", value: profileJson.learning_goal || "待补充", tone: "focus", confidence: profile.dimension_confidence?.learning_goal ?? 0 },
+    { key: "knowledge_foundation", label: "基础", value: profileJson.knowledge_foundation || "未填写", tone: "ready", confidence: profile.dimension_confidence?.knowledge_foundation ?? 0 },
     {
+      key: "weak_points",
       label: "薄弱点",
       value: profileJson.weak_points.length > 0 ? profileJson.weak_points.join("、") : "未填写",
-      tone: "warning"
+      tone: "warning",
+      confidence: profile.dimension_confidence?.weak_points ?? 0
     },
-    { label: "节奏", value: profileJson.learning_pace || "未填写", tone: "steady" },
-    { label: "背景", value: profileJson.major_background || "未填写", tone: "ready" },
-    { label: "方式", value: profileJson.learning_preference || "未填写", tone: "focus" },
-    { label: "风格", value: profileJson.cognitive_style || "未填写", tone: "steady" },
-    { label: "动机", value: profileJson.motivation_interest || "未填写", tone: "ready" }
+    { key: "learning_pace", label: "节奏", value: profileJson.learning_pace || "未填写", tone: "steady", confidence: profile.dimension_confidence?.learning_pace ?? 0 },
+    { key: "major_background", label: "背景", value: profileJson.major_background || "未填写", tone: "ready", confidence: profile.dimension_confidence?.major_background ?? 0 },
+    { key: "learning_preference", label: "方式", value: profileJson.learning_preference || "未填写", tone: "focus", confidence: profile.dimension_confidence?.learning_preference ?? 0 },
+    { key: "cognitive_style", label: "风格", value: profileJson.cognitive_style || "未填写", tone: "steady", confidence: profile.dimension_confidence?.cognitive_style ?? 0 },
+    { key: "motivation_interest", label: "动机", value: profileJson.motivation_interest || "未填写", tone: "ready", confidence: profile.dimension_confidence?.motivation_interest ?? 0 }
   ];
+}
+
+function profileSourceLabel(sourceType?: string) {
+  if (sourceType === "profile_chat") return "主动回答";
+  if (sourceType === "practice_assessment") return "练习诊断";
+  if (sourceType === "course_question") return "课程问答";
+  return "学习证据";
 }
 
 export function ProfilePage() {
@@ -142,6 +156,7 @@ export function ProfilePage() {
               <article className={`profile-dimension ${item.tone}`} key={item.label}>
                 <span>{item.label}</span>
                 <strong>{item.value}</strong>
+                <small>{item.confidence > 0 ? `维度可信度 ${Math.round(item.confidence)}%` : "等待有效证据"}</small>
               </article>
             ))}
           </div>
@@ -185,7 +200,16 @@ export function ProfilePage() {
               {profileEvents.map((item) => (
                 <li key={item.id}>
                   <Brain size={17} weight="duotone" aria-hidden="true" />
-                  <span>{item.change_summary}</span>
+                  <span>
+                    <strong>{item.change_summary}</strong>
+                    <small>
+                      {profileSourceLabel(item.source_type)} · {item.status === "candidate" ? "候选证据" : "已应用"}
+                      {item.confidence_score !== null && item.confidence_score !== undefined
+                        ? ` · ${Math.round(item.confidence_score * 100)}%`
+                        : ""}
+                    </small>
+                    <AgentTraceDisclosure traceId={item.agent_trace_id} label="查看 ProfileGraph" />
+                  </span>
                 </li>
               ))}
             </ul>

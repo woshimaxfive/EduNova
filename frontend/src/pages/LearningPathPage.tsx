@@ -21,6 +21,7 @@ import {
 } from "../api/paths";
 import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
+import { MasteryOverviewChart } from "../components/visualization/LearningCharts";
 import { PageFrame } from "./PageFrame";
 
 const durationOptions: Array<{ label: string; value: GeneratePathRequest["duration_days"] }> = [
@@ -402,20 +403,23 @@ export function LearningPathPage() {
               </div>
             </div>
             {masteryMap && masteryMap.points.length > 0 ? (
-              <div className="mastery-map-list">
-                {masteryMap.points.map((point: CourseMasteryPoint) => (
-                  <article key={point.id} className={`mastery-map-point ${point.status}`}>
-                    <div>
-                      <strong>{point.title}</strong>
-                      <span>{point.chapter ?? "未分章"}</span>
-                    </div>
-                    <em>{masteryStatusLabel(point.status)}</em>
-                    <div className="mastery-score-bar" aria-label={`${point.title} 掌握度 ${point.score}`}>
-                      <span style={{ width: `${point.score}%` }} />
-                    </div>
-                  </article>
-                ))}
-              </div>
+              <>
+                <MasteryOverviewChart points={masteryMap.points} />
+                <div className="mastery-map-list">
+                  {masteryMap.points.map((point: CourseMasteryPoint) => (
+                    <article key={point.id} className={`mastery-map-point ${point.status}`}>
+                      <div>
+                        <strong>{point.title}</strong>
+                        <span>{point.chapter ?? "未分章"}</span>
+                      </div>
+                      <em>{masteryStatusLabel(point.status)}</em>
+                      <div className="mastery-score-bar" aria-label={`${point.title} 掌握度 ${point.score}`}>
+                        <span style={{ width: `${point.score}%` }} />
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </>
             ) : masteryQuery.isPending && hasCourse ? (
               <p className="path-empty-state">正在读取掌握度图。</p>
             ) : (

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.orm import Session
 
 from backend.app.agents.runtime import AgentTraceRecorder
@@ -14,6 +14,7 @@ from backend.app.models import (
     KnowledgePoint,
     PracticeAnswer,
     PracticeSession,
+    StudentProfile,
     User,
     WeaknessReviewItem,
 )
@@ -47,7 +48,13 @@ class PracticeRepository(Protocol):
 
     def get_practice_session_for_user(self, user_id: int, session_id: int) -> PracticeSession | None: ...
 
+    def get_latest_practice_session_for_user(self, user_id: int, course_id: int) -> PracticeSession | None: ...
+
     def list_answers_for_session(self, session_id: int) -> list[PracticeAnswer]: ...
+
+    def list_answers_for_course(self, user_id: int, course_id: int) -> list[PracticeAnswer]: ...
+
+    def get_profile(self, user_id: int) -> StudentProfile | None: ...
 
     def replace_answers_for_session(self, session_id: int, answers: list[PracticeAnswer]) -> list[PracticeAnswer]: ...
 
@@ -93,8 +100,29 @@ class SqlAlchemyPracticeRepository:
     def get_practice_session_for_user(self, user_id: int, session_id: int) -> PracticeSession | None:
         return self.db.scalar(select(PracticeSession).where(PracticeSession.id == session_id, PracticeSession.user_id == user_id))
 
+    def get_latest_practice_session_for_user(self, user_id: int, course_id: int) -> PracticeSession | None:
+        return self.db.scalar(
+            select(PracticeSession)
+            .where(PracticeSession.user_id == user_id, PracticeSession.course_id == course_id)
+            .order_by(case((PracticeSession.status == "in_progress", 0), else_=1), PracticeSession.updated_at.desc(), PracticeSession.id.desc())
+            .limit(1)
+        )
+
     def list_answers_for_session(self, session_id: int) -> list[PracticeAnswer]:
         return list(self.db.scalars(select(PracticeAnswer).where(PracticeAnswer.session_id == session_id).order_by(PracticeAnswer.id)))
+
+    def list_answers_for_course(self, user_id: int, course_id: int) -> list[PracticeAnswer]:
+        return list(
+            self.db.scalars(
+                select(PracticeAnswer)
+                .join(PracticeSession, PracticeSession.id == PracticeAnswer.session_id)
+                .where(PracticeAnswer.user_id == user_id, PracticeSession.course_id == course_id, PracticeSession.status == "completed")
+                .order_by(PracticeAnswer.created_at.desc(), PracticeAnswer.id.desc())
+            )
+        )
+
+    def get_profile(self, user_id: int) -> StudentProfile | None:
+        return self.db.scalar(select(StudentProfile).where(StudentProfile.user_id == user_id))
 
     def replace_answers_for_session(self, session_id: int, answers: list[PracticeAnswer]) -> list[PracticeAnswer]:
         for answer in self.list_answers_for_session(session_id):
@@ -134,7 +162,7 @@ class EvaluatedAnswer:
 
 
 class PracticeService:
-    valid_difficulties = {"easy", "medium", "hard"}
+    valid_difficulties = {"easy", "medium", "hard", "adaptive"}
 
     def __init__(
         self,
@@ -142,11 +170,13 @@ class PracticeService:
         model_service: PracticeModelService | None = None,
         trace_recorder: AgentTraceRecorder | None = None,
         path_service: PracticePathService | None = None,
+        profile_service: object | None = None,
     ) -> None:
         self.repository = repository
         self.model_service = model_service
         self.trace_recorder = trace_recorder
         self.path_service = path_service
+        self.profile_service = profile_service
 
     def create_session(
         self,
@@ -159,7 +189,7 @@ class PracticeService:
         if question_count < 1 or question_count > 12:
             raise PracticeValidationError("题目数量必须在 1 到 12 之间。")
         if difficulty not in self.valid_difficulties:
-            raise PracticeValidationError("练习难度只能是 easy、medium 或 hard。")
+            raise PracticeValidationError("练习难度只能是 adaptive、easy、medium 或 hard。")
         from backend.app.agents.assessment import AssessmentGraphRunner
 
         return AssessmentGraphRunner(self).create_session(
@@ -174,6 +204,49 @@ class PracticeService:
         session = self._require_session(user, session_id)
         return session_to_api(session, self.repository.list_answers_for_session(session.id))
 
+    def get_latest_session(self, user: User, course_id: int) -> PracticeSessionDetail | None:
+        self._require_course(user, course_id)
+        getter = getattr(self.repository, "get_latest_practice_session_for_user", None)
+        if not callable(getter):
+            return None
+        session = getter(user.id, course_id)
+        if session is None:
+            return None
+        return session_to_api(session, self.repository.list_answers_for_session(session.id))
+
+    def save_draft(
+        self,
+        user: User,
+        session_id: int,
+        answers: list[SubmitPracticeAnswerItem | dict],
+    ) -> PracticeSessionDetail:
+        session = self._require_session(user, session_id)
+        if session.status != "in_progress":
+            raise PracticeValidationError("已完成练习不能修改草稿。")
+        rows = self.repository.list_answers_for_session(session.id)
+        by_question = {str((row.question_json or {}).get("id") or ""): row for row in rows}
+        submitted: dict[str, str] = {}
+        for item in answers:
+            payload = item.model_dump() if hasattr(item, "model_dump") else dict(item)
+            question_id = str(payload.get("question_id") or "")
+            if question_id not in by_question:
+                raise PracticeValidationError("草稿包含不属于当前练习的题目。")
+            submitted[question_id] = " ".join(str(payload.get("answer_text") or "").split())[:2000]
+        for question_id, answer_text in submitted.items():
+            by_question[question_id].answer_text = answer_text
+            by_question[question_id].feedback_json = {}
+            by_question[question_id].is_correct = None
+        now = datetime.now(UTC)
+        session.assessment_json = {**(session.assessment_json or {}), "draft_saved_at": now.isoformat().replace("+00:00", "Z")}
+        session.updated_at = now
+        try:
+            self.repository.commit()
+            self.repository.refresh(session)
+        except Exception:
+            self.repository.rollback()
+            raise
+        return session_to_api(session, self.repository.list_answers_for_session(session.id))
+
     def submit_answers(
         self,
         user: User,
@@ -183,6 +256,42 @@ class PracticeService:
         from backend.app.agents.assessment import AssessmentGraphRunner
 
         return AssessmentGraphRunner(self).submit_answers(user=user, session_id=session_id, answers=answers)
+
+    def resolve_difficulty(self, user: User, course_id: int, points: list[KnowledgePoint], requested: str) -> str:
+        if requested != "adaptive":
+            return requested
+        point_ids = {point.id for point in points}
+        weaknesses = self.repository.list_weakness_review_items(user.id, course_id)
+        if any(item.status in {"confirmed", "reviewing"} and item.knowledge_point_id in point_ids for item in weaknesses):
+            return "easy"
+        list_answers = getattr(self.repository, "list_answers_for_course", None)
+        answers = list_answers(user.id, course_id) if callable(list_answers) else []
+        scores: list[int] = []
+        for answer in answers:
+            question = answer.question_json or {}
+            if question.get("knowledge_point_id") not in point_ids:
+                continue
+            feedback = answer.feedback_json or {}
+            if "score" in feedback:
+                scores.append(int(feedback.get("score") or 0))
+            if len(scores) >= max(3, len(points) * 2):
+                break
+        if scores:
+            average = sum(scores) / len(scores)
+            if average < 45:
+                return "easy"
+            if average < 75:
+                return "medium"
+            profile = self.repository.get_profile(user.id)
+            foundation = str((profile.profile_json if profile is not None else {}).get("knowledge_foundation") or "")
+            return "medium" if any(word in foundation for word in ("入门", "薄弱", "刚开始")) else "hard"
+        profile = self.repository.get_profile(user.id)
+        foundation = str((profile.profile_json if profile is not None else {}).get("knowledge_foundation") or "")
+        if any(word in foundation for word in ("入门", "薄弱", "刚开始")):
+            return "easy"
+        if any(word in foundation for word in ("扎实", "熟练", "基础较稳")):
+            return "hard"
+        return "medium"
 
     def _require_course(self, user: User, course_id: int) -> Course:
         course = self.repository.get_course_for_user(user.id, course_id)

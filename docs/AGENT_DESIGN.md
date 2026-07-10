@@ -4,7 +4,7 @@
 
 ## 1. 定位
 
-EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多智能体”概念本身。当前版本有六条 **LangGraph 生产级编排**：`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph` 和 `ReportGraph`。其他学习流程保持现有服务逻辑和安全 trace，后续再逐步真接管。
+EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多智能体”概念本身。当前版本有八条 **LangGraph 生产级编排**：`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph` 和 `ReportGraph`。其他学习流程保持现有服务逻辑和安全 trace，后续再逐步真接管。
 
 本轮不把认证、模型设置、Dashboard 总览等非学习能力包装成 Agent。
 
@@ -12,8 +12,8 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 
 | Graph | 生产职责 | 典型节点 |
 | --- | --- | --- |
-| `ProfileGraph` | 后续专项：画像抽取、画像审核、画像事件持久化 | profile_extract、profile_review、persist |
-| `CourseBuilderGraph` | 后续专项：资料读取、课程结构、知识点、切片、embedding、审核、持久化 | material_read、structure、knowledge_points、chunks、embedding、review、persist |
+| `ProfileGraph` | 已真接管：显式画像回答和学习行为信号的抽取、证据门控、审核/修订、应用与事件持久化 | collect_context、extract、evidence_gate、review、repair、apply、persist_event |
+| `CourseBuilderGraph` | 已真接管：资料读取、来源大纲、课程结构、知识点、切片、embedding、审核/修订和事务持久化 | read_materials、source_outline、structure_course、knowledge_points、chunk、embed、review、repair、persist |
 | `MaterialComparisonGraph` | 后续专项：资料证据收集、重点/考点/遗漏点提炼、引用审核 | evidence、compare、exam_points、gap_analysis、review |
 | `HomeTutorGraph` | 已真接管：安全上下文、问题路由、选中资料检索、按需联网、深度规划、回答、审核/修订和消息持久化 | context、route、material_retriever、web_search、planner、answer、review、repair、persist |
 | `CourseTutorGraph` | 已真接管：画像/上下文读取、课程检索、导师回答、弱点候选、审核、下一步动作、消息持久化 | profile、retriever、tutor、weakness、review、next_action |
@@ -24,7 +24,7 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 | `ReportGraph` | 已真接管：最近练习、掌握度、弱点、路径和资源聚合，叙事增强、审核/修订、持久化 | collect_practice、collect_mastery、aggregate_evidence、generate_narrative、review、repair、persist |
 | `ExportDossierGraph` | 后续专项：学习档案聚合、Markdown 渲染、隐私审核、返回下载内容 | aggregate、render_markdown、privacy_review、return |
 
-`Service` 仍然是 API 边界和依赖装配层。六条主链路的核心流程已经委托给对应 Graph runner；画像、资料建课/对比、冲刺和导出暂时通过服务逻辑产出兼容 trace，不把它们写成已经真接管。
+`Service` 仍然是 API 边界和依赖装配层。八条主链路的核心流程已经委托给对应 Graph runner；资料对比、冲刺和导出暂时通过服务逻辑产出兼容 trace，不把它们写成已经真接管。
 
 ## 3. AgentState
 
@@ -139,5 +139,5 @@ EduNova 不是把所有逻辑都交给大模型，而是把学生学习链路拆
 ## 9. 后续打磨
 
 - 增强资料对比结果和期末冲刺、路径排序之间的证据联动。
-- 扩展隔离 Docker E2E，把六条 Graph 的跨页面回流和失败分支持续纳入验收。
+- 扩展隔离 Docker E2E，把八条 Graph 的跨页面回流和失败分支持续纳入验收。
 - 在不泄露原始输入的前提下继续丰富 AgentTimeline 的白名单 metadata。

@@ -39,6 +39,19 @@ export type ApiCourseKnowledgePoint = {
   chapter: string | null;
   order_index: number;
   difficulty: string | null;
+  prerequisite_ids: string[];
+};
+
+export type ApiCourseStructure = {
+  schema_version: number;
+  learning_objectives: string[];
+  chapters: Array<{
+    title: string;
+    knowledge_point_ids: string[];
+  }>;
+  supplemental_refs: Array<Record<string, unknown>>;
+  generation_mode: string;
+  review_result: Record<string, unknown>;
 };
 
 export type ApiCourseOverview = {
@@ -46,6 +59,7 @@ export type ApiCourseOverview = {
   materials: string[];
   knowledge_points: ApiCourseKnowledgePoint[];
   chunk_count: number;
+  structure?: ApiCourseStructure | null;
 };
 
 export type CreateCourseFromMaterialsResult = {

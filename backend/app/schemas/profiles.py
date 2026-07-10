@@ -51,6 +51,8 @@ class StudentProfileResponse(BaseModel):
     has_profile: bool
     profile_json: dict[str, Any]
     confidence_score: float
+    dimension_confidence: dict[str, float] = Field(default_factory=dict)
+    evidence_summary: dict[str, int | str | None] = Field(default_factory=dict)
     updated_reason: str | None
     updated_at: str | None
     next_question: str
@@ -61,6 +63,12 @@ class ProfileEventResponse(BaseModel):
     dimension: str
     change_summary: str
     evidence_json: dict[str, Any]
+    agent_trace_id: str | None = None
+    source_type: str = "legacy"
+    source_ref_type: str | None = None
+    source_ref_id: str | None = None
+    status: str = "applied"
+    confidence_score: float | None = None
     created_at: str
 
 
@@ -92,7 +100,13 @@ def normalize_profile_json(value: dict[str, Any] | None) -> dict[str, Any]:
     return result
 
 
-def profile_to_api(profile: StudentProfile | None, version: int, next_question: str) -> StudentProfileResponse:
+def profile_to_api(
+    profile: StudentProfile | None,
+    version: int,
+    next_question: str,
+    *,
+    evidence_summary: dict[str, int | str | None] | None = None,
+) -> StudentProfileResponse:
     if profile is None:
         return StudentProfileResponse(
             id=None,
@@ -100,6 +114,8 @@ def profile_to_api(profile: StudentProfile | None, version: int, next_question: 
             has_profile=False,
             profile_json=empty_profile_json(),
             confidence_score=0,
+            dimension_confidence={},
+            evidence_summary=evidence_summary or {},
             updated_reason=None,
             updated_at=None,
             next_question=next_question,
@@ -111,6 +127,12 @@ def profile_to_api(profile: StudentProfile | None, version: int, next_question: 
         has_profile=True,
         profile_json=normalize_profile_json(profile.profile_json),
         confidence_score=float(profile.confidence_score or 0),
+        dimension_confidence={
+            key: float(value)
+            for key, value in (getattr(profile, "dimension_confidence_json", None) or {}).items()
+            if key in PROFILE_DIMENSIONS and isinstance(value, (int, float))
+        },
+        evidence_summary=evidence_summary or {},
         updated_reason=profile.updated_reason,
         updated_at=_iso_timestamp(profile.updated_at),
         next_question=next_question,
@@ -123,5 +145,11 @@ def event_to_api(event: ProfileEvent) -> ProfileEventResponse:
         dimension=event.dimension,
         change_summary=event.change_summary,
         evidence_json=event.evidence_json or {},
+        agent_trace_id=getattr(event, "agent_trace_id", None),
+        source_type=str(getattr(event, "source_type", None) or "legacy"),
+        source_ref_type=getattr(event, "source_ref_type", None),
+        source_ref_id=str(event.source_ref_id) if getattr(event, "source_ref_id", None) is not None else None,
+        status=str(getattr(event, "status", None) or "applied"),
+        confidence_score=float(event.confidence_score) if getattr(event, "confidence_score", None) is not None else None,
         created_at=_iso_timestamp(event.created_at) or "",
     )

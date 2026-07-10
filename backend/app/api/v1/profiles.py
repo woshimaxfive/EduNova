@@ -3,18 +3,31 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from backend.app.api.errors import api_response
+from backend.app.agents.runtime import AgentTraceRecorder
+from backend.app.core.config import get_settings
 from backend.app.api.v1.deps import get_current_user
 from backend.app.db.session import get_db_session
 from backend.app.models import User
+from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.profiles import ProfileChatRequest
 from backend.app.services.profiles import ProfileService, SqlAlchemyProfileRepository
+from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
 
 
 def get_profile_service(db=Depends(get_db_session)) -> ProfileService:
-    return ProfileService(SqlAlchemyProfileRepository(db))
+    model_service = ModelSettingsService(
+        repository=SqlAlchemyModelSettingsRepository(db),
+        settings=get_settings(),
+        provider=OpenAICompatibleChatProvider(),
+    )
+    return ProfileService(
+        SqlAlchemyProfileRepository(db),
+        model_service=model_service,
+        trace_recorder=AgentTraceRecorder(),
+    )
 
 
 @router.get("/me")

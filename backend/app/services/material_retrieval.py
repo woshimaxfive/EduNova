@@ -30,9 +30,13 @@ class MaterialChunkingService:
         if material.parse_status != "completed" or not text or material.id is None:
             return []
 
-        sections = self._markdown_sections(text) if Path(material.filename).suffix.lower() in {".md", ".markdown"} else [(None, text)]
+        sections = (
+            self._markdown_sections(text)
+            if Path(material.filename).suffix.lower() in {".md", ".markdown"}
+            else self._plain_sections(text)
+        )
         chunks: list[MaterialChunk] = []
-        for section_title, section_text in sections:
+        for section_title, section_text, section_metadata in sections:
             for content in self._split_text(section_text):
                 chunks.append(
                     MaterialChunk(
@@ -42,21 +46,29 @@ class MaterialChunkingService:
                         page_number=None,
                         content=content,
                         embedding=None,
-                        metadata_json={"source_filename": material.filename},
+                        metadata_json={"source_filename": material.filename, **section_metadata},
                     )
                 )
         return chunks
 
-    def _markdown_sections(self, text: str) -> list[tuple[str | None, str]]:
+    def _markdown_sections(self, text: str) -> list[tuple[str | None, str, dict[str, Any]]]:
         lines = text.replace("\r\n", "\n").splitlines()
-        sections: list[tuple[str | None, str]] = []
+        sections: list[tuple[str | None, str, dict[str, Any]]] = []
         current_title: str | None = None
+        current_level = 1
+        current_chapter: str | None = None
         current_lines: list[str] = []
 
         def flush() -> None:
             content = self._normalize_text("\n".join(current_lines))
             if content:
-                sections.append((current_title, content))
+                sections.append(
+                    (
+                        current_title,
+                        content,
+                        {"section_level": current_level, "chapter_title": current_chapter},
+                    )
+                )
 
         for line in lines:
             match = re.match(r"^\s{0,3}#{1,3}\s+(.+?)\s*$", line)
@@ -65,9 +77,21 @@ class MaterialChunkingService:
                 continue
             flush()
             current_title = match.group(1).strip()[:255]
+            marker = line.lstrip().split(" ", 1)[0]
+            current_level = len(marker)
+            if current_level == 1:
+                current_chapter = current_title
             current_lines = []
         flush()
-        return sections or [(None, self._normalize_text(text))]
+        return sections or [(None, self._normalize_text(text), {})]
+
+    def _plain_sections(self, text: str) -> list[tuple[str | None, str, dict[str, Any]]]:
+        paragraphs = [self._normalize_text(part) for part in text.replace("\r\n", "\n").split("\n\n")]
+        paragraphs = [paragraph for paragraph in paragraphs if paragraph]
+        return [
+            (f"第 {index} 部分", paragraph, {"section_level": 2, "chapter_title": None})
+            for index, paragraph in enumerate(paragraphs, start=1)
+        ] or [(None, self._normalize_text(text), {})]
 
     def _split_text(self, text: str) -> list[str]:
         normalized = self._normalize_text(text)

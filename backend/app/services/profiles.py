@@ -8,7 +8,6 @@ from typing import Any, Protocol
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.app.api.errors import make_trace_id
 from backend.app.models import ChatMessage, ChatSession, ProfileEvent, StudentProfile, User
 from backend.app.schemas.profiles import (
     ProfileChatResponse,
@@ -19,6 +18,7 @@ from backend.app.schemas.profiles import (
     normalize_profile_json,
     profile_to_api,
 )
+from backend.app.services.model_settings import ModelSettingsService
 
 
 PROFILE_SIGNAL_WORDS = ("不懂", "不会", "困惑", "卡住", "薄弱", "最担心", "为什么", "怎么复习", "难")
@@ -95,70 +95,88 @@ class SqlAlchemyProfileRepository:
 
 
 class ProfileService:
-    def __init__(self, repository: ProfileRepository, now: datetime | None = None) -> None:
+    def __init__(
+        self,
+        repository: ProfileRepository,
+        now: datetime | None = None,
+        *,
+        model_service: ModelSettingsService | None = None,
+        trace_recorder: Any | None = None,
+    ) -> None:
         self.repository = repository
         self.now = now
+        self.model_service = model_service
+        self.trace_recorder = trace_recorder
 
     def get_my_profile(self, user: User) -> StudentProfileResponse:
         profile = self.repository.get_profile(user.id)
+        events = self.repository.list_events(user.id, 100)
         return profile_to_api(
             profile,
             version=self.repository.count_events_for_profile(profile.id if profile is not None else None),
             next_question=self._next_question(profile),
+            evidence_summary=self._evidence_summary(events),
         )
 
     def update_by_chat(self, user: User, message: str) -> ProfileChatResponse:
-        message_text = message.strip()
-        updates = self._extract_profile_updates(message_text)
-        changed_labels = self._changed_labels(updates)
-        agent_trace_id = make_trace_id()
-        profile = self.repository.get_profile(user.id)
-        if profile is None:
-            profile = StudentProfile(
-                user_id=user.id,
-                profile_json=empty_profile_json(),
-                confidence_score=Decimal("0.00"),
-                updated_reason=None,
-            )
-            self.repository.add_profile(profile)
-            self.repository.flush()
+        from backend.app.agents.profile import ProfileGraphRunner
 
-        profile.profile_json = self._merge_profile_json(profile.profile_json, updates)
-        profile.confidence_score = self._next_confidence(profile.confidence_score, changed_labels)
-        profile.updated_reason = self._change_summary(changed_labels)
-        profile.updated_at = self._current_time()
+        return ProfileGraphRunner(self).update_by_chat(user, message)
 
-        event = ProfileEvent(
-            user_id=user.id,
-            profile_id=profile.id,
-            dimension="profile_chat",
-            change_summary=profile.updated_reason,
-            evidence_json={
-                "source_type": "profile_chat",
-                "summary": "学生画像对话",
-                "updated_dimensions": list(updates.keys()),
-                "trace_id": agent_trace_id,
-            },
+    def ingest_learning_signal(
+        self,
+        *,
+        user: User,
+        source_type: str,
+        source_ref_type: str,
+        source_ref_id: int,
+        suggested_updates: dict[str, Any],
+        course_id: int | None = None,
+        parent_trace_id: str | None = None,
+    ) -> ProfileEvent | None:
+        from backend.app.agents.profile import ProfileGraphRunner
+
+        return ProfileGraphRunner(self).ingest_learning_signal(
+            user=user,
+            source_type=source_type,
+            source_ref_type=source_ref_type,
+            source_ref_id=source_ref_id,
+            suggested_updates=suggested_updates,
+            course_id=course_id,
+            parent_trace_id=parent_trace_id,
         )
 
-        try:
-            self.repository.add_event(event)
-            self.repository.flush()
-            self.repository.commit()
-        except Exception:
-            self.repository.rollback()
-            raise
-
-        profile_response = profile_to_api(
-            profile,
-            version=self.repository.count_events_for_profile(profile.id),
-            next_question=self._next_question(profile),
+    def ingest_course_question_signal(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        user_message: ChatMessage,
+        message_text: str,
+        citation_json: list[dict[str, Any]],
+        trace_id: str | None,
+    ) -> ProfileEvent | None:
+        if session.scope != "course" or not self._has_profile_signal(message_text):
+            return None
+        citations = self._safe_citations(citation_json)
+        title = next(
+            (
+                str(item.get("section_title") or item.get("source_title") or "").strip()
+                for item in citations
+                if item.get("section_title") or item.get("source_title")
+            ),
+            "",
         )
-        return ProfileChatResponse(
-            reply="已更新你的学习画像。",
-            agent_trace_id=agent_trace_id,
-            profile=profile_response,
-            event=event_to_api(event),
+        if not title:
+            return None
+        return self.ingest_learning_signal(
+            user=user,
+            source_type="course_question",
+            source_ref_type="chat_message",
+            source_ref_id=user_message.id,
+            suggested_updates={"weak_points": [title]},
+            course_id=session.course_id,
+            parent_trace_id=trace_id,
         )
 
     def list_events(self, user: User, limit: int = 20) -> list[ProfileEventResponse]:
@@ -193,6 +211,13 @@ class ProfileService:
                 "trace_id": trace_id,
                 "citations": self._safe_citations(citation_json),
             },
+            agent_trace_id=trace_id,
+            source_type="course_question",
+            source_ref_type="chat_message",
+            source_ref_id=user_message.id,
+            status="candidate",
+            confidence_score=Decimal("0.78"),
+            proposal_json={"weak_points": [self._safe_citations(citation_json)[0].get("section_title")]} if self._safe_citations(citation_json) and self._safe_citations(citation_json)[0].get("section_title") else {},
         )
         self.repository.add_event(event)
         return event
@@ -353,3 +378,15 @@ class ProfileService:
     def _current_time(self) -> datetime:
         current = self.now or datetime.now(UTC)
         return current if current.tzinfo is not None else current.replace(tzinfo=UTC)
+
+    @staticmethod
+    def _empty_profile() -> dict[str, Any]:
+        return empty_profile_json()
+
+    @staticmethod
+    def _evidence_summary(events: list[ProfileEvent]) -> dict[str, int | str | None]:
+        return {
+            "candidate_count": sum(1 for event in events if getattr(event, "status", None) == "candidate"),
+            "applied_count": sum(1 for event in events if getattr(event, "status", None) == "applied"),
+            "last_trace_id": next((event.agent_trace_id for event in events if getattr(event, "agent_trace_id", None)), None),
+        }

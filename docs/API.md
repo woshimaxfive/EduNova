@@ -375,7 +375,7 @@ Authorization: Bearer <token>
 
 ## 6. Profile 接口
 
-状态：Phase 7.1 已实现。当前后端已挂载 `profiles` router，`ProfilePage` 从真实后端读取画像和画像事件。画像采用确定性抽取，不新增外部模型调用。Phase 7.2 已明确：`profiles` 表示用户级长期画像，不按课程复制完整画像；课程级目标、薄弱点、掌握度、复习队列和路径依据后续由课程学习状态聚合。
+状态：Phase 15 已由 `ProfileGraph` 接管。显式画像回答通过审核后立即更新；课程问答和练习产生的隐式信号使用独立 Graph trace，只有相同归一化结论至少来自 2 个独立来源且聚合置信度不低于 0.75 时才写入长期画像，否则保留候选事件。
 
 ### GET `/profiles/me`
 
@@ -388,6 +388,7 @@ Authorization: Bearer <token>
 - `version` 由当前画像关联的画像事件数量派生。
 - `next_question` 用于前端画像对话入口，不等同于强制问卷。
 - `profile_json` 是用户级画像。`knowledge_foundation`、`weak_points`、`learning_goal` 可以在后续展示和推荐中叠加课程级状态，但 `/profiles/me` 不返回每门课程一份画像。
+- `dimension_confidence` 返回 8 个维度各自的 0-100 可信度，`evidence_summary` 返回候选/已应用证据计数。
 
 响应：
 
@@ -408,6 +409,8 @@ Authorization: Bearer <token>
       "motivation_interest": "希望提升 AI 实践能力"
     },
     "confidence_score": 72,
+    "dimension_confidence": {"major_background": 82, "learning_goal": 76},
+    "evidence_summary": {"candidate_count": 1, "applied_count": 3},
     "updated_reason": "更新学习画像：学习目标、知识基础",
     "updated_at": "2026-07-05T09:00:00Z",
     "next_question": "这门课你最担心哪一章？"
@@ -418,7 +421,7 @@ Authorization: Bearer <token>
 
 ### POST `/profiles/chat`
 
-用途：通过对话更新学习画像。Phase 7.1 使用确定性规则抽取 8 维画像，写入 `student_profiles` 并追加 `profile_events`。
+用途：通过 `ProfileGraph` 对话更新学习画像。模型只可补充现有 8 个白名单字段；规则负责字段、长度、去重、敏感内容和可信度校验，模型不可用时使用明确的 `rules_only` 确定性抽取。
 
 请求：
 
@@ -438,6 +441,10 @@ Authorization: Bearer <token>
     "event": {
       "id": "10",
       "dimension": "profile_chat",
+      "status": "applied",
+      "source_type": "profile_chat",
+      "confidence_score": 72,
+      "agent_trace_id": "trace_profile_graph",
       "change_summary": "更新学习画像：学习目标、薄弱点",
       "evidence_json": {
         "source_type": "profile_chat",
@@ -496,7 +503,7 @@ Authorization: Bearer <token>
 
 ### GET `/courses/{course_id}/overview`
 
-用途：获取课程概览、章节和知识点。Phase 5.1 已实现。
+用途：获取课程概览、章节和知识点。Phase 15 新课程可选返回 `structure` v2，包括学习目标、章节知识点 ID、补充来源、生成/审核模式和来源覆盖摘要；旧课程返回空结构。
 
 ### GET `/courses/{course_id}/knowledge-points`
 
@@ -511,7 +518,8 @@ Authorization: Bearer <token>
   "summary": "理解梯度方向和学习率。",
   "chapter": "优化方法",
   "order_index": 1,
-  "difficulty": "基础"
+  "difficulty": "基础",
+  "prerequisite_ids": ["9000"]
 }
 ```
 
@@ -750,7 +758,7 @@ Authorization: Bearer <token>
 
 ### POST `/courses/from-materials`
 
-用途：根据资料库中的一个或多个资料生成课程。Phase 5.1 已实现，必须携带 JWT。Phase 13.2 后支持当前用户个人资料库里 `parse_status=completed` 且已有 `extracted_text` 的 TXT、Markdown、PDF、DOCX 和 PPTX 资料；未解析、解析失败、旧版 DOC/PPT、图片或扫描件会返回 400，提示“当前仅支持已解析资料生成课程”。
+用途：根据资料库中的一个或多个资料生成课程。Phase 15 由 `CourseBuilderGraph` 接管，必须携带 JWT。支持当前用户个人资料库里已解析的 TXT、Markdown、PDF、DOCX 和 PPTX；未解析、解析失败、旧版 DOC/PPT、图片或扫描件会返回 400。
 
 请求：
 
@@ -795,10 +803,11 @@ Authorization: Bearer <token>
 
 生成规则：
 
-- Markdown 的 `#`、`##`、`###` 标题优先生成章节和知识点。
-- TXT 无标题时按段落生成“第 1 部分 / 第 2 部分”等知识点。
+- 用户填写课程名时始终优先使用；未填写才使用模型建议或文件名 fallback。
+- Markdown 按标题形成来源大纲，其他文档按段落与稳定窗口切分；每个知识点必须关联真实资料分块，未纳入主结构的来源写入补充来源。
+- 确定性底稿可由模型合并、拆分和重排，规则审核知识点数量、重复标题、来源覆盖、先修引用、环路、难度和隐私边界，最多修订一次。
 - 后端会创建 `Course`、`CourseEnrollment`、兼容旧链路的 `CourseMaterial`、`CourseMaterialLink`、`KnowledgePoint` 和 `KnowledgeChunk`。
-- Phase 6.4 后，课程生成会 best-effort 为新 `KnowledgeChunk` 写入 1536 维 embedding；外部 embedding 失败不阻断建课，后续 `/rag/search` 会再尝试懒加载补齐。
+- 课程生成会 best-effort 为新 `KnowledgeChunk` 写入真实外部 1536 维 embedding；失败只记录 warning 并回退关键词检索，不把本地 hash 宣称为语义向量。
 - `knowledge_chunks.metadata_json` 会记录 `embedding_source`、`embedding_model`、`embedding_dimension`、`embedded_at`，便于识别本地 fallback、过期模型和后续重建。
 - 前端 `/app` 主页资料库浮层和 `/app/library` 使用同一接口；成功后刷新 summary/materials 并跳转 `/app/courses/{course_id}`。
 
@@ -960,7 +969,7 @@ Authorization: Bearer <token>
   "knowledge_point_id": 8,
   "resource_types": ["doc", "mindmap", "quiz", "code", "slide", "animation"],
   "learning_goal": "理解反向传播",
-  "difficulty": "medium"
+  "difficulty": "adaptive"
 }
 ```
 
@@ -1574,6 +1583,9 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
     "title": "人工智能导论 练习",
     "status": "in_progress",
     "score": null,
+    "requested_difficulty": "adaptive",
+    "effective_difficulty": "easy",
+    "draft_saved_at": null,
     "questions": [
       {
         "id": "q1",
@@ -1606,6 +1618,18 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 ### GET `/practice/sessions/{session_id}`
 
 用途：读取当前用户自己的练习、题目、作答和反馈。非本人练习返回 404。
+
+### GET `/practice/sessions/latest?course_id=...`
+
+用途：返回当前用户当前课程最近的练习，优先返回未完成会话；没有练习时 `data=null`。前端用它恢复刷新前的学习位置。
+
+### PATCH `/practice/sessions/{session_id}/draft`
+
+用途：保存未评估答案草稿，不触发评分、弱点、路径或画像回流。仅 `in_progress` 会话可写，完成后的练习返回 400。
+
+```json
+{"answers":[{"question_id":"q1","answer_text":"我的草稿"}]}
+```
 
 ### POST `/practice/sessions/{session_id}/answers`
 

@@ -208,7 +208,7 @@ frontend/src/
 - `auth.ts`：注册、登录、读取当前用户、退出。
 - `dashboard.ts`：学习空间首页 summary。
 - `materials.ts`：上传、列表、详情、进度和课程关联。
-- `courses.ts`：课程列表、详情、概览、知识点和规则建课。
+- `courses.ts`：课程列表、详情、v2 概览、知识点先修关系和智能建课。
 - `rag.ts`：课程知识库检索和混合检索字段。
 - `tutor.ts`：主页/课程会话、消息、引用、主页联网/深思/资料参数，以及 home/course 共用 SSE 的状态、来源、token、Review 替换和完成事件。
 - `exports.ts`：旧同步 Markdown 学习档案导出和 Markdown/PDF/DOCX 异步导出任务。
@@ -233,7 +233,7 @@ frontend/src/
 - 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面均不再依赖核心样例数据兜底；后续只保留空态和错误态。
 - 当前前端已移除 `ActionNotice` 类全局横向提示条；按钮反馈优先通过选中态、列表刷新、详情面板、输入内容和真实路由跳转表达。失败、校验错误和模型不可用等需要用户处理的状态使用局部 `InlineFeedback`，模型配置保存、设默认、删除和连接测试等短确认使用右下角 toast；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
 - 上传建课状态轨道和状态条当前使用前端样例状态，后续由 `/materials/{material_id}/progress`、`/courses/from-materials` 和长任务接口驱动。
-- Markmap 已用于结构化思维导图，Mermaid 已用于动画图解；ECharts 和 React Flow 仍保留为后续掌握度与知识画布升级依赖，当前不能写成已使用。
+- Markmap 已用于结构化思维导图，Mermaid 已用于动画图解；React Flow 已接管课程学习模式的知识点与先修关系图，ECharts 已用于路径掌握度和报告练习趋势。旧 CSS 绝对定位知识画布已删除。
 
 ## 4. 后端架构
 
@@ -272,7 +272,7 @@ backend/app/
 | `backend/app/services/materials.py` | 个人资料库服务，负责上传保存、解析、列表、详情、进度和课程资料关联 |
 | `backend/app/services/material_retrieval.py` | 共享资料分块和主页资料级 RAG，负责上传后切片、既有资料惰性补齐、当前用户选中资料限制、关键词/pgvector 混合排序和安全引用 |
 | `backend/app/services/web_search.py` | Tavily-compatible 联网搜索服务，未配置 Key 时返回 warning，不生成假来源 |
-| `backend/app/services/courses.py` | 课程服务，负责已解析资料规则建课、课程列表、详情、概览、知识点读取和课程生成后的 best-effort 向量补齐 |
+| `backend/app/services/courses.py` | 课程 API 边界和依赖装配；`CourseBuilderGraphRunner` 接管来源大纲、课程结构、知识点、切片、embedding、审核/修订与事务持久化 |
 | `backend/app/services/exports.py` | 学习档案导出服务，负责旧同步 Markdown 兼容接口和 Markdown/PDF/DOCX 异步 job 渲染 |
 | `backend/app/workers/export_jobs.py` | Redis/RQ 导出 worker 入口 |
 | `backend/app/api/v1/tutor.py` | `/api/v1/tutor/sessions` 受保护会话接口 |
@@ -366,7 +366,7 @@ ReviewAgent 审核内容
 前端展示资源、引用和轨迹
 ```
 
-当前真实接管生产主流程的是 `HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph` 和 `ReportGraph`。画像、资料建课/对比、冲刺和导出仍使用现有服务逻辑与兼容 trace，不能写成已经全部 Graph 化。六条 Graph 都落真实节点耗时和白名单 metadata，生成型节点均有规则与可选模型审核，失败时最多 Repair 一次。
+当前真实接管生产主流程的是 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph` 和 `ReportGraph`。资料对比、冲刺和导出仍使用现有服务逻辑与兼容 trace，不能写成已经全部 Graph 化。八条 Graph 都落真实节点耗时和白名单 metadata，生成型节点均有规则与可选模型审核，失败时最多 Repair 一次。
 
 后半程闭环：
 

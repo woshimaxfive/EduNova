@@ -5,6 +5,7 @@ import json
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import StreamingResponse
 
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
 from backend.app.core.config import get_settings
@@ -49,7 +50,11 @@ def get_tutor_session_service(db=Depends(get_db_session)) -> TutorSessionService
             embedding_service=EmbeddingService(model_settings_service),
         ),
         course_answer_generator=CourseAnswerService(model_settings_service),
-        profile_event_recorder=ProfileService(SqlAlchemyProfileRepository(db)),
+        profile_event_recorder=ProfileService(
+            SqlAlchemyProfileRepository(db),
+            model_service=model_settings_service,
+            trace_recorder=AgentTraceRecorder(),
+        ),
         web_search_service=WebSearchService(get_settings()),
         material_citation_searcher=MaterialRetrievalService(
             SqlAlchemyMaterialRetrievalRepository(db),

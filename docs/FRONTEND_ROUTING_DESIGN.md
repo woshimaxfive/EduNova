@@ -48,11 +48,11 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 | --- | --- | --- |
 | `/app` | LearningSpacePage | AI 学习空间首页 |
 | `/app/library` | LibraryPage | 资料库、课程资料、上传建课入口 |
-| `/app/path` | LearningPathPage | 真实课程级学习路径、任务状态、推荐资源、路径依据和掌握度图 |
+| `/app/path` | LearningPathPage | 真实课程级学习路径、任务状态、推荐资源、路径依据和 ECharts 掌握度图 |
 | `/app/studio` | StudioPage | 生成和管理学习资源 |
-| `/app/profile` | ProfilePage | 真实 8 维画像、画像事件和画像对话更新 |
+| `/app/profile` | ProfilePage | 真实 8 维画像、逐维可信度、候选/已应用证据、画像对话和 ProfileGraph 轨迹 |
 | `/app/tutor` | TutorPage | AI 辅导入口，选择课程后进入对应课程空间提问 |
-| `/app/practice` | PracticePage | 真实课程练习、作答、确定性批改和复习线索 |
+| `/app/practice` | PracticePage | adaptive 课程练习、最近会话/草稿恢复、确定性批改和复习线索 |
 | `/app/reports` | ReportsPage | 真实学习报告、掌握度更新、薄弱点、下一步建议和 Markdown 学习档案导出 |
 | `/app/settings` | SettingsPage | 模型连接、个人设置、数据导出 |
 
@@ -66,7 +66,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 | `/app/library` | 独立资料库 | 文件库式管理已上传但未必归属课程的资料，可搜索、查看引用、作为主页对话参考，也可通过浮层从资料生成课程 |
 | `/app/path` | 学习路径工作区 | 普通受保护路由，读取当前用户课程、当前 active 路径、任务、推荐资源、路径依据和掌握度图；可通过 `course_id` 查询参数从课程空间预选课程，不作为首页主视觉 |
 | `/app/courses/:courseId` | 课程空间 | 已读取真实课程详情、知识点、课程会话历史、课程知识库检索引用和课程学习状态；默认问答模式展示并操作待复习弱点，按需学习模式继续承载某一课程内的资料、学习路径、练习和资源入口 |
-| 生成课程浮层 | 上层任务流 | 可由输入框、资料库或资料选择区触发，完成选择资料、填写课程名称、调用真实规则建课接口并进入课程 |
+| 生成课程浮层 | 上层任务流 | 可由输入框、资料库或资料选择区触发，调用 CourseBuilderGraph 并进入带 v2 结构和先修关系的课程 |
 
 当前路由边界：
 
@@ -75,7 +75,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 - `/app/courses/:courseId` 是课程上下文，课程历史和主页历史分开；同一路由内承载问答模式和学习模式，不另建第二套课程问答页。
 - `/app/settings` 只处理模型连接、个人设置和数据边界，不放运行期搜索/思考开关。
 - `/app/tutor` 不再维护独立静态问答；它读取当前用户课程列表，并把真实提问统一引导到 `/app/courses/:courseId`。
-- 生成课程浮层会调用 `/courses/from-materials` 生成 TXT/Markdown 规则课程。
+- 生成课程浮层会调用 `/courses/from-materials`，为已解析 TXT/Markdown/PDF/DOCX/PPTX 资料运行真实 CourseBuilderGraph。
 
 后续继续接真实接口时应保证：
 
@@ -476,7 +476,7 @@ Phase 4：
 
 Phase 5 以后：
 
-- 学习主路由已接入资料建课、RAG、流式问答、画像、弱点、资源、路径、练习、报告、冲刺和资料对比。资源工坊与课程空间现在共用六类结构化资源渲染器，主页问答、课程问答和资源生成由真实 LangGraph 编排；其他闭环继续保留兼容 trace。
+- 学习主路由已接入智能建课、RAG、流式问答、画像、弱点、资源、路径、练习、报告、冲刺和资料对比。Profile、CourseBuilder、主页问答、课程问答、资源、路径、评估和报告由八条真实 LangGraph 编排；其他闭环继续保留兼容 trace。
 
 如果路由、入口或首次进入流程变化，必须同步更新：
 
@@ -506,7 +506,7 @@ Phase 5 以后：
 - Phase 4.4 已接真实 `/materials`；`LearningSpacePage` 上传按钮会调用 `/materials/upload` 并刷新 `/dashboard/summary`，`LibraryPage` 调用 `/materials` 渲染当前用户资料列表，上传成功后刷新列表和 summary。
 - Phase 5.1 已接真实 `/courses/from-materials`、`/courses`、`/courses/{course_id}`、`/courses/{course_id}/overview` 和 `/courses/{course_id}/knowledge-points`；`LearningSpacePage` 和 `LibraryPage` 的生成课程浮层会调用真实接口，成功后刷新数据并跳转新课程空间。
 - Phase 14 后，课程生成和 `/rag/search` 只把真实外部 embedding 用作 pgvector SQL 候选；`CourseSpacePage` 会显示混合检索、关键词检索、`local_fallback` 或 `provider_failed`，本地 hash 不作为语义命中。
-- Phase 6.5 已把 `CourseSpacePage` 改造为双模式：默认问答模式不常驻知识画布、资源区、证据层、横向知识点条或主区重复历史；来源、生成资源、学习路径和课堂协作轨迹收敛到回答下方；知识点入口和引用会进入学习模式，右侧复用当前课程 AI 辅导输入。
+- Phase 6.5 已把 `CourseSpacePage` 改造为双模式；Phase 15 在按需学习模式接入 React Flow 知识点先修图和掌握状态，默认问答模式仍不常驻图谱、资源区或证据层。
 - Phase 7.1 已把 `ProfilePage` 接入真实 `/profiles/me`、`/profiles/chat` 和 `/profiles/events`；空画像显示待补充，画像证据来自后端事件，课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件。
 - Phase 13.1 已把 `CourseSpacePage` 的“课堂协作轨迹”接入真实 `/agents/traces/{trace_id}`；存在 `latest_trace_id` 时读取当前用户自己的 `CourseTutorGraph` trace，空 trace 和读取失败只在回答详情局部提示。
 - `StudioPage` 展示六类结构化资源、引用、质量分、Graph 轨迹和 PPTX 状态；`CourseSpacePage` 既可带课程进入资源工坊，也可在回答下方生成并内联预览资源。

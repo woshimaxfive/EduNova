@@ -119,6 +119,7 @@ erDiagram
 | `visibility` | varchar | `private`、`public` |
 | `status` | varchar | `draft`、`ready`、`failed` |
 | `agent_trace_id` | varchar | 建课 Graph 轨迹，可为空 |
+| `structure_json` | jsonb | v2 课程结构、学习目标、章节、来源覆盖和审核摘要，非空默认 `{}` |
 | `created_at` | timestamptz | 创建时间 |
 
 ### 4.3 `course_enrollments`
@@ -250,7 +251,7 @@ Phase 11.2 的资料对比第一刀不新增表和迁移，也不持久化对比
 
 ### 4.5 `knowledge_points`
 
-用途：课程知识点。Phase 5.1 规则建课会根据 Markdown 标题或 TXT 段落为当前用户课程生成知识点。
+用途：课程知识点。Phase 15 的 CourseBuilderGraph 根据真实资料分块生成知识点，并把临时先修 key 在事务落库后转换为真实知识点 ID；旧课程继续兼容空先修关系。
 
 字段：
 
@@ -301,6 +302,7 @@ Phase 11.2 的资料对比第一刀不新增表和迁移，也不持久化对比
 | `user_id` | bigint | 用户 |
 | `profile_json` | jsonb | 8 维画像 |
 | `confidence_score` | numeric | 当前画像可信度 |
+| `dimension_confidence_json` | jsonb | 8 个画像维度的逐维可信度，非空默认 `{}` |
 | `updated_reason` | text | 最近一次更新原因摘要 |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
@@ -323,6 +325,14 @@ Phase 7.2 明确本表保存用户级长期画像，只保留一份，不为每�
 | `dimension` | varchar | 画像维度 |
 | `change_summary` | text | 变化摘要 |
 | `evidence_json` | jsonb | 证据引用和触发来源 |
+| `agent_trace_id` | varchar | ProfileGraph 轨迹，可为空 |
+| `source_type` | varchar | `profile_chat`、`course_tutor`、`practice_assessment` 等安全来源 |
+| `source_ref_type` | varchar | 来源实体类型，可为空 |
+| `source_ref_id` | bigint | 来源实体 ID，可为空 |
+| `status` | varchar | `candidate` 或 `applied` |
+| `confidence_score` | numeric | 本次提案聚合可信度，可为空 |
+| `proposal_json` | jsonb | 白名单画像提案，非空默认 `{}` |
+| `applied_at` | timestamptz | 应用到长期画像的时间，可为空 |
 | `created_at` | timestamptz | 创建时间 |
 
 Phase 7.1 中课程问答只会在 `scope=course` 且用户问题出现明确困惑或薄弱信号时写入 `dimension="weak_points"` 的画像候选事件。`evidence_json` 只保存来源类型、课程 ID、会话 ID、消息 ID、trace ID 和安全引用摘要，不保存完整用户问题、系统提示词、模型输入或资料原文。
@@ -330,6 +340,8 @@ Phase 7.1 中课程问答只会在 `scope=course` 且用户问题出现明确困
 Phase 7.2 明确 `profile_events` 是证据流，不等同于正式弱点或学习事件总线。带课程来源的事件可作为课程学习状态候选证据，后续是否进入 `weakness_review_queue` 需要去重、合并或用户/练习结果确认。本阶段不新增通用 `learning_events` 表。
 
 Phase 7.3 中 `GET /courses/{course_id}/learning-state` 会读取当前用户当前课程下的弱点候选事件，并按知识点或安全标题同步到 `weakness_review_queue` 的 `pending` 项。该同步不读取完整用户问题、系统提示词、模型输入或资料原文。
+
+Phase 15 的迁移 `20260710_0012` 为画像与课程结构补齐上述字段。显式画像回答写 `applied`；隐式学习信号在双来源和置信度门槛前写 `candidate`，不保存完整问答、作答或模型输入。
 
 ### 4.9 `learning_paths`
 
@@ -467,6 +479,8 @@ Phase 8.2 生成资源时同步写入质量分。Phase 8.2.1 后，质量分由�
 用途：保存一次练习。
 
 Phase 14 的迁移 `20260710_0011` 新增 `assessment_json`，持久化弱点新增/更新数、路径回流状态、路径 trace 和推荐资源 ID。练习必须绑定 `user_id` 和 `course_id`，只能由当前用户访问。
+
+Phase 15 继续复用 `assessment_json` 保存 `requested_difficulty`、`effective_difficulty` 和 `draft_saved_at`。草稿写在已有 `practice_answers.answer_text`，不新增草稿表，也不触发评估。
 
 字段：
 
@@ -782,6 +796,7 @@ Demo 数据要求：
 11. 独立资料库和课程资料关联由迁移 `20260703_0005_create_material_library.py` 创建。
 12. 学习产物 Graph trace 字段由迁移 `20260707_0007_add_learning_artifact_agent_trace_ids.py` 创建。
 13. 主页资料检索切片和向量索引由迁移 `20260710_0009_create_material_chunks.py` 创建。
+14. 画像逐维可信度、课程结构和画像证据状态由迁移 `20260710_0012_add_profile_and_course_structure.py` 创建。
 
 当前迁移命令：
 
@@ -817,6 +832,7 @@ Demo 数据要求：
 22. Phase 13.2 后，`export_jobs` 可记录 Markdown/PDF/DOCX 异步导出任务状态、文件路径、脱敏失败摘要和 `agent_trace_id`；下载接口必须按 `user_id` 隔离。
 23. HomeTutorGraph 升级后，已解析资料生成稳定 `material_chunks`；既有资料可惰性补齐，检索只能读取当前用户本次选中的资料，删除资料必须级联删除切片。
 24. Phase 14 后，`practice_sessions.assessment_json` 保存可刷新恢复的闭环摘要；弱点通过来源引用精确绑定错题，但不保存原始模型输入。
+25. Phase 15 后，画像隐式信号必须通过独立来源与置信度门控；课程结构保存来源覆盖和真实知识点先修 ID；练习草稿只能写当前用户未完成会话。
 
 当前已验证：
 

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.errors import make_trace_id
 from backend.app.core.config import Settings, get_settings
-from backend.app.models import Course, CourseMaterial, CourseMaterialLink, KnowledgeChunk, KnowledgePoint, Material, User
+from backend.app.models import Course, CourseMaterial, CourseMaterialLink, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, User
 from backend.app.schemas.materials import (
     AttachCourseMaterialsResult,
     MaterialDetail,
@@ -24,6 +24,7 @@ from backend.app.schemas.materials import (
     MaterialUploadResult,
 )
 from backend.app.services.material_parsers import DocumentParseError, DocumentParser
+from backend.app.services.material_retrieval import MaterialChunkingService
 
 
 class MaterialValidationError(Exception):
@@ -55,6 +56,8 @@ class MaterialRepository(Protocol):
 
     def add_material(self, material: Material) -> None: ...
 
+    def add_material_chunks(self, chunks: list[MaterialChunk]) -> None: ...
+
     def get_material_for_user(self, user_id: int, material_id: int) -> Material | None: ...
 
     def list_materials(self, user_id: int, course_id: int | None = None, unassigned: bool = False) -> list[Material]: ...
@@ -85,6 +88,10 @@ class SqlAlchemyMaterialRepository:
 
     def add_material(self, material: Material) -> None:
         self.db.add(material)
+        self.db.flush()
+
+    def add_material_chunks(self, chunks: list[MaterialChunk]) -> None:
+        self.db.add_all(chunks)
         self.db.flush()
 
     def get_material_for_user(self, user_id: int, material_id: int) -> Material | None:
@@ -151,10 +158,17 @@ class MaterialService:
     image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
     exam_title_keywords = ("期末", "复习", "试题", "样题", "真题", "考试", "练习")
 
-    def __init__(self, repository: MaterialRepository, settings: Settings | None = None, parser: DocumentParser | None = None) -> None:
+    def __init__(
+        self,
+        repository: MaterialRepository,
+        settings: Settings | None = None,
+        parser: DocumentParser | None = None,
+        chunking_service: MaterialChunkingService | None = None,
+    ) -> None:
         self.repository = repository
         self.settings = settings or get_settings()
         self.parser = parser or DocumentParser()
+        self.chunking_service = chunking_service or MaterialChunkingService()
 
     def upload_material(
         self,
@@ -191,6 +205,11 @@ class MaterialService:
 
         try:
             self.repository.add_material(material)
+            chunks = self.chunking_service.build_chunks(material)
+            if chunks:
+                add_material_chunks = getattr(self.repository, "add_material_chunks", None)
+                if callable(add_material_chunks):
+                    add_material_chunks(chunks)
             if course is not None:
                 self.repository.add_link(
                     CourseMaterialLink(

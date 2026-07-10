@@ -123,6 +123,7 @@ const materialRichSummary: DashboardSummary = {
 };
 
 let previousAdapter = apiClient.defaults.adapter;
+let previousFetch = globalThis.fetch;
 
 type ApiCall = {
   method: string;
@@ -134,6 +135,8 @@ type TutorMockOptions = {
   failMessageSend?: boolean;
   historyDetail?: unknown;
   historyDetails?: Record<string, unknown>;
+  streamReplacement?: string;
+  streamWarnings?: string[];
 };
 
 function parsePayload(data: unknown) {
@@ -210,6 +213,75 @@ function renderWithDashboardSummary(
     updated_at: "2026-07-03T12:00:00Z"
   };
   let recentConversations: DashboardSummary["recent_conversations"] = [...summary.recent_conversations];
+
+  globalThis.fetch = vi.fn(async (input, init) => {
+    const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const url = rawUrl.replace(/^https?:\/\/[^/]+/, "").replace(/^\/api\/v1/, "");
+    const payload = parsePayload(init?.body);
+    calls.push({ method: String(init?.method ?? "get").toLowerCase(), url, payload });
+
+    if (url !== TUTOR_ENDPOINTS.stream(501)) {
+      return new Response(null, { status: 404 });
+    }
+    if (tutorOptions.failMessageSend) {
+      return new Response(
+        `event: error\ndata: ${JSON.stringify({ code: "MODEL_PROVIDER_ERROR", message: "模型暂不可用，请检查设置或稍后重试。" })}\n\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } }
+      );
+    }
+
+    const message = typeof payload === "object" && payload !== null && "message" in payload ? String(payload.message) : "";
+    const citations = [
+      {
+        source_type: "material",
+        material_id: "201",
+        title: "真实资料讲义.md",
+        section_title: "反向传播",
+        page_number: null,
+        snippet: "资料短摘录：反向传播需要先理解链式法则。",
+        score: 8.2,
+        retrieval_source: "hybrid",
+        embedding_status: "local_fallback"
+      },
+      {
+        source_type: "web",
+        title: "联网搜索结果",
+        url: "https://example.com/latest-ai-learning",
+        snippet: "网页摘要：把概念复习和练习反馈结合起来。"
+      }
+    ];
+    const draft = "## 学习建议\n\n先把学习目标拆成三步，再按资料和题型复习。";
+    const finalAnswer = tutorOptions.streamReplacement ?? draft;
+    sentMessages.push(
+      { id: `u-${sentMessages.length + 1}`, role: "user", content: message },
+      {
+        id: `a-${sentMessages.length + 2}`,
+        role: "assistant",
+        content: finalAnswer,
+        citation_json: citations,
+        trace_id: "trace_home_tutor_test"
+      }
+    );
+    const detail = makeSessionDetail("501", createdSession.title, sentMessages);
+    const events = [
+      ["metadata", { session_id: "501", trace_id: "trace_home_tutor_test", workflow: "home_tutor", citation_count: 0, used_model: true }],
+      ["status", { stage: "material_retriever", label: "正在检索资料" }],
+      ["sources", { citations, warnings: tutorOptions.streamWarnings ?? [] }],
+      ["status", { stage: "answer", label: "正在生成回答" }],
+      ["token", { content: "## 学习建议\n\n" }],
+      ["token", { content: "先把学习目标拆成三步，再按资料和题型复习。" }],
+      ...(tutorOptions.streamReplacement ? [["replace", { content: finalAnswer, reason: "review_repair" }]] : []),
+      ["done", detail]
+    ];
+    const body = events
+      .map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      .join("");
+
+    return new Response(body, {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream; charset=utf-8" }
+    });
+  });
 
   apiClient.defaults.adapter = async (config) => {
     const method = (config.method ?? "get").toLowerCase();
@@ -374,10 +446,10 @@ function renderWithDashboardSummary(
             steps: [
               {
                 id: "step-profile",
-                agent_name: "home_profile",
+                agent_name: "context",
                 step_index: 1,
                 status: "completed",
-                input_summary: "读取主页画像",
+                input_summary: "读取主页画像与会话上下文",
                 output_summary: "识别学习目标和当前问题",
                 duration_ms: 12,
                 metadata: {
@@ -390,7 +462,7 @@ function renderWithDashboardSummary(
               {
                 id: "step-review",
                 agent_name: "review",
-                step_index: 5,
+                step_index: 7,
                 status: "completed",
                 input_summary: "审核回答",
                 output_summary: "确认不展示原始思维链",
@@ -474,12 +546,14 @@ function renderWithDashboardSummary(
 describe("LearningSpacePage", () => {
   beforeEach(() => {
     previousAdapter = apiClient.defaults.adapter;
+    previousFetch = globalThis.fetch;
     localStorage.clear();
     useAuthStore.getState().clearSession();
   });
 
   afterEach(() => {
     apiClient.defaults.adapter = previousAdapter;
+    globalThis.fetch = previousFetch;
     Reflect.deleteProperty(window, "SpeechRecognition");
     Reflect.deleteProperty(window, "webkitSpeechRecognition");
     Reflect.deleteProperty(window, "speechSynthesis");
@@ -515,6 +589,7 @@ describe("LearningSpacePage", () => {
   it("renders a calm ChatGPT-style learning home without dashboard rails", async () => {
     renderWithDashboardSummary();
 
+    expect(document.querySelector(".home-learning-surface")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "历史对话" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "AI 学习入口" })).toBeInTheDocument();
@@ -721,7 +796,8 @@ describe("LearningSpacePage", () => {
     const thread = screen.getByRole("region", { name: "主页对话" });
 
     expect(within(thread).getByText("期末复习怎么安排？")).toBeInTheDocument();
-    expect(within(thread).getByText(/模型回答：先把学习目标拆成三步/)).toBeInTheDocument();
+    expect(within(thread).getByRole("heading", { name: "学习建议" })).toBeInTheDocument();
+    expect(within(thread).getByText(/先把学习目标拆成三步/)).toBeInTheDocument();
     expect(within(thread).queryByRole("region", { name: "回答展开详情" })).not.toBeInTheDocument();
     await user.click(within(thread).getByRole("button", { name: "来源" }));
     expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("来源");
@@ -760,7 +836,7 @@ describe("LearningSpacePage", () => {
     await user.type(screen.getByRole("textbox", { name: "学习问题输入" }), "结合资料和最新趋势怎么复习？");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
-    const messageCall = calls.find((call) => call.method === "post" && call.url === TUTOR_ENDPOINTS.message(501));
+    const messageCall = calls.find((call) => call.method === "post" && call.url === TUTOR_ENDPOINTS.stream(501));
 
     expect(messageCall?.payload).toMatchObject({
       message: "结合资料和最新趋势怎么复习？",
@@ -777,7 +853,7 @@ describe("LearningSpacePage", () => {
 
     await user.click(within(thread).getByRole("button", { name: "思考过程" }));
 
-    expect(await within(thread).findByText("home_profile")).toBeInTheDocument();
+    expect(await within(thread).findByText("context")).toBeInTheDocument();
     expect(within(thread).getByText("确认不展示原始思维链")).toBeInTheDocument();
     expect(within(thread).getByText("已参考最近 2 条会话")).toBeInTheDocument();
     expect(calls).toContainEqual(expect.objectContaining({ method: "get", url: AGENT_ENDPOINTS.trace("trace_home_tutor_test") }));
@@ -867,7 +943,7 @@ describe("LearningSpacePage", () => {
     expect(await screen.findByText("那第二步做什么？")).toBeInTheDocument();
 
     const createCalls = calls.filter((call) => call.method === "post" && call.url === TUTOR_ENDPOINTS.sessions);
-    const messageCalls = calls.filter((call) => call.method === "post" && call.url === TUTOR_ENDPOINTS.message(501));
+    const messageCalls = calls.filter((call) => call.method === "post" && call.url === TUTOR_ENDPOINTS.stream(501));
 
     expect(createCalls).toHaveLength(1);
     expect(createCalls[0].payload).toMatchObject({
@@ -893,6 +969,49 @@ describe("LearningSpacePage", () => {
     expect(within(thread).getByText("后端保存的问题")).toBeInTheDocument();
     expect(within(thread).getByText("后端保存的回答")).toBeInTheDocument();
     expect(calls).toContainEqual(expect.objectContaining({ method: "get", url: TUTOR_ENDPOINTS.detail(501) }));
+  });
+
+  it("hides legacy prompt echoes when loading an older home answer", async () => {
+    const user = userEvent.setup();
+
+    renderWithDashboardSummary(starterSummary, {
+      historyDetail: makeSessionDetail("501", "接口里的主页历史", [
+        { id: "u-legacy", role: "user", content: "什么是机器学习？" },
+        {
+          id: "a-legacy",
+          role: "assistant",
+          content:
+            "学生问题：什么是机器学习？ 工具状态：联网未配置 可用来源摘要：资料开头 最终回答：## 机器学习\n\n机器学习让系统从数据中归纳规律。"
+        }
+      ])
+    });
+
+    await user.click(await screen.findByRole("button", { name: /接口里的主页历史/ }));
+
+    const thread = await screen.findByRole("region", { name: "主页对话" });
+    expect(within(thread).getByRole("heading", { name: "机器学习" })).toBeInTheDocument();
+    expect(within(thread).getByText("机器学习让系统从数据中归纳规律。")).toBeInTheDocument();
+    expect(within(thread).queryByText(/工具状态/)).not.toBeInTheDocument();
+  });
+
+  it("applies review replacement and keeps tool warnings inside the source panel", async () => {
+    const user = userEvent.setup();
+
+    renderWithDashboardSummary(blankSummary, {
+      streamReplacement: "## 审核后的回答\n\n这是修订后的安全正文。",
+      streamWarnings: ["联网搜索未配置，未返回网页来源。"]
+    });
+
+    await user.type(screen.getByRole("textbox", { name: "学习问题输入" }), "给我一个最新案例");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    const thread = await screen.findByRole("region", { name: "主页对话" });
+    expect(within(thread).getByRole("heading", { name: "审核后的回答" })).toBeInTheDocument();
+    expect(within(thread).queryByRole("heading", { name: "学习建议" })).not.toBeInTheDocument();
+    expect(within(thread).queryByText("已思考若干秒")).not.toBeInTheDocument();
+
+    await user.click(within(thread).getByRole("button", { name: "来源" }));
+    expect(within(thread).getByRole("list", { name: "工具提示" })).toHaveTextContent("联网搜索未配置");
   });
 
   it("renames a home history conversation from the sidebar menu", async () => {

@@ -124,6 +124,59 @@ def test_home_answer_merges_long_conversation_summary_into_single_system_message
     assert sum(message["role"] == "system" for message in sent_messages) == 1
 
 
+def test_home_answer_extracts_only_final_answer_boundary_and_requests_markdown() -> None:
+    model = FakeModelSettingsService(
+        "内部规划不应展示<final_answer>## 机器学习\n\n机器学习从数据中归纳可泛化规律。</final_answer>尾部说明"
+    )
+    service = CourseAnswerService(model)
+
+    result = service.generate_home(user=object(), question="什么是机器学习？")
+
+    assert result.content == "## 机器学习\n\n机器学习从数据中归纳可泛化规律。"
+    assert "内部规划" not in result.content
+    assert "只输出 <final_answer>" in model.calls[0][0]["content"]
+
+
+def test_home_answer_keeps_unbounded_prompt_echo_visible_to_graph_review() -> None:
+    echoed = "学生问题：什么是机器学习？ 工具状态：未联网 可用来源摘要：资料开头 工具提示：无。"
+
+    assert CourseAnswerService._sanitize_home_answer(echoed) == echoed
+
+
+def test_home_review_returns_none_for_invalid_json_instead_of_fabricating_passed() -> None:
+    service = CourseAnswerService(FakeModelSettingsService("这不是审核 JSON"))
+
+    result = service.review_home(
+        user=object(),
+        question="什么是机器学习？",
+        answer="机器学习从数据中归纳规律。",
+        citations=[],
+    )
+
+    assert result is None
+
+
+def test_home_review_filters_unknown_risk_flags_and_forces_revision() -> None:
+    service = CourseAnswerService(
+        FakeModelSettingsService(
+            '{"review_status":"passed","confidence":1.4,"risk_flags":["prompt_echo","unknown"],'
+            '"safety_summary":"需要修订"}'
+        )
+    )
+
+    result = service.review_home(
+        user=object(),
+        question="什么是机器学习？",
+        answer="学生问题：什么是机器学习？",
+        citations=[],
+    )
+
+    assert result is not None
+    assert result.review_status == "revise"
+    assert result.confidence == 1.0
+    assert result.risk_flags == ["prompt_echo"]
+
+
 def test_course_answer_stream_includes_conversation_context() -> None:
     model = FakeModelSettingsService("根据上下文流式回答。")
     service = CourseAnswerService(model)

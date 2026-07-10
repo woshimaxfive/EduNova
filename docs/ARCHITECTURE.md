@@ -210,7 +210,7 @@ frontend/src/
 - `materials.ts`：上传、列表、详情、进度和课程关联。
 - `courses.ts`：课程列表、详情、概览、知识点和规则建课。
 - `rag.ts`：课程知识库检索和混合检索字段。
-- `tutor.ts`：主页/课程会话、消息、引用、主页联网/深思/资料参数和课程消息流式读取。
+- `tutor.ts`：主页/课程会话、消息、引用、主页联网/深思/资料参数，以及 home/course 共用 SSE 的状态、来源、token、Review 替换和完成事件。
 - `exports.ts`：旧同步 Markdown 学习档案导出和 Markdown/PDF/DOCX 异步导出任务。
 - `settings.ts`：模型配置读取、保存、测试、多配置管理和默认配置。
 
@@ -223,7 +223,7 @@ frontend/src/
 - Phase 13.2 已完成 PDF/DOCX/PPTX 文本解析；当前 `/app` 和 `/app/library` 可用已解析 TXT/Markdown/PDF/DOCX/PPTX 资料生成课程，并跳转 `/app/courses/:courseId`。旧版 DOC/PPT、图片和扫描件不伪装解析完成。
 - Phase 5.2 已完成受保护的 `/rag/search` 课程知识库检索；Phase 6.4 后检索会优先融合关键词分数和向量分数，并把真实资料、章节、切片引用和检索状态保存到 assistant 消息。
 - Phase 5.3 已完成课程空间 `scope=course` 会话持久化；课程侧栏历史来自 `/tutor/sessions?scope=course&course_id=...`，点击历史会恢复真实 messages 和 `citation_json`。
-- 当前主页 assistant 已接入普通模型回答、已选资料短摘录、Tavily-compatible 联网搜索、深度回答指令和 `home_tutor` trace；未配置搜索 Key 时只返回 warning，不伪造网页来源。主页仍不使用课程 RAG 和流式输出。
+- 当前主页 assistant 由 `HomeTutorGraph` 接管并使用流式输出。主页允许模型通用知识，已选资料通过独立 `material_chunks` 做资料级混合检索，联网结果作为可追溯证据；未配置搜索 Key 时 warning 只进入来源/轨迹区，不伪造网页来源。课程空间继续使用严格课程 RAG，两者不混用证据边界。
 - 当前 `/app/courses/:courseId` 的课程标题、知识点、课程历史、课程消息和课程引用来自真实接口。
 - 命中引用且模型可用时，课程 assistant 内容来自 OpenAI-compatible 模型回答。
 - 课程页优先使用 `fetch` + `ReadableStream` 消费 SSE。
@@ -264,12 +264,13 @@ backend/app/
 | `backend/app/models` | 用户、课程、资料、知识点、知识切片核心模型，以及画像、路径、资源、Agent 轨迹、练习、报告、对话和模型设置基础模型 |
 | `backend/app/data/builtin_courses` | 内置课程包数据 |
 | `backend/app/services/course_seed.py` | 内置课程导入服务 |
-| `backend/app/services/tutor.py` | 主页/课程会话服务，负责当前用户会话创建、列表、详情、追加消息、主页资料/联网/深度回答工具、`home_tutor` trace、课程会话混合检索引用持久化、非流式课程回答生成编排，以及 Phase 6.3 的课程消息流式输出和完成后持久化 |
+| `backend/app/services/tutor.py` | 主页/课程会话 API 边界和依赖装配；`HomeTutorGraphRunner` 接管主页上下文、路由、资料检索、联网、规划、回答、Review/Repair 和持久化，`CourseTutorGraphRunner` 接管严格课程 RAG 问答 |
 | `backend/app/services/model_settings.py` | 模型设置服务，负责用户多模型配置、系统兜底配置解析、Fernet 加密保存用户 Key、脱敏摘要、连接测试、默认配置切换、聊天模型和 embedding 模型运行时配置优先级 |
 | `backend/app/services/embeddings.py` | Embedding 服务，负责 OpenAI-compatible `/embeddings` 调用编排、本地 `local-hash-1536` fallback、知识切片向量写入和 metadata 标记 |
 | `backend/app/services/course_answers.py` | 回答服务，负责主页学习 prompt、资料/网页来源摘要、深度回答指令、课程引用受控 prompt、非流式或流式模型 Provider 调用、未配置和模型失败处理 |
 | `backend/app/services/material_parsers.py` | 资料解析器，负责 TXT/Markdown/PDF/DOCX/PPTX 文本抽取，并明确 OCR、旧版 Office 和扫描件边界 |
 | `backend/app/services/materials.py` | 个人资料库服务，负责上传保存、解析、列表、详情、进度和课程资料关联 |
+| `backend/app/services/material_retrieval.py` | 共享资料分块和主页资料级 RAG，负责上传后切片、既有资料惰性补齐、当前用户选中资料限制、关键词/pgvector 混合排序和安全引用 |
 | `backend/app/services/web_search.py` | Tavily-compatible 联网搜索服务，未配置 Key 时返回 warning，不生成假来源 |
 | `backend/app/services/courses.py` | 课程服务，负责已解析资料规则建课、课程列表、详情、概览、知识点读取和课程生成后的 best-effort 向量补齐 |
 | `backend/app/services/exports.py` | 学习档案导出服务，负责旧同步 Markdown 兼容接口和 Markdown/PDF/DOCX 异步 job 渲染 |
@@ -361,7 +362,7 @@ ReviewAgent 审核内容
 前端展示资源、引用和轨迹
 ```
 
-当前生产 Graph 覆盖 `ProfileGraph`、`CourseBuilderGraph`、`MaterialComparisonGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`ExamSprintGraph`、`AssessmentGraph`、`ReportGraph` 和 `ExportDossierGraph`。所有生成型 Graph 都必须经过 ReviewAgent 节点，并输出 `review_status`、`confidence`、`risk_flags` 和安全摘要。
+当前真实接管生产主流程的是 `HomeTutorGraph`、`CourseTutorGraph` 和 `ResourceGenerationGraph`。画像、资料建课/对比、路径/冲刺、练习评估、报告和导出仍使用现有服务逻辑与兼容 trace，不能写成已经全部 Graph 化。三个已接管的生成链路都落真实节点耗时和白名单 metadata；主页 Review 输出 `review_status`、`confidence`、`risk_flags` 和 `safety_summary`，失败时最多 Repair 一次。
 
 资源 Worker：
 

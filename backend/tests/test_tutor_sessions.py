@@ -132,12 +132,43 @@ class FakeCourseCitationSearcher:
 
 
 @dataclass
+class FakeMaterialCitationSearcher:
+    citations: list[dict[str, Any]] = field(default_factory=list)
+    retrieval_mode: str = "hybrid"
+    embedding_status: str = "local_fallback"
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def search(self, user: User, material_ids: list[int], query: str, top_k: int) -> SimpleNamespace:
+        self.calls.append(
+            {
+                "user_id": user.id,
+                "material_ids": material_ids,
+                "query": query,
+                "top_k": top_k,
+            }
+        )
+        return SimpleNamespace(
+            citations=self.citations,
+            retrieval_mode=self.retrieval_mode,
+            embedding_status=self.embedding_status,
+        )
+
+
+@dataclass
 class FakeCourseAnswerGenerator:
     content: str = "模型回答：启发式搜索要先理解启发函数，再练 A 星算法。"
     tokens: list[str] = field(default_factory=lambda: ["模型回答：", "启发式搜索要先理解启发函数。"])
     trace_id: str | None = "trace_model_test"
     should_raise: Exception | None = None
     calls: list[dict[str, Any]] = field(default_factory=list)
+    review_status: str = "passed"
+    review_risk_flags: list[str] = field(default_factory=list)
+    review_safety_summary: str | None = None
+    review_available: bool = True
+    repair_content: str | None = None
+    plan_calls: list[dict[str, Any]] = field(default_factory=list)
+    review_calls: list[dict[str, Any]] = field(default_factory=list)
+    repair_calls: list[dict[str, Any]] = field(default_factory=list)
 
     def generate(
         self,
@@ -163,6 +194,7 @@ class FakeCourseAnswerGenerator:
         deep_thinking: bool = False,
         warnings: list[str] | None = None,
         conversation_context: Any | None = None,
+        plan_summary: str | None = None,
     ) -> SimpleNamespace:
         call = {
             "user_id": user.id,
@@ -183,6 +215,83 @@ class FakeCourseAnswerGenerator:
         if self.should_raise is not None:
             raise self.should_raise
         return SimpleNamespace(content=self.content, trace_id=self.trace_id)
+
+    def stream_home(
+        self,
+        user: User,
+        question: str,
+        citations: list[dict[str, Any]] | None = None,
+        use_web_search: bool = False,
+        deep_thinking: bool = False,
+        warnings: list[str] | None = None,
+        conversation_context: Any | None = None,
+        plan_summary: str | None = None,
+    ) -> SimpleNamespace:
+        self.calls.append(
+            {
+                "user_id": user.id,
+                "question": question,
+                "citations": citations or [],
+                "stream": True,
+                "use_web_search": use_web_search,
+                "deep_thinking": deep_thinking,
+                "warnings": warnings or [],
+                **({"conversation_context": conversation_context} if conversation_context is not None else {}),
+            }
+        )
+        if self.should_raise is not None:
+            raise self.should_raise
+        return SimpleNamespace(tokens=iter(self.tokens), trace_id=self.trace_id, used_model=self.trace_id is not None)
+
+    def plan_home(self, user: User, question: str, citations: list[dict[str, Any]]) -> str:
+        self.plan_calls.append({"user_id": user.id, "question": question, "citation_count": len(citations)})
+        return "目标：直接回答问题\n证据需求：使用可用来源\n回答结构：定义、解释、下一步"
+
+    def review_home(
+        self,
+        user: User,
+        question: str,
+        answer: str,
+        citations: list[dict[str, Any]],
+        warnings: list[str] | None = None,
+    ) -> SimpleNamespace:
+        self.review_calls.append(
+            {
+                "user_id": user.id,
+                "question": question,
+                "answer": answer,
+                "citation_count": len(citations),
+                "warnings": warnings or [],
+            }
+        )
+        if not self.review_available:
+            return None
+        return SimpleNamespace(
+            review_status=self.review_status,
+            confidence=0.9 if self.review_status == "passed" else 0.45,
+            risk_flags=self.review_risk_flags,
+            safety_summary=self.review_safety_summary
+            or ("测试审核通过。" if self.review_status == "passed" else "测试审核要求修订。"),
+        )
+
+    def repair_home(
+        self,
+        user: User,
+        question: str,
+        draft: str,
+        citations: list[dict[str, Any]],
+        risk_flags: list[str],
+    ) -> str:
+        self.repair_calls.append(
+            {
+                "user_id": user.id,
+                "question": question,
+                "draft": draft,
+                "citation_count": len(citations),
+                "risk_flags": risk_flags,
+            }
+        )
+        return self.repair_content if self.repair_content is not None else draft
 
     def stream(
         self,
@@ -437,7 +546,8 @@ def test_append_message_writes_user_and_model_assistant_messages_in_order() -> N
     assert detail["messages"][0]["content"] == "为什么反向传播要用链式法则？"
     assert detail["messages"][1]["content"] == "模型回答：先把目标拆成三步，再按资料和题型复习。"
     assert detail["messages"][1]["citation_json"] == []
-    assert detail["messages"][1]["trace_id"] == "trace_model_test"
+    assert detail["messages"][1]["trace_id"].startswith("trace_")
+    assert detail["messages"][1]["trace_id"] != "trace_model_test"
     assert answer_generator.calls == [
         {
             "user_id": 1,
@@ -726,7 +836,8 @@ def test_append_home_message_uses_model_reply_but_does_not_call_course_searcher(
     ]
     assert detail["messages"][1]["content"] == "模型回答：启发式搜索要先理解启发函数，再练 A 星算法。"
     assert detail["messages"][1]["citation_json"] == []
-    assert detail["messages"][1]["trace_id"] == "trace_model_test"
+    assert detail["messages"][1]["trace_id"].startswith("trace_")
+    assert detail["messages"][1]["trace_id"] != "trace_model_test"
 
 
 def test_append_home_message_with_tools_persists_material_web_citations_and_trace() -> None:
@@ -734,11 +845,27 @@ def test_append_home_message_with_tools_persists_material_web_citations_and_trac
     user = make_user(1)
     repo = FakeTutorRepository(materials=[make_home_material()])
     web_searcher = FakeWebSearchService()
+    material_searcher = FakeMaterialCitationSearcher(
+        citations=[
+            {
+                "source_type": "material",
+                "material_id": "301",
+                "title": "主页复习资料.pdf",
+                "section_title": "启发式搜索",
+                "page_number": 3,
+                "snippet": "主页资料提示：启发式搜索要结合 A* 和估价函数一起复习。",
+                "score": 8.75,
+                "retrieval_source": "hybrid",
+                "embedding_status": "local_fallback",
+            }
+        ]
+    )
     answer_generator = FakeCourseAnswerGenerator(content="模型回答：先看 A* 的估价函数，再做三道搜索题。")
     service = module.TutorSessionService(
         repo,
         course_answer_generator=answer_generator,
         web_search_service=web_searcher,
+        material_citation_searcher=material_searcher,
     )
     session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="主页答疑")
 
@@ -763,7 +890,12 @@ def test_append_home_message_with_tools_persists_material_web_citations_and_trac
                     "source_type": "material",
                     "material_id": "301",
                     "title": "主页复习资料.pdf",
+                    "section_title": "启发式搜索",
+                    "page_number": 3,
                     "snippet": "主页资料提示：启发式搜索要结合 A* 和估价函数一起复习。",
+                    "score": 8.75,
+                    "retrieval_source": "hybrid",
+                    "embedding_status": "local_fallback",
                 },
                 {
                     "source_type": "web",
@@ -780,12 +912,32 @@ def test_append_home_message_with_tools_persists_material_web_citations_and_trac
     assistant = detail["messages"][1]
     assert assistant["citation_json"][0]["source_type"] == "material"
     assert assistant["citation_json"][1]["source_type"] == "web"
-    assert assistant["trace_id"] == "trace_model_test"
-    assert [log.agent_name for log in repo.agent_logs] == ["home_profile", "material_context", "web_search", "answer", "review"]
+    assert assistant["trace_id"].startswith("trace_")
+    assert assistant["trace_id"] != "trace_model_test"
+    assert material_searcher.calls == [
+        {
+            "user_id": 1,
+            "material_ids": [301],
+            "query": "启发式搜索怎么复习？",
+            "top_k": 5,
+        }
+    ]
+    assert [log.agent_name for log in repo.agent_logs] == [
+        "context",
+        "route",
+        "material_retriever",
+        "web_search",
+        "planner",
+        "answer",
+        "review",
+        "persist",
+    ]
     assert repo.agent_logs[0].metadata_json["workflow"] == "home_tutor"
-    assert repo.agent_logs[1].metadata_json["material_count"] == 1
-    assert repo.agent_logs[2].metadata_json["web_result_count"] == 1
-    assert repo.agent_logs[4].metadata_json["review_status"] == "passed"
+    assert repo.agent_logs[2].metadata_json["source_count"] == 1
+    assert repo.agent_logs[2].metadata_json["retrieval_mode"] == "hybrid"
+    assert repo.agent_logs[2].metadata_json["embedding_status"] == "local_fallback"
+    assert repo.agent_logs[3].metadata_json["source_count"] == 2
+    assert repo.agent_logs[6].metadata_json["review_status"] == "passed"
 
 
 def test_append_home_message_uses_contextual_query_for_web_search() -> None:
@@ -827,6 +979,122 @@ def test_append_home_message_does_not_record_profile_candidate_event() -> None:
     assert profile_recorder.calls == []
 
 
+def test_home_graph_repairs_prompt_echo_once_and_persists_only_reviewed_answer() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    answer_generator = FakeCourseAnswerGenerator(
+        content=(
+            "学生问题：什么是机器学习？ 工具状态：联网未配置 "
+            "可用来源摘要：资料开头 工具提示：无。"
+        ),
+        repair_content="## 机器学习\n\n机器学习让系统从数据中归纳规律，并用新数据检验规律。",
+    )
+    service = module.TutorSessionService(repo, course_answer_generator=answer_generator)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="机器学习")
+
+    detail = as_dict(service.append_message(user=user, session_id=session.id, content="什么是机器学习？"))
+
+    assistant = detail["messages"][1]
+    assert assistant["content"].startswith("## 机器学习")
+    assert "工具状态" not in assistant["content"]
+    assert len(answer_generator.repair_calls) == 1
+    assert answer_generator.repair_calls[0]["risk_flags"] == ["prompt_echo"]
+    assert len(answer_generator.review_calls) == 2
+    assert [log.agent_name for log in repo.agent_logs] == [
+        "context",
+        "route",
+        "material_retriever",
+        "web_search",
+        "planner",
+        "answer",
+        "review",
+        "repair",
+        "review",
+        "persist",
+    ]
+    assert [log.step_index for log in repo.agent_logs] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    assert repo.agent_logs[6].metadata_json["review_status"] == "revise"
+    assert repo.agent_logs[8].metadata_json["review_status"] == "passed"
+
+
+def test_home_graph_marks_unavailable_model_review_as_warning_instead_of_passed() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    answer_generator = FakeCourseAnswerGenerator(
+        content="## 梯度下降\n\n梯度下降沿损失函数下降方向更新参数。",
+        review_available=False,
+    )
+    service = module.TutorSessionService(repo, course_answer_generator=answer_generator)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="梯度下降")
+
+    detail = as_dict(service.append_message(user=user, session_id=session.id, content="什么是梯度下降？"))
+
+    assert detail["messages"][1]["content"].startswith("## 梯度下降")
+    assert answer_generator.repair_calls == []
+    assert repo.agent_logs[6].status == "warning"
+    assert repo.agent_logs[6].metadata_json["review_status"] == "warning"
+    assert "模型审核结论不可用" in repo.agent_logs[6].metadata_json["safety_summary"]
+
+
+def test_home_graph_does_not_reject_answer_when_model_review_flag_conflicts_with_positive_summary() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    answer_generator = FakeCourseAnswerGenerator(
+        content="## 机器学习\n\n机器学习从数据中归纳规律，并用新数据检验泛化能力。",
+        review_status="revise",
+        review_risk_flags=["off_topic"],
+        review_safety_summary="回答全面、准确且直接解释了机器学习。",
+    )
+    service = module.TutorSessionService(repo, course_answer_generator=answer_generator)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="机器学习")
+
+    detail = as_dict(service.append_message(user=user, session_id=session.id, content="什么是机器学习？"))
+
+    assert detail["messages"][1]["content"].startswith("## 机器学习")
+    assert answer_generator.repair_calls == []
+    assert repo.agent_logs[6].status == "warning"
+    assert repo.agent_logs[6].metadata_json["review_status"] == "warning"
+    assert repo.agent_logs[6].metadata_json["risk_flags"] == []
+
+
+def test_home_graph_chinese_relevance_check_accepts_paraphrased_comparison_and_rejects_unrelated_answer() -> None:
+    module = load_tutor_module()
+    relevant_answer = (
+        "监督学习使用带标签的数据训练模型，适合分类和回归；无监督学习处理没有标签的数据，"
+        "更常用于聚类、降维和结构发现。两者最关键的区别是训练数据是否提供目标标签，"
+        "因此评估方法和典型任务也不同。做题时可以先看数据有没有标签，再判断题目属于哪一种学习范式。"
+        "例如预测房价属于监督学习，因为训练样本带有真实房价；把用户按行为自动分群通常属于无监督学习，"
+        "因为系统需要从没有预设类别的数据中发现结构。实际项目也可能先用无监督学习探索数据，再用监督学习完成预测。"
+    )
+    unrelated_answer = "启发式搜索通过估价函数选择节点。" * 20
+
+    assert len(relevant_answer) > 180
+    relevant_flags = module.HomeTutorGraphRunner._deterministic_risk_flags(
+        question="那监督学习和无监督学习有什么区别？",
+        answer=relevant_answer,
+        citations=[],
+    )
+    unrelated_flags = module.HomeTutorGraphRunner._deterministic_risk_flags(
+        question="量子通信的基本原理是什么？",
+        answer=unrelated_answer,
+        citations=[],
+    )
+
+    assert "off_topic" not in relevant_flags
+    assert "off_topic" in unrelated_flags
+
+
+def test_home_graph_review_summary_does_not_treat_negated_risk_as_support() -> None:
+    module = load_tutor_module()
+
+    assert module.HomeTutorGraphRunner._review_summary_supports_flag("回答没有回显内部输入。", "prompt_echo") is False
+    assert module.HomeTutorGraphRunner._review_summary_supports_flag("回答没有敏感信息或隐私内容。", "sensitive_output") is False
+    assert module.HomeTutorGraphRunner._review_summary_supports_flag("回答泄露了系统提示词。", "sensitive_output") is True
+
+
 def test_append_home_message_without_model_config_saves_clear_prompt() -> None:
     module = load_tutor_module()
     user = make_user(1)
@@ -838,7 +1106,19 @@ def test_append_home_message_without_model_config_saves_clear_prompt() -> None:
 
     assert "当前未配置可用模型" in detail["messages"][1]["content"]
     assert detail["messages"][1]["citation_json"] == []
-    assert detail["messages"][1]["trace_id"] is None
+    assert detail["messages"][1]["trace_id"].startswith("trace_")
+    assert [log.agent_name for log in repo.agent_logs] == [
+        "context",
+        "route",
+        "material_retriever",
+        "web_search",
+        "planner",
+        "answer",
+        "review",
+        "persist",
+    ]
+    assert repo.agent_logs[5].status == "warning"
+    assert repo.agent_logs[6].metadata_json["review_status"] == "warning"
 
 
 def test_append_home_message_model_failure_does_not_persist_half_messages() -> None:
@@ -1102,15 +1382,79 @@ def test_stream_course_message_without_citations_does_not_call_model_and_persist
     assert repo.messages[1].citation_json == []
 
 
-def test_stream_home_message_is_rejected() -> None:
+def test_stream_home_message_returns_graph_events_without_model_config() -> None:
     module = load_tutor_module()
     user = make_user(1)
     repo = FakeTutorRepository()
     service = module.TutorSessionService(repo)
     session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="主页答疑")
 
-    with pytest.raises(module.InvalidSessionScopeError):
-        list(service.stream_message(user=user, session_id=session.id, content="主页问题"))
+    events = list(service.stream_message(user=user, session_id=session.id, content="主页问题"))
+
+    event_names = [event["event"] for event in events]
+    assert event_names[0] == "metadata"
+    assert "sources" in event_names
+    assert "token" in event_names
+    assert event_names[-1] == "done"
+    assert events[0]["data"]["workflow"] == "home_tutor"
+    assert "当前未配置可用模型" in next(event["data"]["content"] for event in events if event["event"] == "token")
+
+
+def test_stream_home_message_emits_replace_after_review_repair() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    answer_generator = FakeCourseAnswerGenerator(
+        tokens=[
+            "<final_answer>学生问题：什么是机器学习？ 工具状态：未联网 "
+            "可用来源摘要：资料开头</final_answer>"
+        ],
+        repair_content="## 机器学习\n\n机器学习通过数据学习可泛化的规律。",
+    )
+    service = module.TutorSessionService(repo, course_answer_generator=answer_generator)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="机器学习")
+
+    events = list(service.stream_message(user=user, session_id=session.id, content="什么是机器学习？"))
+
+    event_names = [event["event"] for event in events]
+    assert event_names[0] == "metadata"
+    assert "sources" in event_names
+    assert "replace" in event_names
+    assert event_names[-1] == "done"
+    replacement = next(event["data"] for event in events if event["event"] == "replace")
+    assert replacement == {
+        "content": "## 机器学习\n\n机器学习通过数据学习可泛化的规律。",
+        "reason": "review_repair",
+    }
+    assert len(answer_generator.repair_calls) == 1
+    assert repo.messages[1].content == replacement["content"]
+
+
+def test_stream_home_model_failure_emits_error_without_persisting_partial_messages() -> None:
+    module = load_tutor_module()
+    answer_module = importlib.import_module("backend.app.services.course_answers")
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    answer_generator = FakeCourseAnswerGenerator(
+        should_raise=answer_module.CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。")
+    )
+    service = module.TutorSessionService(repo, course_answer_generator=answer_generator)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="失败测试")
+
+    events = list(service.stream_message(user=user, session_id=session.id, content="什么是机器学习？"))
+
+    assert events[-1]["event"] == "error"
+    assert events[-1]["data"]["code"] == "MODEL_PROVIDER_ERROR"
+    assert repo.messages == []
+    assert [log.agent_name for log in repo.agent_logs] == [
+        "context",
+        "route",
+        "material_retriever",
+        "web_search",
+        "planner",
+        "answer",
+    ]
+    assert repo.agent_logs[-1].status == "failed"
 
 
 def test_stream_course_message_model_failure_emits_error_without_half_messages() -> None:
@@ -1291,6 +1635,21 @@ def test_tutor_message_route_accepts_home_tool_options() -> None:
     )
     repo = FakeTutorRepository(materials=[make_home_material()])
     answer_generator = FakeCourseAnswerGenerator()
+    material_searcher = FakeMaterialCitationSearcher(
+        citations=[
+            {
+                "source_type": "material",
+                "material_id": "301",
+                "title": "主页复习资料.pdf",
+                "section_title": "启发式搜索",
+                "page_number": None,
+                "snippet": "启发式搜索要结合 A* 和估价函数一起复习。",
+                "score": 7.5,
+                "retrieval_source": "keyword",
+                "embedding_status": "local_fallback",
+            }
+        ]
+    )
     app = create_app()
     app.dependency_overrides[get_auth_service] = lambda: AuthService(
         repository=TokenAuthRepository(user),
@@ -1300,6 +1659,7 @@ def test_tutor_message_route_accepts_home_tool_options() -> None:
         repo,
         course_answer_generator=answer_generator,
         web_search_service=FakeWebSearchService(warning="联网搜索未配置。"),
+        material_citation_searcher=material_searcher,
     )
     client = TestClient(app)
     headers = {"Authorization": f"Bearer {make_token(user, settings)}"}
@@ -1332,7 +1692,7 @@ def test_tutor_stream_route_requires_login() -> None:
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
 
 
-def test_tutor_stream_route_rejects_home_session() -> None:
+def test_tutor_stream_route_accepts_home_session() -> None:
     module = load_tutor_module()
     api_module = load_tutor_api_module()
     user = make_user(1, "接口学生")
@@ -1342,7 +1702,7 @@ def test_tutor_stream_route_rejects_home_session() -> None:
         jwt_expire_minutes=30,
     )
     repo = FakeTutorRepository()
-    service = module.TutorSessionService(repo)
+    service = module.TutorSessionService(repo, course_answer_generator=FakeCourseAnswerGenerator())
     app = create_app()
     app.dependency_overrides[get_auth_service] = lambda: AuthService(
         repository=TokenAuthRepository(user),
@@ -1359,8 +1719,9 @@ def test_tutor_stream_route_rejects_home_session() -> None:
         json={"message": "主页问题"},
     )
 
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert response.status_code == 200
+    assert "event: metadata" in response.text
+    assert "event: done" in response.text
 
 
 def test_tutor_session_route_rejects_course_session_without_course_id() -> None:

@@ -6,9 +6,13 @@
 
 当前最新完成到 **Phase 13.2：资料解析、主页智能工具和异步导出增强**。
 
-Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已按“对话式学习画像”主线收口；Phase 7.3 和 Phase 7.4 前置补齐课程级弱点队列基础，是为了让画像证据能落到课程状态里，不改变后续 Phase 编号。Phase 8 已完成 Agent 可观测底座、5 类课程资源生成和资源质量收口；Phase 9 已完成课程级学习路径、规则掌握度图、弱点队列推荐资源和复习时间第一版；Phase 10 已完成真实练习生成、确定性批改、弱点/掌握度反哺和学习报告展示第一刀；Phase 11.1 已完成课程级期末冲刺计划第一刀；Phase 11.2 已完成同课程多资料对比第一刀；Phase 12.1 已完成课程级 Markdown 学习档案导出第一刀；Phase 12.2 已把当前版本整理为可启动、可演示、可回归、可继续打磨的交付基线；Phase 13.1 已补 Agent trace 和工作流口径；Phase 13.2 已补齐 PDF/DOCX/PPTX 文本解析、主页联网搜索/深度思考/浏览器语音和 Markdown/PDF/DOCX 异步学习档案导出；2026-07-08 的 LangGraph hardening 已让 `CourseTutorGraph` 和 `ResourceGenerationGraph` 两条主链路真接管生产流程。
+Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已按“对话式学习画像”主线收口；Phase 7.3 和 Phase 7.4 前置补齐课程级弱点队列基础，是为了让画像证据能落到课程状态里，不改变后续 Phase 编号。Phase 8 已完成 Agent 可观测底座、5 类课程资源生成和资源质量收口；Phase 9 已完成课程级学习路径、规则掌握度图、弱点队列推荐资源和复习时间第一版；Phase 10 已完成真实练习生成、确定性批改、弱点/掌握度反哺和学习报告展示第一刀；Phase 11.1 已完成课程级期末冲刺计划第一刀；Phase 11.2 已完成同课程多资料对比第一刀；Phase 12.1 已完成课程级 Markdown 学习档案导出第一刀；Phase 12.2 已把当前版本整理为可启动、可演示、可回归、可继续打磨的交付基线；Phase 13.1 已补 Agent trace 和工作流口径；Phase 13.2 已补齐 PDF/DOCX/PPTX 文本解析、主页联网搜索/深度思考/浏览器语音和 Markdown/PDF/DOCX 异步学习档案导出；2026-07-10 的 LangGraph hardening 已让 `HomeTutorGraph`、`CourseTutorGraph` 和 `ResourceGenerationGraph` 三条主链路真接管生产流程。
 
 2026-07-10 已完成 Phase 13 前端视觉硬化第一轮：补齐前端语义化颜色、文字、阴影、圆角、等宽字体和焦点 token；统一运行时品牌色；登录页修正标题换行和表单层级；主页降低大标题与 pill 模板感并为 composer 增加可见焦点；课程空间把返回入口、A3 课程摘要、指标和 8 步轨重新分层；所有受保护路由在紧凑视口默认显示顶部导航条，展开后使用覆盖式侧栏抽屉，不再把完整桌面侧栏堆到页面底部。该轮不新增接口、数据表或学习能力。
+
+2026-07-10 主页智能对话 hardening 已完成 `HomeTutorGraph` 真接管：新增 `material_chunks` 资料级 RAG，主页不再固定读取资料开头；home/course 共用 SSE，主页可展示安全状态、真实来源、增量 Markdown 和 Review 修订替换；回答通过输出边界、规则审核、模型 ReviewAgent 和单次 Repair 防止内部 Prompt 回显。主页允许模型通用知识，课程空间仍保持只能依据课程资料的严格 RAG。
+
+该轮已通过 Docker 真实 PostgreSQL/pgvector 和 `agent-browser` 验收：选择“人工智能导论内置课程包.md”询问“什么是机器学习”能命中机器学习相关片段并输出正常 Markdown，联网未配置 warning 只出现在来源/轨迹区；连续追问 trace 显示最近 4 条会话上下文。验收中修复了弱模型 Review JSON 自相矛盾导致正常回答被误杀、中文整句相关性规则误判，以及 390px 长会话把输入框推到文档底部的问题。桌面和 390px 均为内部内容滚动、输入框固定可见、无水平溢出。
 
 这一阶段之后，EduNova 已经从前端骨架推进到真实学生学习底座：
 
@@ -18,7 +22,8 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 - 课程回答支持 SSE 流式输出，完成后持久化消息、引用和 `trace_id`。
 - RAG 检索已经从纯关键词升级到关键词 + 1536 维向量混合召回。
 - 主页会话已经从固定模板回复改为调用当前用户默认模型生成通用回答。
-- 主页会话可按需读取已选资料短摘录、Tavily-compatible 联网搜索摘要和深度回答指令，并展示真实 `home_tutor` trace；未配置搜索 Key 时不伪造网页来源。
+- 主页会话通过 `HomeTutorGraph` 按需读取已选资料相关切片、Tavily-compatible 联网结果和安全深度规划，并展示真实 `home_tutor` trace；未配置搜索 Key 时 warning 进入来源/轨迹区，不伪造网页来源。
+- 主页回答已支持 SSE 增量 Markdown、Graph 安全状态、`sources` 和 Review `replace`；失败时保留输入和已有历史，不持久化半截消息。
 - 主页会话和课程空间会话已补齐同一 `session_id` 内多轮上下文：模型输入会带入最近 12 条安全历史和必要摘要，安全摘要合并到唯一的 system 指令以兼容 OpenAI-compatible 网关，课程 RAG 与主页联网搜索会用上下文化 query 处理追问，不存在 6 轮或 12 条消息的人工发送上限。
 - 主页历史和课程空间历史支持会话菜单改名与软删除；删除当前会话后分别回到主页默认入口或课程问答引导态。
 - 主页语音输入和回答朗读使用浏览器 Web Speech API，不做服务端音频上传或 STT。
@@ -27,7 +32,7 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 - Phase 7.2 已明确用户级画像和课程级学习状态的边界：用户级画像只有一份，课程级目标、薄弱点、掌握度、复习队列和学习路径按课程聚合。
 - Phase 7.3 已把课程问答弱点候选事件同步为课程级 `weakness_review_queue` 待确认复习项，并在课程空间展示真实“待复习弱点”摘要。
 - Phase 7.4 已为课程级弱点复习项补齐确认、开始、完成和软忽略状态流转，课程空间可以直接操作真实队列项。
-- 2026-07-08 LangGraph hardening 已让 `CourseTutorGraph` 真接管课程非流式/流式问答，让 `ResourceGenerationGraph` 真接管 5 类资源生成；路径、练习、报告和导出仍保留现有服务逻辑和轻量 `agent_trace_id`，后续再图化。
+- 2026-07-10 LangGraph hardening 已让 `HomeTutorGraph`、`CourseTutorGraph` 和 `ResourceGenerationGraph` 真接管三条生产主链路；路径、练习、报告和导出仍保留现有服务逻辑和轻量 `agent_trace_id`，后续再图化。
 - Phase 8.2 已挂载 `/resources`，可基于当前用户课程生成讲解、思维导图、练习、代码实操和 PPT 大纲，并写入资源、质量分和 Agent 轨迹；Phase 8.2.1 已改为课程引用驱动的确定性可用稿优先，模型只做批量增强，模型不可用或失败时不再把可用资源降级为空模板。
 - Phase 9 已挂载 `/paths`，可为当前用户课程生成 active 学习路径、更新任务状态，并把 `/app/path` 接入真实课程、任务、路径依据和掌握度图。
 - Phase 9 已实现 `/courses/{course_id}/mastery-map`，并让 `/courses/{course_id}/learning-state` 返回真实路径摘要、掌握度摘要、弱点推荐资源和下次复习时间。
@@ -37,7 +42,7 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 - Phase 12.1 已挂载 `/exports/learning-dossier`，可同步导出当前用户课程级 Markdown 学习档案；Phase 13.2 已挂载 `/exports/learning-dossier/jobs`、`/exports/{job_id}` 和 `/exports/{job_id}/download`，可通过 Redis/RQ worker 异步生成 Markdown/PDF/DOCX 学习档案，并在 `/app/reports` 选择格式下载。
 - Phase 12.2 已补齐交付基线文档、开源说明、MIT 许可证、用户指南、答辩问答、测试报告和验收证据索引。
 
-2026-07-08 后，LangGraph 不再只是可观测骨架：课程问答和资源生成已经由真实 Graph runner 编排并落 `agent_run_logs`；画像、资料建课/对比、路径/冲刺、练习评估、学习报告和学习档案导出仍使用现有服务逻辑与兼容 trace，后续逐步接管。认证、设置、Dashboard 等非学习能力仍保持普通服务。
+2026-07-10 后，LangGraph 不再只是可观测骨架：主页问答、课程问答和资源生成已经由真实 Graph runner 编排并落 `agent_run_logs`；画像、资料建课/对比、路径/冲刺、练习评估、学习报告和学习档案导出仍使用现有服务逻辑与兼容 trace，后续逐步接管。认证、设置、Dashboard 等非学习能力仍保持普通服务。
 
 当前仍然不是完整商业产品。课程级路径、掌握度图、弱点队列、练习评估、学习报告、期末冲刺、资料对比、PDF/DOCX/PPTX 文本解析和 Markdown/PDF/DOCX 学习档案导出已经接入，交付基线文档和开源准备已补齐；但错题驱动的深度薄弱点追溯、资料对比与期末冲刺联动、OCR、旧版 Office 解析、扫描件解析和完整浏览器 E2E 还在后续打磨阶段。快速演示入口按注册页“带一个示例课程开始”处理，不再新增共享演示账号重置作为当前主线。
 
@@ -47,7 +52,7 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 | --- | --- | --- |
 | 认证 | 注册、登录、读取当前用户、退出、受保护路由 | `/api/v1/auth/*` |
 | 首页总览 | 当前用户课程、资料、主页历史和空状态 | `/api/v1/dashboard/summary` |
-| 主页会话 | 主页首次发送、连续追问、通用模型回答、历史切换、改名、软删除和刷新保留 | `/api/v1/tutor/sessions` |
+| 主页会话 | `HomeTutorGraph`、资料级 RAG、联网/深度规划、SSE Markdown、Review/Repair、连续追问、历史切换、改名、软删除和刷新保留 | `/api/v1/tutor/sessions` |
 | 资料库 | 上传、列表、详情、解析进度、课程关联和同课程资料对比 | `/api/v1/materials/*` |
 | 规则建课 | 已解析 TXT/Markdown/PDF/DOCX/PPTX 资料生成课程、知识点和切片 | `/api/v1/courses/from-materials` |
 | 课程详情 | 课程列表、详情、概览、知识点 | `/api/v1/courses/*` |
@@ -76,7 +81,7 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 | --- | --- |
 | `/login` | 调用真实登录接口，不提供共享演示学生按钮 |
 | `/register` | 调用真实注册接口，可选择空白开始或复制人工智能导论 |
-| `/app` | GPT 式主页，真实读取 summary、主页历史、最近课程和资料库浮层；发送后调用主页回答，可附加已选资料、联网搜索、深度回答指令、多轮上下文、真实来源、`home_tutor` trace、浏览器语音输入和朗读；左侧历史支持改名和删除 |
+| `/app` | GPT 式主页，真实读取 summary、主页历史、最近课程和资料库浮层；发送后流式消费 `HomeTutorGraph` 状态、来源、Markdown token 和 Review 替换，可附加已选资料级 RAG、联网、深度规划和多轮上下文；支持语音输入、朗读、历史改名和删除 |
 | `/app/library` | 文件库式资料库，真实读取资料列表，支持上传、搜索、筛选、详情和同课程资料对比 |
 | `/app/courses/:courseId` | A3 个性化学习闭环主场 + 默认问答模式 + 按需学习模式；读取真实课程、知识点、课程历史、消息、引用、课程学习状态、课程资源、当前路径、最新报告和课堂协作轨迹，支持带多轮上下文的流式课程问答、课程历史改名/删除、弱点队列操作、课程内 5 类资源生成，并带当前 `course_id` 进入路径、练习和报告 |
 | `/app/settings` | 管理多套模型配置，支持 Provider 预设、保存、测试、设默认和删除 |
@@ -105,7 +110,7 @@ Phase 13 前端视觉硬化后，桌面端继续保留 264px / 68px 的展开与
 | 数据库 | PostgreSQL + pgvector，Alembic 迁移到当前 head |
 | 课程包 | 人工智能导论内置课程包可幂等导入 |
 | 认证 | bcrypt、JWT、`starter_mode` 和当前用户依赖已接入 |
-| 资料库 | 独立 `materials` 和 `course_material_links` 已接入；PDF/DOCX/PPTX 文本解析已接入，图片/扫描件不做 OCR；Phase 11.2 已接同课程资料对比 |
+| 资料库 | 独立 `materials`、`material_chunks` 和 `course_material_links` 已接入；PDF/DOCX/PPTX 文本解析、主页资料级混合检索已接入，图片/扫描件不做 OCR；Phase 11.2 已接同课程资料对比 |
 | 课程 | TXT/Markdown/PDF/DOCX/PPTX 已解析资料规则建课、课程学习状态、待确认弱点队列同步和状态流转已接入 |
 | RAG | 混合检索、引用字段和检索状态已接入 |
 | 模型 | OpenAI-compatible chat、stream、embeddings 已接入 |
@@ -186,7 +191,7 @@ Phase 7.2 的分层口径：
 | Phase 12.2 | 已完成 | 交付基线、开源准备、MIT 许可证、验收证据和提交前文档初版 |
 | Phase 13.1 | 已完成 | 学习产物 trace 字段、Graph 工作流口径和前端轻量轨迹入口 |
 | Phase 13.2 | 已完成 | PDF/DOCX/PPTX 资料解析、主页联网/深思/语音、Markdown/PDF/DOCX 异步学习档案导出 |
-| Phase 13 hardening | 已完成 | `CourseTutorGraph` 和 `ResourceGenerationGraph` 两条主链路真接管生产流程 |
+| Phase 13 hardening | 已完成 | `HomeTutorGraph`、`CourseTutorGraph` 和 `ResourceGenerationGraph` 三条主链路真接管生产流程 |
 
 ## 下一步建议
 

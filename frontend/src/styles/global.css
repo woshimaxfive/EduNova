@@ -5535,7 +5535,8 @@ a {
 }
 
 .insight-source-list,
-.insight-trace-list {
+.insight-trace-list,
+.insight-warning-list {
   display: grid;
   gap: 7px;
   margin: 0;
@@ -5544,12 +5545,21 @@ a {
 }
 
 .insight-source-list li,
-.insight-trace-list li {
+.insight-trace-list li,
+.insight-warning-list li {
   display: grid;
   gap: 3px;
   padding: 8px;
   border-radius: 8px;
   background: rgba(247, 251, 250, 0.72);
+}
+
+.insight-warning-list li {
+  color: var(--warning-text, #7a5412);
+  border: 1px solid rgba(170, 116, 20, 0.14);
+  background: rgba(255, 247, 225, 0.72);
+  font-size: 0.82rem;
+  line-height: 1.55;
 }
 
 .insight-source-list li > div {
@@ -6093,6 +6103,21 @@ a {
     overflow: visible;
   }
 
+  .home-learning-surface,
+  .home-learning-surface .edge-shell {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .home-learning-surface .learning-home,
+  .home-learning-surface .learning-home.history-collapsed {
+    grid-template-rows: 58px minmax(0, 1fr);
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .learning-home::before {
     inset: 0;
     height: 42%;
@@ -6113,10 +6138,23 @@ a {
     padding: 18px 10px 8px;
   }
 
+  .home-learning-surface .home-chat-stage {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .home-chat-stage.chat-active {
     min-height: calc(100dvh - 110px);
     padding-top: 24px;
     padding-bottom: 12px;
+  }
+
+  .home-learning-surface .home-chat-stage.chat-active {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .home-chat-stage.chat-active::after {
@@ -6125,6 +6163,10 @@ a {
 
   .home-chat-stage.chat-active .home-thread-stage {
     padding-bottom: 24px;
+  }
+
+  .home-learning-surface .home-chat-stage.chat-active .home-thread-stage {
+    padding-bottom: 250px;
   }
 
   .home-history-rail {
@@ -6229,6 +6271,16 @@ a {
     bottom: 12px;
     width: min(760px, 100%);
     transform: none;
+  }
+
+  .home-learning-surface .composer-frame.docked,
+  .home-learning-surface .learning-home.history-collapsed .composer-frame.docked {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: 12px;
+    z-index: 30;
+    width: auto;
   }
 
   .composer-actions {

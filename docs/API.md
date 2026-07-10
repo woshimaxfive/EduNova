@@ -1415,7 +1415,7 @@ Authorization: Bearer <token>
 
 ### POST `/tutor/sessions/{session_id}/messages`
 
-用途：发送问题并获取回答。Phase 4.3 已实现主页会话持久化闭环：写入一条 `user` 消息，并同步写入一条 `assistant` 回复。Phase 13.2 后，`scope=home` 可按需合并已选资料短摘录、Tavily-compatible 联网搜索摘要和深度回答指令，回答会写入安全 `citation_json` 和 `home_tutor` trace；用户模型配置不存在时回退服务器 `.env` 配置。Phase 5.3 后，如果目标 session 是 `scope=course`，后端会先基于当前课程调用 RAG 检索，把命中结果写入 assistant 消息的 `citation_json`；如果无命中则写入空引用并提示资料依据不足。Phase 6.1 后，课程会话在命中引用且模型配置可用时，会通过 OpenAI-compatible Chat Completions 生成非流式真实回答。Phase 6.3 后，课程空间前端默认优先使用流式接口，本接口保留为兼容路径和自动化测试路径。Phase 6.4 后，课程 RAG 默认使用关键词/向量混合检索，旧关键词字段继续兼容。
+用途：发送问题并获取完整回答。主页和课程会话都复用当前路径；前端默认使用下方流式接口，本接口保留为兼容和自动化测试路径。`scope=home` 由真实 `HomeTutorGraph` 处理通用知识、已选资料检索、按需联网、深度规划、回答、Review/Repair 和持久化；`scope=course` 继续由 `CourseTutorGraph` 执行严格课程 RAG，不允许用通用知识补造课程依据。
 
 请求：
 
@@ -1432,12 +1432,13 @@ Authorization: Bearer <token>
 
 主页会话规则：
 
-- assistant 内容来自模型回答；无可用模型配置时保存清晰提示。
-- `selected_material_ids` 只允许当前用户资料，最多 10 个；后端只取短摘录作为上下文，不返回完整资料原文。
+- assistant 内容来自模型通用知识和本次可用证据；无可用模型配置时保存清晰提示。
+- `selected_material_ids` 只允许当前用户资料，最多 10 个。后端从 `material_chunks` 检索与上下文化 query 相关的最多 5 个片段，不再固定截取资料开头；无相关片段时返回空资料引用。
 - `use_web_search=true` 时调用 `WebSearchService`。未配置 `WEB_SEARCH_API_KEY` 时返回“联网搜索未配置” warning，不生成假网页来源。
-- `deep_thinking=true` 只改变回答组织要求和安全处理摘要，不展示原始思维链、系统提示词或完整模型输入。
-- `citation_json` 允许三类安全来源：课程引用、资料短摘录和网页来源，可包含 `source_type`、`title`、`url`、`snippet` 等字段。
-- 成功时 `trace_id` 写入本次 `home_tutor` trace，步骤为 `home_profile -> material_context -> web_search -> answer -> review`。
+- `deep_thinking=true` 会执行安全 `planner` 节点，只保存目标、证据需求和回答结构摘要，不展示原始思维链、系统提示词或完整模型输入。
+- `citation_json` 允许课程、资料、网页三类真实来源。资料来源可包含 `source_type`、`material_id`、`title`、`section_title`、`page_number`、`snippet`、`score`、`retrieval_source`、`embedding_status`；网页来源可包含 `title`、`url`、`snippet`。
+- 回答使用 `<final_answer>` 边界隔离内部输入。ReviewAgent 检查 `prompt_echo`、`off_topic`、`malformed_markdown`、`citation_mismatch`、`fake_web_source`、`sensitive_output`；不通过时最多修订一次，第二次仍不通过时返回安全降级回答。
+- 成功时 assistant `trace_id` 写入真实 `HomeTutorGraph` trace，正常节点为 `context -> route -> material_retriever -> web_search -> planner -> answer -> review -> persist`；需要修订时在 `review` 和 `persist` 之间执行一次 `repair -> review`。
 - 模型调用失败时返回可恢复错误，不写入半截 assistant 消息。
 - 同一 `session_id` 内默认启用多轮上下文。后端会读取最近 12 条 user/assistant 消息，单条最多 1200 字，总历史上下文最多 6000 字；更早历史只生成最多 1500 字的安全摘要。请求体不新增字段，前端不展示历史原文。
 
@@ -1455,7 +1456,7 @@ Authorization: Bearer <token>
 
 ### POST `/tutor/sessions/{session_id}/messages/stream`
 
-用途：SSE 流式返回课程空间回答。Phase 6.3 已实现，必须携带 JWT，只允许 `scope=course` 会话调用；主页 `scope=home` 调用返回 400。请求体沿用普通消息接口：
+用途：SSE 流式返回主页或课程空间回答。必须携带 JWT，请求体沿用普通消息接口；主页会完整消费 `use_web_search`、`deep_thinking` 和 `selected_material_ids`，课程会话忽略这些主页工具参数并保持严格课程 RAG。
 
 ```json
 {
@@ -1469,7 +1470,7 @@ Authorization: Bearer <token>
 Content-Type: text/event-stream
 ```
 
-事件顺序：
+课程会话保持兼容顺序：
 
 ```text
 event: metadata
@@ -1481,6 +1482,19 @@ data: {"content":"可以先从启发函数的作用看起。"}
 event: done
 data: {"session":{},"messages":[]}
 ```
+
+主页会话事件顺序：
+
+```text
+metadata -> status* -> sources -> token* -> replace? -> done
+```
+
+- `metadata`：包含 `workflow=home_tutor`、Graph 步骤、`context_message_count`、`context_summary_used` 和 `retrieval_query_mode`，不包含历史全文或模型输入。
+- `status`：只返回“正在检索资料、正在联网搜索、正在组织回答、正在审核回答”等安全阶段。
+- `sources`：返回本次真实 `citations` 和工具 `warnings`。
+- `token`：只在确认进入 `<final_answer>` 后发送 Markdown 正文。
+- `replace`：仅当 ReviewAgent 修订草稿时发送，结构为 `{"content":"...","reason":"review_repair"}`。
+- `done`：返回已持久化的完整 `TutorSessionDetail`，前端用它校准临时消息。
 
 错误事件：
 
@@ -1498,6 +1512,7 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 - 只有流式成功完成后，后端才持久化 user 消息、完整 assistant 回答、真实引用和 `trace_id`。
 - 模型流式中途失败时只发送 `error` 事件，不写入半截 assistant；前端必须保留输入并提示用户检查设置或稍后重试。
 - `done` 事件返回最终 `TutorSessionDetail`，前端用它替换临时流式状态并刷新课程历史。
+- 主页只有 Graph 完成 Review/Repair 后才持久化 user/assistant 消息；流式中途失败只发送 `error`，不保存半截消息。
 
 ## 14. Practice 与 Report 接口
 

@@ -707,7 +707,9 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 13.1 后端测试覆盖学习产物 nullable `agent_trace_id` 迁移、trace 索引、`/agents/traces/{trace_id}` 扩展响应、资源生成真实节点顺序、ReviewAgent 风险标记、资源持久化 trace、课程问答 SSE metadata、路径/冲刺/练习/报告/导出 trace 兼容字段和 metadata 脱敏。
 - Phase 13.1 前端测试覆盖课程空间展示真实课堂协作轨迹、资源工坊展示 `ResourceGenerationGraph`、路径/练习/报告页显示轻量 trace 入口、报告空态不误报失败，以及新增 `agent_trace_id` API 合同。
 - Phase 13.2 后端测试覆盖 PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT 和图片 uploaded、不支持 OCR、已解析资料建课、主页联网/深思/资料参数、无搜索 Key 不伪造来源、`home_tutor` trace、`export_jobs` 创建/状态流转/Markdown/PDF/DOCX 下载/失败分支和用户隔离。
+- HomeTutorGraph hardening 后端测试覆盖资料稳定分块、Markdown 章节、普通文档 800/120 窗口、既有资料惰性补齐、用户隔离、选中资料限制、关键词/pgvector 混合排序和级联迁移合同；覆盖九节点顺序、条件规划、Prompt 回显、真实 Review、无效 Review warning、单次 Repair、第二次失败降级、流式 replace、模型失败不写半截消息和 trace metadata 脱敏。
 - Phase 13.2 前端测试覆盖主页联网/深思 payload、真实来源和 trace 展示、浏览器语音输入和朗读、资料库已解析资料文案、报告页异步导出任务创建/轮询/下载/失败提示，以及新增导出 job API 合同。
+- HomeTutorGraph hardening 前端测试覆盖主页 SSE `metadata/status/sources/token/replace/done/error`、UTF-8 单字节分片、增量 Markdown、Review 替换、工具 warning、失败保留输入、持久化消息校准和旧 Prompt 回显历史安全清洗。
 - 2026-07-07 会话上下文增强后，后端测试覆盖主页/课程连续追问、长历史截断与摘要、课程流式 SSE 上下文 metadata、无历史单轮兼容和 trace metadata 脱敏；2026-07-10 补充超过 12 条历史后仍只发送一条 system 消息的 OpenAI-compatible 回归测试，避免安全摘要启用时出现固定轮次发送失败；前端测试覆盖主页与课程空间轨迹展示“已参考最近 N 条会话”，API contract 覆盖 `context_message_count`、`context_summary_used` 和 `retrieval_query_mode`。
 - 路由测试覆盖 `/app/courses/:courseId` 课程空间壳子，确认默认问答模式可见，并确认无效课程不会回落到 demo 课程、常驻知识画布、证据层或资源区；覆盖 `/app/path` 学习路径页，确认学习路径、阶段任务和路径依据可见。
 - 学生核心页面测试覆盖文件库式资料库、文档/图片筛选、真实资料列表、资源工坊、学习画像、AI 辅导入口、练习、报告和设置页面的核心区域。
@@ -730,6 +732,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 4.1 Codex 内置浏览器验收覆盖桌面注册 `blank` 后自动登录进入 `/app`、空白账号无课程、退出后受保护 `/app` 跳回 `/login`、已注册账号登录成功、390px 注册 `ai_intro` 后进入 `/app` 并可见“人工智能导论”、390px 退出与受保护路由跳转，桌面和移动宽度均无明显布局破坏。
 - Phase 4.2 Codex 内置浏览器验收覆盖桌面注册 `blank` 后 `/app` 不显示假课程、假资料和假历史，主页资料库浮层为空且默认未选中；桌面注册 `ai_intro` 后 `/app` 显示当前用户自己的“人工智能导论”和内置课程包资料，进度为“未开始”；刷新 `/app` 后 summary 数据仍保留；退出后访问 `/app` 跳回 `/login`；390px 移动宽度下 `/app` 无水平溢出。
 - Phase 4.3 浏览器验收需要优先使用 `agent-browser` 覆盖桌面登录后发送第一条主页消息并新增左侧历史、连续追问仍在同一历史中、刷新 `/app` 后历史还在、点击历史恢复消息、退出后访问 `/app` 回到 `/login`、390px 移动宽度无水平溢出且输入框不遮挡最后一条消息。
+- HomeTutorGraph 浏览器验收需要优先使用 `agent-browser` 覆盖桌面和 390px：普通知识问答输出正常 Markdown；选择人工智能资料后询问“什么是机器学习”命中相关章节而不是资料开头；联网未配置 warning 只出现在来源/轨迹区；深度模式不展示原始思维链；发送中状态可见，完成后来源和真实九节点 trace 可读；长会话、刷新恢复、固定输入框和滚动均正常且无水平溢出。
 - Phase 4.4 Codex 内置浏览器验收已覆盖桌面注册 blank 后真实资料状态、主页资料库浮层、刷新保留、`/app/library` 真实资料列表、搜索、文档/图片筛选、图片“仅入库，暂不做 OCR”反馈、退出后受保护路由跳转，以及 390px 移动宽度无水平溢出。由于内置浏览器不能直接操作本机文件选择器，已补充使用本机 Chromium 真实浏览器自动化验证 `<input type="file">`：主页上传 TXT 后浮层立即出现该资料，资料库页上传 PNG 后列表出现该资料，图片筛选中 TXT 行数为 0，390px 下 `scrollWidth` 等于 `clientWidth`。
 - Phase 5.1 Codex 内置浏览器验收已覆盖注册 `ai_intro` 后 `/app` 显示当前用户自己的内置课程和资料；主页生成课程浮层默认未选中且主按钮禁用，点选已解析 Markdown 后调用真实 `/courses/from-materials` 并跳转 `/app/courses/{course_id}`；课程空间读取真实标题、资料数、知识点数和知识画布；`/app/library` 的生成课程入口也能从同一资料创建新课程；390px 移动宽度无水平溢出；退出后访问课程路由回到 `/login`。
 - Phase 5.2 浏览器验收需要优先使用 `agent-browser` 覆盖生成课程后进入课程空间，发送能命中资料的课程问题并看到真实引用；发送无关问题显示资料不足；桌面和 390px 移动宽度无水平溢出。

@@ -54,6 +54,11 @@ export type TutorCitation = Partial<RagSearchResultItem> & {
   url?: string;
   snippet?: string;
   material_id?: string | number;
+  section_title?: string | null;
+  page_number?: number | null;
+  score?: number;
+  retrieval_source?: "keyword" | "vector" | "hybrid" | string | null;
+  embedding_status?: string | null;
   warning?: string;
 };
 
@@ -80,6 +85,24 @@ export type TutorStreamMetadata = {
   workflow?: string;
   artifact_type?: string;
   steps?: string[];
+  context_message_count?: number;
+  context_summary_used?: boolean;
+  retrieval_query_mode?: string;
+};
+
+export type TutorStreamStatus = {
+  stage: string;
+  label: string;
+};
+
+export type TutorStreamSources = {
+  citations: TutorCitation[];
+  warnings: string[];
+};
+
+export type TutorStreamReplace = {
+  content: string;
+  reason: "review_repair";
 };
 
 export type TutorStreamError = {
@@ -89,7 +112,10 @@ export type TutorStreamError = {
 
 export type StreamTutorMessageHandlers = {
   onMetadata?: (metadata: TutorStreamMetadata) => void;
+  onStatus?: (status: TutorStreamStatus) => void;
+  onSources?: (sources: TutorStreamSources) => void;
   onToken?: (content: string) => void;
+  onReplace?: (replacement: TutorStreamReplace) => void;
   onDone?: (detail: TutorSessionDetail) => void;
   onError?: (error: TutorStreamError) => void;
 };
@@ -132,7 +158,7 @@ export async function streamTutorMessage(
   sessionId: number | string,
   payload: SendTutorMessageRequest,
   handlers: StreamTutorMessageHandlers = {}
-) {
+): Promise<TutorSessionDetail> {
   const token = useAuthStore.getState().token;
   const baseURL = String(apiClient.defaults.baseURL ?? "/api/v1").replace(/\/$/, "");
   const response = await fetch(`${baseURL}${TUTOR_ENDPOINTS.stream(sessionId)}`, {
@@ -160,7 +186,32 @@ export async function streamTutorMessage(
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
-  let finalDetail: TutorSessionDetail | null = null;
+  const streamState: { finalDetail: TutorSessionDetail | null } = { finalDetail: null };
+
+  const dispatchEvent = (event: { event: string; data: unknown } | null) => {
+    if (event === null) {
+      return;
+    }
+    if (event.event === "metadata") {
+      handlers.onMetadata?.(event.data as TutorStreamMetadata);
+    } else if (event.event === "status") {
+      handlers.onStatus?.(event.data as TutorStreamStatus);
+    } else if (event.event === "sources") {
+      handlers.onSources?.(event.data as TutorStreamSources);
+    } else if (event.event === "token") {
+      const tokenData = event.data as { content?: unknown };
+      handlers.onToken?.(typeof tokenData.content === "string" ? tokenData.content : "");
+    } else if (event.event === "replace") {
+      handlers.onReplace?.(event.data as TutorStreamReplace);
+    } else if (event.event === "done") {
+      streamState.finalDetail = event.data as TutorSessionDetail;
+      handlers.onDone?.(streamState.finalDetail);
+    } else if (event.event === "error") {
+      const error = event.data as TutorStreamError;
+      handlers.onError?.(error);
+      throw new Error(error.message || "模型暂不可用，请检查设置或稍后重试。");
+    }
+  };
 
   while (true) {
     const { done, value } = await reader.read();
@@ -168,42 +219,22 @@ export async function streamTutorMessage(
       break;
     }
     buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split(/\n\n/);
+    const parts = buffer.split(/\r?\n\r?\n/);
     buffer = parts.pop() ?? "";
     for (const part of parts) {
-      const event = parseSseEvent(part);
-      if (event === null) {
-        continue;
-      }
-      if (event.event === "metadata") {
-        handlers.onMetadata?.(event.data as TutorStreamMetadata);
-      } else if (event.event === "token") {
-        const tokenData = event.data as { content?: unknown };
-        handlers.onToken?.(typeof tokenData.content === "string" ? tokenData.content : "");
-      } else if (event.event === "done") {
-        finalDetail = event.data as TutorSessionDetail;
-        handlers.onDone?.(finalDetail);
-      } else if (event.event === "error") {
-        const error = event.data as TutorStreamError;
-        handlers.onError?.(error);
-        throw new Error(error.message || "模型暂不可用，请检查设置或稍后重试。");
-      }
+      dispatchEvent(parseSseEvent(part));
     }
   }
 
   buffer += decoder.decode();
   if (buffer.trim()) {
-    const event = parseSseEvent(buffer);
-    if (event?.event === "done") {
-      finalDetail = event.data as TutorSessionDetail;
-      handlers.onDone?.(finalDetail);
-    }
+    dispatchEvent(parseSseEvent(buffer));
   }
 
-  if (finalDetail === null) {
+  if (streamState.finalDetail === null) {
     throw new Error("模型暂不可用，请检查设置或稍后重试。");
   }
-  return finalDetail;
+  return streamState.finalDetail;
 }
 
 function parseSseEvent(raw: string): { event: string; data: unknown } | null {

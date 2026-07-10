@@ -41,6 +41,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260701_0004_add_user_starter_mode.py`：创建注册初始化方式字段。
 - `backend/migrations/versions/20260703_0005_create_material_library.py`：创建独立个人资料库 `materials` 和课程资料关联表 `course_material_links`，并从旧 `course_materials` 兼容回填。
 - `backend/migrations/versions/20260707_0008_create_export_jobs.py`：创建异步学习档案导出任务表 `export_jobs`。
+- `backend/migrations/versions/20260710_0009_create_material_chunks.py`：创建主页资料级 RAG 使用的 `material_chunks`、资料内顺序唯一约束和 pgvector cosine 索引。
 
 Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
@@ -52,6 +53,7 @@ erDiagram
     users ||--o{ courses : owns
     courses ||--o{ course_materials : has
     users ||--o{ materials : uploads
+    materials ||--o{ material_chunks : chunks
     courses ||--o{ course_material_links : links
     materials ||--o{ course_material_links : joins
     courses ||--o{ knowledge_points : contains
@@ -193,7 +195,31 @@ Phase 11.2 的资料对比第一刀不新增表和迁移，也不持久化对比
 - `user_id` 外键指向 `users.id`。
 - `ix_materials_user_status_created(user_id, parse_status, created_at)` 支持用户资料库列表和状态筛选。
 
-### 4.4.2 `course_material_links`
+### 4.4.2 `material_chunks`
+
+用途：保存个人资料库资料的稳定检索切片，供主页资料问答在建课前直接使用。Markdown 按标题分节；其他已解析文档按段落和 800 字窗口、120 字重叠切分。新资料解析完成后同步写入；既有资料首次被选中时惰性补齐。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | bigint | 主键 |
+| `material_id` | bigint | 来源资料，删除资料时级联删除切片 |
+| `chunk_index` | integer | 资料内稳定顺序 |
+| `section_title` | varchar | Markdown 标题或解析章节，可空 |
+| `page_number` | integer | 来源页码，可空 |
+| `content` | text | 检索正文 |
+| `embedding` | vector(1536) | 外部 embedding 或 `local-hash-1536` fallback，可空 |
+| `metadata_json` | jsonb | 来源文件名、embedding 来源/模型/维度/时间等安全元数据 |
+| `created_at` | timestamptz | 创建时间 |
+
+约束与索引：
+
+- `material_id + chunk_index` 唯一。
+- `material_id` 外键指向 `materials.id`，`ON DELETE CASCADE`。
+- `ix_material_chunks_material(material_id)` 支持选中资料范围检索。
+- `ix_material_chunks_embedding` 使用 `ivfflat` 和 `vector_cosine_ops`。
+- 查询先按当前用户资料所有权和本次 `selected_material_ids` 限定候选，再融合中文关键词分数与 pgvector cosine 分数；不返回完整资料原文。
+
+### 4.4.3 `course_material_links`
 
 用途：记录资料与课程的关联，支持同一资料进入多个课程。
 
@@ -672,6 +698,8 @@ Phase 13.2 后，`POST /exports/learning-dossier/jobs` 创建本表记录并入�
 - `course_materials.agent_trace_id`。
 - `materials(user_id, parse_status, created_at)`，用于当前用户资料库列表和状态筛选。
 - `materials.agent_trace_id`。
+- `material_chunks(material_id, chunk_index)` 唯一约束和资料索引。
+- `material_chunks.embedding` cosine 向量索引。
 - `course_material_links(course_id, material_id)` 唯一索引，用于避免同一资料重复加入同一课程。
 - `knowledge_points(course_id)`。
 - `knowledge_chunks(course_id)`。
@@ -743,6 +771,7 @@ Demo 数据要求：
 10. 用户注册初始化方式由迁移 `20260701_0004_add_user_starter_mode.py` 创建。
 11. 独立资料库和课程资料关联由迁移 `20260703_0005_create_material_library.py` 创建。
 12. 学习产物 Graph trace 字段由迁移 `20260707_0007_add_learning_artifact_agent_trace_ids.py` 创建。
+13. 主页资料检索切片和向量索引由迁移 `20260710_0009_create_material_chunks.py` 创建。
 
 当前迁移命令：
 
@@ -776,13 +805,15 @@ Demo 数据要求：
 20. Phase 11.2 后，资料对比复用 `materials`、`course_material_links`、`course_materials` 和 `knowledge_chunks`，不新增表、不持久化结果；`material_ids` 指资料库 `materials.id`，服务层强制校验当前用户所有权和课程绑定关系。
 21. Phase 13.1 后，课程、资料、资源、路径、冲刺、练习和报告等学习产物可通过 nullable `agent_trace_id` 反查对应 Graph；字段为空时仍保持旧数据兼容。
 22. Phase 13.2 后，`export_jobs` 可记录 Markdown/PDF/DOCX 异步导出任务状态、文件路径、脱敏失败摘要和 `agent_trace_id`；下载接口必须按 `user_id` 隔离。
+23. HomeTutorGraph 升级后，已解析资料生成稳定 `material_chunks`；既有资料可惰性补齐，检索只能读取当前用户本次选中的资料，删除资料必须级联删除切片。
 
 当前已验证：
 
-- Alembic 能创建 `users`、`courses`、`course_enrollments`、`course_materials`、`materials`、`course_material_links`、`knowledge_points`、`knowledge_chunks`。
+- Alembic 能创建 `users`、`courses`、`course_enrollments`、`course_materials`、`materials`、`material_chunks`、`course_material_links`、`knowledge_points`、`knowledge_chunks`。
 - Alembic metadata 已注册并迁移创建 `student_profiles`、`profile_events`、`learning_paths`、`learning_tasks`、`generated_resources`、`resource_quality_scores`、`agent_run_logs`、`practice_sessions`、`practice_answers`、`assessment_reports`、`weakness_review_queue`、`chat_sessions`、`chat_messages` 和 `model_settings`。
 - `knowledge_chunks.embedding` 使用 `vector(1536)`。
 - `knowledge_chunks.embedding` 已建立 `ivfflat` 向量索引。
+- `material_chunks.embedding` 已建立 `ivfflat` cosine 向量索引，删除资料会级联删除资料切片。
 - 第二条迁移已完成 downgrade/upgrade 往返验证。
 - `users.starter_mode` 已进入模型和迁移合同，旧用户默认 `blank`。
 - 人工智能导论内置课程包可导入，包含 12 个知识点和 24 个基础资料切片。

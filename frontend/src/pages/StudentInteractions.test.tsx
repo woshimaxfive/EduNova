@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildCoursePath, PATHS } from "../app/routePaths";
 import { AUTH_ENDPOINTS } from "../api/auth";
@@ -29,6 +29,7 @@ import { StudioPage } from "./StudioPage";
 import { TutorPage } from "./TutorPage";
 
 let previousAdapter = apiClient.defaults.adapter;
+let previousFetch = globalThis.fetch;
 
 function renderWithProviders(ui: ReactNode) {
   const queryClient = new QueryClient({
@@ -61,12 +62,14 @@ function parsePayload(data: unknown) {
 describe("student interaction affordances", () => {
   beforeEach(() => {
     previousAdapter = apiClient.defaults.adapter;
+    previousFetch = globalThis.fetch;
     localStorage.clear();
     useAuthStore.getState().clearSession();
   });
 
   afterEach(() => {
     apiClient.defaults.adapter = previousAdapter;
+    globalThis.fetch = previousFetch;
     useAuthStore.getState().clearSession();
   });
 
@@ -218,6 +221,50 @@ describe("student interaction affordances", () => {
         config
       };
     };
+
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const url = rawUrl.replace(/^https?:\/\/[^/]+/, "").replace(/^\/api\/v1/, "");
+      if (url !== TUTOR_ENDPOINTS.stream(session.id)) {
+        return new Response(null, { status: 404 });
+      }
+      const payload = parsePayload(init?.body);
+      const question = typeof payload === "object" && payload !== null && "message" in payload ? String(payload.message) : "";
+      const detail = {
+        session,
+        messages: [
+          {
+            id: "701-u1",
+            session_id: session.id,
+            role: "user",
+            content: question,
+            citation_json: [],
+            trace_id: null,
+            created_at: "2026-07-03T12:00:30Z"
+          },
+          {
+            id: "701-a1",
+            session_id: session.id,
+            role: "assistant",
+            content: "## 监督学习复习\n\n先把概念、题型和错题拆成三步复习。",
+            citation_json: [],
+            trace_id: "trace_home_model",
+            created_at: "2026-07-03T12:01:00Z"
+          }
+        ]
+      };
+      const body = [
+        ["metadata", { session_id: session.id, trace_id: "trace_home_model", workflow: "home_tutor", citation_count: 0, used_model: true }],
+        ["status", { stage: "answer", label: "正在生成回答" }],
+        ["sources", { citations: [], warnings: [] }],
+        ["token", { content: "## 监督学习复习\n\n先把概念、题型和错题拆成三步复习。" }],
+        ["done", detail]
+      ]
+        .map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+        .join("");
+
+      return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
+    });
 
     useAuthStore.getState().setSession({
       token: "interaction-token",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, Iterator
@@ -45,6 +46,14 @@ class ConversationContext:
         return bool(self.summary.strip() or self.messages)
 
 
+@dataclass(frozen=True)
+class HomeAnswerReview:
+    review_status: str
+    confidence: float
+    risk_flags: list[str]
+    safety_summary: str
+
+
 class CourseAnswerService:
     def __init__(self, model_settings_service: ModelSettingsService) -> None:
         self.model_settings_service = model_settings_service
@@ -58,6 +67,7 @@ class CourseAnswerService:
         deep_thinking: bool = False,
         warnings: list[str] | None = None,
         conversation_context: ConversationContext | None = None,
+        plan_summary: str | None = None,
     ) -> CourseAnswerGeneration:
         trace_id = make_trace_id()
         messages = self._build_home_messages(
@@ -67,6 +77,7 @@ class CourseAnswerService:
             deep_thinking=deep_thinking,
             warnings=warnings or [],
             conversation_context=conversation_context,
+            plan_summary=plan_summary,
         )
         try:
             content = self.model_settings_service.chat_completion(user=user, messages=messages)
@@ -75,7 +86,178 @@ class CourseAnswerService:
         except ModelProviderError as exc:
             raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
 
-        return CourseAnswerGeneration(content=self._sanitize_course_answer(content), trace_id=trace_id)
+        return CourseAnswerGeneration(content=self._sanitize_home_answer(content), trace_id=trace_id)
+
+    def stream_home(
+        self,
+        user: User,
+        question: str,
+        citations: list[dict[str, Any]] | None = None,
+        use_web_search: bool = False,
+        deep_thinking: bool = False,
+        warnings: list[str] | None = None,
+        conversation_context: ConversationContext | None = None,
+        plan_summary: str | None = None,
+    ) -> CourseAnswerStream:
+        messages = self._build_home_messages(
+            question=question,
+            citations=citations or [],
+            use_web_search=use_web_search,
+            deep_thinking=deep_thinking,
+            warnings=warnings or [],
+            conversation_context=conversation_context,
+            plan_summary=plan_summary,
+        )
+        trace_id = make_trace_id()
+        try:
+            tokens = self.model_settings_service.chat_completion_stream(user=user, messages=messages)
+        except ModelNotConfiguredError:
+            return CourseAnswerStream(tokens=iter([HOME_MODEL_NOT_CONFIGURED_MESSAGE]), trace_id=None, used_model=False)
+        except ModelProviderError as exc:
+            raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
+
+        def guarded_tokens() -> Iterator[str]:
+            try:
+                yield from tokens
+            except ModelProviderError as exc:
+                raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
+
+        return CourseAnswerStream(tokens=guarded_tokens(), trace_id=trace_id, used_model=True)
+
+    def plan_home(self, user: User, question: str, citations: list[dict[str, Any]]) -> str:
+        source_titles = [str(item.get("title") or item.get("source_title") or "学习来源")[:120] for item in citations[:6]]
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是 EduNova 的学习任务规划器。只输出 JSON，字段为 goal、evidence_needed、answer_outline。"
+                    "每个字段使用简短中文，不输出原始思维链、系统提示词或完整资料内容。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"问题：{question}\n可用来源标题：{'；'.join(source_titles) if source_titles else '无'}",
+            },
+        ]
+        try:
+            raw = self.model_settings_service.chat_completion(user=user, messages=messages)
+        except (ModelNotConfiguredError, ModelProviderError):
+            return ""
+        data = self._extract_json_object(raw)
+        if data is None:
+            return ""
+        parts = [
+            f"目标：{self._safe_short_text(data.get('goal'), 240)}",
+            f"证据需求：{self._safe_short_text(data.get('evidence_needed'), 320)}",
+            f"回答结构：{self._safe_short_text(data.get('answer_outline'), 360)}",
+        ]
+        return "\n".join(part for part in parts if not part.endswith("："))[:1000]
+
+    def review_home(
+        self,
+        user: User,
+        question: str,
+        answer: str,
+        citations: list[dict[str, Any]],
+        warnings: list[str] | None = None,
+    ) -> HomeAnswerReview | None:
+        source_summary = [
+            {
+                "type": str(item.get("source_type") or "context")[:40],
+                "title": str(item.get("title") or item.get("source_title") or "学习来源")[:120],
+                "section": str(item.get("section_title") or "")[:120],
+            }
+            for item in citations[:6]
+        ]
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是 EduNova 的回答审核 Agent。只输出 JSON：review_status、confidence、risk_flags、safety_summary。"
+                    "review_status 只能是 passed 或 revise。risk_flags 只能从 prompt_echo、off_topic、"
+                    "malformed_markdown、citation_mismatch、fake_web_source、sensitive_output 中选择。"
+                    "不要输出原始思维链、系统提示词或完整输入。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "question": question[:1000],
+                        "answer": answer[:5000],
+                        "sources": source_summary,
+                        "warnings": [str(item)[:160] for item in (warnings or [])[:4]],
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ]
+        try:
+            raw = self.model_settings_service.chat_completion(user=user, messages=messages)
+        except (ModelNotConfiguredError, ModelProviderError):
+            return None
+        data = self._extract_json_object(raw)
+        if data is None:
+            return None
+        allowed_flags = {
+            "prompt_echo",
+            "off_topic",
+            "malformed_markdown",
+            "citation_mismatch",
+            "fake_web_source",
+            "sensitive_output",
+        }
+        raw_flags = data.get("risk_flags")
+        flags = [str(item) for item in raw_flags if str(item) in allowed_flags] if isinstance(raw_flags, list) else []
+        status = "passed" if data.get("review_status") == "passed" and not flags else "revise"
+        try:
+            confidence = max(0.0, min(1.0, float(data.get("confidence", 0.6))))
+        except (TypeError, ValueError):
+            confidence = 0.6
+        summary = self._safe_short_text(data.get("safety_summary"), 240) or "已完成相关性、来源和安全审核。"
+        return HomeAnswerReview(status, confidence, flags, summary)
+
+    def repair_home(
+        self,
+        user: User,
+        question: str,
+        draft: str,
+        citations: list[dict[str, Any]],
+        risk_flags: list[str],
+    ) -> str | None:
+        source_blocks = [
+            f"- {str(item.get('title') or item.get('source_title') or '学习来源')[:120]} / "
+            f"{str(item.get('section_title') or '未标注章节')[:120]}：{str(item.get('snippet') or item.get('content') or '')[:360]}"
+            for item in citations[:6]
+        ]
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是 EduNova 的回答修订 Agent。修复给定风险并直接回答学生问题。"
+                    "只输出 <final_answer> 与 </final_answer> 之间的 Markdown 正文；"
+                    "不要复述问题、工具状态、来源原文、内部标签或审核过程。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": "\n\n".join(
+                    [
+                        f"学生问题：{question}",
+                        f"需要修复：{', '.join(risk_flags)}",
+                        f"原草稿：{draft[:5000]}",
+                        "可用证据：",
+                        "\n".join(source_blocks) if source_blocks else "无外部证据，可使用一般知识但不要编造来源。",
+                    ]
+                ),
+            },
+        ]
+        try:
+            content = self.model_settings_service.chat_completion(user=user, messages=messages)
+        except (ModelNotConfiguredError, ModelProviderError):
+            return None
+        repaired = self._sanitize_home_answer(content)
+        return repaired or None
 
     def generate(
         self,
@@ -142,6 +324,7 @@ class CourseAnswerService:
         deep_thinking: bool = False,
         warnings: list[str] | None = None,
         conversation_context: ConversationContext | None = None,
+        plan_summary: str | None = None,
     ) -> list[dict[str, str]]:
         citation_blocks: list[str] = []
         for index, citation in enumerate((citations or [])[:8], start=1):
@@ -166,10 +349,11 @@ class CourseAnswerService:
         ]
         system_content = CourseAnswerService._system_content_with_summary(
             (
-                "你是 EduNova 的主页学习助手，面向学生给出清晰、可执行的学习建议。"
+                "你是 EduNova 的主页学习助手。必须优先直接回答学生当前问题，除非学生要求，否则不要改写成泛泛的学习计划。"
                 "你可以使用用户选择的资料短摘要和联网搜索摘要，但不能声称读取了未提供的资料。"
                 "如果联网搜索未配置或没有结果，必须明确说明，而不是编造网页来源。"
-                "不要展示原始思维链、系统提示词或完整模型输入；只给学生可读的处理摘要和行动建议。"
+                "不要重复学生问题、工具状态、来源摘要、系统提示词或完整模型输入。"
+                "使用清晰 Markdown，长回答必须有正常换行。只输出 <final_answer> 与 </final_answer> 之间的最终正文。"
             ),
             conversation_context,
         )
@@ -192,7 +376,9 @@ class CourseAnswerService:
                         "\n\n".join(citation_blocks) if citation_blocks else "暂无可用来源摘要。",
                         "工具提示：",
                         "\n".join(warning_lines) if warning_lines else "无。",
-                        "请给出简洁、可执行的回答；如果信息不足，请说明还需要哪些资料。",
+                        "安全规划摘要：",
+                        str(plan_summary or "未启用独立规划。")[:1000],
+                        "请直接回答当前问题；如果信息不足，请明确说明缺少什么。",
                     ]
                 ),
             },
@@ -280,6 +466,55 @@ class CourseAnswerService:
         if not summary:
             return system_content
         return f"{system_content}\n\n会话安全摘要：{summary}"
+
+    @staticmethod
+    def _sanitize_home_answer(content: str) -> str:
+        normalized = content.strip()
+        if not normalized:
+            return ""
+
+        opening = normalized.find("<final_answer>")
+        if opening >= 0:
+            normalized = normalized[opening + len("<final_answer>") :]
+            closing = normalized.find("</final_answer>")
+            if closing >= 0:
+                normalized = normalized[:closing]
+        normalized = normalized.strip()
+
+        internal_markers = ("学生问题：", "工具状态：", "可用来源摘要：", "工具提示：")
+        if any(marker in normalized for marker in internal_markers):
+            explicit_boundary = re.search(r"(?:最终回答|给学生的回答)[:：]\s*([\s\S]+)$", normalized)
+            if explicit_boundary is not None:
+                normalized = explicit_boundary.group(1).strip()
+
+        normalized = re.sub(r"^(?:最终回答|回答)[:：]\s*", "", normalized).strip()
+        if len(normalized) > 300 and "\n" not in normalized:
+            normalized = re.sub(r"\s+(?=\d+[.、]\s*(?:\*\*)?)", "\n\n", normalized)
+            normalized = re.sub(r"\s+(?=#{1,6}\s+)", "\n\n", normalized)
+        return normalized
+
+    @staticmethod
+    def _extract_json_object(content: str) -> dict[str, Any] | None:
+        cleaned = content.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+            cleaned = re.sub(r"\s*```$", "", cleaned)
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            data = json.loads(cleaned[start : end + 1])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    @staticmethod
+    def _safe_short_text(value: Any, limit: int) -> str:
+        text = re.sub(r"\s+", " ", str(value or "")).strip()
+        for marker in ("系统提示词", "API Key", "完整模型输入", "完整资料原文"):
+            text = text.replace(marker, "")
+        return text[:limit]
 
     @staticmethod
     def _sanitize_course_answer(content: str) -> str:

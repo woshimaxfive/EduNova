@@ -39,7 +39,14 @@ import {
   testModelSettings,
   updateModelConfig
 } from "./settings";
-import { deleteTutorSession, listTutorSessions, renameTutorSession, sendTutorMessage, TUTOR_ENDPOINTS } from "./tutor";
+import {
+  deleteTutorSession,
+  listTutorSessions,
+  renameTutorSession,
+  sendTutorMessage,
+  streamTutorMessage,
+  TUTOR_ENDPOINTS
+} from "./tutor";
 
 describe("frontend API contracts", () => {
   it("uses the documented API v1 base path", () => {
@@ -538,6 +545,84 @@ describe("frontend API contracts", () => {
       expect(deleted.data.deleted).toBe(true);
     } finally {
       apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("parses home graph SSE status, sources, UTF-8 tokens, replacement, and done in order", async () => {
+    const previousFetch = globalThis.fetch;
+    const observed: string[] = [];
+    const finalDetail = {
+      session: {
+        id: "501",
+        scope: "home" as const,
+        course_id: null,
+        title: "机器学习",
+        mode: "chat" as const,
+        archived_from_home: false,
+        created_at: "2026-07-10T09:00:00Z",
+        updated_at: "2026-07-10T09:00:03Z"
+      },
+      messages: [
+        {
+          id: "a-1",
+          session_id: "501",
+          role: "assistant" as const,
+          content: "## 修订回答\n\n机器学习从数据中归纳规律。",
+          citation_json: [],
+          trace_id: "trace_home_graph",
+          created_at: "2026-07-10T09:00:03Z"
+        }
+      ]
+    };
+    const body = [
+      ["metadata", { session_id: "501", trace_id: "trace_home_graph", citation_count: 0, used_model: true }],
+      ["status", { stage: "answer", label: "正在生成回答" }],
+      ["sources", { citations: [], warnings: ["联网搜索未配置。"] }],
+      ["token", { content: "机器学习" }],
+      ["replace", { content: "## 修订回答\n\n机器学习从数据中归纳规律。", reason: "review_repair" }],
+      ["done", finalDetail]
+    ]
+      .map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      .join("");
+    const encoded = new TextEncoder().encode(body);
+    globalThis.fetch = async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (let index = 0; index < encoded.length; index += 1) {
+              controller.enqueue(encoded.slice(index, index + 1));
+            }
+            controller.close();
+          }
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } }
+      );
+
+    try {
+      const detail = await streamTutorMessage(
+        501,
+        { message: "什么是机器学习？", deep_thinking: true },
+        {
+          onMetadata: () => observed.push("metadata"),
+          onStatus: (status) => observed.push(`status:${status.stage}`),
+          onSources: (sources) => observed.push(`sources:${sources.warnings.length}`),
+          onToken: (token) => observed.push(`token:${token}`),
+          onReplace: (replacement) => observed.push(`replace:${replacement.reason}`),
+          onDone: () => observed.push("done")
+        }
+      );
+
+      expect(observed).toEqual([
+        "metadata",
+        "status:answer",
+        "sources:1",
+        "token:机器学习",
+        "replace:review_repair",
+        "done"
+      ]);
+      expect(detail.messages[0].content).toContain("修订回答");
+    } finally {
+      globalThis.fetch = previousFetch;
     }
   });
 

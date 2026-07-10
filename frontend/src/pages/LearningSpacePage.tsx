@@ -26,7 +26,7 @@ import {
   deleteTutorSession,
   getTutorSession,
   renameTutorSession,
-  sendTutorMessage,
+  streamTutorMessage,
   type TutorCitation,
   type TutorMessage,
   type TutorSessionSummary
@@ -46,6 +46,7 @@ type HomeMessage = {
   content: string;
   citation_json: TutorCitation[];
   trace_id: string | null;
+  streaming?: boolean;
 };
 
 type LearningSpaceNavigationState = {
@@ -89,10 +90,25 @@ function mapTutorMessages(apiMessages: TutorMessage[]) {
   return apiMessages.map((message) => ({
     id: message.id,
     role: message.role,
-    content: message.content,
+    content: message.role === "assistant" ? sanitizeHomeAnswerContent(message.content) : message.content,
     citation_json: message.citation_json ?? [],
     trace_id: message.trace_id ?? null
   }));
+}
+
+function sanitizeHomeAnswerContent(content: string) {
+  const normalized = content.trim();
+  const internalMarkers = ["学生问题：", "工具状态：", "可用来源摘要：", "工具提示："];
+  if (!internalMarkers.some((marker) => normalized.includes(marker))) {
+    return normalized;
+  }
+
+  const finalBoundary = normalized.match(/(?:最终回答|给学生的回答|以下是针对学生[^：:]*的[^：:]*回答)[：:]\s*([\s\S]+)/);
+  if (finalBoundary?.[1]?.trim()) {
+    return finalBoundary[1].trim();
+  }
+
+  return "这条历史回答包含旧版内部处理信息，已停止展示。请重新提问以获得正常回答。";
 }
 
 export function LearningSpacePage() {
@@ -122,6 +138,9 @@ export function LearningSpacePage() {
   const [isListening, setIsListening] = useState(false);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>("sources");
   const [expandedAnswerId, setExpandedAnswerId] = useState<string | null>(null);
+  const [streamingAnswerId, setStreamingAnswerId] = useState<string | null>(null);
+  const [graphStatus, setGraphStatus] = useState<string | null>(null);
+  const [answerWarnings, setAnswerWarnings] = useState<Record<string, string[]>>({});
   const [composerFeedback, setComposerFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [courseDialogFeedback, setCourseDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const hasHomeThread = messages.length > 0;
@@ -301,6 +320,9 @@ export function LearningSpacePage() {
 
     setIsSendingQuestion(true);
     setComposerFeedback(null);
+    const messagesBeforeSend = messages;
+    let optimisticAssistantId: string | null = null;
+    let streamWarnings: string[] = [];
 
     try {
       let sessionId = activeHomeThreadId;
@@ -319,22 +341,108 @@ export function LearningSpacePage() {
       const selectedMaterialIdsAsNumbers = effectiveSelectedMaterialIds
         .map((materialId) => Number.parseInt(materialId, 10))
         .filter((materialId) => Number.isFinite(materialId));
-      const detail = await sendTutorMessage(sessionId, {
-        message: question,
-        use_web_search: isWebSearchEnabled,
-        deep_thinking: isDeepThinkingEnabled,
-        selected_material_ids: selectedMaterialIdsAsNumbers
-      });
+      const optimisticKey = `${Date.now()}-${sessionId}`;
+      const optimisticUserId = `stream-user-${optimisticKey}`;
+      optimisticAssistantId = `stream-assistant-${optimisticKey}`;
+      setStreamingAnswerId(optimisticAssistantId);
+      setGraphStatus("正在读取会话上下文");
+      setMessages([
+        ...messagesBeforeSend,
+        {
+          id: optimisticUserId,
+          role: "user",
+          content: question,
+          citation_json: [],
+          trace_id: null
+        },
+        {
+          id: optimisticAssistantId,
+          role: "assistant",
+          content: "",
+          citation_json: [],
+          trace_id: null,
+          streaming: true
+        }
+      ]);
 
-      setMessages(mapTutorMessages(detail.data.messages));
-      setActiveHomeThreadId(detail.data.session.id);
-      upsertHomeThread(detail.data.session);
+      const detail = await streamTutorMessage(
+        sessionId,
+        {
+          message: question,
+          use_web_search: isWebSearchEnabled,
+          deep_thinking: isDeepThinkingEnabled,
+          selected_material_ids: selectedMaterialIdsAsNumbers
+        },
+        {
+          onMetadata: (metadata) => {
+            if (!optimisticAssistantId) {
+              return;
+            }
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === optimisticAssistantId ? { ...message, trace_id: metadata.trace_id } : message
+              )
+            );
+          },
+          onStatus: (status) => setGraphStatus(status.label),
+          onSources: (sources) => {
+            streamWarnings = sources.warnings;
+            if (!optimisticAssistantId) {
+              return;
+            }
+            setAnswerWarnings((current) => ({ ...current, [optimisticAssistantId as string]: sources.warnings }));
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === optimisticAssistantId ? { ...message, citation_json: sources.citations } : message
+              )
+            );
+          },
+          onToken: (content) => {
+            if (!optimisticAssistantId || !content) {
+              return;
+            }
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === optimisticAssistantId ? { ...message, content: message.content + content } : message
+              )
+            );
+          },
+          onReplace: (replacement) => {
+            if (!optimisticAssistantId) {
+              return;
+            }
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === optimisticAssistantId ? { ...message, content: replacement.content } : message
+              )
+            );
+          }
+        }
+      );
+
+      const persistedMessages = mapTutorMessages(detail.messages);
+      const persistedAssistantId = [...persistedMessages].reverse().find((message) => message.role === "assistant")?.id;
+      if (persistedAssistantId && streamWarnings.length > 0) {
+        setAnswerWarnings((current) => {
+          const next = { ...current, [persistedAssistantId]: streamWarnings };
+          if (optimisticAssistantId) {
+            delete next[optimisticAssistantId];
+          }
+          return next;
+        });
+      }
+      setMessages(persistedMessages);
+      setActiveHomeThreadId(detail.session.id);
+      upsertHomeThread(detail.session);
       setPrompt("");
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
     } catch (error) {
       void error;
+      setMessages(messagesBeforeSend);
       setComposerFeedback({ message: "消息发送失败，请稍后再试。", tone: "warning" });
     } finally {
+      setStreamingAnswerId(null);
+      setGraphStatus(null);
       setIsSendingQuestion(false);
     }
   }
@@ -426,6 +534,9 @@ export function LearningSpacePage() {
     setIsListening(false);
     setActiveAnswerPanel("sources");
     setExpandedAnswerId(null);
+    setStreamingAnswerId(null);
+    setGraphStatus(null);
+    setAnswerWarnings({});
     setComposerFeedback(null);
     setCourseDialogFeedback(null);
     window.requestAnimationFrame(() => {
@@ -514,7 +625,7 @@ export function LearningSpacePage() {
   }
 
   return (
-    <LearningSpaceShell hideTopNavigation>
+    <LearningSpaceShell hideTopNavigation surfaceClassName="home-learning-surface">
       <div className={["learning-home", isHistoryCollapsed ? "history-collapsed" : "", hasHomeThread ? "chat-active" : ""].filter(Boolean).join(" ")}>
         <div className="learning-signal" aria-hidden="true">
           <span />
@@ -542,21 +653,26 @@ export function LearningSpacePage() {
             <section className="home-thread-stage" aria-label="主页对话">
               {messages.map((message) => (
                 <article className={`home-message ${message.role}`} key={message.id}>
-                  {message.role === "assistant" ? <span className="message-thinking">已思考若干秒</span> : null}
+                  {message.role === "assistant" && message.streaming ? (
+                    <span className="message-thinking" role="status" aria-live="polite">
+                      {message.id === streamingAnswerId ? graphStatus ?? "正在组织回答" : "正在组织回答"}
+                    </span>
+                  ) : null}
                   {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : <p>{message.content}</p>}
-                  {message.role === "assistant" ? (
+                  {message.role === "assistant" && !message.streaming ? (
                     <button className="message-speak-button" type="button" aria-label="朗读回答" onClick={() => handleSpeakMessage(message.content)}>
                       <SpeakerHigh size={15} weight="duotone" aria-hidden="true" />
                       <span>朗读</span>
                     </button>
                   ) : null}
-                  {message.role === "assistant" ? (
+                  {message.role === "assistant" && !message.streaming ? (
                     <HomeAnswerInsights
                       message={message}
                       activePanel={activeAnswerPanel}
                       expandedAnswerId={expandedAnswerId}
                       selectedMaterialCount={effectiveSelectedMaterialIds.length}
                       isWebSearchEnabled={isWebSearchEnabled}
+                      warnings={answerWarnings[message.id] ?? []}
                       onChangePanel={setActiveAnswerPanel}
                       onSetExpandedAnswer={setExpandedAnswerId}
                     />
@@ -755,6 +871,7 @@ type HomeAnswerInsightsProps = {
   expandedAnswerId: string | null;
   selectedMaterialCount: number;
   isWebSearchEnabled: boolean;
+  warnings: string[];
   onChangePanel: (panel: HomeAnswerPanel) => void;
   onSetExpandedAnswer: (messageId: string | null) => void;
 };
@@ -765,6 +882,7 @@ function HomeAnswerInsights({
   expandedAnswerId,
   selectedMaterialCount,
   isWebSearchEnabled,
+  warnings,
   onChangePanel,
   onSetExpandedAnswer
 }: HomeAnswerInsightsProps) {
@@ -841,6 +959,13 @@ function HomeAnswerInsights({
                 来源
               </span>
               <p>{sourceText}</p>
+              {warnings.length > 0 ? (
+                <ul className="insight-warning-list" aria-label="工具提示">
+                  {warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              ) : null}
               {hasCitations ? (
                 <ul className="insight-source-list">
                   {citations.map((citation, index) => (

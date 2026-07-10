@@ -49,3 +49,14 @@ class AgentState(TypedDict, total=False):
     used_model: bool
     tokens: Any
     pending_traces: list[Any]
+    use_web_search: bool
+    deep_thinking: bool
+    selected_material_ids: list[int]
+    streaming: bool
+    requires_fresh_info: bool
+    retrieval_mode: str
+    embedding_status: str
+    plan_summary: str
+    repair_count: int
+    needs_repair: bool
+    detail: Any

@@ -12,6 +12,7 @@ from backend.app.models import (
     LearningPath,
     LearningTask,
     Material,
+    MaterialChunk,
     ModelSetting,
     PracticeAnswer,
     PracticeSession,
@@ -58,6 +59,24 @@ def test_phase_two_learning_closure_tables_are_registered() -> None:
     assert ChatSession.__tablename__ == "chat_sessions"
     assert ChatMessage.__tablename__ == "chat_messages"
     assert ModelSetting.__tablename__ == "model_settings"
+    assert MaterialChunk.__tablename__ == "material_chunks"
+
+
+def test_material_chunks_migration_adds_vector_index_and_delete_cascade() -> None:
+    migration_path = (
+        REPO_ROOT
+        / "backend"
+        / "migrations"
+        / "versions"
+        / "20260710_0009_create_material_chunks.py"
+    )
+
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert '"material_chunks"' in migration_text
+    assert '"ix_material_chunks_embedding"' in migration_text
+    assert 'Vector(dim=1536)' in migration_text
+    assert 'ondelete="CASCADE"' in migration_text
 
 
 def test_learning_artifacts_expose_nullable_agent_trace_columns() -> None:

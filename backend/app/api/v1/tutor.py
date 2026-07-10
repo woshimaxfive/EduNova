@@ -20,6 +20,7 @@ from backend.app.schemas.tutor import (
 from backend.app.services.course_answers import CourseAnswerGenerationError, CourseAnswerService
 from backend.app.services.embeddings import EmbeddingService
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
+from backend.app.services.material_retrieval import MaterialRetrievalService, SqlAlchemyMaterialRetrievalRepository
 from backend.app.services.profiles import ProfileService, SqlAlchemyProfileRepository
 from backend.app.services.rag import RagService, SqlAlchemyRagRepository
 from backend.app.services.tutor import (
@@ -50,6 +51,10 @@ def get_tutor_session_service(db=Depends(get_db_session)) -> TutorSessionService
         course_answer_generator=CourseAnswerService(model_settings_service),
         profile_event_recorder=ProfileService(SqlAlchemyProfileRepository(db)),
         web_search_service=WebSearchService(get_settings()),
+        material_citation_searcher=MaterialRetrievalService(
+            SqlAlchemyMaterialRetrievalRepository(db),
+            embedding_service=EmbeddingService(model_settings_service),
+        ),
     )
 
 
@@ -223,7 +228,14 @@ def stream_message(
     service: TutorSessionService = Depends(get_tutor_session_service),
 ) -> StreamingResponse:
     try:
-        events = service.stream_message(user=current_user, session_id=session_id, content=payload.message)
+        events = service.stream_message(
+            user=current_user,
+            session_id=session_id,
+            content=payload.message,
+            use_web_search=payload.use_web_search,
+            deep_thinking=payload.deep_thinking,
+            selected_material_ids=payload.selected_material_ids,
+        )
     except EmptyMessageError as exc:
         raise ApiError(
             status_code=status.HTTP_400_BAD_REQUEST,

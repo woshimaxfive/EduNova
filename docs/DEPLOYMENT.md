@@ -14,7 +14,8 @@
 - 模型配置、课程流式回答、Embedding、混合检索和课程空间双模式前端。
 - 学习画像、课程学习状态、弱点复习队列和状态流转。
 - Agent trace 查询和资源生成 trace。
-- 5 类课程资源生成、质量分、本地可用稿和模型增强。
+- 六类结构化课程资源、并行 Worker、质量审核、Markmap/Mermaid/Pyodide 和 PPTX 导出。
+- 前端镜像会把 `pyodide.mjs` 与配套运行时复制到版本化目录 `/pyodide/0.29.2/`，Web Worker 直接导入自托管 loader；版本目录用于隔离 immutable 浏览器缓存。Nginx 必须保留 `.js`、`.mjs`、`.wasm`、`.json` 的正确 MIME，并按 Pyodide 官方分发兼容方式以 `application/wasm` 提供标准库 zip，同时返回 CORS、CORP 与 `nosniff` 安全头。
 - 学习路径、规则掌握度图、练习评估、学习报告、期末冲刺、资料对比和 Markdown/PDF/DOCX 学习档案导出。
 - 主页联网搜索、深度回答指令、浏览器语音输入/朗读和 `home_tutor` trace。
 - 交付基线文档、开源说明、MIT 许可证和验收证据索引。

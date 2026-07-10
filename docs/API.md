@@ -937,20 +937,20 @@ Authorization: Bearer <token>
 
 ## 10. Resource 接口
 
-状态：Phase 8.2 已实现，Phase 8.2.1 已完成模型无关的资源质量收口。当前后端已挂载 `resources` router，第一刀只生成课程资源：`course_id != null` 表示课程资源；`course_id == null` 仅作为后续个人全局资源读取语义预留，本阶段不提供全局资源生成入口。
+状态：已完成六类结构化资源和多模态呈现。当前只生成课程资源：`course_id != null` 表示课程资源；`course_id == null` 仅预留个人全局资源语义。
 
 统一规则：
 
 - 所有接口必须携带 JWT。
 - 只能生成和读取当前用户自己的课程、知识点、资源和质量分；非本人资源或课程返回 404。
-- `resource_type` 只支持 `doc`、`mindmap`、`quiz`、`code`、`slide`。
-- 生成采用课程引用驱动的确定性可用稿优先，模型只做批量增强：一次生成请求最多调用一次模型；模型未配置、调用失败、解析失败、输出缺失或输出含敏感标记时，保留对应资源的本地可用稿。
-- `content_json.metadata.generation_mode` 可为 `model_enhanced`、`deterministic_source` 或 `low_evidence_fallback`。`review_status="passed"` 表示资源通过本地质量门槛，不要求一定来自模型；`review_status="low_evidence"` 只表示课程依据不足或只能生成低依据稿。
+- `resource_type` 支持 `doc`、`mindmap`、`quiz`、`code`、`slide`、`animation`。
+- `ResourceGenerationGraph` 使用 LangGraph `Send` 为每个请求类型并行派发独立 Worker。每个 Worker 先生成 v2 确定性结构化稿，再独立调用模型增强；ReviewAgent 结合结构规则与模型复核，失败资源最多修订一次。
+- `content_json.schema_version=2` 时必须包含 `format=rich`、`artifact.kind` 和 Markdown fallback。`generation_mode` 标记模型增强或确定性来源，`review_mode` 标记 `model_and_rules` 或 `rules_only`，不能把规则 fallback 写成模型审核。
 - 响应、资源内容、质量分和 Agent trace 只保存安全摘要、引用标题和白名单 metadata，不返回系统提示词、完整模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
 ### POST `/resources/generate`
 
-用途：为当前用户的一门课程同步生成 1 到 5 类学习资源。
+用途：为当前用户的一门课程同步生成 1 到 6 类学习资源。
 
 请求：
 
@@ -958,7 +958,7 @@ Authorization: Bearer <token>
 {
   "course_id": 1,
   "knowledge_point_id": 8,
-  "resource_types": ["doc", "mindmap", "quiz", "code", "slide"],
+  "resource_types": ["doc", "mindmap", "quiz", "code", "slide", "animation"],
   "learning_goal": "理解反向传播",
   "difficulty": "medium"
 }
@@ -968,7 +968,7 @@ Authorization: Bearer <token>
 
 - `course_id` 必填。
 - `knowledge_point_id` 可选；填写时必须属于该课程。
-- `resource_types` 必须为 1 到 5 个，服务端会去重。
+- `resource_types` 必须为 1 到 6 个，服务端会去重。
 - `learning_goal` 可选，最长 500 字，只用于本次生成，不作为完整用户资料保存到日志。
 - `difficulty` 默认为 `medium`，可选 `easy`、`medium`、`hard`。
 
@@ -986,10 +986,21 @@ Authorization: Bearer <token>
         "resource_type": "doc",
         "title": "反向传播个性化讲解",
         "content_json": {
+          "schema_version": 2,
+          "format": "rich",
           "markdown": "# 反向传播个性化讲解\n\n先理解链式法则，再看计算图中的梯度传递。",
+          "artifact": {
+            "kind": "document",
+            "sections": [
+              {"heading": "概念解释", "body": "反向传播通过计算图逐层传递梯度。"}
+            ],
+            "citation_refs": [501]
+          },
           "metadata": {
             "agent_trace_id": "trace_20260705_resource_001",
             "generation_mode": "model_enhanced",
+            "review_mode": "model_and_rules",
+            "repair_count": 0,
             "difficulty": "medium",
             "has_learning_goal": true,
             "source_excerpt_count": 3,
@@ -1024,7 +1035,9 @@ Authorization: Bearer <token>
           "created_at": "2026-07-05T14:00:00Z"
         }
       ]
-    }
+    },
+    "warnings": [],
+    "failed_resource_types": []
   },
   "trace_id": "trace_20260701_009"
 }
@@ -1037,7 +1050,7 @@ Authorization: Bearer <token>
 查询参数：
 
 - `course_id`：可选，限制为某门课程资源。
-- `resource_type`：可选，限制为 `doc`、`mindmap`、`quiz`、`code` 或 `slide`。
+- `resource_type`：可选，限制为 `doc`、`mindmap`、`quiz`、`code`、`slide` 或 `animation`。
 
 响应为分页列表 envelope：
 
@@ -1083,9 +1096,17 @@ Authorization: Bearer <token>
 
 用途：获取当前用户自己的资源质量评分。评分项包括 `source_match`、`profile_fit`、`fact_confidence`、`difficulty_fit` 和 `completeness`。
 
+### POST `/resources/{resource_id}/exports`
+
+用途：为当前用户自己的 `slide` 资源创建异步 PPTX 导出任务。请求为 `{"format":"pptx"}`；同一资源已有 queued、running 或 completed 的 PPTX 任务时复用该任务。非 PPT 资源返回 400，非本人资源返回 404。
+
+### GET `/resources/{resource_id}/exports`
+
+用途：列出当前用户指定资源的导出任务，按新到旧返回。任务继续通过 `GET /exports/{job_id}` 查询并通过 `/download` 下载。
+
 ## 11. Agent Trace 接口
 
-状态：Phase 13 hardening 已把两条赛题主链路升级为真实 LangGraph 生产编排。资源生成由 `ResourceGenerationGraph` 执行 `profile -> retrieve -> diagnosis -> resource -> review -> persist` 六步；课程问答由 `CourseTutorGraph` 执行 `profile -> retriever -> tutor -> weakness -> review -> next_action` 六步。路径、冲刺、练习、报告和导出暂时保留现有服务逻辑，并继续返回安全 `agent_trace_id` 或轻量 trace，后续再做专项 Graph 接管。
+状态：主页问答、课程问答和资源生成三条主链路已进入真实 LangGraph。资源生成执行 `profile -> retrieve -> diagnosis -> planner -> resource_worker* -> aggregate -> review -> repair? -> persist`，并返回各 Worker 的真实耗时；课程问答执行 `profile -> retriever -> tutor -> weakness -> review -> next_action`。其他学习流程继续使用现有服务逻辑和兼容 trace。
 
 ### GET `/agents/traces/{trace_id}`
 
@@ -1892,7 +1913,7 @@ course_id=101
 
 ## 17. Export 接口
 
-状态：Phase 12.1 已实现 Markdown 学习档案导出第一刀。Phase 13.2 后新增异步导出任务，支持 Markdown、PDF 和 DOCX 三种格式；旧 `POST /exports/learning-dossier` Markdown 同步接口保留兼容。异步任务写入 `export_jobs`，由 Redis/RQ worker 渲染文件，完成后通过下载接口返回。
+状态：异步任务支持 Markdown、PDF、DOCX 学习档案和资源 PPTX。旧 `POST /exports/learning-dossier` Markdown 同步接口保留兼容；所有异步文件都写入 `export_jobs` 并由 Redis/RQ worker 渲染。
 
 统一规则：
 
@@ -1965,6 +1986,8 @@ course_id=101
     "job_id": "901",
     "status": "queued",
     "format": "pdf",
+    "export_type": "learning_dossier",
+    "resource_id": null,
     "filename": "edunova-人工智能导论-learning-dossier.pdf",
     "content_type": "application/pdf",
     "agent_trace_id": "trace_export_job",
@@ -1979,11 +2002,11 @@ course_id=101
 
 ### GET `/exports/{job_id}`
 
-响应字段同创建任务响应。`status` 为 `queued`、`running`、`completed` 或 `failed`；失败时 `error_message` 只返回安全摘要。
+响应字段同创建任务响应。`export_type` 为 `learning_dossier` 或 `resource_artifact`，资源 PPTX 会返回 `resource_id`。`status` 为 `queued`、`running`、`completed` 或 `failed`；失败时只返回安全摘要。
 
 ### GET `/exports/{job_id}/download`
 
-用途：下载已完成的学习档案文件。只允许下载当前用户自己的 `completed` 任务；未完成或失败返回 400/404。`Content-Type` 根据格式返回 `text/markdown; charset=utf-8`、`application/pdf` 或 DOCX 对应 MIME。
+用途：下载已完成的学习档案或资源文件。只允许下载当前用户自己的 `completed` 任务；`Content-Type` 根据格式返回 Markdown、PDF、DOCX 或 PPTX 对应 MIME。
 
 ## 18. Demo 接口
 

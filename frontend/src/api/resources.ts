@@ -1,14 +1,16 @@
 import { apiClient } from "./client";
 import { type ApiEnvelope, type ApiListEnvelope } from "../types/api";
+import { type ExportJob } from "./exports";
 
 export const RESOURCE_ENDPOINTS = {
   generate: "/resources/generate",
   list: "/resources",
   detail: (resourceId: number) => `/resources/${resourceId}`,
-  quality: (resourceId: number) => `/resources/${resourceId}/quality`
+  quality: (resourceId: number) => `/resources/${resourceId}/quality`,
+  exports: (resourceId: number) => `/resources/${resourceId}/exports`
 } as const;
 
-export type ResourceType = "doc" | "mindmap" | "quiz" | "code" | "slide";
+export type ResourceType = "doc" | "mindmap" | "quiz" | "code" | "slide" | "animation";
 export type ResourceDifficulty = "easy" | "medium" | "hard";
 export type ResourceReviewStatus = "passed" | "low_evidence" | "pending" | "failed" | string;
 export type ResourceGenerationMode = "model_enhanced" | "deterministic_source" | "low_evidence_fallback" | string;
@@ -29,11 +31,101 @@ export type GeneratedResourceCitation = {
   page_number?: number | null;
 };
 
+export type ResourceDocumentArtifact = {
+  kind: "document";
+  sections: Array<{ heading: string; body: string }>;
+  citation_refs: number[];
+};
+
+export type ResourceMindmapNode = {
+  id: string;
+  title: string;
+  children: ResourceMindmapNode[];
+};
+
+export type ResourceMindmapArtifact = {
+  kind: "mindmap";
+  markmap_markdown: string;
+  tree: ResourceMindmapNode;
+  citation_refs: number[];
+};
+
+export type ResourceQuizQuestion = {
+  id: string;
+  type: "single_choice" | "multiple_choice" | "short_answer";
+  prompt: string;
+  options: Array<{ key: string; text: string }>;
+  answer: string | string[];
+  explanation: string;
+  citation_refs: number[];
+};
+
+export type ResourceQuizArtifact = {
+  kind: "quiz";
+  questions: ResourceQuizQuestion[];
+  citation_refs: number[];
+};
+
+export type ResourceCodeArtifact = {
+  kind: "code_lab";
+  language: "python";
+  runtime: "pyodide";
+  entry_file: string;
+  files: Array<{ path: string; content: string }>;
+  instructions: string[];
+  expected_output: string;
+  tasks: string[];
+  citation_refs: number[];
+};
+
+export type ResourceSlide = {
+  id: string;
+  title: string;
+  bullets: string[];
+  speaker_notes: string;
+  layout: string;
+  citation_refs: number[];
+};
+
+export type ResourceSlideArtifact = {
+  kind: "slide_deck";
+  theme: { name: string; aspect_ratio: "16:9"; accent: string };
+  slides: ResourceSlide[];
+  citation_refs: number[];
+};
+
+export type ResourceAnimationScene = {
+  id: string;
+  title: string;
+  narration: string;
+  duration_ms: number;
+  diagram: string;
+};
+
+export type ResourceAnimationArtifact = {
+  kind: "animation";
+  scenes: ResourceAnimationScene[];
+  default_scene_duration_ms: number;
+  citation_refs: number[];
+};
+
+export type ResourceArtifact =
+  | ResourceDocumentArtifact
+  | ResourceMindmapArtifact
+  | ResourceQuizArtifact
+  | ResourceCodeArtifact
+  | ResourceSlideArtifact
+  | ResourceAnimationArtifact;
+
 export type GeneratedResourceContent = {
+  schema_version?: 1 | 2;
   markdown?: string;
   format?: string;
   topic?: string;
   course_title?: string;
+  summary?: string;
+  learning_objectives?: string[];
+  artifact?: ResourceArtifact;
   citation_summaries?: string[];
   metadata?: {
     agent_trace_id?: string;
@@ -42,6 +134,8 @@ export type GeneratedResourceContent = {
     has_learning_goal?: boolean;
     source_excerpt_count?: number;
     model_enhancement_failed?: boolean;
+    review_mode?: "model_and_rules" | "rules_only" | string;
+    repair_count?: number;
   };
   [key: string]: unknown;
 };
@@ -75,6 +169,8 @@ export type GenerateResourcesResult = {
   agent_trace_id: string;
   resources: GeneratedResource[];
   quality_scores: Record<string, ResourceQualityScore[]>;
+  warnings: string[];
+  failed_resource_types: ResourceType[];
 };
 
 export async function generateResources(payload: GenerateResourcesRequest) {
@@ -106,5 +202,15 @@ export async function getResource(resourceId: number) {
 
 export async function getResourceQuality(resourceId: number) {
   const response = await apiClient.get<ApiEnvelope<ResourceQualityScore[]>>(RESOURCE_ENDPOINTS.quality(resourceId));
+  return response.data;
+}
+
+export async function createResourceExportJob(resourceId: number, format: "pptx" = "pptx") {
+  const response = await apiClient.post<ApiEnvelope<ExportJob<"pptx">>>(RESOURCE_ENDPOINTS.exports(resourceId), { format });
+  return response.data;
+}
+
+export async function listResourceExportJobs(resourceId: number) {
+  const response = await apiClient.get<ApiEnvelope<Array<ExportJob<"pptx">>>>(RESOURCE_ENDPOINTS.exports(resourceId));
   return response.data;
 }

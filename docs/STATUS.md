@@ -6,7 +6,7 @@
 
 当前最新完成到 **Phase 13.2：资料解析、主页智能工具和异步导出增强**。
 
-Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已按“对话式学习画像”主线收口；Phase 7.3 和 Phase 7.4 前置补齐课程级弱点队列基础，是为了让画像证据能落到课程状态里，不改变后续 Phase 编号。Phase 8 已完成 Agent 可观测底座、5 类课程资源生成和资源质量收口；Phase 9 已完成课程级学习路径、规则掌握度图、弱点队列推荐资源和复习时间第一版；Phase 10 已完成真实练习生成、确定性批改、弱点/掌握度反哺和学习报告展示第一刀；Phase 11.1 已完成课程级期末冲刺计划第一刀；Phase 11.2 已完成同课程多资料对比第一刀；Phase 12.1 已完成课程级 Markdown 学习档案导出第一刀；Phase 12.2 已把当前版本整理为可启动、可演示、可回归、可继续打磨的交付基线；Phase 13.1 已补 Agent trace 和工作流口径；Phase 13.2 已补齐 PDF/DOCX/PPTX 文本解析、主页联网搜索/深度思考/浏览器语音和 Markdown/PDF/DOCX 异步学习档案导出；2026-07-10 的 LangGraph hardening 已让 `HomeTutorGraph`、`CourseTutorGraph` 和 `ResourceGenerationGraph` 三条主链路真接管生产流程。
+Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已收口对话式画像和课程弱点队列；Phase 8 到 Phase 12 已完成资源、路径、练习评估、报告、冲刺、资料对比和学习档案；Phase 13 已补 Agent trace、资料解析、主页智能工具、异步导出和真实 Graph 编排。2026-07-10 的多模态资源生产化进一步把课程资源升级为六类 v2 结构化产物、并行 Worker、真实 ReviewAgent、Markmap/Mermaid/Pyodide 交互以及真实 PPTX 导出。
 
 2026-07-10 已完成 Phase 13 前端视觉硬化第一轮：补齐前端语义化颜色、文字、阴影、圆角、等宽字体和焦点 token；统一运行时品牌色；登录页修正标题换行和表单层级；主页降低大标题与 pill 模板感并为 composer 增加可见焦点；课程空间把返回入口、A3 课程摘要、指标和 8 步轨重新分层；所有受保护路由在紧凑视口默认显示顶部导航条，展开后使用覆盖式侧栏抽屉，不再把完整桌面侧栏堆到页面底部。该轮不新增接口、数据表或学习能力。
 
@@ -33,7 +33,7 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 - Phase 7.3 已把课程问答弱点候选事件同步为课程级 `weakness_review_queue` 待确认复习项，并在课程空间展示真实“待复习弱点”摘要。
 - Phase 7.4 已为课程级弱点复习项补齐确认、开始、完成和软忽略状态流转，课程空间可以直接操作真实队列项。
 - 2026-07-10 LangGraph hardening 已让 `HomeTutorGraph`、`CourseTutorGraph` 和 `ResourceGenerationGraph` 真接管三条生产主链路；路径、练习、报告和导出仍保留现有服务逻辑和轻量 `agent_trace_id`，后续再图化。
-- Phase 8.2 已挂载 `/resources`，可基于当前用户课程生成讲解、思维导图、练习、代码实操和 PPT 大纲，并写入资源、质量分和 Agent 轨迹；Phase 8.2.1 已改为课程引用驱动的确定性可用稿优先，模型只做批量增强，模型不可用或失败时不再把可用资源降级为空模板。
+- `/resources` 可基于当前用户课程生成讲解、思维导图、练习、代码实操、PPT 和动画图解。六个 Worker 分别执行模型增强并保留确定性 fallback，ReviewAgent 结合结构规则和模型审核，失败资源最多修订一次；旧 Markdown 资源继续兼容读取。
 - Phase 9 已挂载 `/paths`，可为当前用户课程生成 active 学习路径、更新任务状态，并把 `/app/path` 接入真实课程、任务、路径依据和掌握度图。
 - Phase 9 已实现 `/courses/{course_id}/mastery-map`，并让 `/courses/{course_id}/learning-state` 返回真实路径摘要、掌握度摘要、弱点推荐资源和下次复习时间。
 - Phase 10 已挂载 `/practice` 和 `/reports`，可创建课程练习、提交作答、确定性批改、把错题或低分题写入 `practice_assessment` 来源的 `confirmed` 弱点，并生成/读取课程学习报告。
@@ -65,7 +65,7 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 | 学习画像 | 8 维用户级画像、画像对话更新、画像事件、课程问答候选事件和课程状态分层边界 | `/api/v1/profiles/*` |
 | 课程学习状态 | 当前课程画像叠层、弱点候选计数、复习队列和状态流转 | `/api/v1/courses/{course_id}/learning-state` |
 | Agent 轨迹 | 当前用户自己的 Agent trace 查询、步骤排序、Graph 工作流和安全摘要返回 | `/api/v1/agents/traces/{trace_id}` |
-| 课程资源 | `ResourceGenerationGraph` 接管 5 类课程学习资源、质量分和 trace | `/api/v1/resources/*` |
+| 课程资源 | `ResourceGenerationGraph` 接管六类结构化资源、质量审核、PPTX 导出和 trace | `/api/v1/resources/*` |
 | 学习路径 | 生成课程级 active 路径、更新路径任务、读取当前路径 | `/api/v1/paths/*` |
 | 掌握度图 | 按课程知识点、弱点队列、路径任务、资源推荐和练习结果计算规则掌握度 | `/api/v1/courses/{course_id}/mastery-map` |
 | 练习评估 | 创建课程练习、提交作答、确定性批改并反哺弱点队列 | `/api/v1/practice/*` |
@@ -83,9 +83,9 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 | `/register` | 调用真实注册接口，可选择空白开始或复制人工智能导论 |
 | `/app` | GPT 式主页，真实读取 summary、主页历史、最近课程和资料库浮层；发送后流式消费 `HomeTutorGraph` 状态、来源、Markdown token 和 Review 替换，可附加已选资料级 RAG、联网、深度规划和多轮上下文；支持语音输入、朗读、历史改名和删除 |
 | `/app/library` | 文件库式资料库，真实读取资料列表，支持上传、搜索、筛选、详情和同课程资料对比 |
-| `/app/courses/:courseId` | A3 个性化学习闭环主场 + 默认问答模式 + 按需学习模式；读取真实课程、知识点、课程历史、消息、引用、课程学习状态、课程资源、当前路径、最新报告和课堂协作轨迹，支持带多轮上下文的流式课程问答、课程历史改名/删除、弱点队列操作、课程内 5 类资源生成，并带当前 `course_id` 进入路径、练习和报告 |
+| `/app/courses/:courseId` | A3 个性化学习闭环主场；支持流式课程问答、历史管理、弱点队列、六类资源生成与内联可视化，并串联路径、练习和报告 |
 | `/app/settings` | 管理多套模型配置，支持 Provider 预设、保存、测试、设默认和删除 |
-| `/app/studio` | 真实资源工坊，读取课程、知识点和当前用户资源，可生成 5 类课程资源并展示模型增强/本地可用稿/低依据、引用、质量分和 ResourceGenerationGraph 轨迹 |
+| `/app/studio` | 真实资源工坊，可生成并渲染六类结构化资源，展示引用、质量分、Graph 轨迹和 PPTX 导出状态 |
 | `/app/profile` | 读取真实 8 维画像、画像事件和画像对话更新；空画像显示待补充，不展示静态假画像 |
 | `/app/tutor` | 课程辅导入口，读取当前用户课程并跳转对应课程空间，不再展示静态假问答 |
 | `/app/practice` | 读取真实课程和知识点，创建课程练习、作答、提交并展示即时反馈和复习线索 |
@@ -100,7 +100,7 @@ Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 7 已�
 
 Phase 13 前端视觉硬化后，桌面端继续保留 264px / 68px 的展开与收起侧栏；`900px` 及以下视口默认收起为 58px 顶部导航条，点击后以覆盖式抽屉显示完整导航、历史和账号入口。移动端导航动作完成后自动收起抽屉。`/app`、普通 `PageFrame` 路由和课程空间复用同一响应式状态逻辑；键盘焦点统一使用可见青绿色焦点环，composer 使用 `:focus-within` 显示输入焦点。
 
-课程空间 Phase 6.5 已落地“默认问答模式 + 按需学习模式”。2026-07-07 的 A3 闭环打磨进一步把 `/app/courses/:courseId` 定位为个性化学习闭环主场：顶部展示当前目标、依据、下一步和画像、检索、辅导、弱点、资源、路径、评估、报告步骤流；默认问答模式保持课程版 ChatGPT 体验，真实引用、课程内 5 类资源生成、学习路径、练习、报告和课堂协作轨迹在回答下方渐进展开；知识点不再以横向列表常驻首屏，而是通过轻量入口进入学习模式后选择，引用来源可直接进入学习模式。学习模式中间显示学习内容，右侧提供上下文 AI 辅导。“课堂协作轨迹”会在存在 `latest_trace_id` 时读取真实 `CourseTutorGraph` trace，并只展示“已参考最近 N 条会话”等安全上下文提示；课程行动入口带 `course_id` 跳转 `/app/path`、`/app/practice` 和 `/app/reports`。
+课程空间采用“默认问答模式 + 按需学习模式”，并作为 A3 闭环主场展示目标、依据、下一步和学习步骤流。真实引用、六类结构化资源、路径、练习、报告和协作轨迹在回答下方渐进展开；资源生成后可直接切换并内联预览，资源工坊继续作为成果库。轨迹只展示安全摘要，不展示原始思维链。
 
 ## 当前后端状态
 
@@ -116,18 +116,18 @@ Phase 13 前端视觉硬化后，桌面端继续保留 264px / 68px 的展开与
 | 模型 | OpenAI-compatible chat、stream、embeddings 已接入 |
 | 学习画像 | `profiles` router 已接入，复用 `student_profiles` 和 `profile_events`；不为每门课复制完整画像 |
 | Agent 轨迹 | `agents` router 已接入，复用 `agent_run_logs`，支持当前用户 trace 查询、Graph 工作流字段和安全摘要返回 |
-| 课程资源 | `resources` router 已接入，复用 `generated_resources`、`resource_quality_scores` 和 `agent_run_logs`，支持 5 类课程资源同步生成 |
+| 课程资源 | `resources` router 已接入，支持六类 v2 结构化资源、并行 Worker、真实审核、旧资源兼容和 PPTX 异步导出 |
 | 学习路径 | `paths` router 已接入，复用 `learning_paths` 和 `learning_tasks`，支持课程级路径生成和任务状态更新 |
 | 练习评估 | `practice` router 已接入，复用 `practice_sessions`、`practice_answers` 和 `weakness_review_queue`，支持确定性出题、批改和弱点反哺 |
 | 学习报告 | `reports` router 已接入，复用 `assessment_reports`，支持课程最新报告读取和报告生成 |
-| 学习档案导出 | `exports` router 已接入，旧接口同步生成 Markdown；`export_jobs` + Redis/RQ worker 支持 Markdown/PDF/DOCX 异步文件导出和下载 |
+| 文件导出 | `export_jobs` + Redis/RQ 支持 Markdown/PDF/DOCX 学习档案和资源 PPTX 异步文件导出与下载 |
 | 期末冲刺 | `exam_sprint` router 已接入，复用 `learning_paths` 和 `learning_tasks`，支持课程级冲刺计划生成和读取 |
 | Docker | Compose 六服务可按默认端口启动，包含 PostgreSQL、Redis、backend、export-worker、frontend、nginx；backend 与 worker 共享导出卷 |
 | 安全 | 用户数据隔离、Key 加密、脱敏返回和上传目录忽略已接入 |
 
 当前后端已挂载的业务 router 是 `auth`、`dashboard`、`courses`、`materials`、`profiles`、`rag`、`settings`、`tutor`、`agents`、`resources`、`paths`、`practice`、`reports`、`exam_sprint` 和 `exports`。`demo` 仍只是前端 API 常量与后续接口设计，不属于当前已实现后端能力。
 
-资源分层口径：`generated_resources.course_id != null` 是课程资源，Phase 8.2 只生成这一类；`course_id == null` 预留为后续个人全局资源，本阶段不提供生成入口。资源生成在 Phase 8.2.1 后固定为“确定性可用稿优先，模型批量增强”：本地 draft 先保证 5 类资源具备可读、可练、可复用结构，模型未配置、调用失败、解析失败、输出缺失或输出含敏感标记时保留对应资源的本地可用稿。`content_json.metadata.generation_mode` 区分 `model_enhanced`、`deterministic_source` 和 `low_evidence_fallback`；`review_status="passed"` 表示资源通过本地质量门槛，不要求一定来自模型，`low_evidence` 只表示课程依据不足。资源、质量分和 Agent trace 均不保存系统提示词、完整模型输入、API Key、完整课程资料原文或完整用户画像原文。
+资源分层口径保持不变：`course_id != null` 是课程资源，`course_id == null` 预留个人全局资源。新资源使用 `content_json.schema_version=2` 和 `artifact.kind` 保存结构化产物，同时保留 Markdown fallback；旧资源不批量改写。`generation_mode` 区分模型增强与确定性来源，`review_mode` 区分 `model_and_rules` 和 `rules_only`，不能把规则 fallback 伪装成模型审核。资源、质量分和 trace 均不保存系统提示词、完整模型输入、密钥、完整资料或完整画像原文。
 
 课程问答在 Phase 7.1 后会把明确困惑/薄弱信号沉淀为画像候选事件，但只保存课程、会话、消息、`trace_id` 和引用摘要，不保存完整用户问题、系统提示词、模型输入或资料原文。Phase 7.3 的 `/courses/{course_id}/learning-state` 会把当前课程的这些候选事件按知识点或安全标题同步为 `pending` 待确认复习项，不把候选事件直接宣称为已诊断弱点。Phase 7.4 后，学生可以把队列项确认为 `confirmed`、开始为 `reviewing`、完成为 `completed`，也可以软忽略为 `dismissed`；`dismissed` 不在主列表展示，但继续参与去重。
 
@@ -150,7 +150,7 @@ Phase 7.2 的分层口径：
 | 旧版 Office 解析 | `.doc`、`.ppt` 只入库，不做深度解析 |
 | 讯飞原生 Embeddingp/Embeddingq | 暂不接入，当前用 OpenAI-compatible embeddings 或本地 fallback |
 | 资料对比增强 | Phase 11.2 已接入第一刀；结果持久化、与期末冲刺联动和跨资料原文对照页未接入 |
-| 资源增强 | Phase 8.2.1 已支持 5 类课程资源的模型无关可用稿、可选模型增强和规则质量分；资源编辑、异步任务队列、个人全局资源生成入口和推荐资源消费未接入 |
+| 资源增强 | 六类 v2 资源、逐 Worker 模型增强、规则+模型审核、单次 Repair、交互渲染和 PPTX 队列已接入；资源版本编辑、个人全局资源仍未接入 |
 | Agent 编排 hardening | `CourseTutorGraph` 和 `ResourceGenerationGraph` 已真接管生产流程；其他闭环 Graph 仍是后续专项，继续补浏览器 E2E 和更多白名单 metadata 打磨 |
 | 弱点复习增强 | Phase 10 已接入练习评估来源；错题驱动的更细粒度追溯、队列项编辑和练习再推荐未接入 |
 | 学习路径 | Phase 9 已接入真实路径生成、当前路径读取、任务状态更新和课程页摘要 |
@@ -181,8 +181,8 @@ Phase 7.2 的分层口径：
 | Phase 7.3 | 已完成 | 课程级弱点追踪与待确认复习队列第一刀 |
 | Phase 7.4 | 已完成 | 课程级弱点复习队列确认与状态流转 |
 | Phase 8.1 | 已完成 | Agent Graph 与可观测轨迹底座 |
-| Phase 8.2 | 已完成 | 多智能体生成 5 类学习资源 |
-| Phase 8.2.1 | 已完成 | 模型无关的资源质量收口，确定性可用稿优先、模型批量增强和规则质量分 |
+| Phase 8.2 | 已完成并增强 | 六 Worker 生成六类结构化学习资源，支持交互渲染和 PPTX |
+| Phase 8.2.1 | 已完成并增强 | 确定性稿、逐 Worker 模型增强、真实审核、单次修订和结构化质量分 |
 | Phase 9 | 已完成 | 课程级学习路径、规则掌握度图、弱点队列推荐资源和复习时间 |
 | Phase 10 | 已完成 | 练习生成、确定性批改、弱点/掌握度反哺和学习报告展示第一刀 |
 | Phase 11.1 | 已完成 | 期末冲刺模式第一刀，课程级 3/7/14 天冲刺计划 |

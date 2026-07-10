@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 from backend.app.models import GeneratedResource, ResourceQualityScore
 
 
-ResourceType = Literal["doc", "mindmap", "quiz", "code", "slide"]
+ResourceType = Literal["doc", "mindmap", "quiz", "code", "slide", "animation"]
 ResourceDifficulty = Literal["easy", "medium", "hard"]
 
 
@@ -55,6 +55,8 @@ class GenerateResourcesResult(BaseModel):
     agent_trace_id: str
     resources: list[GeneratedResourceResponse]
     quality_scores: dict[str, list[ResourceQualityScoreResponse]]
+    warnings: list[str] = Field(default_factory=list)
+    failed_resource_types: list[str] = Field(default_factory=list)
 
 
 class ResourceListResponse(BaseModel):

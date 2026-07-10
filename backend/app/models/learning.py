@@ -281,6 +281,7 @@ class ExportJob(IdMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_export_jobs_user_status", "user_id", "status"),
         Index("ix_export_jobs_agent_trace_id", "agent_trace_id"),
+        Index("ix_export_jobs_resource_status", "resource_id", "status"),
     )
 
     user_id: Mapped[int] = mapped_column(
@@ -291,6 +292,11 @@ class ExportJob(IdMixin, TimestampMixin, Base):
     course_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    resource_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("generated_resources.id", ondelete="CASCADE"),
         nullable=True,
     )
     export_type: Mapped[str] = mapped_column(String(80), nullable=False, default="learning_dossier")

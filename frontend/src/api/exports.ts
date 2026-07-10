@@ -38,12 +38,14 @@ export type LearningDossierExport = {
   source_summary: LearningDossierSourceSummary;
 };
 
-export type ExportJob = {
+export type ExportJob<TFormat extends ExportFormat | "pptx" = ExportFormat> = {
   job_id: string;
   status: "queued" | "running" | "completed" | "failed";
-  format: ExportFormat;
-  filename: string;
-  content_type: string;
+  format: TFormat;
+  export_type: "learning_dossier" | "resource_artifact" | string;
+  resource_id?: string | null;
+  filename: string | null;
+  content_type: string | null;
   agent_trace_id?: string | null;
   error_message?: string | null;
   created_at: string;

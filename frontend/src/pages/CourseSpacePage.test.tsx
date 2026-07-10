@@ -1105,7 +1105,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.queryByText(/片段：知识表示/)).not.toBeInTheDocument();
   });
 
-  it("lets the student generate five A3 resource types from course space", async () => {
+  it("lets the student generate six A3 resource types from course space", async () => {
     const user = userEvent.setup();
     const { calls } = renderCoursePage({
       sessions: [makeSession("777", "已有课程历史")],
@@ -1121,9 +1121,10 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(within(resourcePanel).getByLabelText("思维导图")).toBeChecked();
     expect(within(resourcePanel).getByLabelText("练习题")).toBeChecked();
     expect(within(resourcePanel).getByLabelText("代码实操")).toBeChecked();
-    expect(within(resourcePanel).getByLabelText("PPT 大纲")).toBeChecked();
+    expect(within(resourcePanel).getByLabelText("PPT")).toBeChecked();
+    expect(within(resourcePanel).getByLabelText("动画图解")).toBeChecked();
 
-    await user.click(within(resourcePanel).getByRole("button", { name: "生成 5 类个性化资源" }));
+    await user.click(within(resourcePanel).getByRole("button", { name: "生成 6 类个性化资源" }));
 
     await waitFor(() => {
       expect(calls).toContainEqual(
@@ -1132,7 +1133,7 @@ describe("CourseSpacePage course tutor sessions", () => {
           url: RESOURCE_ENDPOINTS.generate,
           payload: expect.objectContaining({
             course_id: 808,
-            resource_types: ["doc", "mindmap", "quiz", "code", "slide"]
+            resource_types: ["doc", "mindmap", "quiz", "code", "slide", "animation"]
           })
         })
       );

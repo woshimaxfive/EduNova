@@ -27,7 +27,7 @@ import {
 import { getCurrentPath } from "../api/paths";
 import { type RagSearchResultItem } from "../api/rag";
 import { getLatestReport } from "../api/reports";
-import { generateResources, listResources, type ResourceType } from "../api/resources";
+import { generateResources, listResources, type GeneratedResource, type ResourceType } from "../api/resources";
 import {
   createTutorSession,
   deleteTutorSession,
@@ -275,12 +275,14 @@ export function CourseSpacePage() {
   const [courseFeedback, setCourseFeedback] = useState<string | null>(null);
   const [weaknessFeedback, setWeaknessFeedback] = useState<string | null>(null);
   const [courseResourceFeedback, setCourseResourceFeedback] = useState<string | null>(null);
+  const [latestGeneratedResources, setLatestGeneratedResources] = useState<GeneratedResource[]>([]);
   const [selectedCourseResourceTypes, setSelectedCourseResourceTypes] = useState<ResourceType[]>([
     "doc",
     "mindmap",
     "quiz",
     "code",
-    "slide"
+    "slide",
+    "animation"
   ]);
   const [updatingWeaknessItemId, setUpdatingWeaknessItemId] = useState<string | null>(null);
   const optimisticMessageSequence = useRef(0);
@@ -419,8 +421,9 @@ export function CourseSpacePage() {
         difficulty: "medium"
       });
     },
-    onSuccess: () => {
-      setCourseResourceFeedback("资源生成完成，可在资源工坊继续查看。");
+    onSuccess: (response) => {
+      setLatestGeneratedResources(response.data.resources);
+      setCourseResourceFeedback(response.data.warnings?.join(" ") || "资源生成完成，可直接查看，也可在资源工坊继续管理。");
       void queryClient.invalidateQueries({ queryKey: ["resources", "course", numericCourseId] });
       void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
     },
@@ -820,6 +823,7 @@ export function CourseSpacePage() {
                             isGenerating={courseResourceMutation.isPending}
                             feedback={courseResourceFeedback}
                             generatedCount={generatedResources.length}
+                            generatedResources={latestGeneratedResources}
                             onToggleType={toggleCourseResourceType}
                             onGenerate={submitCourseResourceGeneration}
                           />
@@ -1039,7 +1043,7 @@ function AnswerDetailPanel({
     return (
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
         <strong>生成资源</strong>
-        <p>资源工坊会基于当前课程和知识点生成讲解、练习、思维导图、代码实操和 PPT 大纲。</p>
+        <p>资源工坊会基于当前课程和知识点生成讲解、练习、思维导图、代码实操、PPT 和动画图解。</p>
         <Link to={studioHref}>进入资源工坊</Link>
       </section>
     );

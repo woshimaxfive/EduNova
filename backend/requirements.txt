@@ -14,5 +14,6 @@ langgraph
 pypdf
 reportlab
 python-docx
+python-pptx
 redis
 rq

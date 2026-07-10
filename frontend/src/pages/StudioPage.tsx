@@ -16,6 +16,7 @@ import {
 } from "../api/resources";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { AgentTimeline } from "../components/evidence/AgentTimeline";
+import { ResourceRenderer } from "../components/resources/ResourceRenderer";
 import { StudioDock } from "../components/studio/StudioDock";
 import { WorkspaceStateStrip } from "../components/states/WorkspaceStateStrip";
 import { getWorkspaceStatePanels } from "../features/workspace/workflowState";
@@ -26,7 +27,8 @@ const resourceTypes: Array<{ type: ResourceType; label: string }> = [
   { type: "quiz", label: "练习" },
   { type: "mindmap", label: "思维导图" },
   { type: "code", label: "代码实操" },
-  { type: "slide", label: "PPT 大纲" }
+  { type: "slide", label: "PPT" },
+  { type: "animation", label: "动画图解" }
 ];
 
 const difficultyOptions: Array<{ value: ResourceDifficulty; label: string }> = [
@@ -49,14 +51,6 @@ function parseCourseId(value: string | null) {
   }
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function resourceMarkdown(resource: GeneratedResource) {
-  const markdown = resource.content_json.markdown;
-  if (!markdown) {
-    return "资源内容已生成。";
-  }
-  return markdown;
 }
 
 function isLowEvidenceResource(resource: GeneratedResource) {
@@ -173,7 +167,7 @@ export function StudioPage() {
       });
     },
     onSuccess: (response) => {
-      setFeedback(null);
+      setFeedback(response.data.warnings?.join(" ") || null);
       setLatestQualityScores(response.data.quality_scores);
       setSelectedResourceId(response.data.resources[0]?.id ?? null);
       void queryClient.invalidateQueries({ queryKey: ["resources", "list", effectiveCourseId] });
@@ -240,7 +234,7 @@ export function StudioPage() {
         ) : null}
         <article className="resource-reader">
           <strong>{selectedResource.title}</strong>
-          <pre className="resource-markdown-viewer">{resourceMarkdown(selectedResource)}</pre>
+          <ResourceRenderer resource={selectedResource} />
         </article>
       </section>
 

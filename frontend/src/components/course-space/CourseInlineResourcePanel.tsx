@@ -1,15 +1,18 @@
-import { type ChangeEvent } from "react";
+import { type ChangeEvent, useState } from "react";
 
 import { type ResourceType } from "../../api/resources";
+import { type GeneratedResource } from "../../api/resources";
+import { ResourceRenderer } from "../resources/ResourceRenderer";
 import { resourceTypeLabels } from "./courseSpaceLabels";
 
-const orderedResourceTypes: ResourceType[] = ["doc", "mindmap", "quiz", "code", "slide"];
+const orderedResourceTypes: ResourceType[] = ["doc", "mindmap", "quiz", "code", "slide", "animation"];
 
 type CourseInlineResourcePanelProps = {
   selectedTypes: ResourceType[];
   isGenerating: boolean;
   feedback: string | null;
   generatedCount: number;
+  generatedResources?: GeneratedResource[];
   onToggleType: (resourceType: ResourceType) => void;
   onGenerate: () => void;
 };
@@ -19,6 +22,7 @@ export function CourseInlineResourcePanel({
   isGenerating,
   feedback,
   generatedCount,
+  generatedResources = [],
   onToggleType,
   onGenerate
 }: CourseInlineResourcePanelProps) {
@@ -52,6 +56,38 @@ export function CourseInlineResourcePanel({
       </div>
       <p className="course-inline-resource-summary">当前课程已有 {generatedCount} 个资源。生成后可在资源工坊继续查看和导出。</p>
       {feedback ? <p className="course-inline-resource-feedback">{feedback}</p> : null}
+      {generatedResources.length > 0 ? <CourseInlineResourceResults resources={generatedResources} /> : null}
     </section>
+  );
+}
+
+function CourseInlineResourceResults({ resources }: { resources: GeneratedResource[] }) {
+  const [selectedId, setSelectedId] = useState(resources[0]?.id ?? "");
+  const effectiveSelectedId = resources.some((resource) => resource.id === selectedId) ? selectedId : resources[0]?.id ?? "";
+  const selected = resources.find((resource) => resource.id === effectiveSelectedId) ?? resources[0];
+
+  if (!selected) {
+    return null;
+  }
+  return (
+    <div className="course-inline-resource-results">
+      <div className="course-inline-resource-tabs" role="tablist" aria-label="已生成课程资源">
+        {resources.map((resource) => (
+          <button
+            key={resource.id}
+            type="button"
+            role="tab"
+            aria-selected={resource.id === selected.id}
+            onClick={() => setSelectedId(resource.id)}
+          >
+            {resourceTypeLabels[resource.resource_type]}
+          </button>
+        ))}
+      </div>
+      <article className="course-inline-resource-preview">
+        <strong>{selected.title}</strong>
+        <ResourceRenderer resource={selected} />
+      </article>
+    </div>
   );
 }

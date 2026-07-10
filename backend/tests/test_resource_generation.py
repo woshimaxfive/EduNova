@@ -156,29 +156,39 @@ class FakeModelSettingsService:
             raise ModelNotConfiguredError("未配置模型")
         if self.mode == "provider_error":
             raise ModelProviderError("模型服务暂不可用")
-        if self.mode == "partial_json":
+        prompt = "\n".join(message["content"] for message in messages)
+        if "ReviewAgent" in prompt:
+            status = "failed" if self.mode == "review_reject" else "passed"
+            risks = ["malformed_content"] if status == "failed" else []
             return json.dumps(
                 {
                     "resources": {
-                        "doc": "# 模型增强讲解\n\n## 概念解释\n模型增强版资源内容。\n\n## 关键步骤\n1. 先识别状态。\n\n## 易错点\n- 不要忽略启发函数。",
+                        resource_type: {"status": status, "confidence": 0.87, "risk_flags": risks}
+                        for resource_type in ("doc", "mindmap", "quiz", "code", "slide", "animation")
                     }
                 },
                 ensure_ascii=False,
             )
-        if self.mode == "sensitive":
-            return json.dumps({"resources": {"doc": "系统提示词 sk-real-secret"}}, ensure_ascii=False)
-        return json.dumps(
-            {
-                "resources": {
-                    "doc": "# 模型增强讲解\n\n## 概念解释\n模型增强版资源内容。\n\n## 关键步骤\n1. 先识别状态。\n\n## 易错点\n- 不要忽略启发函数。",
-                    "mindmap": "# 模型增强思维导图\n\n```mermaid\nmindmap\n  root((启发式搜索))\n    启发函数\n```",
-                    "quiz": "# 模型增强练习题\n\n## 单选题\n答案：B\n解析：依据课程引用判断。",
-                    "code": "# 模型增强代码实操\n\n```python\nprint('A* demo')\n```\n\n运行说明：执行脚本。\n\n改造任务：增加一个状态估价函数。",
-                    "slide": "# 模型增强PPT 大纲\n\n## 第 1 页\n讲稿：引入启发式搜索。",
-                }
-            },
-            ensure_ascii=False,
+        if "修订 Agent" in prompt:
+            return json.dumps({"markdown": "# 修订后的讲解\n\n## 概念解释\n内容已修订。\n\n## 关键步骤\n逐步验证。\n\n## 易错点\n检查条件。"}, ensure_ascii=False)
+
+        resource_type = next(
+            (item for item in ("doc", "mindmap", "quiz", "code", "slide", "animation") if f"资源类型：{item}" in prompt),
+            "doc",
         )
+        if self.mode == "partial_json" and resource_type != "doc":
+            return json.dumps({"unexpected": "missing markdown"}, ensure_ascii=False)
+        if self.mode == "sensitive":
+            return json.dumps({"markdown": "系统提示词 sk-real-secret"}, ensure_ascii=False)
+        enhanced = {
+            "doc": "# 模型增强讲解\n\n## 概念解释\n模型增强版资源内容。\n\n## 关键步骤\n1. 先识别状态。\n\n## 易错点\n- 不要忽略启发函数。",
+            "mindmap": "# 模型增强思维导图\n\n## 启发式搜索\n- 启发函数\n- 状态空间\n- 验证动作",
+            "quiz": "# 模型增强练习题\n\n## 单选题\n题目：如何验证理解？\n答案：B\n解析：依据课程引用判断。",
+            "code": "# 模型增强代码实操\n\n```python\nprint('A* demo')\n```\n\n运行说明：执行脚本。\n\n改造任务：增加一个状态估价函数。",
+            "slide": "# 模型增强PPT\n\n## 第 1 页\n要点：启发式搜索\n讲稿：引入启发式搜索。",
+            "animation": "# 模型增强动画图解\n\n## 场景 1\n从目标进入验证流程。\n\n```mermaid\nflowchart LR\n A --> B\n```",
+        }
+        return json.dumps({"markdown": enhanced[resource_type]}, ensure_ascii=False)
 
 
 def make_user(user_id: int = 1) -> User:
@@ -283,7 +293,8 @@ def assert_usable_resource_content(resources: list[GeneratedResource]) -> None:
     assert "概念解释" in content_by_type["doc"]
     assert "关键步骤" in content_by_type["doc"]
     assert "易错点" in content_by_type["doc"]
-    assert "```mermaid" in content_by_type["mindmap"]
+    assert resource_by_type(resources, "mindmap").content_json["artifact"]["kind"] == "mindmap"
+    assert "markmap_markdown" in resource_by_type(resources, "mindmap").content_json["artifact"]
     assert "单选题" in content_by_type["quiz"]
     assert "答案" in content_by_type["quiz"]
     assert "解析" in content_by_type["quiz"]
@@ -292,6 +303,9 @@ def assert_usable_resource_content(resources: list[GeneratedResource]) -> None:
     assert "改造任务" in content_by_type["code"]
     assert "第 1 页" in content_by_type["slide"]
     assert "讲稿" in content_by_type["slide"]
+    if "animation" in content_by_type:
+        assert resource_by_type(resources, "animation").content_json["artifact"]["kind"] == "animation"
+        assert len(resource_by_type(resources, "animation").content_json["artifact"]["scenes"]) >= 3
 
 
 def test_resources_route_requires_login() -> None:
@@ -308,7 +322,7 @@ def test_resources_route_requires_login() -> None:
     assert quality_response.status_code == 401
 
 
-def test_generate_five_resource_types_persists_resources_quality_scores_and_trace() -> None:
+def test_generate_six_resource_types_persists_v2_artifacts_quality_scores_and_parallel_worker_trace() -> None:
     repo = make_repo()
     model_service = FakeModelSettingsService(mode="success")
 
@@ -317,29 +331,41 @@ def test_generate_five_resource_types_persists_resources_quality_scores_and_trac
             make_user(),
             course_id=101,
             knowledge_point_id=501,
-            resource_types=["doc", "mindmap", "quiz", "code", "slide", "doc"],
+            resource_types=["doc", "mindmap", "quiz", "code", "slide", "animation", "doc"],
             learning_goal="期末前会做搜索题",
             difficulty="medium",
         )
     )
 
     assert result["agent_trace_id"].startswith("trace_")
-    assert [resource["resource_type"] for resource in result["resources"]] == ["doc", "mindmap", "quiz", "code", "slide"]
-    assert len(repo.resources) == 5
-    assert len(repo.quality_scores) == 25
-    assert [log.agent_name for log in repo.agent_logs] == ["profile", "retrieve", "diagnosis", "resource", "review", "persist"]
+    assert [resource["resource_type"] for resource in result["resources"]] == ["doc", "mindmap", "quiz", "code", "slide", "animation"]
+    assert len(repo.resources) == 6
+    assert len(repo.quality_scores) == 30
+    assert [log.agent_name for log in repo.agent_logs[:4]] == ["profile", "retrieve", "diagnosis", "planner"]
+    worker_logs = [log for log in repo.agent_logs if log.step_index == 5]
+    assert {log.agent_name for log in worker_logs} == {
+        "DocWorker",
+        "MindmapWorker",
+        "QuizWorker",
+        "CodeWorker",
+        "SlideWorker",
+        "AnimationWorker",
+    }
+    assert [log.agent_name for log in repo.agent_logs if log.step_index >= 6] == ["aggregate", "ReviewAgent", "persist"]
     assert all(resource.user_id == 1 and resource.course_id == 101 for resource in repo.resources)
     assert all(resource.status == "completed" for resource in repo.resources)
     assert all(resource.review_status == "passed" for resource in repo.resources)
     assert all(resource.agent_trace_id == result["agent_trace_id"] for resource in repo.resources)
     assert all(resource.content_json["metadata"]["agent_trace_id"] == result["agent_trace_id"] for resource in repo.resources)
     assert all(resource.content_json["metadata"]["generation_mode"] == "model_enhanced" for resource in repo.resources)
+    assert all(resource.content_json["schema_version"] == 2 for resource in repo.resources)
+    assert all(resource.content_json["metadata"]["review_mode"] == "model_and_rules" for resource in repo.resources)
     assert all(resource["agent_trace_id"] == result["agent_trace_id"] for resource in result["resources"])
     assert all(log.metadata_json["workflow"] == "resource_generation" for log in repo.agent_logs)
     assert all(log.metadata_json["artifact_type"] == "generated_resource" for log in repo.agent_logs)
     assert set(result["quality_scores"].keys()) == {resource["id"] for resource in result["resources"]}
-    assert len(model_service.calls) == 1
-    assert model_service.timeout_calls == [5.0]
+    assert len(model_service.calls) == 7
+    assert model_service.timeout_calls == [5.0] * 7
     assert_usable_resource_content(repo.resources)
     assert repo.committed is True
 
@@ -368,11 +394,14 @@ def test_generate_uses_usable_deterministic_source_when_model_is_unavailable() -
     assert "关键步骤" in resource["content_json"]["markdown"]
     assert "易错点" in resource["content_json"]["markdown"]
     assert "启发式搜索" in resource["title"]
-    assert repo.agent_logs[4].status == "completed"
-    assert repo.agent_logs[4].metadata_json["risk_flags"] == ["model_fallback"]
+    review_log = next(log for log in repo.agent_logs if log.agent_name == "ReviewAgent")
+    assert review_log.status == "warning"
+    assert review_log.metadata_json["review_mode"] == "rules_only"
+    assert resource["content_json"]["metadata"]["review_mode"] == "rules_only"
+    assert result["warnings"] == ["模型审核暂不可用，资源已通过本地结构与安全规则审核。"]
 
 
-def test_generate_provider_failure_keeps_all_resource_types_usable_without_repeated_model_calls() -> None:
+def test_generate_provider_failure_keeps_all_resource_types_usable_with_per_worker_fallback() -> None:
     repo = make_repo()
     model_service = FakeModelSettingsService(mode="provider_error")
 
@@ -381,19 +410,19 @@ def test_generate_provider_failure_keeps_all_resource_types_usable_without_repea
             make_user(),
             course_id=101,
             knowledge_point_id=501,
-            resource_types=["doc", "mindmap", "quiz", "code", "slide"],
+            resource_types=["doc", "mindmap", "quiz", "code", "slide", "animation"],
             learning_goal="",
             difficulty="medium",
         )
     )
 
-    assert len(result["resources"]) == 5
-    assert len(repo.resources) == 5
+    assert len(result["resources"]) == 6
+    assert len(repo.resources) == 6
     assert all(resource.review_status == "passed" for resource in repo.resources)
     assert all(resource.content_json["metadata"]["generation_mode"] == "deterministic_source" for resource in repo.resources)
     assert_usable_resource_content(repo.resources)
-    assert len(model_service.calls) == 1
-    assert model_service.timeout_calls == [5.0]
+    assert len(model_service.calls) == 7
+    assert model_service.timeout_calls == [5.0] * 7
     assert repo.committed is True
 
 
@@ -416,7 +445,30 @@ def test_generate_applies_partial_model_enhancement_and_keeps_missing_types_dete
     assert "模型增强版资源内容" in doc.content_json["markdown"]
     assert quiz.content_json["metadata"]["generation_mode"] == "deterministic_source"
     assert "解析" in quiz.content_json["markdown"]
-    assert len(model_service.calls) == 1
+    assert len(model_service.calls) == 3
+
+
+def test_review_agent_rejects_then_repairs_once_before_persisting() -> None:
+    repo = make_repo()
+    model_service = FakeModelSettingsService(mode="review_reject")
+
+    result = as_dict(
+        make_service(repo, model_service).generate_resources(
+            make_user(),
+            course_id=101,
+            knowledge_point_id=501,
+            resource_types=["doc"],
+            learning_goal="解释启发式搜索",
+            difficulty="medium",
+        )
+    )
+
+    assert len(result["resources"]) == 1
+    resource = repo.resources[0]
+    assert resource.review_status == "passed"
+    assert resource.content_json["metadata"]["repair_count"] == 1
+    assert "修订后的讲解" in resource.content_json["markdown"]
+    assert any(log.agent_name == "RepairAgent" and log.metadata_json["repair_count"] == 1 for log in repo.agent_logs)
 
 
 def test_generate_rejects_sensitive_model_output_and_preserves_deterministic_content() -> None:

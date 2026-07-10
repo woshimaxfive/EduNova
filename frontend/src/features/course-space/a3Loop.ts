@@ -62,7 +62,7 @@ export function buildCourseLoopSummary(input: CourseLoopInput): CourseLoopSummar
       : input.resourceCount > 0
         ? "基于已生成资源进入路径或练习，形成评估回流"
         : input.citationCount > 0
-          ? "基于当前引用生成 5 类资源，或直接进入练习"
+          ? "基于当前引用生成 6 类资源，或直接进入练习"
           : "先提问或选择知识点，生成第一批个性化学习依据";
   const traceLabel =
     input.latestTraceWorkflow && input.latestTraceId ? `${input.latestTraceWorkflow} · ${input.latestTraceId}` : null;

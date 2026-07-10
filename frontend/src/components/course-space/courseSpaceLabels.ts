@@ -6,7 +6,8 @@ export const resourceTypeLabels: Record<ResourceType, string> = {
   mindmap: "思维导图",
   quiz: "练习题",
   code: "代码实操",
-  slide: "PPT 大纲"
+  slide: "PPT",
+  animation: "动画图解"
 };
 
 export const studyStepStatusLabels: Record<StudyStepStatus, string> = {

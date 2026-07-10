@@ -42,6 +42,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260703_0005_create_material_library.py`：创建独立个人资料库 `materials` 和课程资料关联表 `course_material_links`，并从旧 `course_materials` 兼容回填。
 - `backend/migrations/versions/20260707_0008_create_export_jobs.py`：创建异步学习档案导出任务表 `export_jobs`。
 - `backend/migrations/versions/20260710_0009_create_material_chunks.py`：创建主页资料级 RAG 使用的 `material_chunks`、资料内顺序唯一约束和 pgvector cosine 索引。
+- `backend/migrations/versions/20260710_0010_add_resource_export_jobs.py`：为 `export_jobs` 增加 nullable `resource_id` 外键和资源状态索引，用于 PPTX 文件任务。
 
 Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
@@ -64,6 +65,7 @@ erDiagram
     learning_paths ||--o{ learning_tasks : contains
     users ||--o{ generated_resources : creates
     generated_resources ||--o{ resource_quality_scores : scores
+    generated_resources ||--o{ export_jobs : exports
     users ||--o{ agent_run_logs : traces
     users ||--o{ practice_sessions : takes
     practice_sessions ||--o{ practice_answers : contains
@@ -383,7 +385,7 @@ Phase 11.1 期末冲刺计划也复用本表保存每日任务，`task_type` 使
 
 用途：保存 AI 生成学习资源。
 
-Phase 8.2 开始实际复用该表保存 5 类课程资源。Phase 8.2.1 不新增迁移，改为课程引用驱动的确定性可用稿优先，模型只做增强。资源分层规则固定为：`course_id != null` 是课程资源，本阶段只生成这一类；`course_id == null` 预留为后续个人全局资源，不在本阶段生成。Phase 13.1 新增 nullable `agent_trace_id`，资源生成 trace 同时写入独立字段和 `content_json.metadata.agent_trace_id`，接口响应继续显式返回 `agent_trace_id` 以兼容旧前端。
+该表现在保存六类课程资源：`doc`、`mindmap`、`quiz`、`code`、`slide`、`animation`。新产物使用 `content_json.schema_version=2` 和 `artifact.kind` 保存结构化内容，同时保留 Markdown fallback；历史 v1 资源不批量迁移。资源分层仍为 `course_id != null` 表示课程资源，`course_id == null` 预留个人全局资源。`agent_trace_id` 同时写入独立字段和安全 metadata。
 
 服务层必须保证：
 
@@ -391,7 +393,7 @@ Phase 8.2 开始实际复用该表保存 5 类课程资源。Phase 8.2.1 不新�
 - `knowledge_point_id` 若存在，必须属于同一课程。
 - `citation_json` 只保存安全引用摘要，不保存完整课程资料原文。
 - `content_json` 不保存系统提示词、完整模型输入、API Key 或完整用户画像原文。
-- `content_json.metadata.generation_mode` 保存 `model_enhanced`、`deterministic_source` 或 `low_evidence_fallback`，用于区分模型增强、本地可用稿和低依据稿。
+- `content_json.metadata.generation_mode` 区分模型增强和确定性来源，`review_mode` 区分模型加规则审核与纯规则审核，`repair_count` 只允许 0 或 1。
 - 模型未配置或调用失败时可以写入确定性可用稿；只要课程依据和资源必备结构足够，`review_status` 仍可为 `passed`。
 - `review_status="low_evidence"` 只表示课程依据不足或只能生成低依据稿，不等同于模型未调用或模型失败。
 
@@ -435,7 +437,7 @@ Phase 8.2 生成资源时同步写入质量分。Phase 8.2.1 后，质量分由�
 
 用途：保存多智能体轨迹。
 
-Phase 8.1 开始实际复用该表提供 `/agents/traces/{trace_id}` 查询。Phase 13.1 后学习闭环生产 Graph 均使用同一张表记录节点轨迹，资源生成步骤固定为 `profile`、`retrieve`、`diagnosis`、`resource`、`review`、`persist`，课程问答步骤固定为 `profile`、`retriever`、`tutor`、`weakness`、`review`、`next_action`。服务层必须按当前用户隔离 trace，响应只返回安全摘要和白名单元数据，不返回系统提示词、模型输入、API Key、完整资料原文或用户隐私原文。
+该表提供 `/agents/traces/{trace_id}` 查询。资源生成会记录 `profile`、`retrieve`、`diagnosis`、`planner`、多个类型 Worker、`aggregate`、`ReviewAgent`、可选 `RepairAgent` 和 `persist`；并行 Worker 共享步骤序号但各自保存真实耗时。课程问答保持 `profile`、`retriever`、`tutor`、`weakness`、`review`、`next_action`。响应只返回白名单摘要。
 
 字段：
 
@@ -619,9 +621,9 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 
 ### 4.20 `export_jobs`
 
-用途：保存学习档案异步导出任务。
+用途：保存学习档案和资源文件异步导出任务。
 
-Phase 13.2 后，`POST /exports/learning-dossier/jobs` 创建本表记录并入队 Redis/RQ worker。worker 复用学习档案聚合逻辑生成 Markdown、PDF 或 DOCX 文件，写入 `file_path`、`filename`、`content_type`、`completed_at` 和 `agent_trace_id`。旧 `POST /exports/learning-dossier` 仍同步返回 Markdown，兼容旧前端和测试。导出只保存可展示摘要，不保存完整资料原文、完整作答原文、内部指令、模型请求内容、密钥、登录令牌或完整用户画像。
+学习档案任务生成 Markdown、PDF 或 DOCX；`POST /resources/{resource_id}/exports` 为结构化 `slide` 资源生成 PPTX。两类任务共用 Redis/RQ worker、文件目录、用户隔离和下载接口。资源任务通过 nullable `resource_id` 关联 `generated_resources`，删除资源时级联删除任务记录。
 
 字段：
 
@@ -630,8 +632,9 @@ Phase 13.2 后，`POST /exports/learning-dossier/jobs` 创建本表记录并入�
 | `id` | bigint | 主键 |
 | `user_id` | bigint | 用户 |
 | `course_id` | bigint | 课程 |
-| `export_type` | varchar | `learning_dossier` |
-| `export_format` | varchar | `markdown`、`pdf`、`docx` |
+| `resource_id` | bigint | 资源，可空；资源 PPTX 时非空 |
+| `export_type` | varchar | `learning_dossier` 或 `resource_artifact` |
+| `export_format` | varchar | `markdown`、`pdf`、`docx`、`pptx` |
 | `status` | varchar | `queued`、`running`、`completed`、`failed` |
 | `filename` | varchar | 下载文件名 |
 | `content_type` | varchar | 下载 MIME |

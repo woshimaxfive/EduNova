@@ -30,7 +30,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 1. 学生是否能完整走通学习闭环。
 2. 上传资料是否能正确解析并生成课程。
 3. 多智能体是否真实参与资源生成过程。
-4. 生成资源是否至少包含 5 类，并能体现个性化。
+4. 六类结构化资源是否都能生成、审核和体现个性化。
 5. RAG 回答和资源生成是否有引用来源。
 6. ReviewAgent 是否能给出审核状态、置信度和风险提示。
 7. 学习路径、练习评估、掌握度和复习队列是否能联动。
@@ -51,7 +51,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 | 上传建课 | PDF、PPTX、DOCX、Markdown、TXT 解析与课程生成 |
 | RAG 检索 | 切片、向量化、检索、引用来源展示 |
 | 多智能体 | Agent 流程、trace_id、agent_run_logs、失败记录 |
-| 资源生成 | 讲解文档、思维导图、练习题、代码案例、PPT 大纲或视频脚本 |
+| 资源生成 | 讲解、Markmap 思维导图、交互练习、Pyodide 代码实操、真实 PPTX、动画图解 |
 | 学习路径 | 任务排序、进度更新、推荐理由 |
 | 掌握度地图 | 知识点状态、薄弱点、复习队列 |
 | AI 辅导 | `/app/tutor` 课程入口、课程空间问答、引用来源、资料不足提示 |
@@ -73,7 +73,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 | 扫描版 PDF OCR | 第一版暂不支持 |
 | 图片题目识别 | 第一版暂不支持 |
 | 视频文件解析 | 第一版暂不支持 |
-| 真实教学视频生成 | 第一版使用视频脚本或 PPT 大纲替代 |
+| 真实教学视频生成 | 暂不支持；当前提供明确标注的交互动画图解，不伪装视频 |
 | 完整教师端 | 第一版学生端优先 |
 | 家长端、支付、移动端 | 不属于第一版主线 |
 
@@ -154,7 +154,7 @@ cd ..
 | `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、会话改名、软删除归档、删除后列表/详情隐藏、主页已选资料/联网/深思字段、同一 session 多轮上下文、上下文化 RAG/联网 query、无搜索 Key 不伪造来源、`home_tutor` trace、模型回答、SSE 流式、错误回滚和历史恢复 |
 | `/profiles/me`、`/profiles/chat`、`/profiles/events` | 无 token 401、空画像稳定 8 维结构、画像对话更新、画像事件写入、事件倒序、多用户隔离、课程问答候选事件隐私安全 |
 | `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要、上下文计数 metadata 和 metadata 白名单 |
-| `/resources/generate`、`/resources`、`/resources/{resource_id}`、`/resources/{resource_id}/quality` | 无 token 401、课程/知识点/资源用户隔离、5 类课程资源持久化、质量分、Agent trace、模型增强、本地可用稿、低依据 fallback、隐私安全 |
+| `/resources/generate`、资源详情/质量、`/resources/{resource_id}/exports` | 无 token 401、用户隔离、六类 v2 资源、并行 Worker、模型/规则审核、单次修订、部分失败、PPTX 任务和隐私安全 |
 | `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}`、`/courses/{course_id}/mastery-map` | 无 token 401、课程/任务用户隔离、空路径、路径生成、旧路径归档、任务状态更新、掌握度映射、推荐资源、隐私安全 |
 | `/practice/sessions`、`/practice/sessions/{session_id}`、`/practice/sessions/{session_id}/answers` | 无 token 401、课程/练习用户隔离、知识点过滤、题型生成、确定性批改、空答案校验、弱点队列反哺、掌握度回归、隐私安全 |
 | `/reports/generate`、`/reports/latest` | 无 token 401、课程/练习/报告用户隔离、空报告、报告生成、最新报告读取、掌握度摘要、下一步建议、隐私安全 |
@@ -281,7 +281,7 @@ cd ..
 -> 选择资料生成课程或加入已有课程
 -> 完成对话式画像
 -> 选择人工智能导论课程
--> 生成 5 类资源
+-> 生成 6 类结构化资源
 -> 查看 Agent 轨迹和引用来源
 -> 生成学习路径
 -> 进入课程空间 AI 辅导问答
@@ -370,8 +370,9 @@ AI 能力不能只看“有没有输出”，还要看输出是否可用、可�
 - 生成思维导图。
 - 生成练习题。
 - 生成代码实操案例。
-- 生成 PPT 大纲或视频脚本。
-- Agent 轨迹至少包含画像、检索、诊断、资源、审核 5 类步骤中的 4 类。
+- 生成可预览且可下载真实 PPTX 的课件。
+- 生成可播放、暂停和逐步切换的动画图解，不宣称为视频。
+- Agent 轨迹包含画像、检索、诊断、规划、请求类型 Worker、聚合、审核、可选修订和持久化。
 - 每个资源有引用、审核状态和可信度。
 
 ### 4.4 防幻觉测试
@@ -574,7 +575,7 @@ cd ..
 | 等级 | 定义 | 示例 |
 | --- | --- | --- |
 | P0 | 阻断提交或演示 | 系统启动失败、登录失败、主链路无法走通 |
-| P1 | 严重影响核心功能 | 无法生成 5 类资源、RAG 无引用、上传建课失败 |
+| P1 | 严重影响核心功能 | 六类资源主链路不可用、RAG 无引用、上传建课失败 |
 | P2 | 明显影响体验或答辩 | Agent 轨迹缺失、报告解释不足、页面错位 |
 | P3 | 可延后优化 | 局部样式不够漂亮、非核心页面小问题 |
 
@@ -609,7 +610,7 @@ cd ..
 | Phase 7.3 | 课程级弱点追踪和待确认复习队列第一刀 |
 | Phase 7.4 | 课程级弱点复习队列确认与状态流转 |
 | Phase 8.1 | Agent Graph 与可观测轨迹底座：查询当前用户自己的 Agent trace 并在课程页展示 |
-| Phase 8.2 | 多智能体资源生成：生成 5 类课程资源、质量分并写入 Agent 轨迹 |
+| Phase 8.2 | 多智能体资源生成：六 Worker 生成六类 v2 资源、质量分、审核和真实轨迹 |
 | Phase 9 | 学习路径、掌握度图和薄弱点队列可用 |
 | Phase 10 | AI 辅导、练习、评估报告闭环通过 |
 | Phase 11.1 | 期末冲刺模式可演示 |
@@ -686,11 +687,11 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 7.3 前端测试覆盖 `COURSE_ENDPOINTS.learningState` 和 `getCourseLearningState` API 合同、课程空间待复习弱点摘要、空队列真实空状态、发送课程问题后刷新 learning-state，以及 learning-state 错误只在课程页局部提示且不阻断课程问答主流程。
 - Phase 7.4 后端测试覆盖弱点复习项确认、开始、完成和软忽略接口，无 token 401，非本人课程、跨课程队列项和其他用户队列项 404，非法状态流转 400，`dismissed` 不返回主列表且不被候选事件重新入队，`pending/confirmed/reviewing/completed/dismissed` 统计正确，响应不泄露完整用户问题、系统提示词、模型输入或资料原文。
 - Phase 7.4 前端测试覆盖 `updateCourseWeaknessReviewItem` API 合同、课程空间待确认/待复习/复习中/已完成状态渲染，确认/开始/完成/忽略操作调用接口并刷新 learning-state，dismissed 项不展示，操作失败仅在弱点区局部提示且不阻断课程问答。
-- Phase 8.1 后端测试覆盖 `/agents/traces/{trace_id}` 无 token 401、trace 不存在 404、其他用户 trace 404、当前用户 trace 按 `step_index/created_at/id` 排序返回、安全 metadata 白名单和敏感摘要隐藏，以及 LangGraph `profile -> retrieve -> diagnosis -> resource -> review -> persist` 节点合同。
+- Agent trace 测试覆盖无 token、trace 不存在、用户隔离、步骤排序、metadata 白名单和敏感摘要隐藏；资源 Graph 断言规划、请求 Worker、聚合、Review、可选 Repair 和 persist，不能再接受固定伪耗时。
 - Phase 8.1 前端测试覆盖 `getAgentTrace` 类型化 API 合同、课程空间课堂协作轨迹读取真实 Agent trace、空 trace 真实空状态，以及 trace 读取失败只在回答详情局部提示。
-- Phase 8.2 后端测试覆盖 `/resources/generate` 无 token 401、非本人课程/资源和跨课程知识点 404，5 类资源持久化到 `generated_resources`，质量分写入 `resource_quality_scores`，`agent_run_logs` 记录 `profile -> retrieve -> diagnosis -> resource -> review -> persist`，资源列表过滤、质量分读取、多用户隔离和隐私字段不泄露。
-- Phase 8.2.1 后端测试覆盖模型未配置、provider 报错或超时时 5 类资源仍生成可用确定性稿；模型成功时只调用一次批量增强；模型输出缺失、格式错误或含敏感标记时回退到确定性稿；5 类资源分别断言讲解有关键步骤和易错点、练习有答案解析、代码含可运行代码块、PPT 有页纲和讲稿、思维导图含 Mermaid。
-- Phase 8.2 前端测试覆盖 `resources.ts` 类型化 API 合同、`/app/studio` 真实课程选择、知识点选择、5 类资源选择、生成成功刷新资源列表、已生成资源选择与完整内容查看、按选中资源读取质量分、空资源状态、生成失败局部提示、fallback/低依据展示，以及课程空间“生成资源”入口跳转 `/app/studio?course_id=...`。
+- 资源后端测试覆盖六类 Worker 动态派发、逐类模型调用、聚合、规则与模型审核、一次修订、单分支失败、全部失败、v2 artifact、旧 v1 兼容、质量分、用户隔离和 metadata 脱敏。
+- 导出测试覆盖 `export_jobs.resource_id`、PPTX 创建/复用/状态/下载、真实 OOXML 页面内容、非 PPT 拒绝、用户隔离，以及 Markdown/PDF/DOCX 学习档案不回退。
+- 前端测试覆盖共享 `ResourceRenderer`、结构化讲解、Markmap、交互题、Python 成功与安全拦截、PPT 自动排队、Mermaid 场景、legacy fallback、课程空间六类生成和资源 API 合同。
 - Phase 8.2.1 前端测试覆盖资源卡显示“模型增强 / 本地可用稿 / 低依据”，低依据资源打开后显示“资料依据不足”局部提示，质量区展示真实评分理由。
 - Phase 9 后端测试覆盖 `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}` 的无 token 401、非本人课程/任务 404、空路径、生成路径、旧 active 路径归档、任务状态更新、多用户隔离；路径生成只消费 `confirmed/reviewing` 弱点，忽略 `pending/dismissed`，按知识点推荐同课程资源，并保证响应和 `plan_json` 不泄露系统提示词、模型输入、API Key、完整资料原文或完整画像原文。
 - Phase 9 后端测试覆盖 `/courses/{course_id}/mastery-map` 空课程、弱点状态映射、路径任务映射、资源推荐、多用户隔离和隐私字段；覆盖 `/courses/{course_id}/learning-state` 的真实 `path_summary`、`mastery_summary`、弱点推荐资源和 `next_review_at`。
@@ -748,7 +749,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 7.4 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/courses/{course_id}` 桌面和 390px：待复习弱点区可见确认、开始、完成和忽略操作；操作后状态刷新正确，失败只显示局部提示，页面无水平溢出。
 - Phase 8.1 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/courses/{course_id}` 桌面和 390px：有 `latest_trace_id` 时课堂协作轨迹显示真实 Agent trace 或真实空状态，不显示静态假轨迹，页面无水平溢出。
 - Phase 8.2 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/studio` 和 `/app/courses/{course_id}` 桌面与 390px：资源工坊能基于真实课程生成并展示持久化资源、可选择资源卡片查看完整内容、展示引用、质量分和低依据状态；课程页“生成资源”入口能带当前课程进入资源工坊；页面不展示静态假资源且无水平溢出。
-- Phase 8.2.1 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/studio` 桌面和 390px：在模型不可用、弱模型或模型失败条件下生成 5 类资源，逐个打开后内容可用，资源卡能显示模型增强、本地可用稿或低依据，页面无水平溢出。
+- 多模态资源浏览器验收使用 `agent-browser` 覆盖 `/app/studio` 和课程空间桌面/390px：生成六类资源，验证 Markmap 非空、练习可答、Python 可运行/停止、PPT 可翻页并下载、动画可播放，旧资源可读且无水平溢出。
 - Phase 9 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/path` 和 `/app/courses/{course_id}` 桌面与 390px：路径生成、任务状态更新、掌握度图、课程页真实路径摘要、弱点推荐资源和下次复习时间可见；页面不展示静态假路径且无水平溢出。
 - Phase 10 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/practice`、`/app/reports` 和 `/app/courses/{course_id}` 桌面与 390px：能创建练习、提交答案、看到反馈、生成报告、弱点和掌握度更新可见；页面不展示静态假练习或假报告，无水平溢出。
 - Phase 11.1 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/path` 和 `/app` 桌面与 390px：可生成课程级期末冲刺计划，每日任务、高频点、薄弱点、必刷题、易错提醒和推荐资源可见，普通学习路径仍可用，学习主页期末冲刺入口可见，页面无水平溢出。
@@ -757,7 +758,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 12.2 浏览器验收需要优先使用 `agent-browser` 覆盖桌面和 390px 主链路抽查：注册示例课程、资料库、课程空间问答、资源工坊、学习路径、练习、报告和 Markdown 导出可见；验收结果写入 `docs/evidence/PHASE_12_2_ACCEPTANCE.md`，非阻断问题进入 Phase 13 backlog。
 - Phase 13.1 浏览器验收需要优先使用 `agent-browser` 覆盖 Docker 入口 `http://127.0.0.1:8080` 桌面和 390px：课程空间课堂协作轨迹、资源工坊 Graph 轨迹、路径/练习/报告 trace 入口可见，页面不展示组件说明式假轨迹且无水平溢出。
 - Docker Compose 配置校验。
-- 当前未接入讯飞原生 Embeddingp/Embeddingq、OCR、旧版 Office 解析、扫描件解析、资料对比结果持久化、资料对比与期末冲刺联动和完整浏览器 E2E；真实资源生成 worker 还没有资源编辑、异步任务队列或个人全局资源生成入口。弱点复习队列已支持课程问答候选事件入队、用户确认/开始/完成/软忽略、推荐资源、下次复习时间和练习评估来源。真实后端认证已经进入 Phase 4.1 验证范围，首页真实总览已经进入 Phase 4.2 验证范围，主页会话持久化已经进入 Phase 4.3 验证范围，真实资料库上传与列表已经进入 Phase 4.4 验证范围，真实已解析资料规则建课已经进入 Phase 13.2 验证范围，课程知识库检索引用已经进入 Phase 5.2 验证范围，课程空间会话引用持久化已经进入 Phase 5.3 验证范围，模型配置和非流式真实课程 RAG 回答已经进入 Phase 6.1 验证范围，多模型配置隔离已经进入 Phase 6.2 验证范围，课程问答流式输出已经进入 Phase 6.3 验证范围，课程知识库 embedding 与混合检索已经进入 Phase 6.4 验证范围，课程空间双模式前端已经进入 Phase 6.5 验证范围，真实学习画像和画像候选事件已经进入 Phase 7.1 验证范围，学习事件语义与课程学习状态边界已经进入 Phase 7.2 验证范围，课程级学习状态和待确认弱点队列已经进入 Phase 7.3 验证范围，课程级弱点复习队列状态流转已经进入 Phase 7.4 验证范围，Agent Graph 与可观测轨迹底座已经进入 Phase 8.1 验证范围，多智能体生成 5 类课程资源已经进入 Phase 8.2 验证范围，课程级学习路径、掌握度图和弱点队列完善已经进入 Phase 9 验证范围，练习评估与学习报告闭环第一刀已经进入 Phase 10 验证范围，期末冲刺模式第一刀已经进入 Phase 11.1 验证范围，资料对比第一刀已经进入 Phase 11.2 验证范围，Markdown 学习档案导出已经进入 Phase 12.1 验证范围，交付基线和开源准备已经进入 Phase 12.2 验证范围，学习产物 trace 字段和前端轻量轨迹入口已经进入 Phase 13.1 验证范围，课程问答与资源生成 LangGraph 真接管已经进入 Phase 13 hardening 验证范围，PDF/DOCX/PPTX 解析、主页联网/深思/语音和异步导出已经进入 Phase 13.2 验证范围。
+- 当前未接入 OCR、旧版 Office、扫描件解析、真实视频/文生图、服务端代码沙箱、个人全局资源和资源版本化编辑。六类结构化资源、Markmap/Mermaid/Pyodide、真实 PPTX 以及主页/课程/资源三条生产 Graph 已进入验证范围；动画图解必须明确标为交互场景，不能作为视频生成能力宣传。
 
 统一验证脚本是日常轻量门禁，不会自动启动 Docker 容器。
 
@@ -794,7 +795,7 @@ docker compose down
 1. 核心学生学习闭环可以在浏览器中完整走通。
 2. 至少一门人工智能导论课程可正常学习。
 3. 至少一份用户上传资料可以自动生成课程。
-4. 至少 5 类个性化资源生成成功。
+4. 当前六类个性化结构化资源全部生成成功。
 5. AI 输出包含引用来源、审核状态和 Agent 轨迹。
 6. 练习评估能影响掌握度、薄弱点和学习报告。
 7. 演示模式可稳定演示。

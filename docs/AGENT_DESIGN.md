@@ -17,7 +17,7 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 | `MaterialComparisonGraph` | 后续专项：资料证据收集、重点/考点/遗漏点提炼、引用审核 | evidence、compare、exam_points、gap_analysis、review |
 | `HomeTutorGraph` | 已真接管：安全上下文、问题路由、选中资料检索、按需联网、深度规划、回答、审核/修订和消息持久化 | context、route、material_retriever、web_search、planner、answer、review、repair、persist |
 | `CourseTutorGraph` | 已真接管：画像/上下文读取、课程检索、导师回答、弱点候选、审核、下一步动作、消息持久化 | profile、retriever、tutor、weakness、review、next_action |
-| `ResourceGenerationGraph` | 已真接管：画像、检索、诊断、5 类资源生成、质量审核、资源持久化 | profile、retrieve、diagnosis、resource、review、persist |
+| `ResourceGenerationGraph` | 已真接管：画像、检索、诊断、规划、六 Worker 并行生成、聚合、模型与规则审核、单次修订、持久化 | profile、retrieve、diagnosis、planner、resource_worker、aggregate、review、repair、persist |
 | `PathPlanningGraph` | 后续专项：画像/弱点/资源证据收集、路径排序、任务生成、审核、持久化 | profile、evidence、rank、tasks、review、persist |
 | `ExamSprintGraph` | 后续专项：冲刺证据收集、高频点/必刷题/易错提醒生成、审核、持久化 | evidence、high_frequency、must_practice、mistakes、review、persist |
 | `AssessmentGraph` | 后续专项：出题、作答评估、弱点同步、审核、持久化 | question_plan、evaluate、weakness_sync、review、persist |
@@ -76,7 +76,7 @@ repair_count
 - `practice_sessions.agent_trace_id`
 - `assessment_reports.agent_trace_id`
 
-`chat_messages.trace_id` 保持既有字段。Phase 13.2 新增 `export_jobs.agent_trace_id`，异步 Markdown/PDF/DOCX 学习档案导出任务和旧同步 Markdown 兼容接口都会携带本次 `ExportDossierGraph` 的 `agent_trace_id`。
+`chat_messages.trace_id` 保持既有字段。`export_jobs.agent_trace_id` 同时服务异步学习档案和资源 PPTX；`resource_id` 把 PPTX 任务关联到对应的 `generated_resources`。
 
 ## 5. Metadata 白名单
 
@@ -110,6 +110,7 @@ EduNova 的第一版坚持确定性可用稿优先：
 - 主页回答要求 `<final_answer>` 输出边界；规则和模型 ReviewAgent 共同识别 Prompt 回显、跑题、Markdown 结构、引用错配、假网页来源和敏感输出。审核不通过最多执行一次 `repair`，第二次仍失败使用清晰降级回答。
 - 模型 Review JSON 无效或 Provider 暂不可用时，Review 节点记录 `warning`，不得伪装为 `passed`。
 - 生成型 Graph 必须经过 ReviewAgent 节点，输出审核状态、置信度、风险标记和安全摘要。
+- 资源 Graph 的每个类型由独立 Worker 调用模型；Worker 失败时只降级该类型，其他分支继续。ReviewAgent 批量复核六类产物，失败内容最多进入一次 RepairAgent，仍不安全则不持久化。
 
 ## 7. 前端呈现
 
@@ -117,7 +118,7 @@ EduNova 的第一版坚持确定性可用稿优先：
 - 课程空间顶部用 A3 个性化学习闭环摘要和固定步骤流解释画像、检索、辅导、弱点、资源、路径、评估、报告的协作关系；这是面向用户的过程证据，不是原始思维链。
 - 课程回答展示层和生成层都必须过滤 `学生问题`、`课程引用`、`匹配度`、资料片段等模型输入字段；引用证据只进入来源面板，不作为回答正文泄露。
 - 主页会话和课程空间会话默认使用同一 `session_id` 内最近 12 条消息作为多轮上下文；更早历史只生成确定性安全摘要。课程 RAG、主页资料上下文和联网搜索会用最近用户问题 + 当前问题做上下文化查询，前端只展示“已参考最近 N 条会话”等安全提示。
-- 资源工坊生成后展示 `ResourceGenerationGraph` 全链路，并把资源质量、引用来源和资源内容放在成果优先区域。
+- 资源工坊和课程空间共用结构化资源渲染器，展示 Markmap、交互练习、浏览器 Python、PPT、动画图解和 `ResourceGenerationGraph` 全链路；旧 Markdown/Mermaid 资源继续降级可读。
 - 学习路径、练习和报告页面显示轻量 trace 入口；这些页面后续再升级为真实 Graph 编排。
 - 主页发送后通过 SSE 展示安全 Graph 状态、真实来源、Markdown token 和可选 Review 替换；`done` 后用持久化消息校准。深度思考只展示规划和处理摘要，不展示原始思维链。
 - 所有 trace 读取失败都只影响局部轨迹区，不阻断学习主流程。

@@ -12,6 +12,10 @@ class LearningDossierExportJobRequest(BaseModel):
     format: str = "markdown"
 
 
+class ResourceExportJobRequest(BaseModel):
+    format: str = "pptx"
+
+
 class LearningDossierSourceSummary(BaseModel):
     has_report: bool
     report_id: str | None
@@ -36,6 +40,8 @@ class ExportJobResponse(BaseModel):
     job_id: str
     status: str
     format: str
+    export_type: str
+    resource_id: str | None = None
     filename: str | None = None
     content_type: str | None = None
     agent_trace_id: str | None = None

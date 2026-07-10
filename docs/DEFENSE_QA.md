@@ -18,7 +18,7 @@ A：有。同一主页或课程 `session_id` 内，后端会把最近 12 条 use
 
 **Q：为什么重点演示课程空间，而不是把首页做成驾驶舱？**
 
-A：首页 `/app` 负责轻量开始：提问、上传资料、选择资料、回到最近课程。A3 赛题的完整闭环需要绑定某一门课程的资料、弱点、资源、路径、练习和报告，所以 EduNova 把 `/app/courses/:courseId` 做成个性化学习闭环主场：顶部解释当前目标、依据和下一步，回答下方串起来源、5 类资源、路径、练习、报告和 Agent 轨迹。
+A：首页 `/app` 负责轻量开始：提问、上传资料、选择资料、回到最近课程。A3 完整闭环绑定具体课程，所以 `/app/courses/:courseId` 是学习主场：回答下方串起来源、六类结构化资源、路径、练习、报告和 Agent 轨迹，生成结果可直接在课程内查看。
 
 ## 2. RAG 与防幻觉
 
@@ -34,7 +34,15 @@ A：系统支持 OpenAI-compatible embeddings。未配置或不可用时使用�
 
 **Q：多智能体是否只是概念？**
 
-A：不是。当前已经真接管两条赛题主链路：课程问答由 `CourseTutorGraph` 执行 `profile -> retriever -> tutor -> weakness -> review -> next_action`，资源生成由 `ResourceGenerationGraph` 执行 `profile -> retrieve -> diagnosis -> resource -> review -> persist`。路径、冲刺、练习、报告和导出仍保留现有服务逻辑与安全 trace，后续按专项继续图化；认证、设置、Dashboard 这类非学习能力仍是普通服务，不伪装成 Agent。
+A：不是。当前三条主链路已经真接管：`HomeTutorGraph` 负责主页智能对话，`CourseTutorGraph` 负责课程问答，`ResourceGenerationGraph` 负责画像、检索、规划、六 Worker 并行生成、聚合、Review 和可选 Repair。每个 Worker 有独立模型调用和真实耗时，模型不可用时明确标记规则 fallback。路径、练习、报告等仍是现有服务逻辑，认证、设置、Dashboard 不伪装成 Agent。
+
+### 资源里的“多模态”是否只是文本换皮？
+
+A：新资源不是统一 Markdown。思维导图使用 Markmap 画布，练习题可交互作答，代码实操通过受限 Pyodide Worker 在浏览器运行，PPT 有结构化页面预览并可异步下载真实 `.pptx`，动画图解按 Mermaid 场景播放。动画图解不是生成视频，项目不会把它包装成视频能力。
+
+### 浏览器代码执行是否安全？
+
+A：不执行服务端代码。Python 在独立 Web Worker 的 Pyodide 中运行，前端预检和 Python AST 双重限制导入、网络、文件、JS 互操作和动态执行，运行超过 5 秒会直接终止 Worker，输出限制为 20 KB。它用于受审核的教学示例，不是通用在线判题沙箱。
 
 **Q：为什么不用模型直接生成全部内容？**
 

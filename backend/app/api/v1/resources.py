@@ -3,12 +3,21 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from backend.app.api.errors import ApiError, api_response, make_trace_id
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.v1.deps import get_current_user
 from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.models import User
 from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
+from backend.app.schemas.exports import ResourceExportJobRequest
 from backend.app.schemas.resources import GenerateResourcesRequest
+from backend.app.services.exports import (
+    ExportNotFoundError,
+    ExportService,
+    ExportValidationError,
+    RqExportJobQueue,
+    SqlAlchemyExportRepository,
+)
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 from backend.app.services.resources import (
     ResourceGenerationError,
@@ -31,6 +40,16 @@ def get_resource_generation_service(db=Depends(get_db_session)) -> ResourceGener
     return ResourceGenerationService(
         repository=SqlAlchemyResourceRepository(db),
         model_settings_service=model_settings_service,
+        trace_recorder=AgentTraceRecorder(),
+    )
+
+
+def get_resource_export_service(db=Depends(get_db_session)) -> ExportService:
+    settings = get_settings()
+    return ExportService(
+        SqlAlchemyExportRepository(db),
+        settings=settings,
+        job_queue=RqExportJobQueue(settings.redis_url, settings.export_queue_name),
     )
 
 
@@ -100,3 +119,32 @@ def get_resource_quality(
         return api_response([score.model_dump() for score in service.get_resource_quality(current_user, resource_id)])
     except ResourceNotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+
+
+@router.post("/{resource_id}/exports")
+def create_resource_export_job(
+    resource_id: int,
+    payload: ResourceExportJobRequest,
+    current_user: User = Depends(get_current_user),
+    service: ExportService = Depends(get_resource_export_service),
+) -> dict:
+    try:
+        result = service.create_resource_export_job(current_user, resource_id, payload.format)
+    except ExportNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+    except ExportValidationError as exc:
+        raise ApiError(400, "VALIDATION_ERROR", str(exc)) from exc
+    return api_response(result.model_dump())
+
+
+@router.get("/{resource_id}/exports")
+def list_resource_export_jobs(
+    resource_id: int,
+    current_user: User = Depends(get_current_user),
+    service: ExportService = Depends(get_resource_export_service),
+) -> dict:
+    try:
+        jobs = service.list_resource_export_jobs(current_user, resource_id)
+    except ExportNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+    return api_response([job.model_dump() for job in jobs])

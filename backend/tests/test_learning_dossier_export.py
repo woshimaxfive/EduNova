@@ -99,6 +99,19 @@ class FakeLearningDossierRepository:
         reports = [report for report in self.reports if report.user_id == user_id and report.course_id == course_id]
         return sorted(reports, key=lambda report: (report.created_at, report.id), reverse=True)[0] if reports else None
 
+    def get_generated_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None:
+        return next(
+            (resource for resource in self.resources if resource.id == resource_id and resource.user_id == user_id),
+            None,
+        )
+
+    def list_export_jobs_for_resource(self, user_id: int, resource_id: int) -> list[Any]:
+        return sorted(
+            [job for job in self.export_jobs if job.user_id == user_id and job.resource_id == resource_id],
+            key=lambda job: (job.created_at, job.id),
+            reverse=True,
+        )
+
     def add_export_job(self, job: Any) -> Any:
         job.id = self.next_export_job_id
         self.next_export_job_id += 1
@@ -157,6 +170,53 @@ def make_point(point_id: int, title: str, order_index: int) -> KnowledgePoint:
         order_index=order_index,
         difficulty=None,
         prerequisites_json=[],
+    )
+
+
+def make_slide_resource(resource_id: int = 9901, user_id: int = 1, course_id: int = 101) -> GeneratedResource:
+    return GeneratedResource(
+        id=resource_id,
+        user_id=user_id,
+        course_id=course_id,
+        knowledge_point_id=501,
+        resource_type="slide",
+        title="启发式搜索个性化课件",
+        agent_trace_id="trace_slide_resource",
+        content_json={
+            "schema_version": 2,
+            "format": "rich",
+            "markdown": "# 启发式搜索PPT",
+            "artifact": {
+                "kind": "slide_deck",
+                "theme": {"name": "edunova-light", "aspect_ratio": "16:9", "accent": "#0f8f83"},
+                "slides": [
+                    {
+                        "id": "slide-1",
+                        "title": "为什么要学启发式搜索",
+                        "bullets": ["减少无效搜索", "结合课程目标"],
+                        "speaker_notes": "先用路径规划问题引入。",
+                        "layout": "title",
+                        "citation_refs": [701],
+                    },
+                    {
+                        "id": "slide-2",
+                        "title": "A* 的关键步骤",
+                        "bullets": ["计算已走代价", "估计剩余代价", "选择优先节点"],
+                        "speaker_notes": "结合课程例题逐步验证。",
+                        "layout": "title_and_content",
+                        "citation_refs": [701],
+                    },
+                ],
+                "citation_refs": [701],
+            },
+            "metadata": {"review_mode": "model_and_rules"},
+        },
+        citation_json=[{"chunk_id": 701, "section_title": "A* 搜索", "source_title": "人工智能导论讲义.md"}],
+        status="completed",
+        review_status="passed",
+        confidence_score=Decimal("0.88"),
+        created_at=NOW,
+        updated_at=NOW,
     )
 
 
@@ -468,3 +528,90 @@ def test_learning_dossier_export_job_route_creates_reads_and_downloads(tmp_path:
     assert download_response.status_code == 200
     assert download_response.headers["content-type"].startswith("application/pdf")
     assert download_response.content.startswith(b"%PDF")
+
+
+def test_resource_slide_export_job_generates_real_pptx_and_reuses_completed_job(tmp_path: Path) -> None:
+    from pptx import Presentation
+
+    from backend.app.services.exports import ExportService
+
+    repo = make_repo(with_report=True)
+    repo.resources.append(make_slide_resource())
+    service = ExportService(repo, settings=make_export_settings(tmp_path), run_jobs_inline=True)
+
+    first = as_dict(service.create_resource_export_job(make_user(), resource_id=9901, export_format="pptx"))
+    second = as_dict(service.create_resource_export_job(make_user(), resource_id=9901, export_format="pptx"))
+
+    assert first["status"] == "completed"
+    assert first["format"] == "pptx"
+    assert first["export_type"] == "resource_artifact"
+    assert first["resource_id"] == "9901"
+    assert first["job_id"] == second["job_id"]
+    saved_path = Path(repo.export_jobs[0].file_path)
+    assert saved_path.exists()
+    assert saved_path.read_bytes().startswith(b"PK")
+    presentation = Presentation(saved_path)
+    assert len(presentation.slides) == 3
+    slide_text = "\n".join(shape.text for slide in presentation.slides for shape in slide.shapes if hasattr(shape, "text"))
+    assert "为什么要学启发式搜索" in slide_text
+    assert "课程引用" in slide_text
+
+
+def test_resource_export_rejects_non_slide_and_other_user(tmp_path: Path) -> None:
+    from backend.app.services.exports import ExportNotFoundError, ExportService, ExportValidationError
+
+    repo = make_repo(with_report=True)
+    repo.resources.extend(
+        [
+            make_slide_resource(),
+            GeneratedResource(
+                id=902,
+                user_id=1,
+                course_id=101,
+                resource_type="doc",
+                title="讲解",
+                content_json={"markdown": "讲解"},
+                citation_json=[],
+                status="completed",
+                review_status="passed",
+            ),
+        ]
+    )
+    service = ExportService(repo, settings=make_export_settings(tmp_path), run_jobs_inline=True)
+
+    with pytest.raises(ExportValidationError):
+        service.create_resource_export_job(make_user(), resource_id=902, export_format="pptx")
+    with pytest.raises(ExportNotFoundError):
+        service.create_resource_export_job(make_user(2), resource_id=9901, export_format="pptx")
+
+
+def test_resource_export_routes_create_list_and_download_pptx(tmp_path: Path) -> None:
+    from backend.app.api.v1.exports import get_export_service
+    from backend.app.api.v1.resources import get_resource_export_service
+    from backend.app.services.exports import ExportService
+
+    repo = make_repo(with_report=True)
+    repo.resources.append(make_slide_resource())
+    user = make_user()
+    settings = make_export_settings(tmp_path)
+    service = ExportService(repo, settings=settings, run_jobs_inline=True)
+    app = create_app()
+    app.dependency_overrides[get_auth_service] = lambda: AuthService(repository=TokenAuthRepository(user), settings=settings)
+    app.dependency_overrides[get_resource_export_service] = lambda: service
+    app.dependency_overrides[get_export_service] = lambda: service
+    client = TestClient(app)
+    token = create_access_token(str(user.id), settings=settings)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    created = client.post("/api/v1/resources/9901/exports", headers=headers, json={"format": "pptx"})
+    listed = client.get("/api/v1/resources/9901/exports", headers=headers)
+    job_id = created.json()["data"]["job_id"]
+    downloaded = client.get(f"/api/v1/exports/{job_id}/download", headers=headers)
+
+    assert created.status_code == 200
+    assert created.json()["data"]["status"] == "completed"
+    assert listed.status_code == 200
+    assert listed.json()["data"][0]["resource_id"] == "9901"
+    assert downloaded.status_code == 200
+    assert downloaded.headers["content-type"].startswith("application/vnd.openxmlformats-officedocument.presentationml.presentation")
+    assert downloaded.content.startswith(b"PK")

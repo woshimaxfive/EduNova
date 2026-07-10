@@ -476,7 +476,7 @@ Phase 4：
 
 Phase 5 以后：
 
-- RAG、资源工坊真实生成、AI 辅导、练习评估逐步接入对应路由和学习空间入口；从资料生成课程已在 Phase 5.1 接入 TXT/Markdown 规则建课，课程知识库检索已在 Phase 5.2 接入，课程空间会话与引用持久化已在 Phase 5.3 接入，模型设置和非流式真实课程 RAG 回答已在 Phase 6.1 接入，多模型配置隔离已在 Phase 6.2 接入，课程问答流式输出已在 Phase 6.3 接入，课程知识库 embedding 与混合检索已在 Phase 6.4 接入，课程空间双模式前端已在 Phase 6.5 接入，真实学习画像与画像事件已在 Phase 7.1 接入，Agent trace 查询和课程页课堂协作轨迹已接入，资源工坊 5 类课程资源生成已在 Phase 8.2 接入，真实课程级学习路径和掌握度图已在 Phase 9 接入，真实练习评估和学习报告已在 Phase 10 接入，期末冲刺计划已在 Phase 11.1 接入，资料库资料对比已在 Phase 11.2 接入，Markdown 学习档案导出已在 Phase 12.1 接入，全学习闭环 LangGraph 生产编排已在 Phase 13.1 接入。
+- 学习主路由已接入资料建课、RAG、流式问答、画像、弱点、资源、路径、练习、报告、冲刺和资料对比。资源工坊与课程空间现在共用六类结构化资源渲染器，主页问答、课程问答和资源生成由真实 LangGraph 编排；其他闭环继续保留兼容 trace。
 
 如果路由、入口或首次进入流程变化，必须同步更新：
 
@@ -509,7 +509,7 @@ Phase 5 以后：
 - Phase 6.5 已把 `CourseSpacePage` 改造为双模式：默认问答模式不常驻知识画布、资源区、证据层、横向知识点条或主区重复历史；来源、生成资源、学习路径和课堂协作轨迹收敛到回答下方；知识点入口和引用会进入学习模式，右侧复用当前课程 AI 辅导输入。
 - Phase 7.1 已把 `ProfilePage` 接入真实 `/profiles/me`、`/profiles/chat` 和 `/profiles/events`；空画像显示待补充，画像证据来自后端事件，课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件。
 - Phase 13.1 已把 `CourseSpacePage` 的“课堂协作轨迹”接入真实 `/agents/traces/{trace_id}`；存在 `latest_trace_id` 时读取当前用户自己的 `CourseTutorGraph` trace，空 trace 和读取失败只在回答详情局部提示。
-- Phase 13.1 已把 `StudioPage` 接入 `ResourceGenerationGraph` 展示：读取当前用户课程、知识点和资源列表，生成讲解、练习、思维导图、代码实操和 PPT 大纲后刷新资源列表；生成后展示资源内容、引用、可信度、质量分、资料依据不足提示和 Graph 全链路；`CourseSpacePage` 的“生成资源”入口跳转 `/app/studio?course_id=...`。
+- `StudioPage` 展示六类结构化资源、引用、质量分、Graph 轨迹和 PPTX 状态；`CourseSpacePage` 既可带课程进入资源工坊，也可在回答下方生成并内联预览资源。
 - Phase 9 已把 `LearningPathPage` 接入真实 `/paths` 和 `/courses/{course_id}/mastery-map`：支持课程预选、生成课程路径、任务状态更新、推荐资源展示、路径依据和规则掌握度图；`CourseSpacePage` 的“学习路径”入口读取真实 `path_summary` 并跳转 `/app/path?course_id=...`。
 - Phase 10 已把 `PracticePage` 接入真实 `/practice`：支持 `course_id` 查询参数预选课程，读取课程与知识点，创建练习、作答、提交并展示即时反馈；`ReportsPage` 接入真实 `/reports`，读取课程与最新报告，可生成学习报告并展示真实分数、掌握度更新、薄弱点、证据摘要和下一步建议；`CourseSpacePage` 的练习/报告入口会带当前课程进入对应页面。
 - Phase 11.1 已把期末冲刺接入现有 `/app/path`：学习主页最近课程区域提供“期末冲刺”入口并跳转 `/app/path?course_id=...`；`LearningPathPage` 在普通学习路径之外新增独立冲刺区域，可选择 3/7/14 天生成计划，展示每日任务、高频点、薄弱点、必刷题、易错提醒和推荐资源。冲刺区域错误只局部提示，不影响普通学习路径任务状态更新。

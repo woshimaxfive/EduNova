@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -57,6 +57,10 @@ class ExportRepository(Protocol):
     def list_practice_answers(self, user_id: int, course_id: int) -> list[PracticeAnswer]: ...
 
     def get_latest_report(self, user_id: int, course_id: int) -> AssessmentReport | None: ...
+
+    def get_generated_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None: ...
+
+    def list_export_jobs_for_resource(self, user_id: int, resource_id: int) -> list[ExportJob]: ...
 
     def add_export_job(self, job: ExportJob) -> ExportJob: ...
 
@@ -163,6 +167,23 @@ class SqlAlchemyExportRepository:
             .order_by(AssessmentReport.created_at.desc(), AssessmentReport.id.desc())
         )
 
+    def get_generated_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None:
+        return self.db.scalar(
+            select(GeneratedResource).where(
+                GeneratedResource.id == resource_id,
+                GeneratedResource.user_id == user_id,
+            )
+        )
+
+    def list_export_jobs_for_resource(self, user_id: int, resource_id: int) -> list[ExportJob]:
+        return list(
+            self.db.scalars(
+                select(ExportJob)
+                .where(ExportJob.user_id == user_id, ExportJob.resource_id == resource_id)
+                .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
+            )
+        )
+
     def add_export_job(self, job: ExportJob) -> ExportJob:
         self.db.add(job)
         self.db.flush()
@@ -186,6 +207,7 @@ class SqlAlchemyExportRepository:
 
 class ExportService:
     allowed_formats = {"markdown", "pdf", "docx"}
+    resource_formats = {"pptx"}
 
     def __init__(
         self,
@@ -288,6 +310,67 @@ class ExportService:
                 return self._job_response(job)
         return self._job_response(job)
 
+    def create_resource_export_job(self, user: User, resource_id: int, export_format: str = "pptx") -> ExportJobResponse:
+        normalized_format = export_format.strip().lower()
+        if normalized_format not in self.resource_formats:
+            raise ExportValidationError("资源导出格式只能是 pptx。")
+        resource = self.repository.get_generated_resource_for_user(user.id, resource_id)
+        if resource is None:
+            raise ExportNotFoundError("资源不存在或无权访问。")
+        if resource.resource_type != "slide":
+            raise ExportValidationError("只有 PPT 资源可以导出为 pptx。")
+
+        existing_jobs = self.repository.list_export_jobs_for_resource(user.id, resource.id)
+        reusable = next(
+            (
+                job
+                for job in existing_jobs
+                if job.export_format == normalized_format and job.status in {"queued", "running", "completed"}
+            ),
+            None,
+        )
+        if reusable is not None:
+            return self._job_response(reusable)
+
+        job = ExportJob(
+            user_id=user.id,
+            course_id=resource.course_id,
+            resource_id=resource.id,
+            export_type="resource_artifact",
+            export_format=normalized_format,
+            status="queued",
+            filename=None,
+            content_type=None,
+            file_path=None,
+            error_message=None,
+            agent_trace_id=resource.agent_trace_id or make_trace_id(),
+            metadata_json={"resource_type": "slide", "resource_title": self._text(resource.title)},
+        )
+        try:
+            self.repository.add_export_job(job)
+            self.repository.commit()
+            self.repository.refresh(job)
+        except Exception:
+            self.repository.rollback()
+            raise
+
+        if self.run_jobs_inline:
+            self.run_export_job(int(job.id))
+            refreshed = self.repository.get_export_job_for_user(user.id, int(job.id)) or job
+            return self._job_response(refreshed)
+        if self.job_queue is not None:
+            try:
+                self.job_queue.enqueue(int(job.id))
+            except Exception:
+                self._mark_job_failed(job, "PPTX 导出任务排队失败，请稍后重试。")
+        return self._job_response(job)
+
+    def list_resource_export_jobs(self, user: User, resource_id: int) -> list[ExportJobResponse]:
+        resource = self.repository.get_generated_resource_for_user(user.id, resource_id)
+        if resource is None:
+            raise ExportNotFoundError("资源不存在或无权访问。")
+        return [self._job_response(job) for job in self.repository.list_export_jobs_for_resource(user.id, resource.id)]
+
     def run_export_job(self, job_id: int) -> ExportJobResponse:
         job = self.repository.get_export_job(job_id)
         if job is None:
@@ -299,7 +382,7 @@ class ExportService:
             job.status = "running"
             job.updated_at = datetime.now(UTC)
             self.repository.commit()
-            rendered = self._render_learning_dossier_job(job)
+            rendered = self._render_export_job(job)
             export_dir = Path(self.settings.export_dir)
             export_dir.mkdir(parents=True, exist_ok=True)
             file_path = export_dir / f"job-{job.id}-{rendered.filename}"
@@ -320,6 +403,11 @@ class ExportService:
                 self._mark_job_failed(failed_job, "学习档案导出失败，请稍后重试。")
                 job = failed_job
         return self._job_response(job)
+
+    def _render_export_job(self, job: ExportJob) -> RenderedExport:
+        if job.export_type == "resource_artifact":
+            return self._render_resource_artifact_job(job)
+        return self._render_learning_dossier_job(job)
 
     def get_export_job(self, user: User, job_id: int) -> ExportJobResponse:
         job = self.repository.get_export_job_for_user(user.id, job_id)
@@ -358,6 +446,141 @@ class ExportService:
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             content=self._render_docx(dossier.markdown),
         )
+
+    def _render_resource_artifact_job(self, job: ExportJob) -> RenderedExport:
+        if job.resource_id is None:
+            raise ExportNotFoundError("资源导出任务缺少资源。")
+        resource = self.repository.get_generated_resource_for_user(int(job.user_id), int(job.resource_id))
+        if resource is None:
+            raise ExportNotFoundError("资源不存在或无权访问。")
+        if resource.resource_type != "slide" or job.export_format != "pptx":
+            raise ExportValidationError("当前资源不支持该导出格式。")
+        slides = self._resource_slides(resource)
+        filename = self._safe_resource_filename(resource.title, ".pptx")
+        return RenderedExport(
+            filename=filename,
+            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            content=self._render_pptx(resource.title, slides, list(resource.citation_json or [])),
+        )
+
+    def _render_pptx(self, title: str, slides: list[dict[str, Any]], citations: list[dict[str, Any]]) -> bytes:
+        from io import BytesIO
+
+        from pptx import Presentation
+        from pptx.dml.color import RGBColor
+        from pptx.enum.text import PP_ALIGN
+        from pptx.util import Inches, Pt
+
+        presentation = Presentation()
+        presentation.slide_width = Inches(13.333)
+        presentation.slide_height = Inches(7.5)
+        blank_layout = presentation.slide_layouts[6]
+        accent = RGBColor(15, 143, 131)
+        ink = RGBColor(16, 27, 35)
+        muted = RGBColor(93, 112, 111)
+        surface = RGBColor(246, 250, 249)
+
+        for index, slide_data in enumerate(slides, start=1):
+            slide = presentation.slides.add_slide(blank_layout)
+            background = slide.background.fill
+            background.solid()
+            background.fore_color.rgb = surface
+
+            marker = slide.shapes.add_shape(1, Inches(0.62), Inches(0.55), Inches(0.12), Inches(0.72))
+            marker.fill.solid()
+            marker.fill.fore_color.rgb = accent
+            marker.line.fill.background()
+
+            title_box = slide.shapes.add_textbox(Inches(0.95), Inches(0.48), Inches(11.5), Inches(0.9))
+            title_frame = title_box.text_frame
+            title_frame.clear()
+            title_paragraph = title_frame.paragraphs[0]
+            title_paragraph.text = self._text(slide_data.get("title") or title)
+            title_paragraph.font.name = "Microsoft YaHei"
+            title_paragraph.font.size = Pt(28 if index > 1 else 32)
+            title_paragraph.font.bold = True
+            title_paragraph.font.color.rgb = ink
+
+            body_box = slide.shapes.add_textbox(Inches(0.98), Inches(1.65), Inches(11.2), Inches(3.75))
+            body_frame = body_box.text_frame
+            body_frame.clear()
+            body_frame.word_wrap = True
+            bullets = slide_data.get("bullets") if isinstance(slide_data.get("bullets"), list) else []
+            for bullet_index, bullet in enumerate(bullets[:6]):
+                paragraph = body_frame.paragraphs[0] if bullet_index == 0 else body_frame.add_paragraph()
+                paragraph.text = self._text(bullet)[:240]
+                paragraph.level = 0
+                paragraph.space_after = Pt(13)
+                paragraph.font.name = "Microsoft YaHei"
+                paragraph.font.size = Pt(20)
+                paragraph.font.color.rgb = ink
+
+            notes_box = slide.shapes.add_textbox(Inches(0.98), Inches(5.65), Inches(11.2), Inches(0.9))
+            notes_frame = notes_box.text_frame
+            notes_frame.clear()
+            notes_paragraph = notes_frame.paragraphs[0]
+            notes_paragraph.text = f"讲稿提示：{self._text(slide_data.get('speaker_notes'))[:360]}"
+            notes_paragraph.font.name = "Microsoft YaHei"
+            notes_paragraph.font.size = Pt(11)
+            notes_paragraph.font.color.rgb = muted
+
+            footer = slide.shapes.add_textbox(Inches(0.98), Inches(6.85), Inches(11.2), Inches(0.28))
+            footer_paragraph = footer.text_frame.paragraphs[0]
+            footer_paragraph.text = f"EduNova · {index}/{len(slides) + (1 if citations else 0)}"
+            footer_paragraph.alignment = PP_ALIGN.RIGHT
+            footer_paragraph.font.name = "Microsoft YaHei"
+            footer_paragraph.font.size = Pt(9)
+            footer_paragraph.font.color.rgb = muted
+
+        if citations:
+            citation_slide = presentation.slides.add_slide(blank_layout)
+            citation_slide.background.fill.solid()
+            citation_slide.background.fill.fore_color.rgb = surface
+            title_box = citation_slide.shapes.add_textbox(Inches(0.95), Inches(0.65), Inches(11.2), Inches(0.7))
+            paragraph = title_box.text_frame.paragraphs[0]
+            paragraph.text = "课程引用"
+            paragraph.font.name = "Microsoft YaHei"
+            paragraph.font.size = Pt(28)
+            paragraph.font.bold = True
+            paragraph.font.color.rgb = ink
+            body = citation_slide.shapes.add_textbox(Inches(0.98), Inches(1.65), Inches(11.1), Inches(4.8))
+            frame = body.text_frame
+            frame.clear()
+            for citation_index, citation in enumerate(citations[:8], start=1):
+                item = frame.paragraphs[0] if citation_index == 1 else frame.add_paragraph()
+                section = self._text(citation.get("section_title") or "课程章节")
+                source = self._text(citation.get("source_title") or "课程资料")
+                item.text = f"{citation_index}. {section}（{source}）"
+                item.font.name = "Microsoft YaHei"
+                item.font.size = Pt(17)
+                item.font.color.rgb = ink
+                item.space_after = Pt(10)
+
+        buffer = BytesIO()
+        presentation.save(buffer)
+        return buffer.getvalue()
+
+    @staticmethod
+    def _resource_slides(resource: GeneratedResource) -> list[dict[str, Any]]:
+        content = resource.content_json or {}
+        artifact = content.get("artifact")
+        if isinstance(artifact, dict) and artifact.get("kind") == "slide_deck":
+            slides = artifact.get("slides")
+            if isinstance(slides, list) and slides:
+                return [slide for slide in slides if isinstance(slide, dict)]
+
+        markdown = str(content.get("markdown") or "")
+        matches = list(re.finditer(r"^## 第 \d+ 页：(.+)$", markdown, flags=re.MULTILINE))
+        slides: list[dict[str, Any]] = []
+        for index, match in enumerate(matches):
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
+            block = markdown[match.end() : end]
+            bullets = [line.removeprefix("- 要点：").strip() for line in block.splitlines() if line.startswith("- 要点：")]
+            notes = next((line.removeprefix("讲稿：").strip() for line in block.splitlines() if line.startswith("讲稿：")), "")
+            slides.append({"title": match.group(1).strip(), "bullets": bullets or ["课程内容"], "speaker_notes": notes})
+        if not slides:
+            raise ExportValidationError("PPT 资源缺少可导出的页面结构。")
+        return slides
 
     def _render_pdf(self, markdown: str) -> bytes:
         from io import BytesIO
@@ -440,6 +663,8 @@ class ExportService:
             job_id=str(job.id),
             status=job.status,
             format=job.export_format,
+            export_type=job.export_type,
+            resource_id=str(job.resource_id) if job.resource_id is not None else None,
             filename=job.filename,
             content_type=job.content_type,
             agent_trace_id=job.agent_trace_id,
@@ -610,6 +835,12 @@ class ExportService:
         title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", course_title).strip() or "course"
         title = re.sub(r"\s+", "-", title)[:80]
         return f"edunova-{title}-learning-dossier.md"
+
+    @staticmethod
+    def _safe_resource_filename(resource_title: str, suffix: str) -> str:
+        title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", resource_title).strip() or "resource"
+        title = re.sub(r"\s+", "-", title)[:80]
+        return f"edunova-{title}{suffix}"
 
     @staticmethod
     def _text(value: str, limit: int = 160) -> str:

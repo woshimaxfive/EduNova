@@ -21,9 +21,11 @@ import { RAG_ENDPOINTS, searchRag } from "./rag";
 import { getMyProfile, listProfileEvents, PROFILE_ENDPOINTS, updateProfileByChat } from "./profiles";
 import { generateReport, getLatestReport, REPORT_ENDPOINTS } from "./reports";
 import {
+  createResourceExportJob,
   generateResources,
   getResource,
   getResourceQuality,
+  listResourceExportJobs,
   listResources,
   RESOURCE_ENDPOINTS
 } from "./resources";
@@ -71,6 +73,7 @@ describe("frontend API contracts", () => {
     expect(MATERIAL_ENDPOINTS.progress(3)).toBe("/materials/3/progress");
     expect(RAG_ENDPOINTS.search).toBe("/rag/search");
     expect(RESOURCE_ENDPOINTS.generate).toBe("/resources/generate");
+    expect(RESOURCE_ENDPOINTS.exports(901)).toBe("/resources/901/exports");
     expect(AGENT_ENDPOINTS.trace("trace_demo")).toBe("/agents/traces/trace_demo");
     expect(PATH_ENDPOINTS.generate).toBe("/paths/generate");
     expect(PATH_ENDPOINTS.current).toBe("/paths/current");
@@ -1418,7 +1421,14 @@ describe("frontend API contracts", () => {
         resource_type: "doc",
         title: "启发式搜索个性化讲解",
         content_json: {
+          schema_version: 2,
+          format: "rich",
           markdown: "# 启发式搜索个性化讲解",
+          artifact: {
+            kind: "document",
+            sections: [{ heading: "概念解释", body: "A* 使用代价和估计值。" }],
+            citation_refs: [501]
+          },
           metadata: {
             agent_trace_id: "trace_resource"
           }
@@ -1447,6 +1457,20 @@ describe("frontend API contracts", () => {
           created_at: "2026-07-05T14:00:00Z"
         }
       ];
+      const exportJob = {
+        job_id: "4001",
+        status: "completed",
+        format: "pptx",
+        export_type: "resource_artifact",
+        resource_id: "901",
+        filename: "edunova-resource.pptx",
+        content_type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        agent_trace_id: "trace_resource",
+        error_message: null,
+        created_at: "2026-07-10T14:00:00Z",
+        updated_at: "2026-07-10T14:00:00Z",
+        completed_at: "2026-07-10T14:00:00Z"
+      };
 
       return {
         data:
@@ -1463,15 +1487,22 @@ describe("frontend API contracts", () => {
                   data: quality,
                   trace_id: "trace_resource_quality"
                 }
+              : config.url === RESOURCE_ENDPOINTS.exports(901)
+                ? {
+                    data: config.method === "post" ? exportJob : [exportJob],
+                    trace_id: "trace_resource_export"
+                  }
               : {
                   data:
                     config.url === RESOURCE_ENDPOINTS.generate
                       ? {
                           agent_trace_id: "trace_resource",
                           resources: [resource],
-                          quality_scores: {
-                            "901": quality
-                          }
+                           quality_scores: {
+                             "901": quality
+                           },
+                           warnings: [],
+                           failed_resource_types: []
                         }
                       : resource,
                   trace_id: "trace_resources_contract"
@@ -1494,6 +1525,8 @@ describe("frontend API contracts", () => {
       const listed = await listResources({ courseId: 7, resourceType: "doc" });
       const detail = await getResource(901);
       const quality = await getResourceQuality(901);
+      const createdExport = await createResourceExportJob(901);
+      const listedExports = await listResourceExportJobs(901);
 
       expect(calls).toEqual([
         {
@@ -1528,12 +1561,26 @@ describe("frontend API contracts", () => {
           method: "get",
           data: undefined,
           params: undefined
+        },
+        {
+          url: RESOURCE_ENDPOINTS.exports(901),
+          method: "post",
+          data: { format: "pptx" },
+          params: undefined
+        },
+        {
+          url: RESOURCE_ENDPOINTS.exports(901),
+          method: "get",
+          data: undefined,
+          params: undefined
         }
       ]);
       expect(generated.data.resources[0].agent_trace_id).toBe("trace_resource");
       expect(listed.data[0].resource_type).toBe("doc");
       expect(detail.data.title).toBe("启发式搜索个性化讲解");
       expect(quality.data[0].score_name).toBe("source_match");
+      expect(createdExport.data.format).toBe("pptx");
+      expect(listedExports.data[0].resource_id).toBe("901");
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

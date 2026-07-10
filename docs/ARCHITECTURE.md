@@ -134,7 +134,7 @@ frontend/src/
 | `MaterialContextPanel` | 轻量资料上下文，连接独立资料库、主页对话和课程资料 |
 | `LearningCanvas` | 课程内可视化模块，展示课程焦点、知识点网络、学习路径节点、资料流入和薄弱点 |
 | `SourceCluster` | 课程内展示资料源、解析状态和引用覆盖度 |
-| `StudioDock` | 展示讲解、练习、思维导图、代码实操、PPT 大纲等生成产物 |
+| `StudioDock` | 展示讲解、练习、思维导图、代码实操、PPT、动画图解六类结构化产物 |
 | `EvidenceLayer` | 展示引用来源、Agent 轨迹、ReviewAgent 结果、低依据提示和质量评分 |
 | `AgentTimeline` | 展示多智能体步骤、耗时、状态和失败节点 |
 | `MasteryVisual` | 展示画像雷达、知识点掌握状态和薄弱点复习队列 |
@@ -233,7 +233,7 @@ frontend/src/
 - 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面均不再依赖核心样例数据兜底；后续只保留空态和错误态。
 - 当前前端已移除 `ActionNotice` 类全局横向提示条；按钮反馈优先通过选中态、列表刷新、详情面板、输入内容和真实路由跳转表达。失败、校验错误和模型不可用等需要用户处理的状态使用局部 `InlineFeedback`，模型配置保存、设默认、删除和连接测试等短确认使用右下角 toast；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
 - 上传建课状态轨道和状态条当前使用前端样例状态，后续由 `/materials/{material_id}/progress`、`/courses/from-materials` 和长任务接口驱动。
-- React Flow、ECharts、Mermaid 和 Markmap 已作为依赖准备，复杂图谱和可视化在后续阶段逐步接入。
+- Markmap 已用于结构化思维导图，Mermaid 已用于动画图解；ECharts 和 React Flow 仍保留为后续掌握度与知识画布升级依赖，当前不能写成已使用。
 
 ## 4. 后端架构
 
@@ -353,7 +353,11 @@ RetrieverAgent 检索课程资料
   ↓
 DiagnosisAgent 判断当前学习状态
   ↓
-ResourceAgent 调用不同 Worker 生成资源
+  PlannerAgent 形成共享生成目标
+  ↓
+  LangGraph Send 并行派发六类 Worker
+  ↓
+  AggregateAgent 汇总结构化产物
   ↓
 ReviewAgent 审核内容
   ↓
@@ -370,7 +374,10 @@ ReviewAgent 审核内容
 - MindMapWorker：思维导图。
 - QuizWorker：练习题。
 - CodeWorker：代码实操案例。
-- SlideWorker：PPT 大纲或视频脚本。
+- SlideWorker：结构化 PPT 页面与真实 PPTX 源数据。
+- AnimationWorker：可播放的 Mermaid 教学场景，不伪装成视频。
+
+资源内容采用 `schema_version=2`，以 `artifact.kind` 区分 `document`、`mindmap`、`quiz`、`code_lab`、`slide_deck`、`animation`，同时保存 Markdown fallback。前端 `ResourceRenderer` 按类型加载 Markmap、Mermaid、CodeMirror/Pyodide 等渲染器；PPTX 复用 Redis/RQ 导出 worker 异步生成。
 
 ## 7. RAG 与可信生成架构
 

@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 13.2：资料解析、主页智能工具和异步导出增强**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询、5 类课程资源生成和资源质量收口，Phase 9 已完成课程级路径、规则掌握度图、弱点推荐资源和复习时间第一版，Phase 10 已完成真实课程练习、确定性批改、弱点/掌握度反哺和学习报告展示第一刀，Phase 11.1 已完成课程级 3/7/14 天期末冲刺计划，Phase 11.2 已完成同课程多资料对比，Phase 12.1 已完成课程级 Markdown 学习档案导出，Phase 12.2 已补齐交付文档、开源说明、MIT 许可证和验收证据索引，Phase 13.1 已把学习闭环 Agent 从“Service 分工 + 手写 trace”升级为 LangGraph 生产编排与真实 trace 展示；Phase 13.2 补齐 PDF/DOCX/PPTX 文本解析、主页联网搜索/深度思考/浏览器语音和 Markdown/PDF/DOCX 异步学习档案导出。
+当前最新完成到 **Phase 13 多模态资源生产化**。Phase 计划继续以 `docs/superpowers` 原始实施计划为准；Phase 7 已按“对话式学习画像”主线收口，Phase 8 已完成 Agent trace 查询与课程资源生成，Phase 9 到 Phase 12 已完成路径、练习评估、报告、冲刺、资料对比和学习档案导出；Phase 13 已让主页问答、课程问答和资源生成进入真实 LangGraph 编排，并补齐资料级 RAG、PDF/DOCX/PPTX 解析、主页工具、异步导出以及六类结构化多模态资源。
 
 LangGraph 现在接管学习闭环生产编排：画像、资料建课/对比、课程问答、弱点识别、资源生成、学习路径、期末冲刺、练习评估、学习报告和学习档案导出都会生成或携带安全 `agent_trace_id`。认证、设置、Dashboard 等非学习 Agent 能力仍保持普通服务，不伪装成智能体。
 
@@ -28,7 +28,7 @@ LangGraph 现在接管学习闭环生产编排：画像、资料建课/对比、
 - `/courses/{course_id}/learning-state` 已实现课程级学习状态第一刀，可把课程问答弱点候选事件同步为 `pending` 待确认复习项，并在课程空间展示待复习弱点摘要。
 - 课程级弱点复习项已支持确认、开始、完成和软忽略状态流转；软忽略项不在主列表展示，但继续参与去重。
 - `/agents/traces/{trace_id}` 已实现当前用户 Agent 轨迹查询，响应包含 `workflow`、`artifact_type`、`artifact_id` 和白名单 metadata；课程空间“课堂协作轨迹”读取真实 trace 或真实空状态。
-- `/resources/generate` 已实现 5 类课程资源生成，资源工坊可生成讲解、思维导图、练习、代码实操和 PPT 大纲，并展示模型增强/本地可用稿/低依据、引用、质量分和 `ResourceGenerationGraph` 全链路；弱模型、无模型或模型失败时仍先保留课程引用驱动的可用稿。
+- `/resources/generate` 已实现讲解、思维导图、练习、代码实操、PPT、动画图解六类结构化课程资源；`ResourceGenerationGraph` 通过独立 Worker 并行生成并执行规则与模型审核。资源工坊和课程空间可直接渲染 Markmap、交互练习、浏览器 Python、PPT 页面和 Mermaid 动画，PPT 可通过 Redis/RQ 异步生成真实 `.pptx`。
 - `/paths/generate`、`/paths/current` 和 `/paths/tasks/{task_id}` 已实现课程级学习路径生成、当前路径读取和任务状态更新；`/app/path` 已接入真实课程、任务、路径依据和掌握度图。
 - `/courses/{course_id}/mastery-map` 已实现规则掌握度图，`/courses/{course_id}/learning-state` 已返回真实 `path_summary`、`mastery_summary`、弱点推荐资源和下次复习时间。
 - `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已实现真实课程练习创建、作答提交和确定性批改；错题或低分题会以 `practice_assessment` 来源反哺课程级弱点队列和掌握度图。
@@ -46,7 +46,7 @@ LangGraph 现在接管学习闭环生产编排：画像、资料建课/对比、
 
 - OCR 和图片题目识别。
 - 讯飞原生 Embeddingp/Embeddingq。
-- 个人全局资源生成入口、资源编辑、异步资源任务队列。
+- 个人全局资源生成入口和资源版本化编辑；当前只有 PPTX 文件渲染进入异步任务，结构化资源生成仍为同步 Graph。
 - 资料对比结果持久化、资料对比与期末冲刺联动、错题驱动深度薄弱点追溯。
 - 完整浏览器 E2E 自动化套件和 Phase 13 产品打磨专项。
 

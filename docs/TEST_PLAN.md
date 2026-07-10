@@ -708,7 +708,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 13.1 前端测试覆盖课程空间展示真实课堂协作轨迹、资源工坊展示 `ResourceGenerationGraph`、路径/练习/报告页显示轻量 trace 入口、报告空态不误报失败，以及新增 `agent_trace_id` API 合同。
 - Phase 13.2 后端测试覆盖 PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT 和图片 uploaded、不支持 OCR、已解析资料建课、主页联网/深思/资料参数、无搜索 Key 不伪造来源、`home_tutor` trace、`export_jobs` 创建/状态流转/Markdown/PDF/DOCX 下载/失败分支和用户隔离。
 - Phase 13.2 前端测试覆盖主页联网/深思 payload、真实来源和 trace 展示、浏览器语音输入和朗读、资料库已解析资料文案、报告页异步导出任务创建/轮询/下载/失败提示，以及新增导出 job API 合同。
-- 2026-07-07 会话上下文增强后，后端测试覆盖主页/课程连续追问、长历史截断与摘要、课程流式 SSE 上下文 metadata、无历史单轮兼容和 trace metadata 脱敏；前端测试覆盖主页与课程空间轨迹展示“已参考最近 N 条会话”，API contract 覆盖 `context_message_count`、`context_summary_used` 和 `retrieval_query_mode`。
+- 2026-07-07 会话上下文增强后，后端测试覆盖主页/课程连续追问、长历史截断与摘要、课程流式 SSE 上下文 metadata、无历史单轮兼容和 trace metadata 脱敏；2026-07-10 补充超过 12 条历史后仍只发送一条 system 消息的 OpenAI-compatible 回归测试，避免安全摘要启用时出现固定轮次发送失败；前端测试覆盖主页与课程空间轨迹展示“已参考最近 N 条会话”，API contract 覆盖 `context_message_count`、`context_summary_used` 和 `retrieval_query_mode`。
 - 路由测试覆盖 `/app/courses/:courseId` 课程空间壳子，确认默认问答模式可见，并确认无效课程不会回落到 demo 课程、常驻知识画布、证据层或资源区；覆盖 `/app/path` 学习路径页，确认学习路径、阶段任务和路径依据可见。
 - 学生核心页面测试覆盖文件库式资料库、文档/图片筛选、真实资料列表、资源工坊、学习画像、AI 辅导入口、练习、报告和设置页面的核心区域。
 - P3.7/P3.14/Phase 4.4 交互测试覆盖主页上传资料文件、资料库默认未选中与点选高亮、联网搜索激活态、资料状态贴近输入区且不显示“联网搜索已开”文案、发送后进入主页对话且不显示持久“已生成回答”状态条、课程回答展开、知识点详情、AI 辅导入口、练习提交校验、资料库上传、文档/图片筛选、生成课程资料选择、资料库详情面板和设置页真实状态；Phase 4.4 起资料库上传和列表断言真实 `/materials` 调用。

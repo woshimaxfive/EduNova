@@ -91,11 +91,37 @@ def test_course_answer_includes_conversation_context_before_current_question() -
     )
 
     sent_messages = model.calls[0]
-    assert [message["role"] for message in sent_messages] == ["system", "system", "user", "assistant", "user"]
-    assert sent_messages[1]["content"] == "会话安全摘要：学生前面一直在问启发式搜索和 A 星算法。"
-    assert sent_messages[2]["content"] == "启发式搜索是什么？"
-    assert sent_messages[3]["content"] == "它用启发函数估计搜索方向。"
-    assert "学生问题：那这个怎么做题？" in sent_messages[4]["content"]
+    assert [message["role"] for message in sent_messages] == ["system", "user", "assistant", "user"]
+    assert "会话安全摘要：学生前面一直在问启发式搜索和 A 星算法。" in sent_messages[0]["content"]
+    assert sent_messages[1]["content"] == "启发式搜索是什么？"
+    assert sent_messages[2]["content"] == "它用启发函数估计搜索方向。"
+    assert "学生问题：那这个怎么做题？" in sent_messages[3]["content"]
+    assert sum(message["role"] == "system" for message in sent_messages) == 1
+
+
+def test_home_answer_merges_long_conversation_summary_into_single_system_message() -> None:
+    model = FakeModelSettingsService("继续回答。")
+    service = CourseAnswerService(model)
+    context = ConversationContext(
+        summary="学生此前关注反向传播，已建议先复习链式法则。",
+        messages=[
+            {"role": "user", "content": "反向传播是什么？"},
+            {"role": "assistant", "content": "它用链式法则计算梯度。"},
+        ],
+        message_count=2,
+        summary_used=True,
+    )
+
+    service.generate_home(
+        user=object(),
+        question="继续讲。",
+        conversation_context=context,
+    )
+
+    sent_messages = model.calls[0]
+    assert [message["role"] for message in sent_messages] == ["system", "user", "assistant", "user"]
+    assert "会话安全摘要：学生此前关注反向传播，已建议先复习链式法则。" in sent_messages[0]["content"]
+    assert sum(message["role"] == "system" for message in sent_messages) == 1
 
 
 def test_course_answer_stream_includes_conversation_context() -> None:

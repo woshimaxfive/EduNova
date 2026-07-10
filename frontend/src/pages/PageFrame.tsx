@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
@@ -6,6 +6,7 @@ import { PATHS } from "../app/routePaths";
 import { getDashboardSummary } from "../api/dashboard";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
+import { useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
 
 type PageFrameProps = {
   title: string;
@@ -14,7 +15,7 @@ type PageFrameProps = {
 
 export function PageFrame({ title, children }: PageFrameProps) {
   const navigate = useNavigate();
-  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", "summary"],
     queryFn: getDashboardSummary,

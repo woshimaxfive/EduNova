@@ -17,11 +17,12 @@ import {
   UserCircle,
   X
 } from "@phosphor-icons/react";
-import { type FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 
 import { PATHS } from "../../app/routePaths";
 import { useAuthStore } from "../../features/auth/authStore";
+import { useCompactWorkspaceViewport } from "./useResponsiveSidebarState";
 
 export type SidebarConversation = {
   id: string;
@@ -40,6 +41,15 @@ type AppSidebarProps = {
   onRenameConversation?: (conversation: SidebarConversation, title: string) => void | Promise<void>;
   onDeleteConversation?: (conversation: SidebarConversation) => void | Promise<void>;
 };
+
+const modalFocusableSelector =
+  'a[href], button:not([disabled]):not([tabindex="-1"]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function getModalFocusableElements(container: HTMLElement | null) {
+  return Array.from(container?.querySelectorAll<HTMLElement>(modalFocusableSelector) ?? []).filter(
+    (element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true"
+  );
+}
 
 export function AppSidebar({
   isCollapsed,
@@ -62,10 +72,16 @@ export function AppSidebar({
   const [editingTitle, setEditingTitle] = useState("");
   const [confirmingDeleteConversationId, setConfirmingDeleteConversationId] = useState<string | null>(null);
   const [busyConversationId, setBusyConversationId] = useState<string | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const toggleButtonRef = useRef<HTMLButtonElement | null>(null);
+  const historySearchButtonRef = useRef<HTMLButtonElement | null>(null);
+  const historySearchDialogRef = useRef<HTMLElement | null>(null);
   const threadListRef = useRef<HTMLDivElement | null>(null);
   const pendingThreadListScrollTopRef = useRef<number | null>(null);
   const historySearchInputRef = useRef<HTMLInputElement | null>(null);
   const editingTitleInputRef = useRef<HTMLInputElement | null>(null);
+  const isCompactViewport = useCompactWorkspaceViewport();
+  const isCompactSidebarOpen = !isCollapsed && isCompactViewport;
   const trimmedHistorySearchTerm = historySearchTerm.trim().toLowerCase();
   const searchConversations = useMemo(
     () =>
@@ -77,11 +93,18 @@ export function AppSidebar({
     [conversations, trimmedHistorySearchTerm]
   );
 
-  useEffect(() => {
-    if (isHistorySearchOpen) {
-      historySearchInputRef.current?.focus();
-    }
-  }, [isHistorySearchOpen]);
+  const restoreHistorySearchFocus = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      const target = isCompactViewport ? toggleButtonRef.current : historySearchButtonRef.current;
+      target?.focus();
+    });
+  }, [isCompactViewport]);
+
+  const closeHistorySearch = useCallback(() => {
+    setHistorySearchTerm("");
+    setIsHistorySearchOpen(false);
+    restoreHistorySearchFocus();
+  }, [restoreHistorySearchFocus]);
 
   useEffect(() => {
     if (editingConversationId !== null) {
@@ -101,9 +124,120 @@ export function AppSidebar({
     pendingThreadListScrollTopRef.current = null;
   }, [activeConversationId, conversations]);
 
+  useEffect(() => {
+    if (!isCompactSidebarOpen) {
+      return undefined;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleDrawerKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onToggleCollapsed();
+        window.requestAnimationFrame(() => toggleButtonRef.current?.focus());
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusableElements = getModalFocusableElements(sidebarRef.current);
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements.at(-1);
+
+      if (!firstElement || !lastElement) {
+        return;
+      }
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleDrawerKeyDown);
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.removeEventListener("keydown", handleDrawerKeyDown);
+    };
+  }, [isCompactSidebarOpen, onToggleCollapsed]);
+
+  useEffect(() => {
+    if (!isHistorySearchOpen) {
+      return undefined;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    historySearchInputRef.current?.focus();
+
+    const handleHistorySearchKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeHistorySearch();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusableElements = getModalFocusableElements(historySearchDialogRef.current);
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements.at(-1);
+
+      if (!firstElement || !lastElement) {
+        return;
+      }
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleHistorySearchKeyDown);
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.removeEventListener("keydown", handleHistorySearchKeyDown);
+    };
+  }, [closeHistorySearch, isHistorySearchOpen]);
+
   function logout() {
     clearSession();
     navigate(PATHS.login);
+  }
+
+  function closeCompactSidebar() {
+    if (!isCollapsed && isCompactViewport) {
+      onToggleCollapsed();
+    }
+  }
+
+  function dismissCompactSidebar() {
+    if (!isCompactSidebarOpen) {
+      return;
+    }
+
+    onToggleCollapsed();
+    window.requestAnimationFrame(() => toggleButtonRef.current?.focus());
   }
 
   function rememberThreadListScroll() {
@@ -116,6 +250,7 @@ export function AppSidebar({
     setOpenConversationMenuId(null);
     setEditingConversationId(null);
     setConfirmingDeleteConversationId(null);
+    closeCompactSidebar();
     onHomeClick?.();
   }
 
@@ -125,6 +260,7 @@ export function AppSidebar({
     setOpenConversationMenuId(null);
     setEditingConversationId(null);
     setConfirmingDeleteConversationId(null);
+    closeCompactSidebar();
 
     if (onNewChat) {
       onNewChat();
@@ -135,17 +271,14 @@ export function AppSidebar({
   }
 
   function handleSearchHistory() {
+    closeCompactSidebar();
     setIsHistorySearchOpen(true);
-  }
-
-  function closeHistorySearch() {
-    setHistorySearchTerm("");
-    setIsHistorySearchOpen(false);
   }
 
   function selectSearchConversation(conversation: SidebarConversation) {
     onSelectConversation?.(conversation);
     closeHistorySearch();
+    closeCompactSidebar();
   }
 
   function startRename(conversation: SidebarConversation) {
@@ -206,7 +339,23 @@ export function AppSidebar({
 
   return (
     <>
-      <section className="home-history-rail" aria-label="历史对话" data-collapsed={isCollapsed ? "true" : "false"}>
+      {isCompactSidebarOpen ? (
+        <button
+          className="mobile-sidebar-backdrop"
+          type="button"
+          tabIndex={-1}
+          aria-label="关闭工作区导航"
+          onClick={dismissCompactSidebar}
+        />
+      ) : null}
+      <section
+        ref={sidebarRef}
+        className="home-history-rail"
+        role={isCompactSidebarOpen ? "dialog" : undefined}
+        aria-modal={isCompactSidebarOpen ? true : undefined}
+        aria-label={isCompactSidebarOpen ? "工作区导航" : "历史对话"}
+        data-collapsed={isCollapsed ? "true" : "false"}
+      >
         <div className="home-sidebar-brand">
           <Link className="brand-mark home-brand" to={PATHS.app} aria-label="EduNova 首页" onClick={handleHomeClick}>
             <span className="brand-symbol" aria-hidden="true">
@@ -215,6 +364,7 @@ export function AppSidebar({
             <span className="home-sidebar-label">EduNova</span>
           </Link>
           <button
+            ref={toggleButtonRef}
             className="sidebar-collapse-button"
             type="button"
             aria-label={isCollapsed ? "展开侧栏" : "收起侧栏"}
@@ -230,11 +380,11 @@ export function AppSidebar({
         </div>
 
         <nav className="home-sidebar-nav" aria-label="主页导航">
-          <NavLink to={PATHS.library} className={sidebarLinkClassName}>
+          <NavLink to={PATHS.library} className={sidebarLinkClassName} onClick={closeCompactSidebar}>
             <BookOpen size={18} weight="duotone" aria-hidden="true" />
             <span>资料库</span>
           </NavLink>
-          <NavLink to={PATHS.studio} className={sidebarLinkClassName}>
+          <NavLink to={PATHS.studio} className={sidebarLinkClassName} onClick={closeCompactSidebar}>
             <Sparkle size={18} weight="duotone" aria-hidden="true" />
             <span>资源工坊</span>
           </NavLink>
@@ -245,10 +395,12 @@ export function AppSidebar({
           <span>新建对话</span>
         </button>
         <button
+          ref={historySearchButtonRef}
           className={isHistorySearchOpen ? "history-search-button active" : "history-search-button"}
           type="button"
           aria-expanded={isHistorySearchOpen}
           aria-haspopup="dialog"
+          aria-controls="history-search-dialog"
           onClick={handleSearchHistory}
         >
           <MagnifyingGlass size={16} weight="duotone" aria-hidden="true" />
@@ -282,6 +434,7 @@ export function AppSidebar({
                       onKeyDown={(event) => {
                         if (event.key === "Escape") {
                           event.preventDefault();
+                          event.stopPropagation();
                           cancelRename();
                         }
                       }}
@@ -307,6 +460,7 @@ export function AppSidebar({
                         setOpenConversationMenuId(null);
                         setConfirmingDeleteConversationId(null);
                         onSelectConversation?.(conversation);
+                        closeCompactSidebar();
                       }}
                     >
                       <ChatCircle className="home-thread-icon" size={16} weight="duotone" aria-hidden="true" />
@@ -387,11 +541,11 @@ export function AppSidebar({
           )}
         </div>
         <div className="home-account-section" aria-label="账号入口">
-          <NavLink className={accountLinkClassName} to={PATHS.profile}>
+          <NavLink className={accountLinkClassName} to={PATHS.profile} onClick={closeCompactSidebar}>
             <UserCircle size={18} weight="duotone" aria-hidden="true" />
             <span>个人资料</span>
           </NavLink>
-          <NavLink className={accountLinkClassName} to={PATHS.settings}>
+          <NavLink className={accountLinkClassName} to={PATHS.settings} onClick={closeCompactSidebar}>
             <GearSix size={18} weight="duotone" aria-hidden="true" />
             <span>设置</span>
           </NavLink>
@@ -415,7 +569,14 @@ export function AppSidebar({
             }
           }}
         >
-          <section className="history-search-dialog" role="dialog" aria-modal="true" aria-labelledby="history-search-title">
+          <section
+            id="history-search-dialog"
+            ref={historySearchDialogRef}
+            className="history-search-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="history-search-title"
+          >
             <div className="history-search-command">
               <MagnifyingGlass size={22} weight="duotone" aria-hidden="true" />
               <label className="visually-hidden" htmlFor="history-search-input">
@@ -429,11 +590,6 @@ export function AppSidebar({
                 value={historySearchTerm}
                 placeholder="搜索历史..."
                 onChange={(event) => setHistorySearchTerm(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    closeHistorySearch();
-                  }
-                }}
               />
               <button type="button" aria-label="关闭搜索历史" onClick={closeHistorySearch}>
                 <X size={18} weight="bold" aria-hidden="true" />

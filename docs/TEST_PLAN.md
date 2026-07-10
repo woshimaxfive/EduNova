@@ -798,3 +798,26 @@ docker compose down
 8. Docker Compose 可启动系统。
 9. P0、P1 缺陷清零。
 10. 文档、PPT、视频和提交包齐全。
+
+## 15. Phase 13 前端视觉硬化验收补充
+
+### 15.1 自动化回归
+
+- `useResponsiveSidebarState` 在 `matchMedia("(max-width: 900px)")` 命中时必须默认收起侧栏。
+- 从桌面视口进入紧凑视口时，响应式侧栏状态必须自动切换为收起。
+- 既有首页、课程空间、学生核心页面、导航、路由保护、历史会话和输入交互测试必须保持通过。
+- 前端门禁依次运行 `pnpm lint`、`pnpm test`、`pnpm build`；TypeScript、ESLint warning 或构建错误均视为阻断。
+
+### 15.2 `agent-browser` 真实浏览器验收
+
+至少覆盖 1440×1000 桌面视口和 390×844 移动视口：
+
+1. `/login` 桌面标题不出现孤立单字换行，移动端表单不溢出。
+2. `/app` 桌面侧栏、问候标题、composer、推荐问题和最近学习层级清晰。
+3. `/app` 移动端默认只显示紧凑顶部导航条；展开按钮可打开覆盖式抽屉，抽屉内导航、历史和账号入口可见。
+4. 从移动抽屉进入资料库、资源工坊、个人资料、设置或主页历史后，抽屉自动收起，主内容不被整条桌面侧栏推到页面底部。
+5. `/app/courses/:courseId` 桌面端返回入口、课程摘要、指标、8 步轨、模式切换和问答主任务层级明确；390px 下步骤轨可横向滚动且页面本身不横向溢出。
+6. 主页 composer 获得焦点时有可见容器焦点环；Tab 导航时按钮、链接和表单控件有可见 `:focus-visible`。
+7. `prefers-reduced-motion` 下不新增强制动画，现有学习信号动效继续尊重 reduced motion。
+
+验收证据记录在 `docs/evidence/PHASE_13_FRONTEND_VISUAL_HARDENING.md`。

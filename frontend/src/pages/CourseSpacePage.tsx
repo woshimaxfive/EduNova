@@ -47,6 +47,7 @@ import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
+import { useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
 import { buildCourseLoopSummary, buildStudySteps } from "../features/course-space/a3Loop";
 import { type AgentTraceEvent } from "../types/api";
 
@@ -266,7 +267,7 @@ export function CourseSpacePage() {
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<AnswerPanelKind>("citations");
   const [courseMode, setCourseMode] = useState<CourseMode>("chat");
   const [studyTarget, setStudyTarget] = useState<StudyTarget | null>(null);
-  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
   const [coursePrompt, setCoursePrompt] = useState("");
   const [courseMessages, setCourseMessages] = useState<CourseMessage[]>([]);
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);

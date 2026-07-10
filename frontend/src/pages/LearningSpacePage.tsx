@@ -35,6 +35,7 @@ import { InlineFeedback, type FeedbackTone } from "../components/feedback/Inline
 import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
+import { isCompactWorkspaceViewport, useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
 import { useAuthStore } from "../features/auth/authStore";
 
 type LibraryMaterial = DashboardMaterial;
@@ -112,7 +113,7 @@ export function LearningSpacePage() {
   const [isSendingQuestion, setIsSendingQuestion] = useState(false);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
-  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
@@ -417,7 +418,7 @@ export function LearningSpacePage() {
     setMessages([]);
     setActiveHomeThreadId(null);
     setSelectedMaterialIds([]);
-    setIsHistoryCollapsed(false);
+    setIsHistoryCollapsed(isCompactWorkspaceViewport());
     setIsLibraryOpen(false);
     setIsCourseDialogOpen(false);
     setIsDeepThinkingEnabled(false);

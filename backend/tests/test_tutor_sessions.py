@@ -1395,7 +1395,7 @@ def test_stream_home_message_returns_graph_events_without_model_config() -> None
     assert event_names[0] == "metadata"
     assert "sources" in event_names
     assert "token" in event_names
-    assert event_names[-1] == "done"
+    assert [name for name in event_names if name in {"done", "error", "cancelled"}] == ["done"]
     assert events[0]["data"]["workflow"] == "home_tutor"
     assert "当前未配置可用模型" in next(event["data"]["content"] for event in events if event["event"] == "token")
 
@@ -1420,7 +1420,7 @@ def test_stream_home_message_emits_replace_after_review_repair() -> None:
     assert event_names[0] == "metadata"
     assert "sources" in event_names
     assert "replace" in event_names
-    assert event_names[-1] == "done"
+    assert [name for name in event_names if name in {"done", "error", "cancelled"}] == ["done"]
     replacement = next(event["data"] for event in events if event["event"] == "replace")
     assert replacement == {
         "content": "## 机器学习\n\n机器学习通过数据学习可泛化的规律。",
@@ -1443,7 +1443,7 @@ def test_stream_home_model_failure_emits_error_without_persisting_partial_messag
 
     events = list(service.stream_message(user=user, session_id=session.id, content="什么是机器学习？"))
 
-    assert events[-1]["event"] == "error"
+    assert [event["event"] for event in events if event["event"] in {"done", "error", "cancelled"}] == ["error"]
     assert events[-1]["data"]["code"] == "MODEL_PROVIDER_ERROR"
     assert repo.messages == []
     assert [log.agent_name for log in repo.agent_logs] == [
@@ -1489,7 +1489,7 @@ def test_stream_course_message_model_failure_emits_error_without_half_messages()
 
     events = list(service.stream_message(user=user, session_id=session.id, content="启发式搜索怎么复习？"))
 
-    assert events[-1]["event"] == "error"
+    assert [event["event"] for event in events if event["event"] in {"done", "error", "cancelled"}] == ["error"]
     assert events[-1]["data"]["code"] == "MODEL_PROVIDER_ERROR"
     assert repo.messages == []
     assert [log.agent_name for log in repo.agent_logs] == ["profile", "retriever", "tutor"]
@@ -1721,7 +1721,8 @@ def test_tutor_stream_route_accepts_home_session() -> None:
 
     assert response.status_code == 200
     assert "event: metadata" in response.text
-    assert "event: done" in response.text
+    assert response.text.count("event: done") == 1
+    assert "event: error" not in response.text
 
 
 def test_tutor_session_route_rejects_course_session_without_course_id() -> None:

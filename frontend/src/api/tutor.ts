@@ -202,10 +202,13 @@ export async function streamTutorMessage(
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
-  const streamState: { finalDetail: TutorSessionDetail | null } = { finalDetail: null };
+  const streamState: {
+    finalDetail: TutorSessionDetail | null;
+    terminalEvent: "done" | "error" | null;
+  } = { finalDetail: null, terminalEvent: null };
 
   const dispatchEvent = (event: { event: string; data: unknown } | null) => {
-    if (event === null) {
+    if (event === null || streamState.terminalEvent !== null) {
       return;
     }
     if (event.event === "metadata") {
@@ -221,9 +224,11 @@ export async function streamTutorMessage(
       handlers.onReplace?.(event.data as TutorStreamReplace);
     } else if (event.event === "done") {
       streamState.finalDetail = event.data as TutorSessionDetail;
+      streamState.terminalEvent = "done";
       handlers.onDone?.(streamState.finalDetail);
     } else if (event.event === "error") {
       const error = event.data as TutorStreamError;
+      streamState.terminalEvent = "error";
       handlers.onError?.(error);
       throw new TutorStreamRequestError(error);
     }

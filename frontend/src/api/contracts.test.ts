@@ -590,7 +590,8 @@ describe("frontend API contracts", () => {
       ["sources", { citations: [], warnings: ["联网搜索未配置。"] }],
       ["token", { content: "机器学习" }],
       ["replace", { content: "## 修订回答\n\n机器学习从数据中归纳规律。", reason: "review_repair" }],
-      ["done", finalDetail]
+      ["done", finalDetail],
+      ["error", { code: "MODEL_PROVIDER_ERROR", message: "不应覆盖已完成的回答。", retryable: true }]
     ]
       .map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
       .join("");

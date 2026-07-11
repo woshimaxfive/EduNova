@@ -1277,10 +1277,19 @@ class HomeTutorGraphRunner:
             streaming=True,
         )
         try:
-            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
-                for event in self.graph.stream(state, stream_mode="custom"):
-                    if isinstance(event, dict) and isinstance(event.get("event"), str):
-                        yield event
+            final_detail: TutorSessionDetail | None = None
+            for stream_mode, payload in self.graph.stream(state, stream_mode=["custom", "values"]):
+                if stream_mode == "custom":
+                    if isinstance(payload, dict) and isinstance(payload.get("event"), str):
+                        yield payload
+                    continue
+                if stream_mode == "values" and isinstance(payload, dict):
+                    detail = payload.get("detail")
+                    if isinstance(detail, TutorSessionDetail):
+                        final_detail = detail
+            if final_detail is None:
+                raise CourseAnswerGenerationError("主页回答未能完成持久化。")
+            yield {"event": "done", "data": final_detail.model_dump()}
         except Exception as exc:
             yield {
                 "event": "error",
@@ -1764,7 +1773,6 @@ class HomeTutorGraphRunner:
             self.service.repository.commit()
         except Exception:
             self.service.repository.rollback()
-        self._write(state, "done", detail.model_dump())
         return {"detail": detail, "pending_traces": [*list(state.get("pending_traces", [])), pending]}
 
     def _run_node(
@@ -1969,49 +1977,48 @@ class CourseTutorGraphRunner:
     def stream(self, *, user: User, session: ChatSession, message_text: str) -> Iterator[dict[str, Any]]:
         state = self._initial_state(user=user, session=session, message_text=message_text)
         try:
-            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
-                state.update(self._profile_node(state))
-                state.update(self._retriever_node(state))
-                citation_json = list(state.get("citation_json", []))
-                stream_state = self._prepare_stream_tutor_node(state)
-                state.update(stream_state)
-                trace_id = str(state.get("trace_id") or "")
-                used_model = bool(state.get("used_model"))
-                yield self.service._stream_event(
-                    "metadata",
-                    session_id=session.id,
-                    trace_id=trace_id,
-                    citation_count=len(citation_json),
-                    used_model=used_model,
-                    context_metadata=state.get("context_metadata"),
-                )
+            state.update(self._profile_node(state))
+            state.update(self._retriever_node(state))
+            citation_json = list(state.get("citation_json", []))
+            stream_state = self._prepare_stream_tutor_node(state)
+            state.update(stream_state)
+            trace_id = str(state.get("trace_id") or "")
+            used_model = bool(state.get("used_model"))
+            yield self.service._stream_event(
+                "metadata",
+                session_id=session.id,
+                trace_id=trace_id,
+                citation_count=len(citation_json),
+                used_model=used_model,
+                context_metadata=state.get("context_metadata"),
+            )
 
-                answer_parts: list[str] = []
-                for token in state.get("tokens", []):
-                    if not isinstance(token, str) or not token:
-                        continue
-                    answer_parts.append(token)
-                    yield {"event": "token", "data": {"content": token}}
+            answer_parts: list[str] = []
+            for token in state.get("tokens", []):
+                if not isinstance(token, str) or not token:
+                    continue
+                answer_parts.append(token)
+                yield {"event": "token", "data": {"content": token}}
 
-                assistant_reply = "".join(answer_parts).strip()
-                if not assistant_reply:
-                    raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。")
-                state["assistant_reply"] = assistant_reply
-                state.update(self._weakness_node(state))
-                state.update(self._review_node(state))
-                state.update(self._next_action_node(state))
-                detail = self.service._persist_message_pair(
-                    user=user,
-                    session=session,
-                    message_text=message_text,
-                    assistant_reply=assistant_reply,
-                    citation_json=citation_json,
-                    trace_id=trace_id,
-                    home_tool_metadata=None,
-                    context_metadata=state.get("context_metadata"),
-                    course_trace_records=list(state.get("pending_traces", [])),
-                )
-                yield {"event": "done", "data": detail.model_dump()}
+            assistant_reply = "".join(answer_parts).strip()
+            if not assistant_reply:
+                raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。")
+            state["assistant_reply"] = assistant_reply
+            state.update(self._weakness_node(state))
+            state.update(self._review_node(state))
+            state.update(self._next_action_node(state))
+            detail = self.service._persist_message_pair(
+                user=user,
+                session=session,
+                message_text=message_text,
+                assistant_reply=assistant_reply,
+                citation_json=citation_json,
+                trace_id=trace_id,
+                home_tool_metadata=None,
+                context_metadata=state.get("context_metadata"),
+                course_trace_records=list(state.get("pending_traces", [])),
+            )
+            yield {"event": "done", "data": detail.model_dump()}
         except Exception as exc:
             yield {
                 "event": "error",

@@ -17,6 +17,7 @@ import { PATHS } from "../app/routePaths";
 import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { PageFrame } from "./PageFrame";
+import { invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 
 type PracticeSessionEnvelope = PracticeSessionDetail | { data?: PracticeSessionDetail };
 
@@ -174,11 +175,8 @@ export function PracticePage() {
       setCurrentSession(resolvePracticeSession(response));
       lastSavedDraftRef.current = JSON.stringify(answers);
       setDraftStatus("saved");
-      void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
-      void queryClient.invalidateQueries({ queryKey: ["courses", "mastery-map", numericCourseId] });
-      void queryClient.invalidateQueries({ queryKey: ["paths", "current", numericCourseId] });
+      void invalidateCourseLearningLoop(queryClient, numericCourseId);
       void queryClient.invalidateQueries({ queryKey: ["exam-sprint", "current", numericCourseId] });
-      void queryClient.invalidateQueries({ queryKey: ["latest-report", numericCourseId] });
     },
     onError: () => {
       setLocalError("答案提交失败，请检查作答后重试。");

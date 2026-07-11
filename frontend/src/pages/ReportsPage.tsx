@@ -1,5 +1,5 @@
 import { ChartLineUp, DownloadSimple, FileText, Graph, ShieldCheck } from "@phosphor-icons/react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -15,6 +15,7 @@ import { generateReport, getLatestReport } from "../api/reports";
 import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { PracticeTrendChart } from "../components/visualization/LearningCharts";
 import { PageFrame } from "./PageFrame";
+import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 
 function downloadDossierFile(filename: string, file: Blob, contentType: string) {
   const blob = file instanceof Blob ? file : new Blob([file], { type: contentType });
@@ -43,6 +44,7 @@ function delay(ms: number) {
 }
 
 export function ReportsPage() {
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const initialCourseId = searchParams.get("course_id") ?? "";
   const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
@@ -60,7 +62,7 @@ export function ReportsPage() {
   const numericCourseId = Number(effectiveCourseId);
   const canUseCourse = Number.isFinite(numericCourseId) && numericCourseId > 0;
   const latestReportQuery = useQuery({
-    queryKey: ["latest-report", numericCourseId],
+    queryKey: courseLoopQueryKeys.latestReport(numericCourseId),
     queryFn: () => getLatestReport(numericCourseId),
     enabled: canUseCourse
   });
@@ -70,7 +72,7 @@ export function ReportsPage() {
     onSuccess: () => {
       setLocalError("");
       setExportMessage("");
-      void latestReportQuery.refetch();
+      void invalidateCourseLearningLoop(queryClient, numericCourseId);
     },
     onError: () => {
       setLocalError("学习报告生成失败，请稍后重试。");

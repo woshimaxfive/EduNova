@@ -42,6 +42,17 @@ export type StudyStep = {
   status: StudyStepStatus;
 };
 
+export function calculateMasteryPercent(points: Array<{ score: number }>) {
+  if (points.length === 0) return 0;
+
+  const total = points.reduce((sum, point) => {
+    const score = Number.isFinite(point.score) ? point.score : 0;
+    return sum + Math.min(100, Math.max(0, score));
+  }, 0);
+
+  return Math.min(100, Math.max(0, Math.round(total / points.length)));
+}
+
 export function buildCourseLoopSummary(input: CourseLoopInput): CourseLoopSummary {
   const totalWeaknessCount = input.pendingWeaknessCount + input.confirmedWeaknessCount;
   const hasWeakness = totalWeaknessCount > 0;

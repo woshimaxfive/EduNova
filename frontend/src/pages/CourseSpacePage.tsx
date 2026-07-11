@@ -48,7 +48,8 @@ import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
-import { buildCourseLoopSummary, buildStudySteps } from "../features/course-space/a3Loop";
+import { buildCourseLoopSummary, buildStudySteps, calculateMasteryPercent } from "../features/course-space/a3Loop";
+import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import { type AgentTraceEvent } from "../types/api";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import "../styles/course-space.css";
@@ -204,13 +205,13 @@ export function CourseSpacePage() {
     staleTime: 30_000
   });
   const learningStateQuery = useQuery({
-    queryKey: ["courses", "learning-state", numericCourseId],
+    queryKey: courseLoopQueryKeys.learningState(numericCourseId),
     queryFn: () => getCourseLearningState(numericCourseId),
     enabled: hasRealCourseId,
     staleTime: 10_000
   });
   const masteryMapQuery = useQuery({
-    queryKey: ["courses", "mastery-map", numericCourseId],
+    queryKey: courseLoopQueryKeys.masteryMap(numericCourseId),
     queryFn: () => getMasteryMap(numericCourseId),
     enabled: hasRealCourseId,
     staleTime: 10_000,
@@ -227,6 +228,8 @@ export function CourseSpacePage() {
   const [courseMode, setCourseMode] = useState<CourseWorkspaceMode>("chat");
   const [courseContentView, setCourseContentView] = useState<CourseContentMode>("overview");
   const [isProgressDrawerOpen, setIsProgressDrawerOpen] = useState(false);
+  const [isProgressSyncing, setIsProgressSyncing] = useState(false);
+  const [progressSyncWarning, setProgressSyncWarning] = useState<string | null>(null);
   const [isStudyAssistantOpen, setIsStudyAssistantOpen] = useState(false);
   const [studyTarget, setStudyTarget] = useState<StudyTarget | null>(null);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
@@ -311,7 +314,7 @@ export function CourseSpacePage() {
         description: fallbackCourse.description,
         subject: fallbackCourse.subject,
         sourceType: fallbackCourse.source_type,
-        progressPercent: fallbackCourse.progress_percent
+        progressPercent: calculateMasteryPercent(masteryMapQuery.data?.data.points ?? [])
       }
     : {
         id: Number.isFinite(numericCourseId) ? numericCourseId : 0,
@@ -336,19 +339,19 @@ export function CourseSpacePage() {
     staleTime: 10_000
   });
   const courseResourcesQuery = useQuery({
-    queryKey: ["resources", "course", numericCourseId],
+    queryKey: courseLoopQueryKeys.resources(numericCourseId),
     queryFn: () => listResources({ courseId: numericCourseId }),
     enabled: hasRealCourseId,
     staleTime: 10_000
   });
   const currentPathQuery = useQuery({
-    queryKey: ["paths", "current", numericCourseId],
+    queryKey: courseLoopQueryKeys.currentPath(numericCourseId),
     queryFn: () => getCurrentPath(numericCourseId),
     enabled: hasRealCourseId,
     staleTime: 10_000
   });
   const latestReportQuery = useQuery({
-    queryKey: ["reports", "latest", numericCourseId],
+    queryKey: courseLoopQueryKeys.latestReport(numericCourseId),
     queryFn: () => getLatestReport(numericCourseId),
     enabled: hasRealCourseId,
     staleTime: 10_000
@@ -427,8 +430,7 @@ export function CourseSpacePage() {
       : [];
     setCourseResourceFeedback(resourceJob.warnings.join(" ") || "资源生成完成，可直接查看，也可在资源工坊继续管理。");
     void (async () => {
-      await queryClient.invalidateQueries({ queryKey: ["resources", "course", numericCourseId] });
-      await queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
+      await invalidateCourseLearningLoop(queryClient, numericCourseId);
       const refreshed = await courseResourcesQuery.refetch();
       const resources = refreshed.data?.data ?? [];
       setLatestGeneratedResources(resourceIds.length > 0 ? resources.filter((item) => resourceIds.includes(item.id)) : resources.slice(0, 6));
@@ -549,6 +551,34 @@ export function CourseSpacePage() {
     if (mode === "chat") setIsStudyAssistantOpen(false);
   }
 
+  async function syncCourseProgress() {
+    if (!hasRealCourseId || isProgressSyncing) return;
+
+    setIsProgressSyncing(true);
+    setProgressSyncWarning(null);
+    try {
+      const results = await Promise.all([
+        learningStateQuery.refetch(),
+        masteryMapQuery.refetch(),
+        courseResourcesQuery.refetch(),
+        currentPathQuery.refetch(),
+        latestReportQuery.refetch()
+      ]);
+      if (results.some((result) => result.isError)) {
+        setProgressSyncWarning("部分学习状态暂未更新，已保留上次成功结果。");
+      }
+    } catch {
+      setProgressSyncWarning("部分学习状态暂未更新，已保留上次成功结果。");
+    } finally {
+      setIsProgressSyncing(false);
+    }
+  }
+
+  function openCourseProgress() {
+    setIsProgressDrawerOpen(true);
+    void syncCourseProgress();
+  }
+
   function toggleTurnPanel(messageId: string, panel: CourseAnswerPanelKind, question: string | null) {
     setActiveTurnDetail((current) =>
       current?.messageId === messageId && current.panel === panel ? null : { messageId, panel }
@@ -602,8 +632,7 @@ export function CourseSpacePage() {
 
     try {
       await updateCourseWeaknessReviewItem(numericCourseId, item.id, action);
-      void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
-      void queryClient.invalidateQueries({ queryKey: ["courses", "mastery-map", numericCourseId] });
+      await invalidateCourseLearningLoop(queryClient, numericCourseId);
     } catch {
       setWeaknessFeedback("弱点状态更新失败，请稍后重试。");
     } finally {
@@ -674,7 +703,7 @@ export function CourseSpacePage() {
       setCoursePrompt("");
       queryClient.setQueryData(["tutor", "session", detail.session.id], { data: detail, trace_id: null });
       void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
-      void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
+      void invalidateCourseLearningLoop(queryClient, numericCourseId);
     } catch (error) {
       setCourseMessages(previousMessages);
       setStreamingSessionId(null);
@@ -720,7 +749,7 @@ export function CourseSpacePage() {
               weaknessCount={weaknessItems.length}
               mode={courseMode}
               onModeChange={changeCourseMode}
-              onOpenProgress={() => setIsProgressDrawerOpen(true)}
+              onOpenProgress={openCourseProgress}
             />
 
             {courseMode === "chat" ? (
@@ -894,9 +923,12 @@ export function CourseSpacePage() {
               weaknessSummary={weaknessSummary}
               weaknessItems={weaknessItems}
               updatingWeaknessItemId={updatingWeaknessItemId}
-              learningStateError={learningStateQuery.isError}
+              learningStateError={learningStateQuery.isError && learningStateQuery.data === undefined}
               weaknessFeedback={weaknessFeedback}
+              isRefreshing={isProgressSyncing}
+              refreshWarning={progressSyncWarning}
               onClose={() => setIsProgressDrawerOpen(false)}
+              onRefresh={() => void syncCourseProgress()}
               onWeaknessAction={(item, action) => void updateWeaknessReviewItem(item, action)}
             />
           </div>

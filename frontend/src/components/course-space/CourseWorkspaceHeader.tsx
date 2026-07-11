@@ -34,7 +34,7 @@ export function CourseWorkspaceHeader({
         </Link>
         <div className="course-workspace-title">
           <h1>{title}</h1>
-          <span aria-label="课程状态">{materialCount} 份资料 · {knowledgePointCount} 个知识点 · {progressPercent}%</span>
+          <span aria-label="课程状态">{materialCount} 份资料 · {knowledgePointCount} 个知识点 · 掌握度 {progressPercent}%</span>
         </div>
       </div>
 

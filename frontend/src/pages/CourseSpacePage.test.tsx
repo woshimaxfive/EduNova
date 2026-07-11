@@ -31,6 +31,9 @@ type CoursePageOptions = {
   sendDetail?: TutorSessionDetail;
   historyDetail?: TutorSessionDetail;
   learningState?: unknown;
+  refreshedLearningState?: unknown;
+  masteryPoints?: unknown[];
+  refreshedMasteryPoints?: unknown[];
   agentTrace?: AgentTrace;
   failLearningState?: boolean;
   failAgentTrace?: boolean;
@@ -42,8 +45,12 @@ type CoursePageOptions = {
   delayCourseDetail?: boolean;
   delayCourseData?: boolean;
   resources?: unknown[];
+  refreshedResources?: unknown[];
   currentPath?: unknown;
+  refreshedCurrentPath?: unknown;
   latestReport?: unknown;
+  refreshedLatestReport?: unknown;
+  failLearningStateRefreshOnce?: boolean;
   historyDetails?: Record<string, TutorSessionDetail>;
 };
 
@@ -524,6 +531,11 @@ function renderCoursePage(options: CoursePageOptions = {}) {
   const encoder = new TextEncoder();
   const createdSession = makeSession("901", "启发式搜索怎么复习？");
   let courseSessions = [...(options.sessions ?? [])];
+  let learningStateRequestCount = 0;
+  let masteryMapRequestCount = 0;
+  let resourceListRequestCount = 0;
+  let currentPathRequestCount = 0;
+  let latestReportRequestCount = 0;
   const defaultSendDetail = makeDetail(
     createdSession,
     "启发式搜索怎么复习？",
@@ -545,13 +557,20 @@ function renderCoursePage(options: CoursePageOptions = {}) {
     }
 
     if (url === COURSE_ENDPOINTS.learningState(808)) {
+      learningStateRequestCount += 1;
       if (options.failLearningState) {
         throw new Error("课程学习状态读取失败。");
+      }
+      if (options.failLearningStateRefreshOnce && learningStateRequestCount === 2) {
+        throw new Error("课程学习状态刷新失败。");
       }
 
       return {
         data: {
-          data: options.learningState ?? emptyLearningState,
+          data:
+            learningStateRequestCount > 1 && options.refreshedLearningState !== undefined
+              ? options.refreshedLearningState
+              : options.learningState ?? emptyLearningState,
           trace_id: "trace_learning_state"
         },
         status: 200,
@@ -580,10 +599,15 @@ function renderCoursePage(options: CoursePageOptions = {}) {
     }
 
     if (url === RESOURCE_ENDPOINTS.list && method === "get") {
+      resourceListRequestCount += 1;
+      const resources =
+        resourceListRequestCount > 1 && options.refreshedResources !== undefined
+          ? options.refreshedResources
+          : options.resources ?? generatedResourceItems;
       return {
         data: {
-          data: options.resources ?? generatedResourceItems,
-          total: (options.resources ?? generatedResourceItems).length,
+          data: resources,
+          total: resources.length,
           trace_id: "trace_course_resources"
         },
         status: 200,
@@ -611,10 +635,13 @@ function renderCoursePage(options: CoursePageOptions = {}) {
     }
 
     if (url === PATH_ENDPOINTS.current && method === "get") {
+      currentPathRequestCount += 1;
       return {
         data: {
           data:
-            options.currentPath ??
+            (currentPathRequestCount > 1 && options.refreshedCurrentPath !== undefined
+              ? options.refreshedCurrentPath
+              : options.currentPath) ??
             {
               course_id: "808",
               status: "not_started",
@@ -640,9 +667,13 @@ function renderCoursePage(options: CoursePageOptions = {}) {
     }
 
     if (url === REPORT_ENDPOINTS.latest && method === "get") {
+      latestReportRequestCount += 1;
       return {
         data: {
-          data: options.latestReport ?? emptyReport,
+          data:
+            latestReportRequestCount > 1 && options.refreshedLatestReport !== undefined
+              ? options.refreshedLatestReport
+              : options.latestReport ?? emptyReport,
           trace_id: "trace_latest_report"
         },
         status: 200,
@@ -748,6 +779,28 @@ function renderCoursePage(options: CoursePageOptions = {}) {
             }
           ],
           trace_id: "trace_course_points"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (url === COURSE_ENDPOINTS.masteryMap(808)) {
+      masteryMapRequestCount += 1;
+      const points =
+        masteryMapRequestCount > 1 && options.refreshedMasteryPoints !== undefined
+          ? options.refreshedMasteryPoints
+          : options.masteryPoints ?? [];
+      return {
+        data: {
+          data: {
+            course_id: "808",
+            summary: emptyLearningState.mastery_summary,
+            points
+          },
+          trace_id: "trace_course_mastery"
         },
         status: 200,
         statusText: "OK",
@@ -1311,8 +1364,86 @@ describe("CourseSpacePage course tutor sessions", () => {
       );
     });
     await waitFor(() => {
-      expect(calls.filter((call) => call.url === COURSE_ENDPOINTS.learningState(808))).toHaveLength(2);
+      expect(calls.filter((call) => call.url === COURSE_ENDPOINTS.learningState(808))).toHaveLength(3);
     });
+  });
+
+  it("refreshes the full course loop when the progress drawer opens", async () => {
+    const user = userEvent.setup();
+    const initialMasteryPoint = {
+      id: "401",
+      title: "启发式搜索",
+      chapter: "搜索问题",
+      order_index: 1,
+      status: "learning",
+      score: 20,
+      prerequisite_ids: [],
+      weakness_item_ids: [],
+      recommended_resource_ids: []
+    };
+    const { calls } = renderCoursePage({
+      learningState: emptyLearningState,
+      refreshedLearningState: learningStateWithPath,
+      masteryPoints: [initialMasteryPoint],
+      refreshedMasteryPoints: [
+        { ...initialMasteryPoint, status: "mastered", score: 91 },
+        { ...initialMasteryPoint, id: "402", title: "A* 搜索", score: 62 }
+      ],
+      resources: [],
+      refreshedResources: generatedResourceItems,
+      currentPath: null,
+      refreshedCurrentPath: activePathDetail,
+      latestReport: emptyReport,
+      refreshedLatestReport: { ...emptyReport, id: "990", status: "ready", score: 78 }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("课程状态")).toHaveTextContent("掌握度 20%");
+    });
+    await user.click(screen.getByRole("button", { name: /学习进度/ }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("课程状态")).toHaveTextContent("掌握度 77%");
+    });
+    const drawer = screen.getByRole("dialog", { name: "学习进度" });
+    expect(within(drawer).getByText("根据课程证据推进下一步个性化学习")).toBeInTheDocument();
+    expect(within(drawer).getByText("先确认薄弱点，再生成针对性资源并进入路径任务")).toBeInTheDocument();
+    expect(within(drawer).getByText(/1 份资料 · 2 个知识点 · 0 条引用 · 1 个资源/)).toBeInTheDocument();
+    expect(within(drawer).getByText("启发式搜索")).toBeInTheDocument();
+
+    for (const url of [
+      COURSE_ENDPOINTS.learningState(808),
+      COURSE_ENDPOINTS.masteryMap(808),
+      RESOURCE_ENDPOINTS.list,
+      PATH_ENDPOINTS.current,
+      REPORT_ENDPOINTS.latest
+    ]) {
+      expect(calls.filter((call) => call.url === url)).toHaveLength(2);
+    }
+  });
+
+  it("keeps the last successful progress data when one refresh fails and can retry", async () => {
+    const user = userEvent.setup();
+    renderCoursePage({
+      learningState: learningStateWithWeakness,
+      refreshedLearningState: emptyLearningState,
+      failLearningStateRefreshOnce: true,
+      resources: [],
+      currentPath: null,
+      latestReport: emptyReport
+    });
+
+    await user.click(await screen.findByRole("button", { name: /学习进度/ }));
+    const drawer = screen.getByRole("dialog", { name: "学习进度" });
+    expect(await within(drawer).findByText("部分学习状态暂未更新，已保留上次成功结果。")).toBeInTheDocument();
+    expect(within(drawer).getByText("启发式搜索")).toBeInTheDocument();
+    expect(within(drawer).queryByText("课程学习状态读取失败，请稍后重试。")).not.toBeInTheDocument();
+
+    await user.click(within(drawer).getByRole("button", { name: "刷新学习进度" }));
+    await waitFor(() => {
+      expect(within(drawer).queryByText("部分学习状态暂未更新，已保留上次成功结果。")).not.toBeInTheDocument();
+    });
+    expect(within(drawer).queryByText("启发式搜索")).not.toBeInTheDocument();
   });
 
   it("shows local feedback when weakness review item update fails without blocking course questions", async () => {

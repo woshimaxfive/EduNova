@@ -3,6 +3,7 @@ import { createContext, type PropsWithChildren, useCallback, useContext, useEffe
 
 import { cancelAiJob, listAiJobs, retryAiJob, streamAiJob, type AiJob } from "../../api/aiJobs";
 import { useAuthStore } from "../auth/authStore";
+import { invalidateCourseLearningLoop } from "../course-space/courseLoopQueries";
 
 type AiJobContextValue = {
   jobs: AiJob[];
@@ -21,6 +22,7 @@ export function AiJobProvider({ children }: PropsWithChildren) {
   const [jobMap, setJobMap] = useState<Record<string, AiJob>>({});
   const streams = useRef(new Map<string, AbortController>());
   const hiddenJobIds = useRef(new Set<string>());
+  const invalidatedTerminalJobIds = useRef(new Set<string>());
 
   const mergeJob = useCallback((job: AiJob) => {
     setJobMap((current) => ({ ...current, [job.job_id]: job }));
@@ -39,6 +41,17 @@ export function AiJobProvider({ children }: PropsWithChildren) {
         if (terminalStatuses.has(snapshot.status)) {
           streams.current.delete(snapshot.job_id);
           void queryClient.invalidateQueries({ queryKey: ["ai-jobs"] });
+          if (
+            snapshot.status === "completed"
+            && snapshot.workflow === "resource_generation"
+            && !invalidatedTerminalJobIds.current.has(snapshot.job_id)
+          ) {
+            const courseId = Number(snapshot.request.course_id);
+            if (Number.isFinite(courseId) && courseId > 0) {
+              invalidatedTerminalJobIds.current.add(snapshot.job_id);
+              void invalidateCourseLearningLoop(queryClient, courseId);
+            }
+          }
         }
       },
       controller.signal
@@ -72,6 +85,7 @@ export function AiJobProvider({ children }: PropsWithChildren) {
     for (const controller of streams.current.values()) controller.abort();
     streams.current.clear();
     hiddenJobIds.current.clear();
+    invalidatedTerminalJobIds.current.clear();
     // Authentication changes invalidate every user-scoped job snapshot.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setJobMap({});

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildCourseLoopSummary, buildStudySteps, type CourseLoopInput } from "./a3Loop";
+import { buildCourseLoopSummary, buildStudySteps, calculateMasteryPercent, type CourseLoopInput } from "./a3Loop";
 
 const baseInput: CourseLoopInput = {
   courseTitle: "人工智能导论",
@@ -19,6 +19,13 @@ const baseInput: CourseLoopInput = {
 };
 
 describe("course-space A3 loop view model", () => {
+  it("calculates knowledge mastery from the deterministic point scores", () => {
+    expect(calculateMasteryPercent([])).toBe(0);
+    expect(calculateMasteryPercent([{ score: 35 }, { score: 60 }, { score: 90 }])).toBe(62);
+    expect(calculateMasteryPercent([{ score: -20 }, { score: 130 }])).toBe(50);
+    expect(calculateMasteryPercent([{ score: Number.NaN }, { score: 75 }])).toBe(38);
+  });
+
   it("builds a course goal from weakness and latest question evidence", () => {
     const summary = buildCourseLoopSummary(baseInput);
 

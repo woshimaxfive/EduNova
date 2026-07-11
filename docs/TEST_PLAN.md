@@ -229,6 +229,7 @@ cd ..
 - 学习画布、资源输出区、证据层和 Agent 轨迹已进入课程空间或回答展开区素材，不作为首页验收主体。
 - Phase 6.5 后，已登录学生访问 `/app/courses/:courseId` 应默认看到课程问答模式；知识画布、资源生成区、证据与 Agent 轨迹不再作为常驻区域出现，主区不重复渲染课程历史，也不常驻横向知识点条。
 - 2026-07-11 桌面重做后，必须在 1440px 和 1920px 验证：左侧课程历史固定、主滚动条位于浏览器最右侧、输入框固定；每条 Assistant 回答只展开自己的引用和 trace；历史回答生成资源使用对应用户问题；流式临时回答持久化前不显示附件工具栏；学习进度与 AI 辅导抽屉均不压缩正文。
+- 学习进度同步收口后，打开抽屉必须绕过 `staleTime` 刷新学习状态、掌握度、资源、当前路径和最新报告；同步中保留旧内容，任一请求失败显示局部 warning 且再次刷新可恢复。课程栏与抽屉的百分比必须等于知识点 `score` 平均值，不能使用 `CourseSummary.progress_percent` 或 A3 步骤完成数。
 - Phase 7.1 后，已登录学生访问 `/app/profile` 应从 `/profiles/me` 和 `/profiles/events` 渲染真实 8 维画像与画像事件，空画像显示待补充；提交“更新目标”和“画像问题回答”必须调用 `/profiles/chat` 并刷新画像和事件。
 - Phase 15 后，画像页还必须展示逐维可信度、候选/已应用证据、来源类型和 ProfileGraph 轨迹；课程内容知识图谱、路径掌握度图和报告趋势图需保留可访问文本降级。
 - `/app/practice` 必须支持 `adaptive` 请求、实际难度展示、`course_id/session_id` URL 恢复、最近练习恢复、650ms 防抖草稿保存和已完成练习回看；草稿失败不得清空本地答案。
@@ -688,6 +689,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 9 后端测试覆盖 `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}` 的无 token 401、非本人课程/任务 404、空路径、生成路径、旧 active 路径归档、任务状态更新、多用户隔离；路径生成只消费 `confirmed/reviewing` 弱点，忽略 `pending/dismissed`，按知识点推荐同课程资源，并保证响应和 `plan_json` 不泄露系统提示词、模型输入、API Key、完整资料原文或完整画像原文。
 - Phase 9 后端测试覆盖 `/courses/{course_id}/mastery-map` 空课程、弱点状态映射、路径任务映射、资源推荐、多用户隔离和隐私字段；覆盖 `/courses/{course_id}/learning-state` 的真实 `path_summary`、`mastery_summary`、弱点推荐资源和 `next_review_at`。
 - Phase 9 前端测试覆盖 `PATH_ENDPOINTS`、`generatePath`、`getCurrentPath`、`updatePathTask` 和 `COURSE_ENDPOINTS.masteryMap` API 合同；`LearningPathPage` 覆盖课程预选、空路径、生成路径、任务状态更新、掌握度图、推荐资源和局部错误；`CourseSpacePage` 覆盖真实学习路径摘要、带 `course_id` 跳转和弱点推荐资源展示。
+- 课程闭环缓存测试覆盖统一 Query Key、知识点平均掌握度的空值/边界/四舍五入，以及课程问答、弱点、资源任务、路径、练习和报告操作后的课程级失效；课程空间测试覆盖抽屉强制刷新五组数据、目标和下一步重算、部分失败保留旧内容与手动重试。
 - Phase 10 后端测试覆盖 `/practice/sessions` 创建练习、知识点过滤、跨课程校验、单选/多选/简答确定性批改、空答案校验、重复提交策略、错题或低分题写入 `weakness_review_queue`、多用户隔离、报告生成和 latest 读取，以及 `/mastery-map` 和 `/learning-state` 对练习结果的反哺。
 - Phase 10 前端测试覆盖 `PRACTICE_ENDPOINTS`、`REPORT_ENDPOINTS` 类型化 API 合同；`PracticePage` 覆盖课程预选、创建练习、作答、提交反馈、空状态和局部错误；`ReportsPage` 覆盖课程预选、空报告、生成报告、真实报告渲染和局部错误；`CourseSpacePage` 覆盖练习/报告入口携带 `course_id`。
 - Phase 11.1 后端测试覆盖 `/exam-sprint/plans` 的无 token 401、非本人课程/资料/计划 404、`duration_days=3/7/14` 校验、空课程知识点可解释错误、生成计划写入 `learning_paths`/`learning_tasks`、新计划只归档旧 `sprint_active` 而不归档普通 `active` 学习路径、弱点/练习低分/资源/报告建议进入证据、隐私字段不泄露。
@@ -739,7 +741,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 6.2 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/settings` 桌面和 390px：配置列表可见、新建 Spark Lite 配置、本地 Provider 可保存、切换默认、测试连接、删除配置、OpenRouter 不可见、设置页无水平溢出；课程空间回答应继续使用当前用户默认模型配置。
 - Phase 6.3 浏览器验收需要优先使用 `agent-browser` 覆盖课程空间桌面和 390px：发送命中资料问题时 assistant 内容逐步出现或未配置提示通过流式路径出现，done 后刷新仍能恢复消息和引用；无依据问题不伪造引用；输入区不遮挡内容，页面无水平溢出。
 - Phase 6.4 浏览器验收需要优先使用 `agent-browser` 覆盖课程空间桌面和 390px：上传文本建课或进入已有文本课程，发送能命中资料的问题后引用区显示混合检索状态；无外部 embedding 配置时显示本地 fallback，并明确 `local-hash-1536` 不是外部语义向量；刷新后消息、引用和检索状态仍可恢复；页面无水平溢出。
-- 课程空间浏览器验收优先使用 `agent-browser`；2026-07-11 桌面重做至少覆盖 1440px 和 1920px 的固定侧栏、右侧主滚动、固定输入、逐回答附件、进度抽屉、课程内容、可读图谱和覆盖式 AI 辅导。
+- 课程空间浏览器验收优先使用 `agent-browser`；2026-07-11 桌面重做至少覆盖 1440px 和 1920px 的固定侧栏、右侧主滚动、固定输入、逐回答附件、进度抽屉、课程内容、可读图谱和覆盖式 AI 辅导。学习进度同步还需验证状态变化后返回课程空间并打开抽屉即可看到最新掌握度、目标和下一步，同步时无内容清空或布局跳动。
 - Phase 7.1 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/profile` 桌面和 390px：空画像待补充、画像回答提交后画像和证据刷新；课程空间提问含明确困惑信号后，画像页事件列表出现隐私安全的弱点候选事件。
 - Phase 7.2 只做文档和接口合同收口，不改前端 UI、路由或交互；无需新增浏览器验收。
 - Phase 7.3 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/courses/{course_id}` 桌面和 390px：课程问答触发弱点候选后，课程页待复习弱点摘要出现待确认项；空队列显示“还没有待确认弱点”，页面无水平溢出。

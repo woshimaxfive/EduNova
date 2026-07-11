@@ -22,6 +22,7 @@ import { StudioDock } from "../components/studio/StudioDock";
 import { WorkspaceStateStrip } from "../components/states/WorkspaceStateStrip";
 import { getWorkspaceStatePanels } from "../features/workspace/workflowState";
 import { PageFrame } from "./PageFrame";
+import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 
 const resourceTypes: Array<{ type: ResourceType; label: string }> = [
@@ -145,7 +146,7 @@ export function StudioPage() {
 
   const resourceCourseId = effectiveCourseId ?? selectedCourseId;
   const resourcesQuery = useQuery({
-    queryKey: ["resources", "list", resourceCourseId],
+    queryKey: resourceCourseId !== null ? courseLoopQueryKeys.resources(resourceCourseId) : ["resources", "all"],
     queryFn: () => listResources(resourceCourseId !== null ? { courseId: resourceCourseId } : undefined),
     staleTime: 10_000
   });
@@ -194,7 +195,7 @@ export function StudioPage() {
     setFeedback(resourceJob.warnings.join(" ") || "资源生成完成。");
     setLatestQualityScores({});
     if (resourceIds[0]) setSelectedResourceId(resourceIds[0]);
-    void queryClient.invalidateQueries({ queryKey: ["resources", "list", effectiveCourseId] });
+    if (effectiveCourseId !== null) void invalidateCourseLearningLoop(queryClient, effectiveCourseId);
   }, [effectiveCourseId, queryClient, resourceJob]);
 
   const generateMutation = useMutation({

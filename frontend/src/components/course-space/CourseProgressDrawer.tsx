@@ -1,4 +1,4 @@
-import { ArrowRight, CheckCircle, Circle, Sparkle, X } from "@phosphor-icons/react";
+import { ArrowClockwise, ArrowRight, CheckCircle, Circle, Sparkle, X } from "@phosphor-icons/react";
 
 import {
   type CourseWeaknessReviewAction,
@@ -20,7 +20,10 @@ type CourseProgressDrawerProps = {
   updatingWeaknessItemId: string | null;
   learningStateError: boolean;
   weaknessFeedback: string | null;
+  isRefreshing: boolean;
+  refreshWarning: string | null;
   onClose: () => void;
+  onRefresh: () => void;
   onWeaknessAction: (item: CourseWeaknessReviewItem, action: CourseWeaknessReviewAction) => void;
 };
 
@@ -34,7 +37,10 @@ export function CourseProgressDrawer({
   updatingWeaknessItemId,
   learningStateError,
   weaknessFeedback,
+  isRefreshing,
+  refreshWarning,
   onClose,
+  onRefresh,
   onWeaknessAction
 }: CourseProgressDrawerProps) {
   if (!open) return null;
@@ -49,20 +55,31 @@ export function CourseProgressDrawer({
             <span>个性化学习闭环</span>
             <h2 id="course-progress-title">学习进度</h2>
           </div>
-          <button type="button" aria-label="关闭学习进度" onClick={onClose}>
-            <X size={19} weight="bold" aria-hidden="true" />
-          </button>
+          <div className="course-drawer-header-actions">
+            <button
+              type="button"
+              aria-label={isRefreshing ? "正在刷新学习进度" : "刷新学习进度"}
+              disabled={isRefreshing}
+              onClick={onRefresh}
+            >
+              <ArrowClockwise className={isRefreshing ? "spinning" : ""} size={18} weight="bold" aria-hidden="true" />
+            </button>
+            <button type="button" aria-label="关闭学习进度" onClick={onClose}>
+              <X size={19} weight="bold" aria-hidden="true" />
+            </button>
+          </div>
         </header>
 
         <div className="course-progress-summary">
-          <span>当前目标</span>
+          <span>{isRefreshing ? "正在同步最新学习状态" : "当前目标"}</span>
           <strong>{summary.currentGoal}</strong>
           <p>{summary.evidenceLine}</p>
           <div>
             <span>下一步</span>
             <strong>{summary.nextAction}</strong>
-            <em>{summary.progressLabel}</em>
+            <em>掌握度 {summary.progressLabel}</em>
           </div>
+          <InlineFeedback message={refreshWarning} tone="warning" className="course-progress-sync-feedback" />
         </div>
 
         <section className="course-progress-section" aria-label="A3 学习步骤">

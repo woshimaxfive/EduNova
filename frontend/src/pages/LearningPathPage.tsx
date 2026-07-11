@@ -25,6 +25,7 @@ import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosur
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { MasteryOverviewChart } from "../components/visualization/LearningCharts";
 import { PageFrame } from "./PageFrame";
+import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 
 const durationOptions: Array<{ label: string; value: GeneratePathRequest["duration_days"] }> = [
   { label: "3 天", value: 3 },
@@ -140,13 +141,13 @@ export function LearningPathPage() {
   const hasCourse = effectiveCourseId !== null && Number.isFinite(effectiveCourseId);
 
   const currentPathQuery = useQuery({
-    queryKey: ["paths", "current", effectiveCourseId],
+    queryKey: courseLoopQueryKeys.currentPath(effectiveCourseId ?? 0),
     queryFn: () => getCurrentPath(effectiveCourseId ?? 0),
     enabled: hasCourse,
     staleTime: 10_000
   });
   const masteryQuery = useQuery({
-    queryKey: ["courses", "mastery-map", effectiveCourseId],
+    queryKey: courseLoopQueryKeys.masteryMap(effectiveCourseId ?? 0),
     queryFn: () => getMasteryMap(effectiveCourseId ?? 0),
     enabled: hasCourse,
     staleTime: 10_000
@@ -186,10 +187,8 @@ export function LearningPathPage() {
     mutationFn: (payload: GeneratePathRequest) => generatePath(payload),
     onSuccess: (result, payload) => {
       setLocalFeedback(null);
-      queryClient.setQueryData(["paths", "current", payload.course_id], result);
-      void queryClient.invalidateQueries({ queryKey: ["paths", "current", payload.course_id] });
-      void queryClient.invalidateQueries({ queryKey: ["courses", "mastery-map", payload.course_id] });
-      void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", payload.course_id] });
+      queryClient.setQueryData(courseLoopQueryKeys.currentPath(payload.course_id), result);
+      void invalidateCourseLearningLoop(queryClient, payload.course_id);
     },
     onError: () => {
       setLocalFeedback("学习路径生成失败，请稍后重试。");
@@ -200,9 +199,7 @@ export function LearningPathPage() {
     onSuccess: () => {
       setLocalFeedback(null);
       if (effectiveCourseId !== null) {
-        void queryClient.invalidateQueries({ queryKey: ["paths", "current", effectiveCourseId] });
-        void queryClient.invalidateQueries({ queryKey: ["courses", "mastery-map", effectiveCourseId] });
-        void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", effectiveCourseId] });
+        void invalidateCourseLearningLoop(queryClient, effectiveCourseId);
       }
     },
     onError: () => {
@@ -221,8 +218,7 @@ export function LearningPathPage() {
         nextParams.comparison_id = String(payload.comparison_id);
       }
       setSearchParams(nextParams, { replace: true });
-      void queryClient.invalidateQueries({ queryKey: ["courses", "mastery-map", payload.course_id] });
-      void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", payload.course_id] });
+      void invalidateCourseLearningLoop(queryClient, payload.course_id);
     },
     onError: () => {
       setSprintFeedback("期末冲刺计划生成失败，请稍后重试。");

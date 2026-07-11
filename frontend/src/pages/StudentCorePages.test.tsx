@@ -4,9 +4,8 @@ import { type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { buildCoursePath } from "../app/routePaths";
 import { apiClient } from "../api/client";
-import { COURSE_ENDPOINTS, type ApiCourseSummary } from "../api/courses";
+import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS } from "../api/dashboard";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
 import { PRACTICE_ENDPOINTS } from "../api/practice";
@@ -19,10 +18,8 @@ import { ProfilePage } from "./ProfilePage";
 import { ReportsPage } from "./ReportsPage";
 import { SettingsPage } from "./SettingsPage";
 import { StudioPage } from "./StudioPage";
-import { TutorPage } from "./TutorPage";
 
 let previousAdapter = apiClient.defaults.adapter;
-let tutorCourses: ApiCourseSummary[] = [];
 
 function renderWithProviders(ui: ReactNode) {
   const queryClient = new QueryClient({
@@ -47,20 +44,6 @@ function renderRoutePage(page: ReactNode, path: string) {
 describe("student core pages", () => {
   beforeEach(() => {
     previousAdapter = apiClient.defaults.adapter;
-    tutorCourses = [
-      {
-        id: "808",
-        title: "AI 搜索复习",
-        description: "由 1 份资料生成",
-        subject: "自主学习",
-        source_type: "uploaded",
-        status: "ready",
-        progress_percent: 0,
-        material_count: 1,
-        knowledge_point_count: 2,
-        chunk_count: 3
-      }
-    ];
     apiClient.defaults.adapter = async (config) => {
       const method = (config.method ?? "get").toLowerCase();
       if (config.url === MATERIAL_ENDPOINTS.list) {
@@ -156,16 +139,6 @@ describe("student core pages", () => {
             },
             trace_id: "trace_core_settings"
           },
-          status: 200,
-          statusText: "OK",
-          headers: {},
-          config
-        };
-      }
-
-      if (config.url === COURSE_ENDPOINTS.list) {
-        return {
-          data: { data: tutorCourses, trace_id: "trace_core_courses" },
           status: 200,
           statusText: "OK",
           headers: {},
@@ -361,27 +334,6 @@ describe("student core pages", () => {
     expect(screen.getByRole("region", { name: "画像对话入口" })).toBeInTheDocument();
     expect(await screen.findByText("期末前掌握神经网络")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("更新学习画像：学习目标、基础");
-  });
-
-  it("renders the AI tutor route as a course selector instead of a static demo chat", async () => {
-    renderPage(<TutorPage />);
-
-    expect(screen.getByRole("heading", { name: "AI 辅导" })).toBeInTheDocument();
-    expect(await screen.findByRole("region", { name: "课程辅导入口" })).toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: /AI 搜索复习/ })).toHaveAttribute("href", buildCoursePath("808"));
-    expect(screen.queryByText("为什么反向传播需要链式法则？")).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "引用来源" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "追问输入" })).not.toBeInTheDocument();
-  });
-
-  it("guides the student to upload materials when AI tutor has no courses", async () => {
-    tutorCourses = [];
-
-    renderPage(<TutorPage />);
-
-    expect(await screen.findByText("还没有可辅导的课程")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "去资料库上传资料" })).toHaveAttribute("href", "/app/library");
-    expect(screen.getByRole("link", { name: "回到学习主页" })).toHaveAttribute("href", "/app");
   });
 
   it("renders practice as an answer, feedback, and review loop", async () => {

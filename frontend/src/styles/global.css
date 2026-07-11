@@ -1580,7 +1580,6 @@ a {
 }
 
 .register-entry,
-.demo-entry,
 .state-page {
   grid-template-columns: 1fr;
   place-items: center;
@@ -2955,86 +2954,6 @@ a {
 .tutor-dialog {
   display: grid;
   gap: 14px;
-}
-
-.tutor-entry-workspace {
-  align-items: start;
-}
-
-.tutor-entry-panel,
-.tutor-entry-note {
-  display: grid;
-  gap: 14px;
-}
-
-.tutor-entry-copy,
-.tutor-entry-state,
-.tutor-entry-note p,
-.tutor-empty-state p {
-  margin: 0;
-  color: var(--text-muted);
-  line-height: 1.7;
-}
-
-.tutor-course-list {
-  display: grid;
-  gap: 10px;
-}
-
-.tutor-course-card {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  justify-content: space-between;
-  min-width: 0;
-  padding: 14px 16px;
-  border: 1px solid rgba(8, 127, 115, 0.14);
-  border-radius: 16px;
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.56);
-  text-decoration: none;
-  transition:
-    border-color 0.2s ease,
-    transform 0.2s ease,
-    background 0.2s ease;
-}
-
-.tutor-course-card:hover {
-  border-color: rgba(8, 127, 115, 0.34);
-  background: rgba(228, 247, 244, 0.7);
-  transform: translateY(-1px);
-}
-
-.tutor-course-card span {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
-
-.tutor-course-card strong,
-.tutor-entry-note strong,
-.tutor-empty-state strong {
-  color: var(--text-strong);
-  font-weight: 860;
-}
-
-.tutor-course-card small {
-  color: var(--text-muted);
-}
-
-.tutor-empty-state {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border: 1px dashed rgba(8, 127, 115, 0.22);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.42);
-}
-
-.tutor-empty-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
 }
 
 .tutor-shell {

@@ -173,4 +173,26 @@ describe("EduNova routes", () => {
     expect(await screen.findByRole("heading", { name: "没有找到这个学习入口" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "回到学习空间" })).toBeInTheDocument();
   });
+
+  it("treats the retired demo entry as not found", async () => {
+    renderRoutes(["/demo"]);
+
+    expect(await screen.findByRole("heading", { name: "没有找到这个学习入口" })).toBeInTheDocument();
+  });
+
+  it("redirects the retired tutor entry to the authenticated home", async () => {
+    useAuthStore.getState().setSession({
+      token: "test-token",
+      user: {
+        id: 1,
+        email: "student@edunova.local",
+        displayName: "测试学生",
+        role: "student"
+      }
+    });
+
+    renderRoutes(["/app/tutor"]);
+
+    expect(await screen.findByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
+  });
 });

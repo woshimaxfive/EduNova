@@ -300,6 +300,7 @@ export function CourseSpacePage() {
   const [updatingWeaknessItemId, setUpdatingWeaknessItemId] = useState<string | null>(null);
   const optimisticMessageSequence = useRef(0);
   const handledResourceJobId = useRef<string | null>(null);
+  const courseQuestionInputRef = useRef<HTMLTextAreaElement>(null);
   const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
   const resourceJob = getJob(resourceJobId);
   const isGeneratingCourseResources = Boolean(resourceJob && ["queued", "running", "cancelling"].includes(resourceJob.status));
@@ -922,21 +923,28 @@ export function CourseSpacePage() {
 
                   {!hasDisplayedCourseMessages ? (
                     <nav className="course-action-links" aria-label="课程行动入口">
-                      {[
-                        { label: "查看学习路径", to: `${PATHS.path}?course_id=${numericCourseId}`, icon: Compass },
-                        { label: "进入 AI 辅导", to: PATHS.tutor, icon: ChatCircleText },
-                        { label: "开始练习", to: `${PATHS.practice}?course_id=${numericCourseId}`, icon: ListChecks },
-                        { label: "查看学习报告", to: `${PATHS.reports}?course_id=${numericCourseId}`, icon: ChartLineUp }
-                      ].map((action) => {
-                        const Icon = action.icon;
-
-                        return (
-                          <Link key={action.label} to={action.to}>
-                            <Icon size={17} weight="duotone" aria-hidden="true" />
-                            <span>{action.label}</span>
-                          </Link>
-                        );
-                      })}
+                      <Link to={`${PATHS.path}?course_id=${numericCourseId}`}>
+                        <Compass size={17} weight="duotone" aria-hidden="true" />
+                        <span>查看学习路径</span>
+                      </Link>
+                      <a
+                        href="#course-question-input"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          courseQuestionInputRef.current?.focus();
+                        }}
+                      >
+                        <ChatCircleText size={17} weight="duotone" aria-hidden="true" />
+                        <span>开始提问</span>
+                      </a>
+                      <Link to={`${PATHS.practice}?course_id=${numericCourseId}`}>
+                        <ListChecks size={17} weight="duotone" aria-hidden="true" />
+                        <span>开始练习</span>
+                      </Link>
+                      <Link to={`${PATHS.reports}?course_id=${numericCourseId}`}>
+                        <ChartLineUp size={17} weight="duotone" aria-hidden="true" />
+                        <span>查看学习报告</span>
+                      </Link>
                     </nav>
                   ) : null}
                 </div>
@@ -944,6 +952,7 @@ export function CourseSpacePage() {
                 <div className="course-composer" role="region" aria-label="课程输入区">
                   <label htmlFor="course-question-input">课程问题输入</label>
                   <textarea
+                    ref={courseQuestionInputRef}
                     id="course-question-input"
                     rows={3}
                     value={coursePrompt}

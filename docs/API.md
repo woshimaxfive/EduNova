@@ -4,7 +4,7 @@
 
 ## 1. 设计目标
 
-本文档定义 EduNova 第一版前后端接口约定。接口设计以学生学习主链路为中心，兼顾 演示模式、RAG 引用、多智能体轨迹和后续开源部署。
+本文档定义 EduNova 第一版前后端接口约定。接口设计以学生学习主链路为中心，兼顾隔离示例课程、RAG 引用、多智能体轨迹和后续开源部署。
 
 接口基础路径：
 
@@ -2127,30 +2127,7 @@ course_id=101
 
 用途：下载已完成的学习档案或资源文件。只允许下载当前用户自己的 `completed` 任务；`Content-Type` 根据格式返回 Markdown、PDF、DOCX 或 PPTX 对应 MIME。
 
-## 18. Demo 接口
-
-### POST `/demo/reset`
-
-用途：重置演示数据。
-
-响应：
-
-```json
-{
-  "data": {
-    "email": "demo@edunova.local",
-    "password_hint": "Demo123456",
-    "reset": true
-  },
-  "trace_id": "trace_20260701_011"
-}
-```
-
-### GET `/demo/status`
-
-用途：查看演示数据状态。
-
-## 19. Settings 接口
+## 18. Settings 接口
 
 ### GET `/settings/model`
 
@@ -2322,7 +2299,7 @@ OpenRouter 不再作为可见预设。
 
 讯飞原生 Embeddingp/Embeddingq 因为独立授权、签名鉴权和 2560 维输出，当前阶段不接入。
 
-## 20. AI 长任务接口
+## 19. AI 长任务接口
 
 状态：Phase 17 已完成。所有接口必须携带 JWT，并按当前用户隔离。
 
@@ -2403,7 +2380,7 @@ OpenRouter 不再作为可见预设。
 
 安全约束：响应不包含 RQ job ID、ORM 对象、原始资料、模型输入、系统提示词、密钥或思维链。排队失败会保留可重试的 `failed` 任务。每用户默认最多同时运行 2 个 AI 任务。
 
-## 21. API 验收标准
+## 20. API 验收标准
 
 第一版接口达到以下标准才算可进入前端联调：
 
@@ -2414,4 +2391,4 @@ OpenRouter 不再作为可见预设。
 5. 多智能体任务包含 trace_id。
 6. 错误响应结构统一。
 7. API Key 不以明文返回或写入日志。
-8. Demo 接口能重置演示数据。
+8. AI 长任务和规则 fallback 能返回可恢复的安全状态。

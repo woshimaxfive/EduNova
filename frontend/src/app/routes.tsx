@@ -5,7 +5,6 @@ import { ProtectedRoute } from "./ProtectedRoute";
 import { PublicOnlyRoute } from "./PublicOnlyRoute";
 import { PATHS } from "./routePaths";
 import { useAuthStore } from "../features/auth/authStore";
-import { DemoEntryPage } from "../pages/DemoEntryPage";
 import { LibraryPage } from "../pages/LibraryPage";
 import { LearningPathPage } from "../pages/LearningPathPage";
 import { LearningSpacePage } from "../pages/LearningSpacePage";
@@ -17,7 +16,6 @@ import { RegisterPage } from "../pages/RegisterPage";
 import { ReportsPage } from "../pages/ReportsPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { StudioPage } from "../pages/StudioPage";
-import { TutorPage } from "../pages/TutorPage";
 
 const CourseSpacePage = lazy(() =>
   import("../pages/CourseSpacePage").then((module) => ({ default: module.CourseSpacePage }))
@@ -46,14 +44,13 @@ export function AppRoutes() {
       <Route path={PATHS.root} element={<RootRedirect />} />
       <Route path={PATHS.login} element={publicPage(<LoginPage />)} />
       <Route path={PATHS.register} element={publicPage(<RegisterPage />)} />
-      <Route path={PATHS.demo} element={publicPage(<DemoEntryPage />)} />
       <Route path={PATHS.app} element={protectedPage(<LearningSpacePage />)} />
       <Route path={PATHS.library} element={protectedPage(<LibraryPage />)} />
       <Route path={PATHS.path} element={protectedPage(<LearningPathPage />)} />
       <Route path={PATHS.courseDetail} element={protectedPage(lazyPage(<CourseSpacePage />))} />
       <Route path={PATHS.studio} element={protectedPage(<StudioPage />)} />
       <Route path={PATHS.profile} element={protectedPage(<ProfilePage />)} />
-      <Route path={PATHS.tutor} element={protectedPage(<TutorPage />)} />
+      <Route path="/app/tutor" element={protectedPage(<Navigate to={PATHS.app} replace />)} />
       <Route path={PATHS.practice} element={protectedPage(<PracticePage />)} />
       <Route path={PATHS.reports} element={protectedPage(<ReportsPage />)} />
       <Route path={PATHS.settings} element={protectedPage(<SettingsPage />)} />

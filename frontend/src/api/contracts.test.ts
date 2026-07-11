@@ -5,7 +5,6 @@ import { AUTH_ENDPOINTS, login } from "./auth";
 import { apiClient } from "./client";
 import { COURSE_ENDPOINTS, getCourseLearningState, getMasteryMap, updateCourseWeaknessReviewItem } from "./courses";
 import { DASHBOARD_ENDPOINTS } from "./dashboard";
-import { DEMO_ENDPOINTS } from "./demo";
 import { EXAM_SPRINT_ENDPOINTS, generateExamSprintPlan, getCurrentExamSprintPlan, getExamSprintPlan } from "./examSprint";
 import {
   createLearningDossierExportJob,
@@ -91,7 +90,6 @@ describe("frontend API contracts", () => {
     expect(TUTOR_ENDPOINTS.message(4)).toBe("/tutor/sessions/4/messages");
     expect(PRACTICE_ENDPOINTS.answers(8)).toBe("/practice/sessions/8/answers");
     expect(REPORT_ENDPOINTS.latest).toBe("/reports/latest");
-    expect(DEMO_ENDPOINTS.reset).toBe("/demo/reset");
     expect(SETTINGS_ENDPOINTS.testModel).toBe("/settings/model/test");
     expect(SETTINGS_ENDPOINTS.configs).toBe("/settings/model/configs");
     expect(SETTINGS_ENDPOINTS.config(7)).toBe("/settings/model/configs/7");

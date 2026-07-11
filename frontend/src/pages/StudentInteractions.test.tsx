@@ -5,7 +5,7 @@ import { type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildCoursePath, PATHS } from "../app/routePaths";
+import { PATHS } from "../app/routePaths";
 import { AUTH_ENDPOINTS } from "../api/auth";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
@@ -27,7 +27,6 @@ import { ProfilePage } from "./ProfilePage";
 import { ReportsPage } from "./ReportsPage";
 import { SettingsPage } from "./SettingsPage";
 import { StudioPage } from "./StudioPage";
-import { TutorPage } from "./TutorPage";
 
 let previousAdapter = apiClient.defaults.adapter;
 let previousFetch = globalThis.fetch;
@@ -422,7 +421,9 @@ describe("student interaction affordances", () => {
     expect(studyMode).toHaveTextContent("模型评估");
   });
 
-  it("keeps tutoring practice and reports as course-context actions", () => {
+  it("keeps question practice and reports as course-context actions", async () => {
+    const user = userEvent.setup();
+
     renderWithProviders(
       <MemoryRouter initialEntries={["/app/courses/808"]}>
         <Routes>
@@ -433,7 +434,6 @@ describe("student interaction affordances", () => {
 
     const courseActions = screen.getByRole("navigation", { name: "课程行动入口" });
     const expectedActions = [
-      ["进入 AI 辅导", PATHS.tutor],
       ["开始练习", `${PATHS.practice}?course_id=808`],
       ["查看学习报告", `${PATHS.reports}?course_id=808`]
     ] as const;
@@ -441,6 +441,9 @@ describe("student interaction affordances", () => {
     for (const [label, path] of expectedActions) {
       expect(within(courseActions).getByRole("link", { name: label })).toHaveAttribute("href", path);
     }
+
+    await user.click(within(courseActions).getByRole("link", { name: "开始提问" }));
+    expect(screen.getByRole("textbox", { name: "课程问题输入" })).toHaveFocus();
   });
 
   it("keeps invalid course questions in the input instead of adding fake history", async () => {
@@ -466,52 +469,6 @@ describe("student interaction affordances", () => {
     expect(within(historyRail).queryByRole("button", { name: /解释泛化能力和过拟合的区别/ })).not.toBeInTheDocument();
     expect(historyRail).toHaveTextContent("还没有历史对话");
     expect(screen.queryByLabelText("课程内历史对话")).not.toBeInTheDocument();
-  });
-
-  it("uses the tutor route as a course tutoring entry without static demo answers", async () => {
-    apiClient.defaults.adapter = async (config) => {
-      if (config.url === COURSE_ENDPOINTS.list) {
-        return {
-          data: {
-            data: [
-              {
-                id: "808",
-                title: "机器学习期末复习",
-                description: "由资料生成",
-                subject: "自主学习",
-                source_type: "uploaded",
-                status: "ready",
-                progress_percent: 0,
-                material_count: 1,
-                knowledge_point_count: 2,
-                chunk_count: 5
-              }
-            ],
-            trace_id: "trace_tutor_courses"
-          },
-          status: 200,
-          statusText: "OK",
-          headers: {},
-          config
-        };
-      }
-
-      return {
-        data: { data: {}, trace_id: "trace_tutor_default" },
-        status: 200,
-        statusText: "OK",
-        headers: {},
-        config
-      };
-    };
-
-    renderPage(<TutorPage />);
-
-    expect(await screen.findByRole("link", { name: /机器学习期末复习/ })).toHaveAttribute("href", buildCoursePath("808"));
-    expect(screen.getByRole("region", { name: "课程辅导入口" })).toHaveTextContent("课程空间");
-    expect(screen.queryByText("为什么反向传播需要链式法则？")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "苏格拉底追问" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "深度思考" })).not.toBeInTheDocument();
   });
 
   it("creates a real practice session and acknowledges submitted answers", async () => {

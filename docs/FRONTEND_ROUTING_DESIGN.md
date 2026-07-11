@@ -11,7 +11,7 @@
 - `UI_UX_DESIGN.md` 定义登录后的 AI 学习空间长什么样。
 - 本文档定义用户如何进入这个学习空间，以及前端工程应该有哪些路由和页面边界。
 
-Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次进入、示例课程和后续 Demo 兜底入口在实现时临时拼凑。
+Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次进入和示例课程入口在实现时临时拼凑。
 
 ## 2. 设计目标
 
@@ -19,7 +19,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 
 1. 让学生快速进入学习。
 2. 让评委第一眼感受到 EduNova 是一个高级 AI 学习空间。
-3. 让示例课程和后续演示模式可以稳定进入主演示链路。
+3. 让每个注册学生都能通过隔离的示例课程稳定进入主体验链路。
 
 入口体验必须做到：
 
@@ -40,7 +40,6 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 | `/` | RootRedirect | 未登录跳 `/login`，已登录跳 `/app` |
 | `/login` | LoginPage | 已有账号登录，不提供共享演示学生按钮 |
 | `/register` | RegisterPage | 注册新学生账号，并选择空白开始或复制人工智能导论示例课程 |
-| `/demo` | DemoEntryPage | 后续稳定演示/重置路由，可保留为内部入口，但不作为登录页主按钮 |
 
 ### 3.2 受保护应用区
 
@@ -51,7 +50,6 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 | `/app/path` | LearningPathPage | 真实课程级学习路径、任务状态、推荐资源、路径依据和 ECharts 掌握度图 |
 | `/app/studio` | StudioPage | 生成和管理学习资源 |
 | `/app/profile` | ProfilePage | 真实 8 维画像、逐维可信度、候选/已应用证据、画像对话和 ProfileGraph 轨迹 |
-| `/app/tutor` | TutorPage | AI 辅导入口，选择课程后进入对应课程空间提问 |
 | `/app/practice` | PracticePage | adaptive 课程练习、最近会话/草稿恢复、确定性批改和复习线索 |
 | `/app/reports` | ReportsPage | 真实学习报告、掌握度更新、薄弱点、下一步建议和 Markdown 学习档案导出 |
 | `/app/settings` | SettingsPage | 模型连接、个人设置、数据导出 |
@@ -74,7 +72,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 - `/app/library` 是独立资料库，资料可以不属于任何课程。
 - `/app/courses/:courseId` 是课程上下文，课程历史和主页历史分开；同一路由内承载问答模式和学习模式，不另建第二套课程问答页。
 - `/app/settings` 只处理模型连接、个人设置和数据边界，不放运行期搜索/思考开关。
-- `/app/tutor` 不再维护独立静态问答；它读取当前用户课程列表，并把真实提问统一引导到 `/app/courses/:courseId`。
+- AI 辅导不维护独立页面；课程行动区直接聚焦当前课程输入框，旧 `/app/tutor` 地址只做受保护兼容跳转并回到 `/app`。
 - 生成课程浮层会调用 `/courses/from-materials/jobs`，为已解析 TXT/Markdown/PDF/DOCX/PPTX 资料后台运行真实 CourseBuilderGraph；同步 `/courses/from-materials` 继续兼容旧客户端。
 
 后续继续接真实接口时应保证：
@@ -115,7 +113,6 @@ P3.15 可用性收口后还要遵守：
 - `/`
 - `/login`
 - `/register`
-- `/demo`
 
 未登录用户访问 `/app/*` 时：
 
@@ -284,7 +281,7 @@ EduNova 标识
 
 - 当前用户没有学习画像。
 - 当前用户没有历史对话、上传资料或最近课程。
-- 用户第一次进入 Demo 之外的 `/app`。
+- 用户第一次进入 `/app`。
 
 引导步骤：
 
@@ -306,9 +303,9 @@ EduNova 标识
 
 引导必须可以跳过，但跳过后学习空间要显示清晰空状态。
 
-## 8. Demo 入口
+## 8. 快速体验入口
 
-演示模式仍是后续比赛演示和试用的稳定兜底能力，但当前登录页不提供共享“演示学生”入口。快速体验默认走注册页的「带一个示例课程开始」。
+独立 Demo 页面和前端假会话已经删除。快速体验统一走注册页的「带一个示例课程开始」，每个学生获得隔离的真实账号和示例课程。
 
 推荐流程：
 
@@ -317,15 +314,10 @@ EduNova 标识
 -> 选择“带一个示例课程开始”
 -> 系统复制人工智能导论示例课程到当前用户空间
 -> 进入 `/app`
--> 后续真实主页和资料库接口接入后显示对应课程与资料
+-> 显示该账号的主页、课程和资料
 ```
 
-后续如保留独立 `/demo` 路由，必须满足：
-
-- 不出现在登录页主流程里，避免共享账号和真实用户注册混在一起。
-- 演示数据与真实用户数据隔离。
-- 任何 fallback 内容都不能伪装成实时模型结果。
-- 截图和演示视频中能看出 Demo 数据是演示数据。
+`/demo` 不再注册路由并进入 404。示例课程只是注册选项，不能生成共享 token、共享用户或伪造模型结果。
 
 ## 9. 应用区导航
 
@@ -333,14 +325,14 @@ EduNova 标识
 
 ```text
 贴边侧栏：EduNova / 资料库 / 资源工坊 / 新建对话 / 搜索历史 / 最近历史 / 个人资料 / 设置 / 退出登录 / 可收起
-主内容区：根据路由呈现主页对话、资料库文件、课程空间、资源工坊、画像、辅导、练习、报告或设置
+主内容区：根据路由呈现主页对话、资料库文件、课程空间、资源工坊、画像、练习、报告或设置
 ```
 
 学生端核心路由必须可发现，但不全部平铺成一级菜单：
 
 - 资料库和资源工坊是侧栏高频入口。
 - 个人资料和设置在侧栏底部。
-- AI 辅导、练习和报告在课程空间中作为学习行动入口出现，也保留直接路由。
+- AI 辅导在课程空间内直接完成；练习和报告保留独立路由，并从课程行动区进入。
 - 学习路径页保留直接路由 `/app/path`，但不平铺在侧栏一级入口，优先由课程行动入口、回答下方“学习路径”展开或路径生成结果进入。
 - 普通路由复用 `PageFrame + AppSidebar`，但不注入前端 demo 历史；侧栏读取真实 summary 的主页历史，点击后导航回 `/app` 并由主页加载对应会话，课程空间侧栏只显示当前课程会话。
 - 侧栏最近历史支持会话操作菜单：主页历史和课程内历史都可以重命名或删除；删除当前主页会话后回到 `/app` 默认入口，删除当前课程会话后回到课程问答引导态。
@@ -371,7 +363,6 @@ Phase 3A 为了工程清晰，可以先有对应路由，但视觉上不做复�
 | LearningPathPage | 展示阶段任务、路径依据和下一步行动 | 不放到首页抢主视觉，不做复杂项目管理看板 |
 | StudioPage | 资源生成和资源详情 | 不做卡片墙首页 |
 | ProfilePage | 从 `/profiles/me` 和 `/profiles/events` 读取真实画像与证据，通过 `/profiles/chat` 更新画像 | 不做复杂用户中心，不展示静态假画像 |
-| TutorPage | 课程辅导入口，读取当前用户课程并跳转课程空间 | 不伪造静态问答，不另建第二套课程问答系统 |
 | PracticePage | 真实课程练习、确定性评分、错因诊断、弱点与已有路径回流、Graph 轨迹 | 不做完整考试系统，不让模型修改客观分数 |
 | ReportsPage | 最近 5 次练习趋势、证据摘要、ReportGraph 和 Markdown/PDF/DOCX 异步导出 | 不做运营报表，不做假导出，不在提交练习时自动生成报告 |
 | SettingsPage | 模型连接、个人资料、导出设置；Phase 6.2 已接入多模型配置列表、创建、测试、设默认和删除，Provider 预设收敛为国内常用和本地部署入口；账号昵称通过 `PATCH /auth/me` 真实保存，隐私与数据边界只做只读说明和报告页导出入口 | 不做复杂管理员后台，不放深度思考或联网搜索开关 |
@@ -425,7 +416,7 @@ Phase 3A 实现时遵守：
 - 登录态使用 Zustand。
 - 路由常量集中定义，避免字符串散落。
 - 页面组件只关心渲染，不直接拼接 token。
-- 后续 Demo 入口使用独立 service，不能重新塞回登录页主流程。
+- 快速体验只使用真实注册流程和隔离的示例课程，不创建前端假 session。
 
 建议文件：
 
@@ -438,10 +429,8 @@ frontend/src/pages/LoginPage.tsx
 frontend/src/pages/RegisterPage.tsx
 frontend/src/pages/LearningSpacePage.tsx
 frontend/src/pages/LearningPathPage.tsx
-frontend/src/pages/DemoEntryPage.tsx
 frontend/src/features/auth/authStore.ts
 frontend/src/features/auth/authApi.ts
-frontend/src/features/demo/demoApi.ts
 frontend/src/features/onboarding/FirstRunGuide.tsx
 ```
 
@@ -493,13 +482,13 @@ Phase 5 以后：
 当前已在 `frontend/` 中实现：
 
 - `/` 根据本地登录态跳转 `/login` 或 `/app`。
-- `/login`、`/register` 已有页面；`/demo` 保留为后续演示路由，不作为登录页主入口。
+- `/login`、`/register` 已有页面；独立 `/demo` 已删除，快速体验通过注册时复制示例课程完成。
 - `/app/*` 使用 `ProtectedRoute` 保护，未登录会回到 `/login`。
 - 已登录用户访问 `/login` 或 `/register` 会通过 `PublicOnlyRoute` 回到 `/app`。
 - `authStore` 使用 Zustand 保存真实 JWT token 和用户信息。
 - API client 默认基础路径为 `/api/v1`，会自动附加 Bearer token；接口返回 401 时清理登录态，如果用户位于 `/app/*`，会返回 `/login`。
 - `frontend/src/api/` 已按业务域拆分 auth、dashboard、courses、materials、profiles、rag、tutor、settings、agents、resources、paths、practice、reports 等已实现合同模块。
-- demo 仅保留为后续预留常量，当前后端未挂载对应 router。
+- 前端 Demo 假会话和未实现的 Demo API 常量已删除，不再把预留合同计入产品能力。
 - Phase 4.1 已接真实 `/auth/register`、`/auth/login`、`/auth/me` 和 `/auth/logout`；注册页会提交 `starter_mode`，注册成功后自动调用登录接口写入 session。
 - Phase 4.2 已接真实 `/dashboard/summary`；`LearningSpacePage` 使用 React Query 读取当前用户 summary，左侧主页历史、最近学习列表、主页资料库浮层资料和 blank/ai_intro 空状态不再来自前端静态 demo 数据。
 - Phase 4.3 已接真实 `/tutor/sessions`；`LearningSpacePage` 首次发送会创建 `scope=home` 会话，发送消息写入 user 和 assistant 消息，当前主页 assistant 来自普通模型回答，连续追问不重复创建历史，点击左侧主页历史会拉取后端 messages；主页历史菜单已接入会话改名和软删除。
@@ -521,7 +510,7 @@ Phase 5 以后：
 - `FirstRunGuide` 已作为学习空间中的轻量引导占位，真实触发条件需要 Phase 4 根据画像和课程上下文接入。
 - `/app` 已重做为总 AI 对话主页，包含贴边可收起主页历史、侧栏账号入口、中心 AI 学习入口、输入区资料库按钮、文件上传入口、最近学习轻量列表、发送后主页对话态和生成课程浮层。
 - `/app` 输入区资料状态只在选中资料后贴着 composer 显示“已选择 N 份资料”；联网搜索和深度思考只通过按钮高亮和 `aria-pressed` 表达，不显示中间状态条或“联网搜索已开”文案。
-- P3.9 已把 `/app/library`、`/app/courses/:courseId`、资源工坊、画像、辅导、练习、报告和设置统一到同一套贴边工作区外壳，不再保留旧顶部导航。
+- P3.9 已把 `/app/library`、`/app/courses/:courseId`、资源工坊、画像、练习、报告和设置统一到同一套贴边工作区外壳，不再保留旧顶部导航；辅导能力直接位于课程空间。
 - 注册页选择 `blank` 时，进入 `/app` 后 summary 返回无内置课程、无内置资料和无历史对话；选择 `ai_intro` 时，summary 返回复制到当前用户空间的人工智能导论示例课程和资料。
 - `/app/courses/:courseId` 已从课程空间骨架推进到真实课程详情、知识点读取、课程会话历史、引用持久化、命中引用后的真实模型回答、课程回答流式输出、混合检索状态展示、双模式前端、课程学习状态、Agent trace 展示、真实学习路径摘要和练习/报告入口；课程内历史菜单已接入会话改名和软删除；无课程消息时只显示推荐问题和开始提问引导，不再渲染固定示例回答。真实课程加载中、资料为空或引用为空时不回落到 demo 课程、demo 资料或 demo 引用；生成资源入口会进入真实资源工坊，学习路径入口会进入真实路径页，练习和报告入口会带当前课程进入真实页面。
 - `/app/path` 已从独立学习路径页骨架升级为真实路径工作区，读取当前用户课程、当前 active 路径、任务、推荐资源、路径依据和掌握度图，并复用普通受保护路由的贴边工作区外壳；涉及 UI 变更时仍需按浏览器验收规则复验桌面和 390px 移动宽度。
@@ -533,7 +522,7 @@ Phase 5 以后：
 - `/app/studio` 已从本地预备队列升级为真实资源工坊：按课程和知识点调用 `/resources/generation-jobs`，资源列表来自 `/resources`，初始不展示假资源；用户可离开页面后继续生成，刷新后恢复任务，并在完成后优先查看新产物。
 
 - Phase 17 新增 `AiJobProvider`、`AiJobProgress` 和紧凑 `AiJobTray`。首页/资料库共用建课任务，课程空间/资源工坊共用资源任务；鉴权 SSE 断线后降级为 1 秒轮询。恢复时只使用服务端白名单请求摘要还原资料 ID、课程名、资源类型、目标和难度。
-- `/app/tutor` 已改为课程辅导入口，读取当前用户课程并跳转课程空间；`/app/profile` 已接真实画像，`/app/path` 已接真实路径，`/app/practice` 和 `/app/reports` 已接真实练习评估与学习报告接口。
+- 独立 TutorPage 已删除；旧 `/app/tutor` 只做兼容跳转，课程提问直接在课程空间完成。`/app/profile` 已接真实画像，`/app/path` 已接真实路径，`/app/practice` 和 `/app/reports` 已接真实练习评估与学习报告接口。
 - 学习画布、资源工坊、证据层和 Agent 轨迹组件不再作为首页或课程默认首屏主体；课程页默认问答，相关内容进入回答展开区或学习模式素材。
 - 学习空间相关状态模型已覆盖上传建课状态轨道、空状态、加载状态、错误恢复、低依据提示和本地预备反馈；真实数据缺口不能再用 demo 内容填充。
 - P3.10 已完成界面文案减法：主页首屏去掉常驻解释句，资料来源提示只在选择资料或开启联网后出现；普通路由页面标题改为短标题，说明句压缩，重复小标题删除，状态信号只保留学生可操作的短提示。

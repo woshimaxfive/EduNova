@@ -35,7 +35,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - `/reports/generate` 和 `/reports/latest` 已由 `ReportGraph` 聚合最近 5 次练习、掌握度、弱点、路径和资源。分数与趋势由规则计算，模型只增强叙事和建议；报告继续由用户主动生成。学习档案同步/异步导出接口保持兼容。
 - `/exam-sprint/plans` 已由 `ExamSprintGraph` 接管；复用 `learning_paths` / `learning_tasks`，可消费显式选中的资料对比证据，并且只有带冲刺任务来源的练习才会完成来源任务和独立重排剩余计划。
 - `/materials/compare` 已由 `MaterialComparisonGraph` 接管；每次对比保存不可变版本，可恢复最近结果、追溯真实资料分块和审核轨迹，并从资料库显式带入期末冲刺。
-- `/app/tutor` 已收敛为课程辅导入口，真实提问统一进入课程空间。
+- AI 辅导直接在 `/app/courses/:courseId` 课程空间内完成；已移除无独立能力的中转页，旧 `/app/tutor` 地址会回到学习主页。
 - 多套个人模型配置、默认配置切换、服务器 `.env` 兜底。
 - 模型调用采用当前配置有限重试，不在故障后自动转发到另一 Provider；失败时保留各 Graph 的确定性 fallback。
 - `model_call_runs` 只记录模型名、状态、尝试次数、耗时和安全错误分类，Agent trace 可查看聚合调用摘要，不保存 Prompt 或回答正文。

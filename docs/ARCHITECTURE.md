@@ -150,7 +150,7 @@ frontend/src/
 | 学习路径 | 独立路径工作区，展示阶段任务、路径依据和下一步行动，后续接 `learning_paths` 与 `learning_tasks` |
 | 资源工坊 | 查看和管理生成的学习资源；当前已补资源生成工作台、生成队列和输出区 |
 | 画像 | 查看学习目标、基础、节奏、薄弱点和画像证据 |
-| AI 辅导 | 课程辅导入口，选择课程后进入课程空间提问并查看引用 |
+| AI 辅导 | 课程空间内的流式问答、引用与连续追问能力，不单设中转页面 |
 | 练习 | 作答、批改反馈和薄弱点复习队列 |
 | 报告 | 查看画像、掌握度、薄弱点、学习报告和导出入口 |
 | 设置 | 配置模型 Provider、个人信息、隐私数据边界和导出数据 |
@@ -159,8 +159,9 @@ frontend/src/
 
 | 路由组 | 路径 |
 | --- | --- |
-| 公开入口 | `/`、`/login`、`/register`、`/demo` |
-| 应用区 | `/app`、`/app/library`、`/app/path`、`/app/courses/:courseId`、`/app/studio`、`/app/profile`、`/app/tutor`、`/app/practice`、`/app/reports`、`/app/settings` |
+| 公开入口 | `/`、`/login`、`/register` |
+| 应用区 | `/app`、`/app/library`、`/app/path`、`/app/courses/:courseId`、`/app/studio`、`/app/profile`、`/app/practice`、`/app/reports`、`/app/settings` |
+| 兼容跳转 | 旧 `/app/tutor` 地址经登录保护后回到 `/app`；不再对应独立页面 |
 | 兜底 | `*` |
 
 路由保护：
@@ -168,7 +169,7 @@ frontend/src/
 - `ProtectedRoute` 统一保护 `/app/*`。
 - `PublicOnlyRoute` 处理已登录用户访问 `/login` 和 `/register`。
 - API client 收到 401 后清理登录态并跳回 `/login`。
-- 后续 Demo 入口由独立 service 管理，避免登录页重新堆共享演示账号逻辑。
+- 快速体验通过真实注册流程复制示例课程，不创建共享账号或前端假 session。
 
 前端状态分工：
 
@@ -199,7 +200,7 @@ frontend/src/
 | `frontend/src/api/client.ts` | Axios 客户端，默认基础路径 `/api/v1`，自动附加 token，401 清理登录态并返回登录页 |
 | `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，默认基础路径 `/api/v1` |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和短状态信号的纯状态模型 |
-| `frontend/src/pages` | 登录、注册、Demo、学习空间、资料库、学习路径、资源工坊、画像、辅导、练习、报告、设置和 404；学生端核心页面已从占位页补成可扩展工作区骨架 |
+| `frontend/src/pages` | 登录、注册、学习空间、资料库、课程空间、学习路径、资源工坊、画像、练习、报告、设置和 404；AI 辅导由课程空间直接承载 |
 | `frontend/src/components` | 贴边侧栏、学习空间壳子、学习画布、资料源簇、命令栏、资源输出区、证据层、Agent 轨迹、局部反馈和轻量 toast |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、深色模式、reduced motion 和 reduced transparency 基础 |
 
@@ -230,7 +231,7 @@ frontend/src/
 - Phase 6.4 起课程引用来自混合检索，缺少外部 embedding 配置时显式显示本地 fallback。
 - Phase 6.5 起课程页默认不再常驻知识画布、资源区、证据层、横向知识点条或主区重复历史；来源、生成资源、学习路径和课堂协作轨迹收敛到回答下方，知识点入口和引用可进入学习模式。
 - 资源、学习路径和 Agent 轨迹已经接入真实接口；后续重点是体验和验收打磨。
-- 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面均不再依赖核心样例数据兜底；后续只保留空态和错误态。
+- 当前资料库、资源工坊、画像、课程空间辅导、练习、报告和设置均不依赖核心样例数据兜底；只保留真实空态和错误态。
 - 当前前端已移除 `ActionNotice` 类全局横向提示条；按钮反馈优先通过选中态、列表刷新、详情面板、输入内容和真实路由跳转表达。失败、校验错误和模型不可用等需要用户处理的状态使用局部 `InlineFeedback`，模型配置保存、设默认、删除和连接测试等短确认使用右下角 toast；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
 - 上传解析状态由 `/materials/{material_id}/progress` 驱动；智能建课状态由 `/courses/from-materials/jobs` 和 `/ai-jobs/*` 的持久化节点进度驱动，不使用前端伪进度。
 - Markmap 已用于结构化思维导图，Mermaid 已用于动画图解；React Flow 已接管课程学习模式的知识点与先修关系图，ECharts 已用于路径掌握度和报告练习趋势。旧 CSS 绝对定位知识画布已删除。
@@ -539,7 +540,7 @@ Phase 18 后，个人配置只有在字段不完整时才沿用现有服务器�
 
 - 用户 Key 优先。
 - 用户 Key 不可用时可使用系统 Key。
-- 演示模式可使用 fallback Provider。
+- 模型不可用时使用明确标记的确定性 fallback，不伪装 Provider 成功。
 - 所有 fallback 内容必须显式标记。
 - 课程会话命中引用但模型未配置时保留引用并提示未配置；模型超时、失败或流式中断时不写入半截 assistant 消息。
 
@@ -613,6 +614,6 @@ http://localhost:8080/api/health
 3. RAG 检索能返回引用来源。
 4. Agent 流程能记录 trace。
 5. 大模型 Provider 可替换。
-6. 演示模式能稳定兜底。
+6. 示例课程和确定性 fallback 能稳定跑通核心链路。
 7. Docker Compose 能启动核心服务。
 8. 主要设计能在答辩时用图和日志解释清楚。

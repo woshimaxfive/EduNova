@@ -1,6 +1,6 @@
-import { Sparkle } from "@phosphor-icons/react";
+import { ArrowClockwise, X } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
@@ -9,76 +9,138 @@ import { getKnowledgePoints, listCourses } from "../api/courses";
 import {
   getResourceQuality,
   listResources,
-  type GeneratedResource,
   type ResourceDifficulty,
-  type ResourceQualityScore,
   type ResourceType
 } from "../api/resources";
-import { InlineFeedback } from "../components/feedback/InlineFeedback";
-import { AiJobProgress } from "../components/feedback/AiJobProgress";
-import { AgentTimeline } from "../components/evidence/AgentTimeline";
-import { ResourceRenderer } from "../components/resources/ResourceRenderer";
-import { StudioDock } from "../components/studio/StudioDock";
-import { WorkspaceStateStrip } from "../components/states/WorkspaceStateStrip";
-import { getWorkspaceStatePanels } from "../features/workspace/workflowState";
-import { PageFrame } from "./PageFrame";
+import { InlineFeedback, type FeedbackTone } from "../components/feedback/InlineFeedback";
+import { StudioArtifactCanvas } from "../components/studio/StudioArtifactCanvas";
+import {
+  StudioDrawer,
+  type StudioDetailTab,
+  type StudioDrawerMode
+} from "../components/studio/StudioDrawer";
+import { StudioResourceLibrary } from "../components/studio/StudioResourceLibrary";
+import { StudioWorkspaceToolbar } from "../components/studio/StudioWorkspaceToolbar";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
+import { PageFrame } from "./PageFrame";
+import "../styles/studio.css";
 
-const resourceTypes: Array<{ type: ResourceType; label: string }> = [
-  { type: "doc", label: "讲解" },
-  { type: "quiz", label: "练习" },
-  { type: "mindmap", label: "思维导图" },
-  { type: "code", label: "代码实操" },
-  { type: "slide", label: "PPT" },
-  { type: "animation", label: "动画图解" }
-];
-
-const difficultyOptions: Array<{ value: ResourceDifficulty; label: string }> = [
-  { value: "easy", label: "基础" },
-  { value: "medium", label: "标准" },
-  { value: "hard", label: "进阶" }
-];
-
-const qualityLabels: Record<string, string> = {
-  source_match: "来源匹配",
-  profile_fit: "画像贴合",
-  fact_confidence: "事实置信",
-  difficulty_fit: "难度贴合",
-  completeness: "完整度"
-};
-
-function parseCourseId(value: string | null) {
-  if (!value) {
-    return null;
-  }
+function parsePositiveId(value: string | null) {
+  if (!value) return null;
   const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function isLowEvidenceResource(resource: GeneratedResource) {
-  return resource.review_status === "low_evidence" || resource.content_json.metadata?.generation_mode === "low_evidence_fallback";
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 export function StudioPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const evidencePanels = getWorkspaceStatePanels().filter((panel) =>
-    ["loading", "low_evidence", "local_preview"].includes(panel.kind)
-  );
-  const initialCourseId = parseCourseId(searchParams.get("course_id"));
+  const initialCourseId = parsePositiveId(searchParams.get("course_id"));
+  const initialResourceId = searchParams.get("resource_id");
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(initialCourseId);
   const [selectedKnowledgePointId, setSelectedKnowledgePointId] = useState<number | null>(null);
+  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(initialResourceId);
   const [selectedResourceTypes, setSelectedResourceTypes] = useState<ResourceType[]>(["doc"]);
   const [learningGoal, setLearningGoal] = useState("");
   const [difficulty, setDifficulty] = useState<ResourceDifficulty>("medium");
+  const [librarySearch, setLibrarySearch] = useState("");
+  const [resourceTypeFilter, setResourceTypeFilter] = useState<"all" | ResourceType>("all");
+  const [drawerMode, setDrawerMode] = useState<StudioDrawerMode>(null);
+  const [detailTab, setDetailTab] = useState<StudioDetailTab>("quality");
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [latestQualityScores, setLatestQualityScores] = useState<Record<string, ResourceQualityScore[]>>({});
-  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
+  const [feedbackTone, setFeedbackTone] = useState<FeedbackTone>("info");
   const [resourceJobId, setResourceJobId] = useState<string | null>(null);
+  const handledCompletedJobIds = useRef(new Set<string>());
   const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
   const resourceJob = getJob(resourceJobId);
   const isGenerating = Boolean(resourceJob && ["queued", "running", "cancelling"].includes(resourceJob.status));
+
+  const coursesQuery = useQuery({
+    queryKey: ["courses", "studio"],
+    queryFn: () => listCourses(),
+    staleTime: 30_000
+  });
+  const courses = useMemo(
+    () => (Array.isArray(coursesQuery.data?.data) ? coursesQuery.data.data : []),
+    [coursesQuery.data]
+  );
+  const effectiveCourseId = useMemo(() => {
+    if (courses.length === 0) return null;
+    if (selectedCourseId !== null && courses.some((course) => Number(course.id) === selectedCourseId)) return selectedCourseId;
+    if (initialCourseId !== null && courses.some((course) => Number(course.id) === initialCourseId)) return initialCourseId;
+    return Number.parseInt(courses[0].id, 10);
+  }, [courses, initialCourseId, selectedCourseId]);
+  const selectedCourse = courses.find((course) => Number(course.id) === effectiveCourseId) ?? null;
+
+  const knowledgePointsQuery = useQuery({
+    queryKey: ["courses", "knowledge-points", effectiveCourseId],
+    queryFn: () => getKnowledgePoints(effectiveCourseId ?? 0),
+    enabled: effectiveCourseId !== null,
+    staleTime: 30_000
+  });
+  const knowledgePoints = useMemo(
+    () => (Array.isArray(knowledgePointsQuery.data?.data) ? knowledgePointsQuery.data.data : []),
+    [knowledgePointsQuery.data]
+  );
+  const effectiveKnowledgePointId = useMemo(() => {
+    if (knowledgePoints.length === 0) return null;
+    if (selectedKnowledgePointId !== null && knowledgePoints.some((point) => Number(point.id) === selectedKnowledgePointId)) {
+      return selectedKnowledgePointId;
+    }
+    return Number.parseInt(knowledgePoints[0].id, 10);
+  }, [knowledgePoints, selectedKnowledgePointId]);
+
+  const resourcesQuery = useQuery({
+    queryKey: effectiveCourseId !== null ? courseLoopQueryKeys.resources(effectiveCourseId) : ["resources", "all"],
+    queryFn: () => listResources(effectiveCourseId !== null ? { courseId: effectiveCourseId } : undefined),
+    enabled: effectiveCourseId !== null,
+    staleTime: 10_000
+  });
+  const resources = useMemo(
+    () => (Array.isArray(resourcesQuery.data?.data) ? [...resourcesQuery.data.data].sort((left, right) => right.created_at.localeCompare(left.created_at)) : []),
+    [resourcesQuery.data]
+  );
+  const selectedResource = useMemo(
+    () => resources.find((resource) => resource.id === selectedResourceId) ?? resources[0] ?? null,
+    [resources, selectedResourceId]
+  );
+  const filteredResources = useMemo(() => {
+    const keyword = librarySearch.trim().toLocaleLowerCase("zh-CN");
+    return resources.filter((resource) => {
+      const matchesType = resourceTypeFilter === "all" || resource.resource_type === resourceTypeFilter;
+      const matchesSearch = !keyword || resource.title.toLocaleLowerCase("zh-CN").includes(keyword);
+      return matchesType && matchesSearch;
+    });
+  }, [librarySearch, resourceTypeFilter, resources]);
+
+  const selectedResourceKnowledgePointTitle = selectedResource?.knowledge_point_id
+    ? knowledgePoints.find((point) => point.id === selectedResource.knowledge_point_id)?.title ?? "课程知识点"
+    : "整门课程";
+  const selectedResourceTraceId = selectedResource?.agent_trace_id ?? selectedResource?.content_json.metadata?.agent_trace_id ?? null;
+  const resourceQualityQuery = useQuery({
+    queryKey: ["resources", "quality", selectedResource?.id],
+    queryFn: () => getResourceQuality(Number.parseInt(selectedResource?.id ?? "0", 10)),
+    enabled: drawerMode === "details" && detailTab === "quality" && selectedResource !== null,
+    staleTime: 10_000
+  });
+  const resourceTraceQuery = useQuery({
+    queryKey: ["agents", "trace", selectedResourceTraceId],
+    queryFn: () => getAgentTrace(selectedResourceTraceId ?? ""),
+    enabled: drawerMode === "details" && detailTab === "trace" && Boolean(selectedResourceTraceId),
+    staleTime: 30_000
+  });
+  const resourceTraceEvents = useMemo(
+    () => resourceTraceQuery.data?.data.steps?.map(mapAgentTraceStepToEvent) ?? [],
+    [resourceTraceQuery.data?.data.steps]
+  );
+
+  useEffect(() => {
+    if (!selectedResource || selectedResource.id === selectedResourceId) return;
+    const next = new URLSearchParams(searchParams);
+    if (effectiveCourseId !== null) next.set("course_id", String(effectiveCourseId));
+    next.set("resource_id", selectedResource.id);
+    setSearchParams(next, { replace: true });
+  }, [effectiveCourseId, searchParams, selectedResource, selectedResourceId, setSearchParams]);
 
   useEffect(() => {
     if (resourceJobId) return;
@@ -98,111 +160,55 @@ export function StudioPage() {
     if (typeof request.learning_goal === "string") setLearningGoal(request.learning_goal);
     if (["easy", "medium", "hard"].includes(String(request.difficulty))) setDifficulty(request.difficulty as ResourceDifficulty);
     setResourceJobId(restored.job_id);
+    if (restored.status === "failed") setDrawerMode("generate");
   }, [initialCourseId, jobs, resourceJobId]);
 
-  const coursesQuery = useQuery({
-    queryKey: ["courses", "studio"],
-    queryFn: () => listCourses(),
-    staleTime: 30_000
-  });
-  const courses = useMemo(
-    () => (Array.isArray(coursesQuery.data?.data) ? coursesQuery.data.data : []),
-    [coursesQuery.data]
-  );
-  const effectiveCourseId = useMemo(() => {
-    if (courses.length === 0) {
-      return null;
+  useEffect(() => {
+    function closeDrawer(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") setDrawerMode(null);
     }
-
-    const selectedExists = selectedCourseId !== null && courses.some((course) => Number.parseInt(course.id, 10) === selectedCourseId);
-    if (selectedExists) {
-      return selectedCourseId;
-    }
-
-    const initialExists = initialCourseId !== null && courses.some((course) => Number.parseInt(course.id, 10) === initialCourseId);
-    return initialExists ? initialCourseId : Number.parseInt(courses[0].id, 10);
-  }, [courses, initialCourseId, selectedCourseId]);
-  const selectedCourse = courses.find((course) => Number.parseInt(course.id, 10) === effectiveCourseId) ?? null;
-
-  const knowledgePointsQuery = useQuery({
-    queryKey: ["courses", "knowledge-points", effectiveCourseId],
-    queryFn: () => getKnowledgePoints(effectiveCourseId ?? 0),
-    enabled: effectiveCourseId !== null,
-    staleTime: 30_000
-  });
-  const knowledgePoints = useMemo(
-    () => (Array.isArray(knowledgePointsQuery.data?.data) ? knowledgePointsQuery.data.data : []),
-    [knowledgePointsQuery.data]
-  );
-  const effectiveKnowledgePointId = useMemo(() => {
-    if (knowledgePoints.length === 0) {
-      return null;
-    }
-
-    const selectedExists =
-      selectedKnowledgePointId !== null && knowledgePoints.some((point) => Number.parseInt(point.id, 10) === selectedKnowledgePointId);
-    return selectedExists ? selectedKnowledgePointId : Number.parseInt(knowledgePoints[0].id, 10);
-  }, [knowledgePoints, selectedKnowledgePointId]);
-
-  const resourceCourseId = effectiveCourseId ?? selectedCourseId;
-  const resourcesQuery = useQuery({
-    queryKey: resourceCourseId !== null ? courseLoopQueryKeys.resources(resourceCourseId) : ["resources", "all"],
-    queryFn: () => listResources(resourceCourseId !== null ? { courseId: resourceCourseId } : undefined),
-    staleTime: 10_000
-  });
-  const resources = useMemo(
-    () => (Array.isArray(resourcesQuery.data?.data) ? resourcesQuery.data.data : []),
-    [resourcesQuery.data]
-  );
-
-  const selectedResource = useMemo(
-    () => resources.find((resource) => resource.id === selectedResourceId) ?? resources[0] ?? null,
-    [resources, selectedResourceId]
-  );
-  const resourceQualityQuery = useQuery({
-    queryKey: ["resources", "quality", selectedResource?.id],
-    queryFn: () => getResourceQuality(Number.parseInt(selectedResource?.id ?? "0", 10)),
-    enabled: selectedResource !== null,
-    staleTime: 10_000
-  });
-  const selectedResourceQuality = selectedResource
-    ? latestQualityScores[selectedResource.id] ?? resourceQualityQuery.data?.data ?? []
-    : [];
-  const selectedResourceTraceId = selectedResource?.agent_trace_id ?? selectedResource?.content_json.metadata?.agent_trace_id ?? null;
-  const resourceTraceQuery = useQuery({
-    queryKey: ["agents", "trace", selectedResourceTraceId],
-    queryFn: () => getAgentTrace(selectedResourceTraceId ?? ""),
-    enabled: Boolean(selectedResourceTraceId),
-    staleTime: 30_000
-  });
-  const resourceTraceEvents = useMemo(
-    () => resourceTraceQuery.data?.data.steps.map(mapAgentTraceStepToEvent) ?? [],
-    [resourceTraceQuery.data?.data.steps]
-  );
+    window.addEventListener("keydown", closeDrawer);
+    return () => window.removeEventListener("keydown", closeDrawer);
+  }, []);
 
   useEffect(() => {
     if (!resourceJob) return;
     if (resourceJob.status === "failed") {
-      // Surface the terminal state delivered by the external job runtime.
+      // Restore durable server job failure after navigation or refresh.
       // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFeedbackTone("warning");
       setFeedback(resourceJob.error_message ?? "资源生成失败，请稍后重试。");
+      setDrawerMode("generate");
       return;
     }
-    if (resourceJob.status !== "completed") return;
-    const resourceIds = Array.isArray(resourceJob.result.resource_ids)
-      ? resourceJob.result.resource_ids.map(String)
-      : [];
+    if (resourceJob.status !== "completed" || handledCompletedJobIds.current.has(resourceJob.job_id)) return;
+    handledCompletedJobIds.current.add(resourceJob.job_id);
+    const resourceIds = Array.isArray(resourceJob.result.resource_ids) ? resourceJob.result.resource_ids.map(String) : [];
+    setFeedbackTone(resourceJob.warnings.length > 0 ? "warning" : "success");
     setFeedback(resourceJob.warnings.join(" ") || "资源生成完成。");
-    setLatestQualityScores({});
-    if (resourceIds[0]) setSelectedResourceId(resourceIds[0]);
-    if (effectiveCourseId !== null) void invalidateCourseLearningLoop(queryClient, effectiveCourseId);
-  }, [effectiveCourseId, queryClient, resourceJob]);
+    void (async () => {
+      const completedCourseId = Number(resourceJob.request.course_id ?? resourceJob.course_id);
+      if (Number.isFinite(completedCourseId) && completedCourseId > 0) {
+        await invalidateCourseLearningLoop(queryClient, completedCourseId);
+      }
+      if (completedCourseId !== effectiveCourseId) return;
+      const refreshed = await resourcesQuery.refetch();
+      const refreshedResources = Array.isArray(refreshed.data?.data) ? refreshed.data.data : [];
+      const nextResource = resourceIds.map((id) => refreshedResources.find((resource) => resource.id === id)).find(Boolean);
+      if (nextResource) {
+        setSelectedResourceId(nextResource.id);
+        const next = new URLSearchParams(searchParams);
+        next.set("course_id", String(completedCourseId));
+        next.set("resource_id", nextResource.id);
+        setSearchParams(next, { replace: true });
+      }
+      setDrawerMode(null);
+    })();
+  }, [effectiveCourseId, queryClient, resourceJob, resourcesQuery, searchParams, setSearchParams]);
 
   const generateMutation = useMutation({
     mutationFn: () => {
-      if (effectiveCourseId === null) {
-        throw new Error("missing course");
-      }
+      if (effectiveCourseId === null) throw new Error("missing course");
       return createResourceGenerationJob(
         {
           course_id: effectiveCourseId,
@@ -215,303 +221,153 @@ export function StudioPage() {
       );
     },
     onSuccess: (job) => {
+      setFeedback(null);
       setResourceJobId(job.job_id);
       trackJob(job);
     },
     onError: () => {
+      setFeedbackTone("warning");
       setFeedback("资源生成失败，请稍后重试。");
+      setDrawerMode("generate");
     }
   });
 
+  function setUrlSelection(courseId: number | null, resourceId?: string | null) {
+    const next = new URLSearchParams(searchParams);
+    if (courseId === null) next.delete("course_id");
+    else next.set("course_id", String(courseId));
+    if (resourceId) next.set("resource_id", resourceId);
+    else next.delete("resource_id");
+    setSearchParams(next, { replace: true });
+  }
+
+  function handleCourseChange(courseId: number | null) {
+    setSelectedCourseId(courseId);
+    setSelectedKnowledgePointId(null);
+    setSelectedResourceId(null);
+    setLibrarySearch("");
+    setResourceTypeFilter("all");
+    setFeedback(null);
+    setDetailTab("quality");
+    setUrlSelection(courseId, null);
+  }
+
+  function selectResource(resourceId: string) {
+    setSelectedResourceId(resourceId);
+    setUrlSelection(effectiveCourseId, resourceId);
+  }
+
   function toggleResourceType(type: ResourceType) {
     setSelectedResourceTypes((current) => {
-      if (current.includes(type)) {
-        return current.length === 1 ? current : current.filter((item) => item !== type);
-      }
+      if (current.includes(type)) return current.length === 1 ? current : current.filter((item) => item !== type);
       return [...current, type];
     });
   }
 
-  function handleCourseChange(value: string) {
-    setSelectedCourseId(value ? Number.parseInt(value, 10) : null);
-    setSelectedKnowledgePointId(null);
-    setLatestQualityScores({});
-  }
-
   function handleGenerate() {
-    if (effectiveCourseId === null || generateMutation.isPending || isGenerating) {
-      return;
-    }
+    if (effectiveCourseId === null || generateMutation.isPending || isGenerating || selectedResourceTypes.length === 0) return;
     generateMutation.mutate();
   }
 
-  const canGenerate = effectiveCourseId !== null && selectedResourceTypes.length > 0 && !generateMutation.isPending && !isGenerating;
-  const selectedKnowledgePoint = knowledgePoints.find((point) => Number.parseInt(point.id, 10) === effectiveKnowledgePointId) ?? null;
-  const selectedKnowledgePointTitle = selectedKnowledgePoint?.title ?? "整门课程";
-  const selectedResourceTypeSummary = selectedResourceTypes
-    .map((type) => resourceTypes.find((item) => item.type === type)?.label ?? type)
-    .join("、");
-  const hasResourceResult = selectedResource !== null;
+  async function handleRetryJob() {
+    if (!resourceJob) return;
+    const job = await retryJob(resourceJob.job_id);
+    setFeedback(null);
+    setResourceJobId(job.job_id);
+  }
 
-  const studioDock = (
-    <StudioDock
-      outputs={resources}
-      selectedResourceId={selectedResource?.id ?? null}
-      onGenerate={handleGenerate}
-      onSelectResource={setSelectedResourceId}
-      showGenerateAction={false}
-    />
-  );
-
-  const resourceResultSections = selectedResource ? (
-    <>
-      <section className="student-panel resource-detail-panel" role="region" aria-label="资源完整内容">
-        <div className="student-panel-heading">
-          <div>
-            <h2>资源内容</h2>
-          </div>
-        </div>
-        {isLowEvidenceResource(selectedResource) ? (
-          <InlineFeedback
-            message="资料依据不足，这份资源是低依据草稿，请补充课程资料后重新生成。"
-            tone="warning"
-            className="library-inline-feedback"
-          />
-        ) : null}
-        <article className="resource-reader">
-          <strong>{selectedResource.title}</strong>
-          <ResourceRenderer resource={selectedResource} />
-        </article>
-      </section>
-
-      <section className="student-panel generation-queue" role="region" aria-label="资源质量">
-        <div className="student-panel-heading">
-          <div>
-            <h2>资源质量</h2>
-          </div>
-        </div>
-        {selectedResourceQuality.length > 0 ? (
-          selectedResourceQuality.map((score) => (
-            <article className="queue-row" key={score.id}>
-              <span>
-                <strong>{qualityLabels[score.score_name] ?? score.score_name}</strong>
-                <small>{score.rationale ?? "已记录质量分"}</small>
-              </span>
-              <em>{score.score_value.toFixed(2)}</em>
-            </article>
-          ))
-        ) : (
-          <p className="empty-inline-note">资源质量分会在生成后显示。</p>
-        )}
-      </section>
-
-      <section className="student-panel generation-queue" role="region" aria-label="引用来源">
-        <div className="student-panel-heading">
-          <div>
-            <h2>引用来源</h2>
-          </div>
-        </div>
-        {selectedResource.citation_json.length > 0 ? (
-          selectedResource.citation_json.map((citation, index) => (
-            <article className="queue-row" key={`${citation.chunk_id ?? index}-${citation.section_title ?? "citation"}`}>
-              <span>
-                <strong>{citation.section_title ?? "课程引用"}</strong>
-                <small>{citation.source_title ?? "课程资料"}</small>
-              </span>
-            </article>
-          ))
-        ) : (
-          <p className="empty-inline-note">当前资源没有可展示引用。</p>
-        )}
-      </section>
-
-      <section className="student-panel generation-queue" role="region" aria-label="资源生成链路">
-        <div className="student-panel-heading">
-          <div>
-            <h2>ResourceGenerationGraph</h2>
-          </div>
-        </div>
-        {resourceTraceQuery.isError ? (
-          <InlineFeedback message="资源生成轨迹读取失败，请稍后重试。" tone="warning" className="library-inline-feedback" />
-        ) : resourceTraceQuery.isPending && resourceTraceQuery.fetchStatus !== "idle" ? (
-          <p className="empty-inline-note">正在读取资源生成链路。</p>
-        ) : resourceTraceEvents.length > 0 ? (
-          <AgentTimeline events={resourceTraceEvents} />
-        ) : (
-          <p className="empty-inline-note">
-            {selectedResourceTraceId ? "当前资源 trace 暂无可展示步骤。" : "生成后会展示 Profile、Retriever、Diagnosis、Resource、Review、Persist 全链路。"}
-          </p>
-        )}
-      </section>
-    </>
-  ) : null;
+  const canGenerate = effectiveCourseId !== null
+    && selectedResourceTypes.length > 0
+    && !generateMutation.isPending
+    && !isGenerating;
+  const showCompactJob = resourceJob && ["queued", "running", "cancelling"].includes(resourceJob.status);
+  const dataError = coursesQuery.isError || resourcesQuery.isError;
 
   return (
-    <PageFrame title="资源工坊">
-      {hasResourceResult ? (
-        <div className="studio-results-first">
-          <section className="student-panel studio-result-summary" role="region" aria-label="资源生成摘要">
-            <div className="studio-result-summary-copy">
-              <span>已生成资源</span>
-              <strong>{selectedResource.title}</strong>
-            </div>
-            <dl className="studio-result-meta" aria-label="当前生成条件">
-              <div>
-                <dt>课程</dt>
-                <dd>{selectedCourse?.title ?? "暂无课程"}</dd>
-              </div>
-              <div>
-                <dt>知识点</dt>
-                <dd>{selectedKnowledgePointTitle}</dd>
-              </div>
-              <div>
-                <dt>类型</dt>
-                <dd>{selectedResourceTypeSummary}</dd>
-              </div>
-            </dl>
-            <button className="primary-action" type="button" onClick={handleGenerate} disabled={!canGenerate}>
-              <Sparkle size={18} weight="fill" aria-hidden="true" />
-              <span>{generateMutation.isPending || isGenerating ? "生成中" : "重新生成"}</span>
-            </button>
-            <InlineFeedback message={feedback} tone="warning" className="library-inline-feedback" />
-            {resourceJob ? (
-              <AiJobProgress
-                job={resourceJob}
-                onCancel={() => void cancelJob(resourceJob.job_id)}
-                onRetry={() => void retryJob(resourceJob.job_id).then((job) => setResourceJobId(job.job_id))}
-              />
-            ) : null}
-            {coursesQuery.isError || resourcesQuery.isError ? (
-              <InlineFeedback message="资源工坊数据读取失败，请稍后重试。" tone="warning" className="library-inline-feedback" />
-            ) : null}
+    <PageFrame title="资源工坊" variant="wide-workspace">
+      <section className="studio-workspace" aria-label="资源成果工作台">
+        <StudioWorkspaceToolbar
+          courses={courses}
+          courseId={effectiveCourseId}
+          resourceCount={resources.length}
+          selectedResource={selectedResource}
+          isGenerating={isGenerating}
+          onCourseChange={handleCourseChange}
+          onOpenGenerate={() => setDrawerMode("generate")}
+          onOpenDetails={() => setDrawerMode("details")}
+        />
+
+        {showCompactJob ? (
+          <section className="studio-job-strip" role="status" aria-label="资源生成进度">
+            <ArrowClockwise className="spinning" size={17} aria-hidden="true" />
+            <div><strong>{resourceJob.label}</strong><span>{resourceJob.stage} · {resourceJob.progress_percent}%</span></div>
+            <progress max="100" value={resourceJob.progress_percent}>{resourceJob.progress_percent}%</progress>
+            <button type="button" onClick={() => void cancelJob(resourceJob.job_id)}><X size={15} /><span>取消</span></button>
           </section>
+        ) : null}
+        {feedback && drawerMode === null ? (
+          <InlineFeedback message={feedback} tone={feedbackTone} className="studio-workspace-feedback" />
+        ) : null}
 
-          {studioDock}
-          {resourceResultSections}
-        </div>
-      ) : null}
-
-      <section
-        className={hasResourceResult ? "student-panel studio-workbench studio-workbench-secondary" : "student-panel studio-workbench"}
-        role="region"
-        aria-label="资源生成工作台"
-      >
-        <div className="student-panel-heading">
-          <div>
-            <h2>{hasResourceResult ? "调整生成设置" : "选择课程和知识点，生成资源"}</h2>
-          </div>
-          <button className="primary-action" type="button" onClick={handleGenerate} disabled={!canGenerate}>
-            <Sparkle size={18} weight="fill" aria-hidden="true" />
-            <span>{generateMutation.isPending || isGenerating ? "生成中" : "生成资源"}</span>
-          </button>
-        </div>
-
-        {!hasResourceResult && resourceJob ? (
-          <AiJobProgress
-            job={resourceJob}
-            onCancel={() => void cancelJob(resourceJob.job_id)}
-            onRetry={() => void retryJob(resourceJob.job_id).then((job) => setResourceJobId(job.job_id))}
+        <div className="studio-workspace-body">
+          <StudioResourceLibrary
+            hasCourse={effectiveCourseId !== null}
+            resources={filteredResources}
+            selectedResourceId={selectedResource?.id ?? null}
+            search={librarySearch}
+            typeFilter={resourceTypeFilter}
+            isLoading={effectiveCourseId !== null && resourcesQuery.isPending && resources.length === 0}
+            onSearchChange={setLibrarySearch}
+            onTypeFilterChange={setResourceTypeFilter}
+            onSelectResource={selectResource}
           />
-        ) : null}
-
-        <div className="studio-control-grid">
-          <label>
-            <span>课程</span>
-            <select
-              value={effectiveCourseId ?? ""}
-              onChange={(event) => handleCourseChange(event.target.value)}
-              disabled={courses.length === 0}
-            >
-              {courses.length > 0 ? (
-                courses.map((course) => (
-                  <option key={course.id} value={Number.parseInt(course.id, 10)}>
-                    {course.title}
-                  </option>
-                ))
-              ) : (
-                <option value="">还没有可生成资源的课程</option>
-              )}
-            </select>
-          </label>
-          <label>
-            <span>知识点</span>
-            <select
-              value={effectiveKnowledgePointId ?? ""}
-              onChange={(event) => setSelectedKnowledgePointId(event.target.value ? Number.parseInt(event.target.value, 10) : null)}
-              disabled={knowledgePoints.length === 0}
-            >
-              {knowledgePoints.length > 0 ? (
-                knowledgePoints.map((point) => (
-                  <option key={point.id} value={Number.parseInt(point.id, 10)}>
-                    {point.title}
-                  </option>
-                ))
-              ) : (
-                <option value="">按整门课程生成</option>
-              )}
-            </select>
-          </label>
-          <label>
-            <span>生成目标</span>
-            <input
-              aria-label="生成目标"
-              value={learningGoal}
-              onChange={(event) => setLearningGoal(event.target.value)}
-              placeholder="例如：期末前掌握搜索题"
-            />
-          </label>
-          <label>
-            <span>难度</span>
-            <select value={difficulty} onChange={(event) => setDifficulty(event.target.value as ResourceDifficulty)}>
-              {difficultyOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="resource-type-row" aria-label="资源类型">
-            {resourceTypes.map((item) => (
-              <button
-                className={selectedResourceTypes.includes(item.type) ? "active" : ""}
-                key={item.type}
-                type="button"
-                aria-pressed={selectedResourceTypes.includes(item.type)}
-                onClick={() => toggleResourceType(item.type)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+          <StudioArtifactCanvas
+            resource={selectedResource}
+            hasCourse={effectiveCourseId !== null}
+            courseTitle={selectedCourse?.title ?? null}
+            knowledgePointTitle={selectedResourceKnowledgePointTitle}
+            isLoading={coursesQuery.isPending || (effectiveCourseId !== null && resourcesQuery.isPending && resources.length === 0)}
+            isError={dataError}
+            onCreate={() => setDrawerMode("generate")}
+            onRetry={() => {
+              void coursesQuery.refetch();
+              void resourcesQuery.refetch();
+            }}
+          />
         </div>
-
-        {!hasResourceResult ? <InlineFeedback message={feedback} tone="warning" className="library-inline-feedback" /> : null}
-        {!hasResourceResult && (coursesQuery.isError || resourcesQuery.isError) ? (
-          <InlineFeedback message="资源工坊数据读取失败，请稍后重试。" tone="warning" className="library-inline-feedback" />
-        ) : null}
-
-        {!hasResourceResult ? <WorkspaceStateStrip panels={evidencePanels} /> : null}
-
-        {!hasResourceResult ? (
-          <section className="generation-queue" role="region" aria-label="生成队列">
-            {selectedCourse ? (
-              <article className="queue-row">
-                <span className="queue-row-icon" aria-hidden="true">
-                  <Sparkle size={19} weight="duotone" />
-                </span>
-                <span>
-                  <strong>{selectedCourse.title}</strong>
-                  <small>{selectedResourceTypes.length} 类资源 · {knowledgePoints.length > 0 ? "知识点生成" : "整课生成"}</small>
-                </span>
-              </article>
-            ) : (
-              <p className="empty-inline-note">还没有可生成资源的课程</p>
-            )}
-          </section>
-        ) : null}
       </section>
 
-      {!hasResourceResult ? studioDock : null}
+      <StudioDrawer
+        mode={drawerMode}
+        detailTab={detailTab}
+        courses={courses}
+        courseId={effectiveCourseId}
+        knowledgePoints={knowledgePoints}
+        knowledgePointId={effectiveKnowledgePointId}
+        selectedTypes={selectedResourceTypes}
+        learningGoal={learningGoal}
+        difficulty={difficulty}
+        resource={selectedResource}
+        qualityScores={resourceQualityQuery.data?.data ?? []}
+        traceEvents={resourceTraceEvents}
+        traceLoading={resourceTraceQuery.isPending && resourceTraceQuery.fetchStatus !== "idle"}
+        traceError={resourceTraceQuery.isError}
+        traceId={selectedResourceTraceId}
+        job={resourceJob}
+        feedback={drawerMode === "generate" ? feedback : null}
+        canGenerate={canGenerate}
+        isGenerating={isGenerating || generateMutation.isPending}
+        onClose={() => setDrawerMode(null)}
+        onDetailTabChange={setDetailTab}
+        onCourseChange={handleCourseChange}
+        onKnowledgePointChange={setSelectedKnowledgePointId}
+        onToggleType={toggleResourceType}
+        onLearningGoalChange={setLearningGoal}
+        onDifficultyChange={setDifficulty}
+        onGenerate={handleGenerate}
+        onCancelJob={() => resourceJob ? void cancelJob(resourceJob.job_id) : undefined}
+        onRetryJob={() => void handleRetryJob()}
+      />
     </PageFrame>
   );
 }

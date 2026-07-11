@@ -11,9 +11,10 @@ import { useResponsiveSidebarState } from "../components/layout/useResponsiveSid
 type PageFrameProps = {
   title: string;
   children: ReactNode;
+  variant?: "standard" | "wide-workspace";
 };
 
-export function PageFrame({ title, children }: PageFrameProps) {
+export function PageFrame({ title, children, variant = "standard" }: PageFrameProps) {
   const navigate = useNavigate();
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
   const dashboardQuery = useQuery({
@@ -54,7 +55,7 @@ export function PageFrame({ title, children }: PageFrameProps) {
             })
           }
         />
-        <section className="route-main-surface">
+        <section className={variant === "wide-workspace" ? "route-main-surface route-main-surface-wide" : "route-main-surface"}>
           <header className="route-titlebar">
             <h1>{title}</h1>
           </header>

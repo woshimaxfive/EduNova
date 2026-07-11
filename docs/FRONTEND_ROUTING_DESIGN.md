@@ -48,7 +48,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 | `/app` | LearningSpacePage | AI 学习空间首页 |
 | `/app/library` | LibraryPage | 资料库、课程资料、上传建课入口 |
 | `/app/path` | LearningPathPage | 真实课程级学习路径、任务状态、推荐资源、路径依据和 ECharts 掌握度图 |
-| `/app/studio` | StudioPage | 生成和管理学习资源 |
+| `/app/studio` | StudioPage | 桌面成果工作台；支持 `course_id` 与可选 `resource_id` 恢复当前课程和成果 |
 | `/app/profile` | ProfilePage | 真实 8 维画像、逐维可信度、候选/已应用证据、画像对话和 ProfileGraph 轨迹 |
 | `/app/practice` | PracticePage | adaptive 课程练习、最近会话/草稿恢复、确定性批改和复习线索 |
 | `/app/reports` | ReportsPage | 真实学习报告、掌握度更新、薄弱点、下一步建议和 Markdown 学习档案导出 |
@@ -96,7 +96,7 @@ P3.15 可用性收口后还要遵守：
 - 回答下方的来源、学习路径和课堂协作轨迹属于附加信息，默认折叠，不直接占用对话主体。
 - 资料库选择是显式动作，未选择资料前不能把资料作为本次对话参考，也不能发起生成课程。
 - 从资料库浮层进入生成课程时，先关闭资料库浮层，再打开生成课程浮层，页面上不能同时出现两个上层任务框。
-- 资源工坊保留一个明确的主生成入口，输出区只负责展示生成结果和状态。
+- 资源工坊只维护一套生成设置；工具栏和空画布入口均打开同一个右侧抽屉，中央画布只负责阅读与交互。
 
 ### 3.3 兜底页面
 
@@ -361,7 +361,7 @@ Phase 3A 为了工程清晰，可以先有对应路由，但视觉上不做复�
 | LibraryPage | 文件库式独立资料库、上传资料、筛选、查看引用、生成课程、资料对比版本恢复、Graph 轨迹和显式冲刺入口 | 不做后台管理器；上传资料不自动勾选进生成课程；资料对比不展示完整原文对照页，也不隐式套用到冲刺 |
 | CourseSpacePage | 课程对话空间、课程资料、课程内历史、引用和学习闭环入口 | 不替代总 AI 学习主页 |
 | LearningPathPage | 展示阶段任务、路径依据和下一步行动 | 不放到首页抢主视觉，不做复杂项目管理看板 |
-| StudioPage | 资源生成和资源详情 | 不做卡片墙首页 |
+| StudioPage | 左侧成果库、中央资源画布、生成/详情覆盖抽屉 | 不做纵向长表单、横向卡片墙或常驻第三栏 |
 | ProfilePage | 从 `/profiles/me` 和 `/profiles/events` 读取真实画像与证据，通过 `/profiles/chat` 更新画像 | 不做复杂用户中心，不展示静态假画像 |
 | PracticePage | 真实课程练习、确定性评分、错因诊断、弱点与已有路径回流、Graph 轨迹 | 不做完整考试系统，不让模型修改客观分数 |
 | ReportsPage | 最近 5 次练习趋势、证据摘要、ReportGraph 和 Markdown/PDF/DOCX 异步导出 | 不做运营报表，不做假导出，不在提交练习时自动生成报告 |
@@ -498,7 +498,7 @@ Phase 5 以后：
 - Phase 6.5 已把 `CourseSpacePage` 改造为双模式；2026-07-11 桌面重做后，默认问答使用固定课程栏、限宽正文和固定输入，A3 状态进入学习进度抽屉；课程内容复用 Phase 15 的 React Flow 先修图并使用覆盖式 AI 辅导。
 - Phase 7.1 已把 `ProfilePage` 接入真实 `/profiles/me`、`/profiles/chat` 和 `/profiles/events`；空画像显示待补充，画像证据来自后端事件，课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件。
 - Phase 13.1 已把 `CourseSpacePage` 的“课堂协作轨迹”接入真实 `/agents/traces/{trace_id}`；存在 `latest_trace_id` 时读取当前用户自己的 `CourseTutorGraph` trace，空 trace 和读取失败只在回答详情局部提示。
-- `StudioPage` 展示六类结构化资源、引用、质量分、Graph 轨迹和 PPTX 状态；`CourseSpacePage` 既可带课程进入资源工坊，也可在回答下方生成并内联预览资源。
+- `StudioPage` 使用宽屏成果工作台展示六类结构化资源、引用、质量分、Graph 轨迹和 PPTX 状态；成果库切换会更新 `resource_id`，生成与详情抽屉覆盖画布而不改变其宽度。`CourseSpacePage` 既可带课程进入资源工坊，也可在回答下方生成并内联预览资源。
 - Phase 9 已把 `LearningPathPage` 接入真实 `/paths` 和 `/courses/{course_id}/mastery-map`：支持课程预选、生成课程路径、任务状态更新、推荐资源展示、路径依据和规则掌握度图；`CourseSpacePage` 的“学习路径”入口读取真实 `path_summary` 并跳转 `/app/path?course_id=...`。
 - Phase 14 已把 `PracticePage` 升级为错因诊断与闭环回流界面，展示缺失概念、复习动作、弱点新增/更新、路径状态和 Assessment/PathPlanning 轨迹；`LearningPathPage` 展示练习触发、保留任务数和真实 PathPlanningGraph；`ReportsPage` 展示最近练习趋势、证据摘要和 ReportGraph。旧响应缺少新增字段时仍正常渲染。
 - Phase 16 的 `/app/path` 会恢复当前冲刺计划；只有 URL 显式携带 `comparison_id` 时才把该对比用于新计划。必刷题链接会携带冲刺计划、任务和知识点来源进入 adaptive 练习，提交后局部展示重排状态和新计划入口。
@@ -519,7 +519,7 @@ Phase 5 以后：
 - P3.14 已把普通侧栏和主页侧栏的“搜索历史”统一为居中浮层，不再在左栏内联展开搜索框；主页发送成功不再产生持久状态条，避免和回答内容或底部输入区重叠。
 - 后续前端交互不再使用“已切换到/已完成”这类全局或横向提示条；页面反馈优先收敛到选中态、列表刷新、详情面板、输入状态和真实跳转。
 - 上传失败、发送失败、课程生成失败、模型连接失败和表单校验失败必须保留反馈，但只放在对应输入区、资料库、弹层或设置表单附近；模型配置保存、设默认、删除和连接测试成功使用右下角轻量 toast，不占据主内容中间。
-- `/app/studio` 已从本地预备队列升级为真实资源工坊：按课程和知识点调用 `/resources/generation-jobs`，资源列表来自 `/resources`，初始不展示假资源；用户可离开页面后继续生成，刷新后恢复任务，并在完成后优先查看新产物。
+- `/app/studio` 已从本地预备队列升级为真实桌面成果工作台：按课程和知识点调用 `/resources/generation-jobs`，成果库来自 `/resources`，初始不展示假资源；用户可离开页面后继续生成，刷新后恢复任务，并在完成后选中新产物、写入 `resource_id` 和关闭生成抽屉。
 
 - Phase 17 新增 `AiJobProvider`、`AiJobProgress` 和紧凑 `AiJobTray`。首页/资料库共用建课任务，课程空间/资源工坊共用资源任务；鉴权 SSE 断线后降级为 1 秒轮询。恢复时只使用服务端白名单请求摘要还原资料 ID、课程名、资源类型、目标和难度。
 - 独立 TutorPage 已删除；旧 `/app/tutor` 只做兼容跳转，课程提问直接在课程空间完成。`/app/profile` 已接真实画像，`/app/path` 已接真实路径，`/app/practice` 和 `/app/reports` 已接真实练习评估与学习报告接口。

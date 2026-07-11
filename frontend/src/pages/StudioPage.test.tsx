@@ -1,11 +1,12 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { PATHS } from "../app/routePaths";
+import { AGENT_ENDPOINTS } from "../api/agents";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { RESOURCE_ENDPOINTS, type GeneratedResource, type ResourceQualityScore } from "../api/resources";
@@ -26,12 +27,18 @@ function renderWithProviders(ui: ReactNode, initialPath: string = PATHS.studio) 
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialPath]}>
+        <LocationProbe />
         <Routes>
           <Route path={PATHS.studio} element={ui} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
   );
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="studio-location">{location.pathname}{location.search}</output>;
 }
 
 function parsePayload(data: unknown) {
@@ -217,12 +224,17 @@ describe("StudioPage resource generation", () => {
     renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808`);
 
     expect(await screen.findByRole("heading", { name: "资源工坊" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "资源生成工作台" })).toHaveTextContent("选择课程和知识点，生成资源");
-    await waitFor(() => expect(screen.getByRole("region", { name: "生成队列" })).toHaveTextContent("AI 搜索复习"));
-    expect(screen.queryByRole("region", { name: "资源生成摘要" })).not.toBeInTheDocument();
-    await user.type(screen.getByRole("textbox", { name: "生成目标" }), "期末前掌握搜索题");
-    await user.click(screen.getByRole("button", { name: "讲解" }));
-    await user.click(screen.getByRole("button", { name: "生成资源" }));
+    expect(screen.getByRole("region", { name: "资源成果工作台" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("main", { name: "成果画布" })).toHaveTextContent("这门课还没有学习资源");
+    });
+    await user.click(within(screen.getByRole("banner", { name: "资源工坊工具栏" })).getByRole("button", { name: "新建资源" }));
+    const generateDrawer = screen.getByRole("dialog", { name: "生成设置" });
+    await user.type(within(generateDrawer).getByRole("textbox", { name: "生成目标" }), "期末前掌握搜索题");
+    for (const type of ["思维导图", "练习", "代码实操", "PPT", "动画图解"]) {
+      await user.click(within(generateDrawer).getByRole("checkbox", { name: type }));
+    }
+    await user.click(within(generateDrawer).getByRole("button", { name: "开始生成" }));
 
     await waitFor(() => {
       expect(calls).toContainEqual(
@@ -232,25 +244,23 @@ describe("StudioPage resource generation", () => {
           payload: {
             course_id: 808,
             knowledge_point_id: 401,
-            resource_types: ["doc"],
+            resource_types: ["doc", "mindmap", "quiz", "code", "slide", "animation"],
             learning_goal: "期末前掌握搜索题",
             difficulty: "medium"
           }
         })
       );
     });
-    const resultSummary = screen.getByRole("region", { name: "资源生成摘要" });
-    expect(resultSummary).toHaveTextContent("已生成资源");
-    expect(resultSummary).toHaveTextContent("AI 搜索复习");
-    expect(resultSummary).toHaveTextContent("启发式搜索");
-    expect(resultSummary).toHaveTextContent("讲解");
-    expect(within(resultSummary).getByRole("button", { name: "重新生成" })).toBeEnabled();
-    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("启发式搜索个性化讲解");
-    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("模型增强");
+    expect(await screen.findByRole("button", { name: "打开成果 启发式搜索个性化讲解" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("先理解启发函数");
-    expect(screen.getByRole("region", { name: "资源生成工作台" })).toHaveTextContent("调整生成设置");
-    expect(screen.getByRole("region", { name: "资源质量" })).toHaveTextContent("来源匹配");
-    expect(screen.getByRole("region", { name: "引用来源" })).toHaveTextContent("人工智能导论讲义.md");
+    await waitFor(() => {
+      expect(screen.getByTestId("studio-location")).toHaveTextContent("course_id=808&resource_id=901");
+    });
+    expect(screen.queryByRole("dialog", { name: "生成设置" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "成果详情" }));
+    expect(await screen.findByRole("tabpanel", { name: "资源质量" })).toHaveTextContent("来源匹配");
+    await user.click(screen.getByRole("tab", { name: "来源" }));
+    expect(screen.getByRole("tabpanel", { name: "引用来源" })).toHaveTextContent("人工智能导论讲义.md");
     expect(calls.filter((call) => call.url === RESOURCE_ENDPOINTS.list).length).toBeGreaterThanOrEqual(2);
   });
 
@@ -287,8 +297,11 @@ describe("StudioPage resource generation", () => {
 
     renderWithProviders(<StudioPage />);
 
-    expect(await screen.findByRole("region", { name: "生成队列" })).toHaveTextContent("还没有可生成资源的课程");
-    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("还没有生成资源");
+    await waitFor(() => {
+      expect(screen.getByRole("main", { name: "成果画布" })).toHaveTextContent("先准备一门课程");
+    });
+    expect(screen.getByRole("link", { name: "进入资料库" })).toHaveAttribute("href", PATHS.library);
+    expect(screen.getByRole("complementary", { name: "成果库" })).toHaveTextContent("选择课程后查看成果");
     expect(screen.queryByText("监督学习个性化讲解")).not.toBeInTheDocument();
   });
 
@@ -297,6 +310,7 @@ describe("StudioPage resource generation", () => {
     const resources: GeneratedResource[] = [
       makeResource({
         id: "901",
+        agent_trace_id: "trace_doc",
         resource_type: "doc",
         title: "启发式搜索个性化讲解",
         content_json: {
@@ -306,6 +320,7 @@ describe("StudioPage resource generation", () => {
       }),
       makeResource({
         id: "902",
+        agent_trace_id: "trace_quiz",
         resource_type: "quiz",
         title: "启发式搜索练习题",
         content_json: {
@@ -416,6 +431,39 @@ describe("StudioPage resource generation", () => {
         };
       }
 
+      if (config.url === AGENT_ENDPOINTS.trace("trace_doc")) {
+        return {
+          data: {
+            data: {
+              trace_id: "trace_doc",
+              workflow: "resource_generation",
+              artifact_type: "generated_resource",
+              artifact_id: "901",
+              course_id: "808",
+              status: "completed",
+              steps: [
+                {
+                  id: "trace-step-review",
+                  agent_name: "review",
+                  step_index: 7,
+                  status: "completed",
+                  input_summary: "审核资源",
+                  output_summary: "资源审核通过",
+                  duration_ms: 18,
+                  metadata: {},
+                  created_at: "2026-07-05T14:00:00Z"
+                }
+              ]
+            },
+            trace_id: "trace_doc"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
       return {
         data: { data: {}, trace_id: "trace_default" },
         status: 200,
@@ -425,21 +473,37 @@ describe("StudioPage resource generation", () => {
       };
     };
 
-    renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808`);
+    renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808&resource_id=902`);
 
-    expect(await screen.findByRole("region", { name: "资源生成摘要" })).toHaveTextContent("启发式搜索个性化讲解");
-    expect(await screen.findByRole("button", { name: "查看资源 启发式搜索个性化讲解" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("本地可用稿");
-    expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("第二段复习建议。");
-    expect(await screen.findByText("基于课程引用摘要生成。")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "查看资源 启发式搜索练习题" }));
-
-    expect(screen.getByRole("button", { name: "查看资源 启发式搜索练习题" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("低依据");
+    expect(await screen.findByRole("button", { name: "打开成果 启发式搜索练习题" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("资料依据不足");
     expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("答案：B。");
-    expect(await screen.findByText("练习题基于课程引用摘要。")).toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "搜索成果" }), "个性化讲解");
+    expect(screen.queryByRole("button", { name: "打开成果 启发式搜索练习题" })).not.toBeInTheDocument();
+    await user.clear(screen.getByRole("textbox", { name: "搜索成果" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "资源类型筛选" }), "quiz");
+    expect(screen.queryByRole("button", { name: "打开成果 启发式搜索个性化讲解" })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByRole("combobox", { name: "资源类型筛选" }), "all");
+    await user.click(screen.getByRole("button", { name: "打开成果 启发式搜索个性化讲解" }));
+
+    expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("第二段复习建议。");
+    expect(screen.getByTestId("studio-location")).toHaveTextContent("resource_id=901");
+    await user.click(screen.getByRole("button", { name: "成果详情" }));
+    expect(await screen.findByRole("tabpanel", { name: "资源质量" })).toHaveTextContent("基于课程引用摘要生成。");
+    await user.click(screen.getByRole("tab", { name: "来源" }));
+    expect(screen.getByRole("tabpanel", { name: "引用来源" })).toHaveTextContent("人工智能导论讲义.md");
+    await user.click(screen.getByRole("tab", { name: "协作轨迹" }));
+    expect(await screen.findByText("资源审核通过")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "关闭成果详情" }));
+    expect(screen.queryByRole("dialog", { name: "成果详情" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "成果详情" }));
+    fireEvent.mouseDown(screen.getByTestId("studio-drawer-layer"));
+    expect(screen.queryByRole("dialog", { name: "成果详情" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "成果详情" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "成果详情" })).not.toBeInTheDocument();
+    expect(screen.getByRole("main", { name: "成果画布" })).toBeInTheDocument();
   });
 
   it("shows local feedback when resource generation fails", async () => {
@@ -523,10 +587,16 @@ describe("StudioPage resource generation", () => {
     renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808`);
 
     await screen.findByRole("heading", { name: "资源工坊" });
-    expect(screen.getByRole("region", { name: "资源生成工作台" })).toHaveTextContent("选择课程和知识点，生成资源");
-    await user.click(screen.getByRole("button", { name: "生成资源" }));
+    await waitFor(() => {
+      expect(screen.getByRole("main", { name: "成果画布" })).toHaveTextContent("这门课还没有学习资源");
+    });
+    await user.click(within(screen.getByRole("banner", { name: "资源工坊工具栏" })).getByRole("button", { name: "新建资源" }));
+    const generateDrawer = screen.getByRole("dialog", { name: "生成设置" });
+    await user.type(within(generateDrawer).getByRole("textbox", { name: "生成目标" }), "保留我的生成目标");
+    await user.click(within(generateDrawer).getByRole("button", { name: "开始生成" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("资源生成失败，请稍后重试。");
-    expect(within(screen.getByRole("region", { name: "资源生成区" })).getByText("还没有生成资源")).toBeInTheDocument();
+    expect(await within(generateDrawer).findByRole("alert")).toHaveTextContent("资源生成失败，请稍后重试。");
+    expect(within(generateDrawer).getByRole("textbox", { name: "生成目标" })).toHaveValue("保留我的生成目标");
+    expect(screen.getByRole("main", { name: "成果画布" })).toHaveTextContent("这门课还没有学习资源");
   });
 });

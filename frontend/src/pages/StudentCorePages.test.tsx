@@ -318,11 +318,11 @@ describe("student core pages", () => {
     renderPage(<StudioPage />);
 
     expect(screen.getByRole("heading", { name: "资源工坊" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "资源生成工作台" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "生成队列" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "资源生成区" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "代码实操" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "复盘报告" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "资源成果工作台" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "成果库" })).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: "成果画布" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "资源类型筛选" })).toBeInTheDocument();
+    expect(screen.queryByText("加载状态")).not.toBeInTheDocument();
   });
 
   it("renders the learning profile workspace from the real profile API", async () => {

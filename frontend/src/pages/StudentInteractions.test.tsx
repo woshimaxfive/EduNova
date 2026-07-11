@@ -738,13 +738,15 @@ describe("student interaction affordances", () => {
 
     renderPage(<StudioPage />);
 
-    await waitFor(() => expect(screen.getByRole("region", { name: "生成队列" })).toHaveTextContent("机器学习期末复习"));
-    expect(screen.getByRole("region", { name: "资源生成区" })).not.toHaveTextContent("反向传播练习");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "资源课程" })).toHaveValue("808"));
+    expect(screen.getByRole("main", { name: "成果画布" })).not.toHaveTextContent("反向传播练习");
 
-    await waitFor(() => expect(screen.getByLabelText("知识点")).not.toBeDisabled());
-    await user.selectOptions(screen.getByLabelText("知识点"), "401");
-    await user.click(screen.getByRole("button", { name: "练习" }));
-    await user.click(screen.getByRole("button", { name: "生成资源" }));
+    await user.click(within(screen.getByRole("banner", { name: "资源工坊工具栏" })).getByRole("button", { name: "新建资源" }));
+    const generateDrawer = screen.getByRole("dialog", { name: "生成设置" });
+    await waitFor(() => expect(within(generateDrawer).getByRole("combobox", { name: "生成知识点" })).not.toBeDisabled());
+    await user.selectOptions(within(generateDrawer).getByRole("combobox", { name: "生成知识点" }), "401");
+    await user.click(within(generateDrawer).getByRole("checkbox", { name: "练习" }));
+    await user.click(within(generateDrawer).getByRole("button", { name: "开始生成" }));
 
     await waitFor(() => {
       expect(calls).toContainEqual(
@@ -762,9 +764,11 @@ describe("student interaction affordances", () => {
       );
     });
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("反向传播练习");
-    expect(screen.getByRole("region", { name: "资源生成区" })).toHaveTextContent("低依据");
-    expect(screen.getByRole("region", { name: "引用来源" })).toHaveTextContent("神经网络讲义.md");
+    expect(await screen.findByRole("region", { name: "资源完整内容" })).toHaveTextContent("反向传播练习");
+    expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("低依据");
+    await user.click(screen.getByRole("button", { name: "成果详情" }));
+    await user.click(screen.getByRole("tab", { name: "来源" }));
+    expect(screen.getByRole("tabpanel", { name: "引用来源" })).toHaveTextContent("神经网络讲义.md");
   });
 
   it("updates profile goals and evidence through the real profile API", async () => {

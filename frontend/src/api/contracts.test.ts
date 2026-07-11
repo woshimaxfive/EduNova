@@ -6,7 +6,7 @@ import { apiClient } from "./client";
 import { COURSE_ENDPOINTS, getCourseLearningState, getMasteryMap, updateCourseWeaknessReviewItem } from "./courses";
 import { DASHBOARD_ENDPOINTS } from "./dashboard";
 import { DEMO_ENDPOINTS } from "./demo";
-import { EXAM_SPRINT_ENDPOINTS, generateExamSprintPlan, getExamSprintPlan } from "./examSprint";
+import { EXAM_SPRINT_ENDPOINTS, generateExamSprintPlan, getCurrentExamSprintPlan, getExamSprintPlan } from "./examSprint";
 import {
   createLearningDossierExportJob,
   downloadExportJob,
@@ -14,7 +14,7 @@ import {
   EXPORT_ENDPOINTS,
   getExportJob
 } from "./exports";
-import { compareMaterials, MATERIAL_ENDPOINTS } from "./materials";
+import { compareMaterials, getLatestMaterialComparison, getMaterialComparison, MATERIAL_ENDPOINTS } from "./materials";
 import { generatePath, getCurrentPath, PATH_ENDPOINTS, updatePathTask } from "./paths";
 import { createPracticeSession, getPracticeSession, PRACTICE_ENDPOINTS, submitPracticeAnswers } from "./practice";
 import { RAG_ENDPOINTS, searchRag } from "./rag";
@@ -70,6 +70,8 @@ describe("frontend API contracts", () => {
     );
     expect(MATERIAL_ENDPOINTS.upload).toBe("/materials/upload");
     expect(MATERIAL_ENDPOINTS.compare).toBe("/materials/compare");
+    expect(MATERIAL_ENDPOINTS.latestComparison).toBe("/materials/comparisons/latest");
+    expect(MATERIAL_ENDPOINTS.comparisonDetail(9)).toBe("/materials/comparisons/9");
     expect(MATERIAL_ENDPOINTS.progress(3)).toBe("/materials/3/progress");
     expect(RAG_ENDPOINTS.search).toBe("/rag/search");
     expect(RESOURCE_ENDPOINTS.generate).toBe("/resources/generate");
@@ -79,6 +81,7 @@ describe("frontend API contracts", () => {
     expect(PATH_ENDPOINTS.current).toBe("/paths/current");
     expect(PATH_ENDPOINTS.updateTask(9)).toBe("/paths/tasks/9");
     expect(EXAM_SPRINT_ENDPOINTS.generate).toBe("/exam-sprint/plans");
+    expect(EXAM_SPRINT_ENDPOINTS.current).toBe("/exam-sprint/plans/current");
     expect(EXAM_SPRINT_ENDPOINTS.detail(12)).toBe("/exam-sprint/plans/12");
     expect(EXPORT_ENDPOINTS.learningDossier).toBe("/exports/learning-dossier");
     expect(EXPORT_ENDPOINTS.learningDossierJob).toBe("/exports/learning-dossier/jobs");
@@ -265,13 +268,17 @@ describe("frontend API contracts", () => {
 
     try {
       const response = await compareMaterials({ course_id: 7, material_ids: [301, 302] });
+      await getLatestMaterialComparison(7);
+      await getMaterialComparison(88);
 
       expect(calls).toEqual([
         {
           url: MATERIAL_ENDPOINTS.compare,
           method: "post",
           data: { course_id: 7, material_ids: [301, 302] }
-        }
+        },
+        { url: MATERIAL_ENDPOINTS.latestComparison, method: "get", data: undefined },
+        { url: MATERIAL_ENDPOINTS.comparisonDetail(88), method: "get", data: undefined }
       ]);
       expect(response.data.repeated_concepts[0].title).toBe("启发式搜索");
       expect(response.data.citations[0].source_title).toBe("AI 导论讲义.md");
@@ -1029,13 +1036,16 @@ describe("frontend API contracts", () => {
     try {
       const generated = await generateExamSprintPlan({ course_id: 7, duration_days: 7, material_ids: [], goal: "期末冲刺" });
       const detail = await getExamSprintPlan(3001);
+      const current = await getCurrentExamSprintPlan(7);
 
       expect(calls).toEqual([
         { url: EXAM_SPRINT_ENDPOINTS.generate, method: "post", data: { course_id: 7, duration_days: 7, material_ids: [], goal: "期末冲刺" } },
-        { url: EXAM_SPRINT_ENDPOINTS.detail(3001), method: "get", data: undefined }
+        { url: EXAM_SPRINT_ENDPOINTS.detail(3001), method: "get", data: undefined },
+        { url: EXAM_SPRINT_ENDPOINTS.current, method: "get", data: undefined }
       ]);
       expect(generated.data.status).toBe("sprint_active");
       expect(detail.data.daily_tasks[0].day_index).toBe(1);
+      expect(current.data?.id).toBe("3001");
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

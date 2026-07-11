@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -38,6 +39,28 @@ class FakeModelService:
     def chat_completion(self, _user: User, messages: list[dict[str, str]]) -> str:
         self.calls.append(messages)
         return self.responses.pop(0)
+
+
+class FakeSprintService:
+    def __init__(self) -> None:
+        self.replan_calls: list[tuple[int, int, int]] = []
+
+    def validate_practice_source(self, _user: User, course_id: int, plan_id: int, task_id: int):
+        assert course_id == 101
+        assert plan_id == 3001
+        assert task_id == 4002
+        return SimpleNamespace(knowledge_point_id=401)
+
+    def replan_after_assessment(
+        self,
+        _user: User,
+        _course_id: int,
+        assessment_session_id: int,
+        plan_id: int,
+        task_id: int,
+    ):
+        self.replan_calls.append((assessment_session_id, plan_id, task_id))
+        return SimpleNamespace(status="replanned", plan_id=3002, trace_id="trace_sprint_replan")
 
 
 class FailingPathService:
@@ -501,6 +524,38 @@ def test_assessment_graph_keeps_rule_score_and_persists_model_diagnosis_with_tra
         "persist",
         "path_replan",
     ]
+
+
+def test_sprint_origin_practice_replans_sprint_without_affecting_normal_practice() -> None:
+    from backend.app.services.practice import PracticeService
+
+    repo = make_repo()
+    sprint = FakeSprintService()
+    logs: list[Any] = []
+    service = PracticeService(repo, sprint_service=sprint, trace_recorder=make_trace_recorder(logs))
+
+    created = service.create_session(
+        make_user(),
+        101,
+        [401],
+        1,
+        "adaptive",
+        sprint_plan_id=3001,
+        sprint_task_id=4002,
+    )
+    result = as_dict(
+        service.submit_answers(
+            make_user(),
+            int(created.id),
+            [{"question_id": "q1", "answer_text": "错误选项"}],
+        )
+    )
+
+    assert result["closure_update"]["sprint_update_status"] == "replanned"
+    assert result["closure_update"]["sprint_plan_id"] == "3002"
+    assert result["closure_update"]["sprint_agent_trace_id"] == "trace_sprint_replan"
+    assert sprint.replan_calls == [(int(created.id), 3001, 4002)]
+    assert logs[-1].agent_name == "sprint_replan"
     assert all("错误选项" not in str(log.metadata_json) for log in logs)
 
 

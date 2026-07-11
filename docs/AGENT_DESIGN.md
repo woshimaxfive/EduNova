@@ -1,10 +1,10 @@
 # EduNova Agent 设计说明
 
-更新时间：2026-07-10
+更新时间：2026-07-11
 
 ## 1. 定位
 
-EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多智能体”概念本身。当前版本有八条 **LangGraph 生产级编排**：`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph` 和 `ReportGraph`。其他学习流程保持现有服务逻辑和安全 trace，后续再逐步真接管。
+EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多智能体”概念本身。当前版本有十条 **LangGraph 生产级编排**：`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph`、`MaterialComparisonGraph` 和 `ExamSprintGraph`。
 
 本轮不把认证、模型设置、Dashboard 总览等非学习能力包装成 Agent。
 
@@ -14,17 +14,15 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 | --- | --- | --- |
 | `ProfileGraph` | 已真接管：显式画像回答和学习行为信号的抽取、证据门控、审核/修订、应用与事件持久化 | collect_context、extract、evidence_gate、review、repair、apply、persist_event |
 | `CourseBuilderGraph` | 已真接管：资料读取、来源大纲、课程结构、知识点、切片、embedding、审核/修订和事务持久化 | read_materials、source_outline、structure_course、knowledge_points、chunk、embed、review、repair、persist |
-| `MaterialComparisonGraph` | 后续专项：资料证据收集、重点/考点/遗漏点提炼、引用审核 | evidence、compare、exam_points、gap_analysis、review |
+| `MaterialComparisonGraph` | 已真接管：范围校验、真实分块证据收集、规则对比、模型解释增强、审核/修订和不可变版本持久化 | validate_scope、collect_evidence、deterministic_compare、model_compare、review、repair、persist |
 | `HomeTutorGraph` | 已真接管：安全上下文、问题路由、选中资料检索、按需联网、深度规划、回答、审核/修订和消息持久化 | context、route、material_retriever、web_search、planner、answer、review、repair、persist |
 | `CourseTutorGraph` | 已真接管：画像/上下文读取、课程检索、导师回答、弱点候选、审核、下一步动作、消息持久化 | profile、retriever、tutor、weakness、review、next_action |
 | `ResourceGenerationGraph` | 已真接管：画像、检索、诊断、规划、六 Worker 并行生成、聚合、模型与规则审核、单次修订、持久化 | profile、retrieve、diagnosis、planner、resource_worker、aggregate、review、repair、persist |
 | `PathPlanningGraph` | 已真接管：画像与证据收集、确定性排序、模型排序理由、审核/修订、事务持久化 | profile、collect_evidence、deterministic_rank、model_plan、review、repair、persist |
-| `ExamSprintGraph` | 后续专项：冲刺证据收集、高频点/必刷题/易错提醒生成、审核、持久化 | evidence、high_frequency、must_practice、mistakes、review、persist |
+| `ExamSprintGraph` | 已真接管：画像和课程证据收集、显式资料对比上下文、规则排序、模型计划增强、任务构建、审核/修订和事务持久化 | profile、collect_evidence、comparison_context、deterministic_rank、model_plan、build_tasks、review、repair、persist |
 | `AssessmentGraph` | 已真接管：规则题稿、可选模型增强、确定性评分、错因诊断、弱点同步和路径回流 | context/question_plan/generate_questions/review/repair/persist；load/deterministic_score/diagnose_errors/sync_weaknesses/review/repair/persist/path_replan |
 | `ReportGraph` | 已真接管：最近练习、掌握度、弱点、路径和资源聚合，叙事增强、审核/修订、持久化 | collect_practice、collect_mastery、aggregate_evidence、generate_narrative、review、repair、persist |
-| `ExportDossierGraph` | 后续专项：学习档案聚合、Markdown 渲染、隐私审核、返回下载内容 | aggregate、render_markdown、privacy_review、return |
-
-`Service` 仍然是 API 边界和依赖装配层。八条主链路的核心流程已经委托给对应 Graph runner；资料对比、冲刺和导出暂时通过服务逻辑产出兼容 trace，不把它们写成已经真接管。
+`Service` 仍然是 API 边界和依赖装配层。十条主链路的核心流程已经委托给对应 Graph runner。学习档案导出是确定性 Service + Redis/RQ Worker，不注册为 `ExportDossierGraph`，也不把异步任务包装成 Agent。
 
 ## 3. AgentState
 
@@ -138,6 +136,6 @@ EduNova 不是把所有逻辑都交给大模型，而是把学生学习链路拆
 
 ## 9. 后续打磨
 
-- 增强资料对比结果和期末冲刺、路径排序之间的证据联动。
-- 扩展隔离 Docker E2E，把八条 Graph 的跨页面回流和失败分支持续纳入验收。
+- 继续验证资料对比、期末冲刺和针对性练习的跨页面恢复与失败分支。
+- 扩展隔离 Docker E2E，把十条 Graph 的跨页面回流持续纳入验收。
 - 在不泄露原始输入的前提下继续丰富 AgentTimeline 的白名单 metadata。

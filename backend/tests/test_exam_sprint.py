@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.v1.deps import get_auth_service
 from backend.app.core.config import Settings
 from backend.app.core.security import create_access_token
@@ -19,6 +20,7 @@ from backend.app.models import (
     KnowledgePoint,
     LearningPath,
     LearningTask,
+    MaterialComparisonRun,
     PracticeAnswer,
     PracticeSession,
     User,
@@ -50,8 +52,10 @@ class FakeExamSprintRepository:
     reports: list[AssessmentReport] = field(default_factory=list)
     paths: list[LearningPath] = field(default_factory=list)
     tasks: list[LearningTask] = field(default_factory=list)
+    comparison_runs: list[MaterialComparisonRun] = field(default_factory=list)
     next_path_id: int = 3001
     next_task_id: int = 4001
+    commit_count: int = 0
 
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return next((course for course in self.courses if course.id == course_id and course.owner_id == user_id), None)
@@ -92,6 +96,13 @@ class FakeExamSprintRepository:
         reports = [report for report in self.reports if report.user_id == user_id and report.course_id == course_id]
         return sorted(reports, key=lambda report: (report.created_at, report.id), reverse=True)[0] if reports else None
 
+    def get_comparison_run_for_user(self, user_id: int, comparison_id: int) -> MaterialComparisonRun | None:
+        return next((run for run in self.comparison_runs if run.id == comparison_id and run.user_id == user_id), None)
+
+    def get_current_sprint_path(self, user_id: int, course_id: int) -> LearningPath | None:
+        paths = [path for path in self.paths if path.user_id == user_id and path.course_id == course_id and path.status == "sprint_active"]
+        return paths[-1] if paths else None
+
     def archive_active_sprint_paths(self, user_id: int, course_id: int) -> None:
         for path in self.paths:
             if path.user_id == user_id and path.course_id == course_id and path.status == "sprint_active":
@@ -124,11 +135,14 @@ class FakeExamSprintRepository:
             None,
         )
 
+    def get_sprint_task_for_user(self, user_id: int, plan_id: int, task_id: int) -> LearningTask | None:
+        return next((task for task in self.tasks if task.id == task_id and task.path_id == plan_id and task.user_id == user_id), None)
+
     def list_tasks_for_path(self, path_id: int) -> list[LearningTask]:
         return sorted([task for task in self.tasks if task.path_id == path_id], key=lambda task: (task.due_at or NOW, task.id))
 
     def commit(self) -> None:
-        return None
+        self.commit_count += 1
 
     def rollback(self) -> None:
         return None
@@ -280,6 +294,10 @@ def as_dict(model: Any) -> dict[str, Any]:
     return model.model_dump() if hasattr(model, "model_dump") else model
 
 
+def make_trace_recorder(logs: list[Any]) -> AgentTraceRecorder:
+    return AgentTraceRecorder(repository_add_log=lambda log: logs.append(log) or log)
+
+
 def test_generate_exam_sprint_plan_persists_without_archiving_normal_path_and_uses_evidence() -> None:
     from backend.app.services.exam_sprint import ExamSprintService
 
@@ -381,6 +399,7 @@ def test_exam_sprint_routes_require_login_and_return_envelopes() -> None:
     )
     plan_id = generated.json()["data"]["id"]
     detail = client.get(f"/api/v1/exam-sprint/plans/{plan_id}", headers=headers)
+    current = client.get("/api/v1/exam-sprint/plans/current?course_id=101", headers=headers)
     missing = client.get("/api/v1/exam-sprint/plans/999999", headers=headers)
 
     assert unauthorized.status_code == 401
@@ -389,4 +408,87 @@ def test_exam_sprint_routes_require_login_and_return_envelopes() -> None:
     assert generated.json()["data"]["daily_tasks"]
     assert detail.status_code == 200
     assert detail.json()["data"]["id"] == plan_id
+    assert current.status_code == 200
+    assert current.json()["data"]["id"] == plan_id
     assert missing.status_code == 404
+
+
+def test_exam_sprint_graph_consumes_comparison_and_replans_only_selected_sprint() -> None:
+    from backend.app.services.exam_sprint import ExamSprintService
+
+    repo = make_repo()
+    comparison = MaterialComparisonRun(
+        id=1201,
+        user_id=1,
+        course_id=101,
+        material_ids_json=[201, 202],
+        result_json={
+            "priority_order": [{"knowledge_point_id": "403", "title": "神经网络基础"}],
+            "exam_likely_points": [{"knowledge_point_id": "403", "title": "神经网络基础"}],
+            "repeated_concepts": [],
+            "missing_review_points": [],
+        },
+        agent_trace_id="trace_comparison",
+        generation_mode="deterministic_source",
+        review_mode="rules_only",
+        created_at=NOW,
+    )
+    repo.comparison_runs.append(comparison)
+    logs: list[Any] = []
+    service = ExamSprintService(repo, trace_recorder=make_trace_recorder(logs))
+
+    created = as_dict(
+        service.generate_plan(
+            make_user(),
+            course_id=101,
+            duration_days=3,
+            material_ids=[201, 202],
+            comparison_id=1201,
+            goal="三天冲刺",
+        )
+    )
+    practice_task = next(task for task in repo.tasks if task.path_id == int(created["id"]) and task.task_type == "sprint_practice")
+    result = service.replan_after_assessment(make_user(), 101, 9001, int(created["id"]), practice_task.id)
+
+    assert created["comparison_id"] == "1201"
+    assert "神经网络基础" in [point["title"] for point in created["high_frequency_points"]]
+    assert result.status == "replanned"
+    assert result.detail is not None
+    replanned = as_dict(result.detail)
+    assert replanned["trigger"] == "assessment_reflow"
+    assert replanned["revision_of"] == created["id"]
+    assert replanned["preserved_task_count"] >= 1
+    assert repo.get_sprint_path_for_user(1, int(created["id"])).status == "sprint_archived"
+    assert [log.agent_name for log in logs[:8]] == [
+        "profile",
+        "collect_evidence",
+        "comparison_context",
+        "deterministic_rank",
+        "model_plan",
+        "build_tasks",
+        "review",
+        "persist",
+    ]
+
+
+def test_exam_sprint_reflow_commits_source_task_before_graph_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.agents.exam_sprint import ExamSprintGraphRunner
+    from backend.app.services.exam_sprint import ExamSprintService
+
+    repo = make_repo()
+    service = ExamSprintService(repo)
+    created = as_dict(service.generate_plan(make_user(), 101, 3, goal="冲刺"))
+    practice_task = next(task for task in repo.tasks if task.path_id == int(created["id"]) and task.task_type == "sprint_practice")
+    commits_before_reflow = repo.commit_count
+
+    def fail_replan(self: ExamSprintGraphRunner, **_kwargs: Any) -> None:
+        raise RuntimeError("replan failed")
+
+    monkeypatch.setattr(ExamSprintGraphRunner, "run", fail_replan)
+
+    with pytest.raises(RuntimeError, match="replan failed"):
+        service.replan_after_assessment(make_user(), 101, 9001, int(created["id"]), practice_task.id)
+
+    assert practice_task.status == "completed"
+    assert repo.commit_count == commits_before_reflow + 1
+    assert repo.get_sprint_path_for_user(1, int(created["id"])).status == "sprint_active"

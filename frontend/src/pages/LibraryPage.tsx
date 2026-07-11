@@ -3,11 +3,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { buildCoursePath } from "../app/routePaths";
+import { buildCoursePath, PATHS } from "../app/routePaths";
 import { createCourseFromMaterials, listCourses, type ApiCourseSummary } from "../api/courses";
 import { getApiErrorMessage } from "../api/errors";
 import {
   compareMaterials,
+  getLatestMaterialComparison,
   listMaterials,
   type MaterialComparisonPoint,
   type MaterialComparisonResult,
@@ -15,6 +16,7 @@ import {
   uploadMaterial
 } from "../api/materials";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
+import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { PageFrame } from "./PageFrame";
 
 type LibraryFilter = "all" | "document" | "image";
@@ -79,6 +81,13 @@ function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
+function asMaterialComparison(value: unknown): MaterialComparisonResult | null {
+  if (!value || typeof value !== "object" || !("summary" in value) || !("citations" in value)) {
+    return null;
+  }
+  return value as MaterialComparisonResult;
+}
+
 export function LibraryPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -111,6 +120,14 @@ export function LibraryPage() {
   const files = useMemo(() => asArray<MaterialListItem>(materialsQuery.data?.data), [materialsQuery.data?.data]);
   const courses = useMemo(() => asArray<ApiCourseSummary>(coursesQuery.data?.data), [coursesQuery.data?.data]);
   const effectiveCompareCourseId = compareCourseId || courses[0]?.id || "";
+  const numericCompareCourseId = parseNumericId(effectiveCompareCourseId);
+  const latestComparisonQuery = useQuery({
+    queryKey: ["materials", "comparison", "latest", numericCompareCourseId],
+    queryFn: () => getLatestMaterialComparison(numericCompareCourseId ?? 0),
+    enabled: numericCompareCourseId !== null,
+    staleTime: 10_000
+  });
+  const displayedComparison = compareResult ?? asMaterialComparison(latestComparisonQuery.data?.data);
   const compareCourseMaterials = useMemo(
     () =>
       files.filter(
@@ -198,6 +215,7 @@ export function LibraryPage() {
     try {
       const result = await compareMaterials({ course_id: courseId, material_ids: selectedMaterialIds });
       setCompareResult(result.data);
+      queryClient.setQueryData(["materials", "comparison", "latest", courseId], result);
     } catch (error) {
       setCompareFeedback(getApiErrorMessage(error, "资料对比失败，请稍后重试。"));
     } finally {
@@ -385,27 +403,45 @@ export function LibraryPage() {
             {selectedComparableCount < 2 ? <p className="material-compare-note">至少选择两份同课程资料。</p> : null}
             <InlineFeedback message={compareFeedback} tone="warning" className="library-inline-feedback" />
 
-            {compareResult ? (
+            {displayedComparison ? (
               <div className="material-compare-result">
                 <div className="material-compare-summary">
-                  <strong>{compareResult.summary.message}</strong>
+                  <strong>{displayedComparison.summary.message}</strong>
                   <span>
-                    {compareResult.summary.comparable_material_count} 份可比较 · {compareResult.summary.matched_concept_count} 个命中点 · {compareResult.summary.citation_count} 条引用
+                    {displayedComparison.summary.comparable_material_count} 份可比较 · {displayedComparison.summary.matched_concept_count} 个命中点 · {displayedComparison.summary.citation_count} 条引用
                   </span>
+                  <small>
+                    {displayedComparison.generation_mode === "model_enhanced" ? "模型增强" : "规则底稿"} · {displayedComparison.review_mode === "model_and_rules" ? "模型与规则审核" : "规则审核"}
+                  </small>
+                  <div className="material-compare-actions">
+                    <AgentTraceDisclosure traceId={displayedComparison.agent_trace_id} label="查看 MaterialComparisonGraph" />
+                    {displayedComparison.id && numericCompareCourseId !== null ? (
+                      <button
+                        className="soft-button"
+                        type="button"
+                        onClick={() => navigate(`${PATHS.path}?course_id=${numericCompareCourseId}&comparison_id=${displayedComparison.id}`)}
+                      >
+                        用于期末冲刺
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
+                {(displayedComparison.warnings ?? []).map((warning) => (
+                  <InlineFeedback key={warning} message={warning} tone="warning" />
+                ))}
                 <div className="material-compare-grid">
-                  {renderComparisonPointList("重复重点", compareResult.repeated_concepts)}
-                  {renderComparisonPointList("疑似考点", compareResult.exam_likely_points)}
-                  {renderComparisonPointList("单资料独有点", compareResult.materials_only_points)}
-                  {renderComparisonPointList("试题独有点", compareResult.questions_only_points)}
-                  {renderComparisonPointList("遗漏复习点", compareResult.missing_review_points)}
-                  {renderComparisonPointList("优先复习顺序", compareResult.priority_order)}
+                  {renderComparisonPointList("重复重点", displayedComparison.repeated_concepts)}
+                  {renderComparisonPointList("疑似考点", displayedComparison.exam_likely_points)}
+                  {renderComparisonPointList("单资料独有点", displayedComparison.materials_only_points)}
+                  {renderComparisonPointList("试题独有点", displayedComparison.questions_only_points)}
+                  {renderComparisonPointList("遗漏复习点", displayedComparison.missing_review_points)}
+                  {renderComparisonPointList("优先复习顺序", displayedComparison.priority_order)}
                 </div>
                 <section className="material-compare-citations" aria-label="对比引用">
                   <h3>引用摘要</h3>
-                  {compareResult.citations.length === 0 ? <p className="library-file-empty">暂无引用。</p> : null}
+                  {displayedComparison.citations.length === 0 ? <p className="library-file-empty">暂无引用。</p> : null}
                   <ul>
-                    {compareResult.citations.map((citation) => (
+                    {displayedComparison.citations.map((citation) => (
                       <li key={citation.id}>
                         <strong>{citation.source_title}</strong>
                         <small>{citation.section_title ?? "未标注章节"}</small>

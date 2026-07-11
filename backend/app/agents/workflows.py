@@ -24,7 +24,7 @@ COURSE_BUILDER_GRAPH = WorkflowSpec(
 MATERIAL_COMPARISON_GRAPH = WorkflowSpec(
     name="material_comparison",
     artifact_type="material_comparison",
-    steps=("collect_evidence", "extract_focus", "compare_gaps", "citation_review", "return_result"),
+    steps=("validate_scope", "collect_evidence", "deterministic_compare", "model_compare", "review", "repair", "persist"),
 )
 COURSE_TUTOR_GRAPH = WorkflowSpec(
     name="course_tutor",
@@ -44,7 +44,7 @@ PATH_PLANNING_GRAPH = WorkflowSpec(
 EXAM_SPRINT_GRAPH = WorkflowSpec(
     name="exam_sprint",
     artifact_type="learning_path",
-    steps=("collect_exam_evidence", "rank_high_frequency", "build_tasks", "review", "persist"),
+    steps=("profile", "collect_evidence", "comparison_context", "deterministic_rank", "model_plan", "build_tasks", "review", "repair", "persist"),
 )
 ASSESSMENT_GRAPH = WorkflowSpec(
     name="assessment",
@@ -61,6 +61,7 @@ ASSESSMENT_GRAPH = WorkflowSpec(
         "repair",
         "persist",
         "path_replan",
+        "sprint_replan",
     ),
 )
 REPORT_GRAPH = WorkflowSpec(
@@ -68,13 +69,6 @@ REPORT_GRAPH = WorkflowSpec(
     artifact_type="assessment_report",
     steps=("collect_practice", "collect_mastery", "aggregate_evidence", "generate_narrative", "review", "repair", "persist"),
 )
-EXPORT_DOSSIER_GRAPH = WorkflowSpec(
-    name="export_dossier",
-    artifact_type="learning_dossier",
-    steps=("collect_dossier", "render_markdown", "privacy_review", "return_download"),
-)
-
-
 WORKFLOW_SPECS = {
     spec.name: spec
     for spec in (
@@ -87,7 +81,6 @@ WORKFLOW_SPECS = {
         EXAM_SPRINT_GRAPH,
         ASSESSMENT_GRAPH,
         REPORT_GRAPH,
-        EXPORT_DOSSIER_GRAPH,
     )
 }
 

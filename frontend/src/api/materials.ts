@@ -7,6 +7,8 @@ export const MATERIAL_ENDPOINTS = {
   detail: (materialId: number) => `/materials/${materialId}`,
   progress: (materialId: number) => `/materials/${materialId}/progress`,
   compare: "/materials/compare",
+  latestComparison: "/materials/comparisons/latest",
+  comparisonDetail: (comparisonId: number) => `/materials/comparisons/${comparisonId}`,
   attachToCourse: (courseId: number) => `/courses/${courseId}/materials`
 } as const;
 
@@ -88,9 +90,20 @@ export type MaterialComparisonCitation = {
 };
 
 export type MaterialComparisonResult = {
+  id?: string | null;
   course_id: string;
   material_ids: string[];
   agent_trace_id?: string | null;
+  generation_mode?: "model_enhanced" | "deterministic_source" | string;
+  review_mode?: "model_and_rules" | "rules_only" | string;
+  review_result?: {
+    review_status: string;
+    confidence: number;
+    risk_flags: string[];
+    safety_summary: string;
+  } | null;
+  warnings?: string[];
+  created_at?: string | null;
   summary: MaterialComparisonSummary;
   repeated_concepts: MaterialComparisonPoint[];
   exam_likely_points: MaterialComparisonPoint[];
@@ -144,6 +157,18 @@ export async function getMaterialProgress(materialId: number) {
 
 export async function compareMaterials(payload: CompareMaterialsRequest) {
   const response = await apiClient.post<ApiEnvelope<MaterialComparisonResult>>(MATERIAL_ENDPOINTS.compare, payload);
+  return response.data;
+}
+
+export async function getLatestMaterialComparison(courseId: number) {
+  const response = await apiClient.get<ApiEnvelope<MaterialComparisonResult | null>>(MATERIAL_ENDPOINTS.latestComparison, {
+    params: { course_id: courseId }
+  });
+  return response.data;
+}
+
+export async function getMaterialComparison(comparisonId: number) {
+  const response = await apiClient.get<ApiEnvelope<MaterialComparisonResult>>(MATERIAL_ENDPOINTS.comparisonDetail(comparisonId));
   return response.data;
 }
 

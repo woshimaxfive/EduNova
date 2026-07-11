@@ -366,7 +366,7 @@ Phase 3A 为了工程清晰，可以先有对应路由，但视觉上不做复�
 | LoginPage | 登录、进入注册 | 不做营销长页，不提供共享演示学生入口 |
 | RegisterPage | 创建学生账号，选择空白开始或人工智能导论示例课程 | 不做学习画像问卷，不共享演示账号数据 |
 | LearningSpacePage | 总 AI 学习主页、贴边可收起主页历史、侧栏账号入口、轻量输入框、发送后主页对话态、文件上传、资料选择、最近课程 | 不默认进入某一课程，不堆路径、Agent、报告 |
-| LibraryPage | 文件库式独立资料库、上传资料、按文档/图片筛选、查看引用、选择资料、加入课程、生成课程浮层、同课程资料对比 | 不做后台管理器，不用“课程内置”这类关系字段替代文件类型；上传资料不自动勾选进生成课程；资料对比不展示完整原文对照页 |
+| LibraryPage | 文件库式独立资料库、上传资料、筛选、查看引用、生成课程、资料对比版本恢复、Graph 轨迹和显式冲刺入口 | 不做后台管理器；上传资料不自动勾选进生成课程；资料对比不展示完整原文对照页，也不隐式套用到冲刺 |
 | CourseSpacePage | 课程对话空间、课程资料、课程内历史、引用和学习闭环入口 | 不替代总 AI 学习主页 |
 | LearningPathPage | 展示阶段任务、路径依据和下一步行动 | 不放到首页抢主视觉，不做复杂项目管理看板 |
 | StudioPage | 资源生成和资源详情 | 不做卡片墙首页 |
@@ -476,7 +476,7 @@ Phase 4：
 
 Phase 5 以后：
 
-- 学习主路由已接入智能建课、RAG、流式问答、画像、弱点、资源、路径、练习、报告、冲刺和资料对比。Profile、CourseBuilder、主页问答、课程问答、资源、路径、评估和报告由八条真实 LangGraph 编排；其他闭环继续保留兼容 trace。
+- 学习主路由已接入智能建课、RAG、流式问答、画像、弱点、资源、路径、练习、报告、冲刺和资料对比。Profile、CourseBuilder、主页问答、课程问答、资源、路径、评估、报告、资料对比和冲刺由十条真实 LangGraph 编排；学习档案导出保持普通异步服务。
 
 如果路由、入口或首次进入流程变化，必须同步更新：
 
@@ -512,8 +512,8 @@ Phase 5 以后：
 - `StudioPage` 展示六类结构化资源、引用、质量分、Graph 轨迹和 PPTX 状态；`CourseSpacePage` 既可带课程进入资源工坊，也可在回答下方生成并内联预览资源。
 - Phase 9 已把 `LearningPathPage` 接入真实 `/paths` 和 `/courses/{course_id}/mastery-map`：支持课程预选、生成课程路径、任务状态更新、推荐资源展示、路径依据和规则掌握度图；`CourseSpacePage` 的“学习路径”入口读取真实 `path_summary` 并跳转 `/app/path?course_id=...`。
 - Phase 14 已把 `PracticePage` 升级为错因诊断与闭环回流界面，展示缺失概念、复习动作、弱点新增/更新、路径状态和 Assessment/PathPlanning 轨迹；`LearningPathPage` 展示练习触发、保留任务数和真实 PathPlanningGraph；`ReportsPage` 展示最近练习趋势、证据摘要和 ReportGraph。旧响应缺少新增字段时仍正常渲染。
-- Phase 11.1 已把期末冲刺接入现有 `/app/path`：学习主页最近课程区域提供“期末冲刺”入口并跳转 `/app/path?course_id=...`；`LearningPathPage` 在普通学习路径之外新增独立冲刺区域，可选择 3/7/14 天生成计划，展示每日任务、高频点、薄弱点、必刷题、易错提醒和推荐资源。冲刺区域错误只局部提示，不影响普通学习路径任务状态更新。
-- Phase 11.2 已把资料对比接入 `/app/library`：页面读取课程和资料列表，选择课程后只展示已绑定该课程且可比较的文档资料，至少选择两份后调用 `/materials/compare`，展示重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先顺序和引用摘要。错误只在资料对比区域局部提示，不影响上传、资料列表和生成课程。
+- Phase 16 的 `/app/path` 会恢复当前冲刺计划；只有 URL 显式携带 `comparison_id` 时才把该对比用于新计划。必刷题链接会携带冲刺计划、任务和知识点来源进入 adaptive 练习，提交后局部展示重排状态和新计划入口。
+- Phase 16 的 `/app/library` 会恢复最近一次已保存资料对比，展示真实 `MaterialComparisonGraph` 轨迹，并提供“用于期末冲刺”入口。对比和 Graph 失败只在局部提示，不影响上传、资料列表和生成课程。
 - Phase 12.1 已把 `ReportsPage` 接入真实 `/exports/learning-dossier`：选择课程后可同步导出 Markdown 学习档案，前端用返回的 Markdown 和安全文件名创建浏览器下载；导出失败只在报告页导出区域局部提示，不影响报告读取和生成。
 - Phase 6.3 已接真实 `/tutor/sessions/{session_id}/messages/stream`；`CourseSpacePage` 发送课程问题时先创建或复用课程会话，再用 `fetch` + `ReadableStream` 读取 SSE，token 到达时逐步渲染，`done` 后用后端持久化消息替换临时状态。
 - Phase 6.1 已接真实 `/settings/model` 和 `/settings/model/test`；Phase 6.2 已接真实 `/settings/model/configs`、`/settings/model/configs/{id}`、`/settings/model/configs/{id}/default` 和 `/settings/model/configs/{id}/test`；`SettingsPage` 会显示配置列表和当前编辑面板，支持创建、编辑、测试、设默认和删除用户自己的模型配置，并且不展示明文 Key。

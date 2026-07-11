@@ -78,6 +78,30 @@ class MaterialChunk(IdMixin, CreatedAtMixin, Base):
     material: Mapped["Material"] = relationship(back_populates="chunks")
 
 
+class MaterialComparisonRun(IdMixin, CreatedAtMixin, Base):
+    __tablename__ = "material_comparison_runs"
+    __table_args__ = (
+        Index("ix_material_comparison_runs_user_course_created", "user_id", "course_id", "created_at"),
+        Index("ix_material_comparison_runs_agent_trace_id", "agent_trace_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    material_ids_json: Mapped[list[int]] = mapped_column(JSONB, nullable=False, default=list)
+    result_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    agent_trace_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    generation_mode: Mapped[str] = mapped_column(String(50), nullable=False, default="deterministic_source")
+    review_mode: Mapped[str] = mapped_column(String(50), nullable=False, default="rules_only")
+
+
 class CourseMaterialLink(IdMixin, CreatedAtMixin, Base):
     __tablename__ = "course_material_links"
     __table_args__ = (

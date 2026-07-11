@@ -31,12 +31,12 @@ EduNova 坚持“基础不牢，地动山摇”的开发原则。
 
 | 项目 | 状态 |
 | --- | --- |
-| 最新完成阶段 | Phase 15 |
-| 当前主链路 | 动态画像、智能建课、主页/课程问答、资源、路径、练习评估和报告已由八条真实 LangGraph 接管 |
-| 当前主要缺口 | MaterialComparison/ExamSprint/ExportDossier 真接管、OCR、旧版 Office、扫描件、资料对比与冲刺联动及持续产品打磨 |
-| 下一步建议 | Phase 15 后剩余学习流程接管与端到端体验硬化 |
+| 最新完成阶段 | Phase 16 |
+| 当前主链路 | 动态画像、智能建课、主页/课程问答、资源、路径、练习评估、报告、资料对比和冲刺已由十条真实 LangGraph 接管 |
+| 当前主要缺口 | OCR、旧版 Office、扫描件解析，以及十条 Graph 的端到端异常恢复和持续产品打磨 |
+| 下一步建议 | Phase 16 后产品硬化；导出保持普通 Service + RQ，不强行 Graph 化 |
 
-Phase 13.2 已完成资料解析、主页工具和异步导出增强；Phase 14 已完成路径、评估、报告三条真实 Graph；Phase 15 已完成 ProfileGraph、CourseBuilderGraph、个性化策略、练习恢复和 React Flow/ECharts 可视化。后续继续做八条 Graph 的可见证据、移动体验和剩余流程接管。
+Phase 13.2 已完成资料解析、主页工具和异步导出增强；Phase 14 已完成路径、评估、报告三条真实 Graph；Phase 15 已完成 ProfileGraph、CourseBuilderGraph、个性化策略、练习恢复和 React Flow/ECharts 可视化；Phase 16 已完成资料对比、冲刺和来源练习回流。后续继续做十条 Graph 的可见证据、移动体验和异常恢复。
 
 ## 4. 里程碑
 
@@ -119,7 +119,7 @@ Phase 13.2 已完成资料解析、主页工具和异步导出增强；Phase 14 
 - [x] 练习评估和弱点队列来源扩展第一刀。
 - [x] 学习报告真实数据第一刀。
 - [x] 学习报告 Markdown 导出。
-- [ ] 资料对比结果与期末冲刺联动。
+- [x] 资料对比结果不可变持久化，并通过显式 `comparison_id` 与期末冲刺联动。
 - [x] PDF/PPTX/DOCX 文本解析专项第一刀。
 - [x] 开源准备和提交材料文档专项第一刀。
 - [x] Phase 13 前端视觉硬化第一轮：统一设计 token 和品牌色，补可见焦点，优化登录页/主页/课程首屏，并把移动端完整侧栏改为紧凑顶栏 + 覆盖式抽屉。
@@ -134,7 +134,9 @@ Phase 13.2 已完成资料解析、主页工具和异步导出增强；Phase 14 
 - [x] LangGraph 真接管主页问答：`HomeTutorGraph` 生产链路已接管 context、route、material_retriever、web_search、planner、answer、review、repair、persist；主页资料来源来自 `material_chunks` 相关片段，SSE 失败不写半截消息。
 - [x] Phase 15：`ProfileGraph` 真接管画像更新与学习信号门控，`CourseBuilderGraph` 真接管资料建课，生产 Graph 增至八条。
 - [x] Phase 15：adaptive 练习、最近会话、草稿恢复、React Flow 课程知识图谱和 ECharts 掌握度/趋势图落地。
-- [x] 文档口径同步：统一为八条真实生产 Graph，其余学习流程继续保持服务逻辑和兼容 trace。
+- [x] Phase 16：`MaterialComparisonGraph` 与 `ExamSprintGraph` 真接管，生产 Graph 增至十条。
+- [x] Phase 16：资料对比版本恢复、显式冲刺入口、当前计划恢复、针对性练习和失败隔离回流落地。
+- [x] 文档口径同步：统一为十条真实生产 Graph；学习档案导出保持普通异步服务。
 - [x] 大模型参与度补强：路径使用模型排序理由，练习使用题目增强与错因诊断，报告使用叙事增强；客观数字保持确定性规则，模型失败完整 fallback。
 - [x] 检索能力升级：主页资料级和课程级 RAG 都可使用 pgvector SQL cosine 候选；课程侧按 embedding 来源/模型隔离，本地 hash 不宣称语义命中。
 - [x] 多模态资源补强：已完成 Markmap 思维导图、Mermaid 动画图解、交互练习、Pyodide Python 和真实 PPTX；不宣称生成视频。

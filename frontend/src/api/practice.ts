@@ -14,6 +14,8 @@ export type CreatePracticeSessionRequest = {
   knowledge_point_ids: number[];
   question_count: number;
   difficulty: "adaptive" | "easy" | "medium" | "hard";
+  sprint_plan_id?: number;
+  sprint_task_id?: number;
 };
 
 export type SubmitPracticeAnswersRequest = {
@@ -79,6 +81,9 @@ export type PracticeSessionDetail = {
     path_update_status: "not_started" | "replanned" | "unchanged" | "failed";
     path_agent_trace_id?: string | null;
     recommended_resource_ids: string[];
+    sprint_update_status?: "not_started" | "replanned" | "unchanged" | "failed";
+    sprint_plan_id?: string | null;
+    sprint_agent_trace_id?: string | null;
   } | null;
   created_at: string;
   updated_at: string;

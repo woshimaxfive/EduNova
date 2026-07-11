@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
+from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.models import User
+from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.materials import AttachCourseMaterialsRequest, CompareMaterialsRequest
 from backend.app.services.materials import (
     CourseNotFoundError,
@@ -14,13 +17,23 @@ from backend.app.services.materials import (
     MaterialValidationError,
     SqlAlchemyMaterialRepository,
 )
+from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 
 
 router = APIRouter(tags=["materials"])
 
 
 def get_material_service(db=Depends(get_db_session)) -> MaterialService:
-    return MaterialService(SqlAlchemyMaterialRepository(db))
+    model_service = ModelSettingsService(
+        repository=SqlAlchemyModelSettingsRepository(db),
+        settings=get_settings(),
+        provider=OpenAICompatibleChatProvider(),
+    )
+    return MaterialService(
+        SqlAlchemyMaterialRepository(db),
+        model_service=model_service,
+        trace_recorder=AgentTraceRecorder(),
+    )
 
 
 @router.post("/materials/upload")
@@ -75,6 +88,32 @@ def compare_materials(
     except (CourseNotFoundError, MaterialNotFoundError) as exc:
         raise ApiError(status_code=status.HTTP_404_NOT_FOUND, code="NOT_FOUND", message=str(exc)) from exc
 
+    return api_response(result.model_dump())
+
+
+@router.get("/materials/comparisons/latest")
+def get_latest_material_comparison(
+    course_id: int = Query(...),
+    current_user: User = Depends(get_current_user),
+    service: MaterialService = Depends(get_material_service),
+) -> dict:
+    try:
+        result = service.get_latest_comparison(current_user, course_id)
+    except CourseNotFoundError as exc:
+        raise ApiError(status_code=status.HTTP_404_NOT_FOUND, code="NOT_FOUND", message=str(exc)) from exc
+    return api_response(result.model_dump() if result is not None else None)
+
+
+@router.get("/materials/comparisons/{comparison_id}")
+def get_material_comparison(
+    comparison_id: int,
+    current_user: User = Depends(get_current_user),
+    service: MaterialService = Depends(get_material_service),
+) -> dict:
+    try:
+        result = service.get_comparison(current_user, comparison_id)
+    except MaterialNotFoundError as exc:
+        raise ApiError(status_code=status.HTTP_404_NOT_FOUND, code="NOT_FOUND", message=str(exc)) from exc
     return api_response(result.model_dump())
 
 

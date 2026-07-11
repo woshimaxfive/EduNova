@@ -7,7 +7,7 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.api.errors import make_trace_id
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.models import (
     AssessmentReport,
     Course,
@@ -18,8 +18,10 @@ from backend.app.models import (
     LearningPath,
     LearningTask,
     Material,
+    MaterialComparisonRun,
     PracticeAnswer,
     PracticeSession,
+    StudentProfile,
     User,
     WeaknessReviewItem,
 )
@@ -44,6 +46,10 @@ class ExamSprintValidationError(Exception):
     pass
 
 
+class ExamSprintModelService(Protocol):
+    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
+
+
 class ExamSprintRepository(Protocol):
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None: ...
 
@@ -59,6 +65,12 @@ class ExamSprintRepository(Protocol):
 
     def get_latest_report(self, user_id: int, course_id: int) -> AssessmentReport | None: ...
 
+    def get_profile(self, user_id: int) -> StudentProfile | None: ...
+
+    def get_comparison_run_for_user(self, user_id: int, comparison_id: int) -> MaterialComparisonRun | None: ...
+
+    def get_current_sprint_path(self, user_id: int, course_id: int) -> LearningPath | None: ...
+
     def archive_active_sprint_paths(self, user_id: int, course_id: int) -> None: ...
 
     def add_path(self, path: LearningPath) -> LearningPath: ...
@@ -66,6 +78,8 @@ class ExamSprintRepository(Protocol):
     def add_task(self, task: LearningTask) -> LearningTask: ...
 
     def get_sprint_path_for_user(self, user_id: int, plan_id: int) -> LearningPath | None: ...
+
+    def get_sprint_task_for_user(self, user_id: int, plan_id: int, task_id: int) -> LearningTask | None: ...
 
     def list_tasks_for_path(self, path_id: int) -> list[LearningTask]: ...
 
@@ -157,6 +171,29 @@ class SqlAlchemyExamSprintRepository:
             .order_by(AssessmentReport.created_at.desc(), AssessmentReport.id.desc())
         )
 
+    def get_profile(self, user_id: int) -> StudentProfile | None:
+        return self.db.scalar(select(StudentProfile).where(StudentProfile.user_id == user_id))
+
+    def get_comparison_run_for_user(self, user_id: int, comparison_id: int) -> MaterialComparisonRun | None:
+        return self.db.scalar(
+            select(MaterialComparisonRun).where(
+                MaterialComparisonRun.id == comparison_id,
+                MaterialComparisonRun.user_id == user_id,
+            )
+        )
+
+    def get_current_sprint_path(self, user_id: int, course_id: int) -> LearningPath | None:
+        return self.db.scalar(
+            select(LearningPath)
+            .where(
+                LearningPath.user_id == user_id,
+                LearningPath.course_id == course_id,
+                LearningPath.status == "sprint_active",
+            )
+            .order_by(LearningPath.updated_at.desc(), LearningPath.id.desc())
+            .limit(1)
+        )
+
     def archive_active_sprint_paths(self, user_id: int, course_id: int) -> None:
         for path in self.db.scalars(
             select(LearningPath).where(
@@ -184,6 +221,15 @@ class SqlAlchemyExamSprintRepository:
                 LearningPath.id == plan_id,
                 LearningPath.user_id == user_id,
                 LearningPath.status.in_(["sprint_active", "sprint_archived"]),
+            )
+        )
+
+    def get_sprint_task_for_user(self, user_id: int, plan_id: int, task_id: int) -> LearningTask | None:
+        return self.db.scalar(
+            select(LearningTask).where(
+                LearningTask.id == task_id,
+                LearningTask.path_id == plan_id,
+                LearningTask.user_id == user_id,
             )
         )
 
@@ -227,11 +273,28 @@ class SprintTaskSpec:
     status: str
 
 
+@dataclass(frozen=True)
+class ExamSprintReplanResult:
+    status: str
+    plan_id: int | None
+    trace_id: str | None
+    detail: ExamSprintPlanResponse | None
+
+
 class ExamSprintService:
+    validation_error = ExamSprintValidationError
+    not_found_error = ExamSprintNotFoundError
     valid_durations = {3, 7, 14}
 
-    def __init__(self, repository: ExamSprintRepository) -> None:
+    def __init__(
+        self,
+        repository: ExamSprintRepository,
+        model_service: ExamSprintModelService | None = None,
+        trace_recorder: AgentTraceRecorder | None = None,
+    ) -> None:
         self.repository = repository
+        self.model_service = model_service
+        self.trace_recorder = trace_recorder
 
     def generate_plan(
         self,
@@ -239,78 +302,77 @@ class ExamSprintService:
         course_id: int,
         duration_days: int,
         material_ids: list[int] | None = None,
+        comparison_id: int | None = None,
         goal: str = "",
     ) -> ExamSprintPlanResponse:
         if duration_days not in self.valid_durations:
             raise ExamSprintValidationError("冲刺计划时长只能是 3、7 或 14 天。")
-        course = self._require_course(user, course_id)
-        normalized_material_ids = [item for item in dict.fromkeys(material_ids or []) if item > 0]
-        if normalized_material_ids and not self.repository.validate_material_ids(user.id, course.id, normalized_material_ids):
-            raise ExamSprintNotFoundError("资料不存在或不属于当前课程。")
+        from backend.app.agents.exam_sprint import ExamSprintGraphRunner
 
-        context = self._collect_context(user, course)
-        if not context["knowledge_points"]:
-            raise ExamSprintValidationError("当前课程还没有可用于生成冲刺计划的知识点。")
-
-        effective_goal = " ".join(goal.split())[:500] or f"完成《{course.title}》期末冲刺复习"
-        agent_trace_id = make_trace_id()
-        now = datetime.now(UTC)
-        plan_payload = self._build_plan_payload(
-            course=course,
+        return ExamSprintGraphRunner(self).run(
+            user=user,
+            course_id=course_id,
             duration_days=duration_days,
-            goal=effective_goal,
-            material_filter_count=len(normalized_material_ids),
-            now=now,
-            **context,
+            material_ids=material_ids or [],
+            comparison_id=comparison_id,
+            goal=goal,
+            trigger="manual",
         )
 
-        try:
-            self.repository.archive_active_sprint_paths(user.id, course.id)
-            path = self.repository.add_path(
-                LearningPath(
-                    user_id=user.id,
-                    course_id=course.id,
-                    title=f"{course.title} 期末冲刺计划",
-                    goal=effective_goal,
-                    status="sprint_active",
-                    agent_trace_id=agent_trace_id,
-                    plan_json={key: value for key, value in plan_payload.items() if key != "task_specs"},
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            task_days: dict[str, int] = {}
-            for spec in plan_payload["task_specs"]:
-                task = self.repository.add_task(
-                    LearningTask(
-                        path_id=path.id,
-                        user_id=user.id,
-                        course_id=course.id,
-                        knowledge_point_id=spec.knowledge_point_id,
-                        title=spec.title,
-                        task_type=spec.task_type,
-                        reason=spec.reason,
-                        recommended_resource_ids=spec.resource_ids,
-                        status=spec.status,
-                        due_at=spec.due_at,
-                        next_review_at=None,
-                        created_at=now,
-                        updated_at=now,
-                    )
-                )
-                task_days[str(task.id)] = spec.day_index
-            path.plan_json = {**(path.plan_json or {}), "task_days": task_days}
-            self.repository.commit()
-            self.repository.refresh(path)
-        except Exception:
-            self.repository.rollback()
-            raise
+    def get_current_plan(self, user: User, course_id: int) -> ExamSprintPlanResponse | None:
+        course = self._require_course(user, course_id)
+        path = self.repository.get_current_sprint_path(user.id, course.id)
+        if path is None:
+            return None
+        resources = self.repository.list_generated_resources(user.id, course.id)
+        return self._build_response(path, self.repository.list_tasks_for_path(path.id), resources)
 
-        return self._build_response(
-            path,
-            self.repository.list_tasks_for_path(path.id),
-            context["resources"],
+    def validate_practice_source(self, user: User, course_id: int, plan_id: int, task_id: int) -> LearningTask:
+        path = self.repository.get_sprint_path_for_user(user.id, plan_id)
+        if path is None or path.status != "sprint_active" or int(path.course_id or 0) != course_id:
+            raise ExamSprintNotFoundError("冲刺计划不存在、已归档或不属于当前课程。")
+        task = self.repository.get_sprint_task_for_user(user.id, plan_id, task_id)
+        if task is None or int(task.course_id or 0) != course_id or task.task_type != "sprint_practice":
+            raise ExamSprintNotFoundError("冲刺必刷题任务不存在或无权访问。")
+        return task
+
+    def replan_after_assessment(
+        self,
+        user: User,
+        course_id: int,
+        assessment_session_id: int,
+        plan_id: int,
+        task_id: int,
+    ) -> ExamSprintReplanResult:
+        previous = self.repository.get_sprint_path_for_user(user.id, plan_id)
+        if previous is None or previous.status != "sprint_active" or int(previous.course_id or 0) != course_id:
+            return ExamSprintReplanResult("unchanged", None, None, None)
+        task = self.validate_practice_source(user, course_id, plan_id, task_id)
+        task.status = "completed"
+        task.updated_at = datetime.now(UTC)
+        # The practice result and its source task are already facts. Persist the
+        # completion before starting an independent replanning transaction so a
+        # failed graph run cannot reopen the task.
+        self.repository.commit()
+        self.repository.refresh(task)
+        plan_json = previous.plan_json or {}
+        duration_days = int(plan_json.get("duration_days") or 7)
+        comparison_id = self._safe_int(plan_json.get("comparison_id"))
+        material_ids = [self._safe_int(item) for item in plan_json.get("material_ids") or []]
+        from backend.app.agents.exam_sprint import ExamSprintGraphRunner
+
+        detail = ExamSprintGraphRunner(self).run(
+            user=user,
+            course_id=course_id,
+            duration_days=duration_days if duration_days in self.valid_durations else 7,
+            material_ids=[item for item in material_ids if item is not None],
+            comparison_id=comparison_id,
+            goal=previous.goal or "",
+            trigger="assessment_reflow",
+            source_practice_session_id=assessment_session_id,
+            previous_path=previous,
         )
+        return ExamSprintReplanResult("replanned", int(detail.id), detail.agent_trace_id, detail)
 
     def get_plan(self, user: User, plan_id: int) -> ExamSprintPlanResponse:
         path = self.repository.get_sprint_path_for_user(user.id, plan_id)
@@ -326,7 +388,9 @@ class ExamSprintService:
         return course
 
     def _collect_context(self, user: User, course: Course) -> dict:
+        get_profile = getattr(self.repository, "get_profile", None)
         return {
+            "profile": get_profile(user.id) if callable(get_profile) else None,
             "knowledge_points": self.repository.list_knowledge_points(course.id),
             "weakness_items": self.repository.list_weakness_review_items(user.id, course.id),
             "resources": self.repository.list_generated_resources(user.id, course.id),
@@ -587,6 +651,17 @@ class ExamSprintService:
             id=str(path.id),
             course_id=str(path.course_id),
             agent_trace_id=getattr(path, "agent_trace_id", None),
+            comparison_id=str(plan_json.get("comparison_id")) if plan_json.get("comparison_id") else None,
+            trigger=str(plan_json.get("trigger") or "manual"),
+            revision_of=str(plan_json.get("revision_of")) if plan_json.get("revision_of") else None,
+            source_practice_session_id=(
+                str(plan_json.get("source_practice_session_id")) if plan_json.get("source_practice_session_id") else None
+            ),
+            preserved_task_count=int(plan_json.get("preserved_task_count") or 0),
+            generation_mode=str(plan_json.get("generation_mode") or "deterministic_source"),
+            review_mode=str(plan_json.get("review_mode") or "rules_only"),
+            review_result=dict(plan_json.get("review_result") or {}),
+            warnings=[str(item) for item in plan_json.get("warnings") or []],
             duration_days=int(plan_json.get("duration_days") or 0),
             goal=path.goal,
             status=path.status,

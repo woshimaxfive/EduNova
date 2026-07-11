@@ -11,9 +11,9 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 15 个性化根基与智能课程生产**。Phase 13 已让主页问答、课程问答和资源生成进入真实 LangGraph 编排，Phase 14 让学习路径、练习评估和学习报告进入真实生产 Graph，Phase 15 继续让动态画像和资料建课由生产 Graph 接管，并补齐课程知识图谱、掌握度/趋势图和练习草稿恢复。
+当前最新完成到 **Phase 16 资料证据与期末冲刺智能闭环**。Phase 13 已让主页问答、课程问答和资源生成进入真实 LangGraph 编排，Phase 14 让学习路径、练习评估和学习报告进入真实生产 Graph，Phase 15 让动态画像和资料建课由生产 Graph 接管，Phase 16 继续完成资料对比与期末冲刺的真实编排和练习回流。
 
-当前八条真实生产 Graph 为 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph` 和 `ReportGraph`。资料对比、期末冲刺和学习档案导出仍使用普通服务与兼容 trace，不把“有 trace”夸大为“已由 LangGraph 接管”。认证、设置、Dashboard 等非学习能力保持普通服务。
+当前十条真实生产 Graph 为 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph`、`MaterialComparisonGraph` 和 `ExamSprintGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
 
 已经具备的主链路：
 
@@ -33,8 +33,8 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - `/courses/{course_id}/mastery-map` 已实现规则掌握度图，`/courses/{course_id}/learning-state` 已返回真实 `path_summary`、`mastery_summary`、弱点推荐资源和下次复习时间。
 - `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已由 `AssessmentGraph` 编排出题和评估，支持 `adaptive` 难度；最近练习与未提交草稿可通过 URL、最近会话接口和草稿接口恢复。客观分数始终由规则决定。
 - `/reports/generate` 和 `/reports/latest` 已由 `ReportGraph` 聚合最近 5 次练习、掌握度、弱点、路径和资源。分数与趋势由规则计算，模型只增强叙事和建议；报告继续由用户主动生成。学习档案同步/异步导出接口保持兼容。
-- `/exam-sprint/plans` 已实现期末冲刺计划生成和读取；复用 `learning_paths` / `learning_tasks`，用 `sprint_active` / `sprint_archived` 避免影响普通学习路径，`/app/path` 可生成并展示每日任务、高频点、薄弱点、必刷题、易错提醒和推荐资源。
-- `/materials/compare` 已实现同课程资料对比第一刀；`/app/library` 可选择已绑定课程的两份以上已解析资料，展示重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序和安全引用摘要。
+- `/exam-sprint/plans` 已由 `ExamSprintGraph` 接管；复用 `learning_paths` / `learning_tasks`，可消费显式选中的资料对比证据，并且只有带冲刺任务来源的练习才会完成来源任务和独立重排剩余计划。
+- `/materials/compare` 已由 `MaterialComparisonGraph` 接管；每次对比保存不可变版本，可恢复最近结果、追溯真实资料分块和审核轨迹，并从资料库显式带入期末冲刺。
 - `/app/tutor` 已收敛为课程辅导入口，真实提问统一进入课程空间。
 - 多套个人模型配置、默认配置切换、服务器 `.env` 兜底。
 - OpenAI-compatible Embeddings 与 pgvector SQL cosine 候选；未配置或 Provider 失败时退回关键词检索，`local-hash-1536` 不再标记为语义命中。
@@ -44,11 +44,10 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 还没有进入的能力：
 
-- OCR 和图片题目识别。
+- OCR、图片题目识别、旧版 Office 和扫描件解析。
 - 讯飞原生 Embeddingp/Embeddingq。
 - 个人全局资源生成入口和资源版本化编辑；当前只有 PPTX 文件渲染进入异步任务，结构化资源生成仍为同步 Graph。
-- 资料对比结果持久化、资料对比与期末冲刺联动。
-- MaterialComparison、ExamSprint 和 ExportDossier 的真实 LangGraph 接管。
+- 学习档案导出的 Agent 化；当前确定性 Service + RQ 已满足业务需要，不列为默认开发目标。
 
 详细状态见 [docs/STATUS.md](docs/STATUS.md)，后续任务看 [docs/PROJECT_BOARD.md](docs/PROJECT_BOARD.md)。
 

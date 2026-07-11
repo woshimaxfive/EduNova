@@ -3,6 +3,13 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+class MaterialReviewResult(BaseModel):
+    review_status: str
+    confidence: float
+    risk_flags: list[str] = Field(default_factory=list)
+    safety_summary: str
+
+
 class MaterialUploadResult(BaseModel):
     id: str
     material_id: int
@@ -86,9 +93,15 @@ class MaterialComparisonPoint(BaseModel):
 
 
 class MaterialComparisonResult(BaseModel):
+    id: str | None = None
     course_id: str
     material_ids: list[str]
     agent_trace_id: str | None = None
+    generation_mode: str = "deterministic_source"
+    review_mode: str = "rules_only"
+    review_result: MaterialReviewResult | None = None
+    warnings: list[str] = Field(default_factory=list)
+    created_at: str | None = None
     summary: MaterialComparisonSummary
     repeated_concepts: list[MaterialComparisonPoint]
     exam_likely_points: list[MaterialComparisonPoint]

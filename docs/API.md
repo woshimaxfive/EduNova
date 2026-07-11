@@ -782,7 +782,7 @@ Authorization: Bearer <token>
       "source_type": "uploaded",
       "status": "ready",
       "progress_percent": 0,
-      "material_count": 2,
+      "compared_material_count": 2,
       "knowledge_point_count": 6,
       "chunk_count": 18
     },
@@ -813,7 +813,7 @@ Authorization: Bearer <token>
 
 ### POST `/materials/compare`
 
-用途：对同一课程下 2 份以上资料做确定性对比，输出重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序和安全引用。Phase 11.2 已实现第一刀；本接口不调用外部模型、不持久化对比结果、不做 OCR 或深度解析，不返回完整资料原文。
+用途：由 `MaterialComparisonGraph` 对同一课程下 2 份以上资料做可追溯对比，输出重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序和安全引用。每次调用创建不可变版本；规则结果完整可用，模型只增强解释和复习排序。
 
 请求：
 
@@ -838,12 +838,13 @@ Authorization: Bearer <token>
 ```json
 {
   "data": {
+    "id": "1201",
     "course_id": "1",
     "material_ids": ["1", "2"],
     "summary": {
       "material_count": 2,
       "comparable_material_count": 2,
-      "concept_count": 5,
+      "matched_concept_count": 5,
       "citation_count": 4,
       "message": "已基于课程知识切片和安全短摘录完成资料对比。"
     },
@@ -872,7 +873,17 @@ Authorization: Bearer <token>
         "excerpt": "启发式搜索使用启发函数估计路径代价。",
         "confidence": "high"
       }
-    ]
+    ],
+    "generation_mode": "deterministic_source",
+    "review_mode": "rules_only",
+    "review_result": {
+      "review_status": "passed",
+      "confidence": 0.82,
+      "risk_flags": [],
+      "safety_summary": "引用和资料范围校验通过。"
+    },
+    "warnings": [],
+    "created_at": "2026-07-11T10:00:00Z"
   },
   "trace_id": "trace_20260705_001"
 }
@@ -882,7 +893,16 @@ Authorization: Bearer <token>
 
 - `citations.excerpt` 只返回短摘录。
 - 响应不包含完整资料原文、系统提示词、模型输入、API Key 或用户隐私原文。
-- 本阶段结果只在 `/app/library` 展示，不写入数据库，也不改变 Phase 11.1 期末冲刺计划生成语义。
+- 审核后的安全结果写入 `material_comparison_runs`；重新对比会创建新版本，不覆盖历史结果。
+- 低重合时返回 warning，不伪造共同重点；模型不得创建不存在的资料、知识点或引用 ID。
+
+### GET `/materials/comparisons/latest?course_id=...`
+
+用途：恢复当前用户当前课程最近一次资料对比；没有结果时返回 `data=null`。
+
+### GET `/materials/comparisons/{comparison_id}`
+
+用途：读取当前用户自己的不可变资料对比版本。非本人记录或课程不匹配返回 404。
 
 ## 9. RAG 接口
 
@@ -1569,9 +1589,13 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
   "course_id": 1,
   "knowledge_point_ids": [8],
   "question_count": 5,
-  "difficulty": "medium"
+  "difficulty": "adaptive",
+  "sprint_plan_id": 3001,
+  "sprint_task_id": 4002
 }
 ```
+
+`sprint_plan_id` 与 `sprint_task_id` 必须同时出现，且必须属于当前用户、当前课程和当前 active 冲刺计划中的 `sprint_practice` 任务。普通练习不传这两个字段。
 
 响应：
 
@@ -1678,11 +1702,15 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
   "weaknesses_updated": 0,
   "path_update_status": "replanned",
   "path_agent_trace_id": "trace_path_replan",
-  "recommended_resource_ids": ["801"]
+  "recommended_resource_ids": ["801"],
+  "sprint_update_status": "replanned",
+  "sprint_plan_id": "3002",
+  "sprint_agent_trace_id": "trace_sprint_replan"
 }
 ```
 
 `path_update_status` 为 `not_started | replanned | unchanged | failed`。路径失败不影响已完成练习和弱点更新。
+`sprint_update_status` 仅在练习带有效冲刺来源时出现，取值为 `replanned | unchanged | failed`。冲刺重排失败不回滚评分、弱点或已完成的来源任务，旧 active 冲刺计划继续可用。
 
 ### POST `/reports/generate`
 
@@ -1859,7 +1887,7 @@ course_id=101
 
 ## 16. Exam Sprint 接口
 
-状态：Phase 11.1 已实现期末冲刺模式第一刀。当前只生成课程级 3/7/14 天冲刺计划，不消费 Phase 11.2 `/materials/compare` 结果，不调用外部模型，不新增迁移。
+状态：Phase 16 已由 `ExamSprintGraph` 接管。课程级 3/7/14 天冲刺计划可显式消费已保存的资料对比；规则负责周期、证据、任务状态和进度，模型只增强排序解释与任务表述。
 
 统一规则：
 
@@ -1868,7 +1896,9 @@ course_id=101
 - 计划复用 `learning_paths` 和 `learning_tasks` 持久化，`learning_paths.plan_json.kind="exam_sprint"`。
 - 冲刺计划状态使用 `sprint_active` / `sprint_archived`，不会污染 `/paths/current` 的普通 `active` 学习路径。
 - 同一用户同一课程生成新冲刺计划时，只归档旧 `sprint_active`，不归档普通学习路径。
-- `material_ids` 只作为本课程资料筛选依据，本接口内不执行资料对比或跨资料差异分析。
+- `comparison_id` 仅在请求显式携带时使用；直接进入路径页不会隐式套用最近对比。
+- 同时传 `comparison_id` 和 `material_ids` 时，两者资料范围必须一致，否则返回 400。
+- 只有携带有效 `sprint_plan_id` / `sprint_task_id` 创建的练习会完成来源任务并独立触发冲刺重排；普通课程练习不影响冲刺计划。
 - 响应和 `plan_json` 不保存系统提示词、模型输入、API Key、完整资料原文、完整用户画像原文或完整练习原始答案。
 
 ### POST `/exam-sprint/plans`
@@ -1882,6 +1912,7 @@ course_id=101
   "course_id": 1,
   "duration_days": 7,
   "material_ids": [1, 2],
+  "comparison_id": 1201,
   "goal": "复习人工智能导论期末考试"
 }
 ```
@@ -1890,7 +1921,8 @@ course_id=101
 
 - `course_id`：必填，当前用户自己的课程 ID。
 - `duration_days`：只允许 `3`、`7`、`14`。
-- `material_ids`：可选，必须属于当前用户且已关联当前课程；本阶段只用于限定证据来源。
+- `material_ids`：可选，必须属于当前用户且已关联当前课程；用于限定证据来源。
+- `comparison_id`：可选，必须是当前用户、当前课程且资料范围一致的已保存对比。
 - `goal`：可选，最长 500 字。
 
 响应：
@@ -1903,6 +1935,15 @@ course_id=101
     "duration_days": 7,
     "goal": "复习人工智能导论期末考试",
     "status": "sprint_active",
+    "comparison_id": "1201",
+    "trigger": "manual",
+    "revision_of": null,
+    "source_practice_session_id": null,
+    "preserved_task_count": 0,
+    "generation_mode": "deterministic_source",
+    "review_mode": "rules_only",
+    "review_result": {"review_status":"passed","confidence":0.82,"risk_flags":[],"safety_summary":"规则审核通过。"},
+    "warnings": [],
     "high_frequency_points": [
       {
         "knowledge_point_id": "402",
@@ -1975,10 +2016,15 @@ course_id=101
 - 未登录返回 401。
 - 课程不存在、非本人课程、资料不存在或资料不属于当前课程返回 404。
 - `duration_days` 不为 `3/7/14` 或课程没有可用知识点时返回 400/422，且不生成假计划。
+- `comparison_id` 不属于当前用户/课程返回 404；对比资料范围冲突返回 400。
 
 ### GET `/exam-sprint/plans/{plan_id}`
 
 用途：查看当前用户自己的冲刺计划。非本人计划返回 404，避免跨用户枚举。
+
+### GET `/exam-sprint/plans/current?course_id=...`
+
+用途：恢复当前用户当前课程的 `sprint_active` 计划；没有计划时返回 `data=null`。
 
 ## 17. Export 接口
 

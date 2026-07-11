@@ -15,6 +15,7 @@ class GenerateExamSprintPlanRequest(BaseModel):
     course_id: int
     duration_days: ExamSprintDuration
     material_ids: list[int] = Field(default_factory=list)
+    comparison_id: int | None = Field(default=None, gt=0)
     goal: str = Field(default="", max_length=500)
 
     @field_validator("material_ids")
@@ -86,6 +87,15 @@ class ExamSprintPlanResponse(BaseModel):
     id: str
     course_id: str
     agent_trace_id: str | None = None
+    comparison_id: str | None = None
+    trigger: str = "manual"
+    revision_of: str | None = None
+    source_practice_session_id: str | None = None
+    preserved_task_count: int = 0
+    generation_mode: str = "deterministic_source"
+    review_mode: str = "rules_only"
+    review_result: dict = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
     duration_days: int
     goal: str | None
     status: str

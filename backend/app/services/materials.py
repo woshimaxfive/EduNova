@@ -9,9 +9,10 @@ from uuid import uuid4
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import make_trace_id
 from backend.app.core.config import Settings, get_settings
-from backend.app.models import Course, CourseMaterial, CourseMaterialLink, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, User
+from backend.app.models import Course, CourseMaterial, CourseMaterialLink, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, MaterialComparisonRun, User
 from backend.app.schemas.materials import (
     AttachCourseMaterialsResult,
     MaterialDetail,
@@ -37,6 +38,10 @@ class MaterialNotFoundError(Exception):
 
 class CourseNotFoundError(Exception):
     pass
+
+
+class MaterialModelService(Protocol):
+    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -71,6 +76,12 @@ class MaterialRepository(Protocol):
     def list_knowledge_points(self, course_id: int) -> list[KnowledgePoint]: ...
 
     def list_knowledge_chunks(self, course_id: int) -> list[KnowledgeChunk]: ...
+
+    def add_comparison_run(self, run: MaterialComparisonRun) -> MaterialComparisonRun: ...
+
+    def get_comparison_run_for_user(self, user_id: int, comparison_id: int) -> MaterialComparisonRun | None: ...
+
+    def get_latest_comparison_run(self, user_id: int, course_id: int) -> MaterialComparisonRun | None: ...
 
     def commit(self) -> None: ...
 
@@ -140,6 +151,27 @@ class SqlAlchemyMaterialRepository:
     def list_knowledge_chunks(self, course_id: int) -> list[KnowledgeChunk]:
         return list(self.db.scalars(select(KnowledgeChunk).where(KnowledgeChunk.course_id == course_id).order_by(KnowledgeChunk.id)))
 
+    def add_comparison_run(self, run: MaterialComparisonRun) -> MaterialComparisonRun:
+        self.db.add(run)
+        self.db.flush()
+        return run
+
+    def get_comparison_run_for_user(self, user_id: int, comparison_id: int) -> MaterialComparisonRun | None:
+        return self.db.scalar(
+            select(MaterialComparisonRun).where(
+                MaterialComparisonRun.id == comparison_id,
+                MaterialComparisonRun.user_id == user_id,
+            )
+        )
+
+    def get_latest_comparison_run(self, user_id: int, course_id: int) -> MaterialComparisonRun | None:
+        return self.db.scalar(
+            select(MaterialComparisonRun)
+            .where(MaterialComparisonRun.user_id == user_id, MaterialComparisonRun.course_id == course_id)
+            .order_by(MaterialComparisonRun.created_at.desc(), MaterialComparisonRun.id.desc())
+            .limit(1)
+        )
+
     def commit(self) -> None:
         self.db.commit()
 
@@ -151,6 +183,8 @@ class SqlAlchemyMaterialRepository:
 
 
 class MaterialService:
+    validation_error = MaterialValidationError
+    not_found_error = MaterialNotFoundError
     allowed_extensions = {".txt", ".md", ".markdown", ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".png", ".jpg", ".jpeg", ".webp"}
     light_parse_extensions = {".txt", ".md", ".markdown"}
     deep_parse_extensions = {".pdf", ".docx", ".pptx"}
@@ -164,11 +198,15 @@ class MaterialService:
         settings: Settings | None = None,
         parser: DocumentParser | None = None,
         chunking_service: MaterialChunkingService | None = None,
+        model_service: MaterialModelService | None = None,
+        trace_recorder: AgentTraceRecorder | None = None,
     ) -> None:
         self.repository = repository
         self.settings = settings or get_settings()
         self.parser = parser or DocumentParser()
         self.chunking_service = chunking_service or MaterialChunkingService()
+        self.model_service = model_service
+        self.trace_recorder = trace_recorder
 
     def upload_material(
         self,
@@ -276,6 +314,27 @@ class MaterialService:
         return AttachCourseMaterialsResult(course_id=str(course.id), material_ids=attached_ids, attached_count=len(attached_ids))
 
     def compare_materials(self, user: User, course_id: int, material_ids: list[int]) -> MaterialComparisonResult:
+        from backend.app.agents.material_comparison import MaterialComparisonGraphRunner
+
+        return MaterialComparisonGraphRunner(self).run(user=user, course_id=course_id, material_ids=material_ids)
+
+    def get_comparison(self, user: User, comparison_id: int) -> MaterialComparisonResult:
+        run = self.repository.get_comparison_run_for_user(user.id, comparison_id)
+        if run is None:
+            raise MaterialNotFoundError("资料对比记录不存在或无权访问。")
+        return self._comparison_run_to_api(run)
+
+    def get_latest_comparison(self, user: User, course_id: int) -> MaterialComparisonResult | None:
+        self._require_course(user, course_id)
+        run = self.repository.get_latest_comparison_run(user.id, course_id)
+        return self._comparison_run_to_api(run) if run is not None else None
+
+    def _prepare_comparison(
+        self,
+        user: User,
+        course_id: int,
+        material_ids: list[int],
+    ) -> tuple[Course, list[Material], list[KnowledgePoint], list[MaterialEvidence]]:
         course = self._require_course(user, course_id)
         unique_material_ids = list(dict.fromkeys(material_ids))
         if len(unique_material_ids) < 2:
@@ -291,6 +350,18 @@ class MaterialService:
         material_ids_with_evidence = {item.material_id for item in evidence}
         if len(material_ids_with_evidence) < 2:
             raise MaterialValidationError("至少需要两份已解析且可比较的课程资料。")
+
+        return course, materials, knowledge_points, evidence
+
+    def _build_deterministic_comparison(
+        self,
+        course: Course,
+        material_ids: list[int],
+        knowledge_points: list[KnowledgePoint],
+        evidence: list[MaterialEvidence],
+    ) -> MaterialComparisonResult:
+        unique_material_ids = list(dict.fromkeys(material_ids))
+        material_ids_with_evidence = {item.material_id for item in evidence}
 
         concept_groups = self._group_evidence(evidence)
         citations = self._build_comparison_citations(evidence)
@@ -314,7 +385,6 @@ class MaterialService:
             if len(point.material_ids) == 1 and all(self._is_exam_material(title) for title in point.source_titles)
         ]
         covered_titles = {self._normalize_title(point.title) for point in points}
-        agent_trace_id = make_trace_id()
         missing_review = [
             MaterialComparisonPoint(
                 title=point.title,
@@ -332,7 +402,6 @@ class MaterialService:
         return MaterialComparisonResult(
             course_id=str(course.id),
             material_ids=[str(material_id) for material_id in unique_material_ids],
-            agent_trace_id=agent_trace_id,
             summary=MaterialComparisonSummary(
                 compared_material_count=len(unique_material_ids),
                 comparable_material_count=len(material_ids_with_evidence),
@@ -348,6 +417,22 @@ class MaterialService:
             priority_order=points[:10],
             citations=citations[:12],
         )
+
+    @staticmethod
+    def _comparison_run_to_api(run: MaterialComparisonRun) -> MaterialComparisonResult:
+        payload = dict(run.result_json or {})
+        payload.update(
+            {
+                "id": str(run.id),
+                "course_id": str(run.course_id),
+                "material_ids": [str(item) for item in (run.material_ids_json or [])],
+                "agent_trace_id": run.agent_trace_id,
+                "generation_mode": run.generation_mode,
+                "review_mode": run.review_mode,
+                "created_at": run.created_at.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            }
+        )
+        return MaterialComparisonResult(**payload)
 
     def _require_course(self, user: User, course_id: int) -> Course:
         course = self.repository.get_course_for_user(user.id, course_id)

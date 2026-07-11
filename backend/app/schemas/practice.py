@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.app.models import PracticeAnswer, PracticeSession
 
@@ -17,6 +17,14 @@ class CreatePracticeSessionRequest(BaseModel):
     knowledge_point_ids: list[int] = Field(default_factory=list)
     question_count: int = Field(default=5, ge=1, le=12)
     difficulty: PracticeDifficulty = "medium"
+    sprint_plan_id: int | None = Field(default=None, gt=0)
+    sprint_task_id: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def require_sprint_source_pair(self):
+        if (self.sprint_plan_id is None) != (self.sprint_task_id is None):
+            raise ValueError("sprint_plan_id 与 sprint_task_id 必须同时提供")
+        return self
 
 
 class SubmitPracticeAnswerItem(BaseModel):
@@ -78,6 +86,9 @@ class PracticeClosureUpdate(BaseModel):
     path_update_status: Literal["not_started", "replanned", "unchanged", "failed"] = "not_started"
     path_agent_trace_id: str | None = None
     recommended_resource_ids: list[str] = Field(default_factory=list)
+    sprint_update_status: Literal["not_started", "replanned", "unchanged", "failed"] = "not_started"
+    sprint_plan_id: str | None = None
+    sprint_agent_trace_id: str | None = None
 
 
 class PracticeAnswerResponse(BaseModel):

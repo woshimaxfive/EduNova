@@ -4,11 +4,11 @@
 
 ## 状态摘要
 
-当前最新完成到 **Phase 15：个性化根基与智能课程生产**。
+当前最新完成到 **Phase 16：资料证据与期末冲刺智能闭环**。
 
-Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 13 已完成主页问答、课程问答和资源生成的真实 Graph 编排，Phase 14 已让路径、练习评估和报告进入真实 LangGraph，Phase 15 已让画像和资料建课进入生产 Graph，并补齐个性化策略、学习连续性与前端可视化。
+Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 13 已完成主页问答、课程问答和资源生成的真实 Graph 编排，Phase 14 已让路径、练习评估和报告进入真实 LangGraph，Phase 15 已让画像和资料建课进入生产 Graph，Phase 16 已让资料对比和期末冲刺进入生产 Graph，并打通冲刺来源练习的独立回流。
 
-Phase 15 使用 Alembic `20260710_0012` 增加逐维画像可信度、课程 v2 结构和画像证据状态。`ProfileGraph` 支持显式画像回答和隐式学习信号，隐式信号只有通过双来源与置信度门槛才进入长期画像；`CourseBuilderGraph` 生成带真实来源覆盖、先修关系和审核摘要的课程结构，embedding 失败只降级关键词检索。练习支持 adaptive 难度、最近会话和草稿恢复；课程学习模式使用 React Flow，路径与报告使用 ECharts，同时保留可访问文本内容。
+Phase 16 使用 Alembic `20260711_0013` 新增不可变 `material_comparison_runs`。`MaterialComparisonGraph` 从真实资料/课程分块生成规则底稿，模型只增强解释与排序；`ExamSprintGraph` 可显式消费对比版本，保留已完成进度并在冲刺来源练习后独立重排。普通练习不触发冲刺，重排失败不回滚评分、弱点或来源任务完成状态。
 
 Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`AssessmentGraph` 保证客观分数由规则决定，错题精确关联 `PracticeAnswer` 并合并更新弱点；`PathPlanningGraph` 只重排已有路径并保留完成进度；`ReportGraph` 确定性聚合最近 5 次练习和趋势。模型只增强题目、诊断、路径理由和报告叙事，失败时明确使用 `rules_only`。课程 RAG 在外部 embedding 可用时使用 pgvector SQL cosine 候选，未配置或失败时退回关键词检索，不再把本地 hash 宣称为语义命中。
 
@@ -36,19 +36,19 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 - Phase 7.2 已明确用户级画像和课程级学习状态的边界：用户级画像只有一份，课程级目标、薄弱点、掌握度、复习队列和学习路径按课程聚合。
 - Phase 7.3 已把课程问答弱点候选事件同步为课程级 `weakness_review_queue` 待确认复习项，并在课程空间展示真实“待复习弱点”摘要。
 - Phase 7.4 已为课程级弱点复习项补齐确认、开始、完成和软忽略状态流转，课程空间可以直接操作真实队列项。
-- 2026-07-10 Phase 15 后，`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph` 和 `ReportGraph` 已真接管八条生产主链路；资料对比、期末冲刺和导出仍保留现有服务逻辑与兼容 trace。
+- 2026-07-11 Phase 16 后，`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph`、`MaterialComparisonGraph` 和 `ExamSprintGraph` 已真接管十条生产主链路；学习档案导出继续使用确定性 Service + Redis/RQ Worker。
 - `/resources` 可基于当前用户课程生成讲解、思维导图、练习、代码实操、PPT 和动画图解。六个 Worker 分别执行模型增强并保留确定性 fallback，ReviewAgent 结合结构规则和模型审核，失败资源最多修订一次；旧 Markdown 资源继续兼容读取。
 - Phase 9 已挂载 `/paths`，可为当前用户课程生成 active 学习路径、更新任务状态，并把 `/app/path` 接入真实课程、任务、路径依据和掌握度图。
 - Phase 9 已实现 `/courses/{course_id}/mastery-map`，并让 `/courses/{course_id}/learning-state` 返回真实路径摘要、掌握度摘要、弱点推荐资源和下次复习时间。
 - Phase 14 已将 `/practice` 和 `/reports` 升级为真实 Graph：练习创建/提交保留确定性分数并生成错因诊断，错题与弱点证据精确绑定，已有路径自动重排；报告聚合最近 5 次练习并展示规则趋势、证据摘要和真实轨迹。
-- Phase 11.1 已挂载 `/exam-sprint`，可基于课程知识点、已确认/复习中弱点、练习低分、资源和报告建议生成 3/7/14 天课程级期末冲刺计划，并在 `/app/path` 展示冲刺任务、高频点、薄弱点、必刷题、易错提醒和推荐资源。
+- Phase 16 已用 `ExamSprintGraph` 接管 `/exam-sprint`，可基于课程证据、显式资料对比、画像、弱点、练习、资源和报告生成 3/7/14 天冲刺计划，并在冲刺来源练习后保留进度重排剩余任务。
 - Phase 11.2 已挂载 `/materials/compare`，可对同一课程下 2 份以上已绑定资料做确定性对比，输出重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序和安全引用，并在 `/app/library` 展示。
 - Phase 12.1 已挂载 `/exports/learning-dossier`，可同步导出当前用户课程级 Markdown 学习档案；Phase 13.2 已挂载 `/exports/learning-dossier/jobs`、`/exports/{job_id}` 和 `/exports/{job_id}/download`，可通过 Redis/RQ worker 异步生成 Markdown/PDF/DOCX 学习档案，并在 `/app/reports` 选择格式下载。
 - Phase 12.2 已补齐交付基线文档、开源说明、MIT 许可证、用户指南、答辩问答、测试报告和验收证据索引。
 
-2026-07-10 后，八条主链路已经由真实 Graph runner 编排并落 `agent_run_logs`：动态画像、智能建课、主页问答、课程问答、资源生成、学习路径、练习评估和学习报告。资料对比、期末冲刺和学习档案导出仍使用现有服务逻辑与兼容 trace。认证、设置、Dashboard 等非学习能力保持普通服务。
+2026-07-11 后，十条主链路已经由真实 Graph runner 编排并落 `agent_run_logs`：动态画像、智能建课、主页问答、课程问答、资源生成、学习路径、练习评估、学习报告、资料对比和期末冲刺。学习档案导出、认证、设置、Dashboard 等能力保持普通服务。
 
-当前仍然不是完整商业产品。课程级路径、错题诊断与回流、掌握度、学习报告、期末冲刺、资料对比、资料解析、学习档案导出和隔离 Docker E2E 已接入；但资料对比与期末冲刺联动、OCR、旧版 Office、扫描件解析，以及剩余学习流程的真实 Graph 接管仍在后续阶段。
+当前仍然不是完整商业产品。课程级路径、错题诊断与回流、掌握度、学习报告、资料对比版本、期末冲刺联动、资料解析、学习档案导出和隔离 Docker E2E 已接入；OCR、旧版 Office、扫描件解析和更广的端到端异常恢复仍在后续阶段。
 
 ## 已完成主链路
 
@@ -57,7 +57,7 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 | 认证 | 注册、登录、读取当前用户、退出、受保护路由 | `/api/v1/auth/*` |
 | 首页总览 | 当前用户课程、资料、主页历史和空状态 | `/api/v1/dashboard/summary` |
 | 主页会话 | `HomeTutorGraph`、资料级 RAG、联网/深度规划、SSE Markdown、Review/Repair、连续追问、历史切换、改名、软删除和刷新保留 | `/api/v1/tutor/sessions` |
-| 资料库 | 上传、列表、详情、解析进度、课程关联和同课程资料对比 | `/api/v1/materials/*` |
+| 资料库 | 上传、列表、详情、解析进度、课程关联、不可变资料对比版本和最近结果恢复 | `/api/v1/materials/*` |
 | 智能建课 | `CourseBuilderGraph` 从已解析 TXT/Markdown/PDF/DOCX/PPTX 资料生成 v2 课程结构、知识点、先修关系和来源切片 | `/api/v1/courses/from-materials` |
 | 课程详情 | 课程列表、详情、概览、知识点 | `/api/v1/courses/*` |
 | RAG 检索 | 外部 embedding + pgvector SQL 与关键词混合；本地关键词 fallback | `/api/v1/rag/search` |
@@ -75,8 +75,8 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 | 练习评估 | `AssessmentGraph` 出题、确定性评分、错因诊断、弱点与路径回流 | `/api/v1/practice/*` |
 | 学习报告 | `ReportGraph` 聚合最近练习、掌握度、弱点、路径、资源与趋势 | `/api/v1/reports/*` |
 | 学习档案导出 | 同步 Markdown 兼容接口与 Markdown/PDF/DOCX 异步导出任务 | `/api/v1/exports/*` |
-| 期末冲刺 | 生成 3/7/14 天课程级冲刺计划、每日任务、高频点、必刷题和易错提醒 | `/api/v1/exam-sprint/*` |
-| 资料对比 | 同课程多资料重复重点、疑似考点、独有点、遗漏点和安全引用 | `/api/v1/materials/compare` |
+| 期末冲刺 | `ExamSprintGraph` 生成/恢复 3/7/14 天计划，支持对比证据、针对性练习和独立重排 | `/api/v1/exam-sprint/*` |
+| 资料对比 | `MaterialComparisonGraph` 生成同课程资料安全对比、不可变版本和真实 trace | `/api/v1/materials/compare`、`/api/v1/materials/comparisons/*` |
 | 交付基线 | 开源说明、开发指南、测试报告、用户指南、答辩问答、MIT 许可证和验收证据索引 | `docs/*`、`LICENSE` |
 
 ## 当前前端状态
@@ -86,7 +86,7 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 | `/login` | 调用真实登录接口，不提供共享演示学生按钮 |
 | `/register` | 调用真实注册接口，可选择空白开始或复制人工智能导论 |
 | `/app` | GPT 式主页，真实读取 summary、主页历史、最近课程和资料库浮层；发送后流式消费 `HomeTutorGraph` 状态、来源、Markdown token 和 Review 替换，可附加已选资料级 RAG、联网、深度规划和多轮上下文；支持语音输入、朗读、历史改名和删除 |
-| `/app/library` | 文件库式资料库，真实读取资料列表，支持上传、搜索、筛选、详情和同课程资料对比 |
+| `/app/library` | 文件库式资料库，支持上传、搜索、筛选、详情、资料对比恢复、Graph 轨迹和显式冲刺入口 |
 | `/app/courses/:courseId` | A3 个性化学习闭环主场；支持流式课程问答、React Flow 知识先修图、弱点队列、六类资源与闭环入口 |
 | `/app/settings` | 管理多套模型配置，支持 Provider 预设、保存、测试、设默认和删除 |
 | `/app/studio` | 真实资源工坊，可生成并渲染六类结构化资源，展示引用、质量分、Graph 轨迹和 PPTX 导出状态 |
@@ -94,7 +94,7 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 | `/app/tutor` | 课程辅导入口，读取当前用户课程并跳转对应课程空间，不再展示静态假问答 |
 | `/app/practice` | 支持 adaptive 难度、最近练习/草稿恢复、确定性评分、诊断和路径回流 |
 | `/app/reports` | 读取真实课程和最新报告，可生成学习报告；展示真实分数、掌握度更新、薄弱点、证据摘要和下一步建议；可创建异步导出任务并下载 Markdown/PDF/DOCX 学习档案 |
-| `/app/path` | 读取真实普通学习路径、掌握度图，并可生成当前课程 3/7/14 天期末冲刺计划 |
+| `/app/path` | 读取普通路径、掌握度图和当前冲刺计划；显式消费 `comparison_id` 并进入指定必刷题练习 |
 
 当前前端不再使用中间横向的 `ActionNotice` 提示。历史切换、筛选、开关和详情展开依靠选中态或内容变化表达；上传失败、发送失败、课程生成失败和表单校验错误使用局部提示；模型配置保存、测试、设默认和删除使用右下角轻量 toast。
 
@@ -114,7 +114,7 @@ Phase 13 前端视觉硬化后，桌面端继续保留 264px / 68px 的展开与
 | 数据库 | PostgreSQL + pgvector，Alembic 迁移到当前 head |
 | 课程包 | 人工智能导论内置课程包可幂等导入 |
 | 认证 | bcrypt、JWT、`starter_mode` 和当前用户依赖已接入 |
-| 资料库 | 独立 `materials`、`material_chunks` 和 `course_material_links` 已接入；PDF/DOCX/PPTX 文本解析、主页资料级混合检索已接入，图片/扫描件不做 OCR；Phase 11.2 已接同课程资料对比 |
+| 资料库 | `materials`、`material_chunks`、`course_material_links` 与 `material_comparison_runs` 已接入；PDF/DOCX/PPTX 可解析，图片/扫描件不做 OCR；资料对比由真实 Graph 生成并版本化 |
 | 课程 | `CourseBuilderGraph` 智能建课、v2 课程结构、来源覆盖、先修关系和课程学习状态已接入 |
 | RAG | 混合检索、引用字段和检索状态已接入 |
 | 模型 | OpenAI-compatible chat、stream、embeddings 已接入 |
@@ -125,7 +125,7 @@ Phase 13 前端视觉硬化后，桌面端继续保留 264px / 68px 的展开与
 | 练习评估 | `practice` router 已接入，复用 `practice_sessions`、`practice_answers` 和 `weakness_review_queue`，支持确定性出题、批改和弱点反哺 |
 | 学习报告 | `reports` router 已接入，复用 `assessment_reports`，支持课程最新报告读取和报告生成 |
 | 文件导出 | `export_jobs` + Redis/RQ 支持 Markdown/PDF/DOCX 学习档案和资源 PPTX 异步文件导出与下载 |
-| 期末冲刺 | `exam_sprint` router 已接入，复用 `learning_paths` 和 `learning_tasks`，支持课程级冲刺计划生成和读取 |
+| 期末冲刺 | `ExamSprintGraph` 复用 `learning_paths` 和 `learning_tasks`，支持当前计划恢复、对比证据和冲刺来源练习回流 |
 | Docker | Compose 六服务可按默认端口启动，包含 PostgreSQL、Redis、backend、export-worker、frontend、nginx；backend 与 worker 共享导出卷 |
 | 安全 | 用户数据隔离、Key 加密、脱敏返回和上传目录忽略已接入 |
 
@@ -153,9 +153,9 @@ Phase 7.2 的分层口径：
 | OCR 和图片题目识别 | 图片只入库，不做识别；扫描件 PDF 不伪装 OCR |
 | 旧版 Office 解析 | `.doc`、`.ppt` 只入库，不做深度解析 |
 | 讯飞原生 Embeddingp/Embeddingq | 暂不接入，当前用 OpenAI-compatible embeddings 或本地 fallback |
-| 资料对比增强 | Phase 11.2 已接入第一刀；结果持久化、与期末冲刺联动和跨资料原文对照页未接入 |
+| 资料对比增强 | Phase 16 已完成安全结果持久化、最近版本恢复、真实 Graph 轨迹和期末冲刺联动；不提供完整原文对照页 |
 | 资源增强 | 六类 v2 资源、逐 Worker 模型增强、规则+模型审核、单次 Repair、交互渲染和 PPTX 队列已接入；资源版本编辑、个人全局资源仍未接入 |
-| Agent 编排 hardening | 八条主链路已真接管；MaterialComparison、ExamSprint、ExportDossier 仍为后续专项 |
+| Agent 编排 hardening | 十条学习主链路已真接管；学习档案导出明确保持普通 Service + RQ Worker |
 | 弱点复习增强 | Phase 14 已接入错题精确证据、诊断去重更新、已有路径重排；队列项编辑仍未接入 |
 | 学习路径 | Phase 9 已接入真实路径生成、当前路径读取、任务状态更新和课程页摘要 |
 | 掌握度图 | Phase 10 已接入练习评估修正；仍是规则计算，不单独持久化 |
@@ -198,10 +198,11 @@ Phase 7.2 的分层口径：
 | Phase 13 hardening | 已完成 | `HomeTutorGraph`、`CourseTutorGraph` 和 `ResourceGenerationGraph` 三条主链路真接管生产流程 |
 | Phase 14 | 已完成 | `PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 真接管，错题证据与路径回流、报告趋势、pgvector SQL 课程检索和隔离 E2E |
 | Phase 15 | 已完成 | `ProfileGraph`、`CourseBuilderGraph` 真接管，画像证据门控、v2 课程结构、adaptive 练习、草稿恢复和 React Flow/ECharts 可视化 |
+| Phase 16 | 已完成 | `MaterialComparisonGraph`、`ExamSprintGraph` 真接管，不可变对比版本、显式冲刺证据和来源练习独立重排 |
 
 ## 下一步建议
 
-当前可以继续推进 **Phase 15 后剩余流程接管与产品硬化**，重点是八条 Graph 的跨页面证据是否稳定、好懂、可恢复，同时逐步接管资料对比、冲刺和导出。
+当前可以继续推进 **Phase 16 后产品硬化**，重点是十条 Graph 的跨页面证据是否稳定、好懂、可恢复，以及 OCR/旧版 Office 等明确缺口。学习档案导出保持普通异步服务，不为了数量强行 Graph 化。
 
 原因：
 
@@ -209,7 +210,7 @@ Phase 7.2 的分层口径：
 - Phase 8 已完成资源生成和可观测底座，Phase 9 已把课程级路径、掌握度、弱点推荐资源和复习时间接入。
 - Phase 10 已把真实练习、答题结果、弱点队列、掌握度修正和学习报告接入最小闭环。
 - Phase 11.1 已把课程资料、弱点、路径、练习、资源和报告建议沉淀为可展示的期末冲刺计划。
-- Phase 11.2 已把课程资料之间的重复重点、疑似考点、独有点、遗漏点和安全引用接入资料库，不需要再造资料对比持久化表。
+- Phase 16 已把课程资料对比升级为不可变版本，并通过显式 `comparison_id` 接入期末冲刺。
 - Phase 12.1 已把课程报告、弱点、路径、资源和练习证据聚合为可下载的 Markdown 学习档案；Phase 13.2 已在此基础上补齐 `export_jobs` 和 Markdown/PDF/DOCX 异步导出。
 - Phase 12.2 已把开源说明、开发指南、测试报告、用户指南、答辩问答、AI 辅助开发说明、MIT 许可证和验收证据索引补齐。
 - Phase 14 已把路径、练习和报告推进为真实 LangGraph runner；客观数字保持规则控制，路径回流失败不会回滚练习，报告仍由用户主动生成。
@@ -217,7 +218,7 @@ Phase 7.2 的分层口径：
 
 可选并行方向：
 
-- 资料对比结果与期末冲刺的后续联动。
+- 继续扩展十条 Graph 的隔离 E2E、异常恢复和移动端验收。
 - 导出文件版式、剩余 Graph、课程空间移动体验和验收中发现问题的 P0/P1 修复。
 
 后续继续保持代码、测试、工程文档和浏览器验收同步；不把 OCR、旧版 Office 或交付材料混入同一轮产品开发。

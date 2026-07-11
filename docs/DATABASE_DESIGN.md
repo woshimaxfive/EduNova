@@ -155,7 +155,7 @@ knowledge_chunks       仍绑定 course_id，同时引用 material_id
 
 迁移后，`course_materials` 暂时保留，用于兼容内置课程和已有 `knowledge_chunks.material_id` 关系；新上传资料写入 `materials`，加入课程时写入 `course_material_links`。Phase 13.2 后，从已解析 TXT/Markdown/PDF/DOCX/PPTX 资料生成课程时，会为新课程创建兼容旧链路的 `course_materials` 副本，同时用 `course_material_links.usage_type=course_source` 关联原个人资料库资料，保证后续 RAG 可以沿 `knowledge_chunks -> course_materials` 接入。
 
-Phase 11.2 的资料对比第一刀不新增表和迁移，也不持久化对比结果。`POST /materials/compare` 复用 `materials` 做当前用户资料所有权校验，复用 `course_material_links` 校验资料已绑定当前课程，优先读取 `knowledge_chunks.metadata_json.source_material_id` 与 `course_materials.metadata_json.source_material_id` 做课程切片对比；缺少切片时，仅对已解析资料的 `materials.extracted_text` 做短摘录 fallback。服务层只返回重复重点、疑似考点、独有点、遗漏点、优先顺序和安全引用摘要，不保存完整资料原文、系统提示词、模型输入或 API Key。
+Phase 16 的 `MaterialComparisonGraph` 继续复用 `materials`、`course_material_links`、`material_chunks` 和课程切片收集真实证据，但审核后的安全结果会写入不可变的 `material_comparison_runs`。记录只保存资料 ID、短引用和结构化结论，不保存完整资料原文、系统提示词、模型输入或 API Key。
 
 字段：
 
@@ -248,6 +248,24 @@ Phase 11.2 的资料对比第一刀不新增表和迁移，也不持久化对比
 - `added_by_user_id` 外键指向 `users.id`。
 - `ix_course_material_links_course(course_id)`。
 - `ix_course_material_links_material(material_id)`。
+
+### 4.4.4 `material_comparison_runs`
+
+用途：保存 `MaterialComparisonGraph` 审核后的不可变资料对比版本，支持最近结果恢复、冲刺证据绑定和 trace 追溯。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | bigint | 主键，也是公共 `comparison_id` |
+| `user_id` | bigint | 当前用户，删除用户时级联删除 |
+| `course_id` | bigint | 当前课程，删除课程时级联删除 |
+| `material_ids_json` | jsonb | 本次对比资料 ID 列表 |
+| `result_json` | jsonb | 审核后的安全结论、短引用、warning 与 review 摘要 |
+| `agent_trace_id` | varchar | 真实 `MaterialComparisonGraph` trace，非空 |
+| `generation_mode` | varchar | `model_enhanced` 或 `deterministic_source` |
+| `review_mode` | varchar | `model_and_rules` 或 `rules_only` |
+| `created_at` | timestamptz | 版本创建时间 |
+
+索引：`(user_id, course_id, created_at)` 用于最近版本恢复，`agent_trace_id` 用于 Graph 追溯。重新对比新增记录，不覆盖旧版本。
 
 ### 4.5 `knowledge_points`
 
@@ -351,7 +369,7 @@ Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状�
 
 Phase 9 开始实际复用本表保存课程级学习路径，不新增迁移。生成新路径时，服务层会把同一用户同一课程旧 `active` 路径归档为 `archived`，再写入新的 `active` 路径。`plan_json` 只保存安全摘要、生成规则、计数、依据说明和可展示 metadata，不保存系统提示词、模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
-Phase 11.1 继续复用本表保存课程级期末冲刺计划，不新增迁移。冲刺计划使用 `status="sprint_active"` 和 `status="sprint_archived"`，`plan_json.kind="exam_sprint"`；生成新冲刺计划时只归档同一用户同一课程旧 `sprint_active`，不归档 Phase 9 普通 `active` 学习路径。`plan_json` 保存高频点、薄弱点、必刷题、易错提醒、推荐资源 ID、证据计数和任务天数映射等安全摘要，不保存系统提示词、模型输入、API Key、完整资料原文、完整用户画像原文或完整练习原始答案。
+Phase 16 的 `ExamSprintGraph` 继续复用本表保存课程级期末冲刺计划。冲刺计划使用 `status="sprint_active"` 和 `status="sprint_archived"`，`plan_json.kind="exam_sprint"`；新计划审核通过并写入后才归档同课程旧 `sprint_active`，不归档普通 `active` 学习路径。v2 `plan_json` 保存 `trigger`、`revision_of`、`comparison_id`、来源练习 ID、保留任务数、生成/审核模式、高频点、薄弱点和安全证据计数，不保存完整资料、作答或模型输入。
 
 字段：
 
@@ -374,7 +392,7 @@ Phase 11.1 继续复用本表保存课程级期末冲刺计划，不新增迁移
 
 Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `reviewing` 弱点、`confirmed` 弱点、未覆盖知识点排序；`pending` 和 `dismissed` 弱点不进入路径任务。普通路径任务类型固定为 `review`、`learn`、`resource`，任务状态固定为 `todo`、`doing`、`completed`；第一条任务为 `doing`，其余为 `todo`。`recommended_resource_ids` 最多保存 3 个同课程资源 ID，优先匹配同知识点资源，没有知识点时按安全标题匹配。
 
-Phase 11.1 期末冲刺计划也复用本表保存每日任务，`task_type` 使用 `sprint_review`、`sprint_practice`、`sprint_resource`，状态仍使用 `doing` / `todo`；第一条冲刺任务为 `doing`，其余为 `todo`。任务的天数分组保存在所属 `learning_paths.plan_json.task_days` 中。
+期末冲刺计划也复用本表保存每日任务，`task_type` 使用 `sprint_review`、`sprint_practice`、`sprint_resource`。只有从 `sprint_practice` 任务发起的练习才会完成来源任务并触发独立重排；重排失败时任务完成事实已独立提交，旧 active 计划保持可用。
 
 字段：
 
@@ -660,7 +678,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 | `content_type` | varchar | 下载 MIME |
 | `file_path` | text | 输出文件路径 |
 | `error_message` | text | 脱敏失败摘要 |
-| `agent_trace_id` | varchar | `ExportDossierGraph` trace |
+| `agent_trace_id` | varchar | 普通导出服务的可选审计 trace；不代表存在 `ExportDossierGraph` |
 | `metadata_json` | jsonb | 安全任务 metadata |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
@@ -797,6 +815,7 @@ Demo 数据要求：
 12. 学习产物 Graph trace 字段由迁移 `20260707_0007_add_learning_artifact_agent_trace_ids.py` 创建。
 13. 主页资料检索切片和向量索引由迁移 `20260710_0009_create_material_chunks.py` 创建。
 14. 画像逐维可信度、课程结构和画像证据状态由迁移 `20260710_0012_add_profile_and_course_structure.py` 创建。
+15. 不可变资料对比版本由迁移 `20260711_0013_add_material_comparison_runs.py` 创建。
 
 当前迁移命令：
 
@@ -827,17 +846,18 @@ Demo 数据要求：
 17. Phase 7.4 后，弱点复习项通过课程绑定接口进行确认、开始、完成和软忽略；`dismissed` 项不返回主列表，但必须继续参与去重。
 18. Phase 10 后，练习会话、作答、报告和练习评估来源弱点都复用已有表；练习错题或低分题可生成 `practice_assessment` 来源的 `confirmed` 队列项，并影响 `/courses/{course_id}/mastery-map` 和 `/courses/{course_id}/learning-state`。
 19. Phase 11.1 后，期末冲刺计划复用 `learning_paths` 和 `learning_tasks`，使用 `sprint_active` / `sprint_archived` 与 `plan_json.kind="exam_sprint"` 区分普通学习路径，不新增表或迁移。
-20. Phase 11.2 后，资料对比复用 `materials`、`course_material_links`、`course_materials` 和 `knowledge_chunks`，不新增表、不持久化结果；`material_ids` 指资料库 `materials.id`，服务层强制校验当前用户所有权和课程绑定关系。
+20. Phase 16 后，资料对比复用资料与课程切片收集证据，并把审核后的安全版本写入 `material_comparison_runs`；`material_ids` 指资料库 `materials.id`，服务层强制校验当前用户所有权和课程绑定关系。
 21. Phase 13.1 后，课程、资料、资源、路径、冲刺、练习和报告等学习产物可通过 nullable `agent_trace_id` 反查对应 Graph；字段为空时仍保持旧数据兼容。
 22. Phase 13.2 后，`export_jobs` 可记录 Markdown/PDF/DOCX 异步导出任务状态、文件路径、脱敏失败摘要和 `agent_trace_id`；下载接口必须按 `user_id` 隔离。
 23. HomeTutorGraph 升级后，已解析资料生成稳定 `material_chunks`；既有资料可惰性补齐，检索只能读取当前用户本次选中的资料，删除资料必须级联删除切片。
 24. Phase 14 后，`practice_sessions.assessment_json` 保存可刷新恢复的闭环摘要；弱点通过来源引用精确绑定错题，但不保存原始模型输入。
 25. Phase 15 后，画像隐式信号必须通过独立来源与置信度门控；课程结构保存来源覆盖和真实知识点先修 ID；练习草稿只能写当前用户未完成会话。
+26. Phase 16 后，只有带成对冲刺来源 ID 的练习触发 `ExamSprintGraph` 重排；来源任务完成先独立提交，Graph 失败不得回滚练习、弱点或任务完成状态。
 
 当前已验证：
 
 - Alembic 能创建 `users`、`courses`、`course_enrollments`、`course_materials`、`materials`、`material_chunks`、`course_material_links`、`knowledge_points`、`knowledge_chunks`。
-- Alembic metadata 已注册并迁移创建 `student_profiles`、`profile_events`、`learning_paths`、`learning_tasks`、`generated_resources`、`resource_quality_scores`、`agent_run_logs`、`practice_sessions`、`practice_answers`、`assessment_reports`、`weakness_review_queue`、`chat_sessions`、`chat_messages` 和 `model_settings`。
+- Alembic metadata 已注册并迁移创建 `student_profiles`、`profile_events`、`material_comparison_runs`、`learning_paths`、`learning_tasks`、`generated_resources`、`resource_quality_scores`、`agent_run_logs`、`practice_sessions`、`practice_answers`、`assessment_reports`、`weakness_review_queue`、`chat_sessions`、`chat_messages` 和 `model_settings`。
 - `knowledge_chunks.embedding` 使用 `vector(1536)`。
 - `knowledge_chunks.embedding` 已建立 `ivfflat` 向量索引。
 - `material_chunks.embedding` 已建立 `ivfflat` cosine 向量索引，删除资料会级联删除资料切片。

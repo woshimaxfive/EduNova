@@ -3,14 +3,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { buildCoursePath } from "../app/routePaths";
+import { buildCoursePath, PATHS } from "../app/routePaths";
 import { getMasteryMap, listCourses, type CourseMasteryPoint, type CourseMasteryStatus } from "../api/courses";
 import {
   generateExamSprintPlan,
+  getCurrentExamSprintPlan,
   type ExamSprintDailyTask,
   type ExamSprintDuration,
   type ExamSprintPlan
 } from "../api/examSprint";
+import { getMaterialComparison } from "../api/materials";
 import {
   generatePath,
   getCurrentPath,
@@ -115,15 +117,16 @@ function groupSprintTasks(tasks: ExamSprintDailyTask[]) {
 
 export function LearningPathPage() {
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryCourseId = parseCourseId(searchParams.get("course_id"));
+  const queryComparisonId = parseCourseId(searchParams.get("comparison_id"));
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(queryCourseId);
   const [durationDays, setDurationDays] = useState<GeneratePathRequest["duration_days"]>(7);
   const [goal, setGoal] = useState("");
   const [localFeedback, setLocalFeedback] = useState<string | null>(null);
   const [sprintDurationDays, setSprintDurationDays] = useState<ExamSprintDuration>(7);
   const [sprintGoal, setSprintGoal] = useState("");
-  const [sprintPlan, setSprintPlan] = useState<ExamSprintPlan | null>(null);
+  const [generatedSprintPlan, setGeneratedSprintPlan] = useState<ExamSprintPlan | null>(null);
   const [sprintFeedback, setSprintFeedback] = useState<string | null>(null);
 
   const coursesQuery = useQuery({
@@ -148,6 +151,17 @@ export function LearningPathPage() {
     enabled: hasCourse,
     staleTime: 10_000
   });
+  const currentSprintQuery = useQuery({
+    queryKey: ["exam-sprint", "current", effectiveCourseId],
+    queryFn: () => getCurrentExamSprintPlan(effectiveCourseId ?? 0),
+    enabled: hasCourse,
+    staleTime: 10_000
+  });
+  const comparisonQuery = useQuery({
+    queryKey: ["materials", "comparison", queryComparisonId],
+    queryFn: () => getMaterialComparison(queryComparisonId ?? 0),
+    enabled: queryComparisonId !== null
+  });
 
   const selectedCourse = useMemo(
     () => courses.find((course) => Number.parseInt(course.id, 10) === effectiveCourseId) ?? null,
@@ -164,6 +178,8 @@ export function LearningPathPage() {
   const masteryMap = masteryQuery.data?.data ?? null;
   const hasPath = Boolean(pathDetail?.path);
   const hasReadError = coursesQuery.isError || currentPathQuery.isError || masteryQuery.isError;
+  const sprintPlan = generatedSprintPlan ?? currentSprintQuery.data?.data ?? null;
+  const selectedComparison = comparisonQuery.data?.data ?? null;
   const sprintTaskGroups = sprintPlan ? groupSprintTasks(sprintPlan.daily_tasks) : [];
 
   const generateMutation = useMutation({
@@ -194,11 +210,17 @@ export function LearningPathPage() {
     }
   });
   const sprintMutation = useMutation({
-    mutationFn: (payload: { course_id: number; duration_days: ExamSprintDuration; material_ids: number[]; goal: string }) =>
+    mutationFn: (payload: { course_id: number; duration_days: ExamSprintDuration; material_ids: number[]; comparison_id?: number; goal: string }) =>
       generateExamSprintPlan(payload),
     onSuccess: (result, payload) => {
       setSprintFeedback(null);
-      setSprintPlan(result.data);
+      setGeneratedSprintPlan(result.data);
+      queryClient.setQueryData(["exam-sprint", "current", payload.course_id], result);
+      const nextParams: Record<string, string> = { course_id: String(payload.course_id), sprint_plan_id: result.data.id };
+      if (payload.comparison_id) {
+        nextParams.comparison_id = String(payload.comparison_id);
+      }
+      setSearchParams(nextParams, { replace: true });
       void queryClient.invalidateQueries({ queryKey: ["courses", "mastery-map", payload.course_id] });
       void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", payload.course_id] });
     },
@@ -211,7 +233,8 @@ export function LearningPathPage() {
     setSelectedCourseId(parseCourseId(event.target.value));
     setLocalFeedback(null);
     setSprintFeedback(null);
-    setSprintPlan(null);
+    setGeneratedSprintPlan(null);
+    setSearchParams({ course_id: event.target.value }, { replace: true });
   }
 
   function handleDurationChange(event: ChangeEvent<HTMLSelectElement>) {
@@ -249,6 +272,7 @@ export function LearningPathPage() {
       course_id: effectiveCourseId,
       duration_days: sprintDurationDays,
       material_ids: [],
+      comparison_id: queryComparisonId ?? undefined,
       goal: sprintGoal.trim()
     });
   }
@@ -461,15 +485,31 @@ export function LearningPathPage() {
             </div>
 
             <InlineFeedback message={sprintFeedback} tone="warning" />
+            {currentSprintQuery.isError ? <InlineFeedback message="当前冲刺计划读取失败，请稍后重试。" tone="warning" /> : null}
+            {comparisonQuery.isError ? <InlineFeedback message="资料对比读取失败，本次不会隐式使用旧结果。" tone="warning" /> : null}
+            {selectedComparison ? (
+              <div className="exam-sprint-comparison-source">
+                <strong>本次采用资料对比 #{selectedComparison.id}</strong>
+                <span>
+                  {selectedComparison.summary.comparable_material_count} 份资料 · {selectedComparison.summary.matched_concept_count} 个命中点 · {selectedComparison.summary.citation_count} 条引用
+                </span>
+                <AgentTraceDisclosure traceId={selectedComparison.agent_trace_id} label="查看 MaterialComparisonGraph" />
+              </div>
+            ) : null}
 
             {sprintPlan ? (
               <div className="exam-sprint-result">
                 <div className="exam-sprint-summary">
-                  {sprintPlan.agent_trace_id ? <span>ExamSprintGraph · {sprintPlan.agent_trace_id}</span> : null}
                   <span>{sprintPlan.evidence_summary.knowledge_point_count} 个知识点</span>
                   <span>{sprintPlan.evidence_summary.weakness_count} 个确认弱点</span>
                   <span>{sprintPlan.evidence_summary.practice_low_score_count} 条练习证据</span>
+                  <span>{sprintPlan.generation_mode === "model_enhanced" ? "模型增强" : "规则底稿"}</span>
+                  {sprintPlan.trigger === "assessment_reflow" ? <span>由冲刺练习更新 · 保留 {sprintPlan.preserved_task_count ?? 0} 个任务</span> : null}
                 </div>
+                <AgentTraceDisclosure traceId={sprintPlan.agent_trace_id} label="查看 ExamSprintGraph" />
+                {(sprintPlan.warnings ?? []).map((warning) => (
+                  <InlineFeedback key={warning} message={warning} tone="warning" />
+                ))}
 
                 {sprintPlan.high_frequency_points.length > 0 ? (
                   <section className="exam-sprint-block" aria-label="高频点">
@@ -516,6 +556,14 @@ export function LearningPathPage() {
                               {task.recommended_resources.map((resource) => (
                                 <em key={resource.id}>{resource.title}</em>
                               ))}
+                              {task.task_type === "sprint_practice" && task.knowledge_point_id ? (
+                                <Link
+                                  className="soft-button"
+                                  to={`${PATHS.practice}?course_id=${effectiveCourseId}&knowledge_point_id=${task.knowledge_point_id}&sprint_plan_id=${sprintPlan.id}&sprint_task_id=${task.id}&new=1`}
+                                >
+                                  开始针对性练习
+                                </Link>
+                              ) : null}
                             </div>
                           </li>
                         ))}

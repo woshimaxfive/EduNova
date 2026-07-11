@@ -1,19 +1,35 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
 
+from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.v1.deps import get_auth_service
 from backend.app.api.v1.materials import get_material_service
 from backend.app.core.config import Settings
 from backend.app.core.security import create_access_token
 from backend.app.main import create_app
-from backend.app.models import Course, CourseMaterial, CourseMaterialLink, KnowledgeChunk, KnowledgePoint, Material, User
+from backend.app.models import Course, CourseMaterial, CourseMaterialLink, KnowledgeChunk, KnowledgePoint, Material, MaterialComparisonRun, User
 from backend.app.services.auth import AuthService
 from backend.app.services.materials import MaterialService
+
+
+@dataclass
+class FakeModelService:
+    responses: list[str]
+
+    def chat_completion(self, _user: User, _messages: list[dict[str, str]]) -> str:
+        if not self.responses:
+            raise RuntimeError("no model response")
+        return self.responses.pop(0)
+
+
+def make_trace_recorder(logs: list[Any]) -> AgentTraceRecorder:
+    return AgentTraceRecorder(repository_add_log=lambda log: logs.append(log) or log)
 
 
 @dataclass
@@ -32,6 +48,8 @@ class FakeMaterialComparisonRepository:
     course_materials: list[CourseMaterial] = field(default_factory=list)
     knowledge_points: list[KnowledgePoint] = field(default_factory=list)
     knowledge_chunks: list[KnowledgeChunk] = field(default_factory=list)
+    comparison_runs: list[MaterialComparisonRun] = field(default_factory=list)
+    next_comparison_id: int = 1
 
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return next((course for course in self.courses if course.id == course_id and course.owner_id == user_id), None)
@@ -67,6 +85,20 @@ class FakeMaterialComparisonRepository:
 
     def list_knowledge_chunks(self, course_id: int) -> list[KnowledgeChunk]:
         return [chunk for chunk in self.knowledge_chunks if chunk.course_id == course_id]
+
+    def add_comparison_run(self, run: MaterialComparisonRun) -> MaterialComparisonRun:
+        run.id = self.next_comparison_id
+        self.next_comparison_id += 1
+        run.created_at = datetime.now(UTC)
+        self.comparison_runs.append(run)
+        return run
+
+    def get_comparison_run_for_user(self, user_id: int, comparison_id: int) -> MaterialComparisonRun | None:
+        return next((run for run in self.comparison_runs if run.id == comparison_id and run.user_id == user_id), None)
+
+    def get_latest_comparison_run(self, user_id: int, course_id: int) -> MaterialComparisonRun | None:
+        runs = [run for run in self.comparison_runs if run.user_id == user_id and run.course_id == course_id]
+        return runs[-1] if runs else None
 
     def commit(self) -> None:
         return None
@@ -189,6 +221,9 @@ def test_compare_materials_extracts_repeated_exam_unique_missing_and_safe_citati
     serialized = str(result)
 
     assert result["course_id"] == "101"
+    assert result["id"] == "1"
+    assert result["generation_mode"] == "deterministic_source"
+    assert result["review_mode"] == "rules_only"
     assert result["material_ids"] == ["1", "2"]
     assert result["summary"]["compared_material_count"] == 2
     assert result["summary"]["comparable_material_count"] == 2
@@ -202,6 +237,8 @@ def test_compare_materials_extracts_repeated_exam_unique_missing_and_safe_citati
     assert "SECRET-COURSE-DOCUMENT-LONG" not in serialized
     assert "系统提示词" not in serialized
     assert "API Key" not in serialized
+    restored = as_dict(service.get_latest_comparison(user, 101))
+    assert restored["id"] == result["id"]
 
 
 def test_compare_materials_validates_user_course_material_scope_and_minimum(tmp_path: Path) -> None:
@@ -276,3 +313,49 @@ def test_compare_materials_route_returns_typed_envelope(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert response.json()["data"]["course_id"] == "101"
     assert response.json()["data"]["repeated_concepts"][0]["title"] == "启发式搜索"
+    comparison_id = response.json()["data"]["id"]
+    latest = client.get("/api/v1/materials/comparisons/latest?course_id=101", headers={"Authorization": f"Bearer {token}"})
+    detail = client.get(f"/api/v1/materials/comparisons/{comparison_id}", headers={"Authorization": f"Bearer {token}"})
+    assert latest.status_code == 200
+    assert latest.json()["data"]["id"] == comparison_id
+    assert detail.status_code == 200
+    assert detail.json()["data"]["agent_trace_id"] == response.json()["data"]["agent_trace_id"]
+
+
+def test_material_comparison_graph_runs_review_repair_and_persists_real_trace(tmp_path: Path) -> None:
+    repo = make_repo()
+    logs: list[Any] = []
+    model = FakeModelService(
+        responses=[
+            '{"ordered_titles":["启发式搜索","反向传播","监督学习","AI 伦理"],'
+            '"rationales":{"启发式搜索":"先复习多资料共同重点。"},"summary_message":"先处理共同重点，再查漏补缺。"}',
+            '{"review_status":"revise","confidence":0.8,"risk_flags":["needs_clearer_priority"],"safety_summary":"需要修订一次。"}',
+            '{"ordered_titles":["启发式搜索","反向传播","监督学习","AI 伦理"],'
+            '"rationales":{"启发式搜索":"优先复习多资料共同重点。"},"summary_message":"按共同重点和覆盖缺口复习。"}',
+        ]
+    )
+    service = MaterialService(
+        repository=repo,
+        settings=make_settings(tmp_path),
+        model_service=model,
+        trace_recorder=make_trace_recorder(logs),
+    )
+
+    result = as_dict(service.compare_materials(make_user(), 101, [1, 2]))
+
+    assert result["generation_mode"] == "model_enhanced"
+    assert result["review_result"]["review_status"] == "passed"
+    assert [log.agent_name for log in logs] == [
+        "validate_scope",
+        "collect_evidence",
+        "deterministic_compare",
+        "model_compare",
+        "review",
+        "repair",
+        "persist",
+    ]
+    assert all(log.duration_ms is not None and log.duration_ms >= 0 for log in logs)
+    assert logs[-1].metadata_json["artifact_id"] == result["id"]
+    serialized = str([log.metadata_json for log in logs])
+    assert "SECRET-COURSE-DOCUMENT-LONG" not in serialized
+    assert repo.comparison_runs[0].agent_trace_id == result["agent_trace_id"]

@@ -3,6 +3,7 @@ import { type ApiEnvelope } from "../types/api";
 
 export const EXAM_SPRINT_ENDPOINTS = {
   generate: "/exam-sprint/plans",
+  current: "/exam-sprint/plans/current",
   detail: (planId: string | number) => `/exam-sprint/plans/${planId}`
 } as const;
 
@@ -12,6 +13,7 @@ export type GenerateExamSprintPlanRequest = {
   course_id: number;
   duration_days: ExamSprintDuration;
   material_ids?: number[];
+  comparison_id?: number;
   goal?: string;
 };
 
@@ -73,6 +75,15 @@ export type ExamSprintPlan = {
   id: string;
   course_id: string;
   agent_trace_id?: string | null;
+  comparison_id?: string | null;
+  trigger?: "manual" | "assessment_reflow" | string;
+  revision_of?: string | null;
+  source_practice_session_id?: string | null;
+  preserved_task_count?: number;
+  generation_mode?: "model_enhanced" | "deterministic_source" | string;
+  review_mode?: "model_and_rules" | "rules_only" | string;
+  review_result?: Record<string, unknown>;
+  warnings?: string[];
   duration_days: ExamSprintDuration | number;
   goal: string | null;
   status: "sprint_active" | "sprint_archived" | string;
@@ -94,5 +105,12 @@ export async function generateExamSprintPlan(payload: GenerateExamSprintPlanRequ
 
 export async function getExamSprintPlan(planId: string | number) {
   const response = await apiClient.get<ApiEnvelope<ExamSprintPlan>>(EXAM_SPRINT_ENDPOINTS.detail(planId));
+  return response.data;
+}
+
+export async function getCurrentExamSprintPlan(courseId: number) {
+  const response = await apiClient.get<ApiEnvelope<ExamSprintPlan | null>>(EXAM_SPRINT_ENDPOINTS.current, {
+    params: { course_id: courseId }
+  });
   return response.data;
 }

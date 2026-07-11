@@ -15,6 +15,7 @@ import {
 } from "../api/practice";
 import { PATHS } from "../app/routePaths";
 import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
+import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { PageFrame } from "./PageFrame";
 
 type PracticeSessionEnvelope = PracticeSessionDetail | { data?: PracticeSessionDetail };
@@ -30,8 +31,12 @@ export function PracticePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const initialCourseId = searchParams.get("course_id") ?? "";
+  const initialKnowledgePointId = searchParams.get("knowledge_point_id") ?? "";
+  const sprintPlanId = Number(searchParams.get("sprint_plan_id") ?? "");
+  const sprintTaskId = Number(searchParams.get("sprint_task_id") ?? "");
+  const hasSprintSource = Number.isFinite(sprintPlanId) && sprintPlanId > 0 && Number.isFinite(sprintTaskId) && sprintTaskId > 0;
   const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
-  const [selectedPointId, setSelectedPointId] = useState("");
+  const [selectedPointId, setSelectedPointId] = useState(initialKnowledgePointId);
   const [questionCount, setQuestionCount] = useState(5);
   const [difficulty, setDifficulty] = useState<"adaptive" | "easy" | "medium" | "hard">("adaptive");
   const [currentSession, setCurrentSession] = useState<PracticeSessionDetail | null>(null);
@@ -132,7 +137,9 @@ export function PracticePage() {
         course_id: numericCourseId,
         knowledge_point_ids: selectedPointIds,
         question_count: questionCount,
-        difficulty
+        difficulty,
+        sprint_plan_id: hasSprintSource ? sprintPlanId : undefined,
+        sprint_task_id: hasSprintSource ? sprintTaskId : undefined
       }),
     onSuccess: (response) => {
       setLocalError("");
@@ -170,6 +177,7 @@ export function PracticePage() {
       void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
       void queryClient.invalidateQueries({ queryKey: ["courses", "mastery-map", numericCourseId] });
       void queryClient.invalidateQueries({ queryKey: ["paths", "current", numericCourseId] });
+      void queryClient.invalidateQueries({ queryKey: ["exam-sprint", "current", numericCourseId] });
       void queryClient.invalidateQueries({ queryKey: ["latest-report", numericCourseId] });
     },
     onError: () => {
@@ -410,6 +418,20 @@ export function PracticePage() {
                   traceId={activeSession.closure_update.path_agent_trace_id}
                   label="查看 PathPlanningGraph"
                 />
+                {activeSession.closure_update.sprint_update_status === "replanned" && activeSession.closure_update.sprint_plan_id ? (
+                  <>
+                    <strong>期末冲刺计划已根据本次必刷题重排</strong>
+                    <Link className="soft-button" to={`${PATHS.path}?course_id=${numericCourseId}&sprint_plan_id=${activeSession.closure_update.sprint_plan_id}`}>
+                      查看更新后的冲刺计划
+                    </Link>
+                    <AgentTraceDisclosure
+                      traceId={activeSession.closure_update.sprint_agent_trace_id}
+                      label="查看 ExamSprintGraph"
+                    />
+                  </>
+                ) : activeSession.closure_update.sprint_update_status === "failed" ? (
+                  <InlineFeedback message="冲刺计划暂未更新，练习结果和弱点已保留。" tone="warning" />
+                ) : null}
               </div>
             ) : null}
           </section>

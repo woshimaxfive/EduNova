@@ -832,3 +832,20 @@ docker compose down
 7. `prefers-reduced-motion` 下不新增强制动画，现有学习信号动效继续尊重 reduced motion。
 
 验收证据记录在 `docs/evidence/PHASE_13_FRONTEND_VISUAL_HARDENING.md`。
+
+## 16. Phase 16 资料证据与冲刺闭环验收
+
+### 16.1 后端与数据
+
+- `MaterialComparisonGraph` 节点顺序固定为 `validate_scope -> collect_evidence -> deterministic_compare -> model_compare -> review -> repair? -> persist`，每次调用创建不可变版本，并验证用户、课程、资料和引用归属。
+- `ExamSprintGraph` 节点顺序固定为 `profile -> collect_evidence -> comparison_context -> deterministic_rank -> model_plan -> build_tasks -> review -> repair? -> persist`。
+- 无模型环境必须返回完整 `deterministic_source` / `rules_only` 结果；模型不得更改周期、证据 ID、知识点 ID、资源 ID 或已完成状态。
+- 只有携带成对 `sprint_plan_id` / `sprint_task_id` 的来源练习触发重排；普通练习不得触发。重排失败时评分、弱点和来源任务完成状态必须保持。
+- Alembic 空库升级必须创建 `material_comparison_runs` 及用户课程时间、trace 索引。
+
+### 16.2 前端与浏览器
+
+- `/app/library` 刷新后恢复最近资料对比，展示 warning、审核模式和真实 `MaterialComparisonGraph`，并且只有点击“用于期末冲刺”才携带 `comparison_id`。
+- `/app/path` 恢复当前 `sprint_active` 计划，展示对比依据和 `ExamSprintGraph`；必刷题进入指定知识点 adaptive 练习并携带冲刺来源。
+- `/app/practice` 提交来源练习后展示任务完成、冲刺重排状态、新计划入口和可展开 trace；失败采用局部反馈。
+- 隔离 Docker E2E 覆盖上传两份资料、建课、对比、生成冲刺、故意答错、重排和刷新恢复；桌面与 390px 均不得出现页面级横向溢出。

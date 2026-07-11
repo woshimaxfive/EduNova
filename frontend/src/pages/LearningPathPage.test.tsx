@@ -10,6 +10,7 @@ import { AGENT_ENDPOINTS } from "../api/agents";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { EXAM_SPRINT_ENDPOINTS } from "../api/examSprint";
+import { MATERIAL_ENDPOINTS } from "../api/materials";
 import { PATH_ENDPOINTS } from "../api/paths";
 import { LearningPathPage } from "./LearningPathPage";
 
@@ -142,6 +143,13 @@ const masteryResponse = {
 const sprintPlanResponse = {
   id: "3001",
   course_id: "808",
+  agent_trace_id: "trace_sprint",
+  comparison_id: "1201",
+  trigger: "manual",
+  generation_mode: "deterministic_source",
+  review_mode: "rules_only",
+  preserved_task_count: 0,
+  warnings: [],
   duration_days: 7,
   goal: "期末冲刺",
   status: "sprint_active",
@@ -198,6 +206,18 @@ const sprintPlanResponse = {
           knowledge_point_id: "401"
         }
       ]
+    },
+    {
+      id: "4002",
+      day_index: 1,
+      title: "完成启发式搜索必刷题",
+      task_type: "sprint_practice",
+      status: "todo",
+      due_at: "2026-07-05T11:00:00Z",
+      knowledge_point_id: "401",
+      reason: "用练习检查复习结果。",
+      recommended_resource_ids: [],
+      recommended_resources: []
     }
   ],
   must_do_questions: [
@@ -501,5 +521,58 @@ describe("LearningPathPage", () => {
 
     expect(await within(sprintRegion).findByText("期末冲刺计划生成失败，请稍后重试。")).toBeInTheDocument();
     expect(screen.getByText("复习启发式搜索")).toBeInTheDocument();
+  });
+
+  it("uses an explicit material comparison, restores sprint and links targeted practice", async () => {
+    const comparison = {
+      id: "1201",
+      course_id: "808",
+      material_ids: ["201", "202"],
+      agent_trace_id: "trace_comparison",
+      summary: {
+        compared_material_count: 2,
+        comparable_material_count: 2,
+        matched_concept_count: 3,
+        citation_count: 4,
+        message: "资料对比完成。"
+      },
+      repeated_concepts: [],
+      exam_likely_points: [],
+      materials_only_points: [],
+      questions_only_points: [],
+      missing_review_points: [],
+      priority_order: [],
+      citations: []
+    };
+
+    apiClient.defaults.adapter = async (config) => {
+      const url = config.url ?? "";
+      if (url === COURSE_ENDPOINTS.list) {
+        return { data: courseListResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === PATH_ENDPOINTS.current) {
+        return { data: { data: activePathResponse }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === COURSE_ENDPOINTS.masteryMap(808)) {
+        return { data: { data: masteryResponse }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === MATERIAL_ENDPOINTS.comparisonDetail(1201)) {
+        return { data: { data: comparison }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === EXAM_SPRINT_ENDPOINTS.current) {
+        return { data: { data: sprintPlanResponse }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      throw new Error(`Unexpected request ${url}`);
+    };
+
+    renderWithProviders(<LearningPathPage />, `${PATHS.path}?course_id=808&comparison_id=1201`);
+
+    expect(await screen.findByText("本次采用资料对比 #1201")).toBeInTheDocument();
+    expect(screen.getByText("完成启发式搜索必刷题")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "开始针对性练习" })).toHaveAttribute(
+      "href",
+      "/app/practice?course_id=808&knowledge_point_id=401&sprint_plan_id=3001&sprint_task_id=4002&new=1"
+    );
+    expect(screen.getByRole("button", { name: "查看 ExamSprintGraph" })).toBeInTheDocument();
   });
 });

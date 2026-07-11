@@ -258,6 +258,46 @@ class AiJob(IdMixin, TimestampMixin, Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ModelCallRun(IdMixin, Base):
+    __tablename__ = "model_call_runs"
+    __table_args__ = (
+        Index("ix_model_call_runs_user_created", "user_id", "started_at"),
+        Index("ix_model_call_runs_trace_node", "trace_id", "node_name"),
+        Index("ix_model_call_runs_status_created", "status", "started_at"),
+        Index("ix_model_call_runs_ai_job", "ai_job_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    ai_job_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("ai_jobs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    model_config_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("model_settings.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    workflow: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    node_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    purpose: Mapped[str] = mapped_column(String(80), nullable=False, default="generation")
+    operation: Mapped[str] = mapped_column(String(30), nullable=False)
+    provider_source: Mapped[str] = mapped_column(String(30), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    error_category: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class PracticeSession(IdMixin, TimestampMixin, Base):
     __tablename__ = "practice_sessions"
     __table_args__ = (

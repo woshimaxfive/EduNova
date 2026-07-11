@@ -35,6 +35,8 @@ if (Test-Path -LiteralPath "$repoRoot\backend") {
 
   if (Test-Path -LiteralPath "$repoRoot\backend\tests") {
     Invoke-CheckedCommand $python -m pytest "$repoRoot\backend\tests"
+    Write-Host "== Offline AI quality evaluation =="
+    Invoke-CheckedCommand $python -m backend.evals.run --mode offline --output "$repoRoot\output\ai-eval\offline-latest.json"
   }
   else {
     Write-Host "backend tests not found; skipped"

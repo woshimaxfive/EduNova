@@ -28,8 +28,13 @@ export function AgentTimeline({ events }: AgentTimelineProps) {
                 {`已参考最近 ${event.contextMessageCount} 条会话${event.contextSummaryUsed ? "，并使用历史摘要" : ""}`}
               </small>
             ) : null}
+            {event.modelCallCount ? (
+              <small className="timeline-context">
+                {`模型调用 ${event.modelCallCount} 次${event.modelRetryCount ? `，重试 ${event.modelRetryCount} 次` : ""}${event.modelOutcome === "degraded" ? "，已安全降级" : ""}`}
+              </small>
+            ) : null}
           </span>
-          {event.durationMs ? <em>{event.durationMs} ms</em> : null}
+          {event.modelLatencyMs ? <em>{event.modelLatencyMs} ms</em> : event.durationMs ? <em>{event.durationMs} ms</em> : null}
         </li>
       ))}
     </ol>

@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 17 AI 长任务运行时与可靠性升级**。Phase 13 至 Phase 16 已让十条学习主链路进入真实 LangGraph 编排；Phase 17 新增统一 `AIJobRuntime`，把最慢的智能建课和六类资源生成交给独立 Redis/RQ 队列执行，并支持真实节点进度、刷新恢复、取消和手动重试。
+当前最新完成到 **Phase 18 AI 执行可靠性与质量评测**。十条学习主链路继续由真实 LangGraph 编排；`ModelExecutionRuntime` 统一处理同配置重试、Redis 并发限制、熔断、流中断、长任务取消和隐私安全调用审计，`AIJobRuntime` 继续负责智能建课与六类资源生成的后台执行。
 
 当前十条真实生产 Graph 为 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph`、`MaterialComparisonGraph` 和 `ExamSprintGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
 
@@ -37,6 +37,8 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - `/materials/compare` 已由 `MaterialComparisonGraph` 接管；每次对比保存不可变版本，可恢复最近结果、追溯真实资料分块和审核轨迹，并从资料库显式带入期末冲刺。
 - `/app/tutor` 已收敛为课程辅导入口，真实提问统一进入课程空间。
 - 多套个人模型配置、默认配置切换、服务器 `.env` 兜底。
+- 模型调用采用当前配置有限重试，不在故障后自动转发到另一 Provider；失败时保留各 Graph 的确定性 fallback。
+- `model_call_runs` 只记录模型名、状态、尝试次数、耗时和安全错误分类，Agent trace 可查看聚合调用摘要，不保存 Prompt 或回答正文。
 - OpenAI-compatible Embeddings 与 pgvector SQL cosine 候选；未配置或 Provider 失败时退回关键词检索，`local-hash-1536` 不再标记为语义命中。
 - Phase 12.2 已补交付基线文档、测试报告、用户指南、开源说明、答辩问答、AI 辅助开发说明和 MIT 许可证。
 

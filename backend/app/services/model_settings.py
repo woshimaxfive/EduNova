@@ -17,6 +17,11 @@ from backend.app.providers.openai_compatible import (
     OpenAICompatibleConfig,
     OpenAICompatibleEmbeddingConfig,
 )
+from backend.app.services.model_execution import (
+    ModelExecutionContext,
+    ModelExecutionRuntime,
+    model_execution_scope,
+)
 
 
 MODEL_NOT_CONFIGURED_MESSAGE = "已找到资料依据，但当前未配置可用模型。"
@@ -36,7 +41,9 @@ class ModelSettingsValidationError(RuntimeError):
 
 
 class ModelNotConfiguredError(RuntimeError):
-    pass
+    code = "not_configured"
+    retryable = False
+    retry_after_seconds = None
 
 
 class ModelSettingsRepository(Protocol):
@@ -238,10 +245,12 @@ class ModelSettingsService:
         repository: ModelSettingsRepository,
         settings: Settings,
         provider: ModelChatProvider | None = None,
+        execution_runtime: ModelExecutionRuntime | None = None,
     ) -> None:
         self.repository = repository
         self.settings = settings
         self.provider = provider or OpenAICompatibleChatProvider()
+        self.execution_runtime = execution_runtime or ModelExecutionRuntime(settings)
 
     def get_summary(self, user: User) -> ModelSettingsSummary:
         user_setting = self.repository.get_default_for_user(user.id)
@@ -382,13 +391,18 @@ class ModelSettingsService:
         runtime = self.resolve_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
             raise ModelNotConfiguredError(MODEL_NOT_CONFIGURED_MESSAGE)
-        return self.provider.chat_completion(
-            config=OpenAICompatibleConfig(
-                base_url=runtime.base_url,
-                api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
-                chat_model=runtime.chat_model,
-            ),
-            messages=messages,
+        config = OpenAICompatibleConfig(
+            base_url=runtime.base_url,
+            api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+            chat_model=runtime.chat_model,
+        )
+        return self.execution_runtime.execute(
+            user_id=user.id,
+            provider_source=runtime.source,
+            model_config_id=runtime.config_id,
+            model_name=runtime.chat_model,
+            operation="chat",
+            call=lambda: self.provider.chat_completion(config=config, messages=messages, timeout_seconds=timeout_seconds),
             timeout_seconds=timeout_seconds,
         )
 
@@ -403,13 +417,21 @@ class ModelSettingsService:
         runtime = self.resolve_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
             raise ModelNotConfiguredError(MODEL_NOT_CONFIGURED_MESSAGE)
-        return self.provider.chat_completion_stream(
-            config=OpenAICompatibleConfig(
-                base_url=runtime.base_url,
-                api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
-                chat_model=runtime.chat_model,
+        config = OpenAICompatibleConfig(
+            base_url=runtime.base_url,
+            api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+            chat_model=runtime.chat_model,
+        )
+        return self.execution_runtime.execute_stream(
+            user_id=user.id,
+            provider_source=runtime.source,
+            model_config_id=runtime.config_id,
+            model_name=runtime.chat_model,
+            call=lambda: self.provider.chat_completion_stream(
+                config=config,
+                messages=messages,
+                timeout_seconds=self.settings.model_request_timeout_seconds,
             ),
-            messages=messages,
             timeout_seconds=self.settings.model_request_timeout_seconds,
         )
 
@@ -417,15 +439,24 @@ class ModelSettingsService:
         runtime = self.resolve_embedding_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.embedding_model is None:
             raise ModelNotConfiguredError("当前未配置可用向量模型。")
-        vectors = self.provider.embed_texts(
-            config=OpenAICompatibleEmbeddingConfig(
-                base_url=runtime.base_url,
-                api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
-                embedding_model=runtime.embedding_model,
+        config = OpenAICompatibleEmbeddingConfig(
+            base_url=runtime.base_url,
+            api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+            embedding_model=runtime.embedding_model,
+        )
+        vectors = self.execution_runtime.execute(
+            user_id=user.id,
+            provider_source=runtime.source,
+            model_config_id=runtime.config_id,
+            model_name=runtime.embedding_model,
+            operation="embedding",
+            call=lambda: self.provider.embed_texts(
+                config=config,
+                texts=texts,
+                timeout_seconds=self.settings.model_request_timeout_seconds,
+                dimensions=dimensions,
             ),
-            texts=texts,
             timeout_seconds=self.settings.model_request_timeout_seconds,
-            dimensions=dimensions,
         )
         if len(vectors) != len(texts) or any(len(vector) != dimensions for vector in vectors):
             raise ModelProviderError("模型服务返回了不匹配的向量维度。")
@@ -444,19 +475,19 @@ class ModelSettingsService:
                 chat_model=runtime.chat_model,
                 message="当前未配置可用模型。",
             )
-        return self._test_runtime(runtime)
+        return self._test_runtime(runtime, user_id=user.id)
 
     def test_config_connection(self, user: User, config_id: int) -> ModelConnectionTestResponse:
         setting = self._get_user_setting_or_raise(user, config_id)
         runtime = self._runtime_from_user_setting(setting)
-        result = self._test_runtime(runtime)
+        result = self._test_runtime(runtime, user_id=user.id)
         setting.last_test_ok = result.ok
         setting.last_test_message = result.message
         setting.last_tested_at = datetime.now(UTC)
         self._save_and_commit(setting)
         return result
 
-    def _test_runtime(self, runtime: RuntimeModelConfig) -> ModelConnectionTestResponse:
+    def _test_runtime(self, runtime: RuntimeModelConfig, *, user_id: int) -> ModelConnectionTestResponse:
         if not runtime.can_use_model:
             return ModelConnectionTestResponse(
                 ok=False,
@@ -467,18 +498,30 @@ class ModelSettingsService:
             )
 
         try:
-            self.provider.chat_completion(
-                config=OpenAICompatibleConfig(
-                    base_url=runtime.base_url or "",
-                    api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
-                    chat_model=runtime.chat_model or "",
-                ),
-                messages=[
-                    {"role": "system", "content": "你是 EduNova 的模型连通性检查器。"},
-                    {"role": "user", "content": "请只回复 ok。"},
-                ],
-                timeout_seconds=self.settings.model_request_timeout_seconds,
+            config = OpenAICompatibleConfig(
+                base_url=runtime.base_url or "",
+                api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+                chat_model=runtime.chat_model or "",
             )
+            with model_execution_scope(ModelExecutionContext(purpose="connection_test")):
+                self.execution_runtime.execute(
+                    user_id=user_id,
+                    provider_source=runtime.source,
+                    model_config_id=runtime.config_id,
+                    model_name=runtime.chat_model or "unknown",
+                    operation="chat",
+                    call=lambda: self.provider.chat_completion(
+                        config=config,
+                        messages=[
+                            {"role": "system", "content": "你是 EduNova 的模型连通性检查器。"},
+                            {"role": "user", "content": "请只回复 ok。"},
+                        ],
+                        timeout_seconds=self.settings.model_request_timeout_seconds,
+                    ),
+                    timeout_seconds=self.settings.model_request_timeout_seconds,
+                    max_attempts=1,
+                    bypass_circuit=True,
+                )
         except ModelProviderError as exc:
             return ModelConnectionTestResponse(
                 ok=False,

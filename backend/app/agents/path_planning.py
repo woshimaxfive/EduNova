@@ -14,6 +14,7 @@ from backend.app.api.errors import make_trace_id
 from backend.app.models import LearningPath, LearningTask, User
 from backend.app.schemas.profiles import normalize_profile_json
 from backend.app.services.paths import PathReplanResult, PathService, PlannedTask
+from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 
 
 class PathPlanningState(TypedDict, total=False):
@@ -79,7 +80,8 @@ class PathPlanningGraphRunner:
             "warnings": [],
             "repair_count": 0,
         }
-        result = self.graph.invoke(state)
+        with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, purpose=trigger)):
+            result = self.graph.invoke(state)
         return PathReplanResult(
             status="replanned" if trigger == "assessment" else "generated",
             trace_id=trace_id,
@@ -556,7 +558,8 @@ class PathPlanningGraphRunner:
     ) -> dict[str, Any]:
         started = perf_counter()
         try:
-            result, output_summary, status, metadata = work()
+            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name=agent_name)):
+                result, output_summary, status, metadata = work()
         except Exception as exc:
             self._record(
                 state,

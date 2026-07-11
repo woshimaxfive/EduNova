@@ -1405,7 +1405,12 @@ describe("frontend API contracts", () => {
                   retrieval_query_mode: "contextual",
                   candidate_count: 5,
                   trend_direction: "improved",
-                  review_result: "pass"
+                  review_result: "pass",
+                  model_call_count: 2,
+                  model_retry_count: 1,
+                  model_latency_ms: 820,
+                  model_outcome: "degraded",
+                  model_error_category: "rate_limited"
                 },
                 created_at: "2026-07-05T10:00:01Z"
               }
@@ -1430,7 +1435,12 @@ describe("frontend API contracts", () => {
       expect(mapAgentTraceStepToEvent(response.data.steps[0])).toMatchObject({
         contextMessageCount: 4,
         contextSummaryUsed: true,
-        retrievalQueryMode: "contextual"
+        retrievalQueryMode: "contextual",
+        modelCallCount: 2,
+        modelRetryCount: 1,
+        modelLatencyMs: 820,
+        modelOutcome: "degraded",
+        modelErrorCategory: "rate_limited"
       });
     } finally {
       apiClient.defaults.adapter = previousAdapter;

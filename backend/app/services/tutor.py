@@ -23,6 +23,8 @@ from backend.app.services.course_answers import (
     HOME_MODEL_NOT_CONFIGURED_MESSAGE,
     HomeAnswerReview,
 )
+from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
+from backend.app.providers.openai_compatible import ModelProviderError
 
 
 COURSE_ASSISTANT_REPLY_WITH_CITATIONS = "我先从课程资料里找到了相关依据。下面保留真实引用片段，后续接入大模型后会基于这些来源生成完整回答。"
@@ -874,6 +876,40 @@ class TutorSessionService:
             )
 
     @staticmethod
+    def _safe_model_error(exc: Exception) -> dict[str, Any]:
+        current: BaseException | None = exc
+        provider_error: ModelProviderError | None = None
+        while current is not None:
+            if isinstance(current, ModelProviderError):
+                provider_error = current
+                break
+            current = current.__cause__ or current.__context__
+        code = provider_error.code if provider_error is not None else getattr(exc, "code", "MODEL_PROVIDER_ERROR")
+        messages = {
+            "not_configured": "当前未配置可用模型，请先检查模型设置。",
+            "authentication_failed": "模型配置认证失败，请检查模型设置。",
+            "context_too_long": "本次会话内容过长，请缩短问题或新建会话。",
+            "rate_limited": "模型服务请求较多，请稍后重试。",
+            "model_busy": "当前模型请求较多，请稍后重试。",
+            "circuit_open": "模型服务正在恢复，请稍后重试。",
+            "timeout": "模型响应超时，请稍后重试。",
+            "stream_interrupted": "模型输出中断，本次回答未保存，可重新发送。",
+            "invalid_request": "模型服务无法处理本次请求。",
+            "invalid_response": "模型返回格式异常，请稍后重试。",
+            "network_error": "暂时无法连接模型服务，请稍后重试。",
+            "provider_unavailable": "模型暂不可用，请检查设置或稍后重试。",
+        }
+        data: dict[str, Any] = {
+            "code": str(code),
+            "message": messages.get(str(code), messages["provider_unavailable"]),
+            "retryable": bool(provider_error.retryable) if provider_error is not None else str(code) not in {"not_configured", "authentication_failed", "invalid_request", "context_too_long"},
+        }
+        retry_after = provider_error.retry_after_seconds if provider_error is not None else None
+        if retry_after is not None:
+            data["retry_after_seconds"] = max(0.0, min(float(retry_after), 3.0))
+        return data
+
+    @staticmethod
     def _stream_event(
         event: str,
         session_id: int,
@@ -1205,17 +1241,17 @@ class HomeTutorGraphRunner:
         deep_thinking: bool,
         selected_material_ids: list[int],
     ) -> TutorSessionDetail:
-        result = self.graph.invoke(
-            self._initial_state(
-                user=user,
-                session=session,
-                message_text=message_text,
-                use_web_search=use_web_search,
-                deep_thinking=deep_thinking,
-                selected_material_ids=selected_material_ids,
-                streaming=False,
-            )
+        state = self._initial_state(
+            user=user,
+            session=session,
+            message_text=message_text,
+            use_web_search=use_web_search,
+            deep_thinking=deep_thinking,
+            selected_material_ids=selected_material_ids,
+            streaming=False,
         )
+        with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
+            result = self.graph.invoke(state)
         detail = result.get("detail")
         if not isinstance(detail, TutorSessionDetail):
             raise CourseAnswerGenerationError("主页回答未能完成持久化。")
@@ -1241,15 +1277,15 @@ class HomeTutorGraphRunner:
             streaming=True,
         )
         try:
-            for event in self.graph.stream(state, stream_mode="custom"):
-                if isinstance(event, dict) and isinstance(event.get("event"), str):
-                    yield event
-        except Exception:
+            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
+                for event in self.graph.stream(state, stream_mode="custom"):
+                    if isinstance(event, dict) and isinstance(event.get("event"), str):
+                        yield event
+        except Exception as exc:
             yield {
                 "event": "error",
                 "data": {
-                    "code": "MODEL_PROVIDER_ERROR",
-                    "message": "模型暂不可用，请检查设置或稍后重试。",
+                    **self.service._safe_model_error(exc),
                 },
             }
 
@@ -1744,7 +1780,8 @@ class HomeTutorGraphRunner:
         self._write(state, "status", {"stage": agent_name, "label": status_label})
         started = perf_counter()
         try:
-            updates, output_summary, status, metadata = work()
+            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name=agent_name)):
+                updates, output_summary, status, metadata = work()
         except Exception as exc:
             failed = PendingAgentTrace(
                 agent_name=agent_name,
@@ -1915,7 +1952,8 @@ class CourseTutorGraphRunner:
 
     def append(self, *, user: User, session: ChatSession, message_text: str) -> TutorSessionDetail:
         state = self._initial_state(user=user, session=session, message_text=message_text)
-        result = self.graph.invoke(state)
+        with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
+            result = self.graph.invoke(state)
         return self.service._persist_message_pair(
             user=user,
             session=session,
@@ -1931,54 +1969,54 @@ class CourseTutorGraphRunner:
     def stream(self, *, user: User, session: ChatSession, message_text: str) -> Iterator[dict[str, Any]]:
         state = self._initial_state(user=user, session=session, message_text=message_text)
         try:
-            state.update(self._profile_node(state))
-            state.update(self._retriever_node(state))
-            citation_json = list(state.get("citation_json", []))
-            stream_state = self._prepare_stream_tutor_node(state)
-            state.update(stream_state)
-            trace_id = str(state.get("trace_id") or "")
-            used_model = bool(state.get("used_model"))
-            yield self.service._stream_event(
-                "metadata",
-                session_id=session.id,
-                trace_id=trace_id,
-                citation_count=len(citation_json),
-                used_model=used_model,
-                context_metadata=state.get("context_metadata"),
-            )
+            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
+                state.update(self._profile_node(state))
+                state.update(self._retriever_node(state))
+                citation_json = list(state.get("citation_json", []))
+                stream_state = self._prepare_stream_tutor_node(state)
+                state.update(stream_state)
+                trace_id = str(state.get("trace_id") or "")
+                used_model = bool(state.get("used_model"))
+                yield self.service._stream_event(
+                    "metadata",
+                    session_id=session.id,
+                    trace_id=trace_id,
+                    citation_count=len(citation_json),
+                    used_model=used_model,
+                    context_metadata=state.get("context_metadata"),
+                )
 
-            answer_parts: list[str] = []
-            for token in state.get("tokens", []):
-                if not isinstance(token, str) or not token:
-                    continue
-                answer_parts.append(token)
-                yield {"event": "token", "data": {"content": token}}
+                answer_parts: list[str] = []
+                for token in state.get("tokens", []):
+                    if not isinstance(token, str) or not token:
+                        continue
+                    answer_parts.append(token)
+                    yield {"event": "token", "data": {"content": token}}
 
-            assistant_reply = "".join(answer_parts).strip()
-            if not assistant_reply:
-                raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。")
-            state["assistant_reply"] = assistant_reply
-            state.update(self._weakness_node(state))
-            state.update(self._review_node(state))
-            state.update(self._next_action_node(state))
-            detail = self.service._persist_message_pair(
-                user=user,
-                session=session,
-                message_text=message_text,
-                assistant_reply=assistant_reply,
-                citation_json=citation_json,
-                trace_id=trace_id,
-                home_tool_metadata=None,
-                context_metadata=state.get("context_metadata"),
-                course_trace_records=list(state.get("pending_traces", [])),
-            )
-            yield {"event": "done", "data": detail.model_dump()}
-        except CourseAnswerGenerationError:
+                assistant_reply = "".join(answer_parts).strip()
+                if not assistant_reply:
+                    raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。")
+                state["assistant_reply"] = assistant_reply
+                state.update(self._weakness_node(state))
+                state.update(self._review_node(state))
+                state.update(self._next_action_node(state))
+                detail = self.service._persist_message_pair(
+                    user=user,
+                    session=session,
+                    message_text=message_text,
+                    assistant_reply=assistant_reply,
+                    citation_json=citation_json,
+                    trace_id=trace_id,
+                    home_tool_metadata=None,
+                    context_metadata=state.get("context_metadata"),
+                    course_trace_records=list(state.get("pending_traces", [])),
+                )
+                yield {"event": "done", "data": detail.model_dump()}
+        except Exception as exc:
             yield {
                 "event": "error",
                 "data": {
-                    "code": "MODEL_PROVIDER_ERROR",
-                    "message": "模型暂不可用，请检查设置或稍后重试。",
+                    **self.service._safe_model_error(exc),
                 },
             }
 
@@ -2212,7 +2250,8 @@ class CourseTutorGraphRunner:
     ) -> dict[str, Any]:
         started = perf_counter()
         try:
-            updates, output_summary, status, metadata = work()
+            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name=agent_name)):
+                updates, output_summary, status, metadata = work()
         except Exception as exc:
             duration_ms = max(1, int((perf_counter() - started) * 1000))
             failed = PendingAgentTrace(

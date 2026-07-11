@@ -106,6 +106,11 @@ export type AgentTraceEvent = {
   contextMessageCount?: number;
   contextSummaryUsed?: boolean;
   retrievalQueryMode?: "direct" | "contextual";
+  modelCallCount?: number;
+  modelRetryCount?: number;
+  modelLatencyMs?: number;
+  modelOutcome?: string;
+  modelErrorCategory?: string;
 };
 
 export type LearningSpaceSnapshot = {

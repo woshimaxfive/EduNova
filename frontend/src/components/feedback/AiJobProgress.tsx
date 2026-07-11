@@ -1,6 +1,8 @@
 import { ArrowClockwise, CircleNotch, Stop } from "@phosphor-icons/react";
+import { Link } from "react-router-dom";
 
 import { type AiJob } from "../../api/aiJobs";
+import { PATHS } from "../../app/routePaths";
 
 type Props = {
   job: AiJob;
@@ -33,6 +35,9 @@ export function AiJobProgress({ job, compact = false, onCancel, onRetry }: Props
       ) : null}
       {job.error_message ? <p className="ai-job-progress__error">{job.error_message}</p> : null}
       <div className="ai-job-progress__actions">
+        {job.error_code === "authentication_failed" || job.error_code === "not_configured" ? (
+          <Link className="icon-text-button" to={PATHS.settings}>检查模型设置</Link>
+        ) : null}
         {job.can_cancel && onCancel ? (
           <button type="button" className="icon-text-button" onClick={onCancel}>
             {job.status === "cancelling" ? <CircleNotch className="spin" size={15} /> : <Stop size={14} />}

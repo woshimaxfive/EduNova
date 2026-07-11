@@ -1,16 +1,18 @@
 # EduNova 当前状态
 
-更新时间：2026-07-10
+更新时间：2026-07-11
 
 ## 状态摘要
 
-当前最新完成到 **Phase 17：AI 长任务运行时与可靠性升级**。
+当前最新完成到 **Phase 18：AI 执行可靠性与质量评测**。
 
 Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 13 已完成主页问答、课程问答和资源生成的真实 Graph 编排，Phase 14 已让路径、练习评估和报告进入真实 LangGraph，Phase 15 已让画像和资料建课进入生产 Graph，Phase 16 已让资料对比和期末冲刺进入生产 Graph，并打通冲刺来源练习的独立回流。
 
 Phase 16 使用 Alembic `20260711_0013` 新增不可变 `material_comparison_runs`。`MaterialComparisonGraph` 从真实资料/课程分块生成规则底稿，模型只增强解释与排序；`ExamSprintGraph` 可显式消费对比版本，保留已完成进度并在冲刺来源练习后独立重排。普通练习不触发冲刺，重排失败不回滚评分、弱点或来源任务完成状态。
 
 Phase 17 使用 Alembic `20260711_0014` 新增 `ai_jobs`。`CourseBuilderGraph` 和 `ResourceGenerationGraph` 继续保持原有同步接口兼容，同时通过 `edunova_ai` RQ 队列提供后台任务入口。任务状态由服务端持久化，Graph 节点通过独立 session 更新真实进度和心跳；取消在节点与持久化边界协作执行，失败或取消不保存半成品课程或资源。
+
+Phase 18 使用 Alembic `20260711_0015` 新增隐私安全的 `model_call_runs`。十条 Graph、主页/课程流式问答和 Embedding 共用 `ModelExecutionRuntime`：只在当前配置内对瞬时故障有限重试，Redis 统一限制用户/全局并发并维护熔断状态；首 token 后的流中断不自动重放，也不持久化半截回答。离线 AI 质量回归集覆盖十条 Graph 的引用、敏感输出、结构和确定性数字边界，不依赖真实 API Key。
 
 Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`AssessmentGraph` 保证客观分数由规则决定，错题精确关联 `PracticeAnswer` 并合并更新弱点；`PathPlanningGraph` 只重排已有路径并保留完成进度；`ReportGraph` 确定性聚合最近 5 次练习和趋势。模型只增强题目、诊断、路径理由和报告叙事，失败时明确使用 `rules_only`。课程 RAG 在外部 embedding 可用时使用 pgvector SQL cosine 候选，未配置或失败时退回关键词检索，不再把本地 hash 宣称为语义命中。
 
@@ -202,10 +204,11 @@ Phase 7.2 的分层口径：
 | Phase 15 | 已完成 | `ProfileGraph`、`CourseBuilderGraph` 真接管，画像证据门控、v2 课程结构、adaptive 练习、草稿恢复和 React Flow/ECharts 可视化 |
 | Phase 16 | 已完成 | `MaterialComparisonGraph`、`ExamSprintGraph` 真接管，不可变对比版本、显式冲刺证据和来源练习独立重排 |
 | Phase 17 | 已完成 | `AIJobRuntime`、`ai_jobs`、独立 AI Worker、建课/资源后台任务、节点进度、恢复、取消、重试和全局任务托盘 |
+| Phase 18 | 已完成 | `ModelExecutionRuntime`、同配置重试、Redis 并发/熔断、模型调用安全审计、Trace 聚合和十 Graph 离线质量评测 |
 
 ## 下一步建议
 
-当前可以继续推进 **Phase 17 后产品硬化**。十条 Graph 数量不变，其中建课和资源生成已有统一长任务运行时；后续重点是其余同步 Graph 的超时边界、移动端持续打磨，以及 OCR/旧版 Office 等明确缺口。学习档案导出保持普通异步服务，不为了数量强行 Graph 化。
+Phase 18 已完成十条 Graph 共用的模型执行可靠性底座。后续应优先根据 Docker、真实模型评测和移动端验收发现的问题继续产品打磨；OCR、旧版 Office 和扫描件仍作为独立范围，不与可靠性底座混写。
 
 原因：
 

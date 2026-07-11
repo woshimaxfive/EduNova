@@ -11,7 +11,7 @@ from backend.app.api.v1.deps import get_auth_service
 from backend.app.core.config import Settings
 from backend.app.core.security import create_access_token
 from backend.app.main import create_app
-from backend.app.models import AgentRunLog, User
+from backend.app.models import AgentRunLog, ModelCallRun, User
 from backend.app.services.auth import AuthService
 
 
@@ -29,12 +29,16 @@ class TokenAuthRepository:
 @dataclass
 class FakeAgentTraceRepository:
     logs: list[AgentRunLog] = field(default_factory=list)
+    model_calls: list[ModelCallRun] = field(default_factory=list)
 
     def list_trace_logs(self, user_id: int, trace_id: str) -> list[AgentRunLog]:
         return sorted(
             [log for log in self.logs if log.user_id == user_id and log.trace_id == trace_id],
             key=lambda log: (log.step_index, log.created_at, log.id or 0),
         )
+
+    def list_model_calls(self, user_id: int, trace_id: str) -> list[ModelCallRun]:
+        return [item for item in self.model_calls if item.user_id == user_id and item.trace_id == trace_id]
 
 
 def make_user(user_id: int, display_name: str = "Agent 学生") -> User:
@@ -182,6 +186,62 @@ def test_agent_trace_route_hides_missing_and_other_user_traces() -> None:
 
     assert missing_response.status_code == 404
     assert other_user_response.status_code == 404
+
+
+def test_agent_trace_aggregates_privacy_safe_model_call_metrics() -> None:
+    user = make_user(1)
+    repo = FakeAgentTraceRepository(
+        logs=[make_log(10, 1, "trace_model_metrics", "persist", 9)],
+        model_calls=[
+            ModelCallRun(
+                id=1,
+                user_id=1,
+                trace_id="trace_model_metrics",
+                workflow="resource_generation",
+                node_name="DocWorker:doc",
+                purpose="generation",
+                operation="chat",
+                provider_source="user",
+                model_name="safe-model-name",
+                status="completed",
+                attempt_count=2,
+                retry_count=1,
+                latency_ms=820,
+                started_at=NOW,
+                completed_at=NOW,
+            ),
+            ModelCallRun(
+                id=2,
+                user_id=1,
+                trace_id="trace_model_metrics",
+                workflow="resource_generation",
+                node_name="review",
+                purpose="generation",
+                operation="chat",
+                provider_source="user",
+                model_name="safe-model-name",
+                status="failed",
+                error_category="rate_limited",
+                attempt_count=3,
+                retry_count=2,
+                latency_ms=1300,
+                started_at=NOW,
+                completed_at=NOW,
+            ),
+        ],
+    )
+    client, headers = make_client(user, repo)
+
+    response = client.get("/api/v1/agents/traces/trace_model_metrics", headers=headers)
+
+    metadata = response.json()["data"]["steps"][-1]["metadata"]
+    assert metadata == {
+        "model_call_count": 2,
+        "model_error_category": "rate_limited",
+        "model_latency_ms": 2120,
+        "model_outcome": "degraded",
+        "model_retry_count": 3,
+    }
 
 
 def test_agent_trace_response_does_not_expose_private_prompts_or_source_text() -> None:

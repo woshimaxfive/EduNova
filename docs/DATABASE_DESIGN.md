@@ -44,6 +44,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260710_0009_create_material_chunks.py`：创建主页资料级 RAG 使用的 `material_chunks`、资料内顺序唯一约束和 pgvector cosine 索引。
 - `backend/migrations/versions/20260710_0010_add_resource_export_jobs.py`：为 `export_jobs` 增加 nullable `resource_id` 外键和资源状态索引，用于 PPTX 文件任务。
 - `backend/migrations/versions/20260711_0014_create_ai_jobs.py`：创建统一 AI 长任务表 `ai_jobs`，用于智能建课和资源生成的状态、进度、幂等、取消和重试。
+- `backend/migrations/versions/20260711_0015_create_model_call_runs.py`：创建隐私安全模型调用审计表 `model_call_runs`，不保存 Prompt、回答、资料原文或密钥。
 
 Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
@@ -79,6 +80,9 @@ erDiagram
     users ||--o{ ai_jobs : runs
     courses ||--o{ ai_jobs : scopes
     ai_jobs ||--o{ ai_jobs : retries
+    users ||--o{ model_call_runs : invokes
+    ai_jobs ||--o{ model_call_runs : observes
+    model_settings ||--o{ model_call_runs : selects
 ```
 
 ## 4. 表设计
@@ -714,6 +718,24 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 | `started_at` / `heartbeat_at` / `completed_at` | timestamptz | 运行时生命周期时间 |
 | `created_at` / `updated_at` | timestamptz | 审计时间 |
 
+### 4.22 `model_call_runs`
+
+用途：保存模型调用的可靠性事实，供当前用户自己的 Agent trace 聚合使用。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `user_id` | bigint FK | 调用所属用户 |
+| `ai_job_id` / `model_config_id` | bigint FK nullable | 可选后台任务和个人配置引用 |
+| `trace_id` / `workflow` / `node_name` | varchar nullable | Graph 与节点关联 |
+| `purpose` / `operation` | varchar | 调用用途及 chat、stream、embedding 类型 |
+| `provider_source` / `model_name` | varchar | user/system 来源与模型名 |
+| `status` / `error_category` | varchar | 完成、失败、取消和安全错误分类 |
+| `attempt_count` / `retry_count` | integer | 当前配置内的尝试与重试次数 |
+| `latency_ms` | integer | 逻辑调用总耗时 |
+| `started_at` / `completed_at` | timestamptz | 调用时间边界 |
+
+记录默认保留 30 天。禁止保存 Prompt、回答正文、资料原文、API Key、请求体、响应体或原始 Provider 错误。
+
 ## 5. JSON 字段约定
 
 ### 5.1 `profile_json`
@@ -791,6 +813,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - `chat_sessions(user_id, scope, course_id)`，支持主页会话和课程会话分开查询。
 - `ai_jobs(user_id, idempotency_key)` 唯一约束。
 - `ai_jobs(user_id, status, updated_at)`、`ai_jobs(workflow, status)`、`ai_jobs(agent_trace_id)`。
+- `model_call_runs(user_id, started_at)`、`model_call_runs(trace_id, node_name)`、`model_call_runs(status, started_at)`、`model_call_runs(ai_job_id)`。
 
 ## 7. 数据隔离规则
 

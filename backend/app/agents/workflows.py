@@ -26,6 +26,11 @@ MATERIAL_COMPARISON_GRAPH = WorkflowSpec(
     artifact_type="material_comparison",
     steps=("validate_scope", "collect_evidence", "deterministic_compare", "model_compare", "review", "repair", "persist"),
 )
+HOME_TUTOR_GRAPH = WorkflowSpec(
+    name="home_tutor",
+    artifact_type="chat_message",
+    steps=("context", "route", "material_retriever", "web_search", "planner", "answer", "review", "repair", "persist"),
+)
 COURSE_TUTOR_GRAPH = WorkflowSpec(
     name="course_tutor",
     artifact_type="chat_message",
@@ -75,6 +80,7 @@ WORKFLOW_SPECS = {
         PROFILE_GRAPH,
         COURSE_BUILDER_GRAPH,
         MATERIAL_COMPARISON_GRAPH,
+        HOME_TUTOR_GRAPH,
         COURSE_TUTOR_GRAPH,
         RESOURCE_GENERATION_GRAPH,
         PATH_PLANNING_GRAPH,

@@ -26,6 +26,8 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 
 Phase 17 新增的 `AIJobRuntime` 也不是第十一条 Agent Graph。它只为 `CourseBuilderGraph` 和 `ResourceGenerationGraph` 提供后台排队、节点进度、心跳、取消、重试和刷新恢复。任务和 Graph 共用同一个 `agent_trace_id`；Graph trace 仍由真实节点执行产生，任务进度不替代 `agent_run_logs`。
 
+Phase 18 新增的 `ModelExecutionRuntime` 同样不是 Agent Graph。它位于模型配置与 OpenAI-compatible Provider 之间，为十条 Graph、主页/课程流式问答和 Embedding 提供统一错误分类、同配置重试、Redis 并发/熔断、取消检查和 `model_call_runs` 安全审计。模型失败后仍由各 Graph 的规则底稿接管，`rules_only` 不伪装成模型审核。
+
 ## 3. AgentState
 
 共享状态字段在 `backend/app/agents/schemas.py` 中定义，核心字段包括：
@@ -65,6 +67,7 @@ repair_count
 - `status`：由步骤状态派生，可能为 `running`、`completed`、`warning` 或 `failed`。
 - `steps`：按 `step_index`、`created_at`、`id` 排序。
 - `metadata`：只包含白名单安全摘要。
+- 最后一个步骤可聚合当前 trace 的模型调用次数、重试次数、总耗时、降级结果和安全错误分类。
 
 以下学习产物新增 nullable `agent_trace_id` 并建立索引，便于从前端产物反查 Graph：
 

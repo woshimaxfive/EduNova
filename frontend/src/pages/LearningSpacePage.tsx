@@ -473,9 +473,11 @@ export function LearningSpacePage() {
       setPrompt("");
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
     } catch (error) {
-      void error;
       setMessages(messagesBeforeSend);
-      setComposerFeedback({ message: "消息发送失败，请稍后再试。", tone: "warning" });
+      setComposerFeedback({
+        message: error instanceof Error ? error.message : "消息发送失败，请稍后再试。",
+        tone: "warning"
+      });
     } finally {
       setStreamingAnswerId(null);
       setGraphStatus(null);

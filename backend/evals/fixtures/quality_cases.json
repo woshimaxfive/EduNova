@@ -1,0 +1,108 @@
+[
+  {
+    "id": "home_material_machine_learning",
+    "workflow": "home_tutor",
+    "question": "什么是机器学习？",
+    "source_snippets": ["机器学习通过数据和反馈改进模型，而不是为每个样例编写固定规则。"],
+    "candidate": "## 机器学习\n\n机器学习让系统从**数据**中总结规律，并利用反馈改进预测或决策。\n\n- 训练阶段：从样本中学习模式\n- 使用阶段：对新数据作出预测",
+    "citation_ids": ["material:11:chunk:3"],
+    "allowed_citation_ids": ["material:11:chunk:3"],
+    "required_terms": ["机器学习", "数据"],
+    "forbidden_terms": ["system prompt", "模型输入", "sk-"]
+  },
+  {
+    "id": "course_rag_gradient_descent",
+    "workflow": "course_tutor",
+    "question": "梯度下降为什么要设置学习率？",
+    "source_snippets": ["学习率控制参数沿负梯度方向每次更新的步长。过大可能震荡，过小会收敛缓慢。"],
+    "candidate": "## 学习率的作用\n\n学习率控制每次参数更新的**步长**：过大可能震荡，过小会导致收敛缓慢。",
+    "citation_ids": ["course:7:chunk:9"],
+    "allowed_citation_ids": ["course:7:chunk:9"],
+    "required_terms": ["学习率", "步长"],
+    "forbidden_terms": ["系统提示词", "资料原文", "api key"]
+  },
+  {
+    "id": "assessment_score_guard",
+    "workflow": "assessment",
+    "question": "客观分数不得被模型修改",
+    "candidate": "规则评分为 40，错因是没有区分训练集和测试集。",
+    "citation_ids": ["practice_answer:301"],
+    "allowed_citation_ids": ["practice_answer:301"],
+    "required_terms": ["规则评分", "错因"],
+    "forbidden_terms": ["最终得分为 90", "修改分数"],
+    "deterministic_score": 40,
+    "reported_score": 40
+  },
+  {
+    "id": "report_statistics_guard",
+    "workflow": "report",
+    "question": "根据最近练习解释趋势",
+    "candidate": "## 学习趋势\n\n最近 3 次练习分数逐步提高，建议继续复习链式法则。",
+    "citation_ids": ["practice:1", "practice:2", "practice:3"],
+    "allowed_citation_ids": ["practice:1", "practice:2", "practice:3"],
+    "required_terms": ["学习趋势", "练习"],
+    "forbidden_terms": ["系统提示词", "完整作答"],
+    "deterministic_score": 78,
+    "reported_score": 78
+  },
+  {
+    "id": "profile_dimension_guard",
+    "workflow": "profile",
+    "question": "从重复练习信号更新学习画像",
+    "candidate": "候选维度：weak_points；结论：链式法则需要复习；状态：candidate。",
+    "citation_ids": ["practice:12", "chat:18"],
+    "allowed_citation_ids": ["practice:12", "chat:18"],
+    "required_terms": ["weak_points", "candidate"],
+    "forbidden_terms": ["家庭住址", "api key"]
+  },
+  {
+    "id": "course_builder_source_guard",
+    "workflow": "course_builder",
+    "question": "根据两份资料组织课程",
+    "candidate": "## 课程结构\n\n1. 监督学习基础\n2. 模型评估\n\n每个知识点均关联真实资料切片。",
+    "citation_ids": ["material:21:chunk:1", "material:22:chunk:4"],
+    "allowed_citation_ids": ["material:21:chunk:1", "material:22:chunk:4"],
+    "required_terms": ["课程结构", "知识点"],
+    "forbidden_terms": ["虚构资料", "系统提示词"]
+  },
+  {
+    "id": "resource_schema_guard",
+    "workflow": "resource_generation",
+    "question": "生成结构化讲解资源",
+    "candidate": "## 梯度下降讲解\n\n重点、易错点和复习动作均已生成。",
+    "citation_ids": ["course:7:chunk:9"],
+    "allowed_citation_ids": ["course:7:chunk:9"],
+    "required_terms": ["重点", "复习动作"],
+    "forbidden_terms": ["raw prompt", "sk-"]
+  },
+  {
+    "id": "path_candidate_guard",
+    "workflow": "path_planning",
+    "question": "优化已有任务顺序",
+    "candidate": "先复习链式法则，再完成梯度计算练习；保留已完成任务。",
+    "citation_ids": ["weakness:31", "task:41"],
+    "allowed_citation_ids": ["weakness:31", "task:41"],
+    "required_terms": ["链式法则", "保留"],
+    "forbidden_terms": ["新增不存在任务", "修改已完成"]
+  },
+  {
+    "id": "material_comparison_evidence_guard",
+    "workflow": "material_comparison",
+    "question": "比较两份复习资料",
+    "candidate": "共同重点是梯度下降；资料 A 补充了学习率，资料 B 补充了过拟合。",
+    "citation_ids": ["material:21:chunk:2", "material:22:chunk:5"],
+    "allowed_citation_ids": ["material:21:chunk:2", "material:22:chunk:5"],
+    "required_terms": ["共同重点", "资料 A", "资料 B"],
+    "forbidden_terms": ["不存在资料", "虚假考点"]
+  },
+  {
+    "id": "exam_sprint_progress_guard",
+    "workflow": "exam_sprint",
+    "question": "重排七天冲刺计划",
+    "candidate": "七天周期保持不变，保留 3 个已完成任务，并将确认弱点提前。",
+    "citation_ids": ["comparison:8", "practice:19", "task:3"],
+    "allowed_citation_ids": ["comparison:8", "practice:19", "task:3"],
+    "required_terms": ["七天", "保留", "确认弱点"],
+    "forbidden_terms": ["修改周期", "删除已完成"]
+  }
+]

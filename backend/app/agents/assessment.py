@@ -19,6 +19,7 @@ from backend.app.api.errors import make_trace_id
 from backend.app.models import PracticeAnswer, PracticeSession, User, WeaknessReviewItem
 from backend.app.schemas.practice import PracticeSessionDetail, SubmitPracticeAnswerItem, session_to_api
 from backend.app.services.practice import EvaluatedAnswer, PracticeService, PracticeValidationError
+from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 
 
 class AssessmentState(TypedDict, total=False):
@@ -91,7 +92,8 @@ class AssessmentGraphRunner:
             "sprint_task_id": sprint_task_id,
             "repair_count": 0,
         }
-        return self.create_graph.invoke(state)["detail"]
+        with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, purpose="question_generation")):
+            return self.create_graph.invoke(state)["detail"]
 
     def submit_answers(
         self,
@@ -109,7 +111,8 @@ class AssessmentGraphRunner:
             "submitted_answers": answers,
             "repair_count": 0,
         }
-        return self.submit_graph.invoke(state)["detail"]
+        with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, purpose="answer_evaluation")):
+            return self.submit_graph.invoke(state)["detail"]
 
     def _build_create_graph(self):
         graph = StateGraph(AssessmentState)
@@ -733,7 +736,8 @@ class AssessmentGraphRunner:
     ) -> dict[str, Any]:
         started = perf_counter()
         try:
-            result, output_summary, status, metadata = work()
+            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name=agent_name)):
+                result, output_summary, status, metadata = work()
         except Exception as exc:
             self._record_failure(state, agent_name, step_index, input_summary, exc, started)
             raise

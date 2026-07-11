@@ -1553,7 +1553,7 @@ metadata -> status* -> sources -> token* -> replace? -> done
 
 ```text
 event: error
-data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查设置或稍后重试。"}
+data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重试。","retryable":true,"retry_after_seconds":3}
 ```
 
 流式规则：
@@ -1563,7 +1563,8 @@ data: {"code":"MODEL_PROVIDER_ERROR","message":"模型暂不可用，请检查�
 - 有引用但未配置可用模型时不调用外部模型，流式返回未配置提示，仍持久化真实引用。
 - 有引用且模型可用时，Provider 以 `stream=true` 调用 `{base_url}/chat/completions`，逐段解析 `data: {...}` 和 `[DONE]`。
 - 只有流式成功完成后，后端才持久化 user 消息、完整 assistant 回答、真实引用和 `trace_id`。
-- 模型流式中途失败时只发送 `error` 事件，不写入半截 assistant；前端必须保留输入并提示用户检查设置或稍后重试。
+- `error` 向后兼容保留 `code` 和 `message`，新增 `retryable` 与可选 `retry_after_seconds`。安全类别包括未配置、认证失败、上下文过长、限流、繁忙、超时、网络故障、服务故障、无效响应和流中断。
+- 模型流式中途失败时只发送 `error` 事件，不写入半截 assistant；首 token 后不自动重放，前端必须保留输入并提供明确恢复动作。
 - `done` 事件返回最终 `TutorSessionDetail`，前端用它替换临时流式状态并刷新课程历史。
 - 主页只有 Graph 完成 Review/Repair 后才持久化 user/assistant 消息；流式中途失败只发送 `error`，不保存半截消息。
 

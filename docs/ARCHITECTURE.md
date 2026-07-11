@@ -266,6 +266,7 @@ backend/app/
 | `backend/app/services/course_seed.py` | 内置课程导入服务 |
 | `backend/app/services/tutor.py` | 主页/课程会话 API 边界和依赖装配；`HomeTutorGraphRunner` 接管主页上下文、路由、资料检索、联网、规划、回答、Review/Repair 和持久化，`CourseTutorGraphRunner` 接管严格课程 RAG 问答 |
 | `backend/app/services/model_settings.py` | 模型设置服务，负责用户多模型配置、系统兜底配置解析、Fernet 加密保存用户 Key、脱敏摘要、连接测试、默认配置切换、聊天模型和 embedding 模型运行时配置优先级 |
+| `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计 |
 | `backend/app/services/embeddings.py` | Embedding 服务，负责 OpenAI-compatible `/embeddings` 调用编排、本地 `local-hash-1536` fallback、知识切片向量写入和 metadata 标记 |
 | `backend/app/services/course_answers.py` | 回答服务，负责主页学习 prompt、资料/网页来源摘要、深度回答指令、课程引用受控 prompt、非流式或流式模型 Provider 调用、未配置和模型失败处理 |
 | `backend/app/services/material_parsers.py` | 资料解析器，负责 TXT/Markdown/PDF/DOCX/PPTX 文本抽取，并明确 OCR、旧版 Office 和扫描件边界 |
@@ -531,6 +532,8 @@ Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已
 ```
 
 用户 API Key 使用 `MODEL_SETTINGS_ENCRYPTION_KEY` 派生的 Fernet 加密后保存到 `model_settings.api_key_ciphertext`。每条用户配置单独保存密钥密文、测试状态和默认标记；`GET /settings/model/configs` 只返回配置摘要、脱敏 Key、服务器兜底摘要和默认配置 id，不返回明文 Key。旧 `/settings/model` 仍作为兼容接口读取或更新当前默认配置。设置页 Provider 预设首位是讯飞星火 Spark，聊天实际走 OpenAI-compatible Chat Completions；embedding 实际走 OpenAI-compatible Embeddings。讯飞原生 Embeddingp/Embeddingq 因独立授权、签名鉴权和 2560 维输出，仍放到后续专项。
+
+Phase 18 后，个人配置只有在字段不完整时才沿用现有服务器配置兜底；已经对个人配置发起的请求发生超时、限流或服务故障时，只在同一配置内有限重试，不把学习内容自动发送给另一 Provider。普通调用与 Embedding 最多 3 次，流式调用只允许在首 token 前重试。Redis 暂不可用时限流与熔断 fail-open，但模型 HTTP 超时、Graph fallback 和安全审计边界继续生效。
 
 降级策略：
 

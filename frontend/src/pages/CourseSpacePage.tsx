@@ -662,10 +662,10 @@ export function CourseSpacePage() {
       queryClient.setQueryData(["tutor", "session", detail.session.id], { data: detail, trace_id: null });
       void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
       void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
-    } catch {
+    } catch (error) {
       setCourseMessages(previousMessages);
       setStreamingSessionId(null);
-      setCourseFeedback("模型暂不可用，请检查设置或稍后重试。");
+      setCourseFeedback(error instanceof Error ? error.message : "模型暂不可用，请检查设置或稍后重试。");
     } finally {
       setIsSearchingCourse(false);
     }

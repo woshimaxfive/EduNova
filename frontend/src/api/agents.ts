@@ -48,7 +48,13 @@ export function mapAgentTraceStepToEvent(step: AgentTraceStep): AgentTraceEvent 
     contextMessageCount,
     contextSummaryUsed:
       typeof step.metadata.context_summary_used === "boolean" ? step.metadata.context_summary_used : undefined,
-    retrievalQueryMode
+    retrievalQueryMode,
+    modelCallCount: typeof step.metadata.model_call_count === "number" ? step.metadata.model_call_count : undefined,
+    modelRetryCount: typeof step.metadata.model_retry_count === "number" ? step.metadata.model_retry_count : undefined,
+    modelLatencyMs: typeof step.metadata.model_latency_ms === "number" ? step.metadata.model_latency_ms : undefined,
+    modelOutcome: typeof step.metadata.model_outcome === "string" ? step.metadata.model_outcome : undefined,
+    modelErrorCategory:
+      typeof step.metadata.model_error_category === "string" ? step.metadata.model_error_category : undefined
   };
 }
 

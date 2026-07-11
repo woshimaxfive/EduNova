@@ -11,6 +11,7 @@ from backend.app.agents.learning_review import contains_sensitive_text, parse_js
 from backend.app.api.errors import make_trace_id
 from backend.app.models import ProfileEvent, StudentProfile, User
 from backend.app.schemas.profiles import PROFILE_DIMENSIONS, ProfileChatResponse, event_to_api, profile_to_api
+from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 
 
 class ProfileState(TypedDict, total=False):
@@ -60,7 +61,8 @@ class ProfileGraphRunner:
             "suggested_updates": {},
             "repair_count": 0,
         }
-        return self.graph.invoke(state)["response"]
+        with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, purpose="explicit_chat")):
+            return self.graph.invoke(state)["response"]
 
     def ingest_learning_signal(
         self,
@@ -89,7 +91,8 @@ class ProfileGraphRunner:
             "suggested_updates": suggested_updates,
             "repair_count": 0,
         }
-        return self.graph.invoke(state).get("event")
+        with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, purpose="learning_signal")):
+            return self.graph.invoke(state).get("event")
 
     def _build_graph(self):
         graph = StateGraph(ProfileState)
@@ -378,7 +381,8 @@ class ProfileGraphRunner:
     def _run_node(self, state: ProfileState, name: str, index: int, input_summary: str, work: Callable):
         started = perf_counter()
         try:
-            result, output_summary, status, metadata = work()
+            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name=name)):
+                result, output_summary, status, metadata = work()
         except Exception as exc:
             self._record(state, name, index, "failed", input_summary, "节点执行失败，已记录安全错误摘要。", {"error_code": exc.__class__.__name__}, started)
             raise

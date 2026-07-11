@@ -15,6 +15,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 - SQLAlchemy、Alembic、pgvector、核心业务表和学习闭环基础表。
 - 真实认证、首页 summary、主页会话、资料库、CourseBuilderGraph 智能建课、RAG 检索和课程会话。
 - 模型设置、多模型配置、非流式课程 RAG 回答、SSE 流式回答。
+- `ModelExecutionRuntime` 错误分类、同配置重试、Redis 并发/熔断、取消、流中断和隐私安全审计。
 - Embedding 服务、`local-hash-1536` fallback 和混合检索字段。
 - 课程空间双模式前端已接入，覆盖默认问答模式、按需学习模式、引用渐进展开和移动端布局。
 - ProfileGraph 节点顺序、显式画像更新、隐式信号双来源门槛、逐维可信度、画像事件和用户隔离。
@@ -871,3 +872,13 @@ docker compose down
 - 失败时保留课程名、资料选择、资源类型、目标和难度，并提供取消/重试；不得显示底层异常或模型输入。
 - Docker Compose 必须同时运行独立 `edunova_ai` 和 `edunova_exports` Worker，队列不混用。
 - `agent-browser` 覆盖桌面和 390px：后台建课、六资源生成、跨页返回、刷新恢复、取消、失败重试、最终产物和无水平溢出。
+
+## 18. Phase 18 AI 可靠性与质量回归
+
+- Provider 测试覆盖 401/403、429、408/504、5xx、上下文过长、无效 JSON、网络故障和 `Retry-After`。
+- Runtime 测试覆盖 `0.5s -> 1.5s` 同配置重试、认证错误不重试、无效响应只重试一次、用户/全局并发、熔断与半开探测。
+- 流式测试覆盖首 token 前重试、首 token 后禁止重放、断流不保存半截消息和输入保留。
+- `model_call_runs` 测试覆盖独立持久化、trace/用户隔离、30 天清理和 Prompt、回答、资料、密钥脱敏。
+- `python -m backend.evals.run --mode offline` 使用十条 Graph 固定中文案例验证引用白名单、敏感输出、必要结构和确定性数字；标准测试不访问网络。
+- `scripts/run_ai_eval.ps1` 只有在 `EDUNOVA_EVAL_ALLOW_NETWORK=1` 且显式提供评测 Base URL/模型后才调用真实模型，报告写入忽略目录 `output/ai-eval`。
+- Docker 验证迁移、Redis 并发/熔断状态、AIJob 取消与重试；`agent-browser` 验证主页、课程空间、任务面板和轨迹摘要在桌面与 390px 下可恢复。

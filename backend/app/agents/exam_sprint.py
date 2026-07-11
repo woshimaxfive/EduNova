@@ -11,6 +11,7 @@ from backend.app.agents.learning_review import contains_sensitive_text, parse_js
 from backend.app.api.errors import make_trace_id
 from backend.app.models import LearningPath, LearningTask, MaterialComparisonRun, User
 from backend.app.services.exam_sprint import SprintPointCandidate, SprintTaskSpec
+from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 
 
 class ExamSprintState(TypedDict, total=False):
@@ -87,7 +88,8 @@ class ExamSprintGraphRunner:
             "repair_count": 0,
             "preserved_task_count": 0,
         }
-        return self.graph.invoke(state)["result"]
+        with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, purpose=trigger)):
+            return self.graph.invoke(state)["result"]
 
     def _build_graph(self):
         graph = StateGraph(ExamSprintState)
@@ -553,7 +555,8 @@ class ExamSprintGraphRunner:
     ) -> dict[str, Any]:
         started = perf_counter()
         try:
-            result, output_summary, status, metadata = work()
+            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name=name)):
+                result, output_summary, status, metadata = work()
         except Exception as exc:
             self._record(state, name, index, "failed", input_summary, "节点执行失败，已记录安全错误摘要。", {"error_code": exc.__class__.__name__}, started)
             raise

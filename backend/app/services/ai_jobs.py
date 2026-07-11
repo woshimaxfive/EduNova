@@ -194,6 +194,14 @@ class AgentJobContext:
             job.stage = stage
             db.commit()
 
+    def check_cancelled(self) -> None:
+        with self.session_factory() as db:
+            job = db.scalar(select(AiJob).where(AiJob.id == self.job_id).with_for_update())
+            if job is None or job.status in {"cancelling", "cancelled"} or job.cancel_requested_at is not None:
+                raise AiJobCancelled("任务已取消。")
+            job.heartbeat_at = datetime.now(UTC)
+            db.commit()
+
     def after_node(
         self,
         *,
@@ -618,6 +626,12 @@ class AiJobService:
 
     @staticmethod
     def _safe_error_code(exc: Exception) -> str:
+        current: BaseException | None = exc
+        while current is not None:
+            code = getattr(current, "code", None)
+            if isinstance(code, str) and code:
+                return code
+            current = current.__cause__ or current.__context__
         name = exc.__class__.__name__.upper()
         if "VALIDATION" in name or "GENERATION" in name:
             return "GENERATION_ERROR"
@@ -627,6 +641,21 @@ class AiJobService:
 
     @staticmethod
     def _safe_error_message(exc: Exception) -> str:
+        code = AiJobService._safe_error_code(exc)
+        runtime_messages = {
+            "authentication_failed": "模型配置认证失败，请检查模型设置后重试。",
+            "context_too_long": "任务上下文过长，请缩小资料或生成范围。",
+            "rate_limited": "模型服务请求较多，可稍后重试。",
+            "model_busy": "当前模型任务较多，可稍后重试。",
+            "circuit_open": "模型服务正在恢复，可稍后重试。",
+            "timeout": "模型响应超时，可稍后重试。",
+            "network_error": "暂时无法连接模型服务，可稍后重试。",
+            "provider_unavailable": "模型服务暂不可用，可稍后重试。",
+            "invalid_request": "模型服务无法处理本次任务，请调整输入。",
+            "invalid_response": "模型返回格式异常，可重新生成。",
+        }
+        if code in runtime_messages:
+            return runtime_messages[code]
         if isinstance(exc, (AiJobValidationError, AiJobNotFoundError)):
             return str(exc)[:300]
         name = exc.__class__.__name__.lower()

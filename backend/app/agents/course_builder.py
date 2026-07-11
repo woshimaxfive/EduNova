@@ -13,6 +13,7 @@ from backend.app.agents.learning_review import contains_sensitive_text, parse_js
 from backend.app.api.errors import make_trace_id
 from backend.app.models import Course, CourseEnrollment, CourseMaterialLink, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, User
 from backend.app.schemas.courses import CreateCourseFromMaterialsResult
+from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 
 
 class CourseBuilderState(TypedDict, total=False):
@@ -78,7 +79,8 @@ class CourseBuilderGraphRunner:
             "repair_count": 0,
             "job_context": job_context,
         }
-        return self.graph.invoke(state)["result"]
+        with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
+            return self.graph.invoke(state)["result"]
 
     def _build_graph(self):
         graph = StateGraph(CourseBuilderState)
@@ -532,7 +534,8 @@ class CourseBuilderGraphRunner:
         started = perf_counter()
         self._job_before(state, name)
         try:
-            result, output_summary, status, metadata = work()
+            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name=name)):
+                result, output_summary, status, metadata = work()
         except Exception as exc:
             self._record(state, name, index, "failed", input_summary, "节点执行失败，已记录安全错误摘要。", {"error_code": exc.__class__.__name__}, started)
             progress, _ = self.job_progress[name]

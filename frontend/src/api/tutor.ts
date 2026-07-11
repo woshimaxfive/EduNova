@@ -108,7 +108,23 @@ export type TutorStreamReplace = {
 export type TutorStreamError = {
   code: string;
   message: string;
+  retryable?: boolean;
+  retry_after_seconds?: number;
 };
+
+export class TutorStreamRequestError extends Error {
+  code: string;
+  retryable: boolean;
+  retryAfterSeconds?: number;
+
+  constructor(error: TutorStreamError) {
+    super(error.message || "模型暂不可用，请检查设置或稍后重试。");
+    this.name = "TutorStreamRequestError";
+    this.code = error.code;
+    this.retryable = error.retryable ?? true;
+    this.retryAfterSeconds = error.retry_after_seconds;
+  }
+}
 
 export type StreamTutorMessageHandlers = {
   onMetadata?: (metadata: TutorStreamMetadata) => void;
@@ -209,7 +225,7 @@ export async function streamTutorMessage(
     } else if (event.event === "error") {
       const error = event.data as TutorStreamError;
       handlers.onError?.(error);
-      throw new Error(error.message || "模型暂不可用，请检查设置或稍后重试。");
+      throw new TutorStreamRequestError(error);
     }
   };
 

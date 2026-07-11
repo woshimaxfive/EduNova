@@ -23,6 +23,17 @@ class Settings(BaseSettings):
     system_embedding_model: str = "example-embedding-model"
     model_settings_encryption_key: str = ""
     model_request_timeout_seconds: float = 20.0
+    model_max_attempts: int = 3
+    model_retry_base_delay_seconds: float = 0.5
+    model_retry_max_delay_seconds: float = 2.0
+    model_retry_after_max_seconds: float = 3.0
+    model_circuit_failure_threshold: int = 5
+    model_circuit_window_seconds: int = 60
+    model_circuit_open_seconds: int = 60
+    model_max_concurrent_per_user: int = 3
+    model_max_concurrent_global: int = 12
+    model_concurrency_wait_seconds: float = 2.0
+    model_call_log_retention_days: int = 30
     web_search_provider: str = "tavily"
     web_search_endpoint: str = "https://api.tavily.com/search"
     web_search_api_key: str = ""

@@ -34,6 +34,7 @@ from backend.app.schemas.resources import (
     quality_score_to_api,
 )
 from backend.app.services.model_settings import ModelNotConfiguredError
+from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.resource_artifacts import ArtifactBuildInput, build_resource_content, validate_resource_content
 
 
@@ -1066,7 +1067,8 @@ class ResourceGenerationGraphRunner:
         }
         persist_started = perf_counter()
         try:
-            result = self.graph.invoke(state)
+            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
+                result = self.graph.invoke(state)
             self._job_before(result, "persist")
             self.service.repository.commit()
             resources = list(result.get("resource_objects", []))
@@ -1254,15 +1256,18 @@ class ResourceGenerationGraphRunner:
                 profile_summary=profile_summary,
                 difficulty=str(state.get("difficulty") or "medium"),
             )
-            enhanced_markdown, model_failed = self.service._enhance_resource_with_model(
-                user=state["user"],
-                resource_type=resource_type,
-                draft=draft,
-                contexts=contexts,
-                profile_summary=profile_summary,
-                learning_goal=str(state.get("learning_goal") or ""),
-                difficulty=str(state.get("difficulty") or "medium"),
-            )
+            with model_execution_scope(
+                execution_context_for_state(state, workflow=self.workflow, node_name=f"{worker_name}:{resource_type}")
+            ):
+                enhanced_markdown, model_failed = self.service._enhance_resource_with_model(
+                    user=state["user"],
+                    resource_type=resource_type,
+                    draft=draft,
+                    contexts=contexts,
+                    profile_summary=profile_summary,
+                    learning_goal=str(state.get("learning_goal") or ""),
+                    difficulty=str(state.get("difficulty") or "medium"),
+                )
             markdown = enhanced_markdown or draft.markdown
             generation_mode = "model_enhanced" if enhanced_markdown else self.service._deterministic_generation_mode(contexts)
             content_json = {**draft.content_json, "markdown": markdown}
@@ -1366,7 +1371,8 @@ class ResourceGenerationGraphRunner:
         self._job_before(state, "review")
         contexts = list(state.get("contexts", []))
         payloads = list(state.get("resource_payloads", []))
-        model_reviews, review_model_failed = self.service._review_resources_with_model(user=state["user"], payloads=payloads)
+        with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name="review")):
+            model_reviews, review_model_failed = self.service._review_resources_with_model(user=state["user"], payloads=payloads)
         reviewed: list[dict[str, Any]] = []
         generation_warnings = 0
         needs_repair = False
@@ -1456,7 +1462,8 @@ class ResourceGenerationGraphRunner:
                 repaired_results.append(payload)
                 continue
             resource_type = str(payload["resource_type"])
-            repaired_markdown = self.service._repair_resource_with_model(user=state["user"], payload=payload)
+            with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name="repair")):
+                repaired_markdown = self.service._repair_resource_with_model(user=state["user"], payload=payload)
             if repaired_markdown is not None:
                 repaired_content = {**payload["content_json"], "markdown": repaired_markdown}
                 repaired_results.append(

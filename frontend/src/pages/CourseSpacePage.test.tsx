@@ -439,6 +439,58 @@ function makeDetail(
   };
 }
 
+function makeTwoTurnDetail(session: TutorSessionSummary): TutorSessionDetail {
+  const secondCitation: TutorCitation = {
+    ...citationItem,
+    chunk_id: 502,
+    content: "A* 搜索同时计算实际代价 g(n) 与启发式估价 h(n)。",
+    source_title: "搜索算法进阶讲义.md",
+    section_title: "A* 搜索"
+  };
+
+  return {
+    session,
+    messages: [
+      {
+        id: "turn-1-user",
+        session_id: session.id,
+        role: "user",
+        content: "第一问：启发函数是什么？",
+        citation_json: [],
+        trace_id: null,
+        created_at: "2026-07-03T12:00:00Z"
+      },
+      {
+        id: "turn-1-assistant",
+        session_id: session.id,
+        role: "assistant",
+        content: "第一答：启发函数用于估计剩余路径代价。",
+        citation_json: [citationItem],
+        trace_id: "trace_turn_1",
+        created_at: "2026-07-03T12:01:00Z"
+      },
+      {
+        id: "turn-2-user",
+        session_id: session.id,
+        role: "user",
+        content: "第二问：A* 如何使用它？",
+        citation_json: [],
+        trace_id: null,
+        created_at: "2026-07-03T12:02:00Z"
+      },
+      {
+        id: "turn-2-assistant",
+        session_id: session.id,
+        role: "assistant",
+        content: "第二答：A* 使用 f(n) = g(n) + h(n) 排序候选节点。",
+        citation_json: [secondCitation],
+        trace_id: "trace_turn_2",
+        created_at: "2026-07-03T12:03:00Z"
+      }
+    ]
+  };
+}
+
 function createSseStream(events: Array<{ event: string; data: unknown }>) {
   const encoder = new TextEncoder();
 
@@ -1003,11 +1055,18 @@ describe("CourseSpacePage course tutor sessions", () => {
   });
 
   it("shows the A3 learning loop in course space without replacing course chat", async () => {
+    const user = userEvent.setup();
     renderCoursePage({ learningState: learningStateWithWeakness, currentPath: activePathDetail });
 
-    expect(await screen.findByRole("region", { name: "课程学习闭环" })).toBeInTheDocument();
-    expect(screen.getByText("A3 个性化学习闭环")).toBeInTheDocument();
-    expect(screen.getByText(/围绕最新问题|从课程资料和知识点开始建立学习闭环/)).toBeInTheDocument();
+    expect(await screen.findByRole("banner", { name: "课程工作区标题栏" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "A3 学习步骤" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /学习进度/ }));
+    expect(await screen.findByRole("dialog", { name: "学习进度" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /围绕最新问题|从课程资料和知识点开始建立学习闭环|根据课程证据推进下一步个性化学习/,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "A3 学习步骤" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "课程对话空间" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "进入你的学习空间" })).not.toBeInTheDocument();
@@ -1137,6 +1196,54 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
   });
 
+  it("keeps citations attached to their own assistant turn", async () => {
+    const user = userEvent.setup();
+    const session = makeSession("777", "两轮课程问答");
+    renderCoursePage({
+      sessions: [session],
+      historyDetail: makeTwoTurnDetail(session)
+    });
+
+    const thread = await screen.findByRole("region", { name: "课程即时对话" });
+    const sourceButtons = within(thread).getAllByRole("button", { name: "来源" });
+
+    await user.click(sourceButtons[0]);
+    let detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
+    expect(within(detailPanel).getByText("人工智能导论讲义.md")).toBeInTheDocument();
+    expect(within(detailPanel).queryByText("搜索算法进阶讲义.md")).not.toBeInTheDocument();
+
+    await user.click(sourceButtons[1]);
+    detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
+    expect(within(detailPanel).getByText("搜索算法进阶讲义.md")).toBeInTheDocument();
+    expect(within(detailPanel).queryByText("人工智能导论讲义.md")).not.toBeInTheDocument();
+  });
+
+  it("uses the matching historical question when generating resources from an answer", async () => {
+    const user = userEvent.setup();
+    const session = makeSession("777", "两轮课程问答");
+    const { calls } = renderCoursePage({
+      sessions: [session],
+      historyDetail: makeTwoTurnDetail(session)
+    });
+
+    const thread = await screen.findByRole("region", { name: "课程即时对话" });
+    await user.click(within(thread).getAllByRole("button", { name: "生成资源" })[0]);
+    const resourcePanel = await screen.findByRole("region", { name: "课程资源生成" });
+    await user.click(within(resourcePanel).getByRole("button", { name: "生成 6 类个性化资源" }));
+
+    await waitFor(() => {
+      expect(calls).toContainEqual(
+        expect.objectContaining({
+          method: "post",
+          url: RESOURCE_ENDPOINTS.generationJobs,
+          payload: expect.objectContaining({
+            learning_goal: "第一问：启发函数是什么？"
+          })
+        })
+      );
+    });
+  });
+
   it("links practice and reports entries with the current course preselected", async () => {
     renderCoursePage();
 
@@ -1152,8 +1259,10 @@ describe("CourseSpacePage course tutor sessions", () => {
   });
 
   it("renders pending course weakness review items from learning state", async () => {
+    const user = userEvent.setup();
     renderCoursePage({ learningState: learningStateWithWeakness });
 
+    await user.click(await screen.findByRole("button", { name: /学习进度/ }));
     const weaknessRegion = await screen.findByRole("region", { name: "待复习弱点" });
     await within(weaknessRegion).findByText("启发式搜索");
 
@@ -1165,8 +1274,10 @@ describe("CourseSpacePage course tutor sessions", () => {
   });
 
   it("renders actionable course weakness review states", async () => {
+    const user = userEvent.setup();
     renderCoursePage({ learningState: learningStateWithReviewFlow });
 
+    await user.click(await screen.findByRole("button", { name: /学习进度/ }));
     const weaknessRegion = await screen.findByRole("region", { name: "待复习弱点" });
     await within(weaknessRegion).findByText("启发式搜索");
 
@@ -1187,6 +1298,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     const user = userEvent.setup();
     const { calls } = renderCoursePage({ learningState: learningStateWithReviewFlow });
 
+    await user.click(await screen.findByRole("button", { name: /学习进度/ }));
     const weaknessRegion = await screen.findByRole("region", { name: "待复习弱点" });
     await user.click(await within(weaknessRegion).findByRole("button", { name: "确认 启发式搜索" }));
 
@@ -1207,6 +1319,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     const user = userEvent.setup();
     const { fetchCalls } = renderCoursePage({ learningState: learningStateWithReviewFlow, failWeaknessAction: true });
 
+    await user.click(await screen.findByRole("button", { name: /学习进度/ }));
     const weaknessRegion = await screen.findByRole("region", { name: "待复习弱点" });
     await user.click(await within(weaknessRegion).findByRole("button", { name: "确认 启发式搜索" }));
 
@@ -1226,8 +1339,10 @@ describe("CourseSpacePage course tutor sessions", () => {
   });
 
   it("shows local feedback when course learning state fails to load", async () => {
+    const user = userEvent.setup();
     renderCoursePage({ failLearningState: true });
 
+    await user.click(await screen.findByRole("button", { name: /学习进度/ }));
     expect(await screen.findByText("课程学习状态读取失败，请稍后重试。")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
   });
@@ -1367,6 +1482,7 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
     expect(await within(detailPanel).findByText("Agent 轨迹读取失败，请稍后重试。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /学习进度/ }));
     expect(screen.getByRole("region", { name: "待复习弱点" })).toHaveTextContent("启发式搜索");
   });
 
@@ -1383,8 +1499,8 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "课程加载中" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("课程状态")).toHaveTextContent("资料1");
-    expect(screen.getByLabelText("课程状态")).toHaveTextContent("知识点2");
+    expect(screen.getByLabelText("课程状态")).toHaveTextContent("1 份资料");
+    expect(screen.getByLabelText("课程状态")).toHaveTextContent("2 个知识点");
   });
 
   it("creates a course session before sending the first course question and renders persisted citations", async () => {
@@ -1418,6 +1534,8 @@ describe("CourseSpacePage course tutor sessions", () => {
         })
       );
     });
+    const thread = await screen.findByRole("region", { name: "课程即时对话" });
+    await user.click(within(thread).getByRole("button", { name: "来源" }));
     expect(await screen.findAllByText("人工智能导论讲义.md")).not.toHaveLength(0);
     expect(screen.getByText(/模型回答：启发式搜索复习/)).toBeInTheDocument();
     expect(screen.getAllByText("启发式搜索")).not.toHaveLength(0);
@@ -1446,23 +1564,25 @@ describe("CourseSpacePage course tutor sessions", () => {
     renderCoursePage();
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
-    expect(screen.getByRole("button", { name: "问答模式" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "问答" })).toHaveAttribute("aria-pressed", "true");
 
-    await user.click(screen.getByRole("button", { name: "学习模式" }));
-    await user.click(screen.getByRole("button", { name: "启发式搜索" }));
+    await user.click(screen.getByRole("button", { name: "课程内容" }));
 
-    const studyMode = screen.getByRole("region", { name: "课程学习模式" });
+    const studyMode = screen.getByRole("region", { name: "课程内容模式" });
     expect(studyMode).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "学习模式" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "课程内容" })).toHaveAttribute("aria-pressed", "true");
     expect(within(studyMode).getByRole("heading", { name: "启发式搜索" })).toBeInTheDocument();
     expect(within(studyMode).getByText("理解启发函数和 A*。")).toBeInTheDocument();
     expect(within(studyMode).getByLabelText("知识点信息")).toHaveTextContent("搜索问题");
-    expect(screen.getByRole("complementary", { name: "AI 辅导" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "AI 辅导" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "围绕这里提问" }));
+    expect(screen.getByRole("dialog", { name: "AI 辅导" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "关闭 AI 辅导" }));
 
-    await user.click(screen.getByRole("button", { name: "回到问答模式" }));
+    await user.click(screen.getByRole("button", { name: "问答" }));
 
     expect(screen.getByRole("region", { name: "课程提问引导" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "问答模式" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "问答" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("reuses the active course session for follow-up questions", async () => {
@@ -1472,7 +1592,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     const input = await screen.findByRole("textbox", { name: "课程问题输入" });
     await user.type(input, "启发式搜索怎么复习？");
     await user.click(screen.getByRole("button", { name: "发送" }));
-    await screen.findByText(/启发函数估计路径代价/);
+    await screen.findByText(/模型回答：启发式搜索复习/);
     await user.type(input, "再讲讲 A*。");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
@@ -1499,6 +1619,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     emitStreamEvent("token", { content: "模型回答：" });
 
     expect(await screen.findByText("模型回答：")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "课程闭环行动" })).not.toBeInTheDocument();
 
     emitStreamEvent("token", { content: "先看启发函数。" });
     emitStreamEvent("done", makeDetail(makeSession("901", "启发式搜索怎么复习？"), "启发式搜索怎么复习？", "持久化后的完整回答。", [citationItem]));
@@ -1506,6 +1627,7 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     expect(await screen.findByText("持久化后的完整回答。")).toBeInTheDocument();
     expect(screen.queryByText("模型回答：先看启发函数。")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "课程闭环行动" })).toBeInTheDocument();
   });
 
   it("loads persisted messages and citations when selecting course history", async () => {
@@ -1516,9 +1638,10 @@ describe("CourseSpacePage course tutor sessions", () => {
     const courseHistory = await screen.findByLabelText("历史对话");
     await user.click(await within(courseHistory).findByRole("button", { name: /已有课程历史/ }));
 
-    const thread = await screen.findByRole("region", { name: "课程即时对话" });
-    expect(within(thread).getByText("历史里的问题")).toBeInTheDocument();
-    expect(within(thread).getByText("历史里的回答保留真实引用。")).toBeInTheDocument();
+    const returnedThread = await screen.findByRole("region", { name: "课程即时对话" });
+    expect(within(returnedThread).getByText("历史里的问题")).toBeInTheDocument();
+    expect(within(returnedThread).getByText("历史里的回答保留真实引用。")).toBeInTheDocument();
+    await user.click(within(returnedThread).getByRole("button", { name: "来源" }));
     expect(screen.getAllByText("人工智能导论讲义.md")).not.toHaveLength(0);
     expect(screen.getByText(/启发函数估计路径代价/)).toBeInTheDocument();
   });
@@ -1531,21 +1654,25 @@ describe("CourseSpacePage course tutor sessions", () => {
     const courseHistory = await screen.findByLabelText("历史对话");
     await user.click(await within(courseHistory).findByRole("button", { name: /已有课程历史/ }));
 
+    const thread = await screen.findByRole("region", { name: "课程即时对话" });
+    await user.click(within(thread).getByRole("button", { name: "来源" }));
     await user.click(await screen.findByRole("button", { name: /人工智能导论讲义\.md/ }));
 
-    const studyMode = screen.getByRole("region", { name: "课程学习模式" });
+    const studyMode = screen.getByRole("region", { name: "课程内容模式" });
     expect(within(studyMode).getByText("资料来源")).toBeInTheDocument();
     expect(within(studyMode).getByRole("heading", { name: "启发式搜索" })).toBeInTheDocument();
     expect(within(studyMode).getByText(/启发函数估计路径代价/)).toBeInTheDocument();
     expect(within(studyMode).getByLabelText("引用信息")).toHaveTextContent("人工智能导论讲义.md");
     expect(within(studyMode).getByLabelText("引用信息")).toHaveTextContent("本地 fallback");
-    expect(screen.getByRole("complementary", { name: "AI 辅导" })).toHaveTextContent("历史里的回答保留真实引用。");
+    await user.click(screen.getByRole("button", { name: "围绕这里提问" }));
+    expect(screen.getByRole("dialog", { name: "AI 辅导" })).toHaveTextContent("历史里的回答保留真实引用。");
+    await user.click(screen.getByRole("button", { name: "关闭 AI 辅导" }));
 
-    await user.click(screen.getByRole("button", { name: "回到问答模式" }));
+    await user.click(screen.getByRole("button", { name: "问答" }));
 
-    const thread = await screen.findByRole("region", { name: "课程即时对话" });
-    expect(within(thread).getByText("历史里的问题")).toBeInTheDocument();
-    expect(within(thread).getByText("历史里的回答保留真实引用。")).toBeInTheDocument();
+    const returnedThread = await screen.findByRole("region", { name: "课程即时对话" });
+    expect(within(returnedThread).getByText("历史里的问题")).toBeInTheDocument();
+    expect(within(returnedThread).getByText("历史里的回答保留真实引用。")).toBeInTheDocument();
   });
 
   it("shows an insufficient-evidence message from persisted assistant citations", async () => {
@@ -1562,6 +1689,7 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     const thread = await screen.findByRole("region", { name: "课程即时对话" });
     expect(within(thread).getByText("我先检查了课程资料，但还没有足够依据支撑这个问题。")).toBeInTheDocument();
+    await user.click(within(thread).getByRole("button", { name: "来源" }));
     expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("当前课程资料里没有找到足够依据。");
   });
 

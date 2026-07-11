@@ -414,9 +414,9 @@ describe("student interaction affordances", () => {
     expect(screen.getByLabelText("课程状态")).toHaveTextContent("2");
     expect(screen.getByRole("region", { name: "课程提问引导" })).toHaveTextContent("推荐问题");
 
-    await user.click(screen.getByRole("button", { name: "学习模式" }));
+    await user.click(screen.getByRole("button", { name: "课程内容" }));
 
-    const studyMode = screen.getByRole("region", { name: "课程学习模式" });
+    const studyMode = screen.getByRole("region", { name: "课程内容模式" });
     expect(studyMode).toHaveTextContent("梯度下降");
     expect(studyMode).toHaveTextContent("模型评估");
   });

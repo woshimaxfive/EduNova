@@ -130,8 +130,8 @@ describe("EduNova routes", () => {
     expect(await screen.findByRole("heading", { name: "课程暂不可用" }, { timeout: 5_000 })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "人工智能导论" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "课程对话空间" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "问答模式" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "学习模式" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "问答" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "课程内容" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("region", { name: "课程提问引导" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "知识学习画布" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "证据与 Agent 轨迹" })).not.toBeInTheDocument();

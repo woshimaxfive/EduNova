@@ -1,12 +1,9 @@
 import {
-  ArrowLeft,
   ArrowRight,
   ChartLineUp,
   ChatCircleText,
   Compass,
-  FileText,
-  ListChecks,
-  Target
+  ListChecks
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -40,21 +37,21 @@ import {
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
-import { CourseClosedLoopActions } from "../components/course-space/CourseClosedLoopActions";
+import { CourseAssistantTurn } from "../components/course-space/CourseAssistantTurn";
+import { CourseClosedLoopActions, type CourseAnswerPanelKind } from "../components/course-space/CourseClosedLoopActions";
+import { CourseContentView, type CourseContentMode } from "../components/course-space/CourseContentView";
 import { CourseInlineResourcePanel } from "../components/course-space/CourseInlineResourcePanel";
-import { CourseKnowledgeGraph } from "../components/course-space/CourseKnowledgeGraph";
-import { CourseLoopHero } from "../components/course-space/CourseLoopHero";
-import { CourseStudyStepRail } from "../components/course-space/CourseStudyStepRail";
+import { CourseProgressDrawer } from "../components/course-space/CourseProgressDrawer";
+import { CourseWorkspaceHeader, type CourseWorkspaceMode } from "../components/course-space/CourseWorkspaceHeader";
 import { AgentTimeline } from "../components/evidence/AgentTimeline";
-import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
-import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
 import { buildCourseLoopSummary, buildStudySteps } from "../features/course-space/a3Loop";
 import { type AgentTraceEvent } from "../types/api";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
+import "../styles/course-space.css";
 
 const courseStarterQuestions = [
   "这门课最适合先复习哪些知识点？",
@@ -112,68 +109,11 @@ function sanitizeCourseAnswerContent(content: string) {
   return "这条回答包含过多内部引用上下文。请打开来源面板查看证据，或换一种问法继续提问。";
 }
 
-function weaknessStatusLabel(status: string) {
-  if (status === "confirmed") {
-    return "待复习";
-  }
-  if (status === "reviewing") {
-    return "复习中";
-  }
-  if (status === "completed") {
-    return "已完成";
-  }
-  if (status === "dismissed") {
-    return "已忽略";
-  }
-  return "待确认";
-}
-
-function weaknessActionsForItem(item: CourseWeaknessReviewItem): Array<{ action: CourseWeaknessReviewAction; label: string; icon: typeof ListChecks }> {
-  if (item.status === "pending") {
-    return [
-      { action: "confirm", label: "确认", icon: ListChecks },
-      { action: "start", label: "开始", icon: ArrowRight },
-      { action: "dismiss", label: "忽略", icon: ArrowLeft }
-    ];
-  }
-  if (item.status === "confirmed") {
-    return [
-      { action: "start", label: "开始", icon: ArrowRight },
-      { action: "complete", label: "完成", icon: Target },
-      { action: "dismiss", label: "忽略", icon: ArrowLeft }
-    ];
-  }
-  if (item.status === "reviewing") {
-    return [
-      { action: "complete", label: "完成", icon: Target },
-      { action: "dismiss", label: "忽略", icon: ArrowLeft }
-    ];
-  }
-  if (item.status === "completed") {
-    return [{ action: "dismiss", label: "移除", icon: ArrowLeft }];
-  }
-  return [];
-}
-
-function formatReviewDate(value: string | null) {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleDateString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit"
-  });
-}
-
-type AnswerPanelKind = "citations" | "resources" | "path" | "thinking";
-type CourseMode = "chat" | "study";
 type TutorSessionsResponse = Awaited<ReturnType<typeof listTutorSessions>>;
+type TurnDetailState = {
+  messageId: string;
+  panel: CourseAnswerPanelKind;
+} | null;
 type StudyTarget =
   | {
       type: "knowledge";
@@ -181,7 +121,7 @@ type StudyTarget =
     }
   | {
       type: "citation";
-      chunkId: number;
+      citation: RagSearchResultItem;
     };
 type CourseMessage = {
   id: string;
@@ -233,6 +173,13 @@ function mapCourseSessionsToConversations(sessions: TutorSessionSummary[]) {
   }));
 }
 
+function findQuestionForAssistant(messages: CourseMessage[], assistantIndex: number) {
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") return messages[index]?.content ?? null;
+  }
+  return null;
+}
+
 export function CourseSpacePage() {
   const { courseId } = useParams();
   const numericCourseId = courseId ? Number.parseInt(courseId, 10) : Number.NaN;
@@ -276,8 +223,11 @@ export function CourseSpacePage() {
     staleTime: 10_000
   });
   const [activeCourseSessionId, setActiveCourseSessionId] = useState<string | null>(null);
-  const [activeAnswerPanel, setActiveAnswerPanel] = useState<AnswerPanelKind>("citations");
-  const [courseMode, setCourseMode] = useState<CourseMode>("chat");
+  const [activeTurnDetail, setActiveTurnDetail] = useState<TurnDetailState>(null);
+  const [courseMode, setCourseMode] = useState<CourseWorkspaceMode>("chat");
+  const [courseContentView, setCourseContentView] = useState<CourseContentMode>("overview");
+  const [isProgressDrawerOpen, setIsProgressDrawerOpen] = useState(false);
+  const [isStudyAssistantOpen, setIsStudyAssistantOpen] = useState(false);
   const [studyTarget, setStudyTarget] = useState<StudyTarget | null>(null);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
   const [coursePrompt, setCoursePrompt] = useState("");
@@ -288,6 +238,8 @@ export function CourseSpacePage() {
   const [weaknessFeedback, setWeaknessFeedback] = useState<string | null>(null);
   const [courseResourceFeedback, setCourseResourceFeedback] = useState<string | null>(null);
   const [latestGeneratedResources, setLatestGeneratedResources] = useState<GeneratedResource[]>([]);
+  const [resourceContextQuestion, setResourceContextQuestion] = useState<string | null>(null);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [resourceJobId, setResourceJobId] = useState<string | null>(null);
   const [selectedCourseResourceTypes, setSelectedCourseResourceTypes] = useState<ResourceType[]>([
     "doc",
@@ -301,6 +253,7 @@ export function CourseSpacePage() {
   const optimisticMessageSequence = useRef(0);
   const handledResourceJobId = useRef<string | null>(null);
   const courseQuestionInputRef = useRef<HTMLTextAreaElement>(null);
+  const courseChatEndRef = useRef<HTMLDivElement>(null);
   const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
   const resourceJob = getJob(resourceJobId);
   const isGeneratingCourseResources = Boolean(resourceJob && ["queued", "running", "cancelling"].includes(resourceJob.status));
@@ -327,13 +280,6 @@ export function CourseSpacePage() {
   const learningState = learningStateQuery.data?.data;
   const weaknessSummary = learningState?.weakness_summary;
   const weaknessItems = (learningState?.weakness_review_queue ?? []).filter((item) => item.status !== "dismissed");
-  const hasWeaknessCounts =
-    (weaknessSummary?.pending_count ?? 0) > 0 ||
-    (weaknessSummary?.confirmed_count ?? 0) > 0 ||
-    (weaknessSummary?.reviewing_count ?? 0) > 0 ||
-    (weaknessSummary?.completed_count ?? 0) > 0 ||
-    (weaknessSummary?.candidate_event_count ?? 0) > 0;
-  const shouldShowWeaknessPanel = weaknessItems.length > 0 || hasWeaknessCounts || learningStateQuery.isError || Boolean(weaknessFeedback);
   const courseSessions = Array.isArray(courseSessionsQuery.data?.data) ? courseSessionsQuery.data.data : [];
   const latestCourseSessionId = courseSessions[0]?.id ?? null;
   const selectedCourseSessionId = hasRealCourseId ? (activeCourseSessionId ?? latestCourseSessionId) : null;
@@ -377,12 +323,16 @@ export function CourseSpacePage() {
       };
   const latestAssistantWithRetrieval = [...displayedCourseMessages].reverse().find((message) => message.role === "assistant" && message.citations !== undefined);
   const latestRagResults = latestAssistantWithRetrieval?.citations ?? [];
-  const hasRetrievalResult = Boolean(latestAssistantWithRetrieval);
   const latestAgentTraceId = latestAssistantWithRetrieval?.traceId ?? learningState?.evidence_summary?.latest_trace_id ?? null;
+  const activeDetailMessage = activeTurnDetail
+    ? displayedCourseMessages.find((message) => message.id === activeTurnDetail.messageId && message.role === "assistant") ?? null
+    : null;
+  const activeDetailTraceId = activeDetailMessage?.traceId
+    ?? (activeDetailMessage?.id === latestAssistantWithRetrieval?.id ? latestAgentTraceId : null);
   const agentTraceQuery = useQuery({
-    queryKey: ["agents", "trace", latestAgentTraceId],
-    queryFn: () => getAgentTrace(latestAgentTraceId ?? ""),
-    enabled: Boolean(latestAgentTraceId) && activeAnswerPanel === "thinking",
+    queryKey: ["agents", "trace", activeDetailTraceId],
+    queryFn: () => getAgentTrace(activeDetailTraceId ?? ""),
+    enabled: Boolean(activeDetailTraceId) && activeTurnDetail?.panel === "thinking",
     staleTime: 10_000
   });
   const courseResourcesQuery = useQuery({
@@ -408,17 +358,21 @@ export function CourseSpacePage() {
     [agentTraceQuery.data?.data.steps]
   );
   const selectedKnowledgePoint =
-    studyTarget?.type === "knowledge" ? apiKnowledgePoints.find((point) => point.id === studyTarget.id) ?? null : null;
-  const selectedCitation =
-    studyTarget?.type === "citation"
-      ? latestRagResults.find((citation) => citation.chunk_id === studyTarget.chunkId) ?? null
-      : null;
+    studyTarget?.type === "knowledge"
+      ? apiKnowledgePoints.find((point) => point.id === studyTarget.id) ?? null
+      : studyTarget?.type === "citation"
+        ? null
+        : apiKnowledgePoints[0] ?? null;
+  const selectedCitation = studyTarget?.type === "citation" ? studyTarget.citation : null;
   const materialCount = fallbackCourse?.material_count ?? overviewMaterials.length;
   const knowledgePointCount = fallbackCourse?.knowledge_point_count ?? apiKnowledgePoints.length;
   const generatedResources = courseResourcesQuery.data?.data ?? [];
   const currentPath = currentPathQuery.data?.data ?? null;
   const latestReport = latestReportQuery.data?.data ?? null;
   const latestUserQuestion = [...displayedCourseMessages].reverse().find((message) => message.role === "user")?.content ?? null;
+  const latestMessageSignature = displayedCourseMessages.length > 0
+    ? `${displayedCourseMessages.at(-1)?.id ?? ""}:${displayedCourseMessages.at(-1)?.content.length ?? 0}`
+    : "empty";
   const hasActivePath = Boolean(currentPath?.path) || learningState?.path_summary?.status === "active";
   const courseLoopInput = {
     courseTitle: courseSummary.title,
@@ -431,12 +385,32 @@ export function CourseSpacePage() {
     confirmedWeaknessCount: weaknessSummary?.confirmed_count ?? 0,
     resourceCount: generatedResources.length,
     hasActivePath,
-    latestTraceWorkflow: agentTraceQuery.data?.data.workflow ?? null,
+    latestTraceWorkflow: latestAgentTraceId ? "CourseTutorGraph" : null,
     latestTraceId: latestAgentTraceId,
     hasLatestReport: latestReport?.status === "ready"
   };
   const courseLoopSummary = buildCourseLoopSummary(courseLoopInput);
   const courseStudySteps = buildStudySteps(courseLoopInput);
+
+  useEffect(() => {
+    function closeCourseDrawers(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setIsProgressDrawerOpen(false);
+      setIsStudyAssistantOpen(false);
+    }
+
+    window.addEventListener("keydown", closeCourseDrawers);
+    return () => window.removeEventListener("keydown", closeCourseDrawers);
+  }, []);
+
+  useEffect(() => {
+    if (courseMode !== "chat" || !hasDisplayedCourseMessages) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = courseChatEndRef.current;
+      if (target && typeof target.scrollIntoView === "function") target.scrollIntoView({ block: "end" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [courseMode, hasDisplayedCourseMessages, latestMessageSignature, selectedCourseSessionId]);
 
   useEffect(() => {
     if (!resourceJob) return;
@@ -471,7 +445,7 @@ export function CourseSpacePage() {
           course_id: numericCourseId,
           knowledge_point_id: Number.isFinite(parsedKnowledgePointId) ? parsedKnowledgePointId : undefined,
           resource_types: selectedCourseResourceTypes,
-          learning_goal: latestUserQuestion ?? courseLoopSummary.currentGoal,
+          learning_goal: resourceContextQuestion ?? latestUserQuestion ?? courseLoopSummary.currentGoal,
           difficulty: "medium"
         },
         createIdempotencyKey("course-resource")
@@ -497,6 +471,8 @@ export function CourseSpacePage() {
     setCourseMessages([]);
     setCourseMode("chat");
     setStudyTarget(null);
+    setActiveTurnDetail(null);
+    setIsStudyAssistantOpen(false);
   }
 
   function updateCourseSessionList(updater: (sessions: TutorSessionSummary[]) => TutorSessionSummary[]) {
@@ -545,7 +521,8 @@ export function CourseSpacePage() {
         setCourseMessages([]);
         setCourseMode("chat");
         setStudyTarget(null);
-        setActiveAnswerPanel("citations");
+        setActiveTurnDetail(null);
+        setIsStudyAssistantOpen(false);
       }
 
       setCourseFeedback(null);
@@ -558,11 +535,46 @@ export function CourseSpacePage() {
   function openKnowledgeStudy(pointId: string) {
     setCourseMode("study");
     setStudyTarget({ type: "knowledge", id: pointId });
+    setCourseContentView("overview");
   }
 
   function openCitationStudy(citation: RagSearchResultItem) {
     setCourseMode("study");
-    setStudyTarget({ type: "citation", chunkId: citation.chunk_id });
+    setStudyTarget({ type: "citation", citation });
+    setCourseContentView("overview");
+  }
+
+  function changeCourseMode(mode: CourseWorkspaceMode) {
+    setCourseMode(mode);
+    if (mode === "chat") setIsStudyAssistantOpen(false);
+  }
+
+  function toggleTurnPanel(messageId: string, panel: CourseAnswerPanelKind, question: string | null) {
+    setActiveTurnDetail((current) =>
+      current?.messageId === messageId && current.panel === panel ? null : { messageId, panel }
+    );
+    if (panel === "resources") setResourceContextQuestion(question);
+  }
+
+  function toggleReadMessage(message: CourseMessage) {
+    if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+      setCourseFeedback("当前浏览器不支持朗读。");
+      return;
+    }
+    if (speakingMessageId === message.id) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(sanitizeCourseAnswerContent(message.content));
+    utterance.lang = "zh-CN";
+    utterance.rate = 1;
+    utterance.onend = () => setSpeakingMessageId(null);
+    utterance.onerror = () => setSpeakingMessageId(null);
+    setSpeakingMessageId(message.id);
+    window.speechSynthesis.speak(utterance);
   }
 
   function toggleCourseResourceType(resourceType: ResourceType) {
@@ -700,216 +712,98 @@ export function CourseSpacePage() {
         />
         <section className="route-main-surface course-route-surface">
           <div className="course-space">
-            <header className="course-space-hero">
-              <Link className="course-back-link" to={PATHS.app}>
-                <ArrowLeft size={17} weight="bold" aria-hidden="true" />
-                <span>回到学习主页</span>
-              </Link>
-              <CourseLoopHero summary={courseLoopSummary} />
-              <dl className="course-space-metrics" aria-label="课程状态">
-                <div>
-                  <dt>进度</dt>
-                  <dd>{courseSummary.progressPercent}%</dd>
-                </div>
-                <div>
-                  <dt>资料</dt>
-                  <dd>{materialCount}</dd>
-                </div>
-                <div>
-                  <dt>知识点</dt>
-                  <dd>{knowledgePointCount}</dd>
-                </div>
-              </dl>
-            </header>
-            <CourseStudyStepRail steps={courseStudySteps} />
-            <AgentTraceDisclosure traceId={fallbackCourse?.agent_trace_id} label="查看 CourseBuilderGraph" />
-
-            <div className="course-mode-tabs" aria-label="课程空间模式">
-              <button
-                className={courseMode === "chat" ? "active" : ""}
-                type="button"
-                aria-pressed={courseMode === "chat"}
-                onClick={() => setCourseMode("chat")}
-              >
-                问答模式
-              </button>
-              <button
-                className={courseMode === "study" ? "active" : ""}
-                type="button"
-                aria-pressed={courseMode === "study"}
-                onClick={() => setCourseMode("study")}
-              >
-                学习模式
-              </button>
-            </div>
+            <CourseWorkspaceHeader
+              title={courseSummary.title}
+              progressPercent={courseSummary.progressPercent}
+              materialCount={materialCount}
+              knowledgePointCount={knowledgePointCount}
+              weaknessCount={weaknessItems.length}
+              mode={courseMode}
+              onModeChange={changeCourseMode}
+              onOpenProgress={() => setIsProgressDrawerOpen(true)}
+            />
 
             {courseMode === "chat" ? (
               <section className="course-chat-panel course-chat-mode" role="region" aria-label="课程对话空间">
-                <div className="course-panel-heading">
-                  <span className="course-panel-icon" aria-hidden="true">
-                    <ChatCircleText size={20} weight="duotone" />
-                  </span>
-                  <div>
-                    <h2>问这门课</h2>
-                  </div>
-                </div>
-
-                <div className="course-context-toolbar" aria-label="课程上下文入口">
-                  <button type="button" onClick={() => setCourseMode("study")}>
-                    <FileText size={17} weight="duotone" aria-hidden="true" />
-                    <span>{knowledgePointCount > 0 ? `${knowledgePointCount} 个知识点` : "查看知识点"}</span>
-                  </button>
-                  <button type="button" onClick={() => setCoursePrompt(courseStarterQuestions[0])}>
-                    <Compass size={17} weight="duotone" aria-hidden="true" />
-                    <span>让 AI 规划复习</span>
-                  </button>
-                </div>
-
                 <div className="course-chat-scroll-area" aria-label="课程学习内容">
-                  {shouldShowWeaknessPanel ? (
-                    <aside className="course-weakness-panel" role="region" aria-label="待复习弱点">
-                      <div className="course-weakness-header">
-                        <div>
-                          <p className="course-answer-label">待复习弱点</p>
-                          <h2>待复习弱点</h2>
-                        </div>
-                        <dl className="course-weakness-counts" aria-label="弱点统计">
-                          <div>
-                            <dt>待确认</dt>
-                            <dd>{weaknessSummary?.pending_count ?? 0}</dd>
-                          </div>
-                          <div>
-                            <dt>待复习</dt>
-                            <dd>{weaknessSummary?.confirmed_count ?? 0}</dd>
-                          </div>
-                          <div>
-                            <dt>复习中</dt>
-                            <dd>{weaknessSummary?.reviewing_count ?? 0}</dd>
-                          </div>
-                          <div>
-                            <dt>已完成</dt>
-                            <dd>{weaknessSummary?.completed_count ?? 0}</dd>
-                          </div>
-                          <div>
-                            <dt>候选证据</dt>
-                            <dd>{weaknessSummary?.candidate_event_count ?? 0}</dd>
-                          </div>
-                        </dl>
-                      </div>
-                      <InlineFeedback
-                        message={learningStateQuery.isError ? "课程学习状态读取失败，请稍后重试。" : null}
-                        tone="warning"
-                        className="course-inline-feedback"
-                      />
-                      <InlineFeedback
-                        message={weaknessFeedback}
-                        tone="warning"
-                        className="course-inline-feedback"
-                      />
-                      {weaknessItems.length > 0 ? (
-                        <ul className="course-weakness-list">
-                          {weaknessItems.map((item) => (
-                            <li key={item.id}>
-                              <div className="course-weakness-main">
-                                <div>
-                                  <span>{item.title}</span>
-                                  {item.recommended_resources.length > 0 ? (
-                                    <small>推荐资源：{item.recommended_resources.map((resource) => resource.title).join("、")}</small>
-                                  ) : null}
-                                  {formatReviewDate(item.next_review_at) ? <small>下次复习：{formatReviewDate(item.next_review_at)}</small> : null}
-                                </div>
-                                <em>{weaknessStatusLabel(item.status)}</em>
-                              </div>
-                              <div className="course-weakness-actions" aria-label={`${item.title} 操作`}>
-                                {weaknessActionsForItem(item).map((action) => {
-                                  const Icon = action.icon;
-                                  const isUpdating = updatingWeaknessItemId === item.id;
-
-                                  return (
-                                    <button
-                                      key={action.action}
-                                      type="button"
-                                      aria-label={`${action.label} ${item.title}`}
-                                      disabled={updatingWeaknessItemId !== null}
-                                      onClick={() => void updateWeaknessReviewItem(item, action.action)}
-                                    >
-                                      <Icon size={14} weight="bold" aria-hidden="true" />
-                                      <span>{isUpdating ? "更新中" : action.label}</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : learningStateQuery.isError ? null : (
-                        <p className="course-weakness-empty">还没有待确认弱点</p>
-                      )}
-                    </aside>
-                  ) : null}
-
                   {hasDisplayedCourseMessages ? (
-                    <>
-                      <section className="course-message-stack" aria-label="课程即时对话">
-                        {displayedCourseMessages.map((message) => (
-                          <article className={`course-message ${message.role}`} key={message.id}>
-                            {message.role === "assistant" ? (
-                              <MarkdownMessage content={sanitizeCourseAnswerContent(message.content)} />
-                            ) : (
-                              <p>{message.content}</p>
-                            )}
-                          </article>
-                        ))}
-                      </section>
-                      <article className="course-answer course-evidence-panel" aria-label="课程回答详情">
-                        <CourseClosedLoopActions
-                          courseId={numericCourseId}
-                          citationCount={latestRagResults.length}
-                          resourceCount={generatedResources.length}
-                          hasActivePath={hasActivePath}
-                          hasTrace={Boolean(latestAgentTraceId)}
-                          onOpenCitations={() => setActiveAnswerPanel("citations")}
-                          onOpenResources={() => setActiveAnswerPanel("resources")}
-                          onOpenPath={() => setActiveAnswerPanel("path")}
-                          onOpenTrace={() => setActiveAnswerPanel("thinking")}
-                        />
-                        {activeAnswerPanel === "resources" ? (
-                          <CourseInlineResourcePanel
-                            selectedTypes={selectedCourseResourceTypes}
-                            isGenerating={courseResourceMutation.isPending || isGeneratingCourseResources}
-                            feedback={courseResourceFeedback}
-                            generatedCount={generatedResources.length}
-                            generatedResources={latestGeneratedResources}
-                            job={resourceJob}
-                            onCancelJob={() => resourceJob && void cancelJob(resourceJob.job_id)}
-                            onRetryJob={() => resourceJob && void retryJob(resourceJob.job_id).then((job) => {
-                              handledResourceJobId.current = null;
-                              setResourceJobId(job.job_id);
-                            })}
-                            onToggleType={toggleCourseResourceType}
-                            onGenerate={submitCourseResourceGeneration}
+                    <section className="course-message-stack" aria-label="课程即时对话">
+                      {displayedCourseMessages.map((message, index) => {
+                        if (message.role === "user") {
+                          return <article className="course-message user" key={message.id}><p>{message.content}</p></article>;
+                        }
+
+                        const isPersisted = !message.id.startsWith("course-assistant-stream-");
+                        const turnPanel = activeTurnDetail?.messageId === message.id ? activeTurnDetail.panel : null;
+                        const question = findQuestionForAssistant(displayedCourseMessages, index);
+                        const citations = message.citations ?? [];
+                        const effectiveTraceId = message.traceId
+                          ?? (message.id === latestAssistantWithRetrieval?.id ? latestAgentTraceId : null);
+                        const detail = turnPanel ? (
+                          <>
+                            {turnPanel === "resources" ? (
+                              <CourseInlineResourcePanel
+                                selectedTypes={selectedCourseResourceTypes}
+                                isGenerating={courseResourceMutation.isPending || isGeneratingCourseResources}
+                                feedback={courseResourceFeedback}
+                                generatedCount={generatedResources.length}
+                                generatedResources={latestGeneratedResources}
+                                job={resourceJob}
+                                onCancelJob={() => resourceJob && void cancelJob(resourceJob.job_id)}
+                                onRetryJob={() => resourceJob && void retryJob(resourceJob.job_id).then((job) => {
+                                  handledResourceJobId.current = null;
+                                  setResourceJobId(job.job_id);
+                                })}
+                                onToggleType={toggleCourseResourceType}
+                                onGenerate={submitCourseResourceGeneration}
+                              />
+                            ) : null}
+                            <AnswerDetailPanel
+                              activePanel={turnPanel}
+                              courseId={hasRealCourseId ? numericCourseId : null}
+                              citations={citations}
+                              hasRealCourse={Boolean(apiCourse)}
+                              hasSearched
+                              pathSummary={learningState?.path_summary ?? null}
+                              agentTraceId={effectiveTraceId}
+                              agentTraceEvents={agentTraceEvents}
+                              isAgentTraceLoading={agentTraceQuery.isPending && agentTraceQuery.fetchStatus !== "idle"}
+                              isAgentTraceError={agentTraceQuery.isError}
+                              onOpenCitation={openCitationStudy}
+                            />
+                          </>
+                        ) : null;
+
+                        return (
+                          <CourseAssistantTurn
+                            key={message.id}
+                            content={sanitizeCourseAnswerContent(message.content)}
+                            actions={isPersisted && message.content.trim() ? (
+                              <CourseClosedLoopActions
+                                courseId={numericCourseId}
+                                citationCount={citations.length}
+                                resourceCount={generatedResources.length}
+                                hasActivePath={hasActivePath}
+                                hasTrace={Boolean(effectiveTraceId)}
+                                activePanel={turnPanel}
+                                isSpeaking={speakingMessageId === message.id}
+                                onRead={() => toggleReadMessage(message)}
+                                onOpenCitations={() => toggleTurnPanel(message.id, "citations", question)}
+                                onOpenResources={() => toggleTurnPanel(message.id, "resources", question)}
+                                onOpenPath={() => toggleTurnPanel(message.id, "path", question)}
+                                onOpenTrace={() => toggleTurnPanel(message.id, "thinking", question)}
+                              />
+                            ) : undefined}
+                            detail={detail}
                           />
-                        ) : null}
-                        <AnswerDetailPanel
-                          activePanel={activeAnswerPanel}
-                          courseId={hasRealCourseId ? numericCourseId : null}
-                          citations={latestRagResults}
-                          hasRealCourse={Boolean(apiCourse)}
-                          hasSearched={hasRetrievalResult}
-                          pathSummary={learningState?.path_summary ?? null}
-                          agentTraceId={latestAgentTraceId}
-                          agentTraceEvents={agentTraceEvents}
-                          isAgentTraceLoading={agentTraceQuery.isPending && agentTraceQuery.fetchStatus !== "idle"}
-                          isAgentTraceError={agentTraceQuery.isError}
-                          onOpenCitation={openCitationStudy}
-                        />
-                      </article>
-                    </>
+                        );
+                      })}
+                    </section>
                   ) : (
                     <article className="course-answer course-start-panel" role="region" aria-label="课程提问引导">
-                      <p className="course-answer-label">开始提问</p>
-                      <h2>问这门课</h2>
-                      <p>我会先检索这门课的知识切片，再把回答、引用来源和下一步学习建议保存在课程历史里。</p>
+                      <p className="course-answer-label">{courseSummary.subject}</p>
+                      <h2>从这门课开始学习</h2>
+                      <p>{courseSummary.description || "提出一个问题，我会先检索课程资料，再给出带来源的回答和下一步建议。"}</p>
                       <div className="course-question-suggestions" aria-label="推荐问题">
                         <span>推荐问题</span>
                         {courseStarterQuestions.map((question) => (
@@ -921,7 +815,7 @@ export function CourseSpacePage() {
                     </article>
                   )}
 
-                  {!hasDisplayedCourseMessages ? (
+                  {!hasDisplayedCourseMessages && hasRealCourseId ? (
                     <nav className="course-action-links" aria-label="课程行动入口">
                       <Link to={`${PATHS.path}?course_id=${numericCourseId}`}>
                         <Compass size={17} weight="duotone" aria-hidden="true" />
@@ -947,6 +841,7 @@ export function CourseSpacePage() {
                       </Link>
                     </nav>
                   ) : null}
+                  <div className="course-chat-end" ref={courseChatEndRef} aria-hidden="true" />
                 </div>
 
                 <div className="course-composer" role="region" aria-label="课程输入区">
@@ -968,116 +863,42 @@ export function CourseSpacePage() {
                 </div>
               </section>
             ) : (
-              <section className="course-study-layout" role="region" aria-label="课程学习模式">
-                <article className="course-study-main" aria-label="学习内容">
-                  <button className="course-back-link" type="button" onClick={() => setCourseMode("chat")}>
-                    <ArrowLeft size={17} weight="bold" aria-hidden="true" />
-                    <span>回到问答模式</span>
-                  </button>
-                  {selectedKnowledgePoint ? (
-                    <>
-                      <p className="course-answer-label">知识点</p>
-                      <h2>{selectedKnowledgePoint.title}</h2>
-                      <p>{selectedKnowledgePoint.summary ?? "这条知识点还没有摘要，可以在右侧直接追问。"}</p>
-                      <dl className="course-study-meta" aria-label="知识点信息">
-                        <div>
-                          <dt>章节</dt>
-                          <dd>{selectedKnowledgePoint.chapter ?? "课程知识点"}</dd>
-                        </div>
-                        <div>
-                          <dt>难度</dt>
-                          <dd>{selectedKnowledgePoint.difficulty ?? "未标注"}</dd>
-                        </div>
-                      </dl>
-                    </>
-                  ) : selectedCitation ? (
-                    <>
-                      <p className="course-answer-label">资料来源</p>
-                      <h2>{selectedCitation.section_title ?? selectedCitation.source_title}</h2>
-                      <p>{selectedCitation.content}</p>
-                      <dl className="course-study-meta" aria-label="引用信息">
-                        <div>
-                          <dt>资料</dt>
-                          <dd>{selectedCitation.source_title}</dd>
-                        </div>
-                        <div>
-                          <dt>检索</dt>
-                          <dd>
-                            {retrievalSourceLabel(selectedCitation.retrieval_source)} · {embeddingStatusLabel(selectedCitation.embedding_status)}
-                          </dd>
-                        </div>
-                      </dl>
-                    </>
-                  ) : (
-                    <>
-                      <p className="course-answer-label">学习模式</p>
-                      <h2>选择知识点开始学习</h2>
-                      <p>先选一个课程知识点，中间看内容，右侧继续追问。回答里的来源也可以带你进入同一个学习模式。</p>
-                    </>
-                  )}
-                  <CourseKnowledgeGraph
-                    points={masteryMapQuery.data?.data.points ?? []}
-                    selectedId={selectedKnowledgePoint?.id}
-                    onSelect={openKnowledgeStudy}
-                  />
-                  {apiKnowledgePoints.length > 0 ? (
-                    <div className="course-study-picker" aria-label="课程知识点">
-                      <span>知识点</span>
-                      {apiKnowledgePoints.map((point) => (
-                        <button
-                          className={selectedKnowledgePoint?.id === point.id ? "active" : ""}
-                          type="button"
-                          key={point.id}
-                          aria-pressed={selectedKnowledgePoint?.id === point.id}
-                          onClick={() => openKnowledgeStudy(point.id)}
-                        >
-                          {point.title}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </article>
-
-                <aside className="course-study-assistant" aria-label="AI 辅导">
-                  <div className="course-panel-heading">
-                    <span className="course-panel-icon" aria-hidden="true">
-                      <ChatCircleText size={20} weight="duotone" />
-                    </span>
-                    <div>
-                      <h2>AI 辅导</h2>
-                      <p>围绕当前内容继续追问。</p>
-                    </div>
-                  </div>
-                  <section className="course-study-mini-thread" aria-label="当前课程对话摘要">
-                    {displayedCourseMessages.slice(-2).map((message) => (
-                      <article className={`course-message ${message.role}`} key={message.id}>
-                        {message.role === "assistant" ? (
-                          <MarkdownMessage content={sanitizeCourseAnswerContent(message.content)} />
-                        ) : (
-                          <p>{message.content}</p>
-                        )}
-                      </article>
-                    ))}
-                  </section>
-                  <div className="course-composer compact" role="region" aria-label="课程输入区">
-                    <label htmlFor="course-study-question-input">课程问题输入</label>
-                    <textarea
-                      id="course-study-question-input"
-                      rows={3}
-                      value={coursePrompt}
-                      onChange={(event) => setCoursePrompt(event.target.value)}
-                      onKeyDown={handleCourseComposerKeyDown}
-                      placeholder="问这里为什么、换个例子，或让它出一道练习"
-                    />
-                    <button className="course-send-button" type="button" disabled={isSearchingCourse} onClick={() => void sendCourseQuestion()}>
-                      <ArrowRight size={17} weight="bold" aria-hidden="true" />
-                      <span>{isSearchingCourse ? "保存中" : "发送"}</span>
-                    </button>
-                    <InlineFeedback message={courseFeedback} tone="warning" className="course-inline-feedback" />
-                  </div>
-                </aside>
-              </section>
+              <CourseContentView
+                points={apiKnowledgePoints}
+                masteryPoints={masteryMapQuery.data?.data.points ?? []}
+                selectedPoint={selectedKnowledgePoint}
+                selectedCitation={selectedCitation}
+                view={courseContentView}
+                assistantOpen={isStudyAssistantOpen}
+                messages={displayedCourseMessages.map((message) => message.role === "assistant"
+                  ? { ...message, content: sanitizeCourseAnswerContent(message.content) }
+                  : message)}
+                prompt={coursePrompt}
+                isSending={isSearchingCourse}
+                feedback={courseFeedback}
+                onViewChange={setCourseContentView}
+                onSelectPoint={openKnowledgeStudy}
+                onOpenAssistant={() => setIsStudyAssistantOpen(true)}
+                onCloseAssistant={() => setIsStudyAssistantOpen(false)}
+                onPromptChange={setCoursePrompt}
+                onPromptKeyDown={handleCourseComposerKeyDown}
+                onSend={() => void sendCourseQuestion()}
+              />
             )}
+
+            <CourseProgressDrawer
+              open={isProgressDrawerOpen}
+              summary={courseLoopSummary}
+              steps={courseStudySteps}
+              traceId={fallbackCourse?.agent_trace_id}
+              weaknessSummary={weaknessSummary}
+              weaknessItems={weaknessItems}
+              updatingWeaknessItemId={updatingWeaknessItemId}
+              learningStateError={learningStateQuery.isError}
+              weaknessFeedback={weaknessFeedback}
+              onClose={() => setIsProgressDrawerOpen(false)}
+              onWeaknessAction={(item, action) => void updateWeaknessReviewItem(item, action)}
+            />
           </div>
         </section>
       </section>
@@ -1086,7 +907,7 @@ export function CourseSpacePage() {
 }
 
 type AnswerDetailPanelProps = {
-  activePanel: AnswerPanelKind;
+  activePanel: CourseAnswerPanelKind;
   courseId: number | null;
   citations: RagSearchResultItem[];
   hasRealCourse: boolean;

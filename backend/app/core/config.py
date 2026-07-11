@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     web_search_max_results: int = 5
     export_dir: str = "storage/exports"
     export_queue_name: str = "edunova_exports"
+    ai_job_queue_name: str = "edunova_ai"
+    ai_job_timeout_seconds: int = 900
+    ai_job_stale_seconds: int = 180
+    ai_job_max_active_per_user: int = 2
 
     model_config = SettingsConfigDict(
         env_file=".env",

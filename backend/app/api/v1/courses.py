@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
 
 from backend.app.api.errors import ApiError, api_response, make_trace_id
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.v1.deps import get_current_user
+from backend.app.api.v1.ai_jobs import get_ai_job_service, raise_ai_job_error
 from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.models import User
@@ -20,6 +21,7 @@ from backend.app.services.courses import (
 from backend.app.services.embeddings import EmbeddingService
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 from backend.app.services.material_retrieval import MaterialChunkingService
+from backend.app.services.ai_jobs import AiJobService
 
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -184,3 +186,23 @@ def create_course_from_materials(
         raise ApiError(400, "VALIDATION_ERROR", str(exc)) from exc
 
     return api_response(result.model_dump())
+
+
+@router.post("/from-materials/jobs", status_code=202)
+def create_course_from_materials_job(
+    payload: CreateCourseFromMaterialsRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    current_user: User = Depends(get_current_user),
+    service: AiJobService = Depends(get_ai_job_service),
+) -> dict:
+    try:
+        result = service.create_course_builder_job(
+            current_user,
+            material_ids=payload.material_ids,
+            course_title=payload.course_title,
+            idempotency_key=idempotency_key,
+        )
+    except Exception as exc:
+        raise_ai_job_error(exc)
+        raise
+    return api_response(result.model_dump(mode="json"))

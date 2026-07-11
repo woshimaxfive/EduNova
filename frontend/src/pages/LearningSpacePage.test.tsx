@@ -12,6 +12,7 @@ import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
 import { MATERIAL_ENDPOINTS } from "../api/materials";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
+import { makeCompletedAiJob } from "../test/aiJobs";
 import { LearningSpacePage } from "./LearningSpacePage";
 
 const starterSummary: DashboardSummary = {
@@ -481,22 +482,10 @@ function renderWithDashboardSummary(
       };
     }
 
-    if (url === COURSE_ENDPOINTS.fromMaterials && method === "post") {
+    if (url === COURSE_ENDPOINTS.fromMaterialsJobs && method === "post") {
       return {
         data: {
-          data: {
-            course: {
-              id: "909",
-              title: "神经网络冲刺课",
-              description: "由 1 份资料生成",
-              source_type: "uploaded",
-              status: "ready",
-              knowledge_point_count: 3,
-              chunk_count: 8,
-              material_count: 1
-            },
-            knowledge_points: []
-          },
+          data: makeCompletedAiJob({ workflow: "course_builder", course_id: null, result: { course_id: "909" } }),
           trace_id: "trace_course_create_test"
         },
         status: 200,
@@ -1181,7 +1170,7 @@ describe("LearningSpacePage", () => {
     expect(calls).toContainEqual(
       expect.objectContaining({
         method: "post",
-        url: COURSE_ENDPOINTS.fromMaterials,
+        url: COURSE_ENDPOINTS.fromMaterialsJobs,
         payload: {
           material_ids: [201],
           course_title: "人工智能导论期末复习"

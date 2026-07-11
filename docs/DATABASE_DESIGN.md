@@ -43,6 +43,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260707_0008_create_export_jobs.py`：创建异步学习档案导出任务表 `export_jobs`。
 - `backend/migrations/versions/20260710_0009_create_material_chunks.py`：创建主页资料级 RAG 使用的 `material_chunks`、资料内顺序唯一约束和 pgvector cosine 索引。
 - `backend/migrations/versions/20260710_0010_add_resource_export_jobs.py`：为 `export_jobs` 增加 nullable `resource_id` 外键和资源状态索引，用于 PPTX 文件任务。
+- `backend/migrations/versions/20260711_0014_create_ai_jobs.py`：创建统一 AI 长任务表 `ai_jobs`，用于智能建课和资源生成的状态、进度、幂等、取消和重试。
 
 Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
@@ -75,6 +76,9 @@ erDiagram
     chat_sessions ||--o{ chat_messages : contains
     users ||--o{ model_settings : configures
     users ||--o{ export_jobs : exports
+    users ||--o{ ai_jobs : runs
+    courses ||--o{ ai_jobs : scopes
+    ai_jobs ||--o{ ai_jobs : retries
 ```
 
 ## 4. 表设计
@@ -684,6 +688,32 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 | `updated_at` | timestamptz | 更新时间 |
 | `completed_at` | timestamptz | 完成时间 |
 
+### 4.21 `ai_jobs`
+
+用途：持久化智能建课和结构化资源生成长任务。文件导出继续使用 `export_jobs`，两者不混用。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | bigint | 主键 |
+| `user_id` | bigint | 当前用户，删除用户时级联删除 |
+| `course_id` | bigint | 资源生成课程，可空 |
+| `retry_of_job_id` | bigint | 手动重试来源任务，可空 |
+| `workflow` | varchar | `course_builder` 或 `resource_generation` |
+| `status` | varchar | `queued`、`running`、`cancelling`、`cancelled`、`completed`、`failed` |
+| `progress_percent` | int | 0 至 100 的服务端进度 |
+| `stage` / `label` | varchar | 当前安全阶段与用户可见文案 |
+| `agent_trace_id` | varchar | 与 Graph 共用的 trace ID |
+| `queue_job_id` | varchar | RQ 任务 ID，不对前端返回 |
+| `idempotency_key` | varchar | 用户内唯一的主动提交键 |
+| `request_json` | jsonb | 白名单请求摘要 |
+| `progress_json` | jsonb | 节点/Worker 进度摘要 |
+| `result_json` | jsonb | 产物 ID、warning 和失败类型 |
+| `error_code` / `error_message` | text | 脱敏错误摘要 |
+| `attempt_count` | int | 当前重试次数，最多 3 次 |
+| `cancel_requested_at` | timestamptz | 协作取消请求时间 |
+| `started_at` / `heartbeat_at` / `completed_at` | timestamptz | 运行时生命周期时间 |
+| `created_at` / `updated_at` | timestamptz | 审计时间 |
+
 ## 5. JSON 字段约定
 
 ### 5.1 `profile_json`
@@ -759,6 +789,8 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - `assessment_reports.agent_trace_id`。
 - `weakness_review_queue(user_id, course_id, status)`。
 - `chat_sessions(user_id, scope, course_id)`，支持主页会话和课程会话分开查询。
+- `ai_jobs(user_id, idempotency_key)` 唯一约束。
+- `ai_jobs(user_id, status, updated_at)`、`ai_jobs(workflow, status)`、`ai_jobs(agent_trace_id)`。
 
 ## 7. 数据隔离规则
 
@@ -816,6 +848,7 @@ Demo 数据要求：
 13. 主页资料检索切片和向量索引由迁移 `20260710_0009_create_material_chunks.py` 创建。
 14. 画像逐维可信度、课程结构和画像证据状态由迁移 `20260710_0012_add_profile_and_course_structure.py` 创建。
 15. 不可变资料对比版本由迁移 `20260711_0013_add_material_comparison_runs.py` 创建。
+16. AI 长任务运行时由迁移 `20260711_0014_create_ai_jobs.py` 创建。
 
 当前迁移命令：
 

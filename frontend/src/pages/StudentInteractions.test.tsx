@@ -14,10 +14,11 @@ import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
 import { PRACTICE_ENDPOINTS } from "../api/practice";
 import { PROFILE_ENDPOINTS, type StudentProfileResponse, type ProfileEventResponse } from "../api/profiles";
 import { REPORT_ENDPOINTS } from "../api/reports";
-import { RESOURCE_ENDPOINTS, type GeneratedResource, type ResourceQualityScore } from "../api/resources";
+import { RESOURCE_ENDPOINTS, type GeneratedResource } from "../api/resources";
 import { SETTINGS_ENDPOINTS, type ModelConfigSummary, type ModelSettingsListResponse } from "../api/settings";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
+import { makeCompletedAiJob } from "../test/aiJobs";
 import { CourseSpacePage } from "./CourseSpacePage";
 import { LearningSpacePage } from "./LearningSpacePage";
 import { LibraryPage } from "./LibraryPage";
@@ -654,17 +655,6 @@ describe("student interaction affordances", () => {
     const user = userEvent.setup();
     const calls: Array<{ url?: string; method?: string; data?: unknown; params?: unknown }> = [];
     let resources: GeneratedResource[] = [];
-    const quality: ResourceQualityScore[] = [
-      {
-        id: "3001",
-        resource_id: "901",
-        score_name: "source_match",
-        score_value: 0.55,
-        rationale: "模型未配置，使用课程引用 fallback。",
-        created_at: "2026-07-05T14:00:00Z"
-      }
-    ];
-
     apiClient.defaults.adapter = async (config) => {
       const method = (config.method ?? "get").toLowerCase();
       const url = config.url ?? "";
@@ -738,7 +728,7 @@ describe("student interaction affordances", () => {
         };
       }
 
-      if (url === RESOURCE_ENDPOINTS.generate && method === "post") {
+      if (url === RESOURCE_ENDPOINTS.generationJobs && method === "post") {
         resources = [
           {
             id: "901",
@@ -770,13 +760,7 @@ describe("student interaction affordances", () => {
 
         return {
           data: {
-            data: {
-              agent_trace_id: "trace_resource_studio",
-              resources,
-              quality_scores: {
-                "901": quality
-              }
-            },
+            data: makeCompletedAiJob({ result: { course_id: "808", resource_ids: ["901"] } }),
             trace_id: "trace_studio_generate"
           },
           status: 200,
@@ -808,7 +792,7 @@ describe("student interaction affordances", () => {
     await waitFor(() => {
       expect(calls).toContainEqual(
         expect.objectContaining({
-          url: RESOURCE_ENDPOINTS.generate,
+          url: RESOURCE_ENDPOINTS.generationJobs,
           method: "post",
           data: {
             course_id: 808,
@@ -1523,7 +1507,7 @@ describe("student interaction affordances", () => {
         };
       }
 
-      if (url === COURSE_ENDPOINTS.fromMaterials && method === "post") {
+      if (url === COURSE_ENDPOINTS.fromMaterialsJobs && method === "post") {
         throw new Error("course failed");
       }
 
@@ -1862,22 +1846,10 @@ describe("student interaction affordances", () => {
         };
       }
 
-      if (url === COURSE_ENDPOINTS.fromMaterials && method === "post") {
+      if (url === COURSE_ENDPOINTS.fromMaterialsJobs && method === "post") {
         return {
           data: {
-            data: {
-              course: {
-                id: "808",
-                title: "机器学习期末复习",
-                description: "由 1 份资料生成",
-                source_type: "uploaded",
-                status: "ready",
-                knowledge_point_count: 2,
-                chunk_count: 5,
-                material_count: 1
-              },
-              knowledge_points: []
-            },
+            data: makeCompletedAiJob({ workflow: "course_builder", course_id: null, result: { course_id: "808" } }),
             trace_id: "trace_library_course"
           },
           status: 200,
@@ -1930,7 +1902,7 @@ describe("student interaction affordances", () => {
     expect(calls).toContainEqual(
       expect.objectContaining({
         method: "post",
-        url: COURSE_ENDPOINTS.fromMaterials,
+        url: COURSE_ENDPOINTS.fromMaterialsJobs,
         payload: {
           material_ids: [302],
           course_title: "机器学习期末复习"

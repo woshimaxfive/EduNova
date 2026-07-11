@@ -2,6 +2,8 @@ import { type ChangeEvent, useState } from "react";
 
 import { type ResourceType } from "../../api/resources";
 import { type GeneratedResource } from "../../api/resources";
+import { type AiJob } from "../../api/aiJobs";
+import { AiJobProgress } from "../feedback/AiJobProgress";
 import { ResourceRenderer } from "../resources/ResourceRenderer";
 import { resourceTypeLabels } from "./courseSpaceLabels";
 
@@ -13,6 +15,9 @@ type CourseInlineResourcePanelProps = {
   feedback: string | null;
   generatedCount: number;
   generatedResources?: GeneratedResource[];
+  job?: AiJob;
+  onCancelJob?: () => void;
+  onRetryJob?: () => void;
   onToggleType: (resourceType: ResourceType) => void;
   onGenerate: () => void;
 };
@@ -23,6 +28,9 @@ export function CourseInlineResourcePanel({
   feedback,
   generatedCount,
   generatedResources = [],
+  job,
+  onCancelJob,
+  onRetryJob,
   onToggleType,
   onGenerate
 }: CourseInlineResourcePanelProps) {
@@ -56,6 +64,7 @@ export function CourseInlineResourcePanel({
       </div>
       <p className="course-inline-resource-summary">当前课程已有 {generatedCount} 个资源。生成后可在资源工坊继续查看和导出。</p>
       {feedback ? <p className="course-inline-resource-feedback">{feedback}</p> : null}
+      {job ? <AiJobProgress job={job} onCancel={onCancelJob} onRetry={onRetryJob} /> : null}
       {generatedResources.length > 0 ? <CourseInlineResourceResults resources={generatedResources} /> : null}
     </section>
   );

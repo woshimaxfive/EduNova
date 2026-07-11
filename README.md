@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 16 资料证据与期末冲刺智能闭环**。Phase 13 已让主页问答、课程问答和资源生成进入真实 LangGraph 编排，Phase 14 让学习路径、练习评估和学习报告进入真实生产 Graph，Phase 15 让动态画像和资料建课由生产 Graph 接管，Phase 16 继续完成资料对比与期末冲刺的真实编排和练习回流。
+当前最新完成到 **Phase 17 AI 长任务运行时与可靠性升级**。Phase 13 至 Phase 16 已让十条学习主链路进入真实 LangGraph 编排；Phase 17 新增统一 `AIJobRuntime`，把最慢的智能建课和六类资源生成交给独立 Redis/RQ 队列执行，并支持真实节点进度、刷新恢复、取消和手动重试。
 
 当前十条真实生产 Graph 为 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph`、`MaterialComparisonGraph` 和 `ExamSprintGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
 
@@ -28,7 +28,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - `/courses/{course_id}/learning-state` 已实现课程级学习状态第一刀，可把课程问答弱点候选事件同步为 `pending` 待确认复习项，并在课程空间展示待复习弱点摘要。
 - 课程级弱点复习项已支持确认、开始、完成和软忽略状态流转；软忽略项不在主列表展示，但继续参与去重。
 - `/agents/traces/{trace_id}` 已实现当前用户 Agent 轨迹查询，响应包含 `workflow`、`artifact_type`、`artifact_id` 和白名单 metadata；课程空间“课堂协作轨迹”读取真实 trace 或真实空状态。
-- `/resources/generate` 已实现讲解、思维导图、练习、代码实操、PPT、动画图解六类结构化课程资源；`ResourceGenerationGraph` 通过独立 Worker 并行生成并执行规则与模型审核。资源工坊和课程空间可直接渲染 Markmap、交互练习、浏览器 Python、PPT 页面和 Mermaid 动画，PPT 可通过 Redis/RQ 异步生成真实 `.pptx`。
+- `/resources/generate` 保留同步兼容；新入口 `/resources/generation-jobs` 通过 `AIJobRuntime` 和独立 `edunova_ai` 队列执行讲解、思维导图、练习、代码实操、PPT、动画图解六类结构化资源。`ResourceGenerationGraph` 通过独立 Worker 并行生成并执行规则与模型审核，前端支持跨页面观察、刷新恢复、取消和失败重试。
 - `/paths/generate`、`/paths/current` 和 `/paths/tasks/{task_id}` 已实现课程级学习路径生成、当前路径读取和任务状态更新；`PathPlanningGraph` 会综合画像、确认弱点、练习诊断、掌握度、资源和旧路径进度，练习回流只重排已有路径并保留已完成任务。
 - `/courses/{course_id}/mastery-map` 已实现规则掌握度图，`/courses/{course_id}/learning-state` 已返回真实 `path_summary`、`mastery_summary`、弱点推荐资源和下次复习时间。
 - `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已由 `AssessmentGraph` 编排出题和评估，支持 `adaptive` 难度；最近练习与未提交草稿可通过 URL、最近会话接口和草稿接口恢复。客观分数始终由规则决定。
@@ -46,7 +46,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 - OCR、图片题目识别、旧版 Office 和扫描件解析。
 - 讯飞原生 Embeddingp/Embeddingq。
-- 个人全局资源生成入口和资源版本化编辑；当前只有 PPTX 文件渲染进入异步任务，结构化资源生成仍为同步 Graph。
+- 个人全局资源生成入口和资源版本化编辑；课程级结构化资源生成已进入后台 AI 任务，个人全局资源仍未接入。
 - 学习档案导出的 Agent 化；当前确定性 Service + RQ 已满足业务需要，不列为默认开发目标。
 
 详细状态见 [docs/STATUS.md](docs/STATUS.md)，后续任务看 [docs/PROJECT_BOARD.md](docs/PROJECT_BOARD.md)。

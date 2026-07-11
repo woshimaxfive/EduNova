@@ -2,6 +2,7 @@ from backend.app.models.course import Course, CourseEnrollment, CourseMaterial
 from backend.app.models.knowledge import KnowledgeChunk, KnowledgePoint
 from backend.app.models.learning import (
     AgentRunLog,
+    AiJob,
     AssessmentReport,
     ChatMessage,
     ChatSession,
@@ -22,6 +23,7 @@ from backend.app.models.user import User
 
 __all__ = [
     "AgentRunLog",
+    "AiJob",
     "AssessmentReport",
     "ChatMessage",
     "ChatSession",

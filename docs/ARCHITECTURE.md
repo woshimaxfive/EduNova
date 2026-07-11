@@ -232,7 +232,7 @@ frontend/src/
 - 资源、学习路径和 Agent 轨迹已经接入真实接口；后续重点是体验和验收打磨。
 - 当前资料库、资源工坊、画像、辅导、练习、报告和设置页面均不再依赖核心样例数据兜底；后续只保留空态和错误态。
 - 当前前端已移除 `ActionNotice` 类全局横向提示条；按钮反馈优先通过选中态、列表刷新、详情面板、输入内容和真实路由跳转表达。失败、校验错误和模型不可用等需要用户处理的状态使用局部 `InlineFeedback`，模型配置保存、设默认、删除和连接测试等短确认使用右下角 toast；后续接 API 时应把对应 handler 替换为 React Query mutation、轮询或 SSE 任务状态。
-- 上传建课状态轨道和状态条当前使用前端样例状态，后续由 `/materials/{material_id}/progress`、`/courses/from-materials` 和长任务接口驱动。
+- 上传解析状态由 `/materials/{material_id}/progress` 驱动；智能建课状态由 `/courses/from-materials/jobs` 和 `/ai-jobs/*` 的持久化节点进度驱动，不使用前端伪进度。
 - Markmap 已用于结构化思维导图，Mermaid 已用于动画图解；React Flow 已接管课程学习模式的知识点与先修关系图，ECharts 已用于路径掌握度和报告练习趋势。旧 CSS 绝对定位知识画布已删除。
 
 ## 4. 后端架构
@@ -258,7 +258,7 @@ backend/app/
 | 模块 | 当前状态 |
 | --- | --- |
 | `backend/app/main.py` | FastAPI 应用和 `/api/health` |
-| `backend/app/core/config.py` | 环境配置，读取数据库、Redis、JWT、上传资料、联网搜索、导出队列和模型 Provider 配置 |
+| `backend/app/core/config.py` | 环境配置，读取数据库、Redis、JWT、上传资料、联网搜索、导出队列、AI 任务队列和模型 Provider 配置 |
 | `backend/app/db/base.py` | SQLAlchemy Declarative Base |
 | `backend/app/db/session.py` | 数据库 engine、Session 工厂和依赖入口 |
 | `backend/app/models` | 用户、课程、资料、知识点、知识切片核心模型，以及画像、路径、资源、Agent 轨迹、练习、报告、对话和模型设置基础模型 |
@@ -275,9 +275,12 @@ backend/app/
 | `backend/app/services/courses.py` | 课程 API 边界和依赖装配；`CourseBuilderGraphRunner` 接管来源大纲、课程结构、知识点、切片、embedding、审核/修订与事务持久化 |
 | `backend/app/services/exports.py` | 学习档案导出服务，负责旧同步 Markdown 兼容接口和 Markdown/PDF/DOCX 异步 job 渲染 |
 | `backend/app/workers/export_jobs.py` | Redis/RQ 导出 worker 入口 |
+| `backend/app/services/ai_jobs.py` | `AIJobRuntime` 服务，负责任务创建、幂等、活动上限、状态/心跳、取消、重试、失联检测和 Graph 依赖装配 |
+| `backend/app/workers/ai_jobs.py` | 独立 `edunova_ai` Redis/RQ worker 入口 |
+| `backend/app/api/v1/ai_jobs.py` | AI 任务列表、详情、SSE、取消和重试接口 |
 | `backend/app/api/v1/tutor.py` | `/api/v1/tutor/sessions` 受保护会话接口 |
 | `backend/app/api/v1/materials.py` | `/api/v1/materials/*` 和 `/api/v1/courses/{course_id}/materials` 受保护资料接口 |
-| `backend/app/api/v1/courses.py` | `/api/v1/courses/*` 和 `/api/v1/courses/from-materials` 受保护课程接口 |
+| `backend/app/api/v1/courses.py` | `/api/v1/courses/*`、同步 `/from-materials` 和异步 `/from-materials/jobs` 受保护课程接口 |
 | `backend/app/api/v1/settings.py` | `/api/v1/settings/model` 和 `/api/v1/settings/model/test` 受保护模型设置接口 |
 | `backend/app/providers/openai_compatible.py` | OpenAI-compatible Provider，支持 `{base_url}/chat/completions` 非流式/流式回答和 `{base_url}/embeddings` 1536 维向量请求 |
 | `backend/migrations` | Alembic 迁移环境、pgvector 扩展迁移、核心学习表迁移、学习闭环表迁移和资料库兼容迁移 |
@@ -313,6 +316,7 @@ backend/app/
 6. 生成资源与质量评分。
 7. 练习、作答、评估报告和复习队列。
 8. 对话、Agent 日志、模型设置和导出任务。
+9. AI 长任务状态、进度和安全结果摘要。
 
 数据隔离规则：
 
@@ -367,6 +371,24 @@ ReviewAgent 审核内容
 ```
 
 当前真实接管生产主流程的是 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph`、`MaterialComparisonGraph` 和 `ExamSprintGraph`。十条 Graph 都落真实节点耗时和白名单 metadata，生成型节点均有规则与可选模型审核，失败时最多 Repair 一次。学习档案导出继续由确定性 Service 聚合并交给 Redis/RQ Worker 生成文件，不注册为生产 Graph。
+
+### 6.1 AI 长任务运行时
+
+Phase 17 不增加 Graph 数量，而是在 `CourseBuilderGraph` 和 `ResourceGenerationGraph` 外增加统一运行时：
+
+```text
+POST jobs + Idempotency-Key
+  -> ai_jobs(queued)
+  -> Redis edunova_ai queue
+  -> ai-worker
+  -> GraphRunner(trace_id + AgentJobContext)
+  -> 独立 session 写节点进度和心跳
+  -> 业务事务提交产物
+  -> ai_jobs(completed / failed / cancelled)
+  -> SSE，断线时 GET 轮询恢复
+```
+
+运行时只保存 ID、资源类型、目标、难度和安全结果摘要，不序列化 ORM 对象、原始资料、模型输入或思维链。取消是节点间协作式取消；持久化前会再次检查取消状态。同步建课和资源接口继续兼容旧客户端，后台接口供当前前端四个生成入口使用。学习档案与资源 PPTX 仍走独立 `edunova_exports` 队列。
 
 后半程闭环：
 

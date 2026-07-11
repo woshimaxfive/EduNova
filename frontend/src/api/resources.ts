@@ -4,6 +4,7 @@ import { type ExportJob } from "./exports";
 
 export const RESOURCE_ENDPOINTS = {
   generate: "/resources/generate",
+  generationJobs: "/resources/generation-jobs",
   list: "/resources",
   detail: (resourceId: number) => `/resources/${resourceId}`,
   quality: (resourceId: number) => `/resources/${resourceId}/quality`,

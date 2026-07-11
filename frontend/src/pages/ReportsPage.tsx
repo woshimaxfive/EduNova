@@ -102,7 +102,7 @@ export function ReportsPage() {
       downloadDossierFile(job.filename ?? "edunova-learning-dossier", file, job.content_type ?? "application/octet-stream");
       setExportMessage(
         job.agent_trace_id
-          ? `已生成 ${exportFormatLabel(job.format)} 学习档案。ExportDossierGraph · ${job.agent_trace_id}`
+          ? `已生成 ${exportFormatLabel(job.format)} 学习档案。异步导出任务 · ${job.agent_trace_id}`
           : `已生成 ${exportFormatLabel(job.format)} 学习档案。`
       );
     },

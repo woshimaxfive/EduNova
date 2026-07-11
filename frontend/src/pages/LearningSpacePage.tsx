@@ -17,7 +17,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { PATHS, buildCoursePath } from "../app/routePaths";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
-import { createCourseFromMaterials } from "../api/courses";
+import { createCourseBuilderJob, createIdempotencyKey, type AiJob } from "../api/aiJobs";
 import { getDashboardSummary, type DashboardMaterial } from "../api/dashboard";
 import { getApiErrorMessage } from "../api/errors";
 import { uploadMaterial } from "../api/materials";
@@ -32,11 +32,13 @@ import {
   type TutorSessionSummary
 } from "../api/tutor";
 import { InlineFeedback, type FeedbackTone } from "../components/feedback/InlineFeedback";
+import { AiJobProgress } from "../components/feedback/AiJobProgress";
 import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { isCompactWorkspaceViewport, useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
 import { useAuthStore } from "../features/auth/authStore";
+import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 
 type LibraryMaterial = DashboardMaterial;
 
@@ -131,7 +133,7 @@ export function LearningSpacePage() {
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
-  const [isCreatingCourse, setIsCreatingCourse] = useState(false);
+  const [courseJobId, setCourseJobId] = useState<string | null>(null);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isDeepThinkingEnabled, setIsDeepThinkingEnabled] = useState(false);
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
@@ -143,6 +145,9 @@ export function LearningSpacePage() {
   const [answerWarnings, setAnswerWarnings] = useState<Record<string, string[]>>({});
   const [composerFeedback, setComposerFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [courseDialogFeedback, setCourseDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
+  const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
+  const courseJob = getJob(courseJobId);
+  const isCreatingCourse = Boolean(courseJob && ["queued", "running", "cancelling"].includes(courseJob.status));
   const hasHomeThread = messages.length > 0;
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", "summary"],
@@ -168,6 +173,37 @@ export function LearningSpacePage() {
     () => selectedMaterialIds.filter((materialId) => materials.some((material) => material.id === materialId)),
     [materials, selectedMaterialIds]
   );
+
+  useEffect(() => {
+    if (courseJobId) return;
+    const restored = jobs.find((job) => job.workflow === "course_builder" && ["queued", "running", "cancelling", "failed"].includes(job.status));
+    if (!restored) return;
+    const materialIds = Array.isArray(restored.request.material_ids) ? restored.request.material_ids.map(String) : [];
+    // Restore durable server state after navigation or refresh.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedMaterialIds(materialIds);
+    setCourseJobId(restored.job_id);
+    setIsLibraryOpen(false);
+    setIsCourseDialogOpen(true);
+  }, [courseJobId, jobs]);
+
+  useEffect(() => {
+    if (!courseJob) return;
+    if (courseJob.status === "failed") {
+      // Surface the terminal state delivered by the external job runtime.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCourseDialogFeedback({ message: courseJob.error_message ?? "课程生成失败，请稍后重试。", tone: "warning" });
+      return;
+    }
+    const courseId = courseJob.result.course_id;
+    if (courseJob.status === "completed" && (typeof courseId === "string" || typeof courseId === "number")) {
+      setCourseJobId(null);
+      setIsCourseDialogOpen(false);
+      setIsLibraryOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      navigate(buildCoursePath(String(courseId)));
+    }
+  }, [courseJob, navigate, queryClient]);
 
   useEffect(() => {
     if (!hasHomeThread) {
@@ -601,26 +637,20 @@ export function LearningSpacePage() {
       return;
     }
 
-    setIsCreatingCourse(true);
     setCourseDialogFeedback(null);
 
     try {
-      const created = await createCourseFromMaterials({
-        material_ids: selectedMaterialIdsAsNumbers,
-        course_title: courseTitle.trim()
-      });
-
-      await queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
-      setIsCourseDialogOpen(false);
-      setIsLibraryOpen(false);
-      navigate(buildCoursePath(created.data.course.id));
+      const job = await createCourseBuilderJob(
+        { material_ids: selectedMaterialIdsAsNumbers, course_title: courseTitle.trim() },
+        createIdempotencyKey("home-course")
+      );
+      setCourseJobId(job.job_id);
+      trackJob(job);
     } catch (error) {
       setCourseDialogFeedback({
         message: getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析资料。"),
         tone: "warning"
       });
-    } finally {
-      setIsCreatingCourse(false);
     }
   }
 
@@ -852,6 +882,10 @@ export function LearningSpacePage() {
           onClose={() => setIsCourseDialogOpen(false)}
           onCreate={(courseTitle) => void createCourseFromSelectedMaterials(courseTitle)}
           isCreatingCourse={isCreatingCourse}
+          initialCourseTitle={typeof courseJob?.request.course_title === "string" ? courseJob.request.course_title : undefined}
+          job={courseJob}
+          onCancelJob={() => courseJob && void cancelJob(courseJob.job_id)}
+          onRetryJob={() => courseJob && void retryJob(courseJob.job_id).then((job) => setCourseJobId(job.job_id))}
           feedback={courseDialogFeedback}
         />
       ) : null}
@@ -1050,6 +1084,10 @@ type CourseGenerationDialogWithNoticeProps = CourseGenerationDialogProps & {
   onToggleMaterial: (materialId: string) => void;
   onCreate: (courseTitle: string) => void;
   isCreatingCourse: boolean;
+  initialCourseTitle?: string;
+  job?: AiJob;
+  onCancelJob: () => void;
+  onRetryJob: () => void;
   feedback: { message: string; tone: FeedbackTone } | null;
 };
 
@@ -1060,10 +1098,14 @@ function CourseGenerationDialog({
   onClose,
   onCreate,
   isCreatingCourse,
+  initialCourseTitle,
+  job,
+  onCancelJob,
+  onRetryJob,
   feedback
 }: CourseGenerationDialogWithNoticeProps) {
   const selectedCount = selectedMaterialIds.length;
-  const [courseTitle, setCourseTitle] = useState("人工智能导论期末复习");
+  const [courseTitle, setCourseTitle] = useState(initialCourseTitle || "人工智能导论期末复习");
 
   return (
     <div className="course-dialog-backdrop">
@@ -1084,6 +1126,7 @@ function CourseGenerationDialog({
           <small>只建立关联，不移动原文件。</small>
         </div>
         <InlineFeedback message={feedback?.message ?? null} tone={feedback?.tone} className="dialog-inline-feedback" />
+        {job ? <AiJobProgress job={job} onCancel={onCancelJob} onRetry={onRetryJob} /> : null}
         <button
           className={selectedCount > 0 ? "dialog-primary-button" : "dialog-primary-button disabled"}
           type="button"

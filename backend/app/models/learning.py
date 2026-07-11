@@ -213,6 +213,51 @@ class AgentRunLog(IdMixin, CreatedAtMixin, Base):
     metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
+class AiJob(IdMixin, TimestampMixin, Base):
+    __tablename__ = "ai_jobs"
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="uq_ai_jobs_user_idempotency"),
+        Index("ix_ai_jobs_user_status_updated", "user_id", "status", "updated_at"),
+        Index("ix_ai_jobs_workflow_status", "workflow", "status"),
+        Index("ix_ai_jobs_agent_trace_id", "agent_trace_id"),
+        Index("ix_ai_jobs_retry_of", "retry_of_job_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("courses.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    retry_of_job_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("ai_jobs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    workflow: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="queued")
+    progress_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    stage: Mapped[str] = mapped_column(String(120), nullable=False, default="queued")
+    label: Mapped[str] = mapped_column(String(255), nullable=False, default="任务已排队")
+    agent_trace_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    queue_job_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    request_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    progress_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    result_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class PracticeSession(IdMixin, TimestampMixin, Base):
     __tablename__ = "practice_sessions"
     __table_args__ = (

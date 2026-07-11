@@ -50,6 +50,10 @@ services:
       WEB_SEARCH_MAX_RESULTS: ${WEB_SEARCH_MAX_RESULTS:-5}
       EXPORT_DIR: ${EXPORT_DIR:-storage/exports}
       EXPORT_QUEUE_NAME: ${EXPORT_QUEUE_NAME:-edunova_exports}
+      AI_JOB_QUEUE_NAME: ${AI_JOB_QUEUE_NAME:-edunova_ai}
+      AI_JOB_TIMEOUT_SECONDS: ${AI_JOB_TIMEOUT_SECONDS:-900}
+      AI_JOB_STALE_SECONDS: ${AI_JOB_STALE_SECONDS:-180}
+      AI_JOB_MAX_ACTIVE_PER_USER: ${AI_JOB_MAX_ACTIVE_PER_USER:-2}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -95,6 +99,34 @@ services:
     volumes:
       - export_data:/app/storage/exports
     command: ["sh", "-c", "rq worker $${EXPORT_QUEUE_NAME:-edunova_exports} --url $${REDIS_URL}"]
+    depends_on:
+      backend:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ai-worker:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_DEBUG: ${APP_DEBUG:-true}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-edunova}:${POSTGRES_PASSWORD:-edunova_dev_password}@postgres:5432/${POSTGRES_DB:-edunova}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change-this-local-development-secret}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
+      AI_JOB_QUEUE_NAME: ${AI_JOB_QUEUE_NAME:-edunova_ai}
+      AI_JOB_TIMEOUT_SECONDS: ${AI_JOB_TIMEOUT_SECONDS:-900}
+      AI_JOB_STALE_SECONDS: ${AI_JOB_STALE_SECONDS:-180}
+      AI_JOB_MAX_ACTIVE_PER_USER: ${AI_JOB_MAX_ACTIVE_PER_USER:-2}
+    command: ["sh", "-c", "rq worker $${AI_JOB_QUEUE_NAME:-edunova_ai} --url $${REDIS_URL}"]
     depends_on:
       backend:
         condition: service_healthy

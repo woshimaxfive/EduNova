@@ -33,6 +33,18 @@ services:
       SYSTEM_EMBEDDING_MODEL: example-embedding-model
       WEB_SEARCH_API_KEY: ""
 
+  ai-worker:
+    environment:
+      APP_ENV: test
+      APP_DEBUG: "false"
+      JWT_SECRET: edunova-e2e-isolated-secret
+      SYSTEM_MODEL_PROVIDER: openai_compatible
+      SYSTEM_MODEL_BASE_URL: https://api.example.com/v1
+      SYSTEM_MODEL_API_KEY: replace-with-your-own-key
+      SYSTEM_CHAT_MODEL: example-chat-model
+      SYSTEM_EMBEDDING_MODEL: example-embedding-model
+      WEB_SEARCH_API_KEY: ""
+
   nginx:
     ports: !override
       - "${E2E_NGINX_PORT:-18080}:80"

@@ -9,11 +9,12 @@ import {
   Target
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type KeyboardEvent, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
+import { createIdempotencyKey, createResourceGenerationJob } from "../api/aiJobs";
 import {
   getCourse,
   getCourseLearningState,
@@ -28,7 +29,7 @@ import {
 import { getCurrentPath } from "../api/paths";
 import { type RagSearchResultItem } from "../api/rag";
 import { getLatestReport } from "../api/reports";
-import { generateResources, listResources, type GeneratedResource, type ResourceType } from "../api/resources";
+import { listResources, type GeneratedResource, type ResourceType } from "../api/resources";
 import {
   createTutorSession,
   deleteTutorSession,
@@ -53,6 +54,7 @@ import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
 import { buildCourseLoopSummary, buildStudySteps } from "../features/course-space/a3Loop";
 import { type AgentTraceEvent } from "../types/api";
+import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 
 const courseStarterQuestions = [
   "这门课最适合先复习哪些知识点？",
@@ -286,6 +288,7 @@ export function CourseSpacePage() {
   const [weaknessFeedback, setWeaknessFeedback] = useState<string | null>(null);
   const [courseResourceFeedback, setCourseResourceFeedback] = useState<string | null>(null);
   const [latestGeneratedResources, setLatestGeneratedResources] = useState<GeneratedResource[]>([]);
+  const [resourceJobId, setResourceJobId] = useState<string | null>(null);
   const [selectedCourseResourceTypes, setSelectedCourseResourceTypes] = useState<ResourceType[]>([
     "doc",
     "mindmap",
@@ -296,6 +299,22 @@ export function CourseSpacePage() {
   ]);
   const [updatingWeaknessItemId, setUpdatingWeaknessItemId] = useState<string | null>(null);
   const optimisticMessageSequence = useRef(0);
+  const handledResourceJobId = useRef<string | null>(null);
+  const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
+  const resourceJob = getJob(resourceJobId);
+  const isGeneratingCourseResources = Boolean(resourceJob && ["queued", "running", "cancelling"].includes(resourceJob.status));
+
+  useEffect(() => {
+    if (resourceJobId || !hasRealCourseId) return;
+    const restored = jobs.find((job) => job.workflow === "resource_generation"
+      && Number(job.request.course_id) === numericCourseId
+      && ["queued", "running", "cancelling", "failed"].includes(job.status));
+    if (!restored) return;
+    // Restore durable server state after navigation or refresh.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (Array.isArray(restored.request.resource_types)) setSelectedCourseResourceTypes(restored.request.resource_types as ResourceType[]);
+    setResourceJobId(restored.job_id);
+  }, [hasRealCourseId, jobs, numericCourseId, resourceJobId]);
   const apiCourse = courseQuery.data?.data;
   const overviewCourse = courseOverviewQuery.data?.data.course;
   const fallbackCourse = apiCourse ?? overviewCourse;
@@ -418,24 +437,49 @@ export function CourseSpacePage() {
   const courseLoopSummary = buildCourseLoopSummary(courseLoopInput);
   const courseStudySteps = buildStudySteps(courseLoopInput);
 
+  useEffect(() => {
+    if (!resourceJob) return;
+    if (resourceJob.status === "failed") {
+      // Surface the terminal state delivered by the external job runtime.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCourseResourceFeedback(resourceJob.error_message ?? "课程资源生成失败，请稍后重试。");
+      return;
+    }
+    if (resourceJob.status !== "completed" || handledResourceJobId.current === resourceJob.job_id) return;
+    handledResourceJobId.current = resourceJob.job_id;
+    const resourceIds = Array.isArray(resourceJob.result.resource_ids)
+      ? resourceJob.result.resource_ids.map(String)
+      : [];
+    setCourseResourceFeedback(resourceJob.warnings.join(" ") || "资源生成完成，可直接查看，也可在资源工坊继续管理。");
+    void (async () => {
+      await queryClient.invalidateQueries({ queryKey: ["resources", "course", numericCourseId] });
+      await queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
+      const refreshed = await courseResourcesQuery.refetch();
+      const resources = refreshed.data?.data ?? [];
+      setLatestGeneratedResources(resourceIds.length > 0 ? resources.filter((item) => resourceIds.includes(item.id)) : resources.slice(0, 6));
+    })();
+  }, [courseResourcesQuery, numericCourseId, queryClient, resourceJob]);
+
   const courseResourceMutation = useMutation({
     mutationFn: () => {
       const parsedKnowledgePointId =
         selectedKnowledgePoint?.id !== undefined ? Number.parseInt(selectedKnowledgePoint.id, 10) : Number.NaN;
 
-      return generateResources({
-        course_id: numericCourseId,
-        knowledge_point_id: Number.isFinite(parsedKnowledgePointId) ? parsedKnowledgePointId : undefined,
-        resource_types: selectedCourseResourceTypes,
-        learning_goal: latestUserQuestion ?? courseLoopSummary.currentGoal,
-        difficulty: "medium"
-      });
+      return createResourceGenerationJob(
+        {
+          course_id: numericCourseId,
+          knowledge_point_id: Number.isFinite(parsedKnowledgePointId) ? parsedKnowledgePointId : undefined,
+          resource_types: selectedCourseResourceTypes,
+          learning_goal: latestUserQuestion ?? courseLoopSummary.currentGoal,
+          difficulty: "medium"
+        },
+        createIdempotencyKey("course-resource")
+      );
     },
-    onSuccess: (response) => {
-      setLatestGeneratedResources(response.data.resources);
-      setCourseResourceFeedback(response.data.warnings?.join(" ") || "资源生成完成，可直接查看，也可在资源工坊继续管理。");
-      void queryClient.invalidateQueries({ queryKey: ["resources", "course", numericCourseId] });
-      void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", numericCourseId] });
+    onSuccess: (job) => {
+      handledResourceJobId.current = null;
+      setResourceJobId(job.job_id);
+      trackJob(job);
     },
     onError: () => {
       setCourseResourceFeedback("课程资源生成失败，请稍后重试。");
@@ -527,7 +571,7 @@ export function CourseSpacePage() {
   }
 
   function submitCourseResourceGeneration() {
-    if (!hasRealCourseId || courseResourceMutation.isPending || selectedCourseResourceTypes.length === 0) {
+    if (!hasRealCourseId || courseResourceMutation.isPending || isGeneratingCourseResources || selectedCourseResourceTypes.length === 0) {
       return;
     }
 
@@ -831,10 +875,16 @@ export function CourseSpacePage() {
                         {activeAnswerPanel === "resources" ? (
                           <CourseInlineResourcePanel
                             selectedTypes={selectedCourseResourceTypes}
-                            isGenerating={courseResourceMutation.isPending}
+                            isGenerating={courseResourceMutation.isPending || isGeneratingCourseResources}
                             feedback={courseResourceFeedback}
                             generatedCount={generatedResources.length}
                             generatedResources={latestGeneratedResources}
+                            job={resourceJob}
+                            onCancelJob={() => resourceJob && void cancelJob(resourceJob.job_id)}
+                            onRetryJob={() => resourceJob && void retryJob(resourceJob.job_id).then((job) => {
+                              handledResourceJobId.current = null;
+                              setResourceJobId(job.job_id);
+                            })}
                             onToggleType={toggleCourseResourceType}
                             onGenerate={submitCourseResourceGeneration}
                           />

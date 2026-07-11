@@ -1,0 +1,144 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+
+import { cancelAiJob, listAiJobs, retryAiJob, streamAiJob, type AiJob } from "../../api/aiJobs";
+import { useAuthStore } from "../auth/authStore";
+
+type AiJobContextValue = {
+  jobs: AiJob[];
+  trackJob: (job: AiJob) => void;
+  getJob: (jobId: string | null | undefined) => AiJob | undefined;
+  cancelJob: (jobId: string) => Promise<AiJob>;
+  retryJob: (jobId: string) => Promise<AiJob>;
+};
+
+const AiJobContext = createContext<AiJobContextValue | null>(null);
+const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
+
+export function AiJobProvider({ children }: PropsWithChildren) {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const queryClient = useQueryClient();
+  const [jobMap, setJobMap] = useState<Record<string, AiJob>>({});
+  const streams = useRef(new Map<string, AbortController>());
+  const hiddenJobIds = useRef(new Set<string>());
+
+  const mergeJob = useCallback((job: AiJob) => {
+    setJobMap((current) => ({ ...current, [job.job_id]: job }));
+  }, []);
+
+  const subscribe = useCallback((job: AiJob) => {
+    if (hiddenJobIds.current.has(job.job_id)) return;
+    mergeJob(job);
+    if (terminalStatuses.has(job.status) || streams.current.has(job.job_id)) return;
+    const controller = new AbortController();
+    streams.current.set(job.job_id, controller);
+    void streamAiJob(
+      job.job_id,
+      (_event, snapshot) => {
+        mergeJob(snapshot);
+        if (terminalStatuses.has(snapshot.status)) {
+          streams.current.delete(snapshot.job_id);
+          void queryClient.invalidateQueries({ queryKey: ["ai-jobs"] });
+        }
+      },
+      controller.signal
+    ).catch(() => {
+      streams.current.delete(job.job_id);
+      if (!controller.signal.aborted) {
+        window.setTimeout(() => void queryClient.invalidateQueries({ queryKey: ["ai-jobs", "active"] }), 1000);
+      }
+    });
+  }, [mergeJob, queryClient]);
+
+  const activeQuery = useQuery({
+    queryKey: ["ai-jobs", "active"],
+    queryFn: listAiJobs,
+    enabled: isAuthenticated,
+    refetchInterval: (query) => {
+      const jobs = query.state.data?.data ?? [];
+      const needsPolling = jobs.some((job) => !terminalStatuses.has(job.status) && !streams.current.has(job.job_id));
+      return needsPolling ? 1000 : 10_000;
+    },
+    retry: false
+  });
+
+  useEffect(() => {
+    // Server snapshots are the external source of truth for durable jobs.
+    for (const job of activeQuery.data?.data ?? []) subscribe(job);
+  }, [activeQuery.data, subscribe]);
+
+  useEffect(() => {
+    if (isAuthenticated) return;
+    for (const controller of streams.current.values()) controller.abort();
+    streams.current.clear();
+    hiddenJobIds.current.clear();
+    // Authentication changes invalidate every user-scoped job snapshot.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setJobMap({});
+  }, [isAuthenticated]);
+
+  useEffect(() => () => {
+    for (const controller of streams.current.values()) controller.abort();
+    streams.current.clear();
+  }, []);
+
+  const cancelJob = useCallback(async (jobId: string) => {
+    const job = await cancelAiJob(jobId);
+    mergeJob(job);
+    return job;
+  }, [mergeJob]);
+
+  const retryJob = useCallback(async (jobId: string) => {
+    const job = await retryAiJob(jobId);
+    hiddenJobIds.current.add(jobId);
+    setJobMap((current) => {
+      const next = { ...current };
+      delete next[jobId];
+      return next;
+    });
+    subscribe(job);
+    return job;
+  }, [subscribe]);
+
+  const value = useMemo<AiJobContextValue>(() => ({
+    jobs: Object.values(jobMap).sort((left, right) => right.updated_at.localeCompare(left.updated_at)),
+    trackJob: subscribe,
+    getJob: (jobId) => (jobId ? jobMap[jobId] : undefined),
+    cancelJob,
+    retryJob
+  }), [cancelJob, jobMap, retryJob, subscribe]);
+
+  return <AiJobContext.Provider value={value}>{children}</AiJobContext.Provider>;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAiJobs() {
+  const context = useContext(AiJobContext);
+  const [localJobMap, setLocalJobMap] = useState<Record<string, AiJob>>({});
+  const localTrackJob = useCallback((job: AiJob) => {
+    setLocalJobMap((current) => ({ ...current, [job.job_id]: job }));
+  }, []);
+  const localCancelJob = useCallback(async (jobId: string) => {
+    const job = await cancelAiJob(jobId);
+    localTrackJob(job);
+    return job;
+  }, [localTrackJob]);
+  const localRetryJob = useCallback(async (jobId: string) => {
+    const job = await retryAiJob(jobId);
+    setLocalJobMap((current) => {
+      const next = { ...current };
+      delete next[jobId];
+      next[job.job_id] = job;
+      return next;
+    });
+    return job;
+  }, []);
+  const fallback = useMemo<AiJobContextValue>(() => ({
+    jobs: Object.values(localJobMap),
+    trackJob: localTrackJob,
+    getJob: (jobId) => (jobId ? localJobMap[jobId] : undefined),
+    cancelJob: localCancelJob,
+    retryJob: localRetryJob
+  }), [localCancelJob, localJobMap, localRetryJob, localTrackJob]);
+  return context ?? fallback;
+}

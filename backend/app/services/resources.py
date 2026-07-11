@@ -74,6 +74,7 @@ class ResourceGenerationState(AgentState, total=False):
     failed_resource_types: list[str]
     result_warnings: list[str]
     needs_repair: bool
+    job_context: Any
 
 
 class ResourceModelService(Protocol):
@@ -1017,6 +1018,16 @@ class ResourceGenerationGraphRunner:
         "slide": "SlideWorker",
         "animation": "AnimationWorker",
     }
+    job_progress = {
+        "profile": (8, "已读取学习画像"),
+        "retrieve": (18, "已检索课程依据"),
+        "diagnosis": (26, "已完成学习诊断"),
+        "planner": (34, "已生成资源计划"),
+        "aggregate": (72, "已汇总资源产物"),
+        "review": (82, "已审核资源质量"),
+        "repair": (90, "已修订资源产物"),
+        "persist": (100, "资源已保存"),
+    }
 
     def __init__(self, service: ResourceGenerationService) -> None:
         self.service = service
@@ -1031,8 +1042,10 @@ class ResourceGenerationGraphRunner:
         resource_types: list[str],
         learning_goal: str,
         difficulty: str,
+        trace_id: str | None = None,
+        job_context: Any | None = None,
     ) -> GenerateResourcesResult:
-        trace_id = make_trace_id()
+        trace_id = trace_id or make_trace_id()
         state: ResourceGenerationState = {
             "trace_id": trace_id,
             "workflow": self.workflow,
@@ -1049,10 +1062,12 @@ class ResourceGenerationGraphRunner:
             "worker_results": [],
             "warnings": [],
             "errors": [],
+            "job_context": job_context,
         }
         persist_started = perf_counter()
         try:
             result = self.graph.invoke(state)
+            self._job_before(result, "persist")
             self.service.repository.commit()
             resources = list(result.get("resource_objects", []))
             for resource in resources:
@@ -1067,6 +1082,7 @@ class ResourceGenerationGraphRunner:
                 metadata={"resource_count": len(resources)},
                 started_at=persist_started,
             )
+            self._job_after(result, "persist")
         except Exception as exc:
             self.service.repository.rollback()
             self._record(
@@ -1079,6 +1095,7 @@ class ResourceGenerationGraphRunner:
                 metadata={"error_code": exc.__class__.__name__},
                 started_at=persist_started,
             )
+            self._job_after(state, "persist", status="failed", label="资源保存失败", progress_percent=95)
             raise
 
         return GenerateResourcesResult(
@@ -1118,6 +1135,7 @@ class ResourceGenerationGraphRunner:
 
     def _profile_node(self, state: ResourceGenerationState) -> dict[str, Any]:
         started = perf_counter()
+        self._job_before(state, "profile")
         profile = self.service.repository.get_profile(int(state["user_id"]))
         profile_summary = self.service._profile_summary(profile)
         self._record(
@@ -1128,10 +1146,12 @@ class ResourceGenerationGraphRunner:
             output_summary="画像已合入资源生成上下文",
             started_at=started,
         )
+        self._job_after(state, "profile")
         return {"profile_summary": profile_summary}
 
     def _retrieve_node(self, state: ResourceGenerationState) -> dict[str, Any]:
         started = perf_counter()
+        self._job_before(state, "retrieve")
         course = state["course"]
         knowledge_point = state.get("knowledge_point")
         context_points = self.service.repository.list_knowledge_points(course.id)
@@ -1152,6 +1172,7 @@ class ResourceGenerationGraphRunner:
             metadata={"citation_count": len(citations), "source_count": len(citations)},
             started_at=started,
         )
+        self._job_after(state, "retrieve")
         return {
             "context_points": context_points,
             "contexts": contexts,
@@ -1161,6 +1182,7 @@ class ResourceGenerationGraphRunner:
 
     def _diagnosis_node(self, state: ResourceGenerationState) -> dict[str, Any]:
         started = perf_counter()
+        self._job_before(state, "diagnosis")
         resource_types = list(state.get("resource_types", []))
         knowledge_point = state.get("knowledge_point")
         diagnosis = {
@@ -1181,10 +1203,12 @@ class ResourceGenerationGraphRunner:
             },
             started_at=started,
         )
+        self._job_after(state, "diagnosis")
         return {"diagnosis": diagnosis}
 
     def _planner_node(self, state: ResourceGenerationState) -> dict[str, Any]:
         started = perf_counter()
+        self._job_before(state, "planner")
         profile_summary = dict(state.get("profile_summary", {}))
         plan = {
             "learning_goal": str(state.get("learning_goal") or profile_summary.get("learning_goal") or "掌握当前知识点"),
@@ -1201,6 +1225,7 @@ class ResourceGenerationGraphRunner:
             metadata={"worker_count": len(plan["resource_types"])},
             started_at=started,
         )
+        self._job_after(state, "planner")
         return {"resource_plan": plan}
 
     @staticmethod
@@ -1214,6 +1239,7 @@ class ResourceGenerationGraphRunner:
         started = perf_counter()
         resource_type = str(state["worker_resource_type"])
         worker_name = self.worker_names[resource_type]
+        self._job_before(state, "resource_worker")
         try:
             course = state["course"]
             knowledge_point = state.get("knowledge_point")
@@ -1263,8 +1289,18 @@ class ResourceGenerationGraphRunner:
                 },
                 started_at=started,
             )
+            self._job_after(
+                state,
+                worker_name,
+                status="warning" if model_failed else "completed",
+                label=f"{worker_name} 已完成",
+                progress_percent=60,
+                resource_type=resource_type,
+            )
             return {"worker_results": [result]}
         except Exception as exc:
+            if exc.__class__.__name__ == "AiJobCancelled":
+                raise
             self._record(
                 state,
                 agent_name=worker_name,
@@ -1274,6 +1310,14 @@ class ResourceGenerationGraphRunner:
                 output_summary="该类型资源生成失败，其他 Worker 继续执行。",
                 metadata={"resource_type": resource_type, "error_code": exc.__class__.__name__},
                 started_at=started,
+            )
+            self._job_after(
+                state,
+                worker_name,
+                status="failed",
+                label=f"{worker_name} 生成失败",
+                progress_percent=60,
+                resource_type=resource_type,
             )
             return {
                 "worker_results": [
@@ -1287,6 +1331,7 @@ class ResourceGenerationGraphRunner:
 
     def _aggregate_node(self, state: ResourceGenerationState) -> dict[str, Any]:
         started = perf_counter()
+        self._job_before(state, "aggregate")
         order = {resource_type: index for index, resource_type in enumerate(state.get("resource_types", []))}
         results = sorted(list(state.get("worker_results", [])), key=lambda item: order.get(item["resource_type"], 99))
         completed = [item for item in results if item.get("status") == "completed"]
@@ -1308,6 +1353,7 @@ class ResourceGenerationGraphRunner:
             },
             started_at=started,
         )
+        self._job_after(state, "aggregate", status="warning" if failed_types else "completed")
         return {
             "worker_results": [],
             "resource_payloads": completed,
@@ -1317,6 +1363,7 @@ class ResourceGenerationGraphRunner:
 
     def _review_node(self, state: ResourceGenerationState) -> dict[str, Any]:
         started = perf_counter()
+        self._job_before(state, "review")
         contexts = list(state.get("contexts", []))
         payloads = list(state.get("resource_payloads", []))
         model_reviews, review_model_failed = self.service._review_resources_with_model(user=state["user"], payloads=payloads)
@@ -1379,6 +1426,11 @@ class ResourceGenerationGraphRunner:
         warnings = list(state.get("result_warnings", []))
         if review_model_failed:
             warnings.append("模型审核暂不可用，资源已通过本地结构与安全规则审核。")
+        self._job_after(
+            state,
+            "review",
+            status="warning" if generation_warnings or needs_repair or review_model_failed else "completed",
+        )
         return {
             "reviewed_results": reviewed,
             "review_result": review_metadata,
@@ -1393,6 +1445,7 @@ class ResourceGenerationGraphRunner:
 
     def _repair_node(self, state: ResourceGenerationState) -> dict[str, Any]:
         started = perf_counter()
+        self._job_before(state, "repair")
         contexts = list(state.get("contexts", []))
         repaired_results: list[dict[str, Any]] = []
         failed_types = list(state.get("failed_resource_types", []))
@@ -1453,6 +1506,7 @@ class ResourceGenerationGraphRunner:
         safe_results = [item for item in repaired_results if item.get("review_status") in {"passed", "low_evidence"}]
         if not safe_results:
             raise ResourceGenerationError("所有资源均未通过安全审核，请调整资料后重试。")
+        self._job_after(state, "repair", status="warning" if failed_types else "completed")
         return {
             "reviewed_results": safe_results,
             "failed_resource_types": list(dict.fromkeys(failed_types)),
@@ -1461,6 +1515,7 @@ class ResourceGenerationGraphRunner:
         }
 
     def _persist_node(self, state: ResourceGenerationState) -> dict[str, Any]:
+        self._job_before(state, "persist")
         course = state["course"]
         knowledge_point = state.get("knowledge_point")
         contexts = list(state.get("contexts", []))
@@ -1525,6 +1580,37 @@ class ResourceGenerationGraphRunner:
             ]
 
         return {"resource_objects": resources, "quality_scores": quality_scores}
+
+    @staticmethod
+    def _job_before(state: ResourceGenerationState, name: str) -> None:
+        context = state.get("job_context")
+        if context is not None:
+            context.before_node(name)
+
+    def _job_after(
+        self,
+        state: ResourceGenerationState,
+        name: str,
+        *,
+        status: str = "completed",
+        label: str | None = None,
+        progress_percent: int | None = None,
+        resource_type: str | None = None,
+    ) -> None:
+        context = state.get("job_context")
+        if context is None:
+            return
+        default_progress, default_label = self.job_progress.get(name, (60, f"{name} 已完成"))
+        try:
+            context.after_node(
+                name=name,
+                label=label or default_label,
+                progress_percent=default_progress if progress_percent is None else progress_percent,
+                status=status,
+                resource_type=resource_type,
+            )
+        except Exception:
+            return
 
     def _record(
         self,

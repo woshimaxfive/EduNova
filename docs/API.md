@@ -810,6 +810,7 @@ Authorization: Bearer <token>
 - 课程生成会 best-effort 为新 `KnowledgeChunk` 写入真实外部 1536 维 embedding；失败只记录 warning 并回退关键词检索，不把本地 hash 宣称为语义向量。
 - `knowledge_chunks.metadata_json` 会记录 `embedding_source`、`embedding_model`、`embedding_dimension`、`embedded_at`，便于识别本地 fallback、过期模型和后续重建。
 - 前端 `/app` 主页资料库浮层和 `/app/library` 使用同一接口；成功后刷新 summary/materials 并跳转 `/app/courses/{course_id}`。
+- Phase 17 起当前前端改用 `POST /courses/from-materials/jobs`；本同步接口保留给旧客户端和内部兼容调用。
 
 ### POST `/materials/compare`
 
@@ -980,6 +981,8 @@ Authorization: Bearer <token>
 ### POST `/resources/generate`
 
 用途：为当前用户的一门课程同步生成 1 到 6 类学习资源。
+
+Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`；本同步接口不删除、不改响应字段。
 
 请求：
 
@@ -2318,7 +2321,88 @@ OpenRouter 不再作为可见预设。
 
 讯飞原生 Embeddingp/Embeddingq 因为独立授权、签名鉴权和 2560 维输出，当前阶段不接入。
 
-## 20. API 验收标准
+## 20. AI 长任务接口
+
+状态：Phase 17 已完成。所有接口必须携带 JWT，并按当前用户隔离。
+
+### POST `/courses/from-materials/jobs`
+
+用途：异步运行 `CourseBuilderGraph`。请求体与同步建课接口相同，必须携带 `Idempotency-Key`；成功返回 HTTP 202。
+
+### POST `/resources/generation-jobs`
+
+用途：异步运行 `ResourceGenerationGraph`。请求体与同步资源生成接口相同，必须携带 `Idempotency-Key`；成功返回 HTTP 202。单个 Worker 失败但仍有成功资源时任务为 `completed`，失败类型写入结果；全部失败才为 `failed`。
+
+### GET `/ai-jobs?status=active&limit=20`
+
+用途：恢复当前用户排队、运行、取消中和失败任务。`limit` 范围 1 至 50。
+
+### GET `/ai-jobs/{job_id}`
+
+用途：查询单条任务。跨用户或不存在返回 404。
+
+### GET `/ai-jobs/{job_id}/events`
+
+用途：返回鉴权 SSE。事件为 `snapshot`、`done`、`error`、`cancelled`，空闲期间发送心跳注释；断线后客户端通过详情/列表 GET 降级恢复。
+
+### POST `/ai-jobs/{job_id}/cancel`
+
+用途：请求协作式取消。排队任务直接取消；运行任务进入 `cancelling`，当前模型请求可在超时内结束，但下一节点或持久化前必须停止。
+
+### POST `/ai-jobs/{job_id}/retry`
+
+用途：为 `failed` 或 `cancelled` 任务创建新任务，返回 HTTP 202，并通过 `retry_of_job_id` 关联原任务。每条任务最多重试 3 次，重试前重新校验资料、课程和知识点归属。
+
+统一任务响应：
+
+```json
+{
+  "data": {
+    "job_id": "101",
+    "workflow": "resource_generation",
+    "status": "running",
+    "course_id": "8",
+    "retry_of_job_id": null,
+    "progress_percent": 60,
+    "stage": "DocWorker",
+    "label": "DocWorker 已完成",
+    "steps": [
+      {
+        "name": "DocWorker",
+        "label": "DocWorker 已完成",
+        "status": "completed",
+        "progress_percent": 60,
+        "resource_type": "doc",
+        "updated_at": "2026-07-11T10:00:00Z"
+      }
+    ],
+    "agent_trace_id": "trace_safe",
+    "request": {
+      "course_id": 8,
+      "knowledge_point_id": 12,
+      "resource_types": ["doc"],
+      "learning_goal": "掌握反向传播",
+      "difficulty": "medium"
+    },
+    "result": {},
+    "warnings": [],
+    "error_code": null,
+    "error_message": null,
+    "attempt_count": 0,
+    "can_cancel": true,
+    "can_retry": false,
+    "created_at": "2026-07-11T09:59:58Z",
+    "updated_at": "2026-07-11T10:00:00Z",
+    "started_at": "2026-07-11T09:59:59Z",
+    "completed_at": null
+  },
+  "trace_id": "trace_api"
+}
+```
+
+安全约束：响应不包含 RQ job ID、ORM 对象、原始资料、模型输入、系统提示词、密钥或思维链。排队失败会保留可重试的 `failed` 任务。每用户默认最多同时运行 2 个 AI 任务。
+
+## 21. API 验收标准
 
 第一版接口达到以下标准才算可进入前端联调：
 

@@ -1,12 +1,12 @@
 import { Sparkle } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
+import { createIdempotencyKey, createResourceGenerationJob } from "../api/aiJobs";
 import { getKnowledgePoints, listCourses } from "../api/courses";
 import {
-  generateResources,
   getResourceQuality,
   listResources,
   type GeneratedResource,
@@ -15,12 +15,14 @@ import {
   type ResourceType
 } from "../api/resources";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
+import { AiJobProgress } from "../components/feedback/AiJobProgress";
 import { AgentTimeline } from "../components/evidence/AgentTimeline";
 import { ResourceRenderer } from "../components/resources/ResourceRenderer";
 import { StudioDock } from "../components/studio/StudioDock";
 import { WorkspaceStateStrip } from "../components/states/WorkspaceStateStrip";
 import { getWorkspaceStatePanels } from "../features/workspace/workflowState";
 import { PageFrame } from "./PageFrame";
+import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 
 const resourceTypes: Array<{ type: ResourceType; label: string }> = [
   { type: "doc", label: "讲解" },
@@ -72,6 +74,30 @@ export function StudioPage() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [latestQualityScores, setLatestQualityScores] = useState<Record<string, ResourceQualityScore[]>>({});
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
+  const [resourceJobId, setResourceJobId] = useState<string | null>(null);
+  const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
+  const resourceJob = getJob(resourceJobId);
+  const isGenerating = Boolean(resourceJob && ["queued", "running", "cancelling"].includes(resourceJob.status));
+
+  useEffect(() => {
+    if (resourceJobId) return;
+    const restored = jobs.find((job) => {
+      const requestCourseId = Number(job.request.course_id);
+      return job.workflow === "resource_generation"
+        && ["queued", "running", "cancelling", "failed"].includes(job.status)
+        && (initialCourseId === null || requestCourseId === initialCourseId);
+    });
+    if (!restored) return;
+    const request = restored.request;
+    // Restore durable server state after navigation or refresh.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (Number.isFinite(Number(request.course_id))) setSelectedCourseId(Number(request.course_id));
+    if (request.knowledge_point_id !== null && Number.isFinite(Number(request.knowledge_point_id))) setSelectedKnowledgePointId(Number(request.knowledge_point_id));
+    if (Array.isArray(request.resource_types)) setSelectedResourceTypes(request.resource_types as ResourceType[]);
+    if (typeof request.learning_goal === "string") setLearningGoal(request.learning_goal);
+    if (["easy", "medium", "hard"].includes(String(request.difficulty))) setDifficulty(request.difficulty as ResourceDifficulty);
+    setResourceJobId(restored.job_id);
+  }, [initialCourseId, jobs, resourceJobId]);
 
   const coursesQuery = useQuery({
     queryKey: ["courses", "studio"],
@@ -153,24 +179,43 @@ export function StudioPage() {
     [resourceTraceQuery.data?.data.steps]
   );
 
+  useEffect(() => {
+    if (!resourceJob) return;
+    if (resourceJob.status === "failed") {
+      // Surface the terminal state delivered by the external job runtime.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFeedback(resourceJob.error_message ?? "资源生成失败，请稍后重试。");
+      return;
+    }
+    if (resourceJob.status !== "completed") return;
+    const resourceIds = Array.isArray(resourceJob.result.resource_ids)
+      ? resourceJob.result.resource_ids.map(String)
+      : [];
+    setFeedback(resourceJob.warnings.join(" ") || "资源生成完成。");
+    setLatestQualityScores({});
+    if (resourceIds[0]) setSelectedResourceId(resourceIds[0]);
+    void queryClient.invalidateQueries({ queryKey: ["resources", "list", effectiveCourseId] });
+  }, [effectiveCourseId, queryClient, resourceJob]);
+
   const generateMutation = useMutation({
     mutationFn: () => {
       if (effectiveCourseId === null) {
         throw new Error("missing course");
       }
-      return generateResources({
-        course_id: effectiveCourseId,
-        knowledge_point_id: effectiveKnowledgePointId,
-        resource_types: selectedResourceTypes,
-        learning_goal: learningGoal,
-        difficulty
-      });
+      return createResourceGenerationJob(
+        {
+          course_id: effectiveCourseId,
+          knowledge_point_id: effectiveKnowledgePointId,
+          resource_types: selectedResourceTypes,
+          learning_goal: learningGoal,
+          difficulty
+        },
+        createIdempotencyKey("studio-resource")
+      );
     },
-    onSuccess: (response) => {
-      setFeedback(response.data.warnings?.join(" ") || null);
-      setLatestQualityScores(response.data.quality_scores);
-      setSelectedResourceId(response.data.resources[0]?.id ?? null);
-      void queryClient.invalidateQueries({ queryKey: ["resources", "list", effectiveCourseId] });
+    onSuccess: (job) => {
+      setResourceJobId(job.job_id);
+      trackJob(job);
     },
     onError: () => {
       setFeedback("资源生成失败，请稍后重试。");
@@ -193,13 +238,13 @@ export function StudioPage() {
   }
 
   function handleGenerate() {
-    if (effectiveCourseId === null || generateMutation.isPending) {
+    if (effectiveCourseId === null || generateMutation.isPending || isGenerating) {
       return;
     }
     generateMutation.mutate();
   }
 
-  const canGenerate = effectiveCourseId !== null && selectedResourceTypes.length > 0 && !generateMutation.isPending;
+  const canGenerate = effectiveCourseId !== null && selectedResourceTypes.length > 0 && !generateMutation.isPending && !isGenerating;
   const selectedKnowledgePoint = knowledgePoints.find((point) => Number.parseInt(point.id, 10) === effectiveKnowledgePointId) ?? null;
   const selectedKnowledgePointTitle = selectedKnowledgePoint?.title ?? "整门课程";
   const selectedResourceTypeSummary = selectedResourceTypes
@@ -325,9 +370,16 @@ export function StudioPage() {
             </dl>
             <button className="primary-action" type="button" onClick={handleGenerate} disabled={!canGenerate}>
               <Sparkle size={18} weight="fill" aria-hidden="true" />
-              <span>{generateMutation.isPending ? "生成中" : "重新生成"}</span>
+              <span>{generateMutation.isPending || isGenerating ? "生成中" : "重新生成"}</span>
             </button>
             <InlineFeedback message={feedback} tone="warning" className="library-inline-feedback" />
+            {resourceJob ? (
+              <AiJobProgress
+                job={resourceJob}
+                onCancel={() => void cancelJob(resourceJob.job_id)}
+                onRetry={() => void retryJob(resourceJob.job_id).then((job) => setResourceJobId(job.job_id))}
+              />
+            ) : null}
             {coursesQuery.isError || resourcesQuery.isError ? (
               <InlineFeedback message="资源工坊数据读取失败，请稍后重试。" tone="warning" className="library-inline-feedback" />
             ) : null}
@@ -349,9 +401,17 @@ export function StudioPage() {
           </div>
           <button className="primary-action" type="button" onClick={handleGenerate} disabled={!canGenerate}>
             <Sparkle size={18} weight="fill" aria-hidden="true" />
-            <span>{generateMutation.isPending ? "生成中" : "生成资源"}</span>
+            <span>{generateMutation.isPending || isGenerating ? "生成中" : "生成资源"}</span>
           </button>
         </div>
+
+        {!hasResourceResult && resourceJob ? (
+          <AiJobProgress
+            job={resourceJob}
+            onCancel={() => void cancelJob(resourceJob.job_id)}
+            onRetry={() => void retryJob(resourceJob.job_id).then((job) => setResourceJobId(job.job_id))}
+          />
+        ) : null}
 
         <div className="studio-control-grid">
           <label>

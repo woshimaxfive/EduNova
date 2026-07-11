@@ -10,7 +10,8 @@ export const COURSE_ENDPOINTS = {
   learningState: (courseId: number) => `/courses/${courseId}/learning-state`,
   weaknessReviewAction: (courseId: number, itemId: string, action: CourseWeaknessReviewAction) =>
     `/courses/${courseId}/weakness-review-items/${itemId}/${action}`,
-  fromMaterials: "/courses/from-materials"
+  fromMaterials: "/courses/from-materials",
+  fromMaterialsJobs: "/courses/from-materials/jobs"
 } as const;
 
 export type CreateCourseFromMaterialsRequest = {

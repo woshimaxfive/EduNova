@@ -1,10 +1,11 @@
 import { BookOpen, FileArrowUp, Image, MagnifyingGlass, SealCheck, Sparkle, X } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ChangeEvent, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { buildCoursePath, PATHS } from "../app/routePaths";
-import { createCourseFromMaterials, listCourses, type ApiCourseSummary } from "../api/courses";
+import { createCourseBuilderJob, createIdempotencyKey, type AiJob } from "../api/aiJobs";
+import { listCourses, type ApiCourseSummary } from "../api/courses";
 import { getApiErrorMessage } from "../api/errors";
 import {
   compareMaterials,
@@ -16,8 +17,10 @@ import {
   uploadMaterial
 } from "../api/materials";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
+import { AiJobProgress } from "../components/feedback/AiJobProgress";
 import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { PageFrame } from "./PageFrame";
+import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 
 type LibraryFilter = "all" | "document" | "image";
 type LibraryFile = MaterialListItem;
@@ -98,7 +101,7 @@ export function LibraryPage() {
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
   const [courseMaterialIds, setCourseMaterialIds] = useState<string[]>([]);
   const [courseTitle, setCourseTitle] = useState("资料生成课程");
-  const [isCreatingCourse, setIsCreatingCourse] = useState(false);
+  const [courseJobId, setCourseJobId] = useState<string | null>(null);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
   const [libraryFeedback, setLibraryFeedback] = useState<string | null>(null);
   const [courseDialogFeedback, setCourseDialogFeedback] = useState<string | null>(null);
@@ -107,6 +110,9 @@ export function LibraryPage() {
   const [compareResult, setCompareResult] = useState<MaterialComparisonResult | null>(null);
   const [compareFeedback, setCompareFeedback] = useState<string | null>(null);
   const [isComparingMaterials, setIsComparingMaterials] = useState(false);
+  const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
+  const courseJob = getJob(courseJobId);
+  const isCreatingCourse = Boolean(courseJob && ["queued", "running", "cancelling"].includes(courseJob.status));
   const materialsQuery = useQuery({
     queryKey: ["materials", "list"],
     queryFn: () => listMaterials(),
@@ -128,6 +134,39 @@ export function LibraryPage() {
     staleTime: 10_000
   });
   const displayedComparison = compareResult ?? asMaterialComparison(latestComparisonQuery.data?.data);
+
+  useEffect(() => {
+    if (courseJobId) return;
+    const restored = jobs.find((job) => job.workflow === "course_builder" && ["queued", "running", "cancelling", "failed"].includes(job.status));
+    if (!restored) return;
+    // Restore durable server state after navigation or refresh.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCourseMaterialIds(Array.isArray(restored.request.material_ids) ? restored.request.material_ids.map(String) : []);
+    if (typeof restored.request.course_title === "string") setCourseTitle(restored.request.course_title);
+    setCourseJobId(restored.job_id);
+    setIsCourseDialogOpen(true);
+  }, [courseJobId, jobs]);
+
+  useEffect(() => {
+    if (!courseJob) return;
+    if (courseJob.status === "failed") {
+      // Surface the terminal state delivered by the external job runtime.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCourseDialogFeedback(courseJob.error_message ?? "课程生成失败，请稍后重试。");
+      return;
+    }
+    const courseId = courseJob.result.course_id;
+    if (courseJob.status === "completed" && (typeof courseId === "string" || typeof courseId === "number")) {
+      setCourseJobId(null);
+      setIsCourseDialogOpen(false);
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["courses", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
+      ]);
+      navigate(buildCoursePath(String(courseId)));
+    }
+  }, [courseJob, navigate, queryClient]);
   const compareCourseMaterials = useMemo(
     () =>
       files.filter(
@@ -237,25 +276,17 @@ export function LibraryPage() {
       return;
     }
 
-    setIsCreatingCourse(true);
     setCourseDialogFeedback(null);
 
     try {
-      const created = await createCourseFromMaterials({
-        material_ids: selectedMaterialIdsAsNumbers,
-        course_title: courseTitle.trim()
-      });
-
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
-      ]);
-      setIsCourseDialogOpen(false);
-      navigate(buildCoursePath(created.data.course.id));
+      const job = await createCourseBuilderJob(
+        { material_ids: selectedMaterialIdsAsNumbers, course_title: courseTitle.trim() },
+        createIdempotencyKey("library-course")
+      );
+      setCourseJobId(job.job_id);
+      trackJob(job);
     } catch (error) {
       setCourseDialogFeedback(getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析资料。"));
-    } finally {
-      setIsCreatingCourse(false);
     }
   }
 
@@ -462,6 +493,9 @@ export function LibraryPage() {
           selectedMaterialIds={courseMaterialIds}
           courseTitle={courseTitle}
           isCreatingCourse={isCreatingCourse}
+          job={courseJob}
+          onCancelJob={() => courseJob && void cancelJob(courseJob.job_id)}
+          onRetryJob={() => courseJob && void retryJob(courseJob.job_id).then((job) => setCourseJobId(job.job_id))}
           onCourseTitleChange={setCourseTitle}
           onToggleMaterial={toggleCourseMaterial}
           feedback={courseDialogFeedback}
@@ -478,11 +512,14 @@ type LibraryCourseDialogProps = {
   selectedMaterialIds: string[];
   courseTitle: string;
   isCreatingCourse: boolean;
+  job?: AiJob;
   feedback: string | null;
   onCourseTitleChange: (courseTitle: string) => void;
   onToggleMaterial: (materialId: string) => void;
   onClose: () => void;
   onCreate: () => void;
+  onCancelJob: () => void;
+  onRetryJob: () => void;
 };
 
 function LibraryCourseDialog({
@@ -490,11 +527,14 @@ function LibraryCourseDialog({
   selectedMaterialIds,
   courseTitle,
   isCreatingCourse,
+  job,
   feedback,
   onCourseTitleChange,
   onToggleMaterial,
   onClose,
-  onCreate
+  onCreate,
+  onCancelJob,
+  onRetryJob
 }: LibraryCourseDialogProps) {
   const selectedCount = selectedMaterialIds.length;
 
@@ -523,6 +563,7 @@ function LibraryCourseDialog({
           ))}
         </div>
         <InlineFeedback message={feedback} tone="warning" className="dialog-inline-feedback" />
+        {job ? <AiJobProgress job={job} onCancel={onCancelJob} onRetry={onRetryJob} /> : null}
         <button
           className={selectedCount > 0 ? "dialog-primary-button" : "dialog-primary-button disabled"}
           type="button"

@@ -14,6 +14,7 @@ import { REPORT_ENDPOINTS } from "../api/reports";
 import { RESOURCE_ENDPOINTS } from "../api/resources";
 import { TUTOR_ENDPOINTS, type TutorCitation, type TutorSessionDetail, type TutorSessionSummary } from "../api/tutor";
 import { CourseSpacePage } from "./CourseSpacePage";
+import { makeCompletedAiJob } from "../test/aiJobs";
 
 let previousAdapter = apiClient.defaults.adapter;
 const previousFetch = globalThis.fetch;
@@ -540,18 +541,14 @@ function renderCoursePage(options: CoursePageOptions = {}) {
       };
     }
 
-    if (url === RESOURCE_ENDPOINTS.generate && method === "post") {
+    if (url === RESOURCE_ENDPOINTS.generationJobs && method === "post") {
       if (options.failResourceGeneration) {
         throw new Error("课程资源生成失败。");
       }
 
       return {
         data: {
-          data: {
-            agent_trace_id: "trace_course_resource_generation",
-            resources: generatedResourceItems,
-            quality_scores: {}
-          },
+          data: makeCompletedAiJob({ result: { course_id: "808", resource_ids: generatedResourceItems.map((item) => item.id) } }),
           trace_id: "trace_course_resource_generation"
         },
         status: 200,
@@ -1130,7 +1127,7 @@ describe("CourseSpacePage course tutor sessions", () => {
       expect(calls).toContainEqual(
         expect.objectContaining({
           method: "post",
-          url: RESOURCE_ENDPOINTS.generate,
+          url: RESOURCE_ENDPOINTS.generationJobs,
           payload: expect.objectContaining({
             course_id: 808,
             resource_types: ["doc", "mindmap", "quiz", "code", "slide", "animation"]

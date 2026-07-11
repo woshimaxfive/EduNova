@@ -10,6 +10,7 @@ import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { RESOURCE_ENDPOINTS, type GeneratedResource, type ResourceQualityScore } from "../api/resources";
 import { StudioPage } from "./StudioPage";
+import { makeCompletedAiJob } from "../test/aiJobs";
 
 let previousAdapter = apiClient.defaults.adapter;
 
@@ -180,19 +181,23 @@ describe("StudioPage resource generation", () => {
         };
       }
 
-      if (url === RESOURCE_ENDPOINTS.generate && method === "post") {
+      if (url === RESOURCE_ENDPOINTS.generationJobs && method === "post") {
         resources = [makeResource()];
         return {
           data: {
-            data: {
-              agent_trace_id: "trace_resource",
-              resources,
-              quality_scores: {
-                "901": makeQuality()
-              }
-            },
+            data: makeCompletedAiJob({ result: { course_id: "808", resource_ids: ["901"] } }),
             trace_id: "trace_generate"
           },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === RESOURCE_ENDPOINTS.quality(901)) {
+        return {
+          data: { data: makeQuality(), trace_id: "trace_quality" },
           status: 200,
           statusText: "OK",
           headers: {},
@@ -223,7 +228,7 @@ describe("StudioPage resource generation", () => {
       expect(calls).toContainEqual(
         expect.objectContaining({
           method: "post",
-          url: RESOURCE_ENDPOINTS.generate,
+          url: RESOURCE_ENDPOINTS.generationJobs,
           payload: {
             course_id: 808,
             knowledge_point_id: 401,
@@ -502,7 +507,7 @@ describe("StudioPage resource generation", () => {
         };
       }
 
-      if (config.url === RESOURCE_ENDPOINTS.generate) {
+      if (config.url === RESOURCE_ENDPOINTS.generationJobs) {
         throw new Error("generate failed");
       }
 

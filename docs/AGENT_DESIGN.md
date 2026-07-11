@@ -24,6 +24,8 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 | `ReportGraph` | 已真接管：最近练习、掌握度、弱点、路径和资源聚合，叙事增强、审核/修订、持久化 | collect_practice、collect_mastery、aggregate_evidence、generate_narrative、review、repair、persist |
 `Service` 仍然是 API 边界和依赖装配层。十条主链路的核心流程已经委托给对应 Graph runner。学习档案导出是确定性 Service + Redis/RQ Worker，不注册为 `ExportDossierGraph`，也不把异步任务包装成 Agent。
 
+Phase 17 新增的 `AIJobRuntime` 也不是第十一条 Agent Graph。它只为 `CourseBuilderGraph` 和 `ResourceGenerationGraph` 提供后台排队、节点进度、心跳、取消、重试和刷新恢复。任务和 Graph 共用同一个 `agent_trace_id`；Graph trace 仍由真实节点执行产生，任务进度不替代 `agent_run_logs`。
+
 ## 3. AgentState
 
 共享状态字段在 `backend/app/agents/schemas.py` 中定义，核心字段包括：
@@ -75,6 +77,8 @@ repair_count
 - `assessment_reports.agent_trace_id`
 
 `chat_messages.trace_id` 保持既有字段。`export_jobs.agent_trace_id` 同时服务异步学习档案和资源 PPTX；`resource_id` 把 PPTX 任务关联到对应的 `generated_resources`。
+
+`ai_jobs.agent_trace_id` 绑定后台任务与对应 Graph trace。`request_json` 只允许资料/课程/知识点 ID、资源类型、目标和难度；`result_json` 只允许课程/资源 ID、warning 和失败资源类型。任务步骤只记录节点名、状态、百分比、资源类型和更新时间。
 
 ## 5. Metadata 白名单
 

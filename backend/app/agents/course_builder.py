@@ -35,27 +35,48 @@ class CourseBuilderState(TypedDict, total=False):
     knowledge_chunks: list[KnowledgeChunk]
     warnings: list[str]
     result: CreateCourseFromMaterialsResult
+    job_context: Any
 
 
 class CourseBuilderGraphRunner:
     workflow = "course_builder"
+    job_progress = {
+        "read_materials": (8, "已读取资料"),
+        "source_outline": (18, "已整理来源提纲"),
+        "structure_course": (32, "已生成课程结构"),
+        "knowledge_points": (44, "已生成知识点"),
+        "chunk": (56, "已生成课程切片"),
+        "embed": (68, "已处理语义向量"),
+        "review": (80, "已审核课程结构"),
+        "repair": (90, "已修订课程结构"),
+        "persist": (100, "课程已创建"),
+    }
 
     def __init__(self, service: Any) -> None:
         self.service = service
         self.graph = self._build_graph()
 
-    def generate(self, *, user: User, material_ids: list[int], course_title: str) -> CreateCourseFromMaterialsResult:
+    def generate(
+        self,
+        *,
+        user: User,
+        material_ids: list[int],
+        course_title: str,
+        trace_id: str | None = None,
+        job_context: Any | None = None,
+    ) -> CreateCourseFromMaterialsResult:
         unique_ids = list(dict.fromkeys(material_ids))
         if not unique_ids:
             raise self.service.generation_error("至少选择一份资料。")
         state: CourseBuilderState = {
-            "trace_id": make_trace_id(),
+            "trace_id": trace_id or make_trace_id(),
             "user": user,
             "user_id": user.id,
             "material_ids": unique_ids,
             "requested_title": course_title.strip(),
             "warnings": [],
             "repair_count": 0,
+            "job_context": job_context,
         }
         return self.graph.invoke(state)["result"]
 
@@ -289,6 +310,7 @@ class CourseBuilderGraphRunner:
 
     def _persist_node(self, state: CourseBuilderState) -> dict[str, Any]:
         started = perf_counter()
+        self._job_before(state, "persist")
         materials = state["materials"]
         structure = dict(state["structure"])
         title = str(state.get("requested_title") or structure.get("title") or Path(materials[0].filename).stem).strip()[:255]
@@ -336,12 +358,14 @@ class CourseBuilderGraphRunner:
         except Exception as exc:
             self.service.repository.rollback()
             self._record(state, "persist", 9, "failed", "事务性持久化课程结构", "课程持久化失败，未保留半成品课程。", {"error_code": exc.__class__.__name__}, started)
+            self._job_after(state, "persist", status="failed", label="课程创建失败", progress_percent=95)
             raise
         result = CreateCourseFromMaterialsResult(
             course=self.service._build_summary(created, len(course_materials), len(state["knowledge_points"]), len(state["knowledge_chunks"])),
             knowledge_points=[self.service._build_knowledge_point(point) for point in state["knowledge_points"]],
         )
         self._record(state, "persist", 9, "completed", "事务性持久化课程结构", "课程、知识点、来源分块和先修关系已持久化。", {"artifact_id": str(created.id), "candidate_count": len(state["knowledge_points"])}, started)
+        self._job_after(state, "persist")
         return {"result": result}
 
     def _deterministic_structure(self, state: CourseBuilderState) -> dict[str, Any]:
@@ -506,13 +530,46 @@ class CourseBuilderGraphRunner:
 
     def _run_node(self, state: CourseBuilderState, name: str, index: int, input_summary: str, work: Callable):
         started = perf_counter()
+        self._job_before(state, name)
         try:
             result, output_summary, status, metadata = work()
         except Exception as exc:
             self._record(state, name, index, "failed", input_summary, "节点执行失败，已记录安全错误摘要。", {"error_code": exc.__class__.__name__}, started)
+            progress, _ = self.job_progress[name]
+            self._job_after(state, name, status="failed", label="节点执行失败", progress_percent=max(0, progress - 1))
             raise
         self._record(state, name, index, status, input_summary, output_summary, metadata, started)
+        self._job_after(state, name, status=status)
         return result
+
+    @staticmethod
+    def _job_before(state: CourseBuilderState, name: str) -> None:
+        context = state.get("job_context")
+        if context is not None:
+            context.before_node(name)
+
+    def _job_after(
+        self,
+        state: CourseBuilderState,
+        name: str,
+        *,
+        status: str = "completed",
+        label: str | None = None,
+        progress_percent: int | None = None,
+    ) -> None:
+        context = state.get("job_context")
+        if context is None:
+            return
+        default_progress, default_label = self.job_progress[name]
+        try:
+            context.after_node(
+                name=name,
+                label=label or default_label,
+                progress_percent=default_progress if progress_percent is None else progress_percent,
+                status=status,
+            )
+        except Exception:
+            return
 
     def _record(self, state: CourseBuilderState, name: str, index: int, status: str, input_summary: str, output_summary: str, metadata: dict[str, Any], started: float) -> None:
         recorder = self.service.trace_recorder

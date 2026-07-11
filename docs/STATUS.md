@@ -4,11 +4,13 @@
 
 ## 状态摘要
 
-当前最新完成到 **Phase 16：资料证据与期末冲刺智能闭环**。
+当前最新完成到 **Phase 17：AI 长任务运行时与可靠性升级**。
 
 Phase 计划继续以 `docs/superpowers` 原始实施计划为准。Phase 13 已完成主页问答、课程问答和资源生成的真实 Graph 编排，Phase 14 已让路径、练习评估和报告进入真实 LangGraph，Phase 15 已让画像和资料建课进入生产 Graph，Phase 16 已让资料对比和期末冲刺进入生产 Graph，并打通冲刺来源练习的独立回流。
 
 Phase 16 使用 Alembic `20260711_0013` 新增不可变 `material_comparison_runs`。`MaterialComparisonGraph` 从真实资料/课程分块生成规则底稿，模型只增强解释与排序；`ExamSprintGraph` 可显式消费对比版本，保留已完成进度并在冲刺来源练习后独立重排。普通练习不触发冲刺，重排失败不回滚评分、弱点或来源任务完成状态。
+
+Phase 17 使用 Alembic `20260711_0014` 新增 `ai_jobs`。`CourseBuilderGraph` 和 `ResourceGenerationGraph` 继续保持原有同步接口兼容，同时通过 `edunova_ai` RQ 队列提供后台任务入口。任务状态由服务端持久化，Graph 节点通过独立 session 更新真实进度和心跳；取消在节点与持久化边界协作执行，失败或取消不保存半成品课程或资源。
 
 Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`AssessmentGraph` 保证客观分数由规则决定，错题精确关联 `PracticeAnswer` 并合并更新弱点；`PathPlanningGraph` 只重排已有路径并保留完成进度；`ReportGraph` 确定性聚合最近 5 次练习和趋势。模型只增强题目、诊断、路径理由和报告叙事，失败时明确使用 `rules_only`。课程 RAG 在外部 embedding 可用时使用 pgvector SQL cosine 候选，未配置或失败时退回关键词检索，不再把本地 hash 宣称为语义命中。
 
@@ -126,10 +128,10 @@ Phase 13 前端视觉硬化后，桌面端继续保留 264px / 68px 的展开与
 | 学习报告 | `reports` router 已接入，复用 `assessment_reports`，支持课程最新报告读取和报告生成 |
 | 文件导出 | `export_jobs` + Redis/RQ 支持 Markdown/PDF/DOCX 学习档案和资源 PPTX 异步文件导出与下载 |
 | 期末冲刺 | `ExamSprintGraph` 复用 `learning_paths` 和 `learning_tasks`，支持当前计划恢复、对比证据和冲刺来源练习回流 |
-| Docker | Compose 六服务可按默认端口启动，包含 PostgreSQL、Redis、backend、export-worker、frontend、nginx；backend 与 worker 共享导出卷 |
+| Docker | Compose 七服务可按默认端口启动，包含 PostgreSQL、Redis、backend、export-worker、ai-worker、frontend、nginx；AI 与文件导出使用独立 RQ 队列 |
 | 安全 | 用户数据隔离、Key 加密、脱敏返回和上传目录忽略已接入 |
 
-当前后端已挂载的业务 router 是 `auth`、`dashboard`、`courses`、`materials`、`profiles`、`rag`、`settings`、`tutor`、`agents`、`resources`、`paths`、`practice`、`reports`、`exam_sprint` 和 `exports`。`demo` 仍只是前端 API 常量与后续接口设计，不属于当前已实现后端能力。
+当前后端已挂载的业务 router 是 `auth`、`dashboard`、`courses`、`materials`、`profiles`、`rag`、`settings`、`tutor`、`agents`、`ai_jobs`、`resources`、`paths`、`practice`、`reports`、`exam_sprint` 和 `exports`。`demo` 仍只是前端 API 常量与后续接口设计，不属于当前已实现后端能力。
 
 资源分层口径保持不变：`course_id != null` 是课程资源，`course_id == null` 预留个人全局资源。新资源使用 `content_json.schema_version=2` 和 `artifact.kind` 保存结构化产物，同时保留 Markdown fallback；旧资源不批量改写。`generation_mode` 区分模型增强与确定性来源，`review_mode` 区分 `model_and_rules` 和 `rules_only`，不能把规则 fallback 伪装成模型审核。资源、质量分和 trace 均不保存系统提示词、完整模型输入、密钥、完整资料或完整画像原文。
 
@@ -199,10 +201,11 @@ Phase 7.2 的分层口径：
 | Phase 14 | 已完成 | `PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 真接管，错题证据与路径回流、报告趋势、pgvector SQL 课程检索和隔离 E2E |
 | Phase 15 | 已完成 | `ProfileGraph`、`CourseBuilderGraph` 真接管，画像证据门控、v2 课程结构、adaptive 练习、草稿恢复和 React Flow/ECharts 可视化 |
 | Phase 16 | 已完成 | `MaterialComparisonGraph`、`ExamSprintGraph` 真接管，不可变对比版本、显式冲刺证据和来源练习独立重排 |
+| Phase 17 | 已完成 | `AIJobRuntime`、`ai_jobs`、独立 AI Worker、建课/资源后台任务、节点进度、恢复、取消、重试和全局任务托盘 |
 
 ## 下一步建议
 
-当前可以继续推进 **Phase 16 后产品硬化**，重点是十条 Graph 的跨页面证据是否稳定、好懂、可恢复，以及 OCR/旧版 Office 等明确缺口。学习档案导出保持普通异步服务，不为了数量强行 Graph 化。
+当前可以继续推进 **Phase 17 后产品硬化**。十条 Graph 数量不变，其中建课和资源生成已有统一长任务运行时；后续重点是其余同步 Graph 的超时边界、移动端持续打磨，以及 OCR/旧版 Office 等明确缺口。学习档案导出保持普通异步服务，不为了数量强行 Graph 化。
 
 原因：
 

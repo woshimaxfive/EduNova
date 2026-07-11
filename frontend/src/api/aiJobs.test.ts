@@ -58,7 +58,8 @@ describe("AI job API contracts", () => {
     const job = makeCompletedAiJob();
     const body = [
       `event: snapshot\ndata: ${JSON.stringify({ ...job, status: "running", progress_percent: 60 })}\n\n`,
-      `event: done\ndata: ${JSON.stringify(job)}\n\n`
+      `event: done\ndata: ${JSON.stringify(job)}\n\n`,
+      `event: error\ndata: ${JSON.stringify({ ...job, status: "failed" })}\n\n`
     ];
     const encoder = new TextEncoder();
     globalThis.fetch = vi.fn(async (_input, init) => {
@@ -66,7 +67,7 @@ describe("AI job API contracts", () => {
       return new Response(new ReadableStream({
         start(controller) {
           controller.enqueue(encoder.encode(body[0].slice(0, 37)));
-          controller.enqueue(encoder.encode(body[0].slice(37) + body[1]));
+          controller.enqueue(encoder.encode(body[0].slice(37) + body[1] + body[2]));
           controller.close();
         }
       }), { status: 200, headers: { "Content-Type": "text/event-stream" } });

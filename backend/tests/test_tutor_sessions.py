@@ -1720,6 +1720,7 @@ def test_tutor_stream_route_accepts_home_session() -> None:
     )
 
     assert response.status_code == 200
+    assert response.headers["x-accel-buffering"] == "no"
     assert "event: metadata" in response.text
     assert response.text.count("event: done") == 1
     assert "event: error" not in response.text

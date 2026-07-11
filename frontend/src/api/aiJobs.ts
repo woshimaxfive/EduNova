@@ -122,6 +122,10 @@ export async function streamAiJob(
       const event = eventLine.slice(6).trim() as AiJobEventName;
       const data = dataLines.map((line) => line.slice(5).trimStart()).join("\n");
       onEvent(event, JSON.parse(data) as AiJob);
+      if (event === "done" || event === "error" || event === "cancelled") {
+        await reader.cancel();
+        return;
+      }
     }
     if (done) break;
   }

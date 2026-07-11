@@ -270,5 +270,5 @@ def stream_message(
     return StreamingResponse(
         encode_events(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache"},
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -21,7 +21,9 @@ from backend.app.schemas.materials import (
     MaterialComparisonResult,
     MaterialComparisonSummary,
     MaterialListItem,
+    MaterialLinkedCourse,
     MaterialProgress,
+    MaterialSectionSummary,
     MaterialUploadResult,
 )
 from backend.app.services.material_parsers import DocumentParseError, DocumentParser
@@ -66,6 +68,10 @@ class MaterialRepository(Protocol):
     def get_material_for_user(self, user_id: int, material_id: int) -> Material | None: ...
 
     def list_materials(self, user_id: int, course_id: int | None = None, unassigned: bool = False) -> list[Material]: ...
+
+    def list_material_chunks(self, user_id: int, material_id: int) -> list[MaterialChunk]: ...
+
+    def list_material_course_links(self, user_id: int, material_id: int) -> list[tuple[CourseMaterialLink, Course]]: ...
 
     def get_link(self, course_id: int, material_id: int) -> CourseMaterialLink | None: ...
 
@@ -121,6 +127,28 @@ class SqlAlchemyMaterialRepository:
             statement = statement.where(~exists(linked_material))
 
         return list(self.db.scalars(statement.order_by(Material.created_at.desc(), Material.id.desc())))
+
+    def list_material_chunks(self, user_id: int, material_id: int) -> list[MaterialChunk]:
+        return list(
+            self.db.scalars(
+                select(MaterialChunk)
+                .join(Material, Material.id == MaterialChunk.material_id)
+                .where(Material.user_id == user_id, MaterialChunk.material_id == material_id)
+                .order_by(MaterialChunk.chunk_index, MaterialChunk.id)
+            )
+        )
+
+    def list_material_course_links(self, user_id: int, material_id: int) -> list[tuple[CourseMaterialLink, Course]]:
+        rows = self.db.execute(
+            select(CourseMaterialLink, Course)
+            .join(Course, Course.id == CourseMaterialLink.course_id)
+            .where(
+                CourseMaterialLink.material_id == material_id,
+                Course.owner_id == user_id,
+            )
+            .order_by(Course.updated_at.desc(), Course.id.desc())
+        ).all()
+        return [(link, course) for link, course in rows]
 
     def get_link(self, course_id: int, material_id: int) -> CourseMaterialLink | None:
         return self.db.scalar(
@@ -274,12 +302,45 @@ class MaterialService:
         material = self._require_material(user, material_id)
         item = self._build_list_item(material)
         preview = material.extracted_text[:500] if material.extracted_text else None
+        chunks = self.repository.list_material_chunks(user.id, material.id)
+        linked_courses = self.repository.list_material_course_links(user.id, material.id)
+        sections = self._build_section_summaries(chunks)
+        page_numbers = [chunk.page_number for chunk in chunks if chunk.page_number is not None]
         return MaterialDetail(
             **item.model_dump(),
             filename=material.filename,
             content_type=material.content_type,
             extracted_text_preview=preview,
+            chunk_count=len(chunks),
+            section_count=len(sections),
+            page_count=max(page_numbers) if page_numbers else None,
+            sections=sections[:20],
+            linked_courses=[
+                MaterialLinkedCourse(id=str(course.id), title=course.title, usage_type=link.usage_type)
+                for link, course in linked_courses
+            ],
+            agent_trace_id=material.agent_trace_id,
         )
+
+    @staticmethod
+    def _build_section_summaries(chunks: list[MaterialChunk]) -> list[MaterialSectionSummary]:
+        grouped: dict[tuple[str, int | None], list[MaterialChunk]] = {}
+        for chunk in chunks:
+            title = (chunk.section_title or "正文").strip() or "正文"
+            grouped.setdefault((title, chunk.page_number), []).append(chunk)
+
+        summaries: list[MaterialSectionSummary] = []
+        for (title, page_number), section_chunks in grouped.items():
+            normalized_preview = " ".join(section_chunks[0].content.split())[:180]
+            summaries.append(
+                MaterialSectionSummary(
+                    section_title=title,
+                    page_number=page_number,
+                    chunk_count=len(section_chunks),
+                    preview=normalized_preview,
+                )
+            )
+        return summaries
 
     def get_progress(self, user: User, material_id: int) -> MaterialProgress:
         material = self._require_material(user, material_id)

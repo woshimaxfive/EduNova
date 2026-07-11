@@ -14,7 +14,7 @@ from backend.app.api.v1.materials import get_material_service
 from backend.app.core.config import Settings
 from backend.app.core.security import create_access_token
 from backend.app.main import create_app
-from backend.app.models import Course, CourseMaterialLink, Material, User
+from backend.app.models import Course, CourseMaterialLink, Material, MaterialChunk, User
 from backend.app.services.auth import AuthService
 from backend.app.services.materials import MaterialService
 
@@ -30,6 +30,7 @@ class TokenAuthRepository:
 @dataclass
 class FakeMaterialRepository:
     materials: list[Material] = field(default_factory=list)
+    chunks: list[MaterialChunk] = field(default_factory=list)
     links: list[CourseMaterialLink] = field(default_factory=list)
     courses: list[Course] = field(default_factory=list)
     next_material_id: int = 1
@@ -42,6 +43,11 @@ class FakeMaterialRepository:
         material.id = self.next_material_id
         self.next_material_id += 1
         self.materials.append(material)
+
+    def add_material_chunks(self, chunks: list[MaterialChunk]) -> None:
+        for chunk in chunks:
+            chunk.id = len(self.chunks) + 1
+            self.chunks.append(chunk)
 
     def get_material_for_user(self, user_id: int, material_id: int) -> Material | None:
         return next((material for material in self.materials if material.id == material_id and material.user_id == user_id), None)
@@ -59,6 +65,22 @@ class FakeMaterialRepository:
             linked_ids = {link.material_id for link in self.links}
             result = [material for material in result if material.id not in linked_ids]
         return sorted(result, key=lambda material: material.created_at or material.id, reverse=True)
+
+    def list_material_chunks(self, user_id: int, material_id: int) -> list[MaterialChunk]:
+        if self.get_material_for_user(user_id, material_id) is None:
+            return []
+        return sorted(
+            [chunk for chunk in self.chunks if chunk.material_id == material_id],
+            key=lambda chunk: chunk.chunk_index,
+        )
+
+    def list_material_course_links(self, user_id: int, material_id: int) -> list[tuple[CourseMaterialLink, Course]]:
+        course_by_id = {course.id: course for course in self.courses if course.owner_id == user_id}
+        return [
+            (link, course_by_id[link.course_id])
+            for link in self.links
+            if link.material_id == material_id and link.course_id in course_by_id
+        ]
 
     def get_link(self, course_id: int, material_id: int) -> CourseMaterialLink | None:
         return next(
@@ -320,6 +342,12 @@ def test_list_detail_progress_and_user_isolation(tmp_path: Path) -> None:
 
     assert [item["title"] for item in list_result] == ["mine.txt"]
     assert detail["title"] == "mine.txt"
+    assert detail["chunk_count"] == 1
+    assert detail["section_count"] == 1
+    assert detail["sections"][0]["preview"] == "mine"
+    assert detail["linked_courses"] == []
+    assert "storage_path" not in detail
+    assert "metadata_json" not in detail
     assert progress == {
         "status": "completed",
         "progress_percent": 100,
@@ -330,6 +358,26 @@ def test_list_detail_progress_and_user_isolation(tmp_path: Path) -> None:
 
     with pytest.raises(MaterialNotFoundError):
         service.get_material(other, int(as_dict(own)["id"]))
+
+
+def test_material_detail_summarizes_sections_pages_and_owned_courses(tmp_path: Path) -> None:
+    course = Course(id=101, owner_id=1, title="机器学习", source_type="generated")
+    other_course = Course(id=202, owner_id=2, title="其他用户课程", source_type="generated")
+    repo = FakeMaterialRepository(courses=[course, other_course])
+    service = make_service(repo, tmp_path)
+    uploaded = upload_bytes(service, make_user(), "notes.md", "# 第一章\n监督学习\n\n# 第二章\n模型评估".encode(), "text/markdown")
+    material_id = int(as_dict(uploaded)["id"])
+    repo.add_link(CourseMaterialLink(course_id=101, material_id=material_id, added_by_user_id=1, usage_type="reference"))
+    repo.add_link(CourseMaterialLink(course_id=202, material_id=material_id, added_by_user_id=2, usage_type="reference"))
+    for index, chunk in enumerate(repo.chunks, start=1):
+        chunk.page_number = index
+
+    detail = as_dict(service.get_material(make_user(), material_id))
+
+    assert detail["chunk_count"] == len(repo.chunks)
+    assert detail["section_count"] == len(repo.chunks)
+    assert detail["page_count"] == len(repo.chunks)
+    assert detail["linked_courses"] == [{"id": "101", "title": "机器学习", "usage_type": "reference"}]
 
 
 def test_course_upload_and_attach_materials_create_unique_links(tmp_path: Path) -> None:

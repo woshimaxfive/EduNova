@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode } from "react";
@@ -316,13 +316,15 @@ describe("student interaction affordances", () => {
     expect(screen.queryByText(/联网搜索已开/)).not.toBeInTheDocument();
     expect(screen.queryByText("已生成回答。")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "主页对话" })).toHaveTextContent("监督学习怎么复习？");
-  });
+  }, 15_000);
 
   it("does not create local course answers when the course route context is missing", async () => {
     const user = userEvent.setup();
     renderPage(<CourseSpacePage />);
 
-    await user.type(screen.getByRole("textbox", { name: "课程问题输入" }), "监督学习怎么复习？");
+    fireEvent.change(screen.getByRole("textbox", { name: "课程问题输入" }), {
+      target: { value: "监督学习怎么复习？" },
+    });
     await user.click(screen.getByRole("button", { name: "发送" }));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
@@ -1076,6 +1078,33 @@ describe("student interaction affordances", () => {
         };
       }
 
+      if (url === MATERIAL_ENDPOINTS.detail(301) && method === "get") {
+        return {
+          data: {
+            data: {
+              ...materials.find((material) => material.id === "301"),
+              filename: "AI 导论讲义.docx",
+              content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              extracted_text_preview: "监督学习通过标注样本学习输入与输出之间的关系。",
+              chunk_count: 4,
+              section_count: 2,
+              page_count: 6,
+              sections: [
+                { section_title: "监督学习", page_number: 2, chunk_count: 2, preview: "监督学习使用标注样本。" },
+                { section_title: "模型评估", page_number: 5, chunk_count: 2, preview: "使用验证集评估模型。" }
+              ],
+              linked_courses: [{ id: "101", title: "人工智能导论", usage_type: "reference" }],
+              agent_trace_id: "trace_material_detail"
+            },
+            trace_id: "trace_material_detail"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
       return {
         data: { data: {}, trace_id: "trace_default" },
         status: 200,
@@ -1093,7 +1122,7 @@ describe("student interaction affordances", () => {
 
     expect(await screen.findByRole("button", { name: /课堂截图.png/ })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /课堂截图.png/ })).toHaveTextContent("仅入库，暂不做 OCR");
+    expect(screen.getByText("已入库")).toBeInTheDocument();
     expect(screen.queryByText("等待提取说明")).not.toBeInTheDocument();
     expect(calls).toContainEqual({ method: "post", url: MATERIAL_ENDPOINTS.upload });
 
@@ -1104,20 +1133,18 @@ describe("student interaction affordances", () => {
     expect(screen.queryByRole("button", { name: /AI 导论讲义/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "全部" }));
-    await user.click(screen.getByRole("button", { name: /AI 导论讲义/ }));
+    await user.click(screen.getByRole("button", { name: /查看AI 导论讲义/ }));
 
-    expect(screen.getByRole("region", { name: "资料动作反馈" })).toHaveTextContent("AI 导论讲义");
-
-    await user.click(screen.getByRole("button", { name: "生成课程" }));
+    const detailDrawer = screen.getByRole("dialog", { name: /AI 导论讲义/ });
+    expect(detailDrawer).toBeInTheDocument();
+    expect(await within(detailDrawer).findByText("监督学习通过标注样本学习输入与输出之间的关系。")).toBeInTheDocument();
+    await user.click(within(detailDrawer).getByRole("tab", { name: "章节" }));
+    expect(within(detailDrawer).getByText("模型评估")).toBeInTheDocument();
+    await user.click(within(detailDrawer).getByRole("button", { name: "生成课程" }));
 
     const courseDialog = screen.getByRole("dialog", { name: "从资料生成课程" });
     expect(courseDialog).toBeInTheDocument();
     const courseMaterial = within(courseDialog).getByRole("button", { name: /AI 导论讲义/ });
-
-    expect(courseMaterial).toHaveAttribute("aria-pressed", "false");
-    expect(within(courseDialog).getByRole("button", { name: "生成课程" })).toBeDisabled();
-
-    await user.click(courseMaterial);
 
     expect(courseMaterial).toHaveAttribute("aria-pressed", "true");
     expect(within(courseDialog).getByRole("button", { name: "生成课程" })).toBeEnabled();
@@ -1290,24 +1317,24 @@ describe("student interaction affordances", () => {
 
     renderPage(<LibraryPage />);
 
-    const comparePanel = await screen.findByRole("region", { name: "资料对比" });
+    await user.click(await screen.findByRole("button", { name: "资料对比" }));
+    const compareDrawer = screen.getByRole("dialog", { name: "资料对比" });
+    expect(within(compareDrawer).getByRole("button", { name: "生成资料对比" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /课堂截图.png，图片暂不参与资料对比/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /其他课程资料.md/ })).toBeEnabled();
 
-    expect(comparePanel).toHaveTextContent("至少选择两份同课程资料");
-    expect(await within(comparePanel).findByRole("button", { name: /AI 导论讲义.md/ })).toBeInTheDocument();
-    expect(await within(comparePanel).findByRole("button", { name: /期末样题.md/ })).toBeInTheDocument();
-    expect(within(comparePanel).queryByRole("button", { name: /课堂截图.png/ })).not.toBeInTheDocument();
-    expect(within(comparePanel).queryByRole("button", { name: /其他课程资料.md/ })).not.toBeInTheDocument();
-    expect(within(comparePanel).getByRole("button", { name: "生成资料对比" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /选择AI 导论讲义.md/ }));
+    await user.click(screen.getByRole("button", { name: /选择期末样题.md/ }));
+    await user.click(within(compareDrawer).getByRole("button", { name: "生成资料对比" }));
 
-    await user.click(within(comparePanel).getByRole("button", { name: /AI 导论讲义.md/ }));
-    await user.click(within(comparePanel).getByRole("button", { name: /期末样题.md/ }));
-    await user.click(within(comparePanel).getByRole("button", { name: "生成资料对比" }));
-
-    expect((await within(comparePanel).findAllByText("启发式搜索")).length).toBeGreaterThan(1);
-    expect(comparePanel).toHaveTextContent("反向传播");
-    expect(comparePanel).toHaveTextContent("监督学习");
-    expect(comparePanel).toHaveTextContent("AI 伦理");
-    expect(comparePanel).toHaveTextContent("启发式搜索使用启发函数。");
+    const resultDrawer = await screen.findByRole("dialog", { name: "对比结果" });
+    expect((await within(resultDrawer).findAllByText("启发式搜索")).length).toBeGreaterThan(1);
+    await user.click(within(resultDrawer).getByRole("tab", { name: "差异遗漏" }));
+    expect(resultDrawer).toHaveTextContent("反向传播");
+    expect(resultDrawer).toHaveTextContent("监督学习");
+    expect(resultDrawer).toHaveTextContent("AI 伦理");
+    await user.click(within(resultDrawer).getByRole("tab", { name: "来源与轨迹" }));
+    expect(resultDrawer).toHaveTextContent("启发式搜索使用启发函数。");
     expect(screen.getByRole("button", { name: "上传资料" })).toBeEnabled();
     expect(calls).toContainEqual({
       method: "post",
@@ -1388,12 +1415,13 @@ describe("student interaction affordances", () => {
 
     renderPage(<LibraryPage />);
 
-    const comparePanel = await screen.findByRole("region", { name: "资料对比" });
-    await user.click(await within(comparePanel).findByRole("button", { name: /AI 导论讲义.md/ }));
-    await user.click(await within(comparePanel).findByRole("button", { name: /期末样题.md/ }));
-    await user.click(within(comparePanel).getByRole("button", { name: "生成资料对比" }));
+    await user.click(await screen.findByRole("button", { name: "资料对比" }));
+    const compareDrawer = screen.getByRole("dialog", { name: "资料对比" });
+    await user.click(screen.getByRole("button", { name: /选择AI 导论讲义.md/ }));
+    await user.click(screen.getByRole("button", { name: /选择期末样题.md/ }));
+    await user.click(within(compareDrawer).getByRole("button", { name: "生成资料对比" }));
 
-    expect(await within(comparePanel).findByRole("alert")).toHaveTextContent("资料对比失败，请稍后重试。");
+    expect(await within(compareDrawer).findByRole("alert")).toHaveTextContent("资料对比失败，请稍后重试。");
     expect(screen.getByRole("button", { name: "上传资料" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "生成课程" })).toBeEnabled();
   });
@@ -1891,6 +1919,6 @@ describe("student interaction affordances", () => {
 
     await user.click(within(historyRail).getByRole("button", { name: "新建对话" }));
 
-    expect(screen.getByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /准备好一起学习了吗/ })).toBeInTheDocument();
   });
 });

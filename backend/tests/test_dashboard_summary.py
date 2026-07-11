@@ -248,6 +248,11 @@ def test_ai_intro_user_summary_uses_current_user_course_and_material() -> None:
     }
     assert summary["material_library_summary"] == {"material_count": 1, "unassigned_count": 0}
     assert summary["empty_state"]["kind"] == "starter"
+    assert summary["command_suggestions"] == [
+        "继续学习《人工智能导论》",
+        "帮我复习《人工智能导论》的薄弱点",
+        "根据《人工智能导论讲义.md》整理复习重点",
+    ]
 
 
 def test_dashboard_summary_uses_real_progress_profile_conversations_and_resources() -> None:

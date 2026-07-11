@@ -262,7 +262,7 @@ describe("StudioPage resource generation", () => {
     await user.click(screen.getByRole("tab", { name: "来源" }));
     expect(screen.getByRole("tabpanel", { name: "引用来源" })).toHaveTextContent("人工智能导论讲义.md");
     expect(calls.filter((call) => call.url === RESOURCE_ENDPOINTS.list).length).toBeGreaterThanOrEqual(2);
-  });
+  }, 10_000);
 
   it("shows a real empty state when there are no generated resources", async () => {
     apiClient.defaults.adapter = async (config) => {

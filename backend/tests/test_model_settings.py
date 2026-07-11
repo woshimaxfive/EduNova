@@ -128,7 +128,6 @@ class FakeProvider:
         if self.should_raise is not None:
             raise self.should_raise
         return self.content
-
     def embed_texts(
         self,
         config: Any,
@@ -149,6 +148,11 @@ class FakeProvider:
         if self.should_raise is not None:
             raise self.should_raise
         return [[1.0, 0.0, 0.0] + [0.0] * (dimensions - 3) for _ in texts]
+
+
+class ImmediateExecutionRuntime:
+    def execute(self, *, call, **_kwargs):
+        return call()
 
 
 @dataclass
@@ -336,6 +340,7 @@ def test_model_settings_test_connection_uses_current_runtime_config() -> None:
         repository=FakeModelSettingsRepository(settings_by_user={}),
         settings=make_settings(),
         provider=provider,
+        execution_runtime=ImmediateExecutionRuntime(),
     )
 
     result = as_dict(service.test_connection(user))
@@ -478,7 +483,12 @@ def test_connection_test_can_target_one_config_and_persist_safe_status() -> None
     user = make_user()
     provider = FakeProvider(content="ok")
     repo = FakeModelSettingsRepository(settings_by_user={})
-    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=provider)
+    service = module.ModelSettingsService(
+        repository=repo,
+        settings=make_settings(),
+        provider=provider,
+        execution_runtime=ImmediateExecutionRuntime(),
+    )
     created = as_dict(service.create_config(
         user,
         module.SaveModelConfigRequest(
@@ -721,7 +731,12 @@ def test_model_settings_routes_use_documented_envelopes() -> None:
     settings = make_settings()
     provider = FakeProvider(content="ok")
     repo = FakeModelSettingsRepository(settings_by_user={})
-    service = module.ModelSettingsService(repository=repo, settings=settings, provider=provider)
+    service = module.ModelSettingsService(
+        repository=repo,
+        settings=settings,
+        provider=provider,
+        execution_runtime=ImmediateExecutionRuntime(),
+    )
     app = create_app()
     app.dependency_overrides[get_auth_service] = lambda: AuthService(
         repository=TokenAuthRepository(user),

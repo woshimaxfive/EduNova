@@ -13,7 +13,7 @@ import {
   EXPORT_ENDPOINTS,
   getExportJob
 } from "./exports";
-import { compareMaterials, getLatestMaterialComparison, getMaterialComparison, MATERIAL_ENDPOINTS } from "./materials";
+import { compareMaterials, getLatestMaterialComparison, getMaterial, getMaterialComparison, MATERIAL_ENDPOINTS } from "./materials";
 import { generatePath, getCurrentPath, PATH_ENDPOINTS, updatePathTask } from "./paths";
 import { createPracticeSession, getPracticeSession, PRACTICE_ENDPOINTS, submitPracticeAnswers } from "./practice";
 import { RAG_ENDPOINTS, searchRag } from "./rag";
@@ -52,6 +52,49 @@ import {
 describe("frontend API contracts", () => {
   it("uses the documented API v1 base path", () => {
     expect(apiClient.defaults.baseURL).toBe("/api/v1");
+  });
+
+  it("keeps material detail summaries typed and backward compatible", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    apiClient.defaults.adapter = async (config) => ({
+      data: {
+        data: {
+          id: "12",
+          title: "机器学习讲义.md",
+          type: "MD",
+          detail: "已解析",
+          modified: "今天",
+          size: "8 KB",
+          category: "document",
+          extension: "MD",
+          parse_status: "completed",
+          course_ids: ["7"],
+          filename: "机器学习讲义.md",
+          content_type: "text/markdown",
+          extracted_text_preview: "监督学习使用标注样本。",
+          chunk_count: 4,
+          section_count: 2,
+          page_count: 3,
+          sections: [{ section_title: "监督学习", page_number: 1, chunk_count: 2, preview: "监督学习使用标注样本。" }],
+          linked_courses: [{ id: "7", title: "机器学习", usage_type: "reference" }],
+          agent_trace_id: "trace_material_12"
+        },
+        trace_id: "trace_material_detail"
+      },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config
+    });
+
+    try {
+      const response = await getMaterial(12);
+      expect(response.data.sections?.[0].section_title).toBe("监督学习");
+      expect(response.data.linked_courses?.[0].title).toBe("机器学习");
+      expect(response.data.agent_trace_id).toBe("trace_material_12");
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
   });
 
   it("keeps route constants aligned with docs/API.md", () => {

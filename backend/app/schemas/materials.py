@@ -37,10 +37,29 @@ class MaterialListItem(BaseModel):
     course_ids: list[str]
 
 
+class MaterialSectionSummary(BaseModel):
+    section_title: str
+    page_number: int | None
+    chunk_count: int
+    preview: str
+
+
+class MaterialLinkedCourse(BaseModel):
+    id: str
+    title: str
+    usage_type: str
+
+
 class MaterialDetail(MaterialListItem):
     filename: str
     content_type: str
     extracted_text_preview: str | None
+    chunk_count: int = 0
+    section_count: int = 0
+    page_count: int | None = None
+    sections: list[MaterialSectionSummary] = Field(default_factory=list)
+    linked_courses: list[MaterialLinkedCourse] = Field(default_factory=list)
+    agent_trace_id: str | None = None
 
 
 class MaterialProgress(BaseModel):

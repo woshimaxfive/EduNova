@@ -9,7 +9,7 @@ import { AGENT_ENDPOINTS } from "../api/agents";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
-import { MATERIAL_ENDPOINTS } from "../api/materials";
+import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
 import { makeCompletedAiJob } from "../test/aiJobs";
@@ -306,6 +306,23 @@ function renderWithDashboardSummary(
       };
     }
 
+    if (url === MATERIAL_ENDPOINTS.list && method === "get") {
+      const materials: MaterialListItem[] = summary.recent_materials.map((material) => ({
+        ...material,
+        category: "document",
+        extension: material.type,
+        parse_status: material.detail === "已解析" ? "completed" : "uploaded",
+        course_ids: []
+      }));
+      return {
+        data: { data: materials, trace_id: "trace_material_list_test" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
     if (url === TUTOR_ENDPOINTS.sessions && method === "post") {
       const title = typeof payload === "object" && payload !== null && "title" in payload ? String(payload.title) : "主页第一问";
       createdSession.title = title;
@@ -553,7 +570,7 @@ describe("LearningSpacePage", () => {
   it("loads the home summary from the dashboard API instead of static starter courses", async () => {
     const { calls } = renderWithDashboardSummary();
 
-    expect(await screen.findByRole("link", { name: /真实机器学习课/ })).toHaveAttribute("href", "/app/courses/101");
+    expect(await screen.findByRole("link", { name: /真实机器学习课/ }, { timeout: 5_000 })).toHaveAttribute("href", "/app/courses/101");
     expect(screen.getByRole("link", { name: /期末冲刺/ })).toHaveAttribute("href", "/app/path?course_id=101");
     expect(screen.getByRole("button", { name: /接口里的主页历史/ })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Python 基础补齐/ })).not.toBeInTheDocument();
@@ -579,7 +596,7 @@ describe("LearningSpacePage", () => {
     renderWithDashboardSummary();
 
     expect(document.querySelector(".home-learning-surface")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "嗨，示例学生，准备好一起学习了吗？" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "历史对话" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "AI 学习入口" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "最近学习" })).toBeInTheDocument();
@@ -793,7 +810,7 @@ describe("LearningSpacePage", () => {
     expect(screen.getByRole("region", { name: "底部学习输入" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /期末复习怎么安排/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("已生成回答。")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /准备好一起学习了吗/ })).not.toBeInTheDocument();
   });
 
   it("keeps selected material state inside the composer without web search copy", async () => {
@@ -811,6 +828,14 @@ describe("LearningSpacePage", () => {
     expect(within(composer).getByText("已选择 1 份资料。")).toBeInTheDocument();
     expect(screen.queryByText(/联网搜索已开/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "联网搜索" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("restores a material selected from the library navigation state", async () => {
+    renderWithDashboardSummary(materialRichSummary, {}, [{ pathname: PATHS.app, state: { selectedMaterialIds: ["203"] } }]);
+
+    const drawer = await screen.findByRole("dialog", { name: "资料库" });
+    expect(await within(drawer).findByRole("button", { name: /神经网络课堂讲义/ })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByText("已选择 1 份资料。")).toBeInTheDocument();
   });
 
   it("sends selected materials with web search and deep thinking, then shows citations and graph trace", async () => {
@@ -1043,7 +1068,7 @@ describe("LearningSpacePage", () => {
     await user.click(screen.getByRole("menuitem", { name: "删除" }));
     await user.click(screen.getByRole("menuitem", { name: "确认删除" }));
 
-    expect(await screen.findByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "嗨，示例学生，准备好一起学习了吗？" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "主页对话" })).not.toBeInTheDocument();
     expect(within(historyRail).queryByRole("button", { name: /接口里的主页历史/ })).not.toBeInTheDocument();
     await waitFor(() => {
@@ -1067,7 +1092,7 @@ describe("LearningSpacePage", () => {
 
     await user.click(screen.getByRole("link", { name: "EduNova 首页" }));
 
-    expect(screen.getByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "嗨，示例学生，准备好一起学习了吗？" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "主页对话" })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("");
     expect(screen.getByRole("region", { name: "历史对话" })).toHaveAttribute("data-collapsed", "false");

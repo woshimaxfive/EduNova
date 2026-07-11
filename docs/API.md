@@ -677,15 +677,36 @@ Authorization: Bearer <token>
     "course_ids": [],
     "filename": "ai-notes.md",
     "content_type": "text/markdown",
-    "extracted_text_preview": "第一章 人工智能导论..."
+    "extracted_text_preview": "第一章 人工智能导论...",
+    "chunk_count": 8,
+    "section_count": 3,
+    "page_count": 6,
+    "sections": [
+      {
+        "section_title": "监督学习",
+        "page_number": 2,
+        "chunk_count": 3,
+        "preview": "监督学习使用标注样本建立输入与输出的关系。"
+      }
+    ],
+    "linked_courses": [
+      {
+        "id": "12",
+        "title": "机器学习复习",
+        "usage_type": "reference"
+      }
+    ],
+    "agent_trace_id": "trace_material_1"
   },
   "trace_id": "trace_20260701_007"
 }
 ```
 
+详情只返回当前用户可见的安全摘要。`sections` 最多返回 20 个章节，每个预览不超过 180 字；`section_count` 可用于判断是否还有未展示章节。接口不返回完整资料正文、存储路径、向量、原始 metadata 或模型输入。
+
 ### GET `/materials`
 
-用途：查看当前用户个人资料库。Phase 4.4 已实现，支持筛选未归属课程资料、某课程已关联资料和最近上传资料。`/app/library` 通过该接口渲染文件库式列表；主页资料库浮层通过 `/dashboard/summary.recent_materials` 渲染最近资料。
+用途：查看当前用户个人资料库。Phase 4.4 已实现，支持筛选未归属课程资料、某课程已关联资料和最近上传资料。`/app/library` 和主页资料库浮层都通过该接口读取完整资料列表；`/dashboard/summary.recent_materials` 只承担主页摘要。
 
 查询参数：
 

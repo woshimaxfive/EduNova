@@ -274,10 +274,23 @@ class DashboardService:
         if not courses and not materials:
             return ["上传第一份资料", "先和 EduNova 聊聊我的学习情况", "用资料生成一门课程"]
 
-        if user.starter_mode == "ai_intro" and courses:
-            return ["帮我复习人工智能导论", "把反向传播讲到我能做题", "用这些资料生成期末复习课"]
+        suggestions: list[str] = []
+        if courses:
+            course_title = DashboardService._short_title(courses[0].title)
+            suggestions.extend([f"继续学习《{course_title}》", f"帮我复习《{course_title}》的薄弱点"])
+        if materials:
+            material_title = DashboardService._short_title(materials[0].title)
+            suggestions.append(f"根据《{material_title}》整理复习重点")
+        if len(suggestions) < 3:
+            suggestions.append("先帮我拆解下一步复习计划")
+        return suggestions[:3]
 
-        return ["继续最近课程", "用我的资料生成一门课程", "先帮我拆解复习计划"]
+    @staticmethod
+    def _short_title(title: str, limit: int = 16) -> str:
+        normalized = " ".join(title.split())
+        if len(normalized) <= limit:
+            return normalized
+        return f"{normalized[:limit]}…"
 
     @staticmethod
     def _build_evidence_summary(resources: list[GeneratedResource]) -> EvidenceSummary:

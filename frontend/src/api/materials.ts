@@ -48,6 +48,25 @@ export type MaterialDetail = MaterialListItem & {
   filename: string;
   content_type: string;
   extracted_text_preview: string | null;
+  chunk_count?: number;
+  section_count?: number;
+  page_count?: number | null;
+  sections?: MaterialSectionSummary[];
+  linked_courses?: MaterialLinkedCourse[];
+  agent_trace_id?: string | null;
+};
+
+export type MaterialSectionSummary = {
+  section_title: string;
+  page_number: number | null;
+  chunk_count: number;
+  preview: string;
+};
+
+export type MaterialLinkedCourse = {
+  id: string;
+  title: string;
+  usage_type: string;
 };
 
 export type MaterialProgress = {

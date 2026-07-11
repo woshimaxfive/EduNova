@@ -18,9 +18,9 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { PATHS, buildCoursePath } from "../app/routePaths";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import { createCourseBuilderJob, createIdempotencyKey, type AiJob } from "../api/aiJobs";
-import { getDashboardSummary, type DashboardMaterial } from "../api/dashboard";
+import { getDashboardSummary } from "../api/dashboard";
 import { getApiErrorMessage } from "../api/errors";
-import { uploadMaterial } from "../api/materials";
+import { listMaterials, uploadMaterial } from "../api/materials";
 import {
   createTutorSession,
   deleteTutorSession,
@@ -40,7 +40,14 @@ import { isCompactWorkspaceViewport, useResponsiveSidebarState } from "../compon
 import { useAuthStore } from "../features/auth/authStore";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 
-type LibraryMaterial = DashboardMaterial;
+type LibraryMaterial = {
+  id: string;
+  title: string;
+  type: string;
+  detail: string;
+  modified: string;
+  size: string;
+};
 
 type HomeMessage = {
   id: string;
@@ -53,6 +60,7 @@ type HomeMessage = {
 
 type LearningSpaceNavigationState = {
   selectedHomeThreadId?: string;
+  selectedMaterialIds?: string[];
 };
 
 type DashboardSummaryResponse = Awaited<ReturnType<typeof getDashboardSummary>>;
@@ -121,6 +129,9 @@ export function LearningSpacePage() {
   const navigationState = location.state as LearningSpaceNavigationState | null;
   const selectedHomeThreadIdFromNavigation =
     typeof navigationState?.selectedHomeThreadId === "string" ? navigationState.selectedHomeThreadId : null;
+  const selectedMaterialIdsFromNavigation = Array.isArray(navigationState?.selectedMaterialIds)
+    ? navigationState.selectedMaterialIds.filter((materialId): materialId is string => typeof materialId === "string")
+    : [];
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const homeChatStageRef = useRef<HTMLElement | null>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
@@ -130,11 +141,11 @@ export function LearningSpacePage() {
   const [activeHomeThreadId, setActiveHomeThreadId] = useState<string | null>(() => selectedHomeThreadIdFromNavigation);
   const [isSendingQuestion, setIsSendingQuestion] = useState(false);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
-  const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
+  const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>(() => selectedMaterialIdsFromNavigation);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
   const [courseJobId, setCourseJobId] = useState<string | null>(null);
-  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(() => selectedMaterialIdsFromNavigation.length > 0);
   const [isDeepThinkingEnabled, setIsDeepThinkingEnabled] = useState(false);
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -156,9 +167,16 @@ export function LearningSpacePage() {
     staleTime: 30_000
   });
   const dashboardSummary = dashboardQuery.data?.data;
+  const allMaterialsQuery = useQuery({
+    queryKey: ["materials", "list"],
+    queryFn: () => listMaterials(),
+    enabled: Boolean(token),
+    staleTime: 30_000
+  });
   const recentCourses = dashboardSummary?.recent_courses ?? [];
   const suggestedPrompts = dashboardSummary?.command_suggestions?.length ? dashboardSummary.command_suggestions : fallbackSuggestedPrompts;
   const emptyState = dashboardSummary?.empty_state;
+  const learnerName = dashboardSummary?.profile_summary.display_name.trim() || "同学";
   const summaryHomeThreads = useMemo(
     () => dashboardSummary?.recent_conversations.map(({ id, title, meta }) => ({ id, title, meta })) ?? [],
     [dashboardSummary?.recent_conversations]
@@ -168,7 +186,13 @@ export function LearningSpacePage() {
 
     return [...localHomeThreads, ...summaryHomeThreads.filter((thread) => !localIds.has(thread.id))];
   }, [localHomeThreads, summaryHomeThreads]);
-  const materials = useMemo(() => dashboardSummary?.recent_materials ?? [], [dashboardSummary?.recent_materials]);
+  const materials = useMemo<LibraryMaterial[]>(() => {
+    const allMaterials = allMaterialsQuery.data?.data;
+    if (allMaterialsQuery.isSuccess && Array.isArray(allMaterials)) {
+      return allMaterials;
+    }
+    return dashboardSummary?.recent_materials ?? [];
+  }, [allMaterialsQuery.data?.data, allMaterialsQuery.isSuccess, dashboardSummary?.recent_materials]);
   const effectiveSelectedMaterialIds = useMemo(
     () => selectedMaterialIds.filter((materialId) => materials.some((material) => material.id === materialId)),
     [materials, selectedMaterialIds]
@@ -716,7 +740,7 @@ export function LearningSpacePage() {
             <div className="home-hero-copy">
               <p className="home-kicker">EduNova</p>
               <h1>
-                <span>嗨，同学，</span>
+                <span>{`嗨，${learnerName}，`}</span>
                 <span>准备好一起学习了吗？</span>
               </h1>
             </div>
@@ -846,12 +870,12 @@ export function LearningSpacePage() {
                   <li key={course.id}>
                     <Link className="recent-course" to={buildCoursePath(course.id)}>
                       <BookOpen size={18} weight="duotone" aria-hidden="true" />
-                      <span>
+                      <span className="recent-course-copy">
                         <strong>{course.title}</strong>
-                        <small>{course.focus}</small>
+                        <small><b>当前重点</b>{course.focus}</small>
                       </span>
-                      <em>{course.progress_label}</em>
-                      <span className="course-next">{course.next}</span>
+                      <span className="recent-course-progress"><small>进度</small><em>{course.progress_label}</em></span>
+                      <span className="course-next"><small>下一步</small><strong>{course.next}</strong></span>
                     </Link>
                   </li>
                 ))}

@@ -253,7 +253,10 @@ cd ..
 - Phase 4.2 后，`/app` 必须通过 `/dashboard/summary` 渲染最近学习、主页历史和主页资料库浮层资料：blank summary 不得出现前端假课程、假资料或假历史；ai_intro summary 应显示当前用户自己的人工智能导论课程和资料；资料库浮层默认未选中。
 - Phase 4.3 后，`/app` 主页发送必须走 `/tutor/sessions`：首次发送先创建 home session，再发送消息；当前主页 assistant 内容来自普通模型回答，未配置模型时给出清晰提示；连续追问不创建第二条历史；点击左侧历史必须从后端恢复 messages；历史菜单必须能改名和软删除，删除当前会话后回到默认主页；发送失败必须提示且保留输入；刷新后左侧历史仍由 `/dashboard/summary` 保留。
 - 主页输入区状态必须贴近 composer：选择资料后只显示“已选择 N 份资料”，联网搜索和深度思考只通过按钮高亮与 `aria-pressed` 表达，不出现“联网搜索已开”文字。
-- Phase 4.4 后，资料上传和资料库必须走 `/materials`：主页上传文件调用 `/materials/upload` 并刷新 `/dashboard/summary`；`/app/library` 调用 `/materials` 渲染真实列表，不再出现静态假资料；文档/图片筛选、搜索、详情反馈、上传失败局部提示、建课失败弹层提示和空状态必须可用。
+- Phase 4.4 后，资料上传和资料库必须走 `/materials`：主页上传文件调用 `/materials/upload` 并刷新 `/dashboard/summary`；`/app/library` 与主页资料浮层调用 `/materials` 渲染完整真实列表，不再出现静态假资料。
+- 资料工作台测试覆盖宽屏文件表格、搜索筛选、空大小降级、`material_id` 恢复、安全详情、章节、关联课程和抽屉关闭；详情响应不得暴露完整正文、存储路径、向量或原始 metadata。
+- 资料对比测试覆盖主列表多选、不可选原因、共同课程交集、无共同课程、结果 Tab、最近对比、错误保留选择、Graph 轨迹和冲刺入口；页面不得恢复常驻对比大面板或复制资料列表。
+- 主页选料测试覆盖从资料详情带入路由状态、完整资料列表自动选中，以及发送请求真实携带对应 `selected_material_ids`。
 - Phase 13.2 后，从资料生成课程必须走 `/courses/from-materials`：`/app` 主页资料库浮层和 `/app/library` 都调用真实建课接口，成功后刷新 summary/materials 并跳转 `/app/courses/{course_id}`；选择未解析、解析失败、旧版 DOC/PPT、图片或扫描件资料时必须显示后端错误并保留用户选择；课程空间标题、资料数、知识点数和知识点列表来自课程接口。
 
 ### 3.5 浏览器端到端测试

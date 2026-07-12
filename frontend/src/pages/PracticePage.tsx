@@ -1,4 +1,4 @@
-import { CheckCircle, ListChecks, WarningCircle } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, CheckCircle, ClipboardText, SlidersHorizontal, WarningCircle } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -9,23 +9,39 @@ import {
   getLatestPracticeSession,
   getPracticeSession,
   savePracticeDraft,
-  type PracticeQuestion,
   type PracticeSessionDetail,
   submitPracticeAnswers
 } from "../api/practice";
-import { PATHS } from "../app/routePaths";
-import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
+import { listResources } from "../api/resources";
 import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
-import { PageFrame } from "./PageFrame";
+import { buildCourseReturnHref } from "../components/course-space/courseReturn";
+import { PracticeDrawer, type PracticeDrawerMode } from "../components/practice/PracticeDrawer";
+import { PracticeQuestionCanvas } from "../components/practice/PracticeQuestionCanvas";
+import { PracticeQuestionRail } from "../components/practice/PracticeQuestionRail";
+import { PracticeResultSummary } from "../components/practice/PracticeResultSummary";
+import { PracticeToolbar } from "../components/practice/PracticeToolbar";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
+import {
+  buildPracticeNextAction,
+  firstWrongKnowledgePoint,
+  isAnswered,
+  practiceResultSummary
+} from "../features/practice/practiceViewModel";
+import { PageFrame } from "./PageFrame";
+import "../styles/practice.css";
 
 type PracticeSessionEnvelope = PracticeSessionDetail | { data?: PracticeSessionDetail };
 
 function resolvePracticeSession(response: PracticeSessionEnvelope): PracticeSessionDetail | null {
-  if ("questions" in response) {
-    return response;
-  }
+  if ("questions" in response) return response;
   return response.data ?? null;
+}
+
+function draftLabel(status: "idle" | "saving" | "saved" | "error") {
+  if (status === "saving") return "正在保存草稿";
+  if (status === "saved") return "草稿已保存";
+  if (status === "error") return "草稿保存失败，当前输入仍保留";
+  return null;
 }
 
 export function PracticePage() {
@@ -41,10 +57,14 @@ export function PracticePage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [localError, setLocalError] = useState("");
   const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [drawerMode, setDrawerMode] = useState<PracticeDrawerMode | null>(null);
+  const [confirmIncomplete, setConfirmIncomplete] = useState(false);
+  const [reviewExpansionOverrides, setReviewExpansionOverrides] = useState<Record<string, boolean>>({});
   const lastSavedDraftRef = useRef("");
   const activeDraftSessionRef = useRef("");
   const requestedSessionId = Number(searchParams.get("session_id") ?? "");
   const hasRequestedSession = Number.isFinite(requestedSessionId) && requestedSessionId > 0;
+  const requestedQuestionId = searchParams.get("question_id");
   const wantsNewPractice = searchParams.get("new") === "1";
 
   useEffect(() => {
@@ -55,11 +75,19 @@ export function PracticePage() {
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const coursesQuery = useQuery({
-    queryKey: ["practice-courses"],
-    queryFn: () => listCourses()
-  });
-  const courses = coursesQuery.data?.data ?? [];
+  useEffect(() => {
+    if (!drawerMode && !confirmIncomplete) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setDrawerMode(null);
+      setConfirmIncomplete(false);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [confirmIncomplete, drawerMode]);
+
+  const coursesQuery = useQuery({ queryKey: ["practice-courses"], queryFn: () => listCourses() });
+  const courses = Array.isArray(coursesQuery.data?.data) ? coursesQuery.data.data : [];
   const effectiveCourseId = selectedCourseId || courses[0]?.id || "";
   const numericCourseId = Number(effectiveCourseId);
   const canUseCourse = Number.isFinite(numericCourseId) && numericCourseId > 0;
@@ -68,7 +96,7 @@ export function PracticePage() {
     queryFn: () => getKnowledgePoints(numericCourseId),
     enabled: canUseCourse
   });
-  const knowledgePoints = pointsQuery.data?.data ?? [];
+  const knowledgePoints = Array.isArray(pointsQuery.data?.data) ? pointsQuery.data.data : [];
   const hasSelectedPoint = knowledgePoints.some((point) => point.id === selectedPointId);
   const effectivePointId = hasSelectedPoint ? selectedPointId : (knowledgePoints[0]?.id ?? "");
   const selectedPointIds = effectivePointId ? [Number(effectivePointId)] : [];
@@ -82,9 +110,21 @@ export function PracticePage() {
     queryFn: () => getLatestPracticeSession(numericCourseId),
     enabled: canUseCourse && !hasRequestedSession && !wantsNewPractice
   });
+  const resourcesQuery = useQuery({
+    queryKey: courseLoopQueryKeys.resources(numericCourseId),
+    queryFn: () => listResources({ courseId: numericCourseId }),
+    enabled: canUseCourse,
+    staleTime: 10_000
+  });
   const restoredCandidate = hasRequestedSession ? requestedSessionQuery.data?.data : latestSessionQuery.data?.data;
   const restoredSession = restoredCandidate && Array.isArray(restoredCandidate.questions) ? restoredCandidate : null;
   const activeSession = currentSession ?? restoredSession ?? null;
+  const activeQuestion = activeSession?.questions.find((question) => question.id === requestedQuestionId)
+    ?? activeSession?.questions[0]
+    ?? null;
+  const activeQuestionIndex = activeQuestion
+    ? activeSession?.questions.findIndex((question) => question.id === activeQuestion.id) ?? 0
+    : 0;
   const effectiveAnswers = useMemo(
     () => ({
       ...Object.fromEntries((activeSession?.answers ?? []).map((answer) => [answer.question_id, answer.answer_text ?? ""])),
@@ -92,366 +132,318 @@ export function PracticePage() {
     }),
     [activeSession?.answers, answers]
   );
+  const feedbackByQuestion = useMemo(
+    () => new Map((activeSession?.answers ?? []).map((answer) => [answer.question_id, answer])),
+    [activeSession?.answers]
+  );
+  const unansweredQuestions = activeSession?.questions.filter((question) => !isAnswered(effectiveAnswers[question.id])) ?? [];
+  const answeredCount = (activeSession?.questions.length ?? 0) - unansweredQuestions.length;
+  const completed = activeSession?.status === "completed";
+  const resultSummary = practiceResultSummary(activeSession?.questions ?? [], activeSession?.answers ?? []);
+  const courseReturnHref = buildCourseReturnHref(searchParams, canUseCourse ? numericCourseId : null);
+  const nextAction = buildPracticeNextAction({
+    courseId: numericCourseId,
+    wrongKnowledgePointId: firstWrongKnowledgePoint(activeSession?.questions ?? [], activeSession?.answers ?? []),
+    pathReplanned: activeSession?.closure_update?.path_update_status === "replanned",
+    courseReturnHref
+  });
+  const recommendedResourceIdSet = new Set(activeSession?.closure_update?.recommended_resource_ids ?? []);
+  const courseResources = Array.isArray(resourcesQuery.data?.data) ? resourcesQuery.data.data : [];
+  const recommendedResources = courseResources.filter((resource) => recommendedResourceIdSet.has(resource.id));
+  const selectedCourseTitle = courses.find((course) => course.id === effectiveCourseId)?.title ?? "";
+  const selectedPointTitle = knowledgePoints.find((point) => point.id === effectivePointId)?.title ?? "";
 
   useEffect(() => {
-    if (restoredSession && !hasRequestedSession) {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set("course_id", restoredSession.course_id);
-      nextParams.set("session_id", restoredSession.id);
-      nextParams.delete("new");
-      setSearchParams(nextParams, { replace: true });
-    }
+    if (!restoredSession || hasRequestedSession) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("course_id", restoredSession.course_id);
+    nextParams.set("session_id", restoredSession.id);
+    if (restoredSession.questions[0]) nextParams.set("question_id", restoredSession.questions[0].id);
+    nextParams.delete("new");
+    setSearchParams(nextParams, { replace: true });
   }, [hasRequestedSession, restoredSession, searchParams, setSearchParams]);
 
   useEffect(() => {
-    if (!activeSession || activeSession.status !== "in_progress") {
-      return;
-    }
+    if (!activeSession?.questions.length || activeSession.questions.some((question) => question.id === requestedQuestionId)) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("course_id", activeSession.course_id);
+    nextParams.set("session_id", activeSession.id);
+    nextParams.set("question_id", activeSession.questions[0].id);
+    nextParams.delete("new");
+    setSearchParams(nextParams, { replace: true });
+  }, [activeSession, requestedQuestionId, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!activeSession || activeSession.status !== "in_progress") return;
     const snapshot = JSON.stringify(effectiveAnswers);
     if (activeDraftSessionRef.current !== activeSession.id) {
       activeDraftSessionRef.current = activeSession.id;
       lastSavedDraftRef.current = snapshot;
       return;
     }
-    if (snapshot === lastSavedDraftRef.current) {
-      return;
-    }
+    if (snapshot === lastSavedDraftRef.current) return;
     const timeout = window.setTimeout(() => {
       setDraftStatus("saving");
       void savePracticeDraft(Number(activeSession.id), {
-        answers: activeSession.questions.map((question) => ({
-          question_id: question.id,
-          answer_text: effectiveAnswers[question.id] ?? ""
-        }))
-      })
-        .then(() => {
-          lastSavedDraftRef.current = snapshot;
-          setDraftStatus("saved");
-        })
-        .catch(() => setDraftStatus("error"));
+        answers: activeSession.questions.map((question) => ({ question_id: question.id, answer_text: effectiveAnswers[question.id] ?? "" }))
+      }).then(() => {
+        lastSavedDraftRef.current = snapshot;
+        setDraftStatus("saved");
+      }).catch(() => setDraftStatus("error"));
     }, 650);
     return () => window.clearTimeout(timeout);
   }, [activeSession, effectiveAnswers]);
 
-  const feedbackByQuestion = useMemo(() => {
-    const result = new Map<string, PracticeSessionDetail["answers"][number]>();
-    for (const answer of activeSession?.answers ?? []) {
-      result.set(answer.question_id, answer);
-    }
-    return result;
-  }, [activeSession]);
-
   const createMutation = useMutation({
-    mutationFn: () =>
-      createPracticeSession({
-        course_id: numericCourseId,
-        knowledge_point_ids: selectedPointIds,
-        question_count: questionCount,
-        difficulty
-      }),
+    mutationFn: () => createPracticeSession({
+      course_id: numericCourseId,
+      knowledge_point_ids: selectedPointIds,
+      question_count: questionCount,
+      difficulty
+    }),
     onSuccess: (response) => {
-      setLocalError("");
       const created = resolvePracticeSession(response);
+      if (!created) {
+        setLocalError("练习生成失败，请稍后重试。");
+        return;
+      }
+      setLocalError("");
       setCurrentSession(created);
       setAnswers({});
+      setReviewExpansionOverrides({});
       lastSavedDraftRef.current = "{}";
       setDraftStatus("idle");
-      if (created) {
-        const nextParams = new URLSearchParams(searchParams);
-        nextParams.set("course_id", created.course_id);
-        nextParams.set("session_id", created.id);
-        nextParams.delete("new");
-        setSearchParams(nextParams, { replace: true });
-      }
+      setDrawerMode(null);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("course_id", created.course_id);
+      nextParams.set("session_id", created.id);
+      if (created.questions[0]) nextParams.set("question_id", created.questions[0].id);
+      nextParams.delete("new");
+      setSearchParams(nextParams, { replace: true });
     },
-    onError: () => {
-      setLocalError("练习生成失败，请稍后重试。");
-    }
+    onError: () => setLocalError("练习生成失败，请稍后重试。")
   });
 
   const submitMutation = useMutation({
     mutationFn: () => {
-      if (!activeSession) {
-        throw new Error("missing session");
-      }
+      if (!activeSession) throw new Error("missing session");
       return submitPracticeAnswers(Number(activeSession.id), {
         answers: activeSession.questions.map((question) => ({
           question_id: question.id,
-          answer_text: effectiveAnswers[question.id] ?? ""
+          answer_text: isAnswered(effectiveAnswers[question.id]) ? effectiveAnswers[question.id] : "未作答"
         }))
       });
     },
     onSuccess: (response) => {
+      const evaluated = resolvePracticeSession(response);
+      if (!evaluated) {
+        setLocalError("答案提交失败，请检查作答后重试。");
+        return;
+      }
       setLocalError("");
-      setCurrentSession(resolvePracticeSession(response));
+      setCurrentSession(evaluated);
       lastSavedDraftRef.current = JSON.stringify(answers);
       setDraftStatus("saved");
+      setConfirmIncomplete(false);
+      const firstWrongId = evaluated.answers.find((answer) => answer.is_correct === false)?.question_id;
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("question_id", firstWrongId ?? evaluated.questions[0]?.id ?? "");
+      setSearchParams(nextParams, { replace: true });
       void invalidateCourseLearningLoop(queryClient, numericCourseId);
     },
     onError: () => {
+      setConfirmIncomplete(false);
       setLocalError("答案提交失败，请检查作答后重试。");
     }
   });
+
+  function selectQuestion(questionId: string) {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("question_id", questionId);
+    setSearchParams(nextParams, { replace: true });
+  }
 
   function updateAnswer(questionId: string, value: string) {
     setAnswers((current) => ({ ...current, [questionId]: value }));
   }
 
-  function optionSelected(question: PracticeQuestion, option: string) {
-    if (question.question_type !== "multiple_choice") {
-      return answers[question.id] === option;
-    }
-    return (answers[question.id] ?? "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .includes(option);
+  function changeCourse(courseId: string) {
+    setSelectedCourseId(courseId);
+    setSelectedPointId("");
+    setCurrentSession(null);
+    setAnswers({});
+    setDraftStatus("idle");
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("course_id", courseId);
+    nextParams.delete("knowledge_point_id");
+    nextParams.delete("session_id");
+    nextParams.delete("question_id");
+    nextParams.set("new", "1");
+    setSearchParams(nextParams, { replace: true });
   }
 
-  function updateOptionAnswer(question: PracticeQuestion, option: string) {
-    if (question.question_type !== "multiple_choice") {
-      updateAnswer(question.id, option);
+  function startNewPractice() {
+    setCurrentSession(null);
+    setAnswers({});
+    setReviewExpansionOverrides({});
+    setDraftStatus("idle");
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("course_id", activeSession?.course_id ?? effectiveCourseId);
+    nextParams.set("new", "1");
+    nextParams.delete("session_id");
+    nextParams.delete("question_id");
+    setSearchParams(nextParams, { replace: true });
+    setDrawerMode("settings");
+  }
+
+  function requestSubmit() {
+    if (unansweredQuestions.length > 0) {
+      setConfirmIncomplete(true);
       return;
     }
-    const selected = (answers[question.id] ?? "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-    const next = selected.includes(option)
-      ? selected.filter((item) => item !== option)
-      : [...selected, option];
-    updateAnswer(question.id, next.join(", "));
+    submitMutation.mutate();
   }
 
+  function cancelIncompleteSubmit() {
+    setConfirmIncomplete(false);
+    if (unansweredQuestions[0]) selectQuestion(unansweredQuestions[0].id);
+  }
+
+  const loadingSession = hasRequestedSession
+    ? requestedSessionQuery.isPending
+    : canUseCourse && !wantsNewPractice && latestSessionQuery.isPending;
+  const restoreError = requestedSessionQuery.isError || latestSessionQuery.isError;
+
   return (
-    <PageFrame title="练习">
-      <CourseReturnLink courseId={canUseCourse ? numericCourseId : null} />
-      <div className="student-workspace practice-workspace">
-        <section className="student-panel practice-question" role="region" aria-label="练习作答">
-          <div className="student-panel-heading">
-            <div>
-              <h2>课程练习</h2>
-            </div>
-            <span className="panel-count">{activeSession?.score ?? "待评估"}</span>
-          </div>
+    <PageFrame title="练习" variant="wide-workspace">
+      <div className="practice-focus-workspace">
+        <PracticeToolbar
+          courseTitle={selectedCourseTitle}
+          pointTitle={activeQuestion?.knowledge_point_title || selectedPointTitle}
+          session={activeSession}
+          activeIndex={activeQuestionIndex}
+          answeredCount={answeredCount}
+          draftLabel={activeSession?.status === "in_progress" ? draftLabel(draftStatus) : null}
+          onOpenSettings={() => setDrawerMode("settings")}
+          onOpenResults={() => setDrawerMode("results")}
+        />
 
-          <div className="path-generator practice-generator">
-            <label>
-              <span>课程</span>
-              <select
-                aria-label="选择课程"
-                value={effectiveCourseId}
-                onChange={(event) => {
-                  setSelectedCourseId(event.target.value);
-                  setSelectedPointId("");
-                  setCurrentSession(null);
-                  setAnswers({});
-                  lastSavedDraftRef.current = "";
-                  setDraftStatus("idle");
-                  setSearchParams({ course_id: event.target.value }, { replace: true });
-                }}
-              >
-                {courses.map((course) => (
-                  <option key={course.id} value={course.id}>
-                    {course.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>知识点</span>
-              <select aria-label="选择知识点" value={effectivePointId} onChange={(event) => setSelectedPointId(event.target.value)}>
-                {knowledgePoints.map((point) => (
-                  <option key={point.id} value={point.id}>
-                    {point.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>题量</span>
-              <select aria-label="题量" value={questionCount} onChange={(event) => setQuestionCount(Number(event.target.value))}>
-                {[3, 5, 8, 10].map((count) => (
-                  <option key={count} value={count}>
-                    {count} 题
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>难度</span>
-              <select aria-label="难度" value={difficulty} onChange={(event) => setDifficulty(event.target.value as typeof difficulty)}>
-                <option value="adaptive">智能适配</option>
-                <option value="easy">基础</option>
-                <option value="medium">中等</option>
-                <option value="hard">进阶</option>
-              </select>
-            </label>
-            <button className="primary-action" type="button" disabled={!canUseCourse || createMutation.isPending} onClick={() => createMutation.mutate()}>
-              生成练习
-            </button>
-          </div>
+        <div className="practice-return-row"><CourseReturnLink courseId={canUseCourse ? numericCourseId : null} /></div>
 
-          {localError ? <p className="form-error">{localError}</p> : null}
-          {requestedSessionQuery.isError || latestSessionQuery.isError ? <p className="form-error">练习恢复失败，请稍后重试。</p> : null}
-          {activeSession?.status === "in_progress" && draftStatus !== "idle" ? (
-            <p className={`practice-draft-status ${draftStatus}`} role="status">
-              {draftStatus === "saving" ? "正在保存草稿" : draftStatus === "saved" ? "草稿已保存" : "草稿保存失败，将继续保留当前输入"}
-            </p>
-          ) : null}
-
-          {activeSession ? (
-            <div className="practice-question-list">
-              {activeSession.questions.map((question, index) => {
-                const feedback = feedbackByQuestion.get(question.id);
-                const evaluatedFeedback = feedback?.is_correct === null || feedback?.is_correct === undefined ? null : feedback;
-                return (
-                  <article className="question-block" key={question.id}>
-                    <strong>
-                      <span>{index + 1}. </span>
-                      <span>{question.prompt}</span>
-                    </strong>
-                    {question.options.length > 0 ? (
-                      <div className="practice-options">
-                        {question.options.map((option) => (
-                          <button
-                            key={option}
-                            type="button"
-                            className={optionSelected(question, option) ? "soft-button active" : "soft-button"}
-                            onClick={() => updateOptionAnswer(question, option)}
-                            disabled={activeSession.status === "completed"}
-                          >
-                            {option}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                    <label className="answer-box">
-                      <span>作答区</span>
-                      <textarea
-                        rows={4}
-                        aria-label={`${question.id} 作答区`}
-                        value={effectiveAnswers[question.id] ?? feedback?.answer_text ?? ""}
-                        onChange={(event) => updateAnswer(question.id, event.target.value)}
-                        placeholder="写下你的答案或推导过程。"
-                        disabled={activeSession.status === "completed"}
-                      />
-                    </label>
-                    {evaluatedFeedback ? (
-                      <>
-                        <div className={evaluatedFeedback.is_correct ? "feedback-status mastered" : "feedback-status"}>
-                          {evaluatedFeedback.is_correct ? <CheckCircle size={22} weight="duotone" aria-hidden="true" /> : <WarningCircle size={22} weight="duotone" aria-hidden="true" />}
-                          <span>
-                            <strong>得分 {evaluatedFeedback.feedback.score}</strong>
-                            <small>{evaluatedFeedback.feedback.message}</small>
-                          </span>
-                        </div>
-                        {evaluatedFeedback.feedback.diagnosis ? (
-                          <div className="practice-diagnosis" aria-label={`${question.id} 错因诊断`}>
-                            <strong>错因诊断</strong>
-                            <p>{evaluatedFeedback.feedback.diagnosis.misconception}</p>
-                            {evaluatedFeedback.feedback.diagnosis.missing_concepts.length > 0 ? (
-                              <div className="practice-diagnosis-concepts">
-                                {evaluatedFeedback.feedback.diagnosis.missing_concepts.map((concept) => (
-                                  <span key={concept}>{concept}</span>
-                                ))}
-                              </div>
-                            ) : null}
-                            <small>{evaluatedFeedback.feedback.diagnosis.recommended_action}</small>
-                          </div>
-                        ) : null}
-                      </>
-                    ) : null}
-                  </article>
-                );
-              })}
-              {activeSession.status === "completed" ? (
-                <button
-                  className="primary-action"
-                  type="button"
-                  onClick={() => {
-                    setCurrentSession(null);
-                    setAnswers({});
-                    lastSavedDraftRef.current = "";
-                    setDraftStatus("idle");
-                    const nextParams = new URLSearchParams(searchParams);
-                    nextParams.set("course_id", activeSession.course_id);
-                    nextParams.set("new", "1");
-                    nextParams.delete("session_id");
-                    setSearchParams(nextParams, { replace: true });
-                  }}
-                >
-                  开始新练习
-                </button>
-              ) : (
-                <button className="primary-action" type="button" disabled={submitMutation.isPending} onClick={() => submitMutation.mutate()}>
-                  提交答案
-                </button>
-              )}
-            </div>
-          ) : (
-            <p className="empty-state">选择课程和知识点后生成练习。</p>
-          )}
-        </section>
-
-        <aside className="practice-side-stack">
-          <section className="student-panel feedback-panel" role="region" aria-label="批改反馈">
-            <div className="feedback-status">
-              <WarningCircle size={22} weight="duotone" aria-hidden="true" />
-              <span>
-                <strong>{activeSession?.status === "completed" ? "练习已完成" : "等待作答"}</strong>
-                <small>
-                  {activeSession?.score !== null && activeSession?.score !== undefined
-                    ? `本次得分 ${activeSession.score}${activeSession.requested_difficulty === "adaptive" ? ` · 智能适配为${activeSession.effective_difficulty === "easy" ? "基础" : activeSession.effective_difficulty === "hard" ? "进阶" : "中等"}` : ""}`
-                    : activeSession
-                      ? `实际难度：${activeSession.effective_difficulty === "easy" ? "基础" : activeSession.effective_difficulty === "hard" ? "进阶" : "中等"}`
-                      : "提交后会生成即时反馈和复习线索。"}
-                </small>
-              </span>
-            </div>
-            <AgentTraceDisclosure traceId={activeSession?.agent_trace_id} label="查看 AssessmentGraph" />
-            {activeSession?.closure_update ? (
-              <div className="practice-closure-update">
-                <strong>
-                  {activeSession.closure_update.path_update_status === "replanned"
-                    ? "已有路径已按本次练习重排"
-                    : activeSession.closure_update.path_update_status === "failed"
-                      ? "路径暂未更新，练习结果已保留"
-                      : activeSession.closure_update.path_update_status === "not_started"
-                        ? "课程还没有学习路径"
-                        : "学习状态已更新"}
-                </strong>
-                <small>
-                  新增 {activeSession.closure_update.weaknesses_added} 个弱点，更新 {activeSession.closure_update.weaknesses_updated} 个弱点
-                </small>
-                <Link className="soft-button" to={`${PATHS.path}?course_id=${numericCourseId}`}>
-                  {activeSession.closure_update.path_update_status === "replanned" ? "查看更新后的路径" : "前往学习路径"}
-                </Link>
-                <AgentTraceDisclosure
-                  traceId={activeSession.closure_update.path_agent_trace_id}
-                  label="查看 PathPlanningGraph"
+        {activeSession && activeQuestion ? (
+          <div className="practice-session-layout">
+            <PracticeQuestionRail
+              questions={activeSession.questions}
+              answers={effectiveAnswers}
+              evaluatedAnswers={activeSession.answers}
+              activeQuestionId={activeQuestion.id}
+              completed={completed}
+              onSelect={selectQuestion}
+            />
+            <main className="practice-session-main">
+              {completed ? (
+                <PracticeResultSummary
+                  score={activeSession.score ?? 0}
+                  correctCount={resultSummary.correctCount}
+                  totalCount={resultSummary.totalCount}
+                  effectiveDifficulty={activeSession.effective_difficulty}
+                  nextAction={nextAction}
+                  onStartNew={startNewPractice}
+                  onOpenResults={() => setDrawerMode("results")}
                 />
-              </div>
-            ) : null}
-          </section>
+              ) : null}
+              {localError ? <p className="practice-local-error" role="alert">{localError}</p> : null}
+              <PracticeQuestionCanvas
+                question={activeQuestion}
+                index={activeQuestionIndex}
+                total={activeSession.questions.length}
+                value={effectiveAnswers[activeQuestion.id] ?? ""}
+                feedback={feedbackByQuestion.get(activeQuestion.id) ?? null}
+                completed={completed}
+                reviewExpanded={reviewExpansionOverrides[activeQuestion.id]
+                  ?? (feedbackByQuestion.get(activeQuestion.id)?.is_correct === false)}
+                onAnswer={(value) => updateAnswer(activeQuestion.id, value)}
+                onToggleReview={() => setReviewExpansionOverrides((current) => ({
+                  ...current,
+                  [activeQuestion.id]: !(current[activeQuestion.id]
+                    ?? (feedbackByQuestion.get(activeQuestion.id)?.is_correct === false))
+                }))}
+              />
+              <footer className="practice-session-actions">
+                <button type="button" disabled={activeQuestionIndex <= 0} onClick={() => selectQuestion(activeSession.questions[activeQuestionIndex - 1].id)}>
+                  <ArrowLeft size={17} weight="bold" aria-hidden="true" />上一题
+                </button>
+                <span>{completed ? "逐题回看批改结果" : `还有 ${unansweredQuestions.length} 题未答`}</span>
+                <button type="button" disabled={activeQuestionIndex >= activeSession.questions.length - 1} onClick={() => selectQuestion(activeSession.questions[activeQuestionIndex + 1].id)}>
+                  下一题<ArrowRight size={17} weight="bold" aria-hidden="true" />
+                </button>
+                {completed ? (
+                  <button className="primary" type="button" onClick={startNewPractice}>开始新练习</button>
+                ) : (
+                  <button className="primary" type="button" disabled={submitMutation.isPending} onClick={requestSubmit}>
+                    <CheckCircle size={18} weight="bold" aria-hidden="true" />{submitMutation.isPending ? "正在提交" : "提交练习"}
+                  </button>
+                )}
+              </footer>
+            </main>
+          </div>
+        ) : (
+          <main className="practice-empty-canvas">
+            {loadingSession ? (
+              <div className="practice-loading-state" role="status"><span /><span /><span /></div>
+            ) : (
+              <>
+                {restoreError ? <WarningCircle size={34} weight="duotone" aria-hidden="true" /> : <ClipboardText size={38} weight="duotone" aria-hidden="true" />}
+                <span>{restoreError ? "练习恢复失败" : selectedPointTitle ? "针对当前知识点开始" : "准备一次课程练习"}</span>
+                <h2>{restoreError ? "暂时无法恢复上次练习" : selectedPointTitle || "选择课程和知识点"}</h2>
+                <p>{restoreError ? "当前选择和返回上下文仍然保留，可以重试恢复或创建新练习。" : "系统会根据掌握度和薄弱点决定实际难度，不会自动开始或消耗模型调用。"}</p>
+                <button type="button" disabled={!canUseCourse || knowledgePoints.length === 0} onClick={() => setDrawerMode("settings")}>
+                  <SlidersHorizontal size={18} weight="bold" aria-hidden="true" />
+                  {restoreError ? "调整并重新开始" : "开始针对性练习"}
+                </button>
+                {!canUseCourse ? <Link to="/app/library">先到资料库创建课程</Link> : null}
+                {canUseCourse && knowledgePoints.length === 0 ? <small>这门课程还没有可练习的知识点。</small> : null}
+              </>
+            )}
+          </main>
+        )}
 
-          <section className="student-panel review-queue" role="region" aria-label="薄弱点复习队列">
-            <div className="student-panel-heading compact">
+        {drawerMode ? (
+          <PracticeDrawer
+            mode={drawerMode}
+            courses={courses}
+            points={knowledgePoints}
+            courseId={effectiveCourseId}
+            pointId={effectivePointId}
+            questionCount={questionCount}
+            difficulty={difficulty}
+            session={activeSession}
+            recommendedResources={recommendedResources}
+            isGenerating={createMutation.isPending}
+            canGenerate={canUseCourse && selectedPointIds.length > 0}
+            error={localError}
+            onCourseChange={changeCourse}
+            onPointChange={setSelectedPointId}
+            onQuestionCountChange={setQuestionCount}
+            onDifficultyChange={setDifficulty}
+            onGenerate={() => createMutation.mutate()}
+            onClose={() => setDrawerMode(null)}
+          />
+        ) : null}
+
+        {confirmIncomplete ? (
+          <div className="practice-confirm-layer" role="presentation">
+            <section role="dialog" aria-modal="true" aria-labelledby="practice-confirm-title">
+              <WarningCircle size={28} weight="duotone" aria-hidden="true" />
+              <h2 id="practice-confirm-title">还有 {unansweredQuestions.length} 题未作答</h2>
+              <p>确认提交后，未答题会按空答案参与本次学习诊断。</p>
               <div>
-                <h2>反馈线索</h2>
+                <button type="button" onClick={cancelIncompleteSubmit}>返回未答题</button>
+                <button className="primary" type="button" onClick={() => submitMutation.mutate()}>仍然提交</button>
               </div>
-            </div>
-            <ol>
-              {(activeSession?.answers ?? []).map((answer) => (
-                <li className={answer.is_correct ? "" : "active"} key={answer.question_id}>
-                  <ListChecks size={17} weight="duotone" aria-hidden="true" />
-                  <span>{answer.feedback.message}</span>
-                </li>
-              ))}
-              {!activeSession?.answers.length ? <li>完成练习后会形成真实复习线索。</li> : null}
-            </ol>
-          </section>
-        </aside>
+            </section>
+          </div>
+        ) : null}
       </div>
     </PageFrame>
   );

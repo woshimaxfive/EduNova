@@ -233,7 +233,8 @@ cd ..
 - 资源工坊桌面重做后，必须覆盖成果搜索/六类筛选、`course_id/resource_id` 刷新恢复、空课程/空成果/低依据/读取失败、生成失败保留配置、完成后自动选中，以及质量/引用/轨迹切换资源不串数据。`Escape`、遮罩和关闭按钮均应关闭抽屉，抽屉打开前后中央画布宽度不得变化。
 - Phase 7.1 后，已登录学生访问 `/app/profile` 应从 `/profiles/me` 和 `/profiles/events` 渲染真实 8 维画像与画像事件，空画像显示待补充；提交“更新目标”和“画像问题回答”必须调用 `/profiles/chat` 并刷新画像和事件。
 - Phase 15 后，画像页还必须展示逐维可信度、候选/已应用证据、来源类型和 ProfileGraph 轨迹；课程内容知识图谱、路径掌握度图和报告趋势图需保留可访问文本降级。
-- `/app/practice` 必须支持 `adaptive` 请求、实际难度展示、`course_id/session_id` URL 恢复、最近练习恢复、650ms 防抖草稿保存和已完成练习回看；草稿失败不得清空本地答案。
+- `/app/practice` 必须覆盖未开始、答题中、已完成三态；支持 `adaptive` 请求、实际难度展示、`course_id/session_id/question_id` URL 恢复、最近练习恢复、650ms 防抖草稿保存和已完成练习回看；草稿失败不得清空本地答案。
+- 练习页测试必须覆盖单题切换、题目已答/未答/正确/错误状态、选择题草稿选中态、未答提交二次确认及取消后定位第一道未答题。结果回看需验证错题默认展开、真实诊断、弱点变化、路径回流、推荐资源标题、AssessmentGraph/PathPlanningGraph 和唯一下一步。
 - P3 补完后，已登录学生访问 `/app/path` 应能看到学习路径、阶段任务和路径依据。
 - P3.6 补完后，文件库式资料库、资源工坊、学习画像、课程空间 AI 辅导、练习、报告和设置必须通过页面测试确认核心区域存在，不允许退回简单占位页。
 - P3.6 已用本地 Edge + Playwright 检查文件库式资料库、资源工坊、学习画像、课程空间 AI 辅导、练习、报告和设置在桌面与 390px 移动宽度下核心区域可见，且无水平溢出。
@@ -698,7 +699,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 9 前端测试覆盖 `PATH_ENDPOINTS`、`generatePath`、`getCurrentPath`、`updatePathTask` 和 `COURSE_ENDPOINTS.masteryMap` API 合同；`LearningPathPage` 覆盖课程预选、空路径、一键生成/更新、任务状态、当前任务置顶、推荐资源、掌握度/依据/轨迹抽屉、局部错误和旧冲刺 URL 参数清理。
 - 课程闭环缓存测试覆盖统一 Query Key、知识点平均掌握度的空值/边界/四舍五入，以及课程问答、弱点、资源任务、路径、练习和报告操作后的课程级失效；课程空间测试覆盖抽屉强制刷新五组数据、目标和下一步重算、部分失败保留旧内容与手动重试。
 - Phase 10 后端测试覆盖 `/practice/sessions` 创建练习、知识点过滤、跨课程校验、单选/多选/简答确定性批改、空答案校验、重复提交策略、错题或低分题写入 `weakness_review_queue`、多用户隔离、报告生成和 latest 读取，以及 `/mastery-map` 和 `/learning-state` 对练习结果的反哺。
-- Phase 10 前端测试覆盖 `PRACTICE_ENDPOINTS`、`REPORT_ENDPOINTS` 类型化 API 合同；`PracticePage` 覆盖课程预选、创建练习、作答、提交反馈、空状态和局部错误；`ReportsPage` 覆盖课程预选、空报告、生成报告、真实报告渲染和局部错误；`CourseSpacePage` 覆盖练习/报告入口携带 `course_id`。
+- Phase 10 前端测试覆盖 `PRACTICE_ENDPOINTS`、`REPORT_ENDPOINTS` 类型化 API 合同；`PracticePage` 当前覆盖课程/知识点预选、创建练习、单题作答、题目 URL 与草稿恢复、未答确认、结果反馈、资源与轨迹、空状态和局部错误；`ReportsPage` 覆盖课程预选、空报告、生成报告、真实报告渲染和局部错误；`CourseSpacePage` 覆盖练习/报告入口及返回上下文。
 - 退役回归测试覆盖 `/exam-sprint/*` 不再注册、工作流列表和离线评测不再包含 `exam_sprint`，旧 `sprint_*` 数据不会被普通 active 路径查询或重排。
 - Phase 11.2 后端测试覆盖 `/materials/compare` 无 token 401、非本人课程/资料和未绑定当前课程资料 404、少于两份资料 400 或 422、课程切片对比、TXT/Markdown fallback、重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序、安全引用和隐私字段不泄露。
 - Phase 11.2 前端测试覆盖 `MATERIAL_ENDPOINTS.compare` 和 `compareMaterials` 类型化 API 合同；`LibraryPage` 覆盖课程选择、资料筛选、少于两份禁用提示、生成对比成功渲染、局部错误提示，且不影响上传、资料列表和生成课程。

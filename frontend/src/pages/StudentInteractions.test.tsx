@@ -600,16 +600,19 @@ describe("student interaction affordances", () => {
 
     renderPage(<PracticePage />);
 
-    await user.click(await screen.findByRole("button", { name: "生成练习" }));
-
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await screen.findByRole("heading", { name: "反向传播" });
+    const startPractice = screen.getByRole("button", { name: "开始针对性练习" });
+    expect(startPractice).toBeEnabled();
+    await user.click(startPractice);
+    const settingsDrawer = await screen.findByRole("dialog", { name: "练习设置" });
+    await user.click(within(settingsDrawer).getByRole("button", { name: "开始针对性练习" }));
 
     await user.type(await screen.findByRole("textbox", { name: "q1 作答区" }), "需要把局部梯度沿计算图传回参数。");
-    await user.click(screen.getByRole("button", { name: "提交答案" }));
+    await user.click(screen.getByRole("button", { name: "提交练习" }));
 
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("region", { name: "薄弱点复习队列" })).toHaveTextContent("已掌握关键依据。"));
-    expect(screen.getByRole("region", { name: "批改反馈" })).toHaveTextContent("本次得分 100");
+    const result = await screen.findByRole("region", { name: "练习结果摘要" });
+    expect(result).toHaveTextContent("100");
+    expect(screen.getByRole("button", { name: /回答正确 · 得分 100/ })).toHaveTextContent("已掌握关键依据。");
   });
 
   it("generates studio resources through the real resource API", async () => {

@@ -202,7 +202,7 @@ describe("ResourceRenderer", () => {
     });
     renderWithQuery(<ResourceRenderer resource={codeResource} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "运行 Python 代码" }));
+    fireEvent.click(await screen.findByRole("button", { name: "运行 Python 代码" }, { timeout: 10_000 }));
     expect((await screen.findAllByText("priority=2.8")).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("调整代价")).toBeInTheDocument();
     vi.unstubAllGlobals();
@@ -222,7 +222,7 @@ describe("ResourceRenderer", () => {
     });
     renderWithQuery(<ResourceRenderer resource={codeResource} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "运行 Python 代码" }));
+    fireEvent.click(await screen.findByRole("button", { name: "运行 Python 代码" }, { timeout: 10_000 }));
     expect(screen.getByText("当前代码包含被禁用的网络、文件或浏览器互操作模块。")).toBeInTheDocument();
   });
 

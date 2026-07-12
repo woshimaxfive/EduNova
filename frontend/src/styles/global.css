@@ -280,7 +280,6 @@ a {
 .report-panel,
 .settings-panel,
 .chat-panel,
-.practice-panel article,
 .evidence-tag,
 .process-step {
   display: flex;
@@ -1575,8 +1574,7 @@ a {
 
 .library-side-stack,
 .profile-side-stack,
-.tutor-side-stack,
-.practice-side-stack {
+.tutor-side-stack {
   display: grid;
   gap: 12px;
   min-width: 0;
@@ -1634,8 +1632,7 @@ a {
 .settings-section p,
 .export-panel p,
 .report-brief p,
-.profile-dialog-entry p,
-.question-block p {
+.profile-dialog-entry p {
   color: var(--text-muted);
   line-height: 1.6;
 }
@@ -1767,8 +1764,7 @@ a {
 
 .ownership-list,
 .evidence-list,
-.report-evidence-list,
-.review-queue ol {
+.report-evidence-list {
   display: grid;
   gap: 10px;
   margin: 0;
@@ -1778,8 +1774,7 @@ a {
 
 .ownership-list li,
 .evidence-list li,
-.report-evidence-list li,
-.review-queue li {
+.report-evidence-list li {
   display: flex;
   align-items: start;
   gap: 9px;
@@ -1787,17 +1782,9 @@ a {
   border-top: 1px solid var(--line);
 }
 
-.review-queue li.active {
-  color: var(--accent-strong);
-  background: var(--accent-soft);
-  border-radius: 12px;
-  padding-inline: 10px;
-}
-
 .ownership-list li:first-child,
 .evidence-list li:first-child,
-.report-evidence-list li:first-child,
-.review-queue li:first-child {
+.report-evidence-list li:first-child {
   border-top: 0;
 }
 
@@ -1943,21 +1930,18 @@ a {
   background: var(--surface-muted);
 }
 
-.tutor-composer,
-.answer-box {
+.tutor-composer {
   display: grid;
   gap: 8px;
 }
 
-.tutor-composer span,
-.answer-box span {
+.tutor-composer span {
   color: var(--text-muted);
   font-size: 0.82rem;
   font-weight: 800;
 }
 
-.tutor-composer textarea,
-.answer-box textarea {
+.tutor-composer textarea {
   resize: vertical;
   width: 100%;
   border: 1px solid var(--line);
@@ -1968,8 +1952,7 @@ a {
   outline: none;
 }
 
-.tutor-composer textarea:focus,
-.answer-box textarea:focus {
+.tutor-composer textarea:focus {
   border-color: rgba(8, 127, 115, 0.38);
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
@@ -1999,37 +1982,6 @@ a {
 .citation-list article:first-child,
 .mastery-list article:first-child {
   border-top: 0;
-}
-
-.practice-question {
-  display: grid;
-  gap: 14px;
-}
-
-.question-block {
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.56);
-}
-
-.feedback-panel,
-.review-queue {
-  display: grid;
-  gap: 10px;
-}
-
-.feedback-status {
-  grid-template-columns: auto minmax(0, 1fr);
-  padding: 12px;
-  border: 1px solid rgba(215, 90, 74, 0.22);
-  border-radius: var(--radius);
-  background: var(--coral-soft);
-}
-
-.feedback-status.mastered {
-  border-color: rgba(32, 139, 98, 0.22);
-  background: var(--green-soft);
 }
 
 .mastery-list article > div:first-child {
@@ -2512,7 +2464,6 @@ a {
   }
 
   .first-run-options,
-  .practice-panel,
   .profile-dimension-grid {
     grid-template-columns: 1fr;
   }
@@ -7657,31 +7608,18 @@ a {
   border-top: 1px solid var(--line);
 }
 
-.practice-diagnosis {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 12px 0 2px;
-  border-top: 1px solid var(--line);
-}
-
-.practice-diagnosis p,
-.practice-diagnosis small,
-.practice-closure-update small,
 .report-trend-copy {
   margin: 0;
   color: var(--text-muted);
   line-height: 1.6;
 }
 
-.practice-diagnosis-concepts,
 .report-evidence-summary {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.practice-diagnosis-concepts span,
 .report-evidence-summary span {
   padding: 5px 8px;
   border: 1px solid var(--line);
@@ -7689,18 +7627,6 @@ a {
   background: var(--surface-muted);
   color: var(--text-muted);
   font-size: 0.78rem;
-}
-
-.practice-closure-update {
-  display: grid;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
-
-.practice-closure-update .soft-button {
-  width: fit-content;
 }
 
 .report-trend-copy {
@@ -7713,8 +7639,7 @@ a {
 }
 
 @media (max-width: 600px) {
-  .agent-trace-disclosure-trigger,
-  .practice-closure-update .soft-button {
+  .agent-trace-disclosure-trigger {
     width: 100%;
   }
 }
@@ -7741,20 +7666,6 @@ a {
 
 .profile-side-stack .agent-trace-disclosure {
   margin-top: 4px;
-}
-
-.practice-draft-status {
-  margin: 8px 0 0;
-  color: var(--text-muted);
-  font-size: 0.78rem;
-}
-
-.practice-draft-status.saved {
-  color: var(--accent-strong);
-}
-
-.practice-draft-status.error {
-  color: var(--coral);
 }
 
 .learning-echart {

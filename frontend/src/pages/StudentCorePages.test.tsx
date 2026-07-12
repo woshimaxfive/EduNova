@@ -337,14 +337,14 @@ describe("student core pages", () => {
     expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("更新学习画像：学习目标、基础");
   });
 
-  it("renders practice as an answer, feedback, and review loop", async () => {
+  it("renders practice as a focused three-state workspace", async () => {
     renderPage(<PracticePage />);
 
     expect(screen.getByRole("heading", { name: "练习" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "练习作答" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "批改反馈" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "薄弱点复习队列" })).toBeInTheDocument();
-    await screen.findByRole("button", { name: "生成练习" });
+    expect(await screen.findByRole("link", { name: "先到资料库创建课程" })).toHaveAttribute("href", "/app/library");
+    expect(screen.getByRole("button", { name: "练习设置" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "练习作答" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "批改反馈" })).not.toBeInTheDocument();
   });
 
   it("renders reports as an explainable learning record", async () => {

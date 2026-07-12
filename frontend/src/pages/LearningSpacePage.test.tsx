@@ -123,6 +123,33 @@ const materialRichSummary: DashboardSummary = {
   ]
 };
 
+const allCourseSummaries = [
+  {
+    id: "101",
+    title: "真实机器学习课",
+    description: "从监督学习开始建立机器学习基础。",
+    subject: "人工智能",
+    source_type: "generated" as const,
+    status: "active",
+    progress_percent: 34,
+    material_count: 2,
+    knowledge_point_count: 8,
+    chunk_count: 12,
+  },
+  {
+    id: "102",
+    title: "数据结构复习",
+    description: "围绕树、图和排序算法复习。",
+    subject: "计算机基础",
+    source_type: "uploaded" as const,
+    status: "active",
+    progress_percent: 72,
+    material_count: 1,
+    knowledge_point_count: 6,
+    chunk_count: 9,
+  },
+];
+
 let previousAdapter = apiClient.defaults.adapter;
 let previousFetch = globalThis.fetch;
 
@@ -138,6 +165,7 @@ type TutorMockOptions = {
   historyDetails?: Record<string, unknown>;
   streamReplacement?: string;
   streamWarnings?: string[];
+  courseListFailures?: number;
 };
 
 function parsePayload(data: unknown) {
@@ -214,6 +242,7 @@ function renderWithDashboardSummary(
     updated_at: "2026-07-03T12:00:00Z"
   };
   let recentConversations: DashboardSummary["recent_conversations"] = [...summary.recent_conversations];
+  let courseListFailures = tutorOptions.courseListFailures ?? 0;
 
   globalThis.fetch = vi.fn(async (input, init) => {
     const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -320,6 +349,21 @@ function renderWithDashboardSummary(
         statusText: "OK",
         headers: {},
         config
+      };
+    }
+
+    if (url === COURSE_ENDPOINTS.list && method === "get") {
+      if (courseListFailures > 0) {
+        courseListFailures -= 1;
+        throw new Error("course list failed");
+      }
+
+      return {
+        data: { data: allCourseSummaries, trace_id: "trace_course_list_test" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
       };
     }
 
@@ -571,11 +615,37 @@ describe("LearningSpacePage", () => {
     const { calls } = renderWithDashboardSummary();
 
     expect(await screen.findByRole("link", { name: /真实机器学习课/ }, { timeout: 5_000 })).toHaveAttribute("href", "/app/courses/101");
-    expect(screen.getByRole("link", { name: /期末冲刺/ })).toHaveAttribute("href", "/app/path?course_id=101");
+    expect(screen.getByRole("button", { name: "全部课程" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("button", { name: /接口里的主页历史/ })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Python 基础补齐/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "快捷学习建议" })).not.toBeInTheDocument();
+    expect(screen.queryByText("根据真实资料复习")).not.toBeInTheDocument();
     expect(calls.map((call) => call.url)).toContain(DASHBOARD_ENDPOINTS.summary);
   });
+
+  it("opens the complete course drawer on demand and supports search, close, retry, and course navigation", async () => {
+    const user = userEvent.setup();
+    const { calls } = renderWithDashboardSummary(starterSummary, { courseListFailures: 1 });
+
+    expect(calls.map((call) => call.url)).not.toContain(COURSE_ENDPOINTS.list);
+    await user.click(await screen.findByRole("button", { name: "全部课程" }));
+
+    const drawer = await screen.findByRole("dialog", { name: "全部课程" });
+    expect(await within(drawer).findByText("课程列表暂时没有读取成功")).toBeInTheDocument();
+    await user.click(within(drawer).getByRole("button", { name: "重新读取" }));
+
+    expect(await within(drawer).findByRole("link", { name: "打开课程真实机器学习课" })).toBeInTheDocument();
+    expect(within(drawer).getByText("2 门课程")).toBeInTheDocument();
+    await user.type(within(drawer).getByRole("textbox", { name: "搜索课程" }), "数据结构");
+    expect(within(drawer).queryByRole("link", { name: "打开课程真实机器学习课" })).not.toBeInTheDocument();
+    expect(within(drawer).getByRole("link", { name: "打开课程数据结构复习" })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "全部课程" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "全部课程" }));
+    await user.click(await screen.findByRole("link", { name: "打开课程数据结构复习" }));
+    expect(await screen.findByText("已进入生成课程")).toBeInTheDocument();
+  }, 15_000);
 
   it("keeps blank dashboard summaries free of static materials and starter history", async () => {
     const user = userEvent.setup();
@@ -1143,14 +1213,12 @@ describe("LearningSpacePage", () => {
   it("lets the home answer reveal sources, path, and thinking details", async () => {
     const user = userEvent.setup();
 
-    renderWithDashboardSummary({
-      ...starterSummary,
-      command_suggestions: ["把反向传播讲到我能做题"]
-    });
+    renderWithDashboardSummary(starterSummary);
 
     await screen.findByRole("link", { name: /真实机器学习课/ });
-    await user.click(screen.getByRole("button", { name: "把反向传播讲到我能做题" }));
-    expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("把反向传播讲到我能做题");
+    const input = screen.getByRole("textbox", { name: "学习问题输入" });
+    await user.type(input, "把反向传播讲到我能做题");
+    expect(input).toHaveValue("把反向传播讲到我能做题");
 
     await user.click(screen.getByRole("button", { name: "发送" }));
     await user.click(screen.getByRole("button", { name: "学习路径" }));

@@ -15,7 +15,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
-import { PATHS, buildCoursePath } from "../app/routePaths";
+import { buildCoursePath } from "../app/routePaths";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import { createCourseBuilderJob, createIdempotencyKey, type AiJob } from "../api/aiJobs";
 import { getDashboardSummary } from "../api/dashboard";
@@ -34,6 +34,7 @@ import {
 import { InlineFeedback, type FeedbackTone } from "../components/feedback/InlineFeedback";
 import { AiJobProgress } from "../components/feedback/AiJobProgress";
 import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
+import { HomeCourseDrawer } from "../components/home/HomeCourseDrawer";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { isCompactWorkspaceViewport, useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
@@ -93,8 +94,6 @@ type SpeechWindow = Window &
     SpeechRecognition?: BrowserSpeechRecognitionConstructor;
     webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
   };
-
-const fallbackSuggestedPrompts = ["帮我制定 7 天期末复习计划", "把反向传播讲到我能做题", "根据资料生成一门冲刺课"];
 
 function mapTutorMessages(apiMessages: TutorMessage[]) {
   return apiMessages.map((message) => ({
@@ -156,6 +155,7 @@ export function LearningSpacePage() {
   const [answerWarnings, setAnswerWarnings] = useState<Record<string, string[]>>({});
   const [composerFeedback, setComposerFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [courseDialogFeedback, setCourseDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
+  const [isCourseDrawerOpen, setIsCourseDrawerOpen] = useState(false);
   const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
   const courseJob = getJob(courseJobId);
   const isCreatingCourse = Boolean(courseJob && ["queued", "running", "cancelling"].includes(courseJob.status));
@@ -174,7 +174,6 @@ export function LearningSpacePage() {
     staleTime: 30_000
   });
   const recentCourses = dashboardSummary?.recent_courses ?? [];
-  const suggestedPrompts = dashboardSummary?.command_suggestions?.length ? dashboardSummary.command_suggestions : fallbackSuggestedPrompts;
   const emptyState = dashboardSummary?.empty_state;
   const learnerName = dashboardSummary?.profile_summary.display_name.trim() || "同学";
   const summaryHomeThreads = useMemo(
@@ -834,16 +833,6 @@ export function LearningSpacePage() {
             <InlineFeedback message={composerFeedback?.message ?? null} tone={composerFeedback?.tone} className="composer-inline-feedback" />
           </section>
 
-          {!hasHomeThread ? (
-            <div className="home-prompt-row" aria-label="快捷学习建议">
-              {suggestedPrompts.map((suggestion) => (
-                <button key={suggestion} type="button" onClick={() => setPrompt(suggestion)}>
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
           {!hasHomeThread && dashboardQuery.isLoading ? (
             <section className="recent-course-strip empty" aria-label="最近学习">
               <strong>正在读取学习空间</strong>
@@ -860,10 +849,16 @@ export function LearningSpacePage() {
             <section className="recent-course-strip" aria-label="最近学习">
               <div className="recent-course-heading">
                 <span>最近学习</span>
-                <Link className="home-sprint-link" to={`${PATHS.path}?course_id=${recentCourses[0].id}`}>
-                  <Sparkle size={15} weight="duotone" aria-hidden="true" />
-                  <span>期末冲刺</span>
-                </Link>
+                <button
+                  className="home-all-courses-button"
+                  type="button"
+                  aria-expanded={isCourseDrawerOpen}
+                  aria-controls="home-course-drawer-title"
+                  onClick={() => setIsCourseDrawerOpen(true)}
+                >
+                  <BookOpen size={15} weight="duotone" aria-hidden="true" />
+                  <span>全部课程</span>
+                </button>
               </div>
               <ul className="recent-course-list" aria-label="最近学习列表">
                 {recentCourses.map((course) => (
@@ -900,6 +895,7 @@ export function LearningSpacePage() {
           onClose={() => setIsLibraryOpen(false)}
         />
       ) : null}
+      {isCourseDrawerOpen ? <HomeCourseDrawer onClose={() => setIsCourseDrawerOpen(false)} /> : null}
       {isCourseDialogOpen ? (
         <CourseGenerationDialog
           materials={materials}

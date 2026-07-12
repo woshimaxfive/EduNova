@@ -8004,3 +8004,23 @@ a {
     transition: none !important;
   }
 }
+.course-return-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  margin: 0 0 14px;
+  padding: 8px 11px;
+  border: 1px solid rgba(8, 127, 115, 0.16);
+  border-radius: 7px;
+  color: var(--accent-strong);
+  background: rgba(255, 255, 255, 0.66);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.course-return-link:hover {
+  border-color: rgba(8, 127, 115, 0.3);
+  background: rgba(223, 244, 240, 0.74);
+}

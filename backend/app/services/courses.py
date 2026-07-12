@@ -30,6 +30,8 @@ from backend.app.models import (
 from backend.app.schemas.courses import (
     CourseEvidenceSummary,
     CourseKnowledgePoint,
+    CourseKnowledgePointContent,
+    CourseKnowledgeSection,
     CourseLearningState,
     CourseListResponse,
     CourseMasteryMap,
@@ -45,6 +47,7 @@ from backend.app.schemas.courses import (
     CreateCourseFromMaterialsResult,
     iso_timestamp,
     weakness_item_to_api,
+    resource_brief,
 )
 from backend.app.schemas.profiles import normalize_profile_json
 from backend.app.services.material_retrieval import MaterialChunkingService
@@ -405,6 +408,53 @@ class CourseService:
     def get_knowledge_points(self, user: User, course_id: int) -> list[CourseKnowledgePoint]:
         course = self._require_course(user, course_id)
         return [self._build_knowledge_point(point) for point in self.repository.list_knowledge_points(course.id)]
+
+    def get_knowledge_point_content(
+        self,
+        user: User,
+        course_id: int,
+        knowledge_point_id: int,
+    ) -> CourseKnowledgePointContent:
+        course = self._require_course(user, course_id)
+        points = self.repository.list_knowledge_points(course.id)
+        point_index = next((index for index, item in enumerate(points) if item.id == knowledge_point_id), None)
+        if point_index is None:
+            raise CourseNotFoundError("课程知识点不存在或无权访问。")
+
+        point = points[point_index]
+        materials_by_id = {item.id: item for item in self.repository.list_course_materials(course.id)}
+        chunks = [
+            item
+            for item in self.repository.list_knowledge_chunks(course.id)
+            if item.knowledge_point_id == point.id
+        ][:12]
+        resources = [
+            item
+            for item in self.repository.list_generated_resources(user.id, course.id)
+            if item.knowledge_point_id == point.id
+        ]
+        sections = []
+        for chunk in chunks:
+            material = materials_by_id.get(chunk.material_id)
+            metadata = chunk.metadata_json or {}
+            source_title = material.filename if material is not None else str(metadata.get("source_filename") or "课程资料")
+            sections.append(
+                CourseKnowledgeSection(
+                    chunk_id=str(chunk.id),
+                    title=(chunk.section_title or point.chapter or point.title)[:255],
+                    content=chunk.content.strip()[:1200],
+                    source_title=source_title[:255],
+                    page_number=chunk.page_number,
+                )
+            )
+
+        return CourseKnowledgePointContent(
+            knowledge_point=self._build_knowledge_point(point),
+            sections=sections,
+            related_resources=[resource_brief(item) for item in resources],
+            previous_knowledge_point_id=str(points[point_index - 1].id) if point_index > 0 else None,
+            next_knowledge_point_id=str(points[point_index + 1].id) if point_index + 1 < len(points) else None,
+        )
 
     def get_mastery_map(self, user: User, course_id: int) -> CourseMasteryMap:
         course = self._require_course(user, course_id)

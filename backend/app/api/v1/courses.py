@@ -91,6 +91,20 @@ def get_course_knowledge_points(
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
 
 
+@router.get("/{course_id}/knowledge-points/{knowledge_point_id}/content")
+def get_course_knowledge_point_content(
+    course_id: int,
+    knowledge_point_id: int,
+    current_user: User = Depends(get_current_user),
+    service: CourseService = Depends(get_course_service),
+) -> dict:
+    try:
+        result = service.get_knowledge_point_content(current_user, course_id, knowledge_point_id)
+        return api_response(result.model_dump())
+    except CourseNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+
+
 @router.get("/{course_id}/mastery-map")
 def get_course_mastery_map(
     course_id: int,

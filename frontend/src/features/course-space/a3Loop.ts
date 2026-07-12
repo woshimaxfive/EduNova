@@ -24,6 +24,10 @@ export type CourseLoopInput = {
   latestTraceWorkflow: string | null;
   latestTraceId: string | null;
   hasLatestReport: boolean;
+  hasProfileEvidence: boolean;
+  hasCompletedPractice: boolean;
+  recommendedGoal: string;
+  recommendedAction: string;
 };
 
 export type CourseLoopSummary = {
@@ -54,35 +58,14 @@ export function calculateMasteryPercent(points: Array<{ score: number }>) {
 }
 
 export function buildCourseLoopSummary(input: CourseLoopInput): CourseLoopSummary {
-  const totalWeaknessCount = input.pendingWeaknessCount + input.confirmedWeaknessCount;
-  const hasWeakness = totalWeaknessCount > 0;
-  const hasQuestion = Boolean(input.latestQuestion?.trim());
-  const hasGeneratedEvidence = input.citationCount > 0 || input.resourceCount > 0 || input.hasActivePath;
-  const currentGoal =
-    hasQuestion && hasWeakness
-      ? `围绕最新问题处理 ${totalWeaknessCount} 个待处理弱点`
-      : hasQuestion
-        ? "围绕最新问题建立资料依据和下一步行动"
-        : hasGeneratedEvidence
-          ? "根据课程证据推进下一步个性化学习"
-          : "从课程资料和知识点开始建立学习闭环";
-  const nextAction = hasWeakness
-    ? "先确认薄弱点，再生成针对性资源并进入路径任务"
-    : input.hasActivePath
-      ? "继续完成路径任务，并用练习结果更新掌握度"
-      : input.resourceCount > 0
-        ? "基于已生成资源进入路径或练习，形成评估回流"
-        : input.citationCount > 0
-          ? "基于当前引用生成 6 类资源，或直接进入练习"
-          : "先提问或选择知识点，生成第一批个性化学习依据";
   const traceLabel =
     input.latestTraceWorkflow && input.latestTraceId ? `${input.latestTraceWorkflow} · ${input.latestTraceId}` : null;
 
   return {
     title: input.courseTitle,
-    currentGoal,
+    currentGoal: input.recommendedGoal,
     evidenceLine: `${input.materialCount} 份资料 · ${input.knowledgePointCount} 个知识点 · ${input.citationCount} 条引用 · ${input.resourceCount} 个资源`,
-    nextAction,
+    nextAction: input.recommendedAction,
     progressLabel: `${input.progressPercent}%`,
     traceLabel
   };
@@ -100,7 +83,7 @@ export function buildStudySteps(input: CourseLoopInput): StudyStep[] {
       key: "profile",
       label: "画像",
       description: "用学生目标、历史和偏好确定课程目标",
-      status: "done"
+      status: input.hasProfileEvidence ? "done" : "ready"
     },
     {
       key: "retrieval",
@@ -135,8 +118,8 @@ export function buildStudySteps(input: CourseLoopInput): StudyStep[] {
     {
       key: "assessment",
       label: "评估",
-      description: "用练习结果更新掌握度和复习队列",
-      status: input.hasActivePath || hasResources ? "next" : "empty"
+      description: input.hasCompletedPractice ? "最近练习已更新掌握度和复习队列" : "用练习结果更新掌握度和复习队列",
+      status: input.hasCompletedPractice ? "done" : input.hasActivePath || hasResources ? "next" : "empty"
     },
     {
       key: "report",

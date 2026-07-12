@@ -15,6 +15,7 @@ import {
 } from "../features/learning-path/LearningPathWorkspace";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import { PageFrame } from "./PageFrame";
+import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
 import "../styles/learning-path.css";
 
 function parsePositiveId(value: string | null) {
@@ -65,9 +66,10 @@ export function LearningPathPage() {
   useEffect(() => {
     const hasDeprecatedParams = ["view", "comparison_id", "sprint_plan_id"].some((key) => searchParams.has(key));
     if (!hasDeprecatedParams) return;
-    const nextParams = new URLSearchParams();
-    const courseId = parsePositiveId(searchParams.get("course_id"));
-    if (courseId) nextParams.set("course_id", String(courseId));
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("view");
+    nextParams.delete("comparison_id");
+    nextParams.delete("sprint_plan_id");
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
@@ -127,6 +129,7 @@ export function LearningPathPage() {
   return (
     <>
       <PageFrame title="学习路径" variant="wide-workspace">
+        <CourseReturnLink courseId={effectiveCourseId} />
         <div className="learning-path-workspace">
           <LearningPathToolbar
             courses={courses}

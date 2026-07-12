@@ -62,7 +62,7 @@ export function CourseWorkspaceHeader({
         <button className="course-progress-trigger" type="button" onClick={onOpenProgress}>
           <ChartDonut size={18} weight="duotone" aria-hidden="true" />
           <span>学习进度</span>
-          <em>{weaknessCount > 0 ? weaknessCount : `${progressPercent}%`}</em>
+          <em>{weaknessCount > 0 ? `${weaknessCount} 项待处理` : `掌握度 ${progressPercent}%`}</em>
         </button>
       </div>
     </header>

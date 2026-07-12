@@ -296,6 +296,26 @@
   opacity: 0.78;
 }
 
+.course-closed-loop-actions .course-recommended-action {
+  min-height: 36px;
+  padding: 8px 12px;
+  color: #f6fffd;
+  background: var(--accent-strong);
+}
+
+.course-closed-loop-actions .course-recommended-action:hover {
+  color: #fff;
+  background: #086f65;
+}
+
+.course-secondary-actions {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-top: 4px;
+}
+
 .course-turn-detail {
   margin-top: 10px;
   padding: 15px 0 4px;
@@ -973,6 +993,91 @@
   color: var(--text-strong);
   font-size: 0.82rem;
   font-weight: 680;
+}
+
+.course-content-citation-focus,
+.course-content-empty-section {
+  display: grid;
+  gap: 8px;
+  margin: 24px 0;
+  padding: 16px 18px;
+  border-left: 3px solid var(--accent);
+  color: var(--text);
+  background: rgba(223, 244, 240, 0.48);
+}
+
+.course-content-citation-focus p,
+.course-content-empty-section p {
+  margin: 0;
+  line-height: 1.75;
+}
+
+.course-content-citation-focus span,
+.course-content-section small {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.course-content-loading {
+  margin: 28px 0;
+  color: var(--text-muted);
+}
+
+.course-content-section {
+  display: grid;
+  gap: 10px;
+  padding: 28px 0;
+  border-bottom: 1px solid rgba(16, 24, 32, 0.08);
+}
+
+.course-content-section h3,
+.course-content-resources h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.12rem;
+}
+
+.course-content-section p {
+  max-width: 74ch;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.9;
+  white-space: pre-wrap;
+}
+
+.course-content-resources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 28px 0;
+}
+
+.course-content-resources h3 {
+  flex: 1 0 100%;
+}
+
+.course-content-resources a,
+.course-content-pager button {
+  padding: 9px 12px;
+  border: 1px solid rgba(8, 127, 115, 0.16);
+  border-radius: 7px;
+  color: var(--accent-strong);
+  background: rgba(255, 255, 255, 0.64);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.course-content-pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 32px 0 12px;
+}
+
+.course-content-pager button:disabled {
+  cursor: default;
+  opacity: 0.38;
 }
 
 .course-content-graph-view .course-knowledge-graph {

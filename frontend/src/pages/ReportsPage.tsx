@@ -15,6 +15,7 @@ import { generateReport, getLatestReport } from "../api/reports";
 import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { PracticeTrendChart } from "../components/visualization/LearningCharts";
 import { PageFrame } from "./PageFrame";
+import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 
 function downloadDossierFile(filename: string, file: Blob, contentType: string) {
@@ -136,6 +137,7 @@ export function ReportsPage() {
 
   return (
     <PageFrame title="学习报告">
+      <CourseReturnLink courseId={canUseCourse ? numericCourseId : null} />
       <div className="student-workspace reports-workspace">
         <section className="student-panel mastery-map" role="region" aria-label="掌握度地图">
           <div className="student-panel-heading">

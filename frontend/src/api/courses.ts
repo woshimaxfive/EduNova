@@ -6,6 +6,8 @@ export const COURSE_ENDPOINTS = {
   detail: (courseId: number) => `/courses/${courseId}`,
   overview: (courseId: number) => `/courses/${courseId}/overview`,
   knowledgePoints: (courseId: number) => `/courses/${courseId}/knowledge-points`,
+  knowledgePointContent: (courseId: number, knowledgePointId: number) =>
+    `/courses/${courseId}/knowledge-points/${knowledgePointId}/content`,
   masteryMap: (courseId: number) => `/courses/${courseId}/mastery-map`,
   learningState: (courseId: number) => `/courses/${courseId}/learning-state`,
   weaknessReviewAction: (courseId: number, itemId: string, action: CourseWeaknessReviewAction) =>
@@ -41,6 +43,22 @@ export type ApiCourseKnowledgePoint = {
   order_index: number;
   difficulty: string | null;
   prerequisite_ids: string[];
+};
+
+export type CourseKnowledgeSection = {
+  chunk_id: string;
+  title: string;
+  content: string;
+  source_title: string;
+  page_number: number | null;
+};
+
+export type CourseKnowledgePointContent = {
+  knowledge_point: ApiCourseKnowledgePoint;
+  sections: CourseKnowledgeSection[];
+  related_resources: CourseResourceBrief[];
+  previous_knowledge_point_id: string | null;
+  next_knowledge_point_id: string | null;
 };
 
 export type ApiCourseStructure = {
@@ -182,6 +200,13 @@ export async function getCourseOverview(courseId: number) {
 
 export async function getKnowledgePoints(courseId: number) {
   const response = await apiClient.get<ApiEnvelope<ApiCourseKnowledgePoint[]>>(COURSE_ENDPOINTS.knowledgePoints(courseId));
+  return response.data;
+}
+
+export async function getKnowledgePointContent(courseId: number, knowledgePointId: number) {
+  const response = await apiClient.get<ApiEnvelope<CourseKnowledgePointContent>>(
+    COURSE_ENDPOINTS.knowledgePointContent(courseId, knowledgePointId)
+  );
   return response.data;
 }
 

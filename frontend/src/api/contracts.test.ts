@@ -107,6 +107,7 @@ describe("frontend API contracts", () => {
     expect(PROFILE_ENDPOINTS.events).toBe("/profiles/events");
     expect(COURSE_ENDPOINTS.fromMaterials).toBe("/courses/from-materials");
     expect(COURSE_ENDPOINTS.masteryMap(7)).toBe("/courses/7/mastery-map");
+    expect(COURSE_ENDPOINTS.knowledgePointContent(7, 12)).toBe("/courses/7/knowledge-points/12/content");
     expect(COURSE_ENDPOINTS.learningState(7)).toBe("/courses/7/learning-state");
     expect(COURSE_ENDPOINTS.weaknessReviewAction(7, "701", "confirm")).toBe(
       "/courses/7/weakness-review-items/701/confirm"

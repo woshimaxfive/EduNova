@@ -10,6 +10,7 @@ import { AGENT_ENDPOINTS, type AgentTrace } from "../api/agents";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { PATH_ENDPOINTS } from "../api/paths";
+import { PRACTICE_ENDPOINTS } from "../api/practice";
 import { REPORT_ENDPOINTS } from "../api/reports";
 import { RESOURCE_ENDPOINTS } from "../api/resources";
 import { TUTOR_ENDPOINTS, type TutorCitation, type TutorSessionDetail, type TutorSessionSummary } from "../api/tutor";
@@ -27,6 +28,7 @@ type ApiCall = {
 };
 
 type CoursePageOptions = {
+  initialEntry?: string;
   sessions?: TutorSessionSummary[];
   sendDetail?: TutorSessionDetail;
   historyDetail?: TutorSessionDetail;
@@ -525,6 +527,16 @@ function renderWithProviders(ui: ReactNode) {
   render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
 }
 
+async function revealSecondaryActions(user: ReturnType<typeof userEvent.setup>, container: HTMLElement = document.body) {
+  await waitFor(() => {
+    expect(within(container).queryAllByRole("button", { name: "更多" }).length).toBeGreaterThan(0);
+  });
+  const buttons = within(container).getAllByRole("button", { name: "更多" });
+  for (const button of buttons) {
+    if (button.getAttribute("aria-expanded") !== "true") await user.click(button);
+  }
+}
+
 function renderCoursePage(options: CoursePageOptions = {}) {
   const calls: ApiCall[] = [];
   const fetchCalls: FetchCall[] = [];
@@ -684,6 +696,16 @@ function renderCoursePage(options: CoursePageOptions = {}) {
       };
     }
 
+    if (url === PRACTICE_ENDPOINTS.latest && method === "get") {
+      return {
+        data: { data: null, trace_id: "trace_latest_practice" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
     if (url.includes("/weakness-review-items/") && method === "post") {
       if (options.failWeaknessAction) {
         throw new Error("弱点状态更新失败。");
@@ -780,6 +802,39 @@ function renderCoursePage(options: CoursePageOptions = {}) {
             }
           ],
           trace_id: "trace_course_points"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
+    if (url === COURSE_ENDPOINTS.knowledgePointContent(808, 401)) {
+      return {
+        data: {
+          data: {
+            knowledge_point: {
+              id: "401",
+              title: "启发式搜索",
+              summary: "理解启发函数和 A*。",
+              chapter: "搜索问题",
+              order_index: 1,
+              difficulty: "基础",
+              prerequisite_ids: []
+            },
+            sections: [{
+              chunk_id: "501",
+              title: "启发式搜索",
+              content: "启发式搜索使用启发函数估计剩余代价。",
+              source_title: "人工智能导论讲义.md",
+              page_number: null
+            }],
+            related_resources: [],
+            previous_knowledge_point_id: null,
+            next_knowledge_point_id: null
+          },
+          trace_id: "trace_course_content"
         },
         status: 200,
         statusText: "OK",
@@ -965,7 +1020,7 @@ function renderCoursePage(options: CoursePageOptions = {}) {
   });
 
   renderWithProviders(
-    <MemoryRouter initialEntries={["/app/courses/808"]}>
+    <MemoryRouter initialEntries={[options.initialEntry ?? "/app/courses/808"]}>
       <Routes>
         <Route path={PATHS.courseDetail} element={<CourseSpacePage />} />
       </Routes>
@@ -1117,9 +1172,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     await user.click(screen.getByRole("button", { name: /学习进度/ }));
     expect(await screen.findByRole("dialog", { name: "学习进度" })).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /围绕最新问题|从课程资料和知识点开始建立学习闭环|根据课程证据推进下一步个性化学习/,
-      ),
+      screen.getByText(/先确认问答或练习识别出的薄弱点/),
     ).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "A3 学习步骤" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "课程对话空间" })).toBeInTheDocument();
@@ -1127,6 +1180,7 @@ describe("CourseSpacePage course tutor sessions", () => {
   });
 
   it("shows course closed-loop actions after a real course answer", async () => {
+    const user = userEvent.setup();
     renderCoursePage({
       sessions: [makeSession("777", "已有课程历史")],
       learningState: learningStateWithPath,
@@ -1135,16 +1189,15 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
     const loopActions = await screen.findByRole("region", { name: "课程闭环行动" });
+    await revealSecondaryActions(user, loopActions);
 
     expect(within(loopActions).getByRole("button", { name: /来源/ })).toBeInTheDocument();
     expect(within(loopActions).getByRole("button", { name: /生成资源/ })).toBeInTheDocument();
     expect(within(loopActions).getByRole("button", { name: /学习路径/ })).toBeInTheDocument();
-    expect(within(loopActions).getByRole("link", { name: /进入练习/ })).toHaveAttribute(
-      "href",
+    expect(within(loopActions).getByRole("link", { name: /进入练习/ }).getAttribute("href")).toContain(
       `${PATHS.practice}?course_id=808`
     );
-    expect(within(loopActions).getByRole("link", { name: /学习报告/ })).toHaveAttribute(
-      "href",
+    expect(within(loopActions).getByRole("link", { name: /学习报告/ }).getAttribute("href")).toContain(
       `${PATHS.reports}?course_id=808`
     );
     expect(within(loopActions).getByRole("button", { name: /课堂协作轨迹/ })).toBeInTheDocument();
@@ -1224,15 +1277,19 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await revealSecondaryActions(user);
     await user.click(await screen.findByRole("button", { name: /生成资源/ }));
 
     const resourcePanel = await screen.findByRole("region", { name: "课程资源生成" });
     expect(within(resourcePanel).getByLabelText("讲解文档")).toBeChecked();
     expect(within(resourcePanel).getByLabelText("思维导图")).toBeChecked();
     expect(within(resourcePanel).getByLabelText("练习题")).toBeChecked();
-    expect(within(resourcePanel).getByLabelText("代码实操")).toBeChecked();
-    expect(within(resourcePanel).getByLabelText("PPT")).toBeChecked();
-    expect(within(resourcePanel).getByLabelText("动画图解")).toBeChecked();
+    expect(within(resourcePanel).getByLabelText("代码实操")).not.toBeChecked();
+    expect(within(resourcePanel).getByLabelText("PPT")).not.toBeChecked();
+    expect(within(resourcePanel).getByLabelText("动画图解")).not.toBeChecked();
+    await user.click(within(resourcePanel).getByLabelText("代码实操"));
+    await user.click(within(resourcePanel).getByLabelText("PPT"));
+    await user.click(within(resourcePanel).getByLabelText("动画图解"));
 
     await user.click(within(resourcePanel).getByRole("button", { name: "生成 6 类个性化资源" }));
 
@@ -1259,6 +1316,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     const thread = await screen.findByRole("region", { name: "课程即时对话" });
+    await revealSecondaryActions(user, thread);
     const sourceButtons = within(thread).getAllByRole("button", { name: "来源" });
 
     await user.click(sourceButtons[0]);
@@ -1281,9 +1339,10 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     const thread = await screen.findByRole("region", { name: "课程即时对话" });
+    await revealSecondaryActions(user, thread);
     await user.click(within(thread).getAllByRole("button", { name: "生成资源" })[0]);
     const resourcePanel = await screen.findByRole("region", { name: "课程资源生成" });
-    await user.click(within(resourcePanel).getByRole("button", { name: "生成 6 类个性化资源" }));
+    await user.click(within(resourcePanel).getByRole("button", { name: "生成 3 类个性化资源" }));
 
     await waitFor(() => {
       expect(calls).toContainEqual(
@@ -1291,10 +1350,33 @@ describe("CourseSpacePage course tutor sessions", () => {
           method: "post",
           url: RESOURCE_ENDPOINTS.generationJobs,
           payload: expect.objectContaining({
-            learning_goal: "第一问：启发函数是什么？"
+            learning_goal: "第一问：启发函数是什么？",
+            knowledge_point_id: 401,
+            difficulty: "easy"
           })
         })
       );
+    });
+  });
+
+  it("omits knowledge point context when an answer has no valid citation", async () => {
+    const user = userEvent.setup();
+    const session = makeSession("777", "无依据回答");
+    const { calls } = renderCoursePage({
+      sessions: [session],
+      historyDetail: makeDetail(session, "量子通信怎么复习？", "课程资料暂时没有足够依据。", [])
+    });
+
+    const thread = await screen.findByRole("region", { name: "课程即时对话" });
+    await revealSecondaryActions(user, thread);
+    await user.click(within(thread).getByRole("button", { name: "生成资源" }));
+    const resourcePanel = await screen.findByRole("region", { name: "课程资源生成" });
+    await user.click(within(resourcePanel).getByRole("button", { name: "生成 3 类个性化资源" }));
+
+    await waitFor(() => {
+      const request = calls.find((call) => call.method === "post" && call.url === RESOURCE_ENDPOINTS.generationJobs);
+      expect(request?.payload).toEqual(expect.objectContaining({ learning_goal: "量子通信怎么复习？", difficulty: "easy" }));
+      expect(request?.payload).not.toHaveProperty("knowledge_point_id");
     });
   });
 
@@ -1407,8 +1489,8 @@ describe("CourseSpacePage course tutor sessions", () => {
       expect(screen.getByLabelText("课程状态")).toHaveTextContent("掌握度 77%");
     });
     const drawer = screen.getByRole("dialog", { name: "学习进度" });
-    expect(within(drawer).getByText("根据课程证据推进下一步个性化学习")).toBeInTheDocument();
-    expect(within(drawer).getByText("先确认薄弱点，再生成针对性资源并进入路径任务")).toBeInTheDocument();
+    expect(within(drawer).getByText("通过自适应练习验证薄弱点是否已经掌握。")).toBeInTheDocument();
+    expect(within(drawer).getByText("针对练习：启发式搜索")).toBeInTheDocument();
     expect(within(drawer).getByText(/1 份资料 · 2 个知识点 · 0 条引用 · 1 个资源/)).toBeInTheDocument();
     expect(within(drawer).getByText("启发式搜索")).toBeInTheDocument();
 
@@ -1417,7 +1499,8 @@ describe("CourseSpacePage course tutor sessions", () => {
       COURSE_ENDPOINTS.masteryMap(808),
       RESOURCE_ENDPOINTS.list,
       PATH_ENDPOINTS.current,
-      REPORT_ENDPOINTS.latest
+      REPORT_ENDPOINTS.latest,
+      PRACTICE_ENDPOINTS.latest
     ]) {
       expect(calls.filter((call) => call.url === url)).toHaveLength(2);
     }
@@ -1488,6 +1571,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await revealSecondaryActions(user);
     await user.click(await screen.findByRole("button", { name: /课堂协作轨迹/ }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
@@ -1521,6 +1605,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await revealSecondaryActions(user);
     await user.click(await screen.findByRole("button", { name: /课堂协作轨迹/ }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
@@ -1547,6 +1632,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await revealSecondaryActions(user);
     await user.click(await screen.findByRole("button", { name: /生成资源/ }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
@@ -1565,13 +1651,13 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await revealSecondaryActions(user);
     await user.click(await screen.findByRole("button", { name: /学习路径/ }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
     expect(within(detailPanel).getByText("当前学习路径进行中。")).toBeInTheDocument();
     expect(within(detailPanel).getByText("复习启发式搜索")).toBeInTheDocument();
-    expect(within(detailPanel).getByRole("link", { name: "查看完整路径" })).toHaveAttribute(
-      "href",
+    expect(within(detailPanel).getByRole("link", { name: "查看完整路径" }).getAttribute("href")).toContain(
       `${PATHS.path}?course_id=808`
     );
     expect(within(detailPanel).queryByText("先围绕本次命中的来源复习核心概念")).not.toBeInTheDocument();
@@ -1594,6 +1680,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await revealSecondaryActions(user);
     await user.click(await screen.findByRole("button", { name: /课堂协作轨迹/ }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
@@ -1610,6 +1697,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await revealSecondaryActions(user);
     await user.click(await screen.findByRole("button", { name: /课堂协作轨迹/ }));
 
     const detailPanel = await screen.findByRole("region", { name: "回答展开详情" });
@@ -1667,6 +1755,7 @@ describe("CourseSpacePage course tutor sessions", () => {
       );
     });
     const thread = await screen.findByRole("region", { name: "课程即时对话" });
+    await revealSecondaryActions(user, thread);
     await user.click(within(thread).getByRole("button", { name: "来源" }));
     expect(await screen.findAllByText("人工智能导论讲义.md")).not.toHaveLength(0);
     expect(screen.getByText(/模型回答：启发式搜索复习/)).toBeInTheDocument();
@@ -1703,7 +1792,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     const studyMode = screen.getByRole("region", { name: "课程内容模式" });
     expect(studyMode).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "课程内容" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(studyMode).getByRole("heading", { name: "启发式搜索" })).toBeInTheDocument();
+    expect(within(studyMode).getByRole("heading", { name: "启发式搜索", level: 2 })).toBeInTheDocument();
     expect(within(studyMode).getByText("理解启发函数和 A*。")).toBeInTheDocument();
     expect(within(studyMode).getByLabelText("知识点信息")).toHaveTextContent("搜索问题");
     expect(screen.queryByRole("dialog", { name: "AI 辅导" })).not.toBeInTheDocument();
@@ -1773,6 +1862,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     const returnedThread = await screen.findByRole("region", { name: "课程即时对话" });
     expect(within(returnedThread).getByText("历史里的问题")).toBeInTheDocument();
     expect(within(returnedThread).getByText("历史里的回答保留真实引用。")).toBeInTheDocument();
+    await revealSecondaryActions(user, returnedThread);
     await user.click(within(returnedThread).getByRole("button", { name: "来源" }));
     expect(screen.getAllByText("人工智能导论讲义.md")).not.toHaveLength(0);
     expect(screen.getByText(/启发函数估计路径代价/)).toBeInTheDocument();
@@ -1787,15 +1877,17 @@ describe("CourseSpacePage course tutor sessions", () => {
     await user.click(await within(courseHistory).findByRole("button", { name: /已有课程历史/ }));
 
     const thread = await screen.findByRole("region", { name: "课程即时对话" });
+    await revealSecondaryActions(user, thread);
     await user.click(within(thread).getByRole("button", { name: "来源" }));
     await user.click(await screen.findByRole("button", { name: /人工智能导论讲义\.md/ }));
 
     const studyMode = screen.getByRole("region", { name: "课程内容模式" });
-    expect(within(studyMode).getByText("资料来源")).toBeInTheDocument();
-    expect(within(studyMode).getByRole("heading", { name: "启发式搜索" })).toBeInTheDocument();
+    expect(within(studyMode).getByText("从回答来源进入")).toBeInTheDocument();
+    expect(within(studyMode).getByRole("heading", { name: "启发式搜索", level: 2 })).toBeInTheDocument();
     expect(within(studyMode).getByText(/启发函数估计路径代价/)).toBeInTheDocument();
-    expect(within(studyMode).getByLabelText("引用信息")).toHaveTextContent("人工智能导论讲义.md");
-    expect(within(studyMode).getByLabelText("引用信息")).toHaveTextContent("本地 fallback");
+    expect(within(studyMode).getByLabelText("本次回答引用")).toHaveTextContent("人工智能导论讲义.md");
+    expect(within(studyMode).getByLabelText("本次回答引用")).toHaveTextContent("本地 fallback");
+    expect(within(studyMode).getByText("启发式搜索使用启发函数估计剩余代价。")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "围绕这里提问" }));
     expect(screen.getByRole("dialog", { name: "AI 辅导" })).toHaveTextContent("历史里的回答保留真实引用。");
     await user.click(screen.getByRole("button", { name: "关闭 AI 辅导" }));
@@ -1805,6 +1897,18 @@ describe("CourseSpacePage course tutor sessions", () => {
     const returnedThread = await screen.findByRole("region", { name: "课程即时对话" });
     expect(within(returnedThread).getByText("历史里的问题")).toBeInTheDocument();
     expect(within(returnedThread).getByText("历史里的回答保留真实引用。")).toBeInTheDocument();
+  });
+
+  it("restores the source answer before knowledge content when returning from practice", async () => {
+    renderCoursePage({
+      initialEntry: "/app/courses/808?course_session_id=777&course_message_id=m2&knowledge_point_id=401",
+      sessions: [makeSession("777", "已有课程历史")]
+    });
+
+    const returnedThread = await screen.findByRole("region", { name: "课程即时对话" });
+    expect(within(returnedThread).getByText("历史里的回答保留真实引用。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "问答" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("region", { name: "课程内容模式" })).not.toBeInTheDocument();
   });
 
   it("shows an insufficient-evidence message from persisted assistant citations", async () => {
@@ -1821,6 +1925,7 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     const thread = await screen.findByRole("region", { name: "课程即时对话" });
     expect(within(thread).getByText("我先检查了课程资料，但还没有足够依据支撑这个问题。")).toBeInTheDocument();
+    await revealSecondaryActions(user, thread);
     await user.click(within(thread).getByRole("button", { name: "来源" }));
     expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("当前课程资料里没有找到足够依据。");
   });

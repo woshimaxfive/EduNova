@@ -15,7 +15,11 @@ const baseInput: CourseLoopInput = {
   hasActivePath: true,
   latestTraceWorkflow: "course_tutor",
   latestTraceId: "trace_course_001",
-  hasLatestReport: true
+  hasLatestReport: true,
+  hasProfileEvidence: true,
+  hasCompletedPractice: true,
+  recommendedGoal: "完成当前路径任务",
+  recommendedAction: "继续任务：理解 RAG 检索"
 };
 
 describe("course-space A3 loop view model", () => {
@@ -30,9 +34,9 @@ describe("course-space A3 loop view model", () => {
     const summary = buildCourseLoopSummary(baseInput);
 
     expect(summary.title).toBe("人工智能导论");
-    expect(summary.currentGoal).toBe("围绕最新问题处理 3 个待处理弱点");
+    expect(summary.currentGoal).toBe("完成当前路径任务");
     expect(summary.evidenceLine).toBe("3 份资料 · 8 个知识点 · 4 条引用 · 5 个资源");
-    expect(summary.nextAction).toBe("先确认薄弱点，再生成针对性资源并进入路径任务");
+    expect(summary.nextAction).toBe("继续任务：理解 RAG 检索");
     expect(summary.traceLabel).toBe("course_tutor · trace_course_001");
   });
 
@@ -46,11 +50,13 @@ describe("course-space A3 loop view model", () => {
       resourceCount: 0,
       hasActivePath: false,
       latestTraceWorkflow: null,
-      latestTraceId: null
+      latestTraceId: null,
+      recommendedGoal: "从课程资料和知识点开始建立学习闭环",
+      recommendedAction: "从课程内容开始学习"
     });
 
     expect(summary.currentGoal).toBe("从课程资料和知识点开始建立学习闭环");
-    expect(summary.nextAction).toBe("先提问或选择知识点，生成第一批个性化学习依据");
+    expect(summary.nextAction).toBe("从课程内容开始学习");
     expect(summary.traceLabel).toBeNull();
   });
 
@@ -61,10 +67,11 @@ describe("course-space A3 loop view model", () => {
       pendingWeaknessCount: 0,
       confirmedWeaknessCount: 0,
       hasActivePath: false,
-      hasLatestReport: false
+      hasLatestReport: false,
+      recommendedAction: "进入自适应练习"
     });
 
-    expect(summary.nextAction).toBe("基于已生成资源进入路径或练习，形成评估回流");
+    expect(summary.nextAction).toBe("进入自适应练习");
   });
 
   it("orders study steps according to the A3 learning loop", () => {
@@ -81,6 +88,6 @@ describe("course-space A3 loop view model", () => {
       "report"
     ]);
     expect(steps.find((step) => step.key === "resource")?.status).toBe("ready");
-    expect(steps.find((step) => step.key === "assessment")?.status).toBe("next");
+    expect(steps.find((step) => step.key === "assessment")?.status).toBe("done");
   });
 });

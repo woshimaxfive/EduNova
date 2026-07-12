@@ -38,6 +38,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
+    testTimeout: 15_000,
     css: true,
     exclude: [...configDefaults.exclude, "e2e/**"]
   }

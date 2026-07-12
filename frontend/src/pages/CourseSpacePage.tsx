@@ -7,7 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { PATHS } from "../app/routePaths";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
@@ -16,14 +16,17 @@ import {
   getCourse,
   getCourseLearningState,
   getCourseOverview,
+  getKnowledgePointContent,
   getKnowledgePoints,
   getMasteryMap,
   updateCourseWeaknessReviewItem,
+  type ApiCourseKnowledgePoint,
   type CoursePathSummary,
   type CourseWeaknessReviewAction,
   type CourseWeaknessReviewItem
 } from "../api/courses";
 import { getCurrentPath } from "../api/paths";
+import { getLatestPracticeSession } from "../api/practice";
 import { type RagSearchResultItem } from "../api/rag";
 import { getLatestReport } from "../api/reports";
 import { listResources, type GeneratedResource, type ResourceType } from "../api/resources";
@@ -50,15 +53,15 @@ import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
 import { buildCourseLoopSummary, buildStudySteps, calculateMasteryPercent } from "../features/course-space/a3Loop";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
+import {
+  buildCourseLearningRecommendation,
+  findBestCitationKnowledgePoint,
+  resourceDifficultyForPoint,
+  type CourseLearningRecommendation
+} from "../features/course-space/courseRecommendation";
 import { type AgentTraceEvent } from "../types/api";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import "../styles/course-space.css";
-
-const courseStarterQuestions = [
-  "这门课最适合先复习哪些知识点？",
-  "把当前资料里的重点整理成期末复习顺序",
-  "根据引用帮我找一个薄弱点练习方向"
-];
 
 function retrievalSourceLabel(source?: string | null) {
   if (source === "hybrid") {
@@ -181,8 +184,40 @@ function findQuestionForAssistant(messages: CourseMessage[], assistantIndex: num
   return null;
 }
 
+function buildCourseStarterQuestions(
+  recommendation: CourseLearningRecommendation,
+  points: ApiCourseKnowledgePoint[]
+) {
+  const recommendedPoint = points.find((point) => point.id === recommendation.knowledgePointId) ?? points[0];
+  const pointTitle = recommendedPoint?.title ?? "这门课的核心知识";
+  return [
+    `请结合课程资料解释${pointTitle}，并给一个具体例子`,
+    `学习${pointTitle}前，我需要先掌握什么？`,
+    `围绕${pointTitle}出一道检查理解的问题`
+  ];
+}
+
+function buildCourseClosureHref(
+  pathname: string,
+  courseId: number,
+  sessionId: string | null,
+  messageId: string,
+  knowledgePointId?: string | null
+) {
+  const params = new URLSearchParams({
+    course_id: String(courseId),
+    return_to: "course",
+    course_message_id: messageId
+  });
+  if (sessionId) params.set("course_session_id", sessionId);
+  if (knowledgePointId) params.set("knowledge_point_id", knowledgePointId);
+  return `${pathname}?${params.toString()}`;
+}
+
 export function CourseSpacePage() {
   const { courseId } = useParams();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const numericCourseId = courseId ? Number.parseInt(courseId, 10) : Number.NaN;
   const hasRealCourseId = Number.isFinite(numericCourseId);
   const queryClient = useQueryClient();
@@ -225,13 +260,19 @@ export function CourseSpacePage() {
   });
   const [activeCourseSessionId, setActiveCourseSessionId] = useState<string | null>(null);
   const [activeTurnDetail, setActiveTurnDetail] = useState<TurnDetailState>(null);
-  const [courseMode, setCourseMode] = useState<CourseWorkspaceMode>("chat");
+  const initialKnowledgePointId = searchParams.get("knowledge_point_id");
+  const initialCourseMessageId = searchParams.get("course_message_id");
+  const [courseMode, setCourseMode] = useState<CourseWorkspaceMode>(
+    initialKnowledgePointId && !initialCourseMessageId ? "study" : "chat"
+  );
   const [courseContentView, setCourseContentView] = useState<CourseContentMode>("overview");
   const [isProgressDrawerOpen, setIsProgressDrawerOpen] = useState(false);
   const [isProgressSyncing, setIsProgressSyncing] = useState(false);
   const [progressSyncWarning, setProgressSyncWarning] = useState<string | null>(null);
   const [isStudyAssistantOpen, setIsStudyAssistantOpen] = useState(false);
-  const [studyTarget, setStudyTarget] = useState<StudyTarget | null>(null);
+  const [studyTarget, setStudyTarget] = useState<StudyTarget | null>(
+    initialKnowledgePointId ? { type: "knowledge", id: initialKnowledgePointId } : null
+  );
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
   const [coursePrompt, setCoursePrompt] = useState("");
   const [courseMessages, setCourseMessages] = useState<CourseMessage[]>([]);
@@ -241,17 +282,13 @@ export function CourseSpacePage() {
   const [weaknessFeedback, setWeaknessFeedback] = useState<string | null>(null);
   const [courseResourceFeedback, setCourseResourceFeedback] = useState<string | null>(null);
   const [latestGeneratedResources, setLatestGeneratedResources] = useState<GeneratedResource[]>([]);
-  const [resourceContextQuestion, setResourceContextQuestion] = useState<string | null>(null);
+  const [resourceContext, setResourceContext] = useState<{ question: string | null; knowledgePointId: string | null }>({
+    question: null,
+    knowledgePointId: null
+  });
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [resourceJobId, setResourceJobId] = useState<string | null>(null);
-  const [selectedCourseResourceTypes, setSelectedCourseResourceTypes] = useState<ResourceType[]>([
-    "doc",
-    "mindmap",
-    "quiz",
-    "code",
-    "slide",
-    "animation"
-  ]);
+  const [selectedCourseResourceTypes, setSelectedCourseResourceTypes] = useState<ResourceType[]>(["doc", "mindmap", "quiz"]);
   const [updatingWeaknessItemId, setUpdatingWeaknessItemId] = useState<string | null>(null);
   const optimisticMessageSequence = useRef(0);
   const handledResourceJobId = useRef<string | null>(null);
@@ -285,7 +322,14 @@ export function CourseSpacePage() {
   const weaknessItems = (learningState?.weakness_review_queue ?? []).filter((item) => item.status !== "dismissed");
   const courseSessions = Array.isArray(courseSessionsQuery.data?.data) ? courseSessionsQuery.data.data : [];
   const latestCourseSessionId = courseSessions[0]?.id ?? null;
-  const selectedCourseSessionId = hasRealCourseId ? (activeCourseSessionId ?? latestCourseSessionId) : null;
+  const requestedCourseSessionId = searchParams.get("course_session_id");
+  const requestedCourseMessageId = initialCourseMessageId;
+  const restorableCourseSessionId = courseSessions.some((session) => session.id === requestedCourseSessionId)
+    ? requestedCourseSessionId
+    : null;
+  const selectedCourseSessionId = hasRealCourseId
+    ? (activeCourseSessionId ?? restorableCourseSessionId ?? latestCourseSessionId)
+    : null;
   const activeCourseSessionQuery = useQuery({
     queryKey: ["tutor", "session", selectedCourseSessionId],
     queryFn: () => getTutorSession(selectedCourseSessionId ?? ""),
@@ -356,6 +400,12 @@ export function CourseSpacePage() {
     enabled: hasRealCourseId,
     staleTime: 10_000
   });
+  const latestPracticeQuery = useQuery({
+    queryKey: courseLoopQueryKeys.latestPractice(numericCourseId),
+    queryFn: () => getLatestPracticeSession(numericCourseId),
+    enabled: hasRealCourseId,
+    staleTime: 10_000
+  });
   const agentTraceEvents = useMemo(
     () => agentTraceQuery.data?.data.steps.map(mapAgentTraceStepToEvent) ?? [],
     [agentTraceQuery.data?.data.steps]
@@ -364,19 +414,43 @@ export function CourseSpacePage() {
     studyTarget?.type === "knowledge"
       ? apiKnowledgePoints.find((point) => point.id === studyTarget.id) ?? null
       : studyTarget?.type === "citation"
-        ? null
+        ? apiKnowledgePoints.find((point) => point.id === String(studyTarget.citation.knowledge_point_id)) ?? null
         : apiKnowledgePoints[0] ?? null;
   const selectedCitation = studyTarget?.type === "citation" ? studyTarget.citation : null;
+  const selectedKnowledgePointId = selectedKnowledgePoint ? Number.parseInt(selectedKnowledgePoint.id, 10) : Number.NaN;
+  const knowledgePointContentQuery = useQuery({
+    queryKey: ["courses", "knowledge-point-content", numericCourseId, selectedKnowledgePointId],
+    queryFn: () => getKnowledgePointContent(numericCourseId, selectedKnowledgePointId),
+    enabled: hasRealCourseId && Number.isFinite(selectedKnowledgePointId),
+    staleTime: 30_000
+  });
   const materialCount = fallbackCourse?.material_count ?? overviewMaterials.length;
   const knowledgePointCount = fallbackCourse?.knowledge_point_count ?? apiKnowledgePoints.length;
   const generatedResources = courseResourcesQuery.data?.data ?? [];
   const currentPath = currentPathQuery.data?.data ?? null;
   const latestReport = latestReportQuery.data?.data ?? null;
+  const latestPractice = latestPracticeQuery.data?.data ?? null;
   const latestUserQuestion = [...displayedCourseMessages].reverse().find((message) => message.role === "user")?.content ?? null;
   const latestMessageSignature = displayedCourseMessages.length > 0
     ? `${displayedCourseMessages.at(-1)?.id ?? ""}:${displayedCourseMessages.at(-1)?.content.length ?? 0}`
     : "empty";
   const hasActivePath = Boolean(currentPath?.path) || learningState?.path_summary?.status === "active";
+  const masteryPoints = masteryMapQuery.data?.data.points ?? [];
+  const recommendation = buildCourseLearningRecommendation({
+    weaknesses: weaknessItems,
+    pathTasks: currentPath?.tasks ?? [],
+    masteryPoints,
+    latestCitations: latestRagResults,
+    latestPractice,
+    latestReport
+  });
+  const courseStarterQuestions = buildCourseStarterQuestions(recommendation, apiKnowledgePoints);
+  const profileOverlay = learningState?.profile_overlay;
+  const hasProfileEvidence = Boolean(
+    profileOverlay?.learning_goal.trim()
+      || profileOverlay?.knowledge_foundation.trim()
+      || profileOverlay?.weak_points.length
+  );
   const courseLoopInput = {
     courseTitle: courseSummary.title,
     materialCount,
@@ -390,7 +464,11 @@ export function CourseSpacePage() {
     hasActivePath,
     latestTraceWorkflow: latestAgentTraceId ? "CourseTutorGraph" : null,
     latestTraceId: latestAgentTraceId,
-    hasLatestReport: latestReport?.status === "ready"
+    hasLatestReport: latestReport?.status === "ready",
+    hasProfileEvidence,
+    hasCompletedPractice: latestPractice?.status === "completed",
+    recommendedGoal: recommendation.reason,
+    recommendedAction: recommendation.label
   };
   const courseLoopSummary = buildCourseLoopSummary(courseLoopInput);
   const courseStudySteps = buildStudySteps(courseLoopInput);
@@ -409,11 +487,16 @@ export function CourseSpacePage() {
   useEffect(() => {
     if (courseMode !== "chat" || !hasDisplayedCourseMessages) return;
     const frame = window.requestAnimationFrame(() => {
-      const target = courseChatEndRef.current;
-      if (target && typeof target.scrollIntoView === "function") target.scrollIntoView({ block: "end" });
+      const requestedTarget = requestedCourseMessageId
+        ? document.getElementById(`course-message-${requestedCourseMessageId}`)
+        : null;
+      const target = requestedTarget ?? courseChatEndRef.current;
+      if (target && typeof target.scrollIntoView === "function") {
+        target.scrollIntoView({ block: requestedTarget ? "center" : "end" });
+      }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [courseMode, hasDisplayedCourseMessages, latestMessageSignature, selectedCourseSessionId]);
+  }, [courseMode, hasDisplayedCourseMessages, latestMessageSignature, requestedCourseMessageId, selectedCourseSessionId]);
 
   useEffect(() => {
     if (!resourceJob) return;
@@ -439,16 +522,18 @@ export function CourseSpacePage() {
 
   const courseResourceMutation = useMutation({
     mutationFn: () => {
-      const parsedKnowledgePointId =
-        selectedKnowledgePoint?.id !== undefined ? Number.parseInt(selectedKnowledgePoint.id, 10) : Number.NaN;
+      const parsedKnowledgePointId = resourceContext.knowledgePointId
+        ? Number.parseInt(resourceContext.knowledgePointId, 10)
+        : Number.NaN;
+      const masteryPoint = masteryPoints.find((point) => point.id === resourceContext.knowledgePointId);
 
       return createResourceGenerationJob(
         {
           course_id: numericCourseId,
           knowledge_point_id: Number.isFinite(parsedKnowledgePointId) ? parsedKnowledgePointId : undefined,
           resource_types: selectedCourseResourceTypes,
-          learning_goal: resourceContextQuestion ?? latestUserQuestion ?? courseLoopSummary.currentGoal,
-          difficulty: "medium"
+          learning_goal: resourceContext.question ?? latestUserQuestion ?? courseLoopSummary.currentGoal,
+          difficulty: resourceDifficultyForPoint(masteryPoint)
         },
         createIdempotencyKey("course-resource")
       );
@@ -475,6 +560,10 @@ export function CourseSpacePage() {
     setStudyTarget(null);
     setActiveTurnDetail(null);
     setIsStudyAssistantOpen(false);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("course_session_id", sessionId);
+    nextParams.delete("course_message_id");
+    setSearchParams(nextParams, { replace: true });
   }
 
   function updateCourseSessionList(updater: (sessions: TutorSessionSummary[]) => TutorSessionSummary[]) {
@@ -525,6 +614,10 @@ export function CourseSpacePage() {
         setStudyTarget(null);
         setActiveTurnDetail(null);
         setIsStudyAssistantOpen(false);
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("course_session_id");
+        nextParams.delete("course_message_id");
+        setSearchParams(nextParams, { replace: true });
       }
 
       setCourseFeedback(null);
@@ -538,12 +631,20 @@ export function CourseSpacePage() {
     setCourseMode("study");
     setStudyTarget({ type: "knowledge", id: pointId });
     setCourseContentView("overview");
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("knowledge_point_id", pointId);
+    setSearchParams(nextParams, { replace: true });
   }
 
   function openCitationStudy(citation: RagSearchResultItem) {
     setCourseMode("study");
     setStudyTarget({ type: "citation", citation });
     setCourseContentView("overview");
+    if (citation.knowledge_point_id) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("knowledge_point_id", String(citation.knowledge_point_id));
+      setSearchParams(nextParams, { replace: true });
+    }
   }
 
   function changeCourseMode(mode: CourseWorkspaceMode) {
@@ -562,7 +663,8 @@ export function CourseSpacePage() {
         masteryMapQuery.refetch(),
         courseResourcesQuery.refetch(),
         currentPathQuery.refetch(),
-        latestReportQuery.refetch()
+        latestReportQuery.refetch(),
+        latestPracticeQuery.refetch()
       ]);
       if (results.some((result) => result.isError)) {
         setProgressSyncWarning("部分学习状态暂未更新，已保留上次成功结果。");
@@ -579,11 +681,52 @@ export function CourseSpacePage() {
     void syncCourseProgress();
   }
 
-  function toggleTurnPanel(messageId: string, panel: CourseAnswerPanelKind, question: string | null) {
+  function toggleTurnPanel(
+    messageId: string,
+    panel: CourseAnswerPanelKind,
+    question: string | null,
+    citations: RagSearchResultItem[]
+  ) {
     setActiveTurnDetail((current) =>
       current?.messageId === messageId && current.panel === panel ? null : { messageId, panel }
     );
-    if (panel === "resources") setResourceContextQuestion(question);
+    if (panel === "resources") {
+      setResourceContext({ question, knowledgePointId: findBestCitationKnowledgePoint(citations) });
+    }
+  }
+
+  function runRecommendedAction(
+    messageId: string,
+    question: string | null,
+    citations: RagSearchResultItem[],
+    turnRecommendation: CourseLearningRecommendation
+  ) {
+    const knowledgePointId = turnRecommendation.kind === "generate_resource"
+      ? findBestCitationKnowledgePoint(citations)
+      : turnRecommendation.knowledgePointId;
+
+    if (turnRecommendation.kind === "confirm_weakness") {
+      openCourseProgress();
+      return;
+    }
+    if (turnRecommendation.kind === "study_point" && knowledgePointId) {
+      openKnowledgeStudy(knowledgePointId);
+      return;
+    }
+    if (turnRecommendation.kind === "generate_resource") {
+      setResourceContext({ question, knowledgePointId });
+      setActiveTurnDetail({ messageId, panel: "resources" });
+      return;
+    }
+    if (turnRecommendation.kind === "continue_path") {
+      navigate(buildCourseClosureHref(PATHS.path, numericCourseId, selectedCourseSessionId, messageId, knowledgePointId));
+      return;
+    }
+    if (turnRecommendation.kind === "practice_weakness") {
+      navigate(buildCourseClosureHref(PATHS.practice, numericCourseId, selectedCourseSessionId, messageId, knowledgePointId));
+      return;
+    }
+    navigate(buildCourseClosureHref(PATHS.reports, numericCourseId, selectedCourseSessionId, messageId));
   }
 
   function toggleReadMessage(message: CourseMessage) {
@@ -662,7 +805,7 @@ export function CourseSpacePage() {
     const previousMessages = displayedCourseMessages;
 
     try {
-      let sessionId = activeCourseSessionId ?? latestCourseSessionId;
+      let sessionId = selectedCourseSessionId;
 
       if (!sessionId) {
         const createdSession = await createTutorSession({
@@ -701,6 +844,11 @@ export function CourseSpacePage() {
       setCourseMessages(messages);
       setStreamingSessionId(null);
       setCoursePrompt("");
+      const persistedAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("course_session_id", detail.session.id);
+      if (persistedAssistant) nextParams.set("course_message_id", persistedAssistant.id);
+      setSearchParams(nextParams, { replace: true });
       queryClient.setQueryData(["tutor", "session", detail.session.id], { data: detail, trace_id: null });
       void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
       void invalidateCourseLearningLoop(queryClient, numericCourseId);
@@ -766,6 +914,30 @@ export function CourseSpacePage() {
                         const turnPanel = activeTurnDetail?.messageId === message.id ? activeTurnDetail.panel : null;
                         const question = findQuestionForAssistant(displayedCourseMessages, index);
                         const citations = message.citations ?? [];
+                        const citationKnowledgePointId = findBestCitationKnowledgePoint(citations);
+                        const turnRecommendation = recommendation.kind === "generate_resource"
+                          ? { ...recommendation, knowledgePointId: citationKnowledgePointId }
+                          : recommendation;
+                        const practiceHref = buildCourseClosureHref(
+                          PATHS.practice,
+                          numericCourseId,
+                          selectedCourseSessionId,
+                          message.id,
+                          turnRecommendation.knowledgePointId
+                        );
+                        const reportHref = buildCourseClosureHref(
+                          PATHS.reports,
+                          numericCourseId,
+                          selectedCourseSessionId,
+                          message.id
+                        );
+                        const pathHref = buildCourseClosureHref(
+                          PATHS.path,
+                          numericCourseId,
+                          selectedCourseSessionId,
+                          message.id,
+                          turnRecommendation.knowledgePointId
+                        );
                         const effectiveTraceId = message.traceId
                           ?? (message.id === latestAssistantWithRetrieval?.id ? latestAgentTraceId : null);
                         const detail = turnPanel ? (
@@ -794,6 +966,7 @@ export function CourseSpacePage() {
                               hasRealCourse={Boolean(apiCourse)}
                               hasSearched
                               pathSummary={learningState?.path_summary ?? null}
+                              pathHref={pathHref}
                               agentTraceId={effectiveTraceId}
                               agentTraceEvents={agentTraceEvents}
                               isAgentTraceLoading={agentTraceQuery.isPending && agentTraceQuery.fetchStatus !== "idle"}
@@ -806,21 +979,25 @@ export function CourseSpacePage() {
                         return (
                           <CourseAssistantTurn
                             key={message.id}
+                            messageId={message.id}
                             content={sanitizeCourseAnswerContent(message.content)}
                             actions={isPersisted && message.content.trim() ? (
                               <CourseClosedLoopActions
-                                courseId={numericCourseId}
+                                recommendation={turnRecommendation}
                                 citationCount={citations.length}
                                 resourceCount={generatedResources.length}
                                 hasActivePath={hasActivePath}
                                 hasTrace={Boolean(effectiveTraceId)}
                                 activePanel={turnPanel}
                                 isSpeaking={speakingMessageId === message.id}
+                                practiceHref={practiceHref}
+                                reportHref={reportHref}
+                                onRecommendedAction={() => runRecommendedAction(message.id, question, citations, turnRecommendation)}
                                 onRead={() => toggleReadMessage(message)}
-                                onOpenCitations={() => toggleTurnPanel(message.id, "citations", question)}
-                                onOpenResources={() => toggleTurnPanel(message.id, "resources", question)}
-                                onOpenPath={() => toggleTurnPanel(message.id, "path", question)}
-                                onOpenTrace={() => toggleTurnPanel(message.id, "thinking", question)}
+                                onOpenCitations={() => toggleTurnPanel(message.id, "citations", question, citations)}
+                                onOpenResources={() => toggleTurnPanel(message.id, "resources", question, citations)}
+                                onOpenPath={() => toggleTurnPanel(message.id, "path", question, citations)}
+                                onOpenTrace={() => toggleTurnPanel(message.id, "thinking", question, citations)}
                               />
                             ) : undefined}
                             detail={detail}
@@ -886,16 +1063,20 @@ export function CourseSpacePage() {
                   />
                   <button className="course-send-button" type="button" disabled={isSearchingCourse} onClick={() => void sendCourseQuestion()}>
                     <ArrowRight size={17} weight="bold" aria-hidden="true" />
-                    <span>{isSearchingCourse ? "保存中" : "发送"}</span>
+                    <span>{isSearchingCourse ? "正在回答" : "发送"}</span>
                   </button>
                   <InlineFeedback message={courseFeedback} tone="warning" className="course-inline-feedback" />
                 </div>
               </section>
             ) : (
               <CourseContentView
+                courseId={numericCourseId}
                 points={apiKnowledgePoints}
                 masteryPoints={masteryMapQuery.data?.data.points ?? []}
                 selectedPoint={selectedKnowledgePoint}
+                content={knowledgePointContentQuery.data?.data ?? null}
+                contentPending={knowledgePointContentQuery.isPending && knowledgePointContentQuery.fetchStatus !== "idle"}
+                contentError={knowledgePointContentQuery.isError}
                 selectedCitation={selectedCitation}
                 view={courseContentView}
                 assistantOpen={isStudyAssistantOpen}
@@ -907,7 +1088,20 @@ export function CourseSpacePage() {
                 feedback={courseFeedback}
                 onViewChange={setCourseContentView}
                 onSelectPoint={openKnowledgeStudy}
-                onOpenAssistant={() => setIsStudyAssistantOpen(true)}
+                onSelectPrevious={() => {
+                  const pointId = knowledgePointContentQuery.data?.data.previous_knowledge_point_id;
+                  if (pointId) openKnowledgeStudy(pointId);
+                }}
+                onSelectNext={() => {
+                  const pointId = knowledgePointContentQuery.data?.data.next_knowledge_point_id;
+                  if (pointId) openKnowledgeStudy(pointId);
+                }}
+                onOpenAssistant={() => {
+                  if (!coursePrompt.trim() && selectedKnowledgePoint) {
+                    setCoursePrompt(`关于“${selectedKnowledgePoint.title}”，`);
+                  }
+                  setIsStudyAssistantOpen(true);
+                }}
                 onCloseAssistant={() => setIsStudyAssistantOpen(false)}
                 onPromptChange={setCoursePrompt}
                 onPromptKeyDown={handleCourseComposerKeyDown}
@@ -945,6 +1139,7 @@ type AnswerDetailPanelProps = {
   hasRealCourse: boolean;
   hasSearched: boolean;
   pathSummary: CoursePathSummary | null;
+  pathHref: string;
   agentTraceId: string | null;
   agentTraceEvents: AgentTraceEvent[];
   isAgentTraceLoading: boolean;
@@ -959,6 +1154,7 @@ function AnswerDetailPanel({
   hasRealCourse,
   hasSearched,
   pathSummary,
+  pathHref,
   agentTraceId,
   agentTraceEvents,
   isAgentTraceLoading,
@@ -978,8 +1174,6 @@ function AnswerDetailPanel({
   }
 
   if (activePanel === "path") {
-    const pathHref = courseId !== null ? `${PATHS.path}?course_id=${courseId}` : PATHS.path;
-
     return (
       <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
         <strong>学习路径</strong>

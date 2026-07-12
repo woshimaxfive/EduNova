@@ -524,6 +524,16 @@ Authorization: Bearer <token>
 
 ### GET `/courses/{course_id}/mastery-map`
 
+### GET `/courses/{course_id}/knowledge-points/{knowledge_point_id}/content`
+
+用途：读取当前用户课程中某个知识点的真实学习内容。接口聚合已落库的课程切片、资料来源、页码、相关资源和前后知识点导航，不调用模型动态生成课文。
+
+响应 `data` 包含 `knowledge_point`、`sections`、`related_resources`、`previous_knowledge_point_id` 和 `next_knowledge_point_id`。`sections` 每项返回 `chunk_id`、`title`、`content`、`source_title` 和可选 `page_number`。
+
+规则：只能访问当前用户自己的课程和知识点；最多返回 12 个切片，单个正文不超过 1200 字。不返回向量、存储路径、原始 metadata、完整资料文件或模型输入。
+
+### GET `/courses/{course_id}/mastery-map`
+
 状态：Phase 9 已实现。
 
 用途：获取课程级规则掌握度图。掌握度第一版不单独持久化，而是按课程知识点、`confirmed/reviewing/completed` 弱点队列、当前 active 学习路径任务、同课程生成资源和 Phase 10 练习评估结果实时计算。

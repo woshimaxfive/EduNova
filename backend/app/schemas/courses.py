@@ -36,6 +36,22 @@ class CourseKnowledgePoint(BaseModel):
     prerequisite_ids: list[str] = Field(default_factory=list)
 
 
+class CourseKnowledgeSection(BaseModel):
+    chunk_id: str
+    title: str
+    content: str
+    source_title: str
+    page_number: int | None = None
+
+
+class CourseKnowledgePointContent(BaseModel):
+    knowledge_point: CourseKnowledgePoint
+    sections: list[CourseKnowledgeSection] = Field(default_factory=list)
+    related_resources: list["CourseResourceBrief"] = Field(default_factory=list)
+    previous_knowledge_point_id: str | None = None
+    next_knowledge_point_id: str | None = None
+
+
 class CourseStructureSummary(BaseModel):
     schema_version: int = 1
     learning_objectives: list[str] = Field(default_factory=list)

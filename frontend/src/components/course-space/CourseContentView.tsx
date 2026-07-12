@@ -1,8 +1,10 @@
 import { BookOpenText, ChatCircleText, Graph, List, X } from "@phosphor-icons/react";
 import { type KeyboardEvent, useMemo } from "react";
+import { Link } from "react-router-dom";
 
-import { type ApiCourseKnowledgePoint, type CourseMasteryPoint } from "../../api/courses";
+import { type ApiCourseKnowledgePoint, type CourseKnowledgePointContent, type CourseMasteryPoint } from "../../api/courses";
 import { type RagSearchResultItem } from "../../api/rag";
+import { PATHS } from "../../app/routePaths";
 import { CourseKnowledgeGraph } from "./CourseKnowledgeGraph";
 import { InlineFeedback } from "../feedback/InlineFeedback";
 import { MarkdownMessage } from "../feedback/MarkdownMessage";
@@ -16,9 +18,13 @@ type CourseContentMessage = {
 };
 
 type CourseContentViewProps = {
+  courseId: number;
   points: ApiCourseKnowledgePoint[];
   masteryPoints: CourseMasteryPoint[];
   selectedPoint: ApiCourseKnowledgePoint | null;
+  content: CourseKnowledgePointContent | null;
+  contentPending: boolean;
+  contentError: boolean;
   selectedCitation: RagSearchResultItem | null;
   view: CourseContentMode;
   assistantOpen: boolean;
@@ -28,6 +34,8 @@ type CourseContentViewProps = {
   feedback: string | null;
   onViewChange: (view: CourseContentMode) => void;
   onSelectPoint: (pointId: string) => void;
+  onSelectPrevious: () => void;
+  onSelectNext: () => void;
   onOpenAssistant: () => void;
   onCloseAssistant: () => void;
   onPromptChange: (value: string) => void;
@@ -36,9 +44,13 @@ type CourseContentViewProps = {
 };
 
 export function CourseContentView({
+  courseId,
   points,
   masteryPoints,
   selectedPoint,
+  content,
+  contentPending,
+  contentError,
   selectedCitation,
   view,
   assistantOpen,
@@ -48,6 +60,8 @@ export function CourseContentView({
   feedback,
   onViewChange,
   onSelectPoint,
+  onSelectPrevious,
+  onSelectNext,
   onOpenAssistant,
   onCloseAssistant,
   onPromptChange,
@@ -55,6 +69,8 @@ export function CourseContentView({
   onSend
 }: CourseContentViewProps) {
   const chapters = useMemo(() => groupByChapter(points), [points]);
+  const contentSections = content?.sections ?? [];
+  const relatedResources = content?.related_resources ?? [];
 
   return (
     <section className="course-content-workspace" role="region" aria-label="课程内容模式">
@@ -111,27 +127,56 @@ export function CourseContentView({
           </div>
         ) : (
           <article className="course-content-reader" aria-label="学习内容">
-            {selectedCitation ? (
-              <>
-                <span className="course-content-kicker">资料来源</span>
-                <h2>{selectedCitation.section_title ?? selectedCitation.source_title}</h2>
-                <p>{selectedCitation.content}</p>
-                <dl aria-label="引用信息">
-                  <div><dt>资料</dt><dd>{selectedCitation.source_title}</dd></div>
-                  <div><dt>检索方式</dt><dd>{retrievalSourceLabel(selectedCitation.retrieval_source)}</dd></div>
-                  <div><dt>向量状态</dt><dd>{embeddingStatusLabel(selectedCitation.embedding_status)}</dd></div>
-                </dl>
-              </>
-            ) : selectedPoint ? (
+            {selectedPoint ? (
               <>
                 <span className="course-content-kicker">{selectedPoint.chapter ?? "课程知识点"}</span>
                 <h2>{selectedPoint.title}</h2>
-                <p>{selectedPoint.summary ?? "这条知识点暂时没有课程摘要，可以打开 AI 辅导继续追问。"}</p>
+                <p className="course-content-objective">{selectedPoint.summary ?? "这条知识点暂时没有课程摘要，可以打开 AI 辅导继续追问。"}</p>
                 <dl aria-label="知识点信息">
                   <div><dt>章节</dt><dd>{selectedPoint.chapter ?? "课程知识点"}</dd></div>
                   <div><dt>难度</dt><dd>{selectedPoint.difficulty ?? "未标注"}</dd></div>
                   <div><dt>先修知识</dt><dd>{(selectedPoint.prerequisite_ids ?? []).length} 个</dd></div>
                 </dl>
+                {selectedCitation ? (
+                  <aside className="course-content-citation-focus" aria-label="本次回答引用">
+                    <strong>从回答来源进入</strong>
+                    <p>{selectedCitation.content}</p>
+                    <span>{selectedCitation.source_title} · {selectedCitation.section_title ?? "课程切片"} · {retrievalSourceLabel(selectedCitation.retrieval_source)} · {embeddingStatusLabel(selectedCitation.embedding_status)}</span>
+                  </aside>
+                ) : null}
+                {contentPending ? <p className="course-content-loading">正在读取真实课程内容。</p> : null}
+                <InlineFeedback
+                  message={contentError ? "课程正文读取失败，请稍后重试。" : null}
+                  tone="warning"
+                  className="course-inline-feedback"
+                />
+                {!contentPending && !contentError && content && contentSections.length === 0 ? (
+                  <div className="course-content-empty-section">
+                    <strong>暂无关联课程切片</strong>
+                    <p>可以围绕这个知识点继续提问，系统不会生成虚假正文。</p>
+                  </div>
+                ) : null}
+                {contentSections.map((section) => (
+                  <section className="course-content-section" key={section.chunk_id}>
+                    <h3>{section.title}</h3>
+                    <p>{section.content}</p>
+                    <small>{section.source_title}{section.page_number ? ` · 第 ${section.page_number} 页` : ""}</small>
+                  </section>
+                ))}
+                {relatedResources.length ? (
+                  <section className="course-content-resources" aria-label="相关学习资源">
+                    <h3>相关学习资源</h3>
+                    {relatedResources.map((resource) => (
+                      <Link key={resource.id} to={`${PATHS.studio}?course_id=${courseId}&resource_id=${resource.id}`}>
+                        {resource.title}
+                      </Link>
+                    ))}
+                  </section>
+                ) : null}
+                <nav className="course-content-pager" aria-label="知识点导航">
+                  <button type="button" disabled={!content?.previous_knowledge_point_id} onClick={onSelectPrevious}>上一个知识点</button>
+                  <button type="button" disabled={!content?.next_knowledge_point_id} onClick={onSelectNext}>下一个知识点</button>
+                </nav>
               </>
             ) : (
               <div className="course-content-empty">

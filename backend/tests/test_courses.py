@@ -32,7 +32,7 @@ from backend.app.models import (
     WeaknessReviewItem,
 )
 from backend.app.services.auth import AuthService
-from backend.app.services.courses import CourseService
+from backend.app.services.courses import CourseNotFoundError, CourseService
 
 
 @dataclass
@@ -679,10 +679,64 @@ def test_course_read_apis_are_scoped_to_current_user() -> None:
     assert service.get_overview(make_user(1), 101).chunk_count == 1
     assert service.get_knowledge_points(make_user(1), 101)[0].title == "知识点"
 
-    from backend.app.services.courses import CourseNotFoundError
-
     with pytest.raises(CourseNotFoundError):
         service.get_course(make_user(2), 101)
+
+
+def test_knowledge_point_content_returns_safe_ordered_course_evidence() -> None:
+    repo = FakeCourseRepository(
+        courses=[make_course()],
+        course_materials=[
+            CourseMaterial(
+                id=301,
+                user_id=1,
+                course_id=101,
+                filename="机器学习讲义.md",
+                content_type="text/markdown",
+                storage_path="private/never-return-this-path.md",
+                parse_status="completed",
+                metadata_json={"secret": "never-return-this"},
+            )
+        ],
+        knowledge_points=[
+            KnowledgePoint(id=401, course_id=101, title="机器学习", summary="学习目标", chapter="第四章", order_index=0),
+            KnowledgePoint(id=402, course_id=101, title="监督学习", summary="后续目标", chapter="第四章", order_index=1),
+        ],
+        knowledge_chunks=[
+            KnowledgeChunk(
+                id=601,
+                course_id=101,
+                material_id=301,
+                knowledge_point_id=401,
+                content="  机器学习从数据中学习规律。  ",
+                page_number=8,
+                section_title="从规则到数据",
+                metadata_json={"api_key": "never-return-this"},
+            )
+        ],
+        generated_resources=[make_resource(801, 1, 101, knowledge_point_id=401)],
+    )
+
+    result = as_dict(make_service(repo).get_knowledge_point_content(make_user(), 101, 401))
+
+    assert result["knowledge_point"]["title"] == "机器学习"
+    assert result["sections"] == [
+        {
+            "chunk_id": "601",
+            "title": "从规则到数据",
+            "content": "机器学习从数据中学习规律。",
+            "source_title": "机器学习讲义.md",
+            "page_number": 8,
+        }
+    ]
+    assert result["related_resources"][0]["id"] == "801"
+    assert result["previous_knowledge_point_id"] is None
+    assert result["next_knowledge_point_id"] == "402"
+    assert "storage_path" not in str(result)
+    assert "never-return-this" not in str(result)
+
+    with pytest.raises(CourseNotFoundError):
+        make_service(repo).get_knowledge_point_content(make_user(2), 101, 401)
 
 
 def test_learning_state_returns_empty_course_state_without_candidates() -> None:
@@ -1070,6 +1124,40 @@ def test_mastery_map_route_returns_envelope_and_scopes_course() -> None:
     assert response.status_code == 200
     assert response.json()["data"]["course_id"] == "101"
     assert response.json()["data"]["points"][0]["status"] == "weak"
+    assert missing_response.status_code == 404
+
+
+def test_knowledge_point_content_route_returns_envelope_and_scopes_point() -> None:
+    repo = FakeCourseRepository(
+        courses=[make_course()],
+        course_materials=[
+            CourseMaterial(
+                id=301,
+                user_id=1,
+                course_id=101,
+                filename="课程讲义.md",
+                content_type="text/markdown",
+                storage_path="private/course.md",
+                parse_status="completed",
+                metadata_json={},
+            )
+        ],
+        knowledge_points=[KnowledgePoint(id=401, course_id=101, title="启发式搜索", summary="摘要", chapter="第一章", order_index=0)],
+        knowledge_chunks=[KnowledgeChunk(id=601, course_id=101, material_id=301, knowledge_point_id=401, content="真实课程正文", metadata_json={})],
+    )
+    user = make_user()
+    settings = Settings(_env_file=None, jwt_secret="courses-test-secret-with-32-bytes", jwt_expire_minutes=30)
+    app = create_app()
+    app.dependency_overrides[get_auth_service] = lambda: AuthService(repository=TokenAuthRepository(user), settings=settings)
+    app.dependency_overrides[get_course_service] = lambda: CourseService(repository=repo)
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {create_access_token(str(user.id), settings=settings)}"}
+
+    response = client.get("/api/v1/courses/101/knowledge-points/401/content", headers=headers)
+    missing_response = client.get("/api/v1/courses/101/knowledge-points/999/content", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["data"]["sections"][0]["content"] == "真实课程正文"
     assert missing_response.status_code == 404
 
 

@@ -15,8 +15,9 @@ import {
 } from "../api/practice";
 import { PATHS } from "../app/routePaths";
 import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
+import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
 import { PageFrame } from "./PageFrame";
-import { invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
+import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 
 type PracticeSessionEnvelope = PracticeSessionDetail | { data?: PracticeSessionDetail };
 
@@ -77,7 +78,7 @@ export function PracticePage() {
     enabled: hasRequestedSession
   });
   const latestSessionQuery = useQuery({
-    queryKey: ["practice-latest", numericCourseId],
+    queryKey: courseLoopQueryKeys.latestPractice(numericCourseId),
     queryFn: () => getLatestPracticeSession(numericCourseId),
     enabled: canUseCourse && !hasRequestedSession && !wantsNewPractice
   });
@@ -94,9 +95,13 @@ export function PracticePage() {
 
   useEffect(() => {
     if (restoredSession && !hasRequestedSession) {
-      setSearchParams({ course_id: restoredSession.course_id, session_id: restoredSession.id }, { replace: true });
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("course_id", restoredSession.course_id);
+      nextParams.set("session_id", restoredSession.id);
+      nextParams.delete("new");
+      setSearchParams(nextParams, { replace: true });
     }
-  }, [hasRequestedSession, restoredSession, setSearchParams]);
+  }, [hasRequestedSession, restoredSession, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!activeSession || activeSession.status !== "in_progress") {
@@ -152,7 +157,11 @@ export function PracticePage() {
       lastSavedDraftRef.current = "{}";
       setDraftStatus("idle");
       if (created) {
-        setSearchParams({ course_id: created.course_id, session_id: created.id }, { replace: true });
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.set("course_id", created.course_id);
+        nextParams.set("session_id", created.id);
+        nextParams.delete("new");
+        setSearchParams(nextParams, { replace: true });
       }
     },
     onError: () => {
@@ -216,6 +225,7 @@ export function PracticePage() {
 
   return (
     <PageFrame title="练习">
+      <CourseReturnLink courseId={canUseCourse ? numericCourseId : null} />
       <div className="student-workspace practice-workspace">
         <section className="student-panel practice-question" role="region" aria-label="练习作答">
           <div className="student-panel-heading">
@@ -364,7 +374,11 @@ export function PracticePage() {
                     setAnswers({});
                     lastSavedDraftRef.current = "";
                     setDraftStatus("idle");
-                    setSearchParams({ course_id: activeSession.course_id, new: "1" }, { replace: true });
+                    const nextParams = new URLSearchParams(searchParams);
+                    nextParams.set("course_id", activeSession.course_id);
+                    nextParams.set("new", "1");
+                    nextParams.delete("session_id");
+                    setSearchParams(nextParams, { replace: true });
                   }}
                 >
                   开始新练习

@@ -17,7 +17,7 @@
   border: 0;
   border-bottom: 1px solid var(--wide-workspace-divider);
   border-radius: 7px 7px 0 0;
-  background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  background: var(--wide-workspace-emphasis);
   box-shadow: none;
   backdrop-filter: blur(20px);
 }
@@ -50,7 +50,7 @@
   border-radius: 6px;
   padding: 0 10px;
   color: var(--text);
-  background: var(--surface-strong);
+  background: var(--wide-workspace-control, var(--surface-strong));
   outline: none;
 }
 
@@ -143,7 +143,7 @@
   border-radius: 6px;
   padding: 0 9px;
   color: var(--text-muted);
-  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
+  background: var(--wide-workspace-emphasis);
 }
 
 .studio-workspace-feedback {
@@ -207,7 +207,7 @@
   border-radius: 6px;
   padding: 0 10px;
   color: var(--text-muted);
-  background: var(--surface-strong);
+  background: var(--wide-workspace-control);
 }
 
 .studio-resource-search input {
@@ -247,7 +247,7 @@
 }
 
 .studio-resource-row:hover {
-  background: color-mix(in srgb, var(--surface-muted) 72%, transparent);
+  background: color-mix(in srgb, var(--wide-workspace-muted) 78%, transparent);
 }
 
 .studio-resource-row.active {
@@ -317,7 +317,7 @@
 .studio-canvas-skeleton span {
   display: block;
   border-radius: 6px;
-  background: linear-gradient(90deg, var(--surface-muted), var(--surface-strong), var(--surface-muted));
+  background: linear-gradient(90deg, var(--wide-workspace-muted), var(--wide-workspace-control), var(--wide-workspace-muted));
   background-size: 200% 100%;
   animation: studio-skeleton 1.4s ease-in-out infinite;
 }

@@ -17,7 +17,7 @@
   border: 0;
   border-bottom: 1px solid var(--wide-workspace-divider);
   border-radius: 7px 7px 0 0;
-  background: color-mix(in srgb, var(--surface-strong) 93%, transparent);
+  background: var(--wide-workspace-emphasis);
   box-shadow: none;
   backdrop-filter: blur(20px);
 }
@@ -50,7 +50,7 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 0 10px;
-  background: var(--surface-strong);
+  background: var(--wide-workspace-control);
 }
 
 .library-workspace-search:focus-within {
@@ -78,7 +78,7 @@
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--surface-muted) 78%, transparent);
+  background: var(--wide-workspace-muted);
 }
 
 .library-workspace-filters button {
@@ -94,7 +94,7 @@
 
 .library-workspace-filters button[aria-pressed="true"] {
   color: var(--text-strong);
-  background: var(--surface-strong);
+  background: var(--wide-workspace-control);
   box-shadow: 0 1px 5px rgba(20, 32, 38, 0.08);
 }
 
@@ -172,7 +172,7 @@
   border-bottom: 1px solid var(--line);
   padding-inline: 12px;
   color: var(--text-muted);
-  background: color-mix(in srgb, var(--surface-muted) 54%, transparent);
+  background: var(--wide-workspace-muted);
   font-size: 0.7rem;
   font-weight: 800;
 }
@@ -196,7 +196,7 @@
 }
 
 .library-table-row.disabled {
-  background: color-mix(in srgb, var(--surface-muted) 42%, transparent);
+  background: color-mix(in srgb, var(--wide-workspace-muted) 72%, transparent);
 }
 
 .library-row-action {
@@ -266,7 +266,7 @@
   border: 1px solid var(--line-strong);
   border-radius: 4px;
   color: white;
-  background: var(--surface-strong);
+  background: var(--wide-workspace-control);
 }
 
 .library-table-row.selected .library-row-selector {
@@ -283,7 +283,7 @@
   border-radius: 4px;
   padding: 0 7px;
   color: var(--text-muted);
-  background: var(--surface-muted);
+  background: var(--wide-workspace-muted);
   font-size: 0.7rem;
   font-weight: 700;
 }

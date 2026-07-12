@@ -4,6 +4,9 @@
   color-scheme: light;
   --bg: #f4f7f6;
   --bg-soft: #e9efed;
+  --app-workspace-wash: rgba(232, 241, 237, 0.78);
+  --app-workspace-accent-wash: rgba(8, 117, 104, 0.032);
+  --app-workspace-grid: rgba(29, 62, 54, 0.032);
   --surface: rgba(252, 253, 253, 0.84);
   --surface-strong: rgba(255, 255, 255, 0.96);
   --surface-muted: rgba(229, 236, 233, 0.88);
@@ -50,6 +53,9 @@
     color-scheme: dark;
     --bg: #111715;
     --bg-soft: #18221f;
+    --app-workspace-wash: rgba(24, 35, 31, 0.82);
+    --app-workspace-accent-wash: rgba(56, 195, 170, 0.035);
+    --app-workspace-grid: rgba(211, 232, 225, 0.026);
     --surface: rgba(28, 37, 34, 0.72);
     --surface-strong: rgba(32, 42, 39, 0.94);
     --surface-muted: rgba(42, 54, 50, 0.72);
@@ -6285,8 +6291,9 @@ a {
   min-height: 0;
   overflow: hidden;
   background:
-    linear-gradient(90deg, rgba(8, 127, 115, 0.045), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.7), transparent 42%);
+    linear-gradient(90deg, var(--app-workspace-accent-wash), transparent 38%),
+    linear-gradient(180deg, var(--app-workspace-wash), transparent 46%),
+    var(--bg);
 }
 
 .app-workspace-layout.history-collapsed {
@@ -6300,8 +6307,8 @@ a {
   height: 52%;
   pointer-events: none;
   background:
-    linear-gradient(rgba(16, 24, 32, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(16, 24, 32, 0.035) 1px, transparent 1px);
+    linear-gradient(var(--app-workspace-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-workspace-grid) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: linear-gradient(180deg, #000000, transparent);
 }
@@ -6343,9 +6350,11 @@ a {
 }
 
 .route-main-surface-wide {
-  --wide-workspace-canvas: color-mix(in srgb, var(--surface-strong) 62%, transparent);
-  --wide-workspace-emphasis: color-mix(in srgb, var(--surface-strong) 84%, transparent);
-  --wide-workspace-divider: color-mix(in srgb, var(--line) 86%, transparent);
+  --wide-workspace-canvas: #f0f5f3;
+  --wide-workspace-emphasis: #edf3f0;
+  --wide-workspace-muted: #e6efeb;
+  --wide-workspace-control: #fafcfb;
+  --wide-workspace-divider: rgba(29, 58, 50, 0.11);
   padding-inline: clamp(18px, 2.4vw, 42px);
 }
 
@@ -6362,6 +6371,22 @@ a {
     inset 0 1px 0 rgba(255, 255, 255, 0.34),
     0 18px 46px rgba(16, 24, 32, 0.035);
   backdrop-filter: blur(18px);
+}
+
+@media (prefers-color-scheme: dark) {
+  .route-main-surface-wide {
+    --wide-workspace-canvas: #18221f;
+    --wide-workspace-emphasis: #1c2824;
+    --wide-workspace-muted: #22302b;
+    --wide-workspace-control: #26342f;
+    --wide-workspace-divider: rgba(218, 235, 229, 0.11);
+  }
+
+  .route-main-surface.route-main-surface-wide .page-workbench {
+    box-shadow:
+      inset 0 1px 0 rgba(226, 241, 236, 0.045),
+      0 18px 46px rgba(0, 0, 0, 0.12);
+  }
 }
 
 .route-main-surface .student-panel {

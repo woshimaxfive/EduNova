@@ -411,10 +411,6 @@
   background: var(--library-drawer-surface);
 }
 
-:root[data-theme="dark"] .library-drawer {
-  --library-drawer-surface: #202a27;
-}
-
 .library-drawer-footer > p {
   flex: 1;
   margin: 0;

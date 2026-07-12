@@ -284,58 +284,60 @@ export function StudioPage() {
   const dataError = coursesQuery.isError || resourcesQuery.isError;
 
   return (
-    <PageFrame title="资源工坊" variant="wide-workspace">
-      <section className="studio-workspace" aria-label="资源成果工作台">
-        <StudioWorkspaceToolbar
-          courses={courses}
-          courseId={effectiveCourseId}
-          resourceCount={resources.length}
-          selectedResource={selectedResource}
-          isGenerating={isGenerating}
-          onCourseChange={handleCourseChange}
-          onOpenGenerate={() => setDrawerMode("generate")}
-          onOpenDetails={() => setDrawerMode("details")}
-        />
-
-        {showCompactJob ? (
-          <section className="studio-job-strip" role="status" aria-label="资源生成进度">
-            <ArrowClockwise className="spinning" size={17} aria-hidden="true" />
-            <div><strong>{resourceJob.label}</strong><span>{resourceJob.stage} · {resourceJob.progress_percent}%</span></div>
-            <progress max="100" value={resourceJob.progress_percent}>{resourceJob.progress_percent}%</progress>
-            <button type="button" onClick={() => void cancelJob(resourceJob.job_id)}><X size={15} /><span>取消</span></button>
-          </section>
-        ) : null}
-        {feedback && drawerMode === null ? (
-          <InlineFeedback message={feedback} tone={feedbackTone} className="studio-workspace-feedback" />
-        ) : null}
-
-        <div className="studio-workspace-body">
-          <StudioResourceLibrary
-            hasCourse={effectiveCourseId !== null}
-            resources={filteredResources}
-            selectedResourceId={selectedResource?.id ?? null}
-            search={librarySearch}
-            typeFilter={resourceTypeFilter}
-            isLoading={effectiveCourseId !== null && resourcesQuery.isPending && resources.length === 0}
-            onSearchChange={setLibrarySearch}
-            onTypeFilterChange={setResourceTypeFilter}
-            onSelectResource={selectResource}
+    <>
+      <PageFrame title="资源工坊" variant="wide-workspace">
+        <section className="studio-workspace" aria-label="资源成果工作台">
+          <StudioWorkspaceToolbar
+            courses={courses}
+            courseId={effectiveCourseId}
+            resourceCount={resources.length}
+            selectedResource={selectedResource}
+            isGenerating={isGenerating}
+            onCourseChange={handleCourseChange}
+            onOpenGenerate={() => setDrawerMode("generate")}
+            onOpenDetails={() => setDrawerMode("details")}
           />
-          <StudioArtifactCanvas
-            resource={selectedResource}
-            hasCourse={effectiveCourseId !== null}
-            courseTitle={selectedCourse?.title ?? null}
-            knowledgePointTitle={selectedResourceKnowledgePointTitle}
-            isLoading={coursesQuery.isPending || (effectiveCourseId !== null && resourcesQuery.isPending && resources.length === 0)}
-            isError={dataError}
-            onCreate={() => setDrawerMode("generate")}
-            onRetry={() => {
-              void coursesQuery.refetch();
-              void resourcesQuery.refetch();
-            }}
-          />
-        </div>
-      </section>
+
+          {showCompactJob ? (
+            <section className="studio-job-strip" role="status" aria-label="资源生成进度">
+              <ArrowClockwise className="spinning" size={17} aria-hidden="true" />
+              <div><strong>{resourceJob.label}</strong><span>{resourceJob.stage} · {resourceJob.progress_percent}%</span></div>
+              <progress max="100" value={resourceJob.progress_percent}>{resourceJob.progress_percent}%</progress>
+              <button type="button" onClick={() => void cancelJob(resourceJob.job_id)}><X size={15} /><span>取消</span></button>
+            </section>
+          ) : null}
+          {feedback && drawerMode === null ? (
+            <InlineFeedback message={feedback} tone={feedbackTone} className="studio-workspace-feedback" />
+          ) : null}
+
+          <div className="studio-workspace-body">
+            <StudioResourceLibrary
+              hasCourse={effectiveCourseId !== null}
+              resources={filteredResources}
+              selectedResourceId={selectedResource?.id ?? null}
+              search={librarySearch}
+              typeFilter={resourceTypeFilter}
+              isLoading={effectiveCourseId !== null && resourcesQuery.isPending && resources.length === 0}
+              onSearchChange={setLibrarySearch}
+              onTypeFilterChange={setResourceTypeFilter}
+              onSelectResource={selectResource}
+            />
+            <StudioArtifactCanvas
+              resource={selectedResource}
+              hasCourse={effectiveCourseId !== null}
+              courseTitle={selectedCourse?.title ?? null}
+              knowledgePointTitle={selectedResourceKnowledgePointTitle}
+              isLoading={coursesQuery.isPending || (effectiveCourseId !== null && resourcesQuery.isPending && resources.length === 0)}
+              isError={dataError}
+              onCreate={() => setDrawerMode("generate")}
+              onRetry={() => {
+                void coursesQuery.refetch();
+                void resourcesQuery.refetch();
+              }}
+            />
+          </div>
+        </section>
+      </PageFrame>
 
       <StudioDrawer
         mode={drawerMode}
@@ -368,6 +370,6 @@ export function StudioPage() {
         onCancelJob={() => resourceJob ? void cancelJob(resourceJob.job_id) : undefined}
         onRetryJob={() => void handleRetryJob()}
       />
-    </PageFrame>
+    </>
   );
 }

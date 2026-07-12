@@ -490,6 +490,7 @@ describe("StudioPage resource generation", () => {
     expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("第二段复习建议。");
     expect(screen.getByTestId("studio-location")).toHaveTextContent("resource_id=901");
     await user.click(screen.getByRole("button", { name: "成果详情" }));
+    expect(screen.getByTestId("studio-drawer-layer").closest(".page-workbench")).toBeNull();
     expect(await screen.findByRole("tabpanel", { name: "资源质量" })).toHaveTextContent("基于课程引用摘要生成。");
     await user.click(screen.getByRole("tab", { name: "来源" }));
     expect(screen.getByRole("tabpanel", { name: "引用来源" })).toHaveTextContent("人工智能导论讲义.md");

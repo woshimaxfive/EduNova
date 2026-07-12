@@ -315,8 +315,9 @@ export function PracticePage() {
   const restoreError = requestedSessionQuery.isError || latestSessionQuery.isError;
 
   return (
-    <PageFrame title="练习" variant="wide-workspace">
-      <div className="practice-focus-workspace">
+    <>
+      <PageFrame title="练习" variant="wide-workspace">
+        <div className="practice-focus-workspace">
         <PracticeToolbar
           courseTitle={selectedCourseTitle}
           pointTitle={activeQuestion?.knowledge_point_title || selectedPointTitle}
@@ -341,6 +342,7 @@ export function PracticePage() {
               onSelect={selectQuestion}
             />
             <main className="practice-session-main">
+              <div className="practice-session-scroll">
               {completed ? (
                 <PracticeResultSummary
                   score={activeSession.score ?? 0}
@@ -369,6 +371,7 @@ export function PracticePage() {
                     ?? (feedbackByQuestion.get(activeQuestion.id)?.is_correct === false))
                 }))}
               />
+              </div>
               <footer className="practice-session-actions">
                 <button type="button" disabled={activeQuestionIndex <= 0} onClick={() => selectQuestion(activeSession.questions[activeQuestionIndex - 1].id)}>
                   <ArrowLeft size={17} weight="bold" aria-hidden="true" />上一题
@@ -408,7 +411,10 @@ export function PracticePage() {
           </main>
         )}
 
-        {drawerMode ? (
+        </div>
+      </PageFrame>
+
+      {drawerMode ? (
           <PracticeDrawer
             mode={drawerMode}
             courses={courses}
@@ -431,20 +437,19 @@ export function PracticePage() {
           />
         ) : null}
 
-        {confirmIncomplete ? (
+      {confirmIncomplete ? (
           <div className="practice-confirm-layer" role="presentation">
             <section role="dialog" aria-modal="true" aria-labelledby="practice-confirm-title">
               <WarningCircle size={28} weight="duotone" aria-hidden="true" />
               <h2 id="practice-confirm-title">还有 {unansweredQuestions.length} 题未作答</h2>
-              <p>确认提交后，未答题会按空答案参与本次学习诊断。</p>
+              <p>确认提交后，未答题会按未作答参与本次学习诊断。</p>
               <div>
                 <button type="button" onClick={cancelIncompleteSubmit}>返回未答题</button>
                 <button className="primary" type="button" onClick={() => submitMutation.mutate()}>仍然提交</button>
               </div>
             </section>
           </div>
-        ) : null}
-      </div>
-    </PageFrame>
+      ) : null}
+    </>
   );
 }

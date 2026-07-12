@@ -5769,6 +5769,22 @@ a {
   backdrop-filter: blur(18px);
 }
 
+@media (min-width: 901px) {
+  .route-main-surface-wide {
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: stretch;
+    overflow: hidden;
+    padding-bottom: clamp(18px, 2vw, 30px);
+  }
+
+  .route-main-surface.route-main-surface-wide .page-workbench {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
 .route-main-surface .student-panel {
   border-color: rgba(16, 24, 32, 0.055);
   background: rgba(255, 255, 255, 0.28);

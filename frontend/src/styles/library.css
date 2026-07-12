@@ -1,12 +1,16 @@
 .library-workspace {
   display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  flex: 1;
+  height: 100%;
   gap: 0;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .library-workspace-toolbar {
-  position: sticky;
-  top: -1px;
+  position: relative;
   z-index: 8;
   display: grid;
   grid-template-columns: minmax(150px, 0.42fr) minmax(220px, 0.72fr) auto auto;
@@ -148,10 +152,12 @@
 
 .library-file-workspace {
   min-width: 0;
+  min-height: 0;
   border: 0;
   border-radius: 0 0 7px 7px;
   background: transparent;
-  overflow: hidden;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .library-table-head,
@@ -168,6 +174,9 @@
 }
 
 .library-table-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   min-height: 42px;
   border-bottom: 1px solid var(--line);
   padding-inline: 12px;
@@ -754,6 +763,18 @@
   .library-toolbar-actions {
     grid-column: 1 / -1;
     justify-content: flex-end;
+  }
+}
+
+@media (max-width: 900px) {
+  .library-workspace {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  .library-file-workspace {
+    overflow: visible;
   }
 }
 

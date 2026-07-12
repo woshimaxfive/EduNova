@@ -259,6 +259,8 @@ describe("PracticePage", () => {
     expect(await screen.findByRole("heading", { name: "启发式搜索" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "开始针对性练习" }));
     const drawer = screen.getByRole("dialog", { name: "练习设置" });
+    expect(drawer.closest(".practice-focus-workspace")).toBeNull();
+    expect(drawer.parentElement).toHaveClass("practice-drawer-layer");
     expect(within(drawer).getByRole("button", { name: "5 题" })).toHaveAttribute("aria-pressed", "true");
     expect(within(drawer).getByRole("button", { name: /智能适配/ })).toHaveAttribute("aria-pressed", "true");
     await user.click(within(drawer).getByRole("button", { name: "开始针对性练习" }));

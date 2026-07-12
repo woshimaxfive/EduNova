@@ -1,13 +1,17 @@
 .practice-focus-workspace {
   position: relative;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  flex: 1;
+  height: 100%;
   min-width: 0;
-  min-height: calc(100dvh - 142px);
+  min-height: 0;
+  overflow: hidden;
   color: var(--text);
 }
 
 .practice-workspace-toolbar {
-  position: sticky;
-  top: -1px;
+  position: relative;
   z-index: 8;
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(220px, auto) auto;
@@ -109,16 +113,16 @@
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
   min-width: 0;
-  min-height: calc(100dvh - 208px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .practice-question-rail {
-  position: sticky;
-  top: 65px;
-  align-self: start;
+  position: relative;
   display: grid;
   align-content: start;
-  min-height: calc(100dvh - 208px);
+  min-height: 0;
+  overflow-y: auto;
   border-right: 1px solid var(--wide-workspace-divider);
   padding: 18px 12px;
   background: color-mix(in srgb, var(--wide-workspace-muted) 74%, transparent);
@@ -218,10 +222,18 @@
 
 .practice-session-main {
   display: grid;
-  align-content: start;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
-  min-height: calc(100dvh - 208px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.practice-session-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 32px clamp(26px, 5vw, 88px) 0;
+  scrollbar-gutter: stable;
 }
 
 .practice-question-canvas {
@@ -474,8 +486,7 @@
 }
 
 .practice-session-actions {
-  position: sticky;
-  bottom: 0;
+  position: relative;
   z-index: 7;
   display: grid;
   grid-template-columns: auto auto minmax(130px, 1fr) auto;
@@ -954,7 +965,15 @@
 }
 
 @media (max-width: 900px) {
+  .practice-focus-workspace {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
   .practice-workspace-toolbar {
+    position: sticky;
+    top: 0;
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
@@ -962,6 +981,7 @@
 
   .practice-session-layout {
     grid-template-columns: 1fr;
+    overflow: visible;
   }
 
   .practice-question-rail {
@@ -986,6 +1006,20 @@
     flex: 0 0 38px;
     width: 38px;
     aspect-ratio: 1;
+  }
+
+  .practice-session-main {
+    display: block;
+    overflow: visible;
+  }
+
+  .practice-session-scroll {
+    overflow: visible;
+  }
+
+  .practice-session-actions {
+    position: sticky;
+    bottom: 0;
   }
 
   .practice-result-summary {
@@ -1019,7 +1053,11 @@
   .practice-question-rail { top: 57px; }
 
   .practice-session-main {
-    min-height: calc(100dvh - 198px);
+    min-height: 0;
+    padding: 0;
+  }
+
+  .practice-session-scroll {
     padding: 20px 14px 0;
   }
 
@@ -1056,8 +1094,8 @@
 
   .practice-session-actions {
     grid-template-columns: 1fr 1fr;
-    width: calc(100% + 28px);
-    margin-inline: -14px;
+    width: 100%;
+    margin-inline: 0;
   }
 
   .practice-session-actions > span { display: none; }

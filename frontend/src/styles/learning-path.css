@@ -1,13 +1,15 @@
 .learning-path-workspace {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  flex: 1;
   min-width: 0;
-  min-height: calc(100dvh - 142px);
+  min-height: 0;
+  overflow: hidden;
   color: var(--text);
 }
 
 .path-workspace-toolbar {
-  position: sticky;
-  top: -1px;
+  position: relative;
   z-index: 8;
   display: grid;
   grid-template-columns: minmax(170px, 0.6fr) auto minmax(150px, 0.45fr) auto;
@@ -109,16 +111,16 @@
   display: grid;
   grid-template-columns: 224px minmax(0, 1fr);
   min-width: 0;
-  min-height: 650px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .path-workspace-rail {
-  position: sticky;
-  top: 65px;
-  align-self: start;
+  position: relative;
   display: grid;
   align-content: start;
-  min-height: calc(100dvh - 208px);
+  min-height: 0;
+  overflow-y: auto;
   border-right: 1px solid var(--wide-workspace-divider);
   padding: 18px 12px;
   background: color-mix(in srgb, var(--wide-workspace-muted) 74%, transparent);
@@ -175,6 +177,9 @@
 
 .path-workspace-main {
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: transparent;
 }
 
@@ -644,6 +649,18 @@
 
   .path-workspace-body {
     grid-template-columns: 196px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .learning-path-workspace {
+    height: auto;
+    overflow: visible;
+  }
+
+  .path-workspace-body,
+  .path-workspace-main {
+    overflow: visible;
   }
 }
 

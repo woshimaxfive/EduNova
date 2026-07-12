@@ -1,9 +1,8 @@
-import { ChartLineUp, DownloadSimple, FileText, Graph, ShieldCheck } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { listCourses } from "../api/courses";
+import { getMasteryMap, listCourses } from "../api/courses";
 import {
   createLearningDossierExportJob,
   downloadExportJob,
@@ -11,12 +10,26 @@ import {
   type ExportFormat,
   type ExportJob
 } from "../api/exports";
+import { getCurrentPath } from "../api/paths";
+import { getLatestPracticeSession } from "../api/practice";
 import { generateReport, getLatestReport } from "../api/reports";
-import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
-import { PracticeTrendChart } from "../components/visualization/LearningCharts";
-import { PageFrame } from "./PageFrame";
+import { PATHS, buildCoursePath } from "../app/routePaths";
 import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
+import { buildCourseReturnHref } from "../components/course-space/courseReturn";
+import { ReportDashboard } from "../components/reports/ReportDashboard";
+import { ReportDrawer, type ReportDetailTab, type ReportDrawerMode } from "../components/reports/ReportDrawer";
+import { ReportWorkspaceToolbar } from "../components/reports/ReportWorkspaceToolbar";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
+import {
+  buildCurrentTrendScores,
+  buildReportPrimaryAction,
+  calculateAverageMastery,
+  calculateCurrentTrend,
+  getReportFreshness,
+  sortMasteryPoints
+} from "../features/reports/reportViewModel";
+import { PageFrame } from "./PageFrame";
+import "../styles/reports.css";
 
 function downloadDossierFile(filename: string, file: Blob, contentType: string) {
   const blob = file instanceof Blob ? file : new Blob([file], { type: contentType });
@@ -31,12 +44,8 @@ function downloadDossierFile(filename: string, file: Blob, contentType: string) 
 }
 
 function exportFormatLabel(format: ExportFormat) {
-  if (format === "pdf") {
-    return "PDF";
-  }
-  if (format === "docx") {
-    return "DOCX";
-  }
+  if (format === "pdf") return "PDF";
+  if (format === "docx") return "DOCX";
   return "Markdown";
 }
 
@@ -46,68 +55,77 @@ function delay(ms: number) {
 
 export function ReportsPage() {
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
-  const initialCourseId = searchParams.get("course_id") ?? "";
-  const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [drawerMode, setDrawerMode] = useState<ReportDrawerMode>(null);
+  const [detailTab, setDetailTab] = useState<ReportDetailTab>("summary");
   const [localError, setLocalError] = useState("");
   const [exportError, setExportError] = useState("");
   const [exportMessage, setExportMessage] = useState("");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("markdown");
 
-  const coursesQuery = useQuery({
-    queryKey: ["report-courses"],
-    queryFn: () => listCourses()
-  });
+  useEffect(() => {
+    if (!drawerMode) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setDrawerMode(null);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [drawerMode]);
+
+  const coursesQuery = useQuery({ queryKey: ["report-courses"], queryFn: () => listCourses() });
   const courses = coursesQuery.data?.data ?? [];
-  const effectiveCourseId = selectedCourseId || courses[0]?.id || "";
+  const effectiveCourseId = searchParams.get("course_id") || courses[0]?.id || "";
   const numericCourseId = Number(effectiveCourseId);
   const canUseCourse = Number.isFinite(numericCourseId) && numericCourseId > 0;
+
   const latestReportQuery = useQuery({
     queryKey: courseLoopQueryKeys.latestReport(numericCourseId),
     queryFn: () => getLatestReport(numericCourseId),
     enabled: canUseCourse
   });
+  const masteryQuery = useQuery({
+    queryKey: courseLoopQueryKeys.masteryMap(numericCourseId),
+    queryFn: () => getMasteryMap(numericCourseId),
+    enabled: canUseCourse
+  });
+  const latestPracticeQuery = useQuery({
+    queryKey: courseLoopQueryKeys.latestPractice(numericCourseId),
+    queryFn: () => getLatestPracticeSession(numericCourseId),
+    enabled: canUseCourse
+  });
+  const currentPathQuery = useQuery({
+    queryKey: courseLoopQueryKeys.currentPath(numericCourseId),
+    queryFn: () => getCurrentPath(numericCourseId),
+    enabled: canUseCourse
+  });
 
   const generateMutation = useMutation({
     mutationFn: () => generateReport({ course_id: numericCourseId }),
-    onSuccess: () => {
+    onSuccess: async () => {
       setLocalError("");
       setExportMessage("");
-      void invalidateCourseLearningLoop(queryClient, numericCourseId);
+      await invalidateCourseLearningLoop(queryClient, numericCourseId);
     },
-    onError: () => {
-      setLocalError("学习报告生成失败，请稍后重试。");
-    }
+    onError: () => setLocalError("学习报告生成失败，请稍后重试。")
   });
 
   const exportMutation = useMutation({
     mutationFn: async () => {
       const created = await createLearningDossierExportJob({ course_id: numericCourseId, format: exportFormat });
       let job = created.data;
-
       for (let attempt = 0; attempt < 20 && job.status !== "completed" && job.status !== "failed"; attempt += 1) {
         const refreshed = await getExportJob(job.job_id);
         job = refreshed.data;
-        if (job.status !== "completed" && job.status !== "failed") {
-          await delay(800);
-        }
+        if (job.status !== "completed" && job.status !== "failed") await delay(800);
       }
-
-      if (job.status !== "completed") {
-        throw new Error(job.error_message || "learning dossier export failed");
-      }
-
+      if (job.status !== "completed") throw new Error(job.error_message || "learning dossier export failed");
       const file = await downloadExportJob(job.job_id);
       return { job, file };
     },
     onSuccess: ({ job, file }: { job: ExportJob; file: Blob }) => {
       setExportError("");
       downloadDossierFile(job.filename ?? "edunova-learning-dossier", file, job.content_type ?? "application/octet-stream");
-      setExportMessage(
-        job.agent_trace_id
-          ? `已生成 ${exportFormatLabel(job.format)} 学习档案。异步导出任务 · ${job.agent_trace_id}`
-          : `已生成 ${exportFormatLabel(job.format)} 学习档案。`
-      );
+      setExportMessage(`已生成 ${exportFormatLabel(job.format)} 学习档案。`);
     },
     onError: () => {
       setExportMessage("");
@@ -116,140 +134,124 @@ export function ReportsPage() {
   });
 
   const report = latestReportQuery.data?.data;
-  const reportBody = report?.report;
-  const isReadyReport = report?.status === "ready";
-  const isEmptyReport = report?.status === "empty";
-  const reportTitle = isReadyReport ? "课程学习报告" : "还没有真实学习报告";
-  const reportSummary = isEmptyReport
-    ? "完成一次课程练习后可生成报告"
-    : reportBody?.summary ?? "还没有真实学习报告";
-  const readError = latestReportQuery.isError && !isEmptyReport ? "学习报告读取失败，请稍后重试。" : "";
-  const trend = reportBody?.trend;
-  const trendLabel = trend
-    ? trend.direction === "improved"
-      ? `较早期提升 ${trend.score_delta} 分`
-      : trend.direction === "declined"
-        ? `较早期下降 ${Math.abs(trend.score_delta)} 分`
-        : trend.direction === "stable"
-          ? "近期表现稳定"
-          : "至少完成两次练习后显示趋势"
-    : "至少完成两次练习后显示趋势";
+  const masteryMap = masteryQuery.data?.data;
+  const latestPractice = latestPracticeQuery.data?.data;
+  const currentPath = currentPathQuery.data?.data;
+  const freshness = getReportFreshness(report, latestPractice);
+  const averageMastery = calculateAverageMastery(masteryMap?.points ?? []);
+  const trendScores = buildCurrentTrendScores(report, latestPractice);
+  const currentTrend = calculateCurrentTrend(trendScores);
+  const weakestPoints = sortMasteryPoints(masteryMap?.points ?? [])
+    .filter((point) => point.status === "weak" || point.status === "recommended_review")
+    .slice(0, 5);
+  const primaryAction = buildReportPrimaryAction({ freshness, masteryMap, currentPath });
+  const readError = latestReportQuery.isError && report?.status !== "empty" ? "学习报告读取失败，请稍后重试。" : "";
+  const dataWarning = [masteryQuery, latestPracticeQuery, currentPathQuery].some((query) => query.isError)
+    ? "部分实时学习状态暂未更新，已保留其余可用数据。"
+    : "";
+  const isLoading = canUseCourse && [latestReportQuery, masteryQuery, latestPracticeQuery].some((query) => query.isPending);
+
+  const preservedContext = useMemo(() => {
+    const context = new URLSearchParams();
+    ["return_to", "course_session_id", "course_message_id"].forEach((key) => {
+      const value = searchParams.get(key);
+      if (value) context.set(key, value);
+    });
+    return context;
+  }, [searchParams]);
+
+  function buildContextHref(path: string, extras: Record<string, string>) {
+    const params = new URLSearchParams(preservedContext);
+    Object.entries(extras).forEach(([key, value]) => params.set(key, value));
+    return `${path}?${params.toString()}`;
+  }
+
+  const primaryActionHref = primaryAction.type === "practice"
+    ? buildContextHref(PATHS.practice, { course_id: effectiveCourseId, knowledge_point_id: primaryAction.knowledgePoint.id, new: "1" })
+    : primaryAction.type === "path"
+      ? buildContextHref(PATHS.path, { course_id: effectiveCourseId })
+      : primaryAction.type === "course"
+        ? buildCourseReturnHref(searchParams, numericCourseId) || buildCoursePath(effectiveCourseId)
+        : null;
+
+  function handleCourseChange(courseId: string) {
+    const next = new URLSearchParams(searchParams);
+    next.set("course_id", courseId);
+    setSearchParams(next);
+    setLocalError("");
+    setExportError("");
+    setExportMessage("");
+    setDrawerMode(null);
+  }
 
   return (
-    <PageFrame title="学习报告">
-      <CourseReturnLink courseId={canUseCourse ? numericCourseId : null} />
-      <div className="student-workspace reports-workspace">
-        <section className="student-panel mastery-map" role="region" aria-label="掌握度地图">
-          <div className="student-panel-heading">
-            <div>
-              <h2>知识掌握度</h2>
-            </div>
-            <ChartLineUp size={24} weight="duotone" aria-hidden="true" />
-          </div>
-          <label className="report-course-picker">
-            <span>课程</span>
-            <select aria-label="选择课程" value={effectiveCourseId} onChange={(event) => setSelectedCourseId(event.target.value)}>
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          {trend?.scores?.length ? <PracticeTrendChart scores={trend.scores} /> : null}
-          <div className="mastery-list">
-            <article>
-              <div>
-                <strong>薄弱点</strong>
-                <span>{reportBody?.mastery_update.weak_count ?? 0}</span>
-              </div>
-              <div className="mastery-meter" aria-label={`薄弱点 ${reportBody?.mastery_update.weak_count ?? 0}`}>
-                <span style={{ width: `${Math.min((reportBody?.mastery_update.weak_count ?? 0) * 20, 100)}%` }} />
-              </div>
-            </article>
-            <article>
-              <div>
-                <strong>已掌握</strong>
-                <span>{reportBody?.mastery_update.mastered_count ?? 0}</span>
-              </div>
-              <div className="mastery-meter" aria-label={`已掌握 ${reportBody?.mastery_update.mastered_count ?? 0}`}>
-                <span style={{ width: `${Math.min((reportBody?.mastery_update.mastered_count ?? 0) * 20, 100)}%` }} />
-              </div>
-            </article>
-            <article>
-              <div>
-                <strong>练习趋势</strong>
-                <span>{trend?.sessions_compared ?? 0} 次</span>
-              </div>
-              <p className="report-trend-copy">{trendLabel}</p>
-            </article>
-          </div>
-        </section>
+    <>
+      <PageFrame title="学习报告" variant="wide-workspace">
+        <section className="report-workspace" aria-label="学习报告数据工作台">
+          <ReportWorkspaceToolbar
+            courses={courses}
+            courseId={effectiveCourseId}
+            freshness={freshness}
+            createdAt={report?.created_at}
+            isGenerating={generateMutation.isPending}
+            returnLink={<CourseReturnLink courseId={canUseCourse ? numericCourseId : null} />}
+            onCourseChange={handleCourseChange}
+            onGenerate={() => generateMutation.mutate()}
+            onOpenDetails={() => setDrawerMode("details")}
+            onOpenExport={() => setDrawerMode("export")}
+          />
 
-        <section className="student-panel learning-report-panel" role="region" aria-label="学习报告">
-          <div className="report-brief">
-            <FileText size={24} weight="duotone" aria-hidden="true" />
-            <div>
-              <strong>{reportTitle}</strong>
-              <p>{reportSummary}</p>
-            </div>
-          </div>
-          {readError || localError ? <p className="form-error">{readError || localError}</p> : null}
-          <AgentTraceDisclosure traceId={report?.agent_trace_id} label="查看 ReportGraph" />
-          {reportBody?.evidence_summary ? (
-            <div className="report-evidence-summary" aria-label="报告证据摘要">
-              <span>{reportBody.evidence_summary.practice_count} 次练习</span>
-              <span>{reportBody.evidence_summary.answer_count} 条作答</span>
-              <span>{reportBody.evidence_summary.weakness_count} 个活跃弱点</span>
-              <span>{reportBody.evidence_summary.resource_count} 个课程资源</span>
-            </div>
-          ) : null}
-          <ul className="report-evidence-list">
-            {(reportBody?.weakness_list ?? []).map((item) => (
-              <li key={`${item.knowledge_point_id}-${item.title}`}>
-                <ShieldCheck size={17} weight="duotone" aria-hidden="true" />
-                <span>{item.title}</span>
-              </li>
-            ))}
-            {(reportBody?.next_step_suggestions ?? []).map((item) => (
-              <li key={item}>
-                <Graph size={17} weight="duotone" aria-hidden="true" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
+          {!canUseCourse && !coursesQuery.isPending ? (
+            <main className="report-no-course"><FileTextFallback /><h2>还没有可生成报告的课程</h2><p>先从资料库创建课程并完成一次练习。</p><a href={PATHS.library}>进入资料库</a></main>
+          ) : (
+            <ReportDashboard
+              report={report}
+              masteryMap={masteryMap}
+              latestPractice={latestPractice}
+              freshness={freshness}
+              averageMastery={averageMastery}
+              trendScores={trendScores}
+              trendDelta={currentTrend.delta}
+              trendLabel={currentTrend.label}
+              weakestPoints={weakestPoints}
+              primaryAction={primaryAction}
+              primaryActionHref={primaryActionHref}
+              buildPracticeHref={(knowledgePointId) => buildContextHref(PATHS.practice, {
+                course_id: effectiveCourseId,
+                knowledge_point_id: knowledgePointId,
+                new: "1"
+              })}
+              dataWarning={dataWarning}
+              reportError={readError || localError}
+              isLoading={isLoading}
+              onGenerate={() => generateMutation.mutate()}
+            />
+          )}
         </section>
+      </PageFrame>
 
-        <aside className="student-panel export-panel" role="region" aria-label="生成学习报告">
-          <div>
-            <h2>生成报告</h2>
-            <p>基于真实练习、弱点和掌握度生成，不包含密钥或隐私原文。</p>
-          </div>
-          <button className="soft-button" type="button" disabled={!canUseCourse || generateMutation.isPending} onClick={() => generateMutation.mutate()}>
-            <FileText size={17} aria-hidden="true" />
-            <span>生成学习报告</span>
-          </button>
-          <label className="report-export-format">
-            <span>导出格式</span>
-            <select
-              aria-label="导出格式"
-              value={exportFormat}
-              disabled={exportMutation.isPending}
-              onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
-            >
-              <option value="markdown">Markdown</option>
-              <option value="pdf">PDF</option>
-              <option value="docx">DOCX</option>
-            </select>
-          </label>
-          <button className="soft-button" type="button" disabled={!canUseCourse || exportMutation.isPending} onClick={() => exportMutation.mutate()}>
-            <DownloadSimple size={17} aria-hidden="true" />
-            <span>{exportMutation.isPending ? "正在导出" : "导出学习档案"}</span>
-          </button>
-          {exportMessage ? <p className="inline-feedback inline-feedback-success">{exportMessage}</p> : null}
-          {exportError ? <p className="form-error">{exportError}</p> : null}
-        </aside>
-      </div>
-    </PageFrame>
+      <ReportDrawer
+        mode={drawerMode}
+        detailTab={detailTab}
+        report={report}
+        exportFormat={exportFormat}
+        isExporting={exportMutation.isPending}
+        exportMessage={exportMessage}
+        exportError={exportError}
+        canExport={canUseCourse}
+        onClose={() => setDrawerMode(null)}
+        onDetailTabChange={setDetailTab}
+        onExportFormatChange={(format) => {
+          setExportFormat(format);
+          setExportError("");
+          setExportMessage("");
+        }}
+        onExport={() => exportMutation.mutate()}
+      />
+    </>
   );
+}
+
+function FileTextFallback() {
+  return <span className="report-empty-mark" aria-hidden="true">R</span>;
 }

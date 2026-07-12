@@ -351,9 +351,10 @@ describe("student core pages", () => {
     renderPage(<ReportsPage />);
 
     expect(screen.getByRole("heading", { name: "学习报告" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "掌握度地图" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "学习报告" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "生成学习报告" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "学习报告数据工作台" })).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: "学习数据仪表盘" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "实时学习指标" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "最近报告快照" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "生成学习报告" })).toBeInTheDocument();
     expect(screen.queryByText("引用覆盖：AI 导论内置讲义、期末复习题样例")).not.toBeInTheDocument();
   });

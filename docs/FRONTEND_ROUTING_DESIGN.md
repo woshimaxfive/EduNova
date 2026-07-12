@@ -51,7 +51,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 | `/app/studio` | StudioPage | 桌面成果工作台；支持 `course_id` 与可选 `resource_id` 恢复当前课程和成果 |
 | `/app/profile` | ProfilePage | 真实 8 维画像、逐维可信度、候选/已应用证据、画像对话和 ProfileGraph 轨迹 |
 | `/app/practice` | PracticePage | adaptive 课程练习、最近会话/草稿恢复、确定性批改和复习线索 |
-| `/app/reports` | ReportsPage | 真实学习报告、掌握度更新、薄弱点、下一步建议和 Markdown 学习档案导出 |
+| `/app/reports` | ReportsPage | 宽屏实时学习仪表盘、最新报告快照、薄弱点行动、ReportGraph 和 Markdown/PDF/DOCX 异步导出 |
 | `/app/settings` | SettingsPage | 模型连接、个人设置、数据导出 |
 
 ### 3.2.1 Phase 3 重定向后的应用信息架构
@@ -365,7 +365,7 @@ Phase 3A 为了工程清晰，可以先有对应路由，但视觉上不做复�
 | StudioPage | 左侧成果库、中央资源画布、生成/详情覆盖抽屉 | 不做纵向长表单、横向卡片墙或常驻第三栏 |
 | ProfilePage | 从 `/profiles/me` 和 `/profiles/events` 读取真实画像与证据，通过 `/profiles/chat` 更新画像 | 不做复杂用户中心，不展示静态假画像 |
 | PracticePage | 真实课程练习、确定性评分、错因诊断、弱点与已有路径回流、Graph 轨迹 | 不做完整考试系统，不让模型修改客观分数 |
-| ReportsPage | 最近 5 次练习趋势、证据摘要、ReportGraph 和 Markdown/PDF/DOCX 异步导出 | 不做运营报表，不做假导出，不在提交练习时自动生成报告 |
+| ReportsPage | 实时掌握度、最近练习、最近 5 次趋势、报告快照、新鲜度、证据审核、ReportGraph 和 Markdown/PDF/DOCX 异步导出 | 不做运营报表、历史版本列表或自动报告，不做假导出 |
 | SettingsPage | 模型连接、个人资料、导出设置；Phase 6.2 已接入多模型配置列表、创建、测试、设默认和删除，Provider 预设收敛为国内常用和本地部署入口；账号昵称通过 `PATCH /auth/me` 真实保存，隐私与数据边界只做只读说明和报告页导出入口 | 不做复杂管理员后台，不放深度思考或联网搜索开关 |
 
 ## 11. 空状态与错误状态
@@ -589,3 +589,10 @@ Phase 5 以后：
 - 从课程空间进入时预选知识点和 `adaptive` 难度但不自动创建练习；进行中的最近练习自动恢复，已完成练习直接进入结果回看。
 - 草稿继续使用 650ms 防抖保存。未答提交使用二次确认，取消后定位第一道未答题；失败不清空答案、当前题或课程返回参数。
 - 练习设置和学习结果共用右侧覆盖抽屉；结果抽屉按需展示弱点、路径回流、真实资源标题及 AssessmentGraph/PathPlanningGraph 轨迹。
+
+## 19. 学习报告数据工作台（2026-07-12）
+
+- `/app/reports` 使用 `wide-workspace`：顶部工具栏固定，主数据画布独立滚动，详情和导出抽屉在 `PageFrame` 外按浏览器视口定位。
+- 实时指标读取统一课程闭环 Query Key 下的 mastery map、latest practice 和 current path；报告正文、证据、审核和 trace 保持最近一次主动生成的快照语义。
+- 最新已完成练习与报告 `practice_session_id` 或时间不一致时标记报告过期，旧报告仍可阅读，主操作变为更新报告。
+- 薄弱点针对练习、学习路径和返回课程空间继续传递 `course_id`、课程 session 与回答定位参数。

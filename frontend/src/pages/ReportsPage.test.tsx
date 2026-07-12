@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -9,6 +9,8 @@ import { apiClient } from "../api/client";
 import { AGENT_ENDPOINTS } from "../api/agents";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { EXPORT_ENDPOINTS } from "../api/exports";
+import { PATH_ENDPOINTS } from "../api/paths";
+import { PRACTICE_ENDPOINTS } from "../api/practice";
 import { REPORT_ENDPOINTS } from "../api/reports";
 import { PATHS } from "../app/routePaths";
 import { ReportsPage } from "./ReportsPage";
@@ -112,6 +114,88 @@ const readyReport = {
   created_at: "2026-07-05T10:10:00Z"
 };
 
+const masteryResponse = {
+  data: {
+    course_id: "808",
+    summary: {
+      total_count: 3,
+      weak_count: 1,
+      learning_count: 1,
+      mastered_count: 1,
+      recommended_review_count: 0,
+      not_started_count: 0
+    },
+    points: [
+      {
+        id: "401",
+        title: "启发式搜索",
+        chapter: "搜索问题",
+        order_index: 1,
+        status: "weak",
+        score: 38,
+        prerequisite_ids: [],
+        weakness_item_ids: ["701"],
+        recommended_resource_ids: []
+      },
+      {
+        id: "402",
+        title: "智能体任务版图",
+        chapter: "人工智能概述",
+        order_index: 2,
+        status: "mastered",
+        score: 82,
+        prerequisite_ids: [],
+        weakness_item_ids: [],
+        recommended_resource_ids: []
+      },
+      {
+        id: "403",
+        title: "状态空间",
+        chapter: "搜索问题",
+        order_index: 3,
+        status: "learning",
+        score: 60,
+        prerequisite_ids: [],
+        weakness_item_ids: [],
+        recommended_resource_ids: []
+      }
+    ]
+  },
+  trace_id: "trace_mastery"
+};
+
+const completedPractice = {
+  id: "501",
+  course_id: "808",
+  title: "人工智能导论练习",
+  status: "completed",
+  score: 67,
+  requested_difficulty: "adaptive",
+  effective_difficulty: "medium",
+  questions: [],
+  answers: [],
+  created_at: "2026-07-05T09:00:00Z",
+  updated_at: "2026-07-05T10:00:00Z"
+};
+
+const emptyPathResponse = {
+  data: {
+    course_id: "808",
+    status: "not_started",
+    message: "尚未生成路径",
+    path: null,
+    tasks: [],
+    evidence_summary: {
+      knowledge_point_count: 3,
+      confirmed_or_reviewing_weakness_count: 1,
+      pending_weakness_count: 0,
+      resource_count: 0,
+      basis: []
+    }
+  },
+  trace_id: "trace_path"
+};
+
 describe("ReportsPage", () => {
   beforeEach(() => {
     previousAdapter = apiClient.defaults.adapter;
@@ -155,6 +239,15 @@ describe("ReportsPage", () => {
           headers: {},
           config
         };
+      }
+      if (url === COURSE_ENDPOINTS.masteryMap(808)) {
+        return { data: masteryResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === PRACTICE_ENDPOINTS.latest) {
+        return { data: { data: generated ? completedPractice : null, trace_id: "trace_practice" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === PATH_ENDPOINTS.current) {
+        return { data: emptyPathResponse, status: 200, statusText: "OK", headers: {}, config };
       }
       if (url === REPORT_ENDPOINTS.generate) {
         generated = true;
@@ -262,11 +355,15 @@ describe("ReportsPage", () => {
     await user.click(screen.getByRole("button", { name: "生成学习报告" }));
 
     expect(await screen.findByText("本次评估得分 67，基于真实练习作答生成。")).toBeInTheDocument();
-    expect(screen.getByText("启发式搜索")).toBeInTheDocument();
-    expect(screen.getByText("优先复习薄弱点。")).toBeInTheDocument();
+    expect(screen.getAllByText("启发式搜索").length).toBeGreaterThan(0);
     expect(screen.getByText("较早期提升 12 分")).toBeInTheDocument();
-    expect(screen.getByText("3 次练习")).toBeInTheDocument();
-    expect(screen.getByText("15 条作答")).toBeInTheDocument();
+    expect(screen.getByText("60%")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "报告详情" }));
+    expect(await screen.findByText("优先复习薄弱点。")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "证据与审核" }));
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("15")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "协作轨迹" }));
     await user.click(screen.getByRole("button", { name: "查看 ReportGraph" }));
     expect(await screen.findByText("aggregate_evidence")).toBeInTheDocument();
     expect(calls).toContainEqual(
@@ -277,7 +374,9 @@ describe("ReportsPage", () => {
       })
     );
 
+    await user.click(screen.getByRole("button", { name: "关闭报告详情" }));
     await user.click(screen.getByRole("button", { name: "导出学习档案" }));
+    await user.click(screen.getByRole("button", { name: "导出 Markdown" }));
 
     expect(await screen.findByText("已生成 Markdown 学习档案。")).toBeInTheDocument();
     expect(createObjectUrlSpy).toHaveBeenCalledTimes(1);
@@ -312,6 +411,48 @@ describe("ReportsPage", () => {
     expect(await screen.findByText("学习报告读取失败，请稍后重试。")).toBeInTheDocument();
   });
 
+  it("keeps the report snapshot visible while marking newer practice data stale", async () => {
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === COURSE_ENDPOINTS.list) {
+        return { data: coursesResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (config.url === REPORT_ENDPOINTS.latest) {
+        return { data: { data: readyReport, trace_id: "trace_report" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (config.url === COURSE_ENDPOINTS.masteryMap(808)) {
+        return { data: masteryResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (config.url === PRACTICE_ENDPOINTS.latest) {
+        return {
+          data: { data: { ...completedPractice, id: "502", score: 82, updated_at: "2026-07-06T10:00:00Z" }, trace_id: "trace_practice" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+      if (config.url === PATH_ENDPOINTS.current) {
+        return { data: emptyPathResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      throw new Error(`Unexpected request ${config.url}`);
+    };
+
+    renderWithProviders(
+      <ReportsPage />,
+      `${PATHS.reports}?course_id=808&return_to=course&course_session_id=91&course_message_id=92`
+    );
+
+    expect(await screen.findByText("已有新的练习结果")).toBeInTheDocument();
+    expect(screen.getByText("实时数据已包含新的练习结果，下面的报告文字仍是上一次生成的快照。")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "更新学习报告" }).length).toBeGreaterThan(0);
+    expect(within(screen.getByRole("region", { name: "实时学习指标" })).getByText("82 分")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "最近报告快照" })).toHaveTextContent("本次评估得分 67");
+    expect(screen.getByRole("link", { name: "针对练习启发式搜索" })).toHaveAttribute(
+      "href",
+      "/app/practice?return_to=course&course_session_id=91&course_message_id=92&course_id=808&knowledge_point_id=401&new=1"
+    );
+  });
+
   it("shows local export errors without blocking the report", async () => {
     const user = userEvent.setup();
 
@@ -321,6 +462,15 @@ describe("ReportsPage", () => {
       }
       if (config.url === REPORT_ENDPOINTS.latest) {
         return { data: { data: readyReport, trace_id: "trace_latest_report" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (config.url === COURSE_ENDPOINTS.masteryMap(808)) {
+        return { data: masteryResponse, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (config.url === PRACTICE_ENDPOINTS.latest) {
+        return { data: { data: completedPractice, trace_id: "trace_practice" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (config.url === PATH_ENDPOINTS.current) {
+        return { data: emptyPathResponse, status: 200, statusText: "OK", headers: {}, config };
       }
       if (config.url === EXPORT_ENDPOINTS.learningDossierJob) {
         throw new Error("export failed");
@@ -333,6 +483,7 @@ describe("ReportsPage", () => {
     expect(await screen.findByText("本次评估得分 67，基于真实练习作答生成。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "导出学习档案" }));
+    await user.click(screen.getByRole("button", { name: "导出 Markdown" }));
 
     expect(await screen.findByText("学习档案导出失败，请稍后重试。")).toBeInTheDocument();
     expect(screen.getByText("本次评估得分 67，基于真实练习作答生成。")).toBeInTheDocument();

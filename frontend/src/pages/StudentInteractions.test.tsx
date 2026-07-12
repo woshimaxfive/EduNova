@@ -1004,7 +1004,7 @@ describe("student interaction affordances", () => {
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(await screen.findByText("本次评估得分 80，基于真实练习作答生成。")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "学习报告" })).toHaveTextContent("反向传播");
+    expect(screen.getByRole("region", { name: "最近报告快照" })).toHaveTextContent("本次评估得分 80");
   });
 
   it("shows feedback for library actions that await real APIs", async () => {

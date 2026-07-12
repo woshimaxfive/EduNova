@@ -658,6 +658,10 @@
 
 .practice-drawer-layer,
 .practice-confirm-layer {
+  --wide-workspace-emphasis: #edf3f0;
+  --wide-workspace-muted: #e6efeb;
+  --wide-workspace-control: #fafcfb;
+  --wide-workspace-divider: rgba(29, 58, 50, 0.14);
   position: fixed;
   inset: 0;
   z-index: 80;

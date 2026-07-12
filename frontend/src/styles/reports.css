@@ -74,6 +74,12 @@
   background: color-mix(in srgb, var(--coral) 11%, transparent);
 }
 
+.report-toolbar-status > span[data-status="unknown"],
+.report-toolbar-status > span[data-status="unavailable"] {
+  color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 10%, transparent);
+}
+
 .report-toolbar-status strong {
   overflow: hidden;
   color: var(--text-strong);
@@ -164,6 +170,24 @@
   border-radius: 4px;
   padding: 8px 10px;
   font-size: 0.72rem;
+}
+
+.report-workspace-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.report-workspace-error button {
+  flex: 0 0 auto;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 5px 9px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
 }
 
 .report-data-warning {

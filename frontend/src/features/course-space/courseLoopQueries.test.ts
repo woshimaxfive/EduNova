@@ -11,7 +11,8 @@ describe("course learning loop query identity", () => {
       ["resources", "course", 808],
       ["paths", "current", 808],
       ["reports", "latest", 808],
-      ["practice", "latest", 808]
+      ["practice", "latest", 808],
+      ["practice", "recent", 808]
     ]);
     expect(courseLoopQueryKeys.resources(808)).toEqual(["resources", "course", 808]);
   });

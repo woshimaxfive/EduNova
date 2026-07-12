@@ -18,7 +18,7 @@ from backend.app.models import (
     User,
     WeaknessReviewItem,
 )
-from backend.app.schemas.practice import PracticeSessionDetail, SubmitPracticeAnswerItem, session_to_api
+from backend.app.schemas.practice import PracticeSessionDetail, PracticeSessionSummary, SubmitPracticeAnswerItem, session_to_api, session_to_summary
 
 
 class PracticeNotFoundError(Exception):
@@ -49,6 +49,8 @@ class PracticeRepository(Protocol):
     def get_practice_session_for_user(self, user_id: int, session_id: int) -> PracticeSession | None: ...
 
     def get_latest_practice_session_for_user(self, user_id: int, course_id: int) -> PracticeSession | None: ...
+
+    def list_recent_completed_practice_sessions(self, user_id: int, course_id: int, limit: int = 5) -> list[PracticeSession]: ...
 
     def list_answers_for_session(self, session_id: int) -> list[PracticeAnswer]: ...
 
@@ -106,6 +108,20 @@ class SqlAlchemyPracticeRepository:
             .where(PracticeSession.user_id == user_id, PracticeSession.course_id == course_id)
             .order_by(case((PracticeSession.status == "in_progress", 0), else_=1), PracticeSession.updated_at.desc(), PracticeSession.id.desc())
             .limit(1)
+        )
+
+    def list_recent_completed_practice_sessions(self, user_id: int, course_id: int, limit: int = 5) -> list[PracticeSession]:
+        return list(
+            self.db.scalars(
+                select(PracticeSession)
+                .where(
+                    PracticeSession.user_id == user_id,
+                    PracticeSession.course_id == course_id,
+                    PracticeSession.status == "completed",
+                )
+                .order_by(PracticeSession.updated_at.desc(), PracticeSession.id.desc())
+                .limit(limit)
+            )
         )
 
     def list_answers_for_session(self, session_id: int) -> list[PracticeAnswer]:
@@ -213,6 +229,13 @@ class PracticeService:
         if session is None:
             return None
         return session_to_api(session, self.repository.list_answers_for_session(session.id))
+
+    def list_recent_completed_sessions(self, user: User, course_id: int, limit: int = 5) -> list[PracticeSessionSummary]:
+        self._require_course(user, course_id)
+        getter = getattr(self.repository, "list_recent_completed_practice_sessions", None)
+        if not callable(getter):
+            return []
+        return [session_to_summary(session) for session in getter(user.id, course_id, limit)]
 
     def save_draft(
         self,

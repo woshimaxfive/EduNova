@@ -243,8 +243,23 @@ describe("ReportsPage", () => {
       if (url === COURSE_ENDPOINTS.masteryMap(808)) {
         return { data: masteryResponse, status: 200, statusText: "OK", headers: {}, config };
       }
-      if (url === PRACTICE_ENDPOINTS.latest) {
-        return { data: { data: generated ? completedPractice : null, trace_id: "trace_practice" }, status: 200, statusText: "OK", headers: {}, config };
+      if (url === PRACTICE_ENDPOINTS.recent) {
+        return {
+          data: {
+            data: generated
+              ? [
+                  completedPractice,
+                  { ...completedPractice, id: "500", score: 61, updated_at: "2026-07-04T10:00:00Z" },
+                  { ...completedPractice, id: "499", score: 55, updated_at: "2026-07-03T10:00:00Z" }
+                ]
+              : [],
+            trace_id: "trace_practice"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
       }
       if (url === PATH_ENDPOINTS.current) {
         return { data: emptyPathResponse, status: 200, statusText: "OK", headers: {}, config };
@@ -358,7 +373,14 @@ describe("ReportsPage", () => {
     expect(screen.getAllByText("启发式搜索").length).toBeGreaterThan(0);
     expect(screen.getByText("较早期提升 12 分")).toBeInTheDocument();
     expect(screen.getByText("60%")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "报告详情" }));
+    const reportDetailsTrigger = screen.getByRole("button", { name: "报告详情" });
+    await user.click(reportDetailsTrigger);
+    const closeDetails = screen.getByRole("button", { name: "关闭报告详情" });
+    expect(closeDetails).toHaveFocus();
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(screen.getByRole("tab", { name: "协作轨迹" })).toHaveFocus();
+    await user.tab();
+    expect(closeDetails).toHaveFocus();
     expect(await screen.findByText("优先复习薄弱点。")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "证据与审核" }));
     expect(screen.getByText("3")).toBeInTheDocument();
@@ -374,7 +396,8 @@ describe("ReportsPage", () => {
       })
     );
 
-    await user.click(screen.getByRole("button", { name: "关闭报告详情" }));
+    await user.click(closeDetails);
+    expect(reportDetailsTrigger).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "导出学习档案" }));
     await user.click(screen.getByRole("button", { name: "导出 Markdown" }));
 
@@ -409,6 +432,9 @@ describe("ReportsPage", () => {
     renderWithProviders(<ReportsPage />);
 
     expect(await screen.findByText("学习报告读取失败，请稍后重试。")).toBeInTheDocument();
+    expect(screen.getByText("报告快照暂时无法读取")).toBeInTheDocument();
+    expect(screen.queryByText("还没有真实学习报告")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "重新读取" }).length).toBeGreaterThan(0);
   });
 
   it("keeps the report snapshot visible while marking newer practice data stale", async () => {
@@ -422,9 +448,9 @@ describe("ReportsPage", () => {
       if (config.url === COURSE_ENDPOINTS.masteryMap(808)) {
         return { data: masteryResponse, status: 200, statusText: "OK", headers: {}, config };
       }
-      if (config.url === PRACTICE_ENDPOINTS.latest) {
+      if (config.url === PRACTICE_ENDPOINTS.recent) {
         return {
-          data: { data: { ...completedPractice, id: "502", score: 82, updated_at: "2026-07-06T10:00:00Z" }, trace_id: "trace_practice" },
+          data: { data: [{ ...completedPractice, id: "502", score: 82, updated_at: "2026-07-06T10:00:00Z" }, completedPractice], trace_id: "trace_practice" },
           status: 200,
           statusText: "OK",
           headers: {},
@@ -466,8 +492,8 @@ describe("ReportsPage", () => {
       if (config.url === COURSE_ENDPOINTS.masteryMap(808)) {
         return { data: masteryResponse, status: 200, statusText: "OK", headers: {}, config };
       }
-      if (config.url === PRACTICE_ENDPOINTS.latest) {
-        return { data: { data: completedPractice, trace_id: "trace_practice" }, status: 200, statusText: "OK", headers: {}, config };
+      if (config.url === PRACTICE_ENDPOINTS.recent) {
+        return { data: { data: [completedPractice], trace_id: "trace_practice" }, status: 200, statusText: "OK", headers: {}, config };
       }
       if (config.url === PATH_ENDPOINTS.current) {
         return { data: emptyPathResponse, status: 200, statusText: "OK", headers: {}, config };

@@ -440,6 +440,7 @@ def test_latest_report_returns_empty_state_and_routes_require_login() -> None:
         headers=headers,
         json={"answers": [{"question_id": question_id, "answer_text": "错误选项"}]},
     )
+    recent = client.get("/api/v1/practice/sessions/recent?course_id=101&limit=5", headers=headers)
     generated_report = client.post(
         "/api/v1/reports/generate",
         headers=headers,
@@ -454,6 +455,15 @@ def test_latest_report_returns_empty_state_and_routes_require_login() -> None:
     assert created.status_code == 200
     assert submitted.status_code == 200
     assert submitted.json()["data"]["status"] == "completed"
+    assert recent.status_code == 200
+    assert len(recent.json()["data"]) == 1
+    assert recent.json()["data"][0]["id"] == created.json()["data"]["id"]
+    assert recent.json()["data"][0]["course_id"] == "101"
+    assert recent.json()["data"][0]["status"] == "completed"
+    assert recent.json()["data"][0]["score"] == 0
+    assert recent.json()["data"][0]["effective_difficulty"] == "easy"
+    assert "questions" not in recent.json()["data"][0]
+    assert "answers" not in recent.json()["data"][0]
     assert generated_report.status_code == 200
     assert generated_report.json()["data"]["practice_session_id"] == created.json()["data"]["id"]
     assert latest.status_code == 200

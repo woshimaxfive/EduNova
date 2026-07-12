@@ -1,9 +1,9 @@
 import type { CourseMasteryMap, CourseMasteryPoint } from "../../api/courses";
 import type { LearningPathDetail } from "../../api/paths";
-import type { PracticeSessionDetail } from "../../api/practice";
+import type { PracticeSessionSummary } from "../../api/practice";
 import type { AssessmentReport } from "../../api/reports";
 
-export type ReportFreshness = "empty" | "current" | "stale";
+export type ReportFreshness = "empty" | "current" | "stale" | "unknown" | "unavailable";
 
 export type ReportPrimaryAction =
   | { type: "update_report"; label: string; description: string }
@@ -19,7 +19,7 @@ export function calculateAverageMastery(points: CourseMasteryPoint[]) {
 
 export function getReportFreshness(
   report: AssessmentReport | null | undefined,
-  latestPractice: PracticeSessionDetail | null | undefined
+  latestPractice: PracticeSessionSummary | null | undefined
 ): ReportFreshness {
   if (!report || report.status !== "ready") return "empty";
   if (!latestPractice || latestPractice.status !== "completed") return "current";
@@ -30,17 +30,14 @@ export function getReportFreshness(
 
 export function buildCurrentTrendScores(
   report: AssessmentReport | null | undefined,
-  latestPractice: PracticeSessionDetail | null | undefined
+  recentPractices: PracticeSessionSummary[] | null | undefined
 ) {
-  const scores = [...(report?.report.trend?.scores ?? [])];
-  if (
-    latestPractice?.status === "completed"
-    && typeof latestPractice.score === "number"
-    && report?.practice_session_id !== latestPractice.id
-  ) {
-    scores.push(latestPractice.score);
-  }
-  return scores.slice(-5);
+  const liveScores = (Array.isArray(recentPractices) ? recentPractices : [])
+    .filter((practice) => practice.status === "completed" && typeof practice.score === "number")
+    .slice(0, 5)
+    .reverse()
+    .map((practice) => practice.score as number);
+  return liveScores.length > 0 ? liveScores : [...(report?.report.trend?.scores ?? [])].slice(-5);
 }
 
 export function sortMasteryPoints(points: CourseMasteryPoint[]) {

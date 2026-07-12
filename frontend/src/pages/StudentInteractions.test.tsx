@@ -995,6 +995,30 @@ describe("student interaction affordances", () => {
         };
       }
 
+      if (url === PRACTICE_ENDPOINTS.recent) {
+        return {
+          data: {
+            data: reportReady
+              ? [{
+                  id: "501",
+                  course_id: "808",
+                  title: "机器学习期末复习练习",
+                  status: "completed",
+                  score: 80,
+                  effective_difficulty: "medium",
+                  created_at: "2026-07-05T09:00:00Z",
+                  updated_at: "2026-07-05T10:00:00Z"
+                }]
+              : [],
+            trace_id: "trace_report_practice"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
       return { data: { data: {}, trace_id: "trace_report_default" }, status: 200, statusText: "OK", headers: {}, config };
     };
 

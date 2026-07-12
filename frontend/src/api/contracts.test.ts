@@ -14,7 +14,7 @@ import {
 } from "./exports";
 import { compareMaterials, getLatestMaterialComparison, getMaterial, getMaterialComparison, MATERIAL_ENDPOINTS } from "./materials";
 import { generatePath, getCurrentPath, PATH_ENDPOINTS, updatePathTask } from "./paths";
-import { createPracticeSession, getPracticeSession, PRACTICE_ENDPOINTS, submitPracticeAnswers } from "./practice";
+import { createPracticeSession, getPracticeSession, listRecentCompletedPracticeSessions, PRACTICE_ENDPOINTS, submitPracticeAnswers } from "./practice";
 import { RAG_ENDPOINTS, searchRag } from "./rag";
 import { getMyProfile, listProfileEvents, PROFILE_ENDPOINTS, updateProfileByChat } from "./profiles";
 import { generateReport, getLatestReport, REPORT_ENDPOINTS } from "./reports";
@@ -1141,8 +1141,21 @@ describe("frontend API contracts", () => {
         updated_at: "2026-07-05T10:01:00Z"
       };
 
+      const data = config.url === PRACTICE_ENDPOINTS.recent
+        ? [{
+            id: session.id,
+            course_id: session.course_id,
+            title: session.title,
+            status: session.status,
+            score: session.score,
+            effective_difficulty: "medium",
+            created_at: session.created_at,
+            updated_at: session.updated_at
+          }]
+        : session;
+
       return {
-        data: { data: session, trace_id: "trace_practice_contract" },
+        data: { data, trace_id: "trace_practice_contract" },
         status: 200,
         statusText: "OK",
         headers: {},
@@ -1158,6 +1171,7 @@ describe("frontend API contracts", () => {
         difficulty: "medium"
       });
       const detail = await getPracticeSession(501);
+      const recent = await listRecentCompletedPracticeSessions(7, 5);
       const submitted = await submitPracticeAnswers(501, { answers: [{ question_id: "q1", answer_text: "无关概念" }] });
 
       expect(calls).toEqual([
@@ -1167,6 +1181,7 @@ describe("frontend API contracts", () => {
           data: { course_id: 7, knowledge_point_ids: [401], question_count: 1, difficulty: "medium" }
         },
         { url: PRACTICE_ENDPOINTS.detail(501), method: "get", data: undefined },
+        { url: PRACTICE_ENDPOINTS.recent, method: "get", data: undefined },
         {
           url: PRACTICE_ENDPOINTS.answers(501),
           method: "post",
@@ -1175,6 +1190,7 @@ describe("frontend API contracts", () => {
       ]);
       expect(created.data.questions[0].correct_answer).toBeNull();
       expect(detail.data.id).toBe("501");
+      expect(recent.data[0].score).toBe(67);
       expect(submitted.data.answers[0].feedback.score).toBe(0);
       expect(submitted.data.answers[0].feedback.diagnosis?.evidence_ref.id).toBe("601");
       expect(submitted.data.closure_update?.path_update_status).toBe("replanned");

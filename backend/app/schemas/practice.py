@@ -104,6 +104,17 @@ class PracticeSessionDetail(BaseModel):
     updated_at: str
 
 
+class PracticeSessionSummary(BaseModel):
+    id: str
+    course_id: str
+    title: str
+    status: str
+    score: int | None
+    effective_difficulty: Literal["easy", "medium", "hard"] = "medium"
+    created_at: str
+    updated_at: str
+
+
 def iso_timestamp(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -138,6 +149,23 @@ def session_to_api(session: PracticeSession, answers: list[PracticeAnswer]) -> P
         questions=questions,
         answers=answer_items,
         closure_update=_closure_update(getattr(session, "assessment_json", None)),
+        created_at=iso_timestamp(session.created_at) or "",
+        updated_at=iso_timestamp(session.updated_at) or "",
+    )
+
+
+def session_to_summary(session: PracticeSession) -> PracticeSessionSummary:
+    assessment = session.assessment_json if isinstance(getattr(session, "assessment_json", None), dict) else {}
+    effective_difficulty = str(assessment.get("effective_difficulty") or assessment.get("difficulty") or "medium")
+    if effective_difficulty not in {"easy", "medium", "hard"}:
+        effective_difficulty = "medium"
+    return PracticeSessionSummary(
+        id=str(session.id),
+        course_id=str(session.course_id),
+        title=session.title,
+        status=session.status,
+        score=int(session.score) if session.score is not None else None,
+        effective_difficulty=effective_difficulty,
         created_at=iso_timestamp(session.created_at) or "",
         updated_at=iso_timestamp(session.updated_at) or "",
     )

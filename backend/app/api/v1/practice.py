@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import ApiError, api_response
@@ -74,6 +74,20 @@ def get_latest_practice_session(
     except PracticeNotFoundError as exc:
         raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc
     return api_response(result.model_dump() if result is not None else None)
+
+
+@router.get("/sessions/recent")
+def list_recent_completed_practice_sessions(
+    course_id: int,
+    limit: int = Query(default=5, ge=1, le=20),
+    current_user: User = Depends(get_current_user),
+    service: PracticeService = Depends(get_practice_service),
+) -> dict:
+    try:
+        result = service.list_recent_completed_sessions(current_user, course_id, limit)
+    except PracticeNotFoundError as exc:
+        raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc
+    return api_response([item.model_dump() for item in result])
 
 
 @router.get("/sessions/{session_id}")

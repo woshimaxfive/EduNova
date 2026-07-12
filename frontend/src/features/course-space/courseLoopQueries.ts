@@ -6,7 +6,8 @@ export const courseLoopQueryKeys = {
   resources: (courseId: number) => ["resources", "course", courseId] as const,
   currentPath: (courseId: number) => ["paths", "current", courseId] as const,
   latestReport: (courseId: number) => ["reports", "latest", courseId] as const,
-  latestPractice: (courseId: number) => ["practice", "latest", courseId] as const
+  latestPractice: (courseId: number) => ["practice", "latest", courseId] as const,
+  recentPractices: (courseId: number) => ["practice", "recent", courseId] as const
 };
 
 export function courseLoopKeys(courseId: number) {
@@ -16,7 +17,8 @@ export function courseLoopKeys(courseId: number) {
     courseLoopQueryKeys.resources(courseId),
     courseLoopQueryKeys.currentPath(courseId),
     courseLoopQueryKeys.latestReport(courseId),
-    courseLoopQueryKeys.latestPractice(courseId)
+    courseLoopQueryKeys.latestPractice(courseId),
+    courseLoopQueryKeys.recentPractices(courseId)
   ] as const;
 }
 

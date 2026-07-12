@@ -4,6 +4,7 @@ import { type ApiEnvelope } from "../types/api";
 export const PRACTICE_ENDPOINTS = {
   sessions: "/practice/sessions",
   latest: "/practice/sessions/latest",
+  recent: "/practice/sessions/recent",
   detail: (sessionId: number) => `/practice/sessions/${sessionId}`,
   draft: (sessionId: number) => `/practice/sessions/${sessionId}/draft`,
   answers: (sessionId: number) => `/practice/sessions/${sessionId}/answers`
@@ -84,6 +85,11 @@ export type PracticeSessionDetail = {
   updated_at: string;
 };
 
+export type PracticeSessionSummary = Pick<
+  PracticeSessionDetail,
+  "id" | "course_id" | "title" | "status" | "score" | "effective_difficulty" | "created_at" | "updated_at"
+>;
+
 export async function createPracticeSession(payload: CreatePracticeSessionRequest) {
   const response = await apiClient.post<ApiEnvelope<PracticeSessionDetail>>(PRACTICE_ENDPOINTS.sessions, payload);
   return response.data;
@@ -97,6 +103,13 @@ export async function getPracticeSession(sessionId: number) {
 export async function getLatestPracticeSession(courseId: number) {
   const response = await apiClient.get<ApiEnvelope<PracticeSessionDetail | null>>(PRACTICE_ENDPOINTS.latest, {
     params: { course_id: courseId }
+  });
+  return response.data;
+}
+
+export async function listRecentCompletedPracticeSessions(courseId: number, limit = 5) {
+  const response = await apiClient.get<ApiEnvelope<PracticeSessionSummary[]>>(PRACTICE_ENDPOINTS.recent, {
+    params: { course_id: courseId, limit }
   });
   return response.data;
 }

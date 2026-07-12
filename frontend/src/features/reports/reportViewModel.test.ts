@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { CourseMasteryPoint } from "../../api/courses";
-import type { PracticeSessionDetail } from "../../api/practice";
+import type { PracticeSessionSummary } from "../../api/practice";
 import type { AssessmentReport } from "../../api/reports";
 import {
   buildCurrentTrendScores,
@@ -48,13 +48,10 @@ const practice = {
   title: "练习",
   status: "completed",
   score: 82,
-  requested_difficulty: "adaptive",
   effective_difficulty: "medium",
-  questions: [],
-  answers: [],
   created_at: "2026-07-11T10:00:00Z",
   updated_at: "2026-07-11T10:00:00Z"
-} satisfies PracticeSessionDetail;
+} satisfies PracticeSessionSummary;
 
 describe("reportViewModel", () => {
   it("calculates rounded and clamped current mastery", () => {
@@ -65,8 +62,19 @@ describe("reportViewModel", () => {
 
   it("marks a report stale when a newer completed practice exists", () => {
     expect(getReportFreshness(report, practice)).toBe("stale");
-    expect(buildCurrentTrendScores(report, practice)).toEqual([60, 70, 82]);
-    expect(calculateCurrentTrend([60, 70, 82])).toEqual({ direction: "improved", delta: 22, label: "较早期提升 22 分" });
+    expect(buildCurrentTrendScores(report, [practice, { ...practice, id: "501", score: 70, updated_at: "2026-07-10T10:00:00Z" }])).toEqual([70, 82]);
+    expect(calculateCurrentTrend([70, 82])).toEqual({ direction: "improved", delta: 12, label: "较早期提升 12 分" });
+  });
+
+  it("uses the latest five completed practice summaries before snapshot fallback", () => {
+    const recent = [82, 76, 70, 64, 58, 52].map((score, index) => ({
+      ...practice,
+      id: String(506 - index),
+      score,
+      updated_at: `2026-07-${String(12 - index).padStart(2, "0")}T10:00:00Z`
+    }));
+    expect(buildCurrentTrendScores(report, recent)).toEqual([58, 64, 70, 76, 82]);
+    expect(buildCurrentTrendScores(report, [])).toEqual([60, 70]);
   });
 
   it("keeps empty reports honest and prioritizes the weakest point otherwise", () => {

@@ -1695,6 +1695,12 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
 
 用途：返回当前用户当前课程最近的练习，优先返回未完成会话；没有练习时 `data=null`。前端用它恢复刷新前的学习位置。
 
+### GET `/practice/sessions/recent?course_id=...&limit=5`
+
+用途：按更新时间从新到旧返回当前用户当前课程最近已完成的练习摘要，供学习报告实时趋势使用。`limit` 默认为 5，范围为 1–20。
+
+响应只包含 `id`、`course_id`、`title`、`status`、`score`、`effective_difficulty`、`created_at` 和 `updated_at`，不返回题目、作答正文或诊断原文。课程不存在或不属于当前用户时返回 404。
+
 ### PATCH `/practice/sessions/{session_id}/draft`
 
 用途：保存未评估答案草稿，不触发评分、弱点、路径或画像回流。仅 `in_progress` 会话可写，完成后的练习返回 400。

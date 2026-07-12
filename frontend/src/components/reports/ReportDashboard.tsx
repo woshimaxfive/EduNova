@@ -2,7 +2,7 @@ import { ArrowRight, BookOpenText, ChartLineUp, CheckCircle, Target, WarningCirc
 import { Link } from "react-router-dom";
 
 import type { CourseMasteryMap, CourseMasteryPoint } from "../../api/courses";
-import type { PracticeSessionDetail } from "../../api/practice";
+import type { PracticeSessionSummary } from "../../api/practice";
 import type { AssessmentReport } from "../../api/reports";
 import type { ReportFreshness, ReportPrimaryAction } from "../../features/reports/reportViewModel";
 import { MasteryOverviewChart, PracticeTrendChart } from "../visualization/LearningCharts";
@@ -10,7 +10,7 @@ import { MasteryOverviewChart, PracticeTrendChart } from "../visualization/Learn
 type ReportDashboardProps = {
   report: AssessmentReport | null | undefined;
   masteryMap: CourseMasteryMap | null | undefined;
-  latestPractice: PracticeSessionDetail | null | undefined;
+  latestPractice: PracticeSessionSummary | null | undefined;
   freshness: ReportFreshness;
   averageMastery: number;
   trendScores: number[];
@@ -24,6 +24,7 @@ type ReportDashboardProps = {
   reportError: string;
   isLoading: boolean;
   onGenerate: () => void;
+  onRetryReport: () => void;
 };
 
 function scoreLabel(score: number | null | undefined) {
@@ -46,12 +47,19 @@ export function ReportDashboard({
   dataWarning,
   reportError,
   isLoading,
-  onGenerate
+  onGenerate,
+  onRetryReport
 }: ReportDashboardProps) {
   const summary = masteryMap?.summary;
   const masteryPoints = Array.isArray(masteryMap?.points) ? masteryMap.points : [];
-  const snapshotTitle = report?.status === "ready" ? "最近报告快照" : "还没有真实学习报告";
-  const snapshotSummary = report?.status === "ready"
+  const snapshotTitle = freshness === "unavailable"
+    ? "报告快照暂时无法读取"
+    : report?.status === "ready"
+      ? "最近报告快照"
+      : "还没有真实学习报告";
+  const snapshotSummary = freshness === "unavailable"
+    ? "实时学习数据仍可查看，重新读取后会恢复报告总结与建议。"
+    : report?.status === "ready"
     ? report.report.summary
     : "完成一次课程练习后可生成报告";
 
@@ -65,7 +73,12 @@ export function ReportDashboard({
         </div>
       ) : null}
       {dataWarning ? <p className="report-data-warning">{dataWarning}</p> : null}
-      {reportError ? <p className="form-error report-workspace-error">{reportError}</p> : null}
+      {reportError ? (
+        <div className="form-error report-workspace-error" role="alert">
+          <span>{reportError}</span>
+          {freshness === "unavailable" ? <button type="button" onClick={onRetryReport}>重新读取</button> : null}
+        </div>
+      ) : null}
 
       <section className="report-metric-strip" aria-label="实时学习指标">
         <article>
@@ -142,7 +155,7 @@ export function ReportDashboard({
           <span>{snapshotTitle}</span>
           <p>{snapshotSummary}</p>
         </div>
-        <small>{report?.created_at ? `生成于 ${new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(report.created_at))}` : "等待真实练习证据"}</small>
+        <small>{freshness === "unavailable" ? "报告读取失败，未判定为空报告" : report?.created_at ? `生成于 ${new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(report.created_at))}` : "等待真实练习证据"}</small>
       </section>
 
       <section className="report-lower-grid">

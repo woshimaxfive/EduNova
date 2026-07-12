@@ -1,4 +1,5 @@
 import { DownloadSimple, FileText, ShieldCheck, X } from "@phosphor-icons/react";
+import { useEffect, useRef } from "react";
 
 import type { ExportFormat } from "../../api/exports";
 import type { AssessmentReport } from "../../api/reports";
@@ -11,6 +12,7 @@ type ReportDrawerProps = {
   mode: ReportDrawerMode;
   detailTab: ReportDetailTab;
   report: AssessmentReport | null | undefined;
+  reportUnavailable: boolean;
   exportFormat: ExportFormat;
   isExporting: boolean;
   exportMessage: string;
@@ -32,6 +34,7 @@ export function ReportDrawer({
   mode,
   detailTab,
   report,
+  reportUnavailable,
   exportFormat,
   isExporting,
   exportMessage,
@@ -42,6 +45,53 @@ export function ReportDrawer({
   onExportFormatChange,
   onExport
 }: ReportDrawerProps) {
+  const drawerRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!mode) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const drawer = drawerRef.current;
+    const focusableSelector = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+    const focusable = () => Array.from(drawer?.querySelectorAll<HTMLElement>(focusableSelector) ?? [])
+      .filter((element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
+    (focusable()[0] ?? drawer)?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) {
+        event.preventDefault();
+        drawer?.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, [mode]);
+
   if (!mode) return null;
   const ready = report?.status === "ready";
   const body = report?.report;
@@ -51,9 +101,9 @@ export function ReportDrawer({
     <div className="report-drawer-layer" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <aside className="report-drawer" role="dialog" aria-modal="true" aria-label={title}>
+      <aside ref={drawerRef} className="report-drawer" role="dialog" aria-modal="true" aria-labelledby="report-drawer-title" tabIndex={-1}>
         <header>
-          <div><span>学习报告</span><h2>{title}</h2></div>
+          <div><span>学习报告</span><h2 id="report-drawer-title">{title}</h2></div>
           <button type="button" aria-label={`关闭${title}`} onClick={onClose}><X size={19} weight="bold" aria-hidden="true" /></button>
         </header>
 
@@ -70,7 +120,7 @@ export function ReportDrawer({
             </div>
             <div className="report-drawer-content">
               {!ready ? (
-                <div className="report-drawer-empty"><FileText size={30} weight="duotone" /><h3>还没有正式报告</h3><p>完成练习并主动生成报告后，这里会展示报告快照。</p></div>
+                <div className="report-drawer-empty"><FileText size={30} weight="duotone" /><h3>{reportUnavailable ? "报告暂时无法读取" : "还没有正式报告"}</h3><p>{reportUnavailable ? "请关闭抽屉并重新读取报告，当前状态不会被当作空报告。" : "完成练习并主动生成报告后，这里会展示报告快照。"}</p></div>
               ) : detailTab === "summary" ? (
                 <div className="report-detail-sections">
                   <section><span>生成时学习结论</span><p>{body?.summary}</p></section>

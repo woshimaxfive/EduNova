@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { getMasteryMap, listCourses } from "../api/courses";
@@ -11,7 +11,7 @@ import {
   type ExportJob
 } from "../api/exports";
 import { getCurrentPath } from "../api/paths";
-import { getLatestPracticeSession } from "../api/practice";
+import { listRecentCompletedPracticeSessions } from "../api/practice";
 import { generateReport, getLatestReport } from "../api/reports";
 import { PATHS, buildCoursePath } from "../app/routePaths";
 import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
@@ -53,6 +53,23 @@ function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+const EXPORT_POLL_INTERVAL_MS = 1000;
+const EXPORT_POLL_TIMEOUT_MS = 120_000;
+
+class ExportPollingTimeoutError extends Error {}
+
+async function waitForExportJob(initialJob: ExportJob) {
+  let job = initialJob;
+  const deadline = Date.now() + EXPORT_POLL_TIMEOUT_MS;
+  while (job.status !== "completed" && job.status !== "failed") {
+    if (Date.now() >= deadline) throw new ExportPollingTimeoutError("export job is still running");
+    const refreshed = await getExportJob(job.job_id);
+    job = refreshed.data;
+    if (job.status !== "completed" && job.status !== "failed") await delay(EXPORT_POLL_INTERVAL_MS);
+  }
+  return job;
+}
+
 export function ReportsPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -62,15 +79,6 @@ export function ReportsPage() {
   const [exportError, setExportError] = useState("");
   const [exportMessage, setExportMessage] = useState("");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("markdown");
-
-  useEffect(() => {
-    if (!drawerMode) return;
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setDrawerMode(null);
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [drawerMode]);
 
   const coursesQuery = useQuery({ queryKey: ["report-courses"], queryFn: () => listCourses() });
   const courses = coursesQuery.data?.data ?? [];
@@ -88,9 +96,9 @@ export function ReportsPage() {
     queryFn: () => getMasteryMap(numericCourseId),
     enabled: canUseCourse
   });
-  const latestPracticeQuery = useQuery({
-    queryKey: courseLoopQueryKeys.latestPractice(numericCourseId),
-    queryFn: () => getLatestPracticeSession(numericCourseId),
+  const recentPracticesQuery = useQuery({
+    queryKey: courseLoopQueryKeys.recentPractices(numericCourseId),
+    queryFn: () => listRecentCompletedPracticeSessions(numericCourseId, 5),
     enabled: canUseCourse
   });
   const currentPathQuery = useQuery({
@@ -112,12 +120,7 @@ export function ReportsPage() {
   const exportMutation = useMutation({
     mutationFn: async () => {
       const created = await createLearningDossierExportJob({ course_id: numericCourseId, format: exportFormat });
-      let job = created.data;
-      for (let attempt = 0; attempt < 20 && job.status !== "completed" && job.status !== "failed"; attempt += 1) {
-        const refreshed = await getExportJob(job.job_id);
-        job = refreshed.data;
-        if (job.status !== "completed" && job.status !== "failed") await delay(800);
-      }
+      const job = await waitForExportJob(created.data);
       if (job.status !== "completed") throw new Error(job.error_message || "learning dossier export failed");
       const file = await downloadExportJob(job.job_id);
       return { job, file };
@@ -127,29 +130,36 @@ export function ReportsPage() {
       downloadDossierFile(job.filename ?? "edunova-learning-dossier", file, job.content_type ?? "application/octet-stream");
       setExportMessage(`已生成 ${exportFormatLabel(job.format)} 学习档案。`);
     },
-    onError: () => {
+    onError: (error) => {
       setExportMessage("");
-      setExportError("学习档案导出失败，请稍后重试。");
+      setExportError(error instanceof ExportPollingTimeoutError
+        ? "学习档案仍在后台生成，请稍后再次尝试下载。"
+        : "学习档案导出失败，请稍后重试。");
     }
   });
 
   const report = latestReportQuery.data?.data;
   const masteryMap = masteryQuery.data?.data;
-  const latestPractice = latestPracticeQuery.data?.data;
+  const recentPractices = recentPracticesQuery.data?.data;
+  const latestPractice = recentPractices?.[0] ?? null;
   const currentPath = currentPathQuery.data?.data;
-  const freshness = getReportFreshness(report, latestPractice);
+  const freshness = latestReportQuery.isError
+    ? "unavailable"
+    : report?.status === "ready" && recentPracticesQuery.isError
+      ? "unknown"
+      : getReportFreshness(report, latestPractice);
   const averageMastery = calculateAverageMastery(masteryMap?.points ?? []);
-  const trendScores = buildCurrentTrendScores(report, latestPractice);
+  const trendScores = buildCurrentTrendScores(report, recentPractices);
   const currentTrend = calculateCurrentTrend(trendScores);
   const weakestPoints = sortMasteryPoints(masteryMap?.points ?? [])
     .filter((point) => point.status === "weak" || point.status === "recommended_review")
     .slice(0, 5);
   const primaryAction = buildReportPrimaryAction({ freshness, masteryMap, currentPath });
-  const readError = latestReportQuery.isError && report?.status !== "empty" ? "学习报告读取失败，请稍后重试。" : "";
-  const dataWarning = [masteryQuery, latestPracticeQuery, currentPathQuery].some((query) => query.isError)
+  const readError = latestReportQuery.isError ? "学习报告读取失败，请稍后重试。" : "";
+  const dataWarning = [masteryQuery, recentPracticesQuery, currentPathQuery].some((query) => query.isError)
     ? "部分实时学习状态暂未更新，已保留其余可用数据。"
     : "";
-  const isLoading = canUseCourse && [latestReportQuery, masteryQuery, latestPracticeQuery].some((query) => query.isPending);
+  const isLoading = canUseCourse && [latestReportQuery, masteryQuery, recentPracticesQuery].some((query) => query.isPending);
 
   const preservedContext = useMemo(() => {
     const context = new URLSearchParams();
@@ -194,9 +204,11 @@ export function ReportsPage() {
             freshness={freshness}
             createdAt={report?.created_at}
             isGenerating={generateMutation.isPending}
+            isRefreshing={latestReportQuery.isFetching && !latestReportQuery.isPending}
             returnLink={<CourseReturnLink courseId={canUseCourse ? numericCourseId : null} />}
             onCourseChange={handleCourseChange}
             onGenerate={() => generateMutation.mutate()}
+            onRetryRead={() => latestReportQuery.refetch()}
             onOpenDetails={() => setDrawerMode("details")}
             onOpenExport={() => setDrawerMode("export")}
           />
@@ -225,6 +237,7 @@ export function ReportsPage() {
               reportError={readError || localError}
               isLoading={isLoading}
               onGenerate={() => generateMutation.mutate()}
+              onRetryReport={() => latestReportQuery.refetch()}
             />
           )}
         </section>
@@ -234,6 +247,7 @@ export function ReportsPage() {
         mode={drawerMode}
         detailTab={detailTab}
         report={report}
+        reportUnavailable={latestReportQuery.isError}
         exportFormat={exportFormat}
         isExporting={exportMutation.isPending}
         exportMessage={exportMessage}

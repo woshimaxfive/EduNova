@@ -10,9 +10,11 @@ type ReportWorkspaceToolbarProps = {
   freshness: ReportFreshness;
   createdAt: string | null | undefined;
   isGenerating: boolean;
+  isRefreshing: boolean;
   returnLink: ReactNode;
   onCourseChange: (courseId: string) => void;
   onGenerate: () => void;
+  onRetryRead: () => void;
   onOpenDetails: () => void;
   onOpenExport: () => void;
 };
@@ -33,14 +35,31 @@ export function ReportWorkspaceToolbar({
   freshness,
   createdAt,
   isGenerating,
+  isRefreshing,
   returnLink,
   onCourseChange,
   onGenerate,
+  onRetryRead,
   onOpenDetails,
   onOpenExport
 }: ReportWorkspaceToolbarProps) {
-  const statusLabel = freshness === "empty" ? "等待学习证据" : freshness === "stale" ? "建议更新" : "报告已同步";
+  const statusLabel = freshness === "empty"
+    ? "等待学习证据"
+    : freshness === "stale"
+      ? "建议更新"
+      : freshness === "unavailable"
+        ? "报告暂不可用"
+        : freshness === "unknown"
+          ? "状态待确认"
+          : "报告已同步";
   const generateLabel = freshness === "stale" ? "更新报告" : freshness === "empty" ? "生成报告" : "重新生成";
+  const statusDetail = freshness === "stale"
+    ? "已有新的练习结果"
+    : freshness === "unavailable"
+      ? "未能读取报告快照"
+      : freshness === "unknown"
+        ? `快照 ${formatDateTime(createdAt)} · 练习状态未同步`
+        : `快照 ${formatDateTime(createdAt)}`;
 
   return (
     <header className="report-workspace-toolbar">
@@ -53,7 +72,7 @@ export function ReportWorkspaceToolbar({
 
       <div className="report-toolbar-status" aria-live="polite">
         <span data-status={freshness}>{statusLabel}</span>
-        <strong>{freshness === "stale" ? "已有新的练习结果" : `快照 ${formatDateTime(createdAt)}`}</strong>
+        <strong>{statusDetail}</strong>
       </div>
 
       <div className="report-toolbar-return">{returnLink}</div>
@@ -67,9 +86,9 @@ export function ReportWorkspaceToolbar({
           <DownloadSimple size={17} weight="bold" aria-hidden="true" />
           <span>导出档案</span>
         </button>
-        <button className="primary" type="button" disabled={!courseId || isGenerating} onClick={onGenerate}>
+        <button className="primary" type="button" disabled={!courseId || isGenerating || isRefreshing} onClick={freshness === "unavailable" ? onRetryRead : onGenerate}>
           <FileText size={17} weight="bold" aria-hidden="true" />
-          <span>{isGenerating ? "正在生成" : generateLabel === "生成报告" ? "生成学习报告" : generateLabel === "重新生成" ? "重新生成学习报告" : "更新学习报告"}</span>
+          <span>{isRefreshing ? "正在重新读取" : isGenerating ? "正在生成" : freshness === "unavailable" ? "重新读取报告" : generateLabel === "生成报告" ? "生成学习报告" : generateLabel === "重新生成" ? "重新生成学习报告" : "更新学习报告"}</span>
         </button>
       </div>
     </header>

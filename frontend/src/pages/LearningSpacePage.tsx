@@ -15,7 +15,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
-import { buildCoursePath } from "../app/routePaths";
+import { buildCoursePath, PATHS } from "../app/routePaths";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import { createCourseBuilderJob, createIdempotencyKey, type AiJob } from "../api/aiJobs";
 import { getDashboardSummary } from "../api/dashboard";
@@ -40,6 +40,7 @@ import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { isCompactWorkspaceViewport, useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
 import { useAuthStore } from "../features/auth/authStore";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
+import { useHomeConversationHistory } from "../features/home/useHomeConversationHistory";
 
 type LibraryMaterial = {
   id: string;
@@ -126,21 +127,26 @@ export function LearningSpacePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const navigationState = location.state as LearningSpaceNavigationState | null;
-  const selectedHomeThreadIdFromNavigation =
-    typeof navigationState?.selectedHomeThreadId === "string" ? navigationState.selectedHomeThreadId : null;
+  const selectedHomeThreadIdFromNavigation = typeof navigationState?.selectedHomeThreadId === "string"
+    ? navigationState.selectedHomeThreadId
+    : new URLSearchParams(location.search).get("session_id");
   const selectedMaterialIdsFromNavigation = Array.isArray(navigationState?.selectedMaterialIds)
     ? navigationState.selectedMaterialIds.filter((materialId): materialId is string => typeof materialId === "string")
     : [];
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const homeChatStageRef = useRef<HTMLElement | null>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const isResettingHomeRef = useRef(false);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
   const [localHomeThreads, setLocalHomeThreads] = useState<DashboardSummaryThread[]>([]);
+  const [historySearch, setHistorySearch] = useState("");
   const [activeHomeThreadId, setActiveHomeThreadId] = useState<string | null>(() => selectedHomeThreadIdFromNavigation);
   const [isSendingQuestion, setIsSendingQuestion] = useState(false);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
-  const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>(() => selectedMaterialIdsFromNavigation);
+  const [conversationMaterialIds, setConversationMaterialIds] = useState<string[]>([]);
+  const [materialDraftIds, setMaterialDraftIds] = useState<string[]>(() => selectedMaterialIdsFromNavigation);
+  const [courseMaterialIds, setCourseMaterialIds] = useState<string[]>([]);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
   const [courseJobId, setCourseJobId] = useState<string | null>(null);
@@ -155,6 +161,7 @@ export function LearningSpacePage() {
   const [answerWarnings, setAnswerWarnings] = useState<Record<string, string[]>>({});
   const [composerFeedback, setComposerFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [courseDialogFeedback, setCourseDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
+  const [materialDialogFeedback, setMaterialDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [isCourseDrawerOpen, setIsCourseDrawerOpen] = useState(false);
   const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
   const courseJob = getJob(courseJobId);
@@ -167,6 +174,8 @@ export function LearningSpacePage() {
     staleTime: 30_000
   });
   const dashboardSummary = dashboardQuery.data?.data;
+  const historyQuery = useHomeConversationHistory("", Boolean(token));
+  const historySearchQuery = useHomeConversationHistory(historySearch, Boolean(token && historySearch));
   const allMaterialsQuery = useQuery({
     queryKey: ["materials", "list"],
     queryFn: () => listMaterials(),
@@ -176,15 +185,24 @@ export function LearningSpacePage() {
   const recentCourses = dashboardSummary?.recent_courses ?? [];
   const emptyState = dashboardSummary?.empty_state;
   const learnerName = dashboardSummary?.profile_summary.display_name.trim() || "同学";
-  const summaryHomeThreads = useMemo(
+  const historyHomeThreads = useMemo(
+    () => (historyQuery.data?.pages ?? []).flatMap((page) => (page.data?.items ?? []).map(({ id, title, updated_at }) => ({ id, title, meta: updated_at.slice(0, 10) }))),
+    [historyQuery.data?.pages]
+  );
+  const fallbackHomeThreads = useMemo(
     () => dashboardSummary?.recent_conversations.map(({ id, title, meta }) => ({ id, title, meta })) ?? [],
     [dashboardSummary?.recent_conversations]
   );
   const homeThreads = useMemo(() => {
     const localIds = new Set(localHomeThreads.map((thread) => thread.id));
+    const serverThreads = historyHomeThreads.length > 0 ? historyHomeThreads : fallbackHomeThreads;
 
-    return [...localHomeThreads, ...summaryHomeThreads.filter((thread) => !localIds.has(thread.id))];
-  }, [localHomeThreads, summaryHomeThreads]);
+    return [...localHomeThreads, ...serverThreads.filter((thread) => !localIds.has(thread.id))];
+  }, [fallbackHomeThreads, historyHomeThreads, localHomeThreads]);
+  const historySearchThreads = useMemo(
+    () => (historySearchQuery.data?.pages ?? []).flatMap((page) => (page.data?.items ?? []).map(({ id, title, match_snippet }) => ({ id, title, meta: match_snippet || "历史会话" }))),
+    [historySearchQuery.data?.pages]
+  );
   const materials = useMemo<LibraryMaterial[]>(() => {
     const allMaterials = allMaterialsQuery.data?.data;
     if (allMaterialsQuery.isSuccess && Array.isArray(allMaterials)) {
@@ -192,9 +210,9 @@ export function LearningSpacePage() {
     }
     return dashboardSummary?.recent_materials ?? [];
   }, [allMaterialsQuery.data?.data, allMaterialsQuery.isSuccess, dashboardSummary?.recent_materials]);
-  const effectiveSelectedMaterialIds = useMemo(
-    () => selectedMaterialIds.filter((materialId) => materials.some((material) => material.id === materialId)),
-    [materials, selectedMaterialIds]
+  const effectiveConversationMaterialIds = useMemo(
+    () => conversationMaterialIds.filter((materialId) => materials.some((material) => material.id === materialId)),
+    [conversationMaterialIds, materials]
   );
 
   useEffect(() => {
@@ -204,7 +222,7 @@ export function LearningSpacePage() {
     const materialIds = Array.isArray(restored.request.material_ids) ? restored.request.material_ids.map(String) : [];
     // Restore durable server state after navigation or refresh.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelectedMaterialIds(materialIds);
+    setCourseMaterialIds(materialIds);
     setCourseJobId(restored.job_id);
     setIsLibraryOpen(false);
     setIsCourseDialogOpen(true);
@@ -249,10 +267,19 @@ export function LearningSpacePage() {
   }, []);
 
   function openLibrary() {
+    setMaterialDraftIds(effectiveConversationMaterialIds);
+    setMaterialDialogFeedback(null);
     setIsLibraryOpen(true);
   }
 
   function openCourseGeneration() {
+    setCourseMaterialIds(effectiveConversationMaterialIds);
+    setIsLibraryOpen(false);
+    setIsCourseDialogOpen(true);
+  }
+
+  function openCourseGenerationFromLibrary() {
+    setCourseMaterialIds(materialDraftIds);
     setIsLibraryOpen(false);
     setIsCourseDialogOpen(true);
   }
@@ -279,12 +306,38 @@ export function LearningSpacePage() {
     }
   }
 
-  function toggleMaterialSelection(materialId: string) {
-    setSelectedMaterialIds((current) => {
+  function toggleMaterialDraft(materialId: string) {
+    setMaterialDraftIds((current) => {
+      if (!current.includes(materialId) && current.length >= 10) {
+        setMaterialDialogFeedback({ message: "单个会话最多选择 10 份参考资料。", tone: "warning" });
+        return current;
+      }
       const next = current.includes(materialId) ? current.filter((id) => id !== materialId) : [...current, materialId];
-
+      setMaterialDialogFeedback(null);
       return next;
     });
+  }
+
+  function toggleCourseMaterial(materialId: string) {
+    setCourseMaterialIds((current) =>
+      current.includes(materialId) ? current.filter((id) => id !== materialId) : [...current, materialId]
+    );
+  }
+
+  async function confirmConversationMaterials() {
+    const materialIds = materialDraftIds.filter((materialId) => materials.some((material) => material.id === materialId));
+    if (activeHomeThreadId) {
+      try {
+        await renameTutorSession(activeHomeThreadId, { selected_material_ids: materialIds.map(Number) });
+      } catch {
+        setMaterialDialogFeedback({ message: "参考资料保存失败，请稍后重试。", tone: "warning" });
+        return;
+      }
+    }
+    setConversationMaterialIds(materialIds);
+    setMaterialDialogFeedback(null);
+    setIsLibraryOpen(false);
+    void queryClient.invalidateQueries({ queryKey: ["tutor", "home-history"] });
   }
 
   function buildHomeSessionTitle(question: string) {
@@ -305,6 +358,7 @@ export function LearningSpacePage() {
 
       return [nextThread, ...current.filter((thread) => thread.id !== nextThread.id)];
     });
+    void queryClient.invalidateQueries({ queryKey: ["tutor", "home-history"] });
   }
 
   function updateDashboardHomeThreads(
@@ -344,6 +398,7 @@ export function LearningSpacePage() {
       renameCachedHomeThread(conversation.id, renamed.data.title);
       setComposerFeedback(null);
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      void queryClient.invalidateQueries({ queryKey: ["tutor", "home-history"] });
     } catch {
       setComposerFeedback({ message: "会话改名失败，请稍后再试。", tone: "warning" });
     }
@@ -360,6 +415,7 @@ export function LearningSpacePage() {
       }
 
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      void queryClient.invalidateQueries({ queryKey: ["tutor", "home-history"] });
     } catch {
       setComposerFeedback({ message: "会话删除失败，请稍后再试。", tone: "warning" });
     }
@@ -391,15 +447,13 @@ export function LearningSpacePage() {
           scope: "home",
           course_id: null,
           mode: "chat",
-          title: buildHomeSessionTitle(question)
+          title: buildHomeSessionTitle(question),
+          selected_material_ids: effectiveConversationMaterialIds.map(Number)
         });
         sessionId = created.data.id;
         setActiveHomeThreadId(sessionId);
       }
 
-      const selectedMaterialIdsAsNumbers = effectiveSelectedMaterialIds
-        .map((materialId) => Number.parseInt(materialId, 10))
-        .filter((materialId) => Number.isFinite(materialId));
       const optimisticKey = `${Date.now()}-${sessionId}`;
       const optimisticUserId = `stream-user-${optimisticKey}`;
       optimisticAssistantId = `stream-assistant-${optimisticKey}`;
@@ -429,8 +483,7 @@ export function LearningSpacePage() {
         {
           message: question,
           use_web_search: isWebSearchEnabled,
-          deep_thinking: isDeepThinkingEnabled,
-          selected_material_ids: selectedMaterialIdsAsNumbers
+          deep_thinking: isDeepThinkingEnabled
         },
         {
           onMetadata: (metadata) => {
@@ -492,6 +545,7 @@ export function LearningSpacePage() {
       }
       setMessages(persistedMessages);
       setActiveHomeThreadId(detail.session.id);
+      navigate(`${PATHS.app}?session_id=${detail.session.id}`, { replace: true, state: null });
       upsertHomeThread(detail.session);
       setPrompt("");
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
@@ -579,6 +633,7 @@ export function LearningSpacePage() {
   }
 
   function resetHomeEntry() {
+    isResettingHomeRef.current = true;
     recognitionRef.current?.stop();
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -586,7 +641,9 @@ export function LearningSpacePage() {
     setPrompt("");
     setMessages([]);
     setActiveHomeThreadId(null);
-    setSelectedMaterialIds([]);
+    setConversationMaterialIds([]);
+    setMaterialDraftIds([]);
+    setCourseMaterialIds([]);
     setIsHistoryCollapsed(isCompactWorkspaceViewport());
     setIsLibraryOpen(false);
     setIsCourseDialogOpen(false);
@@ -600,6 +657,8 @@ export function LearningSpacePage() {
     setAnswerWarnings({});
     setComposerFeedback(null);
     setCourseDialogFeedback(null);
+    setMaterialDialogFeedback(null);
+    navigate(PATHS.app, { replace: true, state: null });
     window.requestAnimationFrame(() => {
       document.documentElement.scrollTop = 0;
       document.documentElement.scrollLeft = 0;
@@ -619,37 +678,41 @@ export function LearningSpacePage() {
       const detail = await getTutorSession(conversation.id);
 
       setMessages(mapTutorMessages(detail.data.messages));
+      setConversationMaterialIds((detail.data.session.selected_material_ids ?? []).map(String));
+      setMaterialDraftIds((detail.data.session.selected_material_ids ?? []).map(String));
+      navigate(`${PATHS.app}?session_id=${conversation.id}`, { state: null });
     } catch (error) {
       void error;
       setComposerFeedback({ message: "历史对话读取失败，请稍后再试。", tone: "warning" });
     }
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
-    if (!selectedHomeThreadIdFromNavigation || messages.length > 0) {
+    if (!selectedHomeThreadIdFromNavigation) {
+      isResettingHomeRef.current = false;
       return;
     }
-
-    const conversation = homeThreads.find((thread) => thread.id === selectedHomeThreadIdFromNavigation);
-    if (!conversation) {
+    if (isResettingHomeRef.current || messages.length > 0) {
       return;
     }
 
     void (async () => {
       try {
-        const detail = await getTutorSession(conversation.id);
+        const detail = await getTutorSession(selectedHomeThreadIdFromNavigation);
 
         setMessages(mapTutorMessages(detail.data.messages));
-        setActiveHomeThreadId(conversation.id);
+        setActiveHomeThreadId(selectedHomeThreadIdFromNavigation);
+        setConversationMaterialIds((detail.data.session.selected_material_ids ?? []).map(String));
+        setMaterialDraftIds((detail.data.session.selected_material_ids ?? []).map(String));
       } catch (error) {
         void error;
         setComposerFeedback({ message: "历史对话读取失败，请稍后再试。", tone: "warning" });
       }
     })();
-  }, [homeThreads, messages.length, selectedHomeThreadIdFromNavigation]);
+  }, [messages.length, selectedHomeThreadIdFromNavigation]);
 
   async function createCourseFromSelectedMaterials(courseTitle: string) {
-    const selectedMaterialIdsAsNumbers = effectiveSelectedMaterialIds
+    const selectedMaterialIdsAsNumbers = courseMaterialIds
       .map((materialId) => Number.parseInt(materialId, 10))
       .filter((materialId) => Number.isFinite(materialId));
 
@@ -697,6 +760,17 @@ export function LearningSpacePage() {
           onSelectConversation={(conversation) => void selectHomeConversation(conversation)}
           onRenameConversation={renameHomeConversation}
           onDeleteConversation={deleteHomeConversation}
+          hasMoreConversations={Boolean(historyQuery.hasNextPage)}
+          isLoadingMoreConversations={historyQuery.isFetchingNextPage}
+          onLoadMoreConversations={() => void historyQuery.fetchNextPage()}
+          historySearchResults={historySearch ? historySearchThreads : undefined}
+          historySearchPending={historySearchQuery.isPending && Boolean(historySearch)}
+          historySearchError={historySearchQuery.isError}
+          historySearchHasMore={Boolean(historySearchQuery.hasNextPage)}
+          historySearchLoadingMore={historySearchQuery.isFetchingNextPage}
+          onHistorySearch={setHistorySearch}
+          onRetryHistorySearch={() => void historySearchQuery.refetch()}
+          onLoadMoreHistorySearch={() => void historySearchQuery.fetchNextPage()}
         />
 
         <section
@@ -725,7 +799,7 @@ export function LearningSpacePage() {
                       message={message}
                       activePanel={activeAnswerPanel}
                       expandedAnswerId={expandedAnswerId}
-                      selectedMaterialCount={effectiveSelectedMaterialIds.length}
+                      selectedMaterialCount={effectiveConversationMaterialIds.length}
                       isWebSearchEnabled={isWebSearchEnabled}
                       warnings={answerWarnings[message.id] ?? []}
                       onChangePanel={setActiveAnswerPanel}
@@ -824,10 +898,12 @@ export function LearningSpacePage() {
                 </div>
               </div>
             </div>
-            {effectiveSelectedMaterialIds.length > 0 ? (
+            {effectiveConversationMaterialIds.length > 0 ? (
               <div className="selected-materials-note">
                 <LinkSimple size={16} weight="duotone" aria-hidden="true" />
-                <span>{`已选择 ${effectiveSelectedMaterialIds.length} 份资料。`}</span>
+                <span>{materials.filter((material) => effectiveConversationMaterialIds.includes(material.id)).slice(0, 3).map((material) => material.title).join("、")}</span>
+                <small>{`共 ${effectiveConversationMaterialIds.length} 份`}</small>
+                <button type="button" onClick={openLibrary}>管理</button>
               </div>
             ) : null}
             <InlineFeedback message={composerFeedback?.message ?? null} tone={composerFeedback?.tone} className="composer-inline-feedback" />
@@ -889,9 +965,12 @@ export function LearningSpacePage() {
       {isLibraryOpen ? (
         <MaterialLibraryDrawer
           materials={materials}
-          selectedMaterialIds={effectiveSelectedMaterialIds}
-          onToggleMaterial={toggleMaterialSelection}
-          onOpenCourseGeneration={openCourseGeneration}
+          selectedMaterialIds={materialDraftIds}
+          onToggleMaterial={toggleMaterialDraft}
+          onOpenCourseGeneration={openCourseGenerationFromLibrary}
+          onConfirm={() => void confirmConversationMaterials()}
+          allowClear={effectiveConversationMaterialIds.length > 0}
+          feedback={materialDialogFeedback}
           onClose={() => setIsLibraryOpen(false)}
         />
       ) : null}
@@ -899,8 +978,8 @@ export function LearningSpacePage() {
       {isCourseDialogOpen ? (
         <CourseGenerationDialog
           materials={materials}
-          selectedMaterialIds={effectiveSelectedMaterialIds}
-          onToggleMaterial={toggleMaterialSelection}
+          selectedMaterialIds={courseMaterialIds}
+          onToggleMaterial={toggleCourseMaterial}
           onClose={() => setIsCourseDialogOpen(false)}
           onCreate={(courseTitle) => void createCourseFromSelectedMaterials(courseTitle)}
           isCreatingCourse={isCreatingCourse}
@@ -1167,9 +1246,12 @@ type MaterialLibraryDrawerProps = CourseGenerationDialogProps & {
   selectedMaterialIds: string[];
   onToggleMaterial: (materialId: string) => void;
   onOpenCourseGeneration: () => void;
+  onConfirm: () => void;
+  allowClear: boolean;
+  feedback: { message: string; tone: FeedbackTone } | null;
 };
 
-function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMaterial, onOpenCourseGeneration, onClose }: MaterialLibraryDrawerProps) {
+function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMaterial, onOpenCourseGeneration, onConfirm, allowClear, feedback, onClose }: MaterialLibraryDrawerProps) {
   const selectedCount = selectedMaterialIds.length;
   const [searchTerm, setSearchTerm] = useState("");
   const visibleMaterials = useMemo(() => {
@@ -1211,13 +1293,14 @@ function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMateria
         />
         <div className="library-dialog-footer">
           <span>{selectedCount > 0 ? `已选择 ${selectedCount} 份资料` : "当前未选择资料"}</span>
+          <InlineFeedback message={feedback?.message ?? null} tone={feedback?.tone} />
           <button
-            className={selectedCount > 0 ? "dialog-primary-button" : "dialog-primary-button secondary disabled"}
+            className="dialog-primary-button"
             type="button"
-            disabled={selectedCount === 0}
-            onClick={onClose}
+            disabled={selectedCount === 0 && !allowClear}
+            onClick={onConfirm}
           >
-            作为本次对话参考
+            {selectedCount > 0 || !allowClear ? "作为本次对话参考" : "清空对话参考"}
           </button>
         </div>
       </section>

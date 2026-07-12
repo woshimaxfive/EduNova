@@ -89,7 +89,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 - 课程内容模式按章节展示知识点概览和 React Flow 图谱，AI 辅导使用覆盖抽屉并复用当前课程 session，不另建独立 tutor 会话体系。
 - 引用区可以展示检索状态，但不能把模型或 embedding 配置细节变成课程页主操作。
 - 待确认弱点来自课程问答画像候选事件同步后的 `weakness_review_queue`，文案必须保持“待确认/待复习”，不能宣称已完成正式诊断；学生确认后才进入待复习或复习中语义。
-- 普通二级路由不注入主页 demo 历史，而是复用真实主页历史；点击主页历史会回到 `/app` 并打开对应会话。课程历史只在对应课程空间显示。
+- 普通二级路由不注入主页 demo 历史，而是复用 `/tutor/sessions/history` 的真实分页主页历史；点击主页历史会回到 `/app?session_id=...` 并打开对应会话。`session_id` 只用于前端刷新恢复，不改变业务路由；点击 EduNova 或新建对话仍回到无参数 `/app`。课程历史只在对应课程空间显示。
 
 P3.15 可用性收口后还要遵守：
 
@@ -460,7 +460,7 @@ Phase 4：
 
 - 接入真实注册、登录、`/auth/me`、路由保护和登录态恢复。
 - Phase 4.2 已接入 `/dashboard/summary`，用于 `/app` 首页最近学习、主页历史、资料库浮层资料和空状态的真实读取。
-- Phase 4.3 已接入 `/tutor/sessions`，用于 `/app` 主页首次发送创建会话、连续追问复用会话、点击历史恢复消息和刷新后保留历史。
+- Phase 4.3 已接入 `/tutor/sessions`；当前另由 `/tutor/sessions/history` 提供首批 30 条、继续加载和服务端正文搜索。主页首次发送创建会话，连续追问复用会话，`session_id` 刷新恢复消息与会话资料。
 - Phase 4.4 已接入 `/materials`，用于 `/app` 主页上传资料、刷新主页资料库浮层、`/app/library` 真实列表、资料筛选、资料详情反馈和资料进度查询。
 
 Phase 5 以后：
@@ -491,7 +491,7 @@ Phase 5 以后：
 - 前端 Demo 假会话和未实现的 Demo API 常量已删除，不再把预留合同计入产品能力。
 - Phase 4.1 已接真实 `/auth/register`、`/auth/login`、`/auth/me` 和 `/auth/logout`；注册页会提交 `starter_mode`，注册成功后自动调用登录接口写入 session。
 - Phase 4.2 已接真实 `/dashboard/summary`；`LearningSpacePage` 使用 React Query 读取当前用户 summary，左侧主页历史、最近学习列表、主页资料库浮层资料和 blank/ai_intro 空状态不再来自前端静态 demo 数据。
-- Phase 4.3 已接真实 `/tutor/sessions`；`LearningSpacePage` 首次发送会创建 `scope=home` 会话，发送消息写入 user 和 assistant 消息，当前主页 assistant 来自普通模型回答，连续追问不重复创建历史，点击左侧主页历史会拉取后端 messages；主页历史菜单已接入会话改名和软删除。
+- Phase 4.3 已接真实 `/tutor/sessions`；`LearningSpacePage` 首次发送会创建 `scope=home` 会话，发送消息写入 user 和 assistant 消息，连续追问不重复创建历史。完整历史使用分页接口，点击历史或刷新 `session_id` 会拉取后端 messages 和 `selected_material_ids`；主页历史菜单继续支持改名和软删除。
 - Phase 4.4 已接真实 `/materials`；`LearningSpacePage` 上传按钮会调用 `/materials/upload` 并刷新 `/dashboard/summary`，`LibraryPage` 调用 `/materials` 渲染当前用户资料列表，上传成功后刷新列表和 summary。
 - Phase 5.1 已接真实 `/courses/from-materials`、`/courses`、`/courses/{course_id}`、`/courses/{course_id}/overview` 和 `/courses/{course_id}/knowledge-points`；`LearningSpacePage` 和 `LibraryPage` 的生成课程浮层会调用真实接口，成功后刷新数据并跳转新课程空间。
 - Phase 14 后，课程生成和 `/rag/search` 只把真实外部 embedding 用作 pgvector SQL 候选；`CourseSpacePage` 会显示混合检索、关键词检索、`local_fallback` 或 `provider_failed`，本地 hash 不作为语义命中。
@@ -515,7 +515,7 @@ Phase 5 以后：
 - `/app/courses/:courseId` 已推进到桌面课程对话工作区：课程内历史固定，问答 SSE 和输入固定，Assistant 使用 Markdown 正文；来源、资源、路径、练习、报告和 trace 按回答绑定并就地展开；学习进度抽屉展示闭环与弱点；课程内容展示真实知识点、来源和图谱。真实空态不回落到 demo 数据。
 - `/app/path` 已升级为单一个性化学习路径工作台：路径按真实任务状态筛选并视觉置顶当前任务，不显示日期、期限或时间设置；掌握度、证据、Review 和 Graph 轨迹收进全视口覆盖抽屉。
 - `/app/library` 已重做为宽屏资料工作台，支持可选 `material_id` 查询参数恢复当前详情；工具栏和文件表格共用连续工作画布，真实详情抽屉和资料对比抽屉保持互斥，资料对比不再常驻占据首屏。
-- 从资料详情进入 `/app` 时通过内部路由状态传递 `selectedMaterialIds`；主页读取完整资料列表并自动打开资料浮层。该状态只负责当前会话选料，不写入长期画像或默认资料范围。
+- 从资料详情进入 `/app` 时通过内部路由状态传递 `selectedMaterialIds`；主页读取完整资料列表并自动打开资料浮层。该状态只初始化资料草稿，用户确认后才保存到主页会话；取消不会修改会话。建课选料与对话资料是两份独立状态。
 - P3.13 已把普通路由标题收敛为短标题，隐藏重复说明；普通路由侧栏“新建对话”回到 `/app`；普通路由侧栏历史复用真实主页历史，点击后回到 `/app` 打开对应会话；资料库页主按钮使用“生成课程”，生成课程浮层默认未选中，上传资料只进入资料库。
 - P3.14 已把普通侧栏和主页侧栏的“搜索历史”统一为居中浮层，不再在左栏内联展开搜索框；主页发送成功不再产生持久状态条，避免和回答内容或底部输入区重叠。
 - 后续前端交互不再使用“已切换到/已完成”这类全局或横向提示条；页面反馈优先收敛到选中态、列表刷新、详情面板、输入状态和真实跳转。

@@ -300,8 +300,10 @@ describe("student interaction affordances", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "作为本次对话参考" })).toBeEnabled();
 
-    await user.click(screen.getByRole("button", { name: "关闭资料库" }));
-    expect(within(screen.getByRole("region", { name: "学习输入区" })).getByText("已选择 1 份资料。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "作为本次对话参考" }));
+    const composer = within(screen.getByRole("region", { name: "学习输入区" }));
+    expect(composer.getByText("数据结构期末题.pdf")).toBeInTheDocument();
+    expect(composer.getByText("共 1 份")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "发送" }));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();

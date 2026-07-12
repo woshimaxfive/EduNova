@@ -1370,13 +1370,15 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
   "scope": "home",
   "course_id": null,
   "mode": "chat",
-  "title": "帮我整理这份期末资料"
+  "title": "帮我整理这份期末资料",
+  "selected_material_ids": [12, 15]
 }
 ```
 
 规则：
 
 - `scope=home` 时 `course_id` 必须为空，当前 `/app` 首页首次发送会先创建主页会话。
+- `selected_material_ids` 可选，只允许绑定当前用户已解析资料，去重后最多 10 份；课程会话不允许绑定主页资料。
 - `scope=course` 时必须传 `course_id`，且课程必须属于当前登录用户。
 - `scope=course` 已用于 `/app/courses/:courseId`，课程空间首次提问会先创建课程会话，连续追问复用当前课程会话。
 - 会话标题由前端用第一条问题截取生成，也可以由调用方显式传入。
@@ -1393,6 +1395,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
     "title": "帮我整理这份期末资料",
     "mode": "chat",
     "archived_from_home": false,
+    "selected_material_ids": [12, 15],
     "created_at": "2026-07-03T08:00:00Z",
     "updated_at": "2026-07-03T08:00:00Z"
   },
@@ -1408,6 +1411,18 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 - `scope`：`home` 或 `course`，默认 `home`。
 - `course_id`：课程会话筛选参数，主页历史不传。
+
+### GET `/tutor/sessions/history`
+
+用途：分页读取当前用户全部未归档主页会话。该接口供主页及其他 `PageFrame` 侧栏共用，不替代课程空间继续使用的 `GET /tutor/sessions?scope=course&course_id=...`。
+
+查询参数：
+
+- `page`：默认 `1`。
+- `page_size`：默认 `30`，最大 `50`。
+- `q`：可选搜索词，最长 100 字；同时匹配会话标题和 user/assistant 消息正文。
+
+响应返回 `items`、`page`、`page_size`、`total`、`has_more`。搜索结果可包含不超过 120 字的 `match_snippet`，只用于显示安全匹配片段，不返回完整消息正文；结果按 `updated_at`、`id` 倒序稳定排列。
 
 ### GET `/tutor/sessions/{session_id}`
 
@@ -1425,6 +1440,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
       "title": "帮我整理这份期末资料",
       "mode": "chat",
       "archived_from_home": false,
+      "selected_material_ids": [12, 15],
       "created_at": "2026-07-03T08:00:00Z",
       "updated_at": "2026-07-03T08:03:00Z"
     },
@@ -1446,19 +1462,22 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 ### PATCH `/tutor/sessions/{session_id}`
 
-用途：重命名 AI 学习会话。用于主页历史和课程空间历史的会话菜单；必须携带 JWT，只能修改当前用户自己的未归档会话。
+用途：更新 AI 学习会话标题或主页会话参考资料。用于历史会话菜单和主页资料确认；必须携带 JWT，只能修改当前用户自己的未归档会话。
 
 请求：
 
 ```json
 {
-  "title": "反向传播薄弱点复习"
+  "title": "反向传播薄弱点复习",
+  "selected_material_ids": [12, 15]
 }
 ```
 
 规则：
 
 - `title` 会去掉首尾空白，不能为空，最长 255 个字符。
+- `title` 与 `selected_material_ids` 均可选，但至少提交一项；显式空数组表示清空会话参考资料。
+- 资料保存前验证当前用户归属和 `parse_status=completed`；课程会话传入非空资料数组返回 `MATERIAL_CONTEXT_INVALID`。
 - 成功后返回更新后的 `TutorSessionSummary`。
 - 会话不存在、属于其他用户或已归档时返回 404。
 
@@ -1504,7 +1523,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 主页会话规则：
 
 - assistant 内容来自模型通用知识和本次可用证据；无可用模型配置时保存清晰提示。
-- `selected_material_ids` 只允许当前用户资料，最多 10 个。后端从 `material_chunks` 检索与上下文化 query 相关的最多 5 个片段，不再固定截取资料开头；无相关片段时返回空资料引用。
+- `selected_material_ids` 只允许当前用户资料，最多 10 个。省略时沿用会话已保存范围，显式数组替换范围，空数组清空。历史资料失效时只忽略失效项并返回安全 warning，不泄露资料归属。后端从 `material_chunks` 检索与上下文化 query 相关的最多 5 个片段，不再固定截取资料开头；无相关片段时返回空资料引用。
 - `use_web_search=true` 时调用 `WebSearchService`。未配置 `WEB_SEARCH_API_KEY` 时返回“联网搜索未配置” warning，不生成假网页来源。
 - `deep_thinking=true` 会执行安全 `planner` 节点，只保存目标、证据需求和回答结构摘要，不展示原始思维链、系统提示词或完整模型输入。
 - `citation_json` 允许课程、资料、网页三类真实来源。资料来源可包含 `source_type`、`material_id`、`title`、`section_title`、`page_number`、`snippet`、`score`、`retrieval_source`、`embedding_status`；网页来源可包含 `title`、`url`、`snippet`。

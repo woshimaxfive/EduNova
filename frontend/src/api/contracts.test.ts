@@ -40,7 +40,9 @@ import {
   updateModelConfig
 } from "./settings";
 import {
+  createTutorSession,
   deleteTutorSession,
+  listHomeTutorHistory,
   listTutorSessions,
   renameTutorSession,
   sendTutorMessage,
@@ -126,6 +128,7 @@ describe("frontend API contracts", () => {
     expect(EXPORT_ENDPOINTS.job(44)).toBe("/exports/44");
     expect(EXPORT_ENDPOINTS.download(44)).toBe("/exports/44/download");
     expect(TUTOR_ENDPOINTS.detail(4)).toBe("/tutor/sessions/4");
+    expect(TUTOR_ENDPOINTS.history).toBe("/tutor/sessions/history");
     expect(TUTOR_ENDPOINTS.message(4)).toBe("/tutor/sessions/4/messages");
     expect(PRACTICE_ENDPOINTS.answers(8)).toBe("/practice/sessions/8/answers");
     expect(REPORT_ENDPOINTS.latest).toBe("/reports/latest");
@@ -458,6 +461,83 @@ describe("frontend API contracts", () => {
     }
   });
 
+  it("creates home sessions with material context and paginates server history", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown; params?: unknown }> = [];
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data,
+        params: config.params
+      });
+      return {
+        data: {
+          data: config.method === "post"
+            ? {
+                id: "501",
+                scope: "home",
+                course_id: null,
+                title: "链式法则",
+                mode: "chat",
+                archived_from_home: false,
+                selected_material_ids: [201],
+                created_at: "2026-07-12T08:00:00Z",
+                updated_at: "2026-07-12T08:00:00Z"
+              }
+            : {
+                items: [],
+                page: 2,
+                page_size: 30,
+                total: 31,
+                has_more: false
+              },
+          trace_id: "trace_home_history"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const created = await createTutorSession({
+        scope: "home",
+        course_id: null,
+        mode: "chat",
+        title: "链式法则",
+        selected_material_ids: [201]
+      });
+      const history = await listHomeTutorHistory({ page: 2, pageSize: 30, query: "反向传播" });
+
+      expect(created.data.selected_material_ids).toEqual([201]);
+      expect(history.data.page).toBe(2);
+      expect(calls).toEqual([
+        {
+          url: TUTOR_ENDPOINTS.sessions,
+          method: "post",
+          data: {
+            scope: "home",
+            course_id: null,
+            mode: "chat",
+            title: "链式法则",
+            selected_material_ids: [201]
+          },
+          params: undefined
+        },
+        {
+          url: TUTOR_ENDPOINTS.history,
+          method: "get",
+          data: undefined,
+          params: { page: 2, page_size: 30, q: "反向传播" }
+        }
+      ]);
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
   it("sends home tutor tool options through the shared API client", async () => {
     const previousAdapter = apiClient.defaults.adapter;
     const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
@@ -574,6 +654,7 @@ describe("frontend API contracts", () => {
 
     try {
       const renamed = await renameTutorSession(501, { title: "改名后的主页历史" });
+      await renameTutorSession(501, { selected_material_ids: [201, 202] });
       const deleted = await deleteTutorSession(501);
 
       expect(calls).toEqual([
@@ -581,6 +662,11 @@ describe("frontend API contracts", () => {
           url: TUTOR_ENDPOINTS.detail(501),
           method: "patch",
           data: { title: "改名后的主页历史" }
+        },
+        {
+          url: TUTOR_ENDPOINTS.detail(501),
+          method: "patch",
+          data: { selected_material_ids: [201, 202] }
         },
         {
           url: TUTOR_ENDPOINTS.detail(501),

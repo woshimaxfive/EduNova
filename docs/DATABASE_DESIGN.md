@@ -45,6 +45,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260710_0010_add_resource_export_jobs.py`：为 `export_jobs` 增加 nullable `resource_id` 外键和资源状态索引，用于 PPTX 文件任务。
 - `backend/migrations/versions/20260711_0014_create_ai_jobs.py`：创建统一 AI 长任务表 `ai_jobs`，用于智能建课和资源生成的状态、进度、幂等、取消和重试。
 - `backend/migrations/versions/20260711_0015_create_model_call_runs.py`：创建隐私安全模型调用审计表 `model_call_runs`，不保存 Prompt、回答、资料原文或密钥。
+- `backend/migrations/versions/20260712_0016_add_chat_session_material_context.py`：为主页会话增加会话级参考资料 ID 数组，默认空数组。
 
 Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
@@ -615,6 +616,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - `title`。
 - `mode`。
 - `archived_from_home`。
+- `selected_material_ids`，JSONB，默认 `[]`；只保存当前用户已解析资料 ID，最多 10 项，课程会话保持空数组。
 - `created_at`。
 
 `chat_messages`：

@@ -409,6 +409,7 @@ function makeSession(id: string, title: string): TutorSessionSummary {
     title,
     mode: "chat",
     archived_from_home: false,
+    selected_material_ids: [],
     created_at: "2026-07-03T12:00:00Z",
     updated_at: "2026-07-03T12:01:00Z"
   };

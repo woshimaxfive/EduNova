@@ -8,14 +8,21 @@ from typing import Any, Iterator, Protocol
 
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.app.api.errors import make_trace_id
 from backend.app.agents.runtime import PendingAgentTrace, agent_log_from_pending_trace
 from backend.app.agents.schemas import AgentState
 from backend.app.models import AgentRunLog, ChatMessage, ChatSession, Course, CourseEnrollment, Material, User
-from backend.app.schemas.tutor import TutorSessionDetail, TutorSessionSummary, session_detail_to_api, session_to_summary
+from backend.app.schemas.tutor import (
+    TutorSessionDetail,
+    TutorSessionHistoryItem,
+    TutorSessionHistoryPage,
+    TutorSessionSummary,
+    session_detail_to_api,
+    session_to_summary,
+)
 from backend.app.services.course_answers import (
     ConversationContext,
     CourseAnswerService,
@@ -61,11 +68,21 @@ class EmptyMessageError(ValueError):
     pass
 
 
+class InvalidMaterialContextError(ValueError):
+    pass
+
+
 class TutorSessionRepository(Protocol):
     def list_sessions(self, user_id: int, scope: str, course_id: int | None = None) -> list[ChatSession]:
         ...
 
     def get_session_for_user(self, session_id: int, user_id: int) -> ChatSession | None:
+        ...
+
+    def list_home_history(self, user_id: int, page: int, page_size: int, query: str) -> tuple[list[ChatSession], int]:
+        ...
+
+    def find_history_match(self, session_id: int, query: str) -> str | None:
         ...
 
     def user_can_access_course(self, user_id: int, course_id: int) -> bool:
@@ -240,6 +257,47 @@ class SqlAlchemyTutorSessionRepository:
             )
         )
 
+    def list_home_history(self, user_id: int, page: int, page_size: int, query: str) -> tuple[list[ChatSession], int]:
+        filters = [
+            ChatSession.user_id == user_id,
+            ChatSession.scope == "home",
+            ChatSession.archived_from_home.is_(False),
+        ]
+        if query:
+            message_match = (
+                select(ChatMessage.id)
+                .where(
+                    ChatMessage.session_id == ChatSession.id,
+                    ChatMessage.content.icontains(query, autoescape=True),
+                )
+                .exists()
+            )
+            filters.append(or_(ChatSession.title.icontains(query, autoescape=True), message_match))
+        total = int(self.db.scalar(select(func.count(ChatSession.id)).where(*filters)) or 0)
+        sessions = list(
+            self.db.scalars(
+                select(ChatSession)
+                .where(*filters)
+                .order_by(ChatSession.updated_at.desc(), ChatSession.id.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+        )
+        return sessions, total
+
+    def find_history_match(self, session_id: int, query: str) -> str | None:
+        if not query:
+            return None
+        return self.db.scalar(
+            select(ChatMessage.content)
+            .where(
+                ChatMessage.session_id == session_id,
+                ChatMessage.content.icontains(query, autoescape=True),
+            )
+            .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+            .limit(1)
+        )
+
     def user_can_access_course(self, user_id: int, course_id: int) -> bool:
         owned_course = self.db.scalar(
             select(Course.id).where(
@@ -328,11 +386,13 @@ class TutorSessionService:
         course_id: int | None,
         mode: str,
         title: str,
+        selected_material_ids: list[int] | None = None,
     ) -> ChatSession:
         normalized_scope = self._normalize_scope(scope)
         normalized_course_id = self._normalize_course_id(user.id, normalized_scope, course_id)
         normalized_mode = self._normalize_mode(mode)
         normalized_title = title.strip() or "新的学习对话"
+        material_ids = self._validate_material_context(user, normalized_scope, selected_material_ids or [])
 
         session = ChatSession(
             user_id=user.id,
@@ -341,6 +401,7 @@ class TutorSessionService:
             title=normalized_title[:255],
             mode=normalized_mode,
             archived_from_home=False,
+            selected_material_ids=material_ids,
         )
 
         try:
@@ -368,17 +429,42 @@ class TutorSessionService:
             )
         ]
 
+    def list_home_history(self, user: User, page: int, page_size: int, query: str = "") -> TutorSessionHistoryPage:
+        normalized_query = " ".join(query.split())[:100]
+        sessions, total = self.repository.list_home_history(user.id, page, page_size, normalized_query)
+        items: list[TutorSessionHistoryItem] = []
+        for session in sessions:
+            summary = session_to_summary(session).model_dump()
+            matched = self.repository.find_history_match(session.id, normalized_query) if normalized_query else None
+            items.append(TutorSessionHistoryItem(**summary, match_snippet=self._history_snippet(matched, normalized_query)))
+        return TutorSessionHistoryPage(
+            items=items,
+            page=page,
+            page_size=page_size,
+            total=total,
+            has_more=page * page_size < total,
+        )
+
     def get_session(self, user: User, session_id: int) -> TutorSessionDetail:
         session = self._get_session_for_user(user.id, session_id)
         return session_detail_to_api(session, self.repository.list_messages(session.id))
 
-    def rename_session(self, user: User, session_id: int, title: str) -> TutorSessionSummary:
-        normalized_title = title.strip()
-        if not normalized_title:
-            raise EmptyMessageError("会话名称不能为空。")
-
+    def update_session(
+        self,
+        user: User,
+        session_id: int,
+        *,
+        title: str | None = None,
+        selected_material_ids: list[int] | None = None,
+    ) -> TutorSessionSummary:
         session = self._get_session_for_user(user.id, session_id)
-        session.title = normalized_title[:255]
+        if title is not None:
+            normalized_title = title.strip()
+            if not normalized_title:
+                raise EmptyMessageError("会话名称不能为空。")
+            session.title = normalized_title[:255]
+        if selected_material_ids is not None:
+            session.selected_material_ids = self._validate_material_context(user, session.scope, selected_material_ids)
 
         try:
             self.repository.touch_session(session)
@@ -389,6 +475,9 @@ class TutorSessionService:
             raise
 
         return session_to_summary(session)
+
+    def rename_session(self, user: User, session_id: int, title: str) -> TutorSessionSummary:
+        return self.update_session(user, session_id, title=title)
 
     def delete_session(self, user: User, session_id: int) -> TutorSessionSummary:
         session = self._get_session_for_user(user.id, session_id)
@@ -424,13 +513,15 @@ class TutorSessionService:
                 session=session,
                 message_text=message_text,
             )
+        material_ids, material_warnings = self._material_context_for_message(user, session, selected_material_ids)
         return HomeTutorGraphRunner(self).append(
             user=user,
             session=session,
             message_text=message_text,
             use_web_search=use_web_search,
             deep_thinking=deep_thinking,
-            selected_material_ids=selected_material_ids or [],
+            selected_material_ids=material_ids,
+            initial_warnings=material_warnings,
         )
 
     def stream_message(
@@ -453,14 +544,70 @@ class TutorSessionService:
                 session=session,
                 message_text=message_text,
             )
+        material_ids, material_warnings = self._material_context_for_message(user, session, selected_material_ids)
         return HomeTutorGraphRunner(self).stream(
             user=user,
             session=session,
             message_text=message_text,
             use_web_search=use_web_search,
             deep_thinking=deep_thinking,
-            selected_material_ids=selected_material_ids or [],
+            selected_material_ids=material_ids,
+            initial_warnings=material_warnings,
         )
+
+    def _material_context_for_message(
+        self,
+        user: User,
+        session: ChatSession,
+        requested_ids: list[int] | None,
+    ) -> tuple[list[int], list[str]]:
+        if requested_ids is None:
+            persisted = [int(item) for item in (session.selected_material_ids or []) if str(item).isdigit()][:10]
+            available = self.repository.list_home_materials_for_user(user.id, persisted)
+            available_ids = {material.id for material in available}
+            available_material_ids = [material_id for material_id in persisted if material_id in available_ids]
+            warnings = []
+            if len(available_material_ids) != len(persisted):
+                warnings.append("部分历史参考资料已失效，已从本次检索中忽略。")
+            return available_material_ids, warnings
+        material_ids = self._validate_material_context(user, session.scope, requested_ids)
+        session.selected_material_ids = material_ids
+        try:
+            self.repository.touch_session(session)
+            self.repository.flush()
+            self.repository.commit()
+        except Exception:
+            self.repository.rollback()
+            raise
+        return material_ids, []
+
+    def _validate_material_context(self, user: User, scope: str, material_ids: list[int]) -> list[int]:
+        normalized = list(dict.fromkeys(item for item in material_ids if item > 0))
+        if len(normalized) > 10:
+            raise InvalidMaterialContextError("单个会话最多选择 10 份参考资料。")
+        if scope != "home":
+            if normalized:
+                raise InvalidMaterialContextError("课程会话不能绑定主页参考资料。")
+            return []
+        materials = self.repository.list_home_materials_for_user(user.id, normalized)
+        available_ids = {material.id for material in materials}
+        if any(material_id not in available_ids for material_id in normalized):
+            raise InvalidMaterialContextError("部分参考资料不存在、未解析或无权访问。")
+        return normalized
+
+    @staticmethod
+    def _history_snippet(content: str | None, query: str) -> str | None:
+        normalized = " ".join((content or "").split())
+        if not normalized:
+            return None
+        index = normalized.casefold().find(query.casefold()) if query else 0
+        start = max(0, index - 40) if index >= 0 else 0
+        snippet = normalized[start : start + 120]
+        if start > 0:
+            snippet = f"…{snippet[1:]}"
+        if start + 120 < len(normalized):
+            snippet = f"{snippet[:119]}…"
+        return snippet[:120]
 
     def _stream_course_response(
         self,
@@ -1240,6 +1387,7 @@ class HomeTutorGraphRunner:
         use_web_search: bool,
         deep_thinking: bool,
         selected_material_ids: list[int],
+        initial_warnings: list[str] | None = None,
     ) -> TutorSessionDetail:
         state = self._initial_state(
             user=user,
@@ -1248,6 +1396,7 @@ class HomeTutorGraphRunner:
             use_web_search=use_web_search,
             deep_thinking=deep_thinking,
             selected_material_ids=selected_material_ids,
+            initial_warnings=initial_warnings,
             streaming=False,
         )
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
@@ -1266,6 +1415,7 @@ class HomeTutorGraphRunner:
         use_web_search: bool,
         deep_thinking: bool,
         selected_material_ids: list[int],
+        initial_warnings: list[str] | None = None,
     ) -> Iterator[dict[str, Any]]:
         state = self._initial_state(
             user=user,
@@ -1274,6 +1424,7 @@ class HomeTutorGraphRunner:
             use_web_search=use_web_search,
             deep_thinking=deep_thinking,
             selected_material_ids=selected_material_ids,
+            initial_warnings=initial_warnings,
             streaming=True,
         )
         try:
@@ -1334,6 +1485,7 @@ class HomeTutorGraphRunner:
         use_web_search: bool,
         deep_thinking: bool,
         selected_material_ids: list[int],
+        initial_warnings: list[str] | None,
         streaming: bool,
     ) -> AgentState:
         return {
@@ -1350,7 +1502,7 @@ class HomeTutorGraphRunner:
             "selected_material_ids": list(dict.fromkeys(selected_material_ids))[:10],
             "streaming": streaming,
             "pending_traces": [],
-            "warnings": [],
+            "warnings": list(initial_warnings or []),
             "errors": [],
             "repair_count": 0,
         }

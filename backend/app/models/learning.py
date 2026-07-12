@@ -473,6 +473,7 @@ class ChatSession(IdMixin, TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     mode: Mapped[str] = mapped_column(String(50), nullable=False, default="chat")
     archived_from_home: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    selected_material_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
 
 
 class ChatMessage(IdMixin, CreatedAtMixin, Base):

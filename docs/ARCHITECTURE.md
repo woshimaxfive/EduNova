@@ -219,12 +219,13 @@ frontend/src/
 
 - Phase 4.1 已完成真实注册、登录、读取当前用户和退出闭环；注册 starter mode 已落入后端注册接口和用户初始化流程。
 - Phase 4.2 已完成受保护的 `/dashboard/summary` 首页总览；当前 `/app` 左侧主页历史、最近课程、主页资料库浮层资料和 blank/ai_intro 空状态来自当前登录用户的真实 summary，不再使用前端假课程、假资料和假历史伪装真实数据。
-- Phase 4.3 已完成受保护的 `/tutor/sessions` 主页会话与消息持久化；当前 `/app` 首次发送会创建 home session，连续追问复用当前 session，主页 assistant 调用当前用户默认模型生成普通回答，点击左侧历史会从后端读取真实 messages，刷新后历史由 `/dashboard/summary` 保留。
+- Phase 4.3 已完成受保护的 `/tutor/sessions` 主页会话与消息持久化；当前 `/app` 首次发送会创建 home session，连续追问复用当前 session，主页 assistant 调用当前用户默认模型生成普通回答。完整主页历史由 `/tutor/sessions/history` 分页查询并做服务端正文搜索，`/dashboard/summary` 只保留首页轻量最近数据。当前会话通过内部 `session_id` 恢复，详情响应同时恢复会话级 `selected_material_ids`。
 - Phase 4.4 已完成受保护的 `/materials` 真实资料库闭环；当前 `/app` 上传资料会写入个人资料库并刷新 `/dashboard/summary`，`/app/library` 从 `/materials` 读取当前用户资料，支持文档/图片筛选、搜索、详情反馈和上传刷新。
 - Phase 13.2 已完成 PDF/DOCX/PPTX 文本解析；当前 `/app` 和 `/app/library` 可用已解析 TXT/Markdown/PDF/DOCX/PPTX 资料生成课程，并跳转 `/app/courses/:courseId`。旧版 DOC/PPT、图片和扫描件不伪装解析完成。
 - Phase 5.2 已完成受保护的 `/rag/search` 课程知识库检索；Phase 6.4 后检索会优先融合关键词分数和向量分数，并把真实资料、章节、切片引用和检索状态保存到 assistant 消息。
 - Phase 5.3 已完成课程空间 `scope=course` 会话持久化；课程侧栏历史来自 `/tutor/sessions?scope=course&course_id=...`，点击历史会恢复真实 messages 和 `citation_json`。
 - 当前主页 assistant 由 `HomeTutorGraph` 接管并使用流式输出。主页允许模型通用知识，已选资料通过独立 `material_chunks` 做资料级混合检索，联网结果作为可追溯证据；未配置搜索 Key 时 warning 只进入来源/轨迹区，不伪造网页来源。课程空间继续使用严格课程 RAG，两者不混用证据边界。
+- 主页资料范围属于 `chat_sessions`，只有用户确认后保存；发送请求省略资料字段时复用会话范围。生成课程使用独立选料状态，AI Job 恢复只恢复建课请求摘要，不覆盖主页会话资料。
 - 当前 `/app/courses/:courseId` 的课程标题、知识点、课程历史、课程消息和课程引用来自真实接口。
 - 命中引用且模型可用时，课程 assistant 内容来自 OpenAI-compatible 模型回答。
 - 课程页优先使用 `fetch` + `ReadableStream` 消费 SSE。

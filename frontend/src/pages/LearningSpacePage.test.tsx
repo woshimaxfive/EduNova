@@ -161,6 +161,7 @@ type ApiCall = {
 
 type TutorMockOptions = {
   failMessageSend?: boolean;
+  failMaterialSave?: boolean;
   historyDetail?: unknown;
   historyDetails?: Record<string, unknown>;
   streamReplacement?: string;
@@ -189,7 +190,8 @@ function makeSessionDetail(
     content: string;
     citation_json?: unknown[];
     trace_id?: string | null;
-  }>
+  }>,
+  selectedMaterialIds: number[] = []
 ) {
   return {
     session: {
@@ -199,6 +201,7 @@ function makeSessionDetail(
       title,
       mode: "chat",
       archived_from_home: false,
+      selected_material_ids: selectedMaterialIds,
       created_at: "2026-07-03T12:00:00Z",
       updated_at: "2026-07-03T12:01:00Z"
     },
@@ -238,6 +241,7 @@ function renderWithDashboardSummary(
     title: "主页第一问",
     mode: "chat",
     archived_from_home: false,
+    selected_material_ids: [] as number[],
     created_at: "2026-07-03T12:00:00Z",
     updated_at: "2026-07-03T12:00:00Z"
   };
@@ -367,9 +371,37 @@ function renderWithDashboardSummary(
       };
     }
 
+    if (url === TUTOR_ENDPOINTS.history && method === "get") {
+      const query = String((config.params as { q?: string } | undefined)?.q ?? "").toLowerCase();
+      const items = recentConversations
+        .filter((thread) => !query || thread.title.toLowerCase().includes(query) || "后端保存的问题".includes(query))
+        .map((thread) => ({
+          id: thread.id,
+          scope: "home" as const,
+          course_id: null,
+          title: thread.title,
+          mode: "chat" as const,
+          archived_from_home: false,
+          selected_material_ids: thread.id === createdSession.id ? createdSession.selected_material_ids : [],
+          created_at: "2026-07-03T12:00:00Z",
+          updated_at: thread.updated_at,
+          match_snippet: query ? "后端保存的问题" : null
+        }));
+      return {
+        data: { data: { items, page: 1, page_size: 30, total: items.length, has_more: false }, trace_id: "trace_history_test" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    }
+
     if (url === TUTOR_ENDPOINTS.sessions && method === "post") {
       const title = typeof payload === "object" && payload !== null && "title" in payload ? String(payload.title) : "主页第一问";
       createdSession.title = title;
+      createdSession.selected_material_ids = typeof payload === "object" && payload !== null && "selected_material_ids" in payload
+        ? (payload.selected_material_ids as number[])
+        : [];
 
       return {
         data: {
@@ -408,10 +440,19 @@ function renderWithDashboardSummary(
 
     if (sessionDetailMatch && method === "patch") {
       const sessionId = sessionDetailMatch[1];
-      const title = typeof payload === "object" && payload !== null && "title" in payload ? String(payload.title).trim() : "";
-      recentConversations = recentConversations.map((thread) => (thread.id === sessionId ? { ...thread, title } : thread));
+      const title = typeof payload === "object" && payload !== null && "title" in payload ? String(payload.title).trim() : undefined;
+      const selectedIds = typeof payload === "object" && payload !== null && "selected_material_ids" in payload
+        ? (payload.selected_material_ids as number[])
+        : undefined;
+      if (selectedIds !== undefined && tutorOptions.failMaterialSave) {
+        throw new Error("material save failed");
+      }
+      if (title !== undefined) {
+        recentConversations = recentConversations.map((thread) => (thread.id === sessionId ? { ...thread, title } : thread));
+      }
       if (createdSession.id === sessionId) {
-        createdSession.title = title;
+        if (title !== undefined) createdSession.title = title;
+        if (selectedIds !== undefined) createdSession.selected_material_ids = selectedIds;
       }
 
       return {
@@ -420,9 +461,10 @@ function renderWithDashboardSummary(
             id: sessionId,
             scope: "home",
             course_id: null,
-            title,
+            title: title ?? createdSession.title,
             mode: "chat",
             archived_from_home: false,
+            selected_material_ids: selectedIds ?? createdSession.selected_material_ids,
             created_at: "2026-07-03T12:00:00Z",
             updated_at: "2026-07-03T12:02:00Z"
           },
@@ -763,16 +805,16 @@ describe("LearningSpacePage", () => {
 
     const historyRail = await screen.findByRole("region", { name: "历史对话" });
     expect((await within(historyRail).findAllByRole("button", { name: /主页历史/ })).map((button) => button.textContent)).toEqual([
-      "上方主页历史刚刚",
-      "下方主页历史昨天"
+      "上方主页历史2026-07-03",
+      "下方主页历史2026-07-02"
     ]);
 
     await user.click(within(historyRail).getByRole("button", { name: /下方主页历史/ }));
 
     expect(await screen.findByText("下方历史问题")).toBeInTheDocument();
     expect(within(historyRail).getAllByRole("button", { name: /主页历史/ }).map((button) => button.textContent)).toEqual([
-      "上方主页历史刚刚",
-      "下方主页历史昨天"
+      "上方主页历史2026-07-03",
+      "下方主页历史2026-07-02"
     ]);
   });
 
@@ -828,6 +870,24 @@ describe("LearningSpacePage", () => {
     expect(within(thread).getByText("从画像页点回来的问题")).toBeInTheDocument();
     expect(within(thread).getByText("从画像页点回来的回答")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /接口里的主页历史/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("restores the active home session and its materials after a refresh URL", async () => {
+    renderWithDashboardSummary(
+      starterSummary,
+      {
+        historyDetail: makeSessionDetail("501", "刷新恢复会话", [
+          { id: "u-refresh", role: "user", content: "刷新前的问题" },
+          { id: "a-refresh", role: "assistant", content: "刷新后仍可见的回答" }
+        ], [201])
+      },
+      ["/app?session_id=501"]
+    );
+
+    expect(await screen.findByText("刷新前的问题")).toBeInTheDocument();
+    const composer = within(screen.getByRole("region", { name: "底部学习输入" }));
+    expect(composer.getByText("真实资料讲义.md")).toBeInTheDocument();
+    expect(composer.getByText("共 1 份")).toBeInTheDocument();
   });
 
   it("filters materials inside the home library drawer", async () => {
@@ -890,12 +950,13 @@ describe("LearningSpacePage", () => {
 
     await user.click(screen.getByRole("button", { name: "打开资料库" }));
     await user.click(screen.getByRole("button", { name: /真实资料讲义.md/ }));
-    await user.click(screen.getByRole("button", { name: "关闭资料库" }));
+    await user.click(screen.getByRole("button", { name: "作为本次对话参考" }));
     await user.click(screen.getByRole("button", { name: "联网搜索" }));
 
     const composer = screen.getByRole("region", { name: "学习输入区" });
 
-    expect(within(composer).getByText("已选择 1 份资料。")).toBeInTheDocument();
+    expect(within(composer).getByText("真实资料讲义.md")).toBeInTheDocument();
+    expect(within(composer).getByText("共 1 份")).toBeInTheDocument();
     expect(screen.queryByText(/联网搜索已开/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "联网搜索" })).toHaveAttribute("aria-pressed", "true");
   });
@@ -905,7 +966,58 @@ describe("LearningSpacePage", () => {
 
     const drawer = await screen.findByRole("dialog", { name: "资料库" });
     expect(await within(drawer).findByRole("button", { name: /神经网络课堂讲义/ })).toHaveAttribute("aria-pressed", "true");
-    expect(await screen.findByText("已选择 1 份资料。")).toBeInTheDocument();
+    expect(screen.queryByText("共 1 份")).not.toBeInTheDocument();
+    await userEvent.click(within(drawer).getByRole("button", { name: "作为本次对话参考" }));
+    expect(await screen.findByText("共 1 份")).toBeInTheDocument();
+  });
+
+  it("does not change conversation materials when the library draft is cancelled", async () => {
+    const user = userEvent.setup();
+    const { calls } = renderWithDashboardSummary(materialRichSummary);
+
+    await user.click(screen.getByRole("button", { name: "打开资料库" }));
+    await user.click(screen.getByRole("button", { name: /期末复习题 2025/ }));
+    await user.click(screen.getByRole("button", { name: "关闭资料库" }));
+
+    expect(screen.queryByText("共 1 份")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "打开资料库" }));
+    expect(screen.getByRole("button", { name: /期末复习题 2025/ })).toHaveAttribute("aria-pressed", "false");
+    expect(calls).not.toContainEqual(expect.objectContaining({
+      method: "patch",
+      payload: expect.objectContaining({ selected_material_ids: expect.any(Array) })
+    }));
+  });
+
+  it("keeps the material draft open when saving session context fails", async () => {
+    const user = userEvent.setup();
+    renderWithDashboardSummary(starterSummary, { failMaterialSave: true });
+    await user.click(await screen.findByRole("button", { name: /接口里的主页历史/ }));
+    await user.click(screen.getByRole("button", { name: "打开资料库" }));
+    await user.click(screen.getByRole("button", { name: /真实资料讲义.md/ }));
+    await user.click(screen.getByRole("button", { name: "作为本次对话参考" }));
+
+    expect(screen.getByRole("dialog", { name: "资料库" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("参考资料保存失败");
+    expect(screen.queryByText("共 1 份")).not.toBeInTheDocument();
+  });
+
+  it("keeps course generation materials separate from conversation context", async () => {
+    const user = userEvent.setup();
+    renderWithDashboardSummary(materialRichSummary);
+    await user.click(screen.getByRole("button", { name: "打开资料库" }));
+    await user.click(screen.getByRole("button", { name: /真实资料讲义.md/ }));
+    await user.click(screen.getByRole("button", { name: "作为本次对话参考" }));
+
+    await user.click(screen.getByRole("button", { name: "生成课程" }));
+    const courseDialog = screen.getByRole("dialog", { name: "从资料生成课程" });
+    await user.click(within(courseDialog).getByRole("button", { name: /真实资料讲义.md/ }));
+    await user.click(within(courseDialog).getByRole("button", { name: /期末复习题 2025/ }));
+    expect(within(courseDialog).getByText("已选择 1 份资料")).toBeInTheDocument();
+    await user.click(within(courseDialog).getByRole("button", { name: "关闭生成课程" }));
+
+    const composer = within(screen.getByRole("region", { name: "学习输入区" }));
+    expect(composer.getByText("真实资料讲义.md")).toBeInTheDocument();
+    expect(composer.queryByText("期末复习题 2025.pdf")).not.toBeInTheDocument();
   });
 
   it("sends selected materials with web search and deep thinking, then shows citations and graph trace", async () => {
@@ -914,7 +1026,7 @@ describe("LearningSpacePage", () => {
 
     await user.click(screen.getByRole("button", { name: "打开资料库" }));
     await user.click(screen.getByRole("button", { name: /期末复习题 2025/ }));
-    await user.click(screen.getByRole("button", { name: "关闭资料库" }));
+    await user.click(screen.getByRole("button", { name: "作为本次对话参考" }));
     await user.click(screen.getByRole("button", { name: "联网搜索" }));
     await user.click(screen.getByRole("button", { name: "深度思考" }));
     await user.type(screen.getByRole("textbox", { name: "学习问题输入" }), "结合资料和最新趋势怎么复习？");
@@ -925,9 +1037,14 @@ describe("LearningSpacePage", () => {
     expect(messageCall?.payload).toMatchObject({
       message: "结合资料和最新趋势怎么复习？",
       use_web_search: true,
-      deep_thinking: true,
-      selected_material_ids: [202]
+      deep_thinking: true
     });
+    expect(messageCall?.payload).not.toHaveProperty("selected_material_ids");
+    expect(calls).toContainEqual(expect.objectContaining({
+      method: "post",
+      url: TUTOR_ENDPOINTS.sessions,
+      payload: expect.objectContaining({ selected_material_ids: [202] })
+    }));
 
     const thread = screen.getByRole("region", { name: "主页对话" });
 
@@ -1044,7 +1161,12 @@ describe("LearningSpacePage", () => {
   it("loads persisted messages when selecting a home history thread", async () => {
     const user = userEvent.setup();
 
-    const { calls } = renderWithDashboardSummary(starterSummary);
+    const { calls } = renderWithDashboardSummary(starterSummary, {
+      historyDetail: makeSessionDetail("501", "接口里的主页历史", [
+        { id: "u-501", role: "user", content: "后端保存的问题" },
+        { id: "a-501", role: "assistant", content: "后端保存的回答" }
+      ], [201])
+    });
 
     await user.click(await screen.findByRole("button", { name: /接口里的主页历史/ }));
 
@@ -1052,6 +1174,7 @@ describe("LearningSpacePage", () => {
 
     expect(within(thread).getByText("后端保存的问题")).toBeInTheDocument();
     expect(within(thread).getByText("后端保存的回答")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "底部学习输入" })).getByText("真实资料讲义.md")).toBeInTheDocument();
     expect(calls).toContainEqual(expect.objectContaining({ method: "get", url: TUTOR_ENDPOINTS.detail(501) }));
   });
 

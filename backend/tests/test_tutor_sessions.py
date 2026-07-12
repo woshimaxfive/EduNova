@@ -66,6 +66,34 @@ class FakeTutorRepository:
             None,
         )
 
+    def list_home_history(self, user_id: int, page: int, page_size: int, query: str) -> tuple[list[ChatSession], int]:
+        candidates = [
+            session
+            for session in self.sessions
+            if session.user_id == user_id and session.scope == "home" and not session.archived_from_home
+        ]
+        if query:
+            normalized = query.casefold()
+            candidates = [
+                session
+                for session in candidates
+                if normalized in session.title.casefold()
+                or any(normalized in message.content.casefold() for message in self.messages if message.session_id == session.id)
+            ]
+        candidates.sort(key=lambda session: (session.updated_at, session.id), reverse=True)
+        start = (page - 1) * page_size
+        return candidates[start : start + page_size], len(candidates)
+
+    def find_history_match(self, session_id: int, query: str) -> str | None:
+        return next(
+            (
+                message.content
+                for message in reversed(self.list_messages(session_id))
+                if query.casefold() in message.content.casefold()
+            ),
+            None,
+        )
+
     def user_can_access_course(self, user_id: int, course_id: int) -> bool:
         return course_id in self.allowed_course_ids
 
@@ -426,6 +454,108 @@ def test_tutor_sessions_route_requires_login() -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+
+def test_home_history_paginates_and_searches_titles_and_message_content() -> None:
+    module = load_tutor_module()
+    repo = FakeTutorRepository()
+    user = make_user(1)
+    for index in range(35):
+        session = module.TutorSessionService(repo).create_session(
+            user=user,
+            scope="home",
+            course_id=None,
+            mode="chat",
+            title=f"历史会话 {index:02d}",
+        )
+        if index == 2:
+            add_history_message(repo, session, "user", "这里讨论了独特的链式法则关键词")
+    repo.sessions[0].archived_from_home = True
+    repo.sessions.append(
+        ChatSession(
+            id=99,
+            user_id=2,
+            scope="home",
+            title="别人的链式法则会话",
+            mode="chat",
+            archived_from_home=False,
+            selected_material_ids=[],
+            created_at=NOW,
+            updated_at=NOW,
+        )
+    )
+    service = module.TutorSessionService(repo)
+
+    first = service.list_home_history(user, page=1, page_size=30)
+    second = service.list_home_history(user, page=2, page_size=30)
+    searched = service.list_home_history(user, page=1, page_size=30, query="链式法则")
+
+    assert first.total == 34
+    assert len(first.items) == 30
+    assert first.has_more is True
+    assert len(second.items) == 4
+    assert second.has_more is False
+    assert searched.total == 1
+    assert searched.items[0].match_snippet is not None
+    assert "链式法则" in searched.items[0].match_snippet
+    assert len(searched.items[0].match_snippet) <= 120
+
+
+def test_home_session_persists_material_context_and_reuses_it_when_message_omits_ids() -> None:
+    module = load_tutor_module()
+    repo = FakeTutorRepository(materials=[make_home_material(301, 1)])
+    searcher = FakeMaterialCitationSearcher(
+        citations=[{"source_type": "material", "material_id": "301", "title": "主页复习资料.pdf", "snippet": "链式法则"}]
+    )
+    service = module.TutorSessionService(
+        repo,
+        material_citation_searcher=searcher,
+        course_answer_generator=FakeCourseAnswerGenerator(),
+    )
+    user = make_user(1)
+    session = service.create_session(user, "home", None, "chat", "资料会话", selected_material_ids=[301])
+
+    detail = service.append_message(user, session.id, "继续讲解")
+    cleared = service.update_session(user, session.id, selected_material_ids=[])
+
+    assert detail.session.selected_material_ids == [301]
+    assert searcher.calls[0]["material_ids"] == [301]
+    assert cleared.selected_material_ids == []
+
+
+def test_material_context_rejects_unavailable_materials_and_course_sessions() -> None:
+    module = load_tutor_module()
+    repo = FakeTutorRepository(materials=[make_home_material(301, 1)], allowed_course_ids={101})
+    service = module.TutorSessionService(repo)
+    user = make_user(1)
+
+    with pytest.raises(module.InvalidMaterialContextError):
+        service.create_session(user, "home", None, "chat", "无效资料", selected_material_ids=[999])
+    with pytest.raises(module.InvalidMaterialContextError):
+        service.create_session(user, "course", 101, "chat", "课程会话", selected_material_ids=[301])
+
+
+def test_material_context_rejects_more_than_ten_distinct_materials() -> None:
+    module = load_tutor_module()
+    materials = [make_home_material(300 + index, 1) for index in range(1, 12)]
+    service = module.TutorSessionService(FakeTutorRepository(materials=materials))
+
+    with pytest.raises(module.InvalidMaterialContextError, match="最多选择 10 份"):
+        service.create_session(make_user(1), "home", None, "chat", "资料太多", selected_material_ids=[item.id for item in materials])
+
+
+def test_home_session_ignores_stale_material_context_with_safe_warning() -> None:
+    module = load_tutor_module()
+    repo = FakeTutorRepository(materials=[make_home_material(301, 1)])
+    generator = FakeCourseAnswerGenerator()
+    service = module.TutorSessionService(repo, course_answer_generator=generator)
+    user = make_user(1)
+    session = service.create_session(user, "home", None, "chat", "资料会话", selected_material_ids=[301])
+    repo.materials.clear()
+
+    service.append_message(user, session.id, "继续讲解")
+
+    assert generator.calls[0]["warnings"] == ["部分历史参考资料已失效，已从本次检索中忽略。"]
 
 
 def test_create_home_session_and_list_it_for_current_user() -> None:
@@ -1596,6 +1726,11 @@ def test_tutor_session_routes_create_send_and_read_messages() -> None:
     assert detail_response.json()["data"]["session"]["title"] == "主页第一问"
     assert detail_response.json()["data"]["messages"][0]["content"] == "我应该先看概念还是先刷题？"
 
+    history_response = client.get("/api/v1/tutor/sessions/history?page=1&page_size=30&q=概念", headers=headers)
+    assert history_response.status_code == 200
+    assert history_response.json()["data"]["total"] == 1
+    assert "概念" in history_response.json()["data"]["items"][0]["match_snippet"]
+
     list_response = client.get("/api/v1/tutor/sessions?scope=home", headers=headers)
     assert list_response.status_code == 200
     assert [item["title"] for item in list_response.json()["data"]] == ["主页第一问"]
@@ -1665,6 +1800,14 @@ def test_tutor_message_route_accepts_home_tool_options() -> None:
     headers = {"Authorization": f"Bearer {make_token(user, settings)}"}
     session = module.TutorSessionService(repo).create_session(user=user, scope="home", course_id=None, mode="chat", title="主页第一问")
 
+    context_response = client.patch(
+        f"/api/v1/tutor/sessions/{session.id}",
+        headers=headers,
+        json={"selected_material_ids": [301]},
+    )
+    assert context_response.status_code == 200
+    assert context_response.json()["data"]["selected_material_ids"] == [301]
+
     response = client.post(
         f"/api/v1/tutor/sessions/{session.id}/messages",
         headers=headers,
@@ -1672,7 +1815,6 @@ def test_tutor_message_route_accepts_home_tool_options() -> None:
             "message": "启发式搜索怎么复习？",
             "use_web_search": True,
             "deep_thinking": True,
-            "selected_material_ids": [301],
         },
     )
 

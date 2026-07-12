@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
@@ -64,7 +64,54 @@ function StatefulSidebar({ conversations, onToggle }: StatefulSidebarProps) {
 
 afterEach(() => {
   document.body.style.overflow = "";
+  vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+it("历史列表通过明确按钮继续加载", async () => {
+  installCompactViewport(false);
+  const onLoadMore = vi.fn();
+  render(
+    <MemoryRouter>
+      <AppSidebar
+        isCollapsed={false}
+        conversations={[{ id: "thread-1", title: "第一页会话", meta: "今天" }]}
+        hasMoreConversations
+        onLoadMoreConversations={onLoadMore}
+        onToggleCollapsed={vi.fn()}
+      />
+    </MemoryRouter>
+  );
+
+  await userEvent.click(screen.getByRole("button", { name: "加载更多" }));
+
+  expect(onLoadMore).toHaveBeenCalledTimes(1);
+});
+
+it("历史搜索防抖后交给服务端并展示正文匹配片段", async () => {
+  installCompactViewport(false);
+  const onHistorySearch = vi.fn();
+  render(
+    <MemoryRouter>
+      <AppSidebar
+        isCollapsed={false}
+        conversations={[]}
+        historySearchResults={[{ id: "thread-2", title: "反向传播复习", meta: "正文命中：链式法则" }]}
+        onHistorySearch={onHistorySearch}
+        onToggleCollapsed={vi.fn()}
+      />
+    </MemoryRouter>
+  );
+  await userEvent.click(screen.getByRole("button", { name: "搜索历史" }));
+  vi.useFakeTimers();
+
+  fireEvent.change(screen.getByRole("searchbox", { name: "搜索历史关键词" }), { target: { value: "链式法则" } });
+  act(() => vi.advanceTimersByTime(249));
+  expect(onHistorySearch).not.toHaveBeenCalledWith("链式法则");
+  act(() => vi.advanceTimersByTime(1));
+
+  expect(onHistorySearch).toHaveBeenCalledWith("链式法则");
+  expect(screen.getByRole("button", { name: /反向传播复习.*链式法则/ })).toBeInTheDocument();
 });
 
 it("在紧凑视口点击侧栏导航后请求收起抽屉", async () => {

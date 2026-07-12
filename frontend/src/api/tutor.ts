@@ -6,6 +6,7 @@ import { type RagSearchResultItem } from "./rag";
 
 export const TUTOR_ENDPOINTS = {
   sessions: "/tutor/sessions",
+  history: "/tutor/sessions/history",
   detail: (sessionId: number | string) => `/tutor/sessions/${sessionId}`,
   message: (sessionId: number | string) => `/tutor/sessions/${sessionId}/messages`,
   stream: (sessionId: number | string) => `/tutor/sessions/${sessionId}/messages/stream`
@@ -19,10 +20,12 @@ export type CreateTutorSessionRequest = {
   course_id: number | null;
   mode: TutorSessionMode;
   title: string;
+  selected_material_ids?: number[];
 };
 
 export type UpdateTutorSessionRequest = {
-  title: string;
+  title?: string;
+  selected_material_ids?: number[];
 };
 
 export type DeleteTutorSessionResponse = {
@@ -44,8 +47,21 @@ export type TutorSessionSummary = {
   title: string;
   mode: TutorSessionMode;
   archived_from_home: boolean;
+  selected_material_ids: number[];
   created_at: string;
   updated_at: string;
+};
+
+export type TutorSessionHistoryItem = TutorSessionSummary & {
+  match_snippet?: string | null;
+};
+
+export type TutorSessionHistoryPage = {
+  items: TutorSessionHistoryItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  has_more: boolean;
 };
 
 export type TutorCitation = Partial<RagSearchResultItem> & {
@@ -146,6 +162,17 @@ export async function listTutorSessions(scope: TutorSessionScope = "home", cours
 
   const response = await apiClient.get<ApiEnvelope<TutorSessionSummary[]>>(TUTOR_ENDPOINTS.sessions, {
     params
+  });
+  return response.data;
+}
+
+export async function listHomeTutorHistory(params: { page?: number; pageSize?: number; query?: string } = {}) {
+  const response = await apiClient.get<ApiEnvelope<TutorSessionHistoryPage>>(TUTOR_ENDPOINTS.history, {
+    params: {
+      page: params.page ?? 1,
+      page_size: params.pageSize ?? 30,
+      ...(params.query?.trim() ? { q: params.query.trim() } : {})
+    }
   });
   return response.data;
 }

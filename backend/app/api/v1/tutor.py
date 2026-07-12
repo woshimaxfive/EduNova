@@ -26,6 +26,7 @@ from backend.app.services.profiles import ProfileService, SqlAlchemyProfileRepos
 from backend.app.services.rag import RagService, SqlAlchemyRagRepository
 from backend.app.services.tutor import (
     EmptyMessageError,
+    InvalidMaterialContextError,
     InvalidSessionScopeError,
     SessionNotFoundError,
     SqlAlchemyTutorSessionRepository,
@@ -76,6 +77,7 @@ def create_session(
             course_id=payload.course_id,
             mode=payload.mode,
             title=payload.title,
+            selected_material_ids=payload.selected_material_ids,
         )
     except InvalidSessionScopeError as exc:
         raise ApiError(
@@ -89,6 +91,8 @@ def create_session(
             code="NOT_FOUND",
             message="课程不存在或无权访问。",
         ) from exc
+    except InvalidMaterialContextError as exc:
+        raise ApiError(status_code=status.HTTP_400_BAD_REQUEST, code="MATERIAL_CONTEXT_INVALID", message=str(exc)) from exc
 
     from backend.app.schemas.tutor import session_to_summary
 
@@ -118,6 +122,18 @@ def list_sessions(
         ) from exc
 
     return api_response([session.model_dump() for session in sessions])
+
+
+@router.get("/sessions/history")
+def list_home_history(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=30, ge=1, le=50),
+    q: str = Query(default="", max_length=100),
+    current_user: User = Depends(get_current_user),
+    service: TutorSessionService = Depends(get_tutor_session_service),
+) -> dict:
+    result = service.list_home_history(current_user, page=page, page_size=page_size, query=q)
+    return api_response(result.model_dump())
 
 
 @router.get("/sessions/{session_id}")
@@ -152,7 +168,12 @@ def rename_session(
     service: TutorSessionService = Depends(get_tutor_session_service),
 ) -> dict:
     try:
-        session = service.rename_session(user=current_user, session_id=session_id, title=payload.title)
+        session = service.update_session(
+            user=current_user,
+            session_id=session_id,
+            title=payload.title,
+            selected_material_ids=payload.selected_material_ids,
+        )
     except EmptyMessageError as exc:
         raise ApiError(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -165,6 +186,8 @@ def rename_session(
             code="NOT_FOUND",
             message="会话不存在或无权访问。",
         ) from exc
+    except InvalidMaterialContextError as exc:
+        raise ApiError(status_code=status.HTTP_400_BAD_REQUEST, code="MATERIAL_CONTEXT_INVALID", message=str(exc)) from exc
 
     return api_response(session.model_dump())
 
@@ -183,7 +206,6 @@ def delete_session(
             code="NOT_FOUND",
             message="会话不存在或无权访问。",
         ) from exc
-
     return api_response(DeleteTutorSessionResponse(session_id=deleted.id, deleted=True).model_dump())
 
 
@@ -215,6 +237,8 @@ def send_message(
             code="NOT_FOUND",
             message="会话不存在或无权访问。",
         ) from exc
+    except InvalidMaterialContextError as exc:
+        raise ApiError(status_code=status.HTTP_400_BAD_REQUEST, code="MATERIAL_CONTEXT_INVALID", message=str(exc)) from exc
     except CourseAnswerGenerationError as exc:
         raise ApiError(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -259,6 +283,8 @@ def stream_message(
             code="NOT_FOUND",
             message="会话不存在或无权访问。",
         ) from exc
+    except InvalidMaterialContextError as exc:
+        raise ApiError(status_code=status.HTTP_400_BAD_REQUEST, code="MATERIAL_CONTEXT_INVALID", message=str(exc)) from exc
 
     def encode_events():
         for event in events:

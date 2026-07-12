@@ -40,6 +40,17 @@ type AppSidebarProps = {
   onSelectConversation?: (conversation: SidebarConversation) => void;
   onRenameConversation?: (conversation: SidebarConversation, title: string) => void | Promise<void>;
   onDeleteConversation?: (conversation: SidebarConversation) => void | Promise<void>;
+  hasMoreConversations?: boolean;
+  isLoadingMoreConversations?: boolean;
+  onLoadMoreConversations?: () => void;
+  historySearchResults?: SidebarConversation[];
+  historySearchPending?: boolean;
+  historySearchError?: boolean;
+  historySearchHasMore?: boolean;
+  historySearchLoadingMore?: boolean;
+  onHistorySearch?: (query: string) => void;
+  onRetryHistorySearch?: () => void;
+  onLoadMoreHistorySearch?: () => void;
 };
 
 const modalFocusableSelector =
@@ -60,13 +71,25 @@ export function AppSidebar({
   onNewChat,
   onSelectConversation,
   onRenameConversation,
-  onDeleteConversation
+  onDeleteConversation,
+  hasMoreConversations = false,
+  isLoadingMoreConversations = false,
+  onLoadMoreConversations,
+  historySearchResults,
+  historySearchPending = false,
+  historySearchError = false,
+  historySearchHasMore = false,
+  historySearchLoadingMore = false,
+  onHistorySearch,
+  onRetryHistorySearch,
+  onLoadMoreHistorySearch
 }: AppSidebarProps) {
   const navigate = useNavigate();
   const clearSession = useAuthStore((state) => state.clearSession);
   const user = useAuthStore((state) => state.user);
   const [isHistorySearchOpen, setIsHistorySearchOpen] = useState(false);
   const [historySearchTerm, setHistorySearchTerm] = useState("");
+  const [debouncedHistorySearchTerm, setDebouncedHistorySearchTerm] = useState("");
   const [openConversationMenuId, setOpenConversationMenuId] = useState<string | null>(null);
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -83,15 +106,22 @@ export function AppSidebar({
   const isCompactViewport = useCompactWorkspaceViewport();
   const isCompactSidebarOpen = !isCollapsed && isCompactViewport;
   const trimmedHistorySearchTerm = historySearchTerm.trim().toLowerCase();
-  const searchConversations = useMemo(
-    () =>
-      trimmedHistorySearchTerm
-        ? conversations.filter((conversation) =>
-            `${conversation.title} ${conversation.meta}`.toLowerCase().includes(trimmedHistorySearchTerm)
-          )
-        : conversations,
-    [conversations, trimmedHistorySearchTerm]
-  );
+  const searchConversations = useMemo(() => {
+    if (!trimmedHistorySearchTerm) return conversations;
+    if (historySearchResults) return historySearchResults;
+    return conversations.filter((conversation) =>
+      `${conversation.title} ${conversation.meta}`.toLowerCase().includes(trimmedHistorySearchTerm)
+    );
+  }, [conversations, historySearchResults, trimmedHistorySearchTerm]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedHistorySearchTerm(trimmedHistorySearchTerm), 250);
+    return () => window.clearTimeout(timer);
+  }, [trimmedHistorySearchTerm]);
+
+  useEffect(() => {
+    if (isHistorySearchOpen) onHistorySearch?.(debouncedHistorySearchTerm);
+  }, [debouncedHistorySearchTerm, isHistorySearchOpen, onHistorySearch]);
 
   const restoreHistorySearchFocus = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -103,8 +133,9 @@ export function AppSidebar({
   const closeHistorySearch = useCallback(() => {
     setHistorySearchTerm("");
     setIsHistorySearchOpen(false);
+    onHistorySearch?.("");
     restoreHistorySearchFocus();
-  }, [restoreHistorySearchFocus]);
+  }, [onHistorySearch, restoreHistorySearchFocus]);
 
   useEffect(() => {
     if (editingConversationId !== null) {
@@ -539,6 +570,16 @@ export function AppSidebar({
           ) : (
             <p className="home-thread-empty">还没有历史对话</p>
           )}
+          {hasMoreConversations ? (
+            <button
+              className="home-thread-load-more"
+              type="button"
+              disabled={isLoadingMoreConversations}
+              onClick={onLoadMoreConversations}
+            >
+              {isLoadingMoreConversations ? "正在加载" : "加载更多"}
+            </button>
+          ) : null}
         </div>
         <div className="home-account-section" aria-label="账号入口">
           <NavLink className={accountLinkClassName} to={PATHS.profile} onClick={closeCompactSidebar}>
@@ -597,7 +638,16 @@ export function AppSidebar({
             </div>
             <h2 id="history-search-title">搜索历史</h2>
             <div className="history-search-results" aria-label="历史搜索结果">
-              {searchConversations.length > 0 ? (
+              {trimmedHistorySearchTerm && historySearchPending ? (
+                <p className="history-search-empty">正在搜索全部历史...</p>
+              ) : null}
+              {trimmedHistorySearchTerm && historySearchError ? (
+                <div className="history-search-empty" role="alert">
+                  <span>历史搜索暂时不可用</span>
+                  <button type="button" onClick={onRetryHistorySearch}>重试</button>
+                </div>
+              ) : null}
+              {!historySearchPending && !historySearchError && searchConversations.length > 0 ? (
                 searchConversations.map((conversation) => (
                   <button
                     className="history-search-result"
@@ -613,9 +663,14 @@ export function AppSidebar({
                     </span>
                   </button>
                 ))
-              ) : (
+              ) : !historySearchPending && !historySearchError ? (
                 <p className="history-search-empty">没有匹配的历史对话</p>
-              )}
+              ) : null}
+              {trimmedHistorySearchTerm && historySearchHasMore ? (
+                <button type="button" onClick={onLoadMoreHistorySearch} disabled={historySearchLoadingMore}>
+                  {historySearchLoadingMore ? "正在加载" : "加载更多结果"}
+                </button>
+              ) : null}
             </div>
           </section>
         </div>

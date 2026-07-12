@@ -411,10 +411,8 @@
   background: var(--library-drawer-surface);
 }
 
-@media (prefers-color-scheme: dark) {
-  .library-drawer {
-    --library-drawer-surface: #202a27;
-  }
+:root[data-theme="dark"] .library-drawer {
+  --library-drawer-surface: #202a27;
 }
 
 .library-drawer-footer > p {

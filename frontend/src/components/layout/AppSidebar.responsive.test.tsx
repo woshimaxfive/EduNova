@@ -64,7 +64,28 @@ function StatefulSidebar({ conversations, onToggle }: StatefulSidebarProps) {
 
 afterEach(() => {
   document.body.style.overflow = "";
+  delete document.documentElement.dataset.theme;
+  window.localStorage.clear();
   vi.unstubAllGlobals();
+});
+
+it("通过侧栏按钮一键切换并保存明暗主题", async () => {
+  installCompactViewport(false);
+  document.documentElement.dataset.theme = "light";
+
+  render(
+    <MemoryRouter>
+      <AppSidebar isCollapsed={false} onToggleCollapsed={vi.fn()} />
+    </MemoryRouter>
+  );
+
+  await userEvent.click(screen.getByRole("button", { name: "切换到深色模式" }));
+  expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+  expect(window.localStorage.getItem("edunova-theme")).toBe("dark");
+
+  await userEvent.click(screen.getByRole("button", { name: "切换到浅色模式" }));
+  expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  expect(window.localStorage.getItem("edunova-theme")).toBe("light");
 });
 
 it("在紧凑视口点击侧栏导航后请求收起抽屉", async () => {

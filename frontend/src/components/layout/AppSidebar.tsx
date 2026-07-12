@@ -13,8 +13,10 @@ import {
   SignOut,
   Sparkle,
   Student,
+  Sun,
   Trash,
   UserCircle,
+  Moon,
   X
 } from "@phosphor-icons/react";
 import { type FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -22,6 +24,7 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 
 import { PATHS } from "../../app/routePaths";
 import { useAuthStore } from "../../features/auth/authStore";
+import { useThemeMode } from "../../features/theme/theme";
 import { useCompactWorkspaceViewport } from "./useResponsiveSidebarState";
 
 export type SidebarConversation = {
@@ -65,6 +68,7 @@ export function AppSidebar({
   const navigate = useNavigate();
   const clearSession = useAuthStore((state) => state.clearSession);
   const user = useAuthStore((state) => state.user);
+  const { theme, toggleTheme } = useThemeMode();
   const [isHistorySearchOpen, setIsHistorySearchOpen] = useState(false);
   const [historySearchTerm, setHistorySearchTerm] = useState("");
   const [openConversationMenuId, setOpenConversationMenuId] = useState<string | null>(null);
@@ -363,20 +367,36 @@ export function AppSidebar({
             </span>
             <span className="home-sidebar-label">EduNova</span>
           </Link>
-          <button
-            ref={toggleButtonRef}
-            className="sidebar-collapse-button"
-            type="button"
-            aria-label={isCollapsed ? "展开侧栏" : "收起侧栏"}
-            aria-expanded={!isCollapsed}
-            onClick={onToggleCollapsed}
-          >
-            {isCollapsed ? (
-              <CaretRight size={17} weight="bold" aria-hidden="true" />
-            ) : (
-              <CaretLeft size={17} weight="bold" aria-hidden="true" />
-            )}
-          </button>
+          <div className="home-sidebar-brand-actions">
+            <button
+              className="sidebar-theme-button"
+              type="button"
+              aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+              aria-pressed={theme === "dark"}
+              title={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+              onClick={toggleTheme}
+            >
+              {theme === "dark" ? (
+                <Sun size={17} weight="duotone" aria-hidden="true" />
+              ) : (
+                <Moon size={17} weight="duotone" aria-hidden="true" />
+              )}
+            </button>
+            <button
+              ref={toggleButtonRef}
+              className="sidebar-collapse-button"
+              type="button"
+              aria-label={isCollapsed ? "展开侧栏" : "收起侧栏"}
+              aria-expanded={!isCollapsed}
+              onClick={onToggleCollapsed}
+            >
+              {isCollapsed ? (
+                <CaretRight size={17} weight="bold" aria-hidden="true" />
+              ) : (
+                <CaretLeft size={17} weight="bold" aria-hidden="true" />
+              )}
+            </button>
+          </div>
         </div>
 
         <nav className="home-sidebar-nav" aria-label="主页导航">

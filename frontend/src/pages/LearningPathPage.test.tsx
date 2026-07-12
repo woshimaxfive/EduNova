@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { PATHS } from "../app/routePaths";
@@ -29,11 +29,16 @@ function renderWithProviders(ui: ReactNode, initialPath = `${PATHS.path}?course_
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
-          <Route path={PATHS.path} element={ui} />
+          <Route path={PATHS.path} element={<>{ui}<LocationProbe /></>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
   );
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}{location.search}</output>;
 }
 
 function parsePayload(data: unknown) {
@@ -267,7 +272,7 @@ describe("LearningPathPage", () => {
     apiClient.defaults.adapter = previousAdapter;
   });
 
-  it("renders real course path, mastery map and updates task status", async () => {
+  it("renders the path workspace, filters tasks, opens details and updates the current task", async () => {
     const user = userEvent.setup();
     const calls: Array<{ method: string; url: string; payload: unknown; params: unknown }> = [];
 
@@ -341,15 +346,23 @@ describe("LearningPathPage", () => {
     expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
     expect(screen.getByText("启发式搜索讲解")).toBeInTheDocument();
     expect(screen.getByText("由练习结果更新 · 保留 2 个既有任务")).toBeInTheDocument();
-    expect(screen.getByText("模型增强 · 模型与规则审核")).toBeInTheDocument();
-    const masteryRegion = screen.getByRole("region", { name: "掌握度图" });
-    expect(within(masteryRegion).getByText("启发式搜索")).toBeInTheDocument();
-    expect(within(masteryRegion).getByText("薄弱")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "个性化路径" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("navigation", { name: "任务状态" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "查看 PathPlanningGraph" }));
+    await user.click(screen.getByRole("button", { name: "路径详情" }));
+    const drawer = screen.getByRole("dialog", { name: "路径详情" });
+    expect(screen.getByTestId("path-drawer-layer").closest(".page-workbench")).toBeNull();
+    expect(within(drawer).getByText("启发式搜索")).toBeInTheDocument();
+    expect(within(drawer).getByText("薄弱 · 35")).toBeInTheDocument();
+    await user.click(within(drawer).getByRole("tab", { name: "规划依据" }));
+    expect(within(drawer).getByText("模型增强 · 模型与规则审核")).toBeInTheDocument();
+    expect(within(drawer).getByText("课程知识点 3 个。")).toBeInTheDocument();
+    await user.click(within(drawer).getByRole("tab", { name: "协作轨迹" }));
+    await user.click(within(drawer).getByRole("button", { name: "查看 PathPlanningGraph" }));
     expect(await screen.findByText("deterministic_rank")).toBeInTheDocument();
+    await user.click(within(drawer).getByRole("button", { name: "关闭" }));
 
-    await user.click(screen.getByRole("button", { name: "完成 复习启发式搜索" }));
+    await user.click(screen.getByRole("button", { name: "标记完成" }));
 
     await waitFor(() => {
       expect(calls).toContainEqual(
@@ -364,7 +377,7 @@ describe("LearningPathPage", () => {
     });
   });
 
-  it("shows a real empty state and generates a path for the selected course", async () => {
+  it("opens generation settings from the empty state and creates a path", async () => {
     const user = userEvent.setup();
     let hasPath = false;
     const calls: Array<{ method: string; url: string; payload: unknown }> = [];
@@ -410,8 +423,11 @@ describe("LearningPathPage", () => {
 
     renderWithProviders(<LearningPathPage />);
 
-    expect(await screen.findByText("学习路径尚未生成。")).toBeInTheDocument();
+    expect(await screen.findByText("还没有个性化学习路径")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "生成学习路径" }));
+    const drawer = screen.getByRole("dialog", { name: "学习路径生成设置" });
+    await user.selectOptions(within(drawer).getByLabelText("学习周期"), "7");
+    await user.click(within(drawer).getByRole("button", { name: "生成学习路径" }));
 
     expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
     expect(calls).toContainEqual(
@@ -440,7 +456,7 @@ describe("LearningPathPage", () => {
     expect(await screen.findByText("学习路径数据读取失败，请稍后重试。")).toBeInTheDocument();
   });
 
-  it("generates and renders an exam sprint plan without replacing the normal path", async () => {
+  it("switches to sprint mode, generates a plan and preserves the normal path", async () => {
     const user = userEvent.setup();
     const calls: Array<{ method: string; url: string; payload: unknown }> = [];
 
@@ -459,6 +475,9 @@ describe("LearningPathPage", () => {
       if (url === COURSE_ENDPOINTS.masteryMap(808)) {
         return { data: { data: masteryResponse, trace_id: "trace_mastery" }, status: 200, statusText: "OK", headers: {}, config };
       }
+      if (url === EXAM_SPRINT_ENDPOINTS.current) {
+        return { data: { data: null }, status: 200, statusText: "OK", headers: {}, config };
+      }
       if (url === EXAM_SPRINT_ENDPOINTS.generate) {
         return { data: { data: sprintPlanResponse, trace_id: "trace_sprint" }, status: 200, statusText: "OK", headers: {}, config };
       }
@@ -469,16 +488,19 @@ describe("LearningPathPage", () => {
     renderWithProviders(<LearningPathPage />);
 
     expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
-    const sprintRegion = screen.getByRole("region", { name: "期末冲刺计划" });
+    await user.click(screen.getByRole("tab", { name: "期末冲刺" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("view=sprint");
+    expect(await screen.findByText("还没有期末冲刺计划")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "生成冲刺计划" }));
+    const drawer = screen.getByRole("dialog", { name: "期末冲刺生成设置" });
+    await user.selectOptions(within(drawer).getByLabelText("冲刺天数"), "3");
+    await user.click(within(drawer).getByRole("button", { name: "生成期末冲刺计划" }));
 
-    await user.selectOptions(within(sprintRegion).getByLabelText("冲刺天数"), "3");
-    await user.click(within(sprintRegion).getByRole("button", { name: "生成期末冲刺计划" }));
-
-    expect(await within(sprintRegion).findByText("第 1 天复习启发式搜索")).toBeInTheDocument();
-    expect(within(sprintRegion).getByText("用课程证据解释启发式搜索的核心概念、常见误区和解题步骤。")).toBeInTheDocument();
-    expect(within(sprintRegion).getByText("启发式搜索：先复述概念边界，再做题；错题要标出依据缺口。")).toBeInTheDocument();
-    expect(within(sprintRegion).getByText("启发式搜索讲解")).toBeInTheDocument();
-    expect(screen.getByText("复习启发式搜索")).toBeInTheDocument();
+    expect(await screen.findByText("第 1 天复习启发式搜索")).toBeInTheDocument();
+    expect(screen.getByText("启发式搜索讲解")).toBeInTheDocument();
+    expect(screen.queryByText("复习启发式搜索")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "个性化路径" }));
+    expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
     expect(calls).toContainEqual(
       expect.objectContaining({
         method: "post",
@@ -493,7 +515,7 @@ describe("LearningPathPage", () => {
     );
   });
 
-  it("shows local sprint feedback without blocking the normal learning path", async () => {
+  it("keeps sprint generation settings after a local failure", async () => {
     const user = userEvent.setup();
 
     apiClient.defaults.adapter = async (config) => {
@@ -506,6 +528,9 @@ describe("LearningPathPage", () => {
       if (config.url === COURSE_ENDPOINTS.masteryMap(808)) {
         return { data: { data: masteryResponse, trace_id: "trace_mastery" }, status: 200, statusText: "OK", headers: {}, config };
       }
+      if (config.url === EXAM_SPRINT_ENDPOINTS.current) {
+        return { data: { data: null }, status: 200, statusText: "OK", headers: {}, config };
+      }
       if (config.url === EXAM_SPRINT_ENDPOINTS.generate) {
         throw new Error("sprint failed");
       }
@@ -515,12 +540,14 @@ describe("LearningPathPage", () => {
     renderWithProviders(<LearningPathPage />);
 
     expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
-    const sprintRegion = screen.getByRole("region", { name: "期末冲刺计划" });
+    await user.click(screen.getByRole("tab", { name: "期末冲刺" }));
+    await user.click(await screen.findByRole("button", { name: "生成冲刺计划" }));
+    const drawer = screen.getByRole("dialog", { name: "期末冲刺生成设置" });
+    await user.type(within(drawer).getByPlaceholderText("例如：优先突破高频考点与错题"), "突破启发式搜索");
+    await user.click(within(drawer).getByRole("button", { name: "生成期末冲刺计划" }));
 
-    await user.click(within(sprintRegion).getByRole("button", { name: "生成期末冲刺计划" }));
-
-    expect(await within(sprintRegion).findByText("期末冲刺计划生成失败，请稍后重试。")).toBeInTheDocument();
-    expect(screen.getByText("复习启发式搜索")).toBeInTheDocument();
+    expect(await within(drawer).findByText("期末冲刺计划生成失败，请稍后重试。")).toBeInTheDocument();
+    expect(within(drawer).getByDisplayValue("突破启发式搜索")).toBeInTheDocument();
   });
 
   it("uses an explicit material comparison, restores sprint and links targeted practice", async () => {
@@ -565,14 +592,20 @@ describe("LearningPathPage", () => {
       throw new Error(`Unexpected request ${url}`);
     };
 
-    renderWithProviders(<LearningPathPage />, `${PATHS.path}?course_id=808&comparison_id=1201`);
+    renderWithProviders(<LearningPathPage />, `${PATHS.path}?course_id=808&comparison_id=1201&sprint_plan_id=3001`);
 
-    expect(await screen.findByText("本次采用资料对比 #1201")).toBeInTheDocument();
+    expect(await screen.findByText("资料对比 #1201")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "期末冲刺" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("location")).toHaveTextContent("comparison_id=1201");
+    expect(screen.getByTestId("location")).toHaveTextContent("sprint_plan_id=3001");
     expect(screen.getByText("完成启发式搜索必刷题")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "开始针对性练习" })).toHaveAttribute(
       "href",
       "/app/practice?course_id=808&knowledge_point_id=401&sprint_plan_id=3001&sprint_task_id=4002&new=1"
     );
-    expect(screen.getByRole("button", { name: "查看 ExamSprintGraph" })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "路径详情" }));
+    const drawer = screen.getByRole("dialog", { name: "路径详情" });
+    await userEvent.setup().click(within(drawer).getByRole("tab", { name: "协作轨迹" }));
+    expect(within(drawer).getByRole("button", { name: "查看 ExamSprintGraph" })).toBeInTheDocument();
   });
 });

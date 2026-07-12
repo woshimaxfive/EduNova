@@ -56,7 +56,7 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 - Phase 7.4 已为课程级弱点复习项补齐确认、开始、完成和软忽略状态流转，课程空间可以直接操作真实队列项。
 - 2026-07-11 Phase 16 后，`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph`、`MaterialComparisonGraph` 和 `ExamSprintGraph` 已真接管十条生产主链路；学习档案导出继续使用确定性 Service + Redis/RQ Worker。
 - `/resources` 可基于当前用户课程生成讲解、思维导图、练习、代码实操、PPT 和动画图解。六个 Worker 分别执行模型增强并保留确定性 fallback，ReviewAgent 结合结构规则和模型审核，失败资源最多修订一次；旧 Markdown 资源继续兼容读取。
-- Phase 9 已挂载 `/paths`，可为当前用户课程生成 active 学习路径、更新任务状态，并把 `/app/path` 接入真实课程、任务、路径依据和掌握度图。
+- Phase 9 已挂载 `/paths`，可为当前用户课程生成 active 学习路径、更新任务状态；`/app/path` 现已升级为“个性化路径 / 期末冲刺”双模式宽屏任务工作台，生成、掌握度、依据和轨迹按需进入右侧抽屉。
 - Phase 9 已实现 `/courses/{course_id}/mastery-map`，并让 `/courses/{course_id}/learning-state` 返回真实路径摘要、掌握度摘要、弱点推荐资源和下次复习时间。
 - Phase 14 已将 `/practice` 和 `/reports` 升级为真实 Graph：练习创建/提交保留确定性分数并生成错因诊断，错题与弱点证据精确绑定，已有路径自动重排；报告聚合最近 5 次练习并展示规则趋势、证据摘要和真实轨迹。
 - Phase 16 已用 `ExamSprintGraph` 接管 `/exam-sprint`，可基于课程证据、显式资料对比、画像、弱点、练习、资源和报告生成 3/7/14 天冲刺计划，并在冲刺来源练习后保留进度重排剩余任务。

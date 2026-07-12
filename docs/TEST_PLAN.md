@@ -696,12 +696,12 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 8.2.1 前端测试覆盖资源卡显示“模型增强 / 本地可用稿 / 低依据”，低依据资源打开后显示“资料依据不足”局部提示，质量区展示真实评分理由。
 - Phase 9 后端测试覆盖 `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}` 的无 token 401、非本人课程/任务 404、空路径、生成路径、旧 active 路径归档、任务状态更新、多用户隔离；路径生成只消费 `confirmed/reviewing` 弱点，忽略 `pending/dismissed`，按知识点推荐同课程资源，并保证响应和 `plan_json` 不泄露系统提示词、模型输入、API Key、完整资料原文或完整画像原文。
 - Phase 9 后端测试覆盖 `/courses/{course_id}/mastery-map` 空课程、弱点状态映射、路径任务映射、资源推荐、多用户隔离和隐私字段；覆盖 `/courses/{course_id}/learning-state` 的真实 `path_summary`、`mastery_summary`、弱点推荐资源和 `next_review_at`。
-- Phase 9 前端测试覆盖 `PATH_ENDPOINTS`、`generatePath`、`getCurrentPath`、`updatePathTask` 和 `COURSE_ENDPOINTS.masteryMap` API 合同；`LearningPathPage` 覆盖课程预选、空路径、生成路径、任务状态更新、掌握度图、推荐资源和局部错误；`CourseSpacePage` 覆盖真实学习路径摘要、带 `course_id` 跳转和弱点推荐资源展示。
+- Phase 9 前端测试覆盖 `PATH_ENDPOINTS`、`generatePath`、`getCurrentPath`、`updatePathTask` 和 `COURSE_ENDPOINTS.masteryMap` API 合同；`LearningPathPage` 继续覆盖课程预选、空路径、生成路径、任务状态更新、推荐资源和局部错误，并新增双模式 URL、任务状态筛选、当前任务置顶、掌握度/依据/轨迹抽屉测试。
 - 课程闭环缓存测试覆盖统一 Query Key、知识点平均掌握度的空值/边界/四舍五入，以及课程问答、弱点、资源任务、路径、练习和报告操作后的课程级失效；课程空间测试覆盖抽屉强制刷新五组数据、目标和下一步重算、部分失败保留旧内容与手动重试。
 - Phase 10 后端测试覆盖 `/practice/sessions` 创建练习、知识点过滤、跨课程校验、单选/多选/简答确定性批改、空答案校验、重复提交策略、错题或低分题写入 `weakness_review_queue`、多用户隔离、报告生成和 latest 读取，以及 `/mastery-map` 和 `/learning-state` 对练习结果的反哺。
 - Phase 10 前端测试覆盖 `PRACTICE_ENDPOINTS`、`REPORT_ENDPOINTS` 类型化 API 合同；`PracticePage` 覆盖课程预选、创建练习、作答、提交反馈、空状态和局部错误；`ReportsPage` 覆盖课程预选、空报告、生成报告、真实报告渲染和局部错误；`CourseSpacePage` 覆盖练习/报告入口携带 `course_id`。
 - Phase 11.1 后端测试覆盖 `/exam-sprint/plans` 的无 token 401、非本人课程/资料/计划 404、`duration_days=3/7/14` 校验、空课程知识点可解释错误、生成计划写入 `learning_paths`/`learning_tasks`、新计划只归档旧 `sprint_active` 而不归档普通 `active` 学习路径、弱点/练习低分/资源/报告建议进入证据、隐私字段不泄露。
-- Phase 11.1 前端测试覆盖 `EXAM_SPRINT_ENDPOINTS`、`generateExamSprintPlan`、`getExamSprintPlan` 类型化 API 合同；`LearningPathPage` 覆盖课程预选、3/7/14 天选择、生成冲刺计划、计划渲染、局部错误和普通学习路径不回退；`LearningSpacePage` 覆盖期末冲刺入口跳转 `/app/path?course_id=...`。
+- Phase 11.1 前端测试覆盖 `EXAM_SPRINT_ENDPOINTS`、`generateExamSprintPlan`、`getExamSprintPlan` 类型化 API 合同；`LearningPathPage` 覆盖 `view=sprint`、显式对比/冲刺参数自动选中、3/7/14 天生成、按日任务、针对性练习链接、失败保留配置和切回普通路径不回退。
 - Phase 11.2 后端测试覆盖 `/materials/compare` 无 token 401、非本人课程/资料和未绑定当前课程资料 404、少于两份资料 400 或 422、课程切片对比、TXT/Markdown fallback、重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序、安全引用和隐私字段不泄露。
 - Phase 11.2 前端测试覆盖 `MATERIAL_ENDPOINTS.compare` 和 `compareMaterials` 类型化 API 合同；`LibraryPage` 覆盖课程选择、资料筛选、少于两份禁用提示、生成对比成功渲染、局部错误提示，且不影响上传、资料列表和生成课程。
 - Phase 12.1 后端测试覆盖 `/exports/learning-dossier` 无 token 401、非本人课程 404、无报告导出真实空状态、有报告导出课程级 Markdown、路径任务/资源/练习证据进入摘要、文件名安全，以及不泄露完整资料原文、完整作答原文、内部指令、模型请求内容、密钥、登录令牌或完整用户画像。
@@ -846,7 +846,7 @@ docker compose down
 ### 16.2 前端与浏览器
 
 - `/app/library` 刷新后恢复最近资料对比，展示 warning、审核模式和真实 `MaterialComparisonGraph`，并且只有点击“用于期末冲刺”才携带 `comparison_id`。
-- `/app/path` 恢复当前 `sprint_active` 计划，展示对比依据和 `ExamSprintGraph`；必刷题进入指定知识点 adaptive 练习并携带冲刺来源。
+- `/app/path` 恢复当前 `sprint_active` 计划并自动进入冲刺工作台，展示显式对比来源和 `ExamSprintGraph`；按真实日期浏览任务，必刷题进入指定知识点 adaptive 练习并携带冲刺来源。
 - `/app/practice` 提交来源练习后展示任务完成、冲刺重排状态、新计划入口和可展开 trace；失败采用局部反馈。
 - 隔离 Docker E2E 覆盖上传两份资料、建课、对比、生成冲刺、故意答错、重排和刷新恢复；桌面与 390px 均不得出现页面级横向溢出。
 

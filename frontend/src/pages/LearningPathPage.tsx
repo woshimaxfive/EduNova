@@ -1,133 +1,67 @@
-import { ArrowRight, CheckCircle, Compass, FileText, Sparkle, Target } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ChangeEvent, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
-import { buildCoursePath, PATHS } from "../app/routePaths";
-import { getMasteryMap, listCourses, type CourseMasteryPoint, type CourseMasteryStatus } from "../api/courses";
-import {
-  generateExamSprintPlan,
-  getCurrentExamSprintPlan,
-  type ExamSprintDailyTask,
-  type ExamSprintDuration,
-  type ExamSprintPlan
-} from "../api/examSprint";
+import { getMasteryMap, listCourses } from "../api/courses";
+import { generateExamSprintPlan, getCurrentExamSprintPlan, type ExamSprintDuration, type ExamSprintPlan } from "../api/examSprint";
 import { getMaterialComparison } from "../api/materials";
+import { generatePath, getCurrentPath, updatePathTask, type GeneratePathRequest, type LearningPathTask, type PathTaskStatus } from "../api/paths";
 import {
-  generatePath,
-  getCurrentPath,
-  updatePathTask,
-  type GeneratePathRequest,
-  type LearningPathTask,
-  type PathTaskStatus
-} from "../api/paths";
-import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
-import { InlineFeedback } from "../components/feedback/InlineFeedback";
-import { MasteryOverviewChart } from "../components/visualization/LearningCharts";
-import { PageFrame } from "./PageFrame";
+  LearningPathDrawer,
+  LearningPathToolbar,
+  PathStatusRail,
+  PathTaskCanvas,
+  SprintDayRail,
+  SprintTaskCanvas,
+  WorkspacePane,
+  type LearningPathView,
+  type PathDetailTab,
+  type PathDrawerMode,
+  type PathTaskFilter
+} from "../features/learning-path/LearningPathWorkspace";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
+import { PageFrame } from "./PageFrame";
+import "../styles/learning-path.css";
 
-const durationOptions: Array<{ label: string; value: GeneratePathRequest["duration_days"] }> = [
-  { label: "3 天", value: 3 },
-  { label: "7 天", value: 7 },
-  { label: "14 天", value: 14 }
-];
-const sprintDurationOptions: Array<{ label: string; value: ExamSprintDuration }> = durationOptions;
-
-function parseCourseId(value: string | null) {
-  if (!value) {
-    return null;
-  }
-
+function parsePositiveId(value: string | null) {
+  if (!value) return null;
   const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-function taskStatusLabel(status: PathTaskStatus) {
-  if (status === "doing") {
-    return "进行中";
-  }
-  if (status === "completed") {
-    return "已完成";
-  }
-  return "待开始";
-}
-
-function taskAction(task: LearningPathTask): { label: string; status: PathTaskStatus } | null {
-  if (task.status === "todo") {
-    return { label: `开始 ${task.title}`, status: "doing" };
-  }
-  if (task.status === "doing") {
-    return { label: `完成 ${task.title}`, status: "completed" };
-  }
-  return null;
-}
-
-function masteryStatusLabel(status: CourseMasteryStatus) {
-  if (status === "weak") {
-    return "薄弱";
-  }
-  if (status === "learning") {
-    return "学习中";
-  }
-  if (status === "mastered") {
-    return "已掌握";
-  }
-  if (status === "recommended_review") {
-    return "建议复习";
-  }
-  return "未开始";
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "未安排";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleDateString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit"
-  });
-}
-
-function sprintTaskTypeLabel(taskType: string) {
-  if (taskType === "sprint_practice") {
-    return "必刷题";
-  }
-  if (taskType === "sprint_resource") {
-    return "资源阅读";
-  }
-  return "重点复习";
-}
-
-function groupSprintTasks(tasks: ExamSprintDailyTask[]) {
-  const groups = new Map<number, ExamSprintDailyTask[]>();
-
+function groupSprintTasks(tasks: ExamSprintPlan["daily_tasks"]) {
+  const groups = new Map<number, ExamSprintPlan["daily_tasks"]>();
   tasks.forEach((task) => {
-    const dayIndex = task.day_index || 1;
-    groups.set(dayIndex, [...(groups.get(dayIndex) ?? []), task]);
+    const day = task.day_index || 1;
+    groups.set(day, [...(groups.get(day) ?? []), task]);
   });
-
   return [...groups.entries()].sort(([left], [right]) => left - right);
+}
+
+function resolveView(searchParams: URLSearchParams): LearningPathView {
+  const explicitView = searchParams.get("view");
+  if (explicitView === "path" || explicitView === "sprint") return explicitView;
+  return searchParams.has("comparison_id") || searchParams.has("sprint_plan_id") ? "sprint" : "path";
 }
 
 export function LearningPathPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const queryCourseId = parseCourseId(searchParams.get("course_id"));
-  const queryComparisonId = parseCourseId(searchParams.get("comparison_id"));
+  const queryCourseId = parsePositiveId(searchParams.get("course_id"));
+  const queryComparisonId = parsePositiveId(searchParams.get("comparison_id"));
+  const view = resolveView(searchParams);
+
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(queryCourseId);
+  const [pathFilter, setPathFilter] = useState<PathTaskFilter>("all");
+  const [selectedSprintDay, setSelectedSprintDay] = useState(1);
+  const [drawerMode, setDrawerMode] = useState<PathDrawerMode | null>(null);
+  const [detailTab, setDetailTab] = useState<PathDetailTab>("mastery");
   const [durationDays, setDurationDays] = useState<GeneratePathRequest["duration_days"]>(7);
   const [goal, setGoal] = useState("");
-  const [localFeedback, setLocalFeedback] = useState<string | null>(null);
   const [sprintDurationDays, setSprintDurationDays] = useState<ExamSprintDuration>(7);
   const [sprintGoal, setSprintGoal] = useState("");
   const [generatedSprintPlan, setGeneratedSprintPlan] = useState<ExamSprintPlan | null>(null);
+  const [pathFeedback, setPathFeedback] = useState<string | null>(null);
   const [sprintFeedback, setSprintFeedback] = useState<string | null>(null);
 
   const coursesQuery = useQuery({
@@ -136,9 +70,9 @@ export function LearningPathPage() {
     staleTime: 30_000
   });
   const courses = useMemo(() => coursesQuery.data?.data ?? [], [coursesQuery.data?.data]);
-  const firstCourseId = courses[0] ? Number.parseInt(courses[0].id, 10) : null;
+  const firstCourseId = courses[0] ? parsePositiveId(courses[0].id) : null;
   const effectiveCourseId = selectedCourseId ?? queryCourseId ?? firstCourseId;
-  const hasCourse = effectiveCourseId !== null && Number.isFinite(effectiveCourseId);
+  const hasCourse = effectiveCourseId !== null;
 
   const currentPathQuery = useQuery({
     queryKey: courseLoopQueryKeys.currentPath(effectiveCourseId ?? 0),
@@ -164,106 +98,100 @@ export function LearningPathPage() {
     enabled: queryComparisonId !== null
   });
 
-  const selectedCourse = useMemo(
-    () => courses.find((course) => Number.parseInt(course.id, 10) === effectiveCourseId) ?? null,
-    [courses, effectiveCourseId]
-  );
+  const selectedCourse = courses.find((course) => parsePositiveId(course.id) === effectiveCourseId) ?? null;
   const pathDetail = currentPathQuery.data?.data ?? null;
   const tasks = pathDetail?.tasks ?? [];
-  const pathPlan = pathDetail?.path?.plan_json ?? {};
-  const pathTrigger = typeof pathPlan.trigger === "string" ? pathPlan.trigger : "manual";
-  const preservedTaskCount = typeof pathPlan.preserved_task_count === "number" ? pathPlan.preserved_task_count : 0;
-  const pathGenerationMode = pathPlan.generation_mode === "model_enhanced" ? "模型增强" : "规则底稿";
-  const pathReviewMode = pathPlan.review_mode === "model_and_rules" ? "模型与规则审核" : "规则审核";
-  const evidenceBasis = pathDetail?.evidence_summary.basis ?? [];
-  const masteryMap = masteryQuery.data?.data ?? null;
-  const hasPath = Boolean(pathDetail?.path);
-  const hasReadError = coursesQuery.isError || currentPathQuery.isError || masteryQuery.isError;
   const sprintPlan = generatedSprintPlan ?? currentSprintQuery.data?.data ?? null;
+  const sprintGroups = useMemo(() => groupSprintTasks(sprintPlan?.daily_tasks ?? []), [sprintPlan?.daily_tasks]);
+  const effectiveSprintDay = sprintGroups.some(([day]) => day === selectedSprintDay)
+    ? selectedSprintDay
+    : sprintGroups[0]?.[0] ?? 1;
   const selectedComparison = comparisonQuery.data?.data ?? null;
-  const sprintTaskGroups = sprintPlan ? groupSprintTasks(sprintPlan.daily_tasks) : [];
+  const masteryPoints = masteryQuery.data?.data?.points ?? [];
+  const activeTasks = view === "path" ? tasks : sprintPlan?.daily_tasks ?? [];
+  const completedCount = activeTasks.filter((task) => task.status === "completed").length;
+  const hasActivePlan = view === "path" ? Boolean(pathDetail?.path) : Boolean(sprintPlan);
+
+  useEffect(() => {
+    if (!drawerMode) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setDrawerMode(null);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [drawerMode]);
 
   const generateMutation = useMutation({
     mutationFn: (payload: GeneratePathRequest) => generatePath(payload),
     onSuccess: (result, payload) => {
-      setLocalFeedback(null);
+      setPathFeedback(null);
       queryClient.setQueryData(courseLoopQueryKeys.currentPath(payload.course_id), result);
       void invalidateCourseLearningLoop(queryClient, payload.course_id);
+      setDrawerMode(null);
     },
-    onError: () => {
-      setLocalFeedback("学习路径生成失败，请稍后重试。");
-    }
+    onError: () => setPathFeedback("学习路径生成失败，请稍后重试。")
   });
   const updateTaskMutation = useMutation({
     mutationFn: ({ taskId, status }: { taskId: number; status: PathTaskStatus }) => updatePathTask(taskId, { status }),
     onSuccess: () => {
-      setLocalFeedback(null);
-      if (effectiveCourseId !== null) {
-        void invalidateCourseLearningLoop(queryClient, effectiveCourseId);
-      }
+      setPathFeedback(null);
+      if (effectiveCourseId) void invalidateCourseLearningLoop(queryClient, effectiveCourseId);
     },
-    onError: () => {
-      setLocalFeedback("任务状态更新失败，请稍后重试。");
-    }
+    onError: () => setPathFeedback("任务状态更新失败，请稍后重试。")
   });
   const sprintMutation = useMutation({
-    mutationFn: (payload: { course_id: number; duration_days: ExamSprintDuration; material_ids: number[]; comparison_id?: number; goal: string }) =>
-      generateExamSprintPlan(payload),
+    mutationFn: (payload: { course_id: number; duration_days: ExamSprintDuration; material_ids: number[]; comparison_id?: number; goal: string }) => generateExamSprintPlan(payload),
     onSuccess: (result, payload) => {
       setSprintFeedback(null);
       setGeneratedSprintPlan(result.data);
       queryClient.setQueryData(["exam-sprint", "current", payload.course_id], result);
-      const nextParams: Record<string, string> = { course_id: String(payload.course_id), sprint_plan_id: result.data.id };
-      if (payload.comparison_id) {
-        nextParams.comparison_id = String(payload.comparison_id);
-      }
+      const nextParams = new URLSearchParams();
+      nextParams.set("course_id", String(payload.course_id));
+      nextParams.set("view", "sprint");
+      nextParams.set("sprint_plan_id", result.data.id);
+      if (payload.comparison_id) nextParams.set("comparison_id", String(payload.comparison_id));
       setSearchParams(nextParams, { replace: true });
       void invalidateCourseLearningLoop(queryClient, payload.course_id);
+      setDrawerMode(null);
     },
-    onError: () => {
-      setSprintFeedback("期末冲刺计划生成失败，请稍后重试。");
-    }
+    onError: () => setSprintFeedback("期末冲刺计划生成失败，请稍后重试。")
   });
 
   function handleCourseChange(event: ChangeEvent<HTMLSelectElement>) {
-    setSelectedCourseId(parseCourseId(event.target.value));
-    setLocalFeedback(null);
-    setSprintFeedback(null);
+    const courseId = parsePositiveId(event.target.value);
+    setSelectedCourseId(courseId);
     setGeneratedSprintPlan(null);
-    setSearchParams({ course_id: event.target.value }, { replace: true });
+    setPathFeedback(null);
+    setSprintFeedback(null);
+    setPathFilter("all");
+    setSelectedSprintDay(1);
+    const nextParams = new URLSearchParams();
+    if (courseId) nextParams.set("course_id", String(courseId));
+    nextParams.set("view", view);
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function handleViewChange(nextView: LearningPathView) {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("view", nextView);
+    if (effectiveCourseId) nextParams.set("course_id", String(effectiveCourseId));
+    setSearchParams(nextParams, { replace: true });
+    setDrawerMode(null);
   }
 
   function handleDurationChange(event: ChangeEvent<HTMLSelectElement>) {
     const value = Number.parseInt(event.target.value, 10);
-    if (value === 3 || value === 7 || value === 14) {
-      setDurationDays(value);
-    }
+    if (value !== 3 && value !== 7 && value !== 14) return;
+    if (view === "path") setDurationDays(value);
+    else setSprintDurationDays(value);
   }
 
-  function handleSprintDurationChange(event: ChangeEvent<HTMLSelectElement>) {
-    const value = Number.parseInt(event.target.value, 10);
-    if (value === 3 || value === 7 || value === 14) {
-      setSprintDurationDays(value);
-    }
-  }
-
-  function submitGeneratePath() {
-    if (effectiveCourseId === null || !hasCourse || generateMutation.isPending) {
+  function submitPlan() {
+    if (!effectiveCourseId) return;
+    if (view === "path") {
+      generateMutation.mutate({ course_id: effectiveCourseId, duration_days: durationDays, goal: goal.trim() });
       return;
     }
-
-    generateMutation.mutate({
-      course_id: effectiveCourseId,
-      duration_days: durationDays,
-      goal: goal.trim()
-    });
-  }
-
-  function submitGenerateSprintPlan() {
-    if (effectiveCourseId === null || !hasCourse || sprintMutation.isPending) {
-      return;
-    }
-
     sprintMutation.mutate({
       course_id: effectiveCourseId,
       duration_days: sprintDurationDays,
@@ -273,350 +201,89 @@ export function LearningPathPage() {
     });
   }
 
-  function submitTaskStatus(task: LearningPathTask, status: PathTaskStatus) {
-    const taskId = Number.parseInt(task.id, 10);
-    if (!Number.isFinite(taskId) || updateTaskMutation.isPending) {
-      return;
-    }
-
+  function updateTask(task: LearningPathTask, status: PathTaskStatus) {
+    const taskId = parsePositiveId(task.id);
+    if (!taskId || updateTaskMutation.isPending) return;
     updateTaskMutation.mutate({ taskId, status });
   }
 
+  const pathReadError = coursesQuery.isError || currentPathQuery.isError
+    ? "学习路径数据读取失败，请稍后重试。"
+    : pathFeedback;
+  const sprintReadError = currentSprintQuery.isError
+    ? "当前冲刺计划读取失败，请稍后重试。"
+    : comparisonQuery.isError
+      ? "资料对比读取失败，本次不会隐式使用旧结果。"
+      : sprintFeedback;
+
   return (
-    <PageFrame title="学习路径">
-      <div className="student-workspace learning-path-workspace">
-        <section className="student-panel path-stage-panel" role="region" aria-label="阶段任务">
-          <div className="student-panel-heading">
-            <div>
-              <h2>课程路径</h2>
-            </div>
-            <span className="panel-count">
-              <Target size={17} weight="duotone" aria-hidden="true" />
-              {tasks.length} 任务
-            </span>
-          </div>
+    <>
+      <PageFrame title="学习路径" variant="wide-workspace">
+        <div className="learning-path-workspace">
+        <LearningPathToolbar
+          courses={courses}
+          courseId={effectiveCourseId}
+          courseTitle={selectedCourse?.title ?? "未选择课程"}
+          view={view}
+          completedCount={completedCount}
+          totalCount={activeTasks.length}
+          hasPlan={hasActivePlan}
+          onCourseChange={handleCourseChange}
+          onViewChange={handleViewChange}
+          onOpenGenerate={() => setDrawerMode("generate")}
+          onOpenDetails={() => { setDetailTab("mastery"); setDrawerMode("details"); }}
+        />
 
-          <div className="path-control-row">
-            <label>
-              <span>课程</span>
-              <select value={effectiveCourseId ?? ""} onChange={handleCourseChange} disabled={courses.length === 0}>
-                {courses.length === 0 ? (
-                  <option value="">暂无课程</option>
-                ) : (
-                  courses.map((course) => (
-                    <option key={course.id} value={course.id}>
-                      {course.title}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
-            <label>
-              <span>周期</span>
-              <select value={durationDays} onChange={handleDurationChange}>
-                {durationOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="path-goal-input">
-              <span>目标</span>
-              <input value={goal} placeholder="可选" onChange={(event) => setGoal(event.target.value)} />
-            </label>
-            <button className="primary-action" type="button" disabled={!hasCourse || generateMutation.isPending} onClick={submitGeneratePath}>
-              <span>{generateMutation.isPending ? "生成中" : "生成学习路径"}</span>
-              <ArrowRight size={17} weight="bold" aria-hidden="true" />
-            </button>
-          </div>
-
-          <InlineFeedback
-            message={hasReadError ? "学习路径数据读取失败，请稍后重试。" : localFeedback}
-            tone="warning"
-          />
-
-          {pathDetail && hasPath ? (
-            <div className="path-current-summary">
-              <strong>{pathDetail.message}</strong>
-              <span>{selectedCourse ? selectedCourse.title : `课程 ${pathDetail.course_id}`}</span>
-              {pathTrigger === "assessment" ? <small>由练习结果更新 · 保留 {preservedTaskCount} 个既有任务</small> : null}
-              <small>{pathGenerationMode} · {pathReviewMode}</small>
-              <AgentTraceDisclosure traceId={pathDetail.agent_trace_id} label="查看 PathPlanningGraph" />
-            </div>
-          ) : currentPathQuery.isPending && hasCourse ? (
-            <p className="path-empty-state">正在读取学习路径。</p>
-          ) : null}
-
-          {hasPath && tasks.length > 0 ? (
-            <ol className="path-stage-list">
-              {tasks.map((task, index) => {
-                const action = taskAction(task);
-
-                return (
-                  <li className={task.status === "doing" ? "active" : ""} key={task.id}>
-                    <span className="path-stage-index">{index + 1}</span>
-                    <div className="path-stage-content">
-                      <span className="path-stage-meta">
-                        {taskStatusLabel(task.status)} · 截止 {formatDateTime(task.due_at)}
-                      </span>
-                      <strong>{task.title}</strong>
-                      <ul>
-                        <li>
-                          <CheckCircle size={15} weight="duotone" aria-hidden="true" />
-                          <span>{task.reason}</span>
-                        </li>
-                        {task.recommended_resources.map((resource) => (
-                          <li key={resource.id}>
-                            <FileText size={15} weight="duotone" aria-hidden="true" />
-                            <span>{resource.title}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      <span className="path-stage-source">
-                        <Sparkle size={15} weight="duotone" aria-hidden="true" />
-                        {task.task_type === "review" ? "弱点复习" : task.task_type === "resource" ? "资源学习" : "知识点学习"}
-                      </span>
-                    </div>
-                    {action ? (
-                      <button
-                        className="path-task-action"
-                        type="button"
-                        disabled={updateTaskMutation.isPending}
-                        onClick={() => submitTaskStatus(task, action.status)}
-                      >
-                        {action.label}
-                      </button>
-                    ) : (
-                      <span className="path-stage-status">已完成</span>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-          ) : pathDetail && !hasReadError ? (
-            <p className="path-empty-state">学习路径尚未生成。</p>
-          ) : null}
-        </section>
-
-        <aside className="path-side-stack">
-          <section className="student-panel path-evidence-panel" role="region" aria-label="路径依据">
-            <div className="student-panel-heading compact">
-              <div>
-                <h2>路径依据</h2>
-              </div>
-            </div>
-            <ul className="path-evidence-list">
-              {(evidenceBasis.length > 0 ? evidenceBasis : ["暂无可展示依据。"]).map((item) => (
-                <li key={item}>
-                  <Sparkle size={17} weight="duotone" aria-hidden="true" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="student-panel mastery-map-panel" role="region" aria-label="掌握度图">
-            <div className="student-panel-heading compact">
-              <div>
-                <h2>掌握度图</h2>
-              </div>
-            </div>
-            {masteryMap && masteryMap.points.length > 0 ? (
-              <>
-                <MasteryOverviewChart points={masteryMap.points} />
-                <div className="mastery-map-list">
-                  {masteryMap.points.map((point: CourseMasteryPoint) => (
-                    <article key={point.id} className={`mastery-map-point ${point.status}`}>
-                      <div>
-                        <strong>{point.title}</strong>
-                        <span>{point.chapter ?? "未分章"}</span>
-                      </div>
-                      <em>{masteryStatusLabel(point.status)}</em>
-                      <div className="mastery-score-bar" aria-label={`${point.title} 掌握度 ${point.score}`}>
-                        <span style={{ width: `${point.score}%` }} />
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </>
-            ) : masteryQuery.isPending && hasCourse ? (
-              <p className="path-empty-state">正在读取掌握度图。</p>
-            ) : (
-              <p className="path-empty-state">暂无掌握度数据。</p>
-            )}
-          </section>
-
-          <section className="student-panel exam-sprint-panel" role="region" aria-label="期末冲刺计划">
-            <div className="student-panel-heading compact">
-              <div>
-                <h2>期末冲刺</h2>
-              </div>
-              {sprintPlan ? <span className="panel-count">{sprintPlan.duration_days} 天</span> : null}
-            </div>
-
-            <div className="exam-sprint-controls">
-              <label>
-                <span>冲刺天数</span>
-                <select aria-label="冲刺天数" value={sprintDurationDays} onChange={handleSprintDurationChange}>
-                  {sprintDurationOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>冲刺目标</span>
-                <input value={sprintGoal} placeholder="可选" onChange={(event) => setSprintGoal(event.target.value)} />
-              </label>
-              <button
-                className="primary-action"
-                type="button"
-                disabled={!hasCourse || sprintMutation.isPending}
-                onClick={submitGenerateSprintPlan}
-              >
-                <span>{sprintMutation.isPending ? "生成中" : "生成期末冲刺计划"}</span>
-              </button>
-            </div>
-
-            <InlineFeedback message={sprintFeedback} tone="warning" />
-            {currentSprintQuery.isError ? <InlineFeedback message="当前冲刺计划读取失败，请稍后重试。" tone="warning" /> : null}
-            {comparisonQuery.isError ? <InlineFeedback message="资料对比读取失败，本次不会隐式使用旧结果。" tone="warning" /> : null}
-            {selectedComparison ? (
-              <div className="exam-sprint-comparison-source">
-                <strong>本次采用资料对比 #{selectedComparison.id}</strong>
-                <span>
-                  {selectedComparison.summary.comparable_material_count} 份资料 · {selectedComparison.summary.matched_concept_count} 个命中点 · {selectedComparison.summary.citation_count} 条引用
-                </span>
-                <AgentTraceDisclosure traceId={selectedComparison.agent_trace_id} label="查看 MaterialComparisonGraph" />
-              </div>
-            ) : null}
-
-            {sprintPlan ? (
-              <div className="exam-sprint-result">
-                <div className="exam-sprint-summary">
-                  <span>{sprintPlan.evidence_summary.knowledge_point_count} 个知识点</span>
-                  <span>{sprintPlan.evidence_summary.weakness_count} 个确认弱点</span>
-                  <span>{sprintPlan.evidence_summary.practice_low_score_count} 条练习证据</span>
-                  <span>{sprintPlan.generation_mode === "model_enhanced" ? "模型增强" : "规则底稿"}</span>
-                  {sprintPlan.trigger === "assessment_reflow" ? <span>由冲刺练习更新 · 保留 {sprintPlan.preserved_task_count ?? 0} 个任务</span> : null}
-                </div>
-                <AgentTraceDisclosure traceId={sprintPlan.agent_trace_id} label="查看 ExamSprintGraph" />
-                {(sprintPlan.warnings ?? []).map((warning) => (
-                  <InlineFeedback key={warning} message={warning} tone="warning" />
-                ))}
-
-                {sprintPlan.high_frequency_points.length > 0 ? (
-                  <section className="exam-sprint-block" aria-label="高频点">
-                    <h3>高频点</h3>
-                    <ul>
-                      {sprintPlan.high_frequency_points.slice(0, 4).map((point) => (
-                        <li key={`${point.knowledge_point_id ?? point.title}-high`}>
-                          <Target size={15} weight="duotone" aria-hidden="true" />
-                          <span>{point.title}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
-
-                {sprintPlan.weak_points.length > 0 ? (
-                  <section className="exam-sprint-block" aria-label="薄弱点">
-                    <h3>薄弱点</h3>
-                    <ul>
-                      {sprintPlan.weak_points.slice(0, 4).map((point) => (
-                        <li key={`${point.knowledge_point_id ?? point.title}-weak`}>
-                          <CheckCircle size={15} weight="duotone" aria-hidden="true" />
-                          <span>{point.title}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
-
-                <section className="exam-sprint-block" aria-label="每日任务">
-                  <h3>每日任务</h3>
-                  {sprintTaskGroups.map(([dayIndex, dailyTasks]) => (
-                    <article className="exam-sprint-day" key={dayIndex}>
-                      <strong>第 {dayIndex} 天</strong>
-                      <ul>
-                        {dailyTasks.map((task) => (
-                          <li key={task.id}>
-                            <span>{sprintTaskTypeLabel(task.task_type)}</span>
-                            <div>
-                              <b>{task.title}</b>
-                              <small>
-                                {task.status === "doing" ? "进行中" : "待开始"} · {formatDateTime(task.due_at)}
-                              </small>
-                              {task.recommended_resources.map((resource) => (
-                                <em key={resource.id}>{resource.title}</em>
-                              ))}
-                              {task.task_type === "sprint_practice" && task.knowledge_point_id ? (
-                                <Link
-                                  className="soft-button"
-                                  to={`${PATHS.practice}?course_id=${effectiveCourseId}&knowledge_point_id=${task.knowledge_point_id}&sprint_plan_id=${sprintPlan.id}&sprint_task_id=${task.id}&new=1`}
-                                >
-                                  开始针对性练习
-                                </Link>
-                              ) : null}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </article>
-                  ))}
-                </section>
-
-                {sprintPlan.must_do_questions.length > 0 ? (
-                  <section className="exam-sprint-block" aria-label="必刷题">
-                    <h3>必刷题</h3>
-                    <ul>
-                      {sprintPlan.must_do_questions.slice(0, 3).map((question) => (
-                        <li key={question.id}>
-                          <FileText size={15} weight="duotone" aria-hidden="true" />
-                          <span>{question.prompt}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
-
-                {sprintPlan.easy_mistake_warnings.length > 0 ? (
-                  <section className="exam-sprint-block" aria-label="易错提醒">
-                    <h3>易错提醒</h3>
-                    <ul>
-                      {sprintPlan.easy_mistake_warnings.slice(0, 3).map((warning) => (
-                        <li key={`${warning.knowledge_point_id ?? warning.title}-warning`}>
-                          <Sparkle size={15} weight="duotone" aria-hidden="true" />
-                          <span>{warning.warning}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
-              </div>
-            ) : (
-              <p className="path-empty-state">选择课程后可生成 3/7/14 天期末冲刺计划。</p>
-            )}
-          </section>
-
-          <section className="student-panel path-action-panel" role="region" aria-label="下一步行动">
-            <Compass size={26} weight="duotone" aria-hidden="true" />
-            <div>
-              <span className="path-action-eyebrow">下一步行动</span>
-              <strong>{tasks.find((task) => task.status === "doing") ? "继续当前路径" : "先生成课程路径。"}</strong>
-              <p>{hasPath ? "完成当前任务后，掌握度图会按规则刷新。" : "路径会优先安排已确认和复习中的薄弱点。"}</p>
-            </div>
-            {effectiveCourseId !== null ? (
-              <Link className="primary-action" to={buildCoursePath(effectiveCourseId)}>
-                <span>回到课程</span>
-                <ArrowRight size={17} weight="bold" aria-hidden="true" />
-              </Link>
-            ) : null}
-          </section>
-        </aside>
-      </div>
-    </PageFrame>
+        {view === "path" ? (
+          <WorkspacePane rail={<PathStatusRail filter={pathFilter} tasks={tasks} onChange={setPathFilter} />}>
+            <PathTaskCanvas
+              pathDetail={pathDetail}
+              tasks={tasks}
+              filter={pathFilter}
+              isPending={currentPathQuery.isPending}
+              errorMessage={pathReadError}
+              mutationPending={updateTaskMutation.isPending}
+              onOpenGenerate={() => setDrawerMode("generate")}
+              onUpdateTask={updateTask}
+            />
+          </WorkspacePane>
+        ) : (
+          <WorkspacePane rail={<SprintDayRail days={sprintGroups} selectedDay={effectiveSprintDay} onChange={setSelectedSprintDay} />}>
+            <SprintTaskCanvas
+              plan={sprintPlan}
+              selectedDay={effectiveSprintDay}
+              comparison={selectedComparison}
+              courseId={effectiveCourseId}
+              isPending={currentSprintQuery.isPending}
+              errorMessage={sprintReadError}
+              onOpenGenerate={() => setDrawerMode("generate")}
+            />
+          </WorkspacePane>
+        )}
+        </div>
+      </PageFrame>
+      {drawerMode ? (
+        <LearningPathDrawer
+          mode={drawerMode}
+          view={view}
+          detailTab={detailTab}
+          duration={view === "path" ? durationDays : sprintDurationDays}
+          goal={view === "path" ? goal : sprintGoal}
+          courseTitle={selectedCourse?.title ?? "未选择课程"}
+          hasCourse={hasCourse}
+          pending={view === "path" ? generateMutation.isPending : sprintMutation.isPending}
+          feedback={view === "path" ? pathFeedback : sprintFeedback}
+          pathDetail={pathDetail}
+          sprintPlan={sprintPlan}
+          comparison={selectedComparison}
+          masteryPoints={masteryPoints}
+          onClose={() => setDrawerMode(null)}
+          onDetailTabChange={setDetailTab}
+          onDurationChange={handleDurationChange}
+          onGoalChange={view === "path" ? setGoal : setSprintGoal}
+          onSubmit={submitPlan}
+        />
+      ) : null}
+    </>
   );
 }

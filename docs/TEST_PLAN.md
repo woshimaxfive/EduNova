@@ -54,7 +54,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 | RAG 检索 | 切片、向量化、检索、引用来源展示 |
 | 多智能体 | Agent 流程、trace_id、agent_run_logs、失败记录 |
 | 资源生成 | 讲解、Markmap 思维导图、交互练习、Pyodide 代码实操、真实 PPTX、动画图解 |
-| 学习路径 | 画像目标、持续排程、任务排序、进度更新、推荐理由和练习回流 |
+| 学习路径 | 画像目标、任务排序、进度更新、推荐理由和练习回流 |
 | 掌握度地图 | 知识点状态、薄弱点、复习队列 |
 | AI 辅导 | 课程空间问答、引用来源、资料不足提示、开始提问聚焦和旧地址兼容跳转 |
 | 课程空间双模式 | 默认问答、逐回答引用与 trace、历史问题资源生成、学习进度抽屉、课程内容目录/概览/图谱、覆盖式 AI 辅导、历史隔离 |
@@ -693,7 +693,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - 导出测试覆盖 `export_jobs.resource_id`、PPTX 创建/复用/状态/下载、真实 OOXML 页面内容、非 PPT 拒绝、用户隔离，以及 Markdown/PDF/DOCX 学习档案不回退。
 - 前端测试覆盖共享 `ResourceRenderer`、结构化讲解、Markmap、交互题、Python 成功与安全拦截、PPT 自动排队、Mermaid 场景、legacy fallback、课程空间六类生成和资源 API 合同。
 - Phase 8.2.1 前端测试覆盖资源卡显示“模型增强 / 本地可用稿 / 低依据”，低依据资源打开后显示“资料依据不足”局部提示，质量区展示真实评分理由。
-- Phase 9 后端测试覆盖 `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}` 的无 token 401、非本人课程/任务 404、空路径、一键生成、旧 active 路径归档、任务状态更新、多用户隔离；请求只包含 `course_id`，路径生成读取画像目标和节奏，使用 v3 连续排程，只消费 `confirmed/reviewing` 弱点，忽略 `pending/dismissed`，并保证响应和 `plan_json` 不泄露敏感内容。
+- Phase 9 后端测试覆盖 `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}` 的无 token 401、非本人课程/任务 404、空路径、一键生成、旧 active 路径归档、任务状态更新、多用户隔离；请求只包含 `course_id`，路径生成读取画像目标并使用 v4 有序任务结构，只消费 `confirmed/reviewing` 弱点，忽略 `pending/dismissed`，不写入或返回任务时间，并保证响应和 `plan_json` 不泄露敏感内容。
 - Phase 9 后端测试覆盖 `/courses/{course_id}/mastery-map` 空课程、弱点状态映射、路径任务映射、资源推荐、多用户隔离和隐私字段；覆盖 `/courses/{course_id}/learning-state` 的真实 `path_summary`、`mastery_summary`、弱点推荐资源和 `next_review_at`。
 - Phase 9 前端测试覆盖 `PATH_ENDPOINTS`、`generatePath`、`getCurrentPath`、`updatePathTask` 和 `COURSE_ENDPOINTS.masteryMap` API 合同；`LearningPathPage` 覆盖课程预选、空路径、一键生成/更新、任务状态、当前任务置顶、推荐资源、掌握度/依据/轨迹抽屉、局部错误和旧冲刺 URL 参数清理。
 - 课程闭环缓存测试覆盖统一 Query Key、知识点平均掌握度的空值/边界/四舍五入，以及课程问答、弱点、资源任务、路径、练习和报告操作后的课程级失效；课程空间测试覆盖抽屉强制刷新五组数据、目标和下一步重算、部分失败保留旧内容与手动重试。
@@ -831,19 +831,19 @@ docker compose down
 
 验收证据记录在 `docs/evidence/PHASE_13_FRONTEND_VISUAL_HARDENING.md`。
 
-## 16. 持续学习路径收敛验收
+## 16. 个性化学习路径收敛验收
 
 ### 16.1 后端与数据
 
 - `PathPlanningGraph` 节点顺序保持 `profile -> collect_evidence -> deterministic_rank -> model_plan -> review -> repair? -> persist`。
-- `POST /paths/generate` 只接收 `course_id`；画像目标缺失时使用课程标题 fallback，每日任务容量缺失时默认为 2。
-- 新路径写入 `schema_version=3`、`schedule_mode="continuous"`，任务日期按每日容量自然延展；旧 v2 普通路径在练习回流或手动更新时自然升级。
+- `POST /paths/generate` 只接收 `course_id`；画像目标缺失时使用课程标题 fallback。
+- 新路径写入 `schema_version=4`、`path_mode="ordered"`，任务按证据和学习顺序排列，不写入 `due_at` 或 `next_review_at`；旧 v2/v3 普通路径在练习回流或手动更新时自然升级。
 - `/exam-sprint/*` 不再注册，评估图不再包含冲刺来源或 `sprint_replan`；历史 `sprint_*` 行保持不变且不被普通路径查询。
 - `MaterialComparisonGraph` 继续保存不可变结果，但不向路径或练习传递 `comparison_id`。
 
 ### 16.2 前端与浏览器
 
-- `/app/path` 只有持续学习工作台，不显示模式切换、冲刺日期或天数输入；空路径一键生成，已有路径一键更新。
+- `/app/path` 只有个性化学习路径工作台，不显示模式切换、日期、期限或天数输入；空路径一键生成，已有路径一键更新。
 - 旧 `view`、`comparison_id`、`sprint_plan_id` URL 参数会被清理并保留 `course_id`；练习页同样清理旧冲刺来源参数。
 - `/app/library` 的资料对比结果保留引用、审核和 `MaterialComparisonGraph`，不显示“用于期末冲刺”。
 - 隔离 Docker E2E 覆盖一键建路径、故意答错、路径重排、资料对比独立恢复以及桌面与 390px 无水平溢出。

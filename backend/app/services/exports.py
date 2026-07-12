@@ -134,7 +134,7 @@ class SqlAlchemyExportRepository:
 
     def list_tasks_for_path(self, path_id: int) -> list[LearningTask]:
         return list(
-            self.db.scalars(select(LearningTask).where(LearningTask.path_id == path_id).order_by(LearningTask.due_at.asc(), LearningTask.id.asc()))
+            self.db.scalars(select(LearningTask).where(LearningTask.path_id == path_id).order_by(LearningTask.id.asc()))
         )
 
     def list_generated_resources(self, user_id: int, course_id: int) -> list[GeneratedResource]:
@@ -794,7 +794,7 @@ class ExportService:
         lines.extend(
             [
                 f"- [{self._text(task.status)}] {self._text(task.title)}"
-                f"（类型：{self._text(task.task_type)}；到期：{iso_timestamp(task.due_at) or '未设置'}）"
+                f"（类型：{self._text(task.task_type)}）"
                 for task in tasks[:10]
             ]
         )

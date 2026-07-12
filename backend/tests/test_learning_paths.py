@@ -93,7 +93,7 @@ class FakePathRepository:
         return sorted(active_paths, key=lambda path: (path.updated_at, path.id), reverse=True)[0] if active_paths else None
 
     def list_tasks_for_path(self, path_id: int) -> list[LearningTask]:
-        return sorted([task for task in self.tasks if task.path_id == path_id], key=lambda task: (task.due_at or NOW, task.id))
+        return sorted([task for task in self.tasks if task.path_id == path_id], key=lambda task: task.id)
 
     def archive_active_paths(self, user_id: int, course_id: int) -> None:
         for path in self.paths:
@@ -271,9 +271,9 @@ def test_generate_path_archives_previous_active_path_and_prioritizes_confirmed_r
     assert result["status"] == "active"
     assert result["path"]["course_id"] == "101"
     assert result["path"]["goal"] == "掌握搜索算法"
-    assert result["path"]["plan_json"]["schema_version"] == 3
-    assert result["path"]["plan_json"]["schedule_mode"] == "continuous"
-    assert result["path"]["plan_json"]["personalization"]["daily_task_capacity"] == 2
+    assert result["path"]["plan_json"]["schema_version"] == 4
+    assert result["path"]["plan_json"]["path_mode"] == "ordered"
+    assert "daily_task_capacity" not in result["path"]["plan_json"]["personalization"]
     assert result["path"]["plan_json"]["source_counts"]["confirmed_or_reviewing_weaknesses"] == 2
     assert [task["knowledge_point_id"] for task in result["tasks"][:3]] == ["402", "401", "403"]
     assert [task["task_type"] for task in result["tasks"]] == ["review", "review", "learn"]
@@ -281,9 +281,9 @@ def test_generate_path_archives_previous_active_path_and_prioritizes_confirmed_r
     assert result["tasks"][1]["status"] == "todo"
     assert result["tasks"][0]["recommended_resource_ids"] == ["802"]
     assert result["tasks"][1]["recommended_resource_ids"] == ["801"]
-    first_due = datetime.fromisoformat(result["tasks"][0]["due_at"].replace("Z", "+00:00"))
-    third_due = datetime.fromisoformat(result["tasks"][2]["due_at"].replace("Z", "+00:00"))
-    assert third_due > first_due
+    assert "due_at" not in result["tasks"][0]
+    assert "next_review_at" not in result["tasks"][0]
+    assert all(task.due_at is None and task.next_review_at is None for task in repo.list_tasks_for_path(int(result["path"]["id"])))
     serialized = str(result)
     assert "系统提示词" not in serialized
     assert "模型输入" not in serialized
@@ -384,8 +384,8 @@ def test_path_planning_graph_runs_real_model_review_and_trace_nodes() -> None:
 
     detail = as_dict(service.generate_path(make_user(), 101))
 
-    assert detail["path"]["plan_json"]["schema_version"] == 3
-    assert detail["path"]["plan_json"]["schedule_mode"] == "continuous"
+    assert detail["path"]["plan_json"]["schema_version"] == 4
+    assert detail["path"]["plan_json"]["path_mode"] == "ordered"
     assert detail["path"]["plan_json"]["generation_mode"] == "model_enhanced"
     assert detail["path"]["plan_json"]["review_mode"] == "model_and_rules"
     assert [task["knowledge_point_id"] for task in detail["tasks"]] == ["401", "402", "403"]
@@ -423,7 +423,7 @@ def test_assessment_replan_preserves_completed_progress_and_does_not_create_miss
     assert replanned.detail.path.plan_json["trigger"] == "assessment"
     assert replanned.detail.path.plan_json["revision_of"] == str(old_path_id)
     assert replanned.detail.path.goal == "掌握搜索算法"
-    assert replanned.detail.path.plan_json["schema_version"] == 3
+    assert replanned.detail.path.plan_json["schema_version"] == 4
     assert replanned.detail.tasks[0].status == "completed"
     assert replanned.detail.tasks[0].knowledge_point_id == "402"
     assert any(task.knowledge_point_id == "403" and task.task_type == "review" for task in replanned.detail.tasks)
@@ -475,8 +475,9 @@ def test_legacy_v2_path_upgrades_on_replan_and_sprint_rows_are_not_current_paths
 
     assert replanned.detail is not None
     assert replanned.detail.path is not None
-    assert replanned.detail.path.plan_json["schema_version"] == 3
-    assert replanned.detail.path.plan_json["schedule_mode"] == "continuous"
+    assert replanned.detail.path.plan_json["schema_version"] == 4
+    assert replanned.detail.path.plan_json["path_mode"] == "ordered"
     assert "duration_days" not in replanned.detail.path.plan_json
+    assert all(task.due_at is None and task.next_review_at is None for task in repo.list_tasks_for_path(int(replanned.detail.path.id)))
     assert sprint_history.status == "sprint_active"
     assert repo.get_active_path(1, 101).id != sprint_history.id

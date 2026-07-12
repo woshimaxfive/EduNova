@@ -62,7 +62,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 | --- | --- | --- |
 | `/app` | 总 AI 学习主页 | 类似 ChatGPT 首页，承载贴边可收起主页历史、侧栏账号入口、轻量输入框、发送后主页对话态、文件上传、资料选择和最近课程入口 |
 | `/app/library` | 独立资料库 | 文件库式管理已上传但未必归属课程的资料，可搜索、查看引用、作为主页对话参考，也可通过浮层从资料生成课程 |
-| `/app/path` | 学习路径工作区 | 宽屏连续画布，读取当前课程唯一 active 持续路径；可通过 `course_id` 预选课程，一键生成或更新学习安排 |
+| `/app/path` | 学习路径工作区 | 宽屏连续画布，读取当前课程唯一 active 个性化路径；可通过 `course_id` 预选课程，一键生成或更新学习路径 |
 | `/app/courses/:courseId` | 课程空间 | 桌面课程对话工作区；默认问答并逐回答绑定引用、trace 和闭环行动，学习进度抽屉承载弱点与八步状态，课程内容模式承载目录、概览、图谱和覆盖式 AI 辅导 |
 | 生成课程浮层 | 上层任务流 | 可由输入框、资料库或资料选择区触发，调用 CourseBuilderGraph 并进入带 v2 结构和先修关系的课程 |
 
@@ -501,7 +501,7 @@ Phase 5 以后：
 - `StudioPage` 使用宽屏成果工作台展示六类结构化资源、引用、质量分、Graph 轨迹和 PPTX 状态；成果库切换会更新 `resource_id`，生成与详情抽屉覆盖画布而不改变其宽度。`CourseSpacePage` 既可带课程进入资源工坊，也可在回答下方生成并内联预览资源。
 - Phase 9 已把 `LearningPathPage` 接入真实 `/paths` 和 `/courses/{course_id}/mastery-map`：支持课程预选、生成课程路径、任务状态更新、推荐资源展示、路径依据和规则掌握度图；`CourseSpacePage` 的“学习路径”入口读取真实 `path_summary` 并跳转 `/app/path?course_id=...`。
 - Phase 14 已把 `PracticePage` 升级为错因诊断与闭环回流界面，展示缺失概念、复习动作、弱点新增/更新、路径状态和 Assessment/PathPlanning 轨迹；`LearningPathPage` 展示练习触发、保留任务数和真实 PathPlanningGraph；`ReportsPage` 展示最近练习趋势、证据摘要和 ReportGraph。旧响应缺少新增字段时仍正常渲染。
-- `/app/path` 只展示当前课程的一条持续学习路径；`view`、`comparison_id` 和 `sprint_plan_id` 属于已退役参数，打开旧地址时会清理这些参数并保留 `course_id`。
+- `/app/path` 只展示当前课程的一条个性化学习路径；`view`、`comparison_id` 和 `sprint_plan_id` 属于已退役参数，打开旧地址时会清理这些参数并保留 `course_id`。
 - `/app/library` 会恢复最近一次已保存资料对比并展示真实 `MaterialComparisonGraph` 轨迹。资料对比保持独立，对比和 Graph 失败只在局部提示，不影响上传、资料列表、生成课程或学习路径。
 - Phase 12.1 已把 `ReportsPage` 接入真实 `/exports/learning-dossier`：选择课程后可同步导出 Markdown 学习档案，前端用返回的 Markdown 和安全文件名创建浏览器下载；导出失败只在报告页导出区域局部提示，不影响报告读取和生成。
 - Phase 6.3 已接真实 `/tutor/sessions/{session_id}/messages/stream`；`CourseSpacePage` 发送课程问题时先创建或复用课程会话，再用 `fetch` + `ReadableStream` 读取 SSE，token 到达时逐步渲染，`done` 后用后端持久化消息替换临时状态。
@@ -513,7 +513,7 @@ Phase 5 以后：
 - P3.9 已把 `/app/library`、`/app/courses/:courseId`、资源工坊、画像、练习、报告和设置统一到同一套贴边工作区外壳，不再保留旧顶部导航；辅导能力直接位于课程空间。
 - 注册页选择 `blank` 时，进入 `/app` 后 summary 返回无内置课程、无内置资料和无历史对话；选择 `ai_intro` 时，summary 返回复制到当前用户空间的人工智能导论示例课程和资料。
 - `/app/courses/:courseId` 已推进到桌面课程对话工作区：课程内历史固定，问答 SSE 和输入固定，Assistant 使用 Markdown 正文；来源、资源、路径、练习、报告和 trace 按回答绑定并就地展开；学习进度抽屉展示闭环与弱点；课程内容展示真实知识点、来源和图谱。真实空态不回落到 demo 数据。
-- `/app/path` 已升级为单一持续学习任务工作台：路径按真实任务状态筛选并视觉置顶当前任务，用户无需设置天数或重复填写目标；掌握度、证据、Review 和 Graph 轨迹收进全视口覆盖抽屉。
+- `/app/path` 已升级为单一个性化学习路径工作台：路径按真实任务状态筛选并视觉置顶当前任务，不显示日期、期限或时间设置；掌握度、证据、Review 和 Graph 轨迹收进全视口覆盖抽屉。
 - `/app/library` 已重做为宽屏资料工作台，支持可选 `material_id` 查询参数恢复当前详情；工具栏和文件表格共用连续工作画布，真实详情抽屉和资料对比抽屉保持互斥，资料对比不再常驻占据首屏。
 - 从资料详情进入 `/app` 时通过内部路由状态传递 `selectedMaterialIds`；主页读取完整资料列表并自动打开资料浮层。该状态只负责当前会话选料，不写入长期画像或默认资料范围。
 - P3.13 已把普通路由标题收敛为短标题，隐藏重复说明；普通路由侧栏“新建对话”回到 `/app`；普通路由侧栏历史复用真实主页历史，点击后回到 `/app` 打开对应会话；资料库页主按钮使用“生成课程”，生成课程浮层默认未选中，上传资料只进入资料库。

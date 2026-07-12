@@ -1240,7 +1240,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 - `course_id` 必填，必须是当前用户自己的课程。
 - 学习目标优先读取用户画像；画像未提供目标时使用当前课程标题生成安全 fallback。
-- 用户不需要设置固定天数。系统根据画像节奏推导每日任务容量，并让任务日期自然延展。
+- 路径只返回有序任务、当前状态和推荐理由，不生成日期、期限或每日任务容量。
 
 响应：
 
@@ -1257,10 +1257,10 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
       "goal": "完成《机器学习》学习",
       "status": "active",
       "plan_json": {
-        "schema_version": 3,
-        "schedule_mode": "continuous",
+        "schema_version": 4,
+        "path_mode": "ordered",
         "strategy": "reviewing_first_then_confirmed_then_uncovered",
-        "personalization": {"daily_task_capacity": 2},
+        "personalization": {"learning_preference": "图示优先"},
         "basis": ["课程知识点 6 个。", "已确认或复习中的薄弱点 2 个。"]
       },
       "created_at": "2026-07-05T16:00:00Z",
@@ -1284,8 +1284,6 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
           }
         ],
         "status": "doing",
-        "due_at": "2026-07-06T16:00:00Z",
-        "next_review_at": null,
         "created_at": "2026-07-05T16:00:00Z",
         "updated_at": "2026-07-05T16:00:00Z"
       }
@@ -1903,7 +1901,7 @@ course_id=101
 
 ## 16. 已退役接口
 
-`/exam-sprint/*` 已停止注册。日常学习统一使用 `/paths/*` 持续学习路径；历史 `sprint_active/sprint_archived` 数据保留但不再通过业务接口读取或更新。
+`/exam-sprint/*` 已停止注册。日常学习统一使用 `/paths/*` 个性化学习路径；历史 `sprint_active/sprint_archived` 数据保留但不再通过业务接口读取或更新。
 ## 17. Export 接口
 
 状态：异步任务支持 Markdown、PDF、DOCX 学习档案和资源 PPTX。旧 `POST /exports/learning-dossier` Markdown 同步接口保留兼容；所有异步文件都写入 `export_jobs` 并由 Redis/RQ worker 渲染。

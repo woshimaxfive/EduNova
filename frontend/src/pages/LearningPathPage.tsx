@@ -87,7 +87,7 @@ export function LearningPathPage() {
       queryClient.setQueryData(courseLoopQueryKeys.currentPath(courseId), result);
       void invalidateCourseLearningLoop(queryClient, courseId);
     },
-    onError: () => setFeedback("学习安排生成失败，请稍后重试。")
+    onError: () => setFeedback("学习路径生成失败，请稍后重试。")
   });
   const updateTaskMutation = useMutation({
     mutationFn: ({ taskId, status }: { taskId: number; status: PathTaskStatus }) => updatePathTask(taskId, { status }),

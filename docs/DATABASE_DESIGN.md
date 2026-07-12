@@ -377,7 +377,7 @@ Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状�
 
 Phase 9 开始实际复用本表保存课程级学习路径，不新增迁移。生成新路径时，服务层会把同一用户同一课程旧 `active` 路径归档为 `archived`，再写入新的 `active` 路径。`plan_json` 只保存安全摘要、生成规则、计数、依据说明和可展示 metadata，不保存系统提示词、模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
-当前普通路径使用 `plan_json.schema_version=3` 和 `schedule_mode="continuous"`。系统根据画像目标和学习节奏推导每日任务容量，任务日期按容量自然延展；练习回流保留已完成进度并生成新的 active 路径。历史 `sprint_active/sprint_archived` 行保持原样，不删除、不迁移，也不再由业务接口读取或更新。
+当前普通路径使用 `plan_json.schema_version=4` 和 `path_mode="ordered"`。系统根据画像目标、弱点、掌握度、课程知识点和资源证据生成有序任务，不生成日期或期限；练习回流保留已完成进度并生成新的 active 路径。历史 v2/v3 与 `sprint_active/sprint_archived` 行保持原样，不删除、不迁移，也不再由业务接口读取或更新。
 
 字段：
 
@@ -416,8 +416,8 @@ Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `r
 | `reason` | text | 推荐理由 |
 | `recommended_resource_ids` | jsonb | 推荐资源 ID 列表 |
 | `status` | varchar | `todo`、`doing`、`completed` |
-| `due_at` | timestamptz | 建议完成时间 |
-| `next_review_at` | timestamptz | 下次复习时间 |
+| `due_at` | timestamptz | 历史兼容字段；当前学习路径不再写入、排序或返回 |
+| `next_review_at` | timestamptz | 历史兼容字段；当前学习路径不再写入或返回，弱点复习时间由 `weakness_review_queue` 管理 |
 
 ### 4.11 `generated_resources`
 

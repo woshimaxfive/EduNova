@@ -916,8 +916,6 @@ describe("frontend API contracts", () => {
               }
             ],
             status: "doing",
-            due_at: "2026-07-06T09:00:00Z",
-            next_review_at: null,
             created_at: "2026-07-05T09:00:00Z",
             updated_at: "2026-07-05T09:00:00Z"
           }

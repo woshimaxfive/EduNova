@@ -304,7 +304,7 @@ class SqlAlchemyCourseRepository:
             self.db.scalars(
                 select(LearningTask)
                 .where(LearningTask.user_id == user_id, LearningTask.course_id == course_id)
-                .order_by(LearningTask.due_at.asc(), LearningTask.id.asc())
+                .order_by(LearningTask.id.asc())
             )
         )
 
@@ -313,7 +313,7 @@ class SqlAlchemyCourseRepository:
             self.db.scalars(
                 select(LearningTask)
                 .where(LearningTask.path_id == path_id)
-                .order_by(LearningTask.due_at.asc(), LearningTask.id.asc())
+                .order_by(LearningTask.id.asc())
             )
         )
 

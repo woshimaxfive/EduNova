@@ -3,7 +3,6 @@ import {
   Check,
   CheckCircle,
   CirclesThreePlus,
-  Clock,
   FileText,
   Info,
   ListChecks,
@@ -67,7 +66,7 @@ export function LearningPathToolbar({
       </label>
 
       <div className="path-toolbar-title">
-        <span>持续学习安排</span>
+        <span>个性化学习路径</span>
         <strong>{courseTitle}</strong>
       </div>
 
@@ -79,7 +78,7 @@ export function LearningPathToolbar({
       <div className="path-toolbar-actions">
         <button className="soft-button" type="button" disabled={courseId === null || generatePending} onClick={onGenerate}>
           <Sparkle size={17} weight="duotone" aria-hidden="true" />
-          {generatePending ? "正在规划" : hasPlan ? "更新学习安排" : "生成学习安排"}
+          {generatePending ? "正在规划" : hasPlan ? "更新学习路径" : "生成学习路径"}
         </button>
         <button className="soft-button" type="button" disabled={!hasPlan} onClick={onOpenDetails}>
           <Info size={17} weight="duotone" aria-hidden="true" />
@@ -135,13 +134,6 @@ function taskTypeLabel(taskType: string) {
   return "知识点学习";
 }
 
-function formatDate(value: string | null) {
-  if (!value) return "自动安排";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
-}
-
 type PathTaskCanvasProps = {
   pathDetail: LearningPathDetail | null;
   tasks: LearningPathTask[];
@@ -178,9 +170,9 @@ export function PathTaskCanvas({
       <div className="path-workspace-state path-workspace-empty">
         <ListChecks size={34} weight="duotone" aria-hidden="true" />
         <strong>还没有个性化学习路径</strong>
-        <p>系统会根据课程知识点、学习画像、掌握度和薄弱点安排下一步。</p>
+        <p>系统会根据课程知识点、学习画像、掌握度和薄弱点确定学习顺序。</p>
         <button className="primary-action" type="button" disabled={mutationPending} onClick={onGenerate}>
-          {mutationPending ? "正在规划" : "一键生成学习安排"}
+          {mutationPending ? "正在规划" : "一键生成学习路径"}
         </button>
         <InlineFeedback message={errorMessage} tone="warning" />
       </div>
@@ -219,7 +211,6 @@ export function PathTaskCanvas({
                   <div className="path-task-meta">
                     <span>{taskStatusLabel(task.status)}</span>
                     <span>{taskTypeLabel(task.task_type)}</span>
-                    <span><Clock size={14} aria-hidden="true" />安排至 {formatDate(task.due_at)}</span>
                     {isCurrent ? <b>当前任务</b> : null}
                   </div>
                   <h3>{task.title}</h3>
@@ -297,7 +288,7 @@ export function LearningPathDrawer({
           {detailTab === "evidence" ? (
             <div className="path-detail-panel" role="tabpanel">
               <div className="path-plan-metadata">
-                <span>{pathDetail?.path ? "持续学习安排已生效" : "暂无学习安排"}</span>
+                <span>{pathDetail?.path ? "个性化学习路径已生成" : "暂无学习路径"}</span>
                 {pathDetail?.path ? (
                   <strong>
                     {String(pathDetail.path.plan_json.generation_mode ?? "deterministic_source") === "model_enhanced" ? "模型增强" : "规则底稿"}

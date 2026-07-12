@@ -78,7 +78,7 @@ class FakeLearningDossierRepository:
         return sorted(paths, key=lambda path: (path.updated_at, path.id), reverse=True)[0] if paths else None
 
     def list_tasks_for_path(self, path_id: int) -> list[LearningTask]:
-        return sorted([task for task in self.tasks if task.path_id == path_id], key=lambda task: (task.due_at or NOW, task.id))
+        return sorted([task for task in self.tasks if task.path_id == path_id], key=lambda task: task.id)
 
     def list_generated_resources(self, user_id: int, course_id: int) -> list[GeneratedResource]:
         return sorted(
@@ -384,6 +384,7 @@ def test_learning_dossier_exports_ready_report_path_resources_and_safe_markdown(
     assert "启发式搜索" in markdown
     assert "复习启发式搜索" in markdown
     assert "启发式搜索讲解" in markdown
+    assert "到期" not in markdown
     assert "这是不应进入学习档案的完整学生原始答案" not in markdown
     assert "系统提示词" not in markdown
     assert "模型输入" not in markdown

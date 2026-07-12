@@ -6,7 +6,7 @@
 
 当前最新完成到 **Phase 18：AI 执行可靠性与质量评测**。
 
-Phase 计划的历史过程继续保留在 `docs/superpowers`。Phase 13 已完成主页问答、课程问答和资源生成的真实 Graph 编排，Phase 14 已让路径、练习评估和报告进入真实 LangGraph，Phase 15 已让画像和资料建课进入生产 Graph，Phase 16 曾实现资料对比和独立期末冲刺；当前产品已收敛为九条生产 Graph 和一条持续学习路径。
+Phase 计划的历史过程继续保留在 `docs/superpowers`。Phase 13 已完成主页问答、课程问答和资源生成的真实 Graph 编排，Phase 14 已让路径、练习评估和报告进入真实 LangGraph，Phase 15 已让画像和资料建课进入生产 Graph，Phase 16 曾实现资料对比和独立期末冲刺；当前产品已收敛为九条生产 Graph 和一条个性化学习路径。
 
 Phase 16 使用 Alembic `20260711_0013` 新增不可变 `material_comparison_runs`。`MaterialComparisonGraph` 从真实资料/课程分块生成规则底稿，模型只增强解释与排序。资料对比当前保持为资料库独立辅助工具，不自动修改路径、资源或练习。
 
@@ -14,7 +14,7 @@ Phase 17 使用 Alembic `20260711_0014` 新增 `ai_jobs`。`CourseBuilderGraph` 
 
 Phase 18 使用 Alembic `20260711_0015` 新增隐私安全的 `model_call_runs`。九条 Graph、主页/课程流式问答和 Embedding 共用 `ModelExecutionRuntime`：只在当前配置内对瞬时故障有限重试，Redis 统一限制用户/全局并发并维护熔断状态；首 token 后的流中断不自动重放，也不持久化半截回答。离线 AI 质量回归集覆盖九条 Graph 的引用、敏感输出、结构和确定性数字边界，不依赖真实 API Key。
 
-2026-07-12 已完成持续学习路径收敛：`/app/path` 只保留一条动态个性化路径，生成请求只提交 `course_id`，目标和每日容量来自画像，任务日期按容量自然延展；练习继续重排已有路径并保留完成进度。`ExamSprintGraph`、`/exam-sprint/*` 和冲刺来源练习分支已从生产代码移除，历史 `sprint_*` 数据不迁移、不清理。资料对比继续独立保存和恢复，不再提供跨页冲刺入口。
+2026-07-12 已完成个性化学习路径收敛：`/app/path` 只保留一条动态路径，生成请求只提交 `course_id`，路径只表达学习顺序、当前任务和完成状态，不生成日期或期限；练习继续重排已有路径并保留完成进度。`ExamSprintGraph`、`/exam-sprint/*` 和冲刺来源练习分支已从生产代码移除，历史 `sprint_*` 数据不迁移、不清理。资料对比继续独立保存和恢复，不再提供跨页冲刺入口。
 
 2026-07-12 已完成工作区背景融合与主页精简：资料库和资源工坊的工具栏、列表及内容区统一为一层连续工作画布，只保留必要分隔线，抽屉继续作为不透明浮层；主页删除预设快捷问题，“最近学习”改为按需打开完整课程抽屉，支持搜索、失败重试和课程跳转，不新增 `/app/courses` 列表路由。Docker 入口已用 `agent-browser` 验收 `1440px`、`1920px` 和 `390px`，三页及课程抽屉均无横向溢出，浏览器控制台无错误。
 
@@ -58,14 +58,14 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 - Phase 7.4 已为课程级弱点复习项补齐确认、开始、完成和软忽略状态流转，课程空间可以直接操作真实队列项。
 - 当前 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph` 已真接管九条生产主链路；学习档案导出继续使用确定性 Service + Redis/RQ Worker。
 - `/resources` 可基于当前用户课程生成讲解、思维导图、练习、代码实操、PPT 和动画图解。六个 Worker 分别执行模型增强并保留确定性 fallback，ReviewAgent 结合结构规则和模型审核，失败资源最多修订一次；旧 Markdown 资源继续兼容读取。
-- Phase 9 已挂载 `/paths`，可为当前用户课程生成 active 持续学习路径、更新任务状态；`/app/path` 是单一宽屏任务工作台，用户无需设置天数，掌握度、依据和轨迹按需进入右侧抽屉。
+- Phase 9 已挂载 `/paths`，可为当前用户课程生成 active 个性化学习路径、更新任务状态；`/app/path` 是单一宽屏任务工作台，只表达学习顺序、当前任务和完成状态，掌握度、依据和轨迹按需进入右侧抽屉。
 - Phase 9 已实现 `/courses/{course_id}/mastery-map`，并让 `/courses/{course_id}/learning-state` 返回真实路径摘要、掌握度摘要、弱点推荐资源和下次复习时间。
 - Phase 14 已将 `/practice` 和 `/reports` 升级为真实 Graph：练习创建/提交保留确定性分数并生成错因诊断，错题与弱点证据精确绑定，已有路径自动重排；报告聚合最近 5 次练习并展示规则趋势、证据摘要和真实轨迹。
 - Phase 11.2 已挂载 `/materials/compare`，可对同一课程下 2 份以上已绑定资料做确定性对比，输出重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序和安全引用，并在 `/app/library` 展示。
 - Phase 12.1 已挂载 `/exports/learning-dossier`，可同步导出当前用户课程级 Markdown 学习档案；Phase 13.2 已挂载 `/exports/learning-dossier/jobs`、`/exports/{job_id}` 和 `/exports/{job_id}/download`，可通过 Redis/RQ worker 异步生成 Markdown/PDF/DOCX 学习档案，并在 `/app/reports` 选择格式下载。
 - Phase 12.2 已补齐交付基线文档、开源说明、MIT 许可证、用户指南、答辩问答、测试报告和验收证据索引。
 
-当前九条主链路已经由真实 Graph runner 编排并落 `agent_run_logs`：动态画像、智能建课、主页问答、课程问答、资源生成、持续学习路径、练习评估、学习报告和资料对比。学习档案导出、认证、设置、Dashboard 等能力保持普通服务。
+当前九条主链路已经由真实 Graph runner 编排并落 `agent_run_logs`：动态画像、智能建课、主页问答、课程问答、资源生成、个性化学习路径、练习评估、学习报告和资料对比。学习档案导出、认证、设置、Dashboard 等能力保持普通服务。
 
 当前仍然不是完整商业产品。课程级持续路径、错题诊断与回流、掌握度、学习报告、资料对比版本、资料解析、学习档案导出和隔离 Docker E2E 已接入；OCR、旧版 Office、扫描件解析和更广的端到端异常恢复仍在后续阶段。
 
@@ -89,7 +89,7 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 | 课程学习状态 | 当前课程画像叠层、弱点候选计数、复习队列和状态流转 | `/api/v1/courses/{course_id}/learning-state` |
 | Agent 轨迹 | 当前用户自己的 Agent trace 查询、步骤排序、Graph 工作流和安全摘要返回 | `/api/v1/agents/traces/{trace_id}` |
 | 课程资源 | `ResourceGenerationGraph` 接管六类结构化资源、质量审核、PPTX 导出和 trace | `/api/v1/resources/*` |
-| 学习路径 | `PathPlanningGraph` 按画像节奏生成/重排 active 持续路径并保留进度 | `/api/v1/paths/*` |
+| 学习路径 | `PathPlanningGraph` 按画像、弱点、掌握度和课程结构生成/重排有序路径并保留进度 | `/api/v1/paths/*` |
 | 掌握度图 | 按课程知识点、弱点队列、路径任务、资源推荐和练习结果计算规则掌握度 | `/api/v1/courses/{course_id}/mastery-map` |
 | 练习评估 | `AssessmentGraph` 出题、确定性评分、错因诊断、弱点与路径回流 | `/api/v1/practice/*` |
 | 学习报告 | `ReportGraph` 聚合最近练习、掌握度、弱点、路径、资源与趋势 | `/api/v1/reports/*` |
@@ -111,7 +111,7 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 | `/app/profile` | 读取真实 8 维画像、逐维可信度、候选/已应用证据和 ProfileGraph 轨迹 |
 | `/app/practice` | 支持 adaptive 难度、最近练习/草稿恢复、确定性评分、诊断和路径回流 |
 | `/app/reports` | 读取真实课程和最新报告，可生成学习报告；展示真实分数、掌握度更新、薄弱点、证据摘要和下一步建议；可创建异步导出任务并下载 Markdown/PDF/DOCX 学习档案 |
-| `/app/path` | 读取当前课程唯一持续学习路径和掌握度图；支持一键生成/更新、状态筛选、进度保留和路径轨迹 |
+| `/app/path` | 读取当前课程唯一个性化学习路径和掌握度图；支持一键生成/更新、状态筛选、进度保留和路径轨迹，不显示任务日期或期限 |
 
 当前前端不再使用中间横向的 `ActionNotice` 提示。历史切换、筛选、开关和详情展开依靠选中态或内容变化表达；上传失败、发送失败、课程生成失败和表单校验错误使用局部提示；模型配置保存、测试、设默认和删除使用右下角轻量 toast。
 

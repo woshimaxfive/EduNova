@@ -41,8 +41,6 @@ export type LearningPathTask = {
   recommended_resource_ids: string[];
   recommended_resources: CourseResourceBrief[];
   status: PathTaskStatus;
-  due_at: string | null;
-  next_review_at: string | null;
   created_at: string;
   updated_at: string;
 };

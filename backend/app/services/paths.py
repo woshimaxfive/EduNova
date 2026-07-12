@@ -116,7 +116,7 @@ class SqlAlchemyPathRepository:
             self.db.scalars(
                 select(LearningTask)
                 .where(LearningTask.path_id == path_id)
-                .order_by(LearningTask.due_at.asc(), LearningTask.id.asc())
+                .order_by(LearningTask.id.asc())
             )
         )
 
@@ -157,9 +157,7 @@ class PlannedTask:
     knowledge_point_id: int | None
     reason: str
     resource_ids: list[int]
-    next_review_at: datetime | None = None
     status: str = "todo"
-    due_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -269,7 +267,6 @@ class PathService:
                     knowledge_point_id=point.id if point is not None else item.knowledge_point_id,
                     reason="来自已确认或复习中的课程薄弱点",
                     resource_ids=self._recommend_resource_ids(resources, item.knowledge_point_id, title),
-                    next_review_at=item.next_review_at,
                 )
             )
             if item.knowledge_point_id is not None:

@@ -67,8 +67,8 @@ const activePathResponse = {
     goal: "掌握搜索算法",
     status: "active",
     plan_json: {
-      schema_version: 3,
-      schedule_mode: "continuous",
+      schema_version: 4,
+      path_mode: "ordered",
       trigger: "assessment",
       preserved_task_count: 2,
       generation_mode: "model_enhanced",
@@ -88,8 +88,6 @@ const activePathResponse = {
     recommended_resource_ids: ["801"],
     recommended_resources: [{ id: "801", title: "启发式搜索讲解", resource_type: "doc" }],
     status: "doing",
-    due_at: "2026-07-06T09:00:00Z",
-    next_review_at: null,
     created_at: "2026-07-05T09:00:00Z",
     updated_at: "2026-07-05T09:00:00Z"
   }],
@@ -167,7 +165,7 @@ describe("LearningPathPage", () => {
     renderWithProviders(<LearningPathPage />);
 
     expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
-    expect(screen.getByText("持续学习安排")).toBeInTheDocument();
+    expect(screen.getByText("个性化学习路径")).toBeInTheDocument();
     expect(screen.queryByText("期末冲刺")).not.toBeInTheDocument();
     expect(screen.getByText("由练习结果更新 · 保留 2 个既有任务")).toBeInTheDocument();
 
@@ -192,7 +190,7 @@ describe("LearningPathPage", () => {
     renderWithProviders(<LearningPathPage />);
 
     expect(await screen.findByText("还没有个性化学习路径")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "一键生成学习安排" }));
+    await user.click(screen.getByRole("button", { name: "一键生成学习路径" }));
     expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
     expect(calls).toContainEqual(expect.objectContaining({ method: "post", url: PATH_ENDPOINTS.generate, payload: { course_id: 808 } }));
     expect(screen.queryByText("学习周期")).not.toBeInTheDocument();

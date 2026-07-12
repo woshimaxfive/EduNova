@@ -18,7 +18,7 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 | `HomeTutorGraph` | 已真接管：安全上下文、问题路由、选中资料检索、按需联网、深度规划、回答、审核/修订和消息持久化 | context、route、material_retriever、web_search、planner、answer、review、repair、persist |
 | `CourseTutorGraph` | 已真接管：画像/上下文读取、课程检索、导师回答、弱点候选、审核、下一步动作、消息持久化 | profile、retriever、tutor、weakness、review、next_action |
 | `ResourceGenerationGraph` | 已真接管：画像、检索、诊断、规划、六 Worker 并行生成、聚合、模型与规则审核、单次修订、持久化 | profile、retrieve、diagnosis、planner、resource_worker、aggregate、review、repair、persist |
-| `PathPlanningGraph` | 已真接管：画像与证据收集、持续排程、确定性排序、模型排序理由、审核/修订、事务持久化 | profile、collect_evidence、deterministic_rank、model_plan、review、repair、persist |
+| `PathPlanningGraph` | 已真接管：画像与证据收集、确定性排序、模型排序理由、审核/修订、事务持久化 | profile、collect_evidence、deterministic_rank、model_plan、review、repair、persist |
 | `AssessmentGraph` | 已真接管：规则题稿、可选模型增强、确定性评分、错因诊断、弱点同步和路径回流 | context/question_plan/generate_questions/review/repair/persist；load/deterministic_score/diagnose_errors/sync_weaknesses/review/repair/persist/path_replan |
 | `ReportGraph` | 已真接管：最近练习、掌握度、弱点、路径和资源聚合，叙事增强、审核/修订、持久化 | collect_practice、collect_mastery、aggregate_evidence、generate_narrative、review、repair、persist |
 `Service` 仍然是 API 边界和依赖装配层。九条主链路的核心流程已经委托给对应 Graph runner。学习档案导出是确定性 Service + Redis/RQ Worker，不注册为 `ExportDossierGraph`，也不把异步任务包装成 Agent。
@@ -116,7 +116,7 @@ EduNova 的第一版坚持确定性可用稿优先：
 - 生成型 Graph 必须经过 ReviewAgent 节点，输出审核状态、置信度、风险标记和安全摘要。
 - 资源 Graph 的每个类型由独立 Worker 调用模型；Worker 失败时只降级该类型，其他分支继续。ReviewAgent 批量复核六类产物，失败内容最多进入一次 RepairAgent，仍不安全则不持久化。
 - `AssessmentGraph` 的客观分数不可被模型覆盖；模型只增强题目、错因、缺失概念和复习动作。评估先提交练习和弱点事务，再用独立 `PathPlanningGraph` trace 重排已有路径，路径失败不回滚练习。
-- `PathPlanningGraph` 不自动创建用户从未建立的路径；用户主动建立路径后，系统根据画像目标与节奏持续排程。练习重排保留已完成任务和未受影响的当前任务，审核成功后才归档旧 active 路径。
+- `PathPlanningGraph` 不自动创建用户从未建立的路径；用户主动建立路径后，系统根据画像目标、弱点、掌握度和课程结构给出有序任务。路径不生成日期或期限；练习重排保留已完成任务和未受影响的当前任务，审核成功后才归档旧 active 路径。
 - `ReportGraph` 的分数、掌握数量、证据数和趋势均为确定性聚合；模型只生成总结和建议，模型不可用时保存完整 `rules_only` 报告。
 
 ## 7. 前端呈现

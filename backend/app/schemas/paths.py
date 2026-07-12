@@ -37,8 +37,6 @@ class LearningPathTaskResponse(BaseModel):
     recommended_resource_ids: list[str]
     recommended_resources: list[PathResourceBrief]
     status: str
-    due_at: str | None
-    next_review_at: str | None
     created_at: str
     updated_at: str
 
@@ -116,8 +114,6 @@ def task_to_api(task: LearningTask, resources_by_id: dict[int, GeneratedResource
         recommended_resource_ids=[str(resource_id) for resource_id in resource_ids],
         recommended_resources=[resource_brief(resources_by_id[resource_id]) for resource_id in resource_ids if resource_id in resources_by_id],
         status=task.status,
-        due_at=iso_timestamp(task.due_at),
-        next_review_at=iso_timestamp(task.next_review_at),
         created_at=iso_timestamp(task.created_at) or "",
         updated_at=iso_timestamp(task.updated_at) or "",
     )

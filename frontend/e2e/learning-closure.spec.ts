@@ -31,8 +31,8 @@ test("rules-only Docker environment closes the learning loop with real traces", 
   await expect(page).toHaveURL(/\/app$/);
 
   await page.goto("/app/path");
-  await expect(page.getByRole("button", { name: "一键生成学习安排" })).toBeEnabled();
-  await page.getByRole("button", { name: "一键生成学习安排" }).click();
+  await expect(page.getByRole("button", { name: "一键生成学习路径" })).toBeEnabled();
+  await page.getByRole("button", { name: "一键生成学习路径" }).click();
   await page.getByRole("button", { name: "路径详情" }).click();
   await page.getByRole("tab", { name: "协作轨迹" }).click();
   await expect(page.getByRole("button", { name: "查看 PathPlanningGraph" })).toBeVisible();

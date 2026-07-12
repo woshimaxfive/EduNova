@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
-from math import ceil
-import re
 from time import perf_counter
 from typing import Any, Callable, TypedDict
 
@@ -41,7 +38,6 @@ class PathPlanningState(TypedDict, total=False):
     repair_count: int
     warnings: list[str]
     preserved_task_count: int
-    daily_task_capacity: int
     path: LearningPath
     detail: Any
 
@@ -146,7 +142,7 @@ class PathPlanningGraphRunner:
                 active_weaknesses,
                 list(state.get("resources", [])),
             )
-            base, daily_capacity = self._personalize_tasks(base, state)
+            base = self._personalize_tasks(base, state)
             base = [replace(task, status="doing" if index == 0 else "todo") for index, task in enumerate(base)]
             planned = base
             preserved = 0
@@ -158,11 +154,10 @@ class PathPlanningGraphRunner:
                     "planned_tasks": planned,
                     "preserved_task_count": preserved,
                     "generation_mode": "deterministic_source",
-                    "daily_task_capacity": daily_capacity,
                 },
                 f"规则排序生成 {len(planned)} 个任务，并保留 {preserved} 个既有任务。",
                 "completed",
-                {"preserved_task_count": preserved, "daily_task_capacity": daily_capacity},
+                {"preserved_task_count": preserved},
             )
 
         return self._run_node(state, "deterministic_rank", 3, "按弱点、进度和课程顺序生成可信任务底稿", work)
@@ -289,8 +284,8 @@ class PathPlanningGraphRunner:
                     status="active",
                     agent_trace_id=state["trace_id"],
                     plan_json={
-                        "schema_version": 3,
-                        "schedule_mode": "continuous",
+                        "schema_version": 4,
+                        "path_mode": "ordered",
                         "strategy": "reviewing_first_then_confirmed_then_uncovered",
                         "trigger": state.get("trigger", "manual"),
                         "revision_of": str(previous.id) if previous is not None else None,
@@ -300,7 +295,6 @@ class PathPlanningGraphRunner:
                         "review_mode": state.get("review_mode", "rules_only"),
                         "review_result": state.get("review_result", {}),
                         "personalization": {
-                            "daily_task_capacity": int(state.get("daily_task_capacity") or 2),
                             "learning_preference": safe_text(profile.get("learning_preference"), limit=80),
                             "knowledge_foundation": safe_text(profile.get("knowledge_foundation"), limit=80),
                         },
@@ -318,14 +312,7 @@ class PathPlanningGraphRunner:
                     },
                 )
             )
-            now = datetime.now(UTC)
-            open_index = 0
             for planned in state.get("planned_tasks", []):
-                due_at = planned.due_at
-                if planned.status != "completed":
-                    open_index += 1
-                    capacity = max(1, int(state.get("daily_task_capacity") or 2))
-                    due_at = now + timedelta(days=ceil(open_index / capacity))
                 self.service.repository.add_task(
                     LearningTask(
                         path_id=path.id,
@@ -337,8 +324,6 @@ class PathPlanningGraphRunner:
                         reason=planned.reason,
                         recommended_resource_ids=planned.resource_ids,
                         status=planned.status,
-                        due_at=due_at,
-                        next_review_at=planned.next_review_at,
                     )
                 )
             self.service.repository.commit()
@@ -472,9 +457,7 @@ class PathPlanningGraphRunner:
                 knowledge_point_id=task.knowledge_point_id,
                 reason=task.reason or "保留自上一版路径",
                 resource_ids=[int(item) for item in (task.recommended_resource_ids or []) if str(item).isdigit()],
-                next_review_at=task.next_review_at,
                 status="completed" if task.status == "completed" else "todo",
-                due_at=task.due_at,
             )
             key = cls._task_key(planned)
             if task.status == "completed":
@@ -504,12 +487,8 @@ class PathPlanningGraphRunner:
         merged_open = [replace(task, status="doing" if index == 0 else "todo") for index, task in enumerate(merged_open)]
         return [*completed, *merged_open], len(completed) + retained_count
 
-    def _personalize_tasks(self, tasks: list[PlannedTask], state: PathPlanningState) -> tuple[list[PlannedTask], int]:
+    def _personalize_tasks(self, tasks: list[PlannedTask], state: PathPlanningState) -> list[PlannedTask]:
         profile = state.get("profile_summary", {})
-        pace = safe_text(profile.get("learning_pace"), limit=80)
-        minutes_match = re.search(r"(\d+)", pace)
-        minutes = int(minutes_match.group(1)) if minutes_match else 45
-        daily_capacity = 1 if minutes <= 30 else 3 if minutes >= 60 else 2
         preference = safe_text(profile.get("learning_preference"), limit=80)
         preferred_types: list[str] = []
         if any(word in preference for word in ("图", "视觉", "动画")):
@@ -537,7 +516,7 @@ class PathPlanningGraphRunner:
             if preference:
                 reason = f"{reason}；结合学习偏好：{preference}"
             personalized.append(replace(task, resource_ids=resource_ids, reason=reason))
-        return personalized, daily_capacity
+        return personalized
 
     @staticmethod
     def _task_key(task: PlannedTask) -> str:

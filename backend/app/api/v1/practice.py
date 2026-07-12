@@ -11,7 +11,6 @@ from backend.app.models import User
 from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.practice import CreatePracticeSessionRequest, SavePracticeDraftRequest, SubmitPracticeAnswersRequest
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
-from backend.app.services.exam_sprint import ExamSprintService, SqlAlchemyExamSprintRepository
 from backend.app.services.paths import PathService, SqlAlchemyPathRepository
 from backend.app.services.profiles import ProfileService, SqlAlchemyProfileRepository
 from backend.app.services.practice import PracticeNotFoundError, PracticeService, PracticeValidationError, SqlAlchemyPracticeRepository
@@ -32,11 +31,6 @@ def get_practice_service(db=Depends(get_db_session)) -> PracticeService:
         trace_recorder=AgentTraceRecorder(),
         path_service=PathService(
             SqlAlchemyPathRepository(db),
-            model_service=model_service,
-            trace_recorder=AgentTraceRecorder(),
-        ),
-        sprint_service=ExamSprintService(
-            SqlAlchemyExamSprintRepository(db),
             model_service=model_service,
             trace_recorder=AgentTraceRecorder(),
         ),
@@ -61,8 +55,6 @@ def create_practice_session(
             knowledge_point_ids=payload.knowledge_point_ids,
             question_count=payload.question_count,
             difficulty=payload.difficulty,
-            sprint_plan_id=payload.sprint_plan_id,
-            sprint_task_id=payload.sprint_task_id,
         )
     except PracticeNotFoundError as exc:
         raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc

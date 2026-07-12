@@ -88,13 +88,13 @@ Nginx
 - 课程详情、知识点、课程会话、RAG 引用和流式回答。
 - 多模型配置管理、默认配置和连接测试。
 - 主页已选资料、联网搜索、深度回答指令、`home_tutor` trace、浏览器语音输入和朗读。
-- 资源工坊、画像、路径、练习、报告、期末冲刺、资料对比和学习档案导出。
+- 资源工坊、画像、持续学习路径、练习、报告、资料对比和学习档案导出。
 
 当前仍需继续打磨的区域：
 
 - Graph trace 视觉表达和更多浏览器 E2E。
 - OCR、旧版 Office 和扫描件解析。
-- 资料对比结果持久化、显式带入期末冲刺，以及冲刺来源练习完成后的独立计划重排。
+- 资料对比结果持久化与独立恢复；对比结果不隐式进入路径或练习。
 - 导出文件版式细节。
 
 深度思考和联网搜索只属于对话输入区的运行期工具，不属于模型连接设置。
@@ -372,7 +372,7 @@ ReviewAgent 审核内容
 前端展示资源、引用和轨迹
 ```
 
-当前真实接管生产主流程的是 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph`、`MaterialComparisonGraph` 和 `ExamSprintGraph`。十条 Graph 都落真实节点耗时和白名单 metadata，生成型节点均有规则与可选模型审核，失败时最多 Repair 一次。学习档案导出继续由确定性 Service 聚合并交给 Redis/RQ Worker 生成文件，不注册为生产 Graph。
+当前真实接管生产主流程的是 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。九条 Graph 都落真实节点耗时和白名单 metadata，生成型节点均有规则与可选模型审核，失败时最多 Repair 一次。学习档案导出继续由确定性 Service 聚合并交给 Redis/RQ Worker 生成文件，不注册为生产 Graph。
 
 ### 6.1 AI 长任务运行时
 

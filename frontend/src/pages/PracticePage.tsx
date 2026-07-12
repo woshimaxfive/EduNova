@@ -15,7 +15,6 @@ import {
 } from "../api/practice";
 import { PATHS } from "../app/routePaths";
 import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
-import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { PageFrame } from "./PageFrame";
 import { invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 
@@ -33,9 +32,6 @@ export function PracticePage() {
   const queryClient = useQueryClient();
   const initialCourseId = searchParams.get("course_id") ?? "";
   const initialKnowledgePointId = searchParams.get("knowledge_point_id") ?? "";
-  const sprintPlanId = Number(searchParams.get("sprint_plan_id") ?? "");
-  const sprintTaskId = Number(searchParams.get("sprint_task_id") ?? "");
-  const hasSprintSource = Number.isFinite(sprintPlanId) && sprintPlanId > 0 && Number.isFinite(sprintTaskId) && sprintTaskId > 0;
   const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
   const [selectedPointId, setSelectedPointId] = useState(initialKnowledgePointId);
   const [questionCount, setQuestionCount] = useState(5);
@@ -49,6 +45,14 @@ export function PracticePage() {
   const requestedSessionId = Number(searchParams.get("session_id") ?? "");
   const hasRequestedSession = Number.isFinite(requestedSessionId) && requestedSessionId > 0;
   const wantsNewPractice = searchParams.get("new") === "1";
+
+  useEffect(() => {
+    if (!searchParams.has("sprint_plan_id") && !searchParams.has("sprint_task_id")) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("sprint_plan_id");
+    nextParams.delete("sprint_task_id");
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const coursesQuery = useQuery({
     queryKey: ["practice-courses"],
@@ -138,9 +142,7 @@ export function PracticePage() {
         course_id: numericCourseId,
         knowledge_point_ids: selectedPointIds,
         question_count: questionCount,
-        difficulty,
-        sprint_plan_id: hasSprintSource ? sprintPlanId : undefined,
-        sprint_task_id: hasSprintSource ? sprintTaskId : undefined
+        difficulty
       }),
     onSuccess: (response) => {
       setLocalError("");
@@ -176,7 +178,6 @@ export function PracticePage() {
       lastSavedDraftRef.current = JSON.stringify(answers);
       setDraftStatus("saved");
       void invalidateCourseLearningLoop(queryClient, numericCourseId);
-      void queryClient.invalidateQueries({ queryKey: ["exam-sprint", "current", numericCourseId] });
     },
     onError: () => {
       setLocalError("答案提交失败，请检查作答后重试。");
@@ -416,20 +417,6 @@ export function PracticePage() {
                   traceId={activeSession.closure_update.path_agent_trace_id}
                   label="查看 PathPlanningGraph"
                 />
-                {activeSession.closure_update.sprint_update_status === "replanned" && activeSession.closure_update.sprint_plan_id ? (
-                  <>
-                    <strong>期末冲刺计划已根据本次必刷题重排</strong>
-                    <Link className="soft-button" to={`${PATHS.path}?course_id=${numericCourseId}&sprint_plan_id=${activeSession.closure_update.sprint_plan_id}`}>
-                      查看更新后的冲刺计划
-                    </Link>
-                    <AgentTraceDisclosure
-                      traceId={activeSession.closure_update.sprint_agent_trace_id}
-                      label="查看 ExamSprintGraph"
-                    />
-                  </>
-                ) : activeSession.closure_update.sprint_update_status === "failed" ? (
-                  <InlineFeedback message="冲刺计划暂未更新，练习结果和弱点已保留。" tone="warning" />
-                ) : null}
               </div>
             ) : null}
           </section>

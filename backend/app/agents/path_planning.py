@@ -22,7 +22,6 @@ class PathPlanningState(TypedDict, total=False):
     user: User
     user_id: int
     course_id: int
-    duration_days: int
     goal: str
     trigger: str
     assessment_session_id: int | None
@@ -59,9 +58,8 @@ class PathPlanningGraphRunner:
         *,
         user: User,
         course_id: int,
-        duration_days: int,
-        goal: str,
         trigger: str,
+        goal: str = "",
         assessment_session_id: int | None = None,
         previous_path: LearningPath | None = None,
     ) -> PathReplanResult:
@@ -71,7 +69,6 @@ class PathPlanningGraphRunner:
             "user": user,
             "user_id": user.id,
             "course_id": course_id,
-            "duration_days": duration_days,
             "goal": goal,
             "trigger": trigger,
             "assessment_session_id": assessment_session_id,
@@ -275,7 +272,7 @@ class PathPlanningGraphRunner:
         course = state["course"]
         profile = state.get("profile_summary", {})
         goal = safe_text(state.get("goal"), limit=500) or safe_text(profile.get("learning_goal"), limit=500)
-        effective_goal = goal or f"完成《{course.title}》阶段复习"
+        effective_goal = goal or f"完成《{course.title}》学习"
         points = list(state.get("knowledge_points", []))
         weaknesses = list(state.get("weaknesses", []))
         resources = list(state.get("resources", []))
@@ -292,8 +289,8 @@ class PathPlanningGraphRunner:
                     status="active",
                     agent_trace_id=state["trace_id"],
                     plan_json={
-                        "schema_version": 2,
-                        "duration_days": int(state["duration_days"]),
+                        "schema_version": 3,
+                        "schedule_mode": "continuous",
                         "strategy": "reviewing_first_then_confirmed_then_uncovered",
                         "trigger": state.get("trigger", "manual"),
                         "revision_of": str(previous.id) if previous is not None else None,
@@ -328,7 +325,7 @@ class PathPlanningGraphRunner:
                 if planned.status != "completed":
                     open_index += 1
                     capacity = max(1, int(state.get("daily_task_capacity") or 2))
-                    due_at = now + timedelta(days=min(ceil(open_index / capacity), int(state["duration_days"])))
+                    due_at = now + timedelta(days=ceil(open_index / capacity))
                 self.service.repository.add_task(
                     LearningTask(
                         path_id=path.id,

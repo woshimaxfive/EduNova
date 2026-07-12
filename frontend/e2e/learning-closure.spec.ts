@@ -31,8 +31,10 @@ test("rules-only Docker environment closes the learning loop with real traces", 
   await expect(page).toHaveURL(/\/app$/);
 
   await page.goto("/app/path");
-  await expect(page.getByRole("button", { name: "生成学习路径" })).toBeEnabled();
-  await page.getByRole("button", { name: "生成学习路径" }).click();
+  await expect(page.getByRole("button", { name: "一键生成学习安排" })).toBeEnabled();
+  await page.getByRole("button", { name: "一键生成学习安排" }).click();
+  await page.getByRole("button", { name: "路径详情" }).click();
+  await page.getByRole("tab", { name: "协作轨迹" }).click();
   await expect(page.getByRole("button", { name: "查看 PathPlanningGraph" })).toBeVisible();
   await page.getByRole("button", { name: "查看 PathPlanningGraph" }).click();
   await expect(page.getByText("deterministic_rank")).toBeVisible();
@@ -43,6 +45,8 @@ test("rules-only Docker environment closes the learning loop with real traces", 
 
   await page.goto("/app/path");
   await expect(page.getByText(/由练习结果更新 · 保留 \d+ 个既有任务/)).toBeVisible();
+  await page.getByRole("button", { name: "路径详情" }).click();
+  await page.getByRole("tab", { name: "规划依据" }).click();
   await expect(page.getByText(/规则底稿 · 规则审核/)).toBeVisible();
 
   await createAndSubmitWrongPractice(page);
@@ -64,7 +68,7 @@ test("rules-only Docker environment closes the learning loop with real traces", 
   }
 });
 
-test("material comparison drives an exam sprint and targeted practice reflow", async ({ page }) => {
+test("material comparison remains an independent evidence tool", async ({ page }) => {
   await page.goto("/register");
   await page.getByLabel("昵称").fill("Phase 16 验收账号");
   await page.getByLabel("邮箱").fill("phase16-e2e@edunova.local");
@@ -85,50 +89,28 @@ test("material comparison drives an exam sprint and targeted practice reflow", a
 
   await page.getByRole("button", { name: "生成课程" }).first().click();
   const courseDialog = page.getByRole("dialog", { name: "从资料生成课程" });
-  await courseDialog.getByLabel("课程名称").fill("Phase 16 资料冲刺课");
+  await courseDialog.getByLabel("课程名称").fill("Phase 16 资料对比课");
   await courseDialog.getByRole("button", { name: /phase16-ai-notes\.md/ }).click();
   await courseDialog.getByRole("button", { name: /phase16-exam-guide\.md/ }).click();
   await courseDialog.getByRole("button", { name: "生成课程", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/courses\/\d+$/);
 
   await page.goto("/app/library");
-  await page.getByLabel("对比课程").selectOption({ label: "Phase 16 资料冲刺课" });
-  const comparisonPanel = page.getByRole("region", { name: "资料对比" });
-  await comparisonPanel.getByRole("button", { name: /phase16-ai-notes\.md/ }).click();
-  await comparisonPanel.getByRole("button", { name: /phase16-exam-guide\.md/ }).click();
-  await comparisonPanel.getByRole("button", { name: "生成资料对比" }).click();
-  await expect(comparisonPanel.getByRole("button", { name: "查看 MaterialComparisonGraph" })).toBeVisible();
-  await comparisonPanel.getByRole("button", { name: "查看 MaterialComparisonGraph" }).click();
+  await page.getByRole("button", { name: "资料对比" }).click();
+  await page.getByRole("button", { name: /phase16-ai-notes\.md/ }).click();
+  await page.getByRole("button", { name: /phase16-exam-guide\.md/ }).click();
+  const comparisonSetup = page.getByRole("dialog", { name: "资料对比" });
+  await comparisonSetup.getByLabel("对比课程").selectOption({ label: "Phase 16 资料对比课" });
+  await comparisonSetup.getByRole("button", { name: "生成资料对比" }).click();
+  const comparisonResult = page.getByRole("dialog", { name: "对比结果" });
+  await comparisonResult.getByRole("tab", { name: "来源与轨迹" }).click();
+  await expect(comparisonResult.getByRole("button", { name: "查看 MaterialComparisonGraph" })).toBeVisible();
+  await comparisonResult.getByRole("button", { name: "查看 MaterialComparisonGraph" }).click();
   await expect(page.getByText("deterministic_compare")).toBeVisible();
-  await comparisonPanel.getByRole("button", { name: "用于期末冲刺" }).click();
+  await expect(comparisonResult.getByRole("button", { name: "用于期末冲刺" })).toHaveCount(0);
 
-  await expect(page).toHaveURL(/\/app\/path\?course_id=\d+&comparison_id=\d+/);
-  await expect(page.getByText(/本次采用资料对比 #/)).toBeVisible();
-  await page.getByRole("button", { name: "生成期末冲刺计划" }).click();
-  await expect(page.getByRole("button", { name: "查看 ExamSprintGraph" })).toBeVisible();
-  await page.getByRole("button", { name: "查看 ExamSprintGraph" }).click();
-  await expect(page.getByText("comparison_context")).toBeVisible();
-
-  await page.getByRole("link", { name: "开始针对性练习" }).first().click();
-  await expect(page.getByRole("button", { name: "生成练习" })).toBeEnabled();
-  await page.getByLabel("题量").selectOption("3");
-  await page.getByRole("button", { name: "生成练习" }).click();
-  const answerBoxes = page.getByRole("textbox", { name: /作答区/ });
-  await expect(answerBoxes).toHaveCount(3);
-  for (let index = 0; index < 3; index += 1) {
-    await answerBoxes.nth(index).fill("故意错误答案");
-  }
-  await page.getByRole("button", { name: "提交答案" }).click();
-  await expect(page.getByText("期末冲刺计划已根据本次必刷题重排")).toBeVisible();
-  await page.getByRole("link", { name: "查看更新后的冲刺计划" }).click();
-  await expect(page.getByText(/由冲刺练习更新 · 保留 \d+ 个任务/)).toBeVisible();
-
-  await page.reload();
-  await expect(page.getByText(/由冲刺练习更新 · 保留 \d+ 个任务/)).toBeVisible();
-
-  const restoredSprintRoute = `${new URL(page.url()).pathname}${new URL(page.url()).search}`;
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const route of ["/app/library", restoredSprintRoute]) {
+  for (const route of ["/app/library", "/app/path"]) {
     await page.goto(route);
     await page.waitForLoadState("networkidle");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

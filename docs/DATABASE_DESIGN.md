@@ -259,7 +259,7 @@ Phase 16 的 `MaterialComparisonGraph` 继续复用 `materials`、`course_materi
 
 ### 4.4.4 `material_comparison_runs`
 
-用途：保存 `MaterialComparisonGraph` 审核后的不可变资料对比版本，支持最近结果恢复、冲刺证据绑定和 trace 追溯。
+用途：保存 `MaterialComparisonGraph` 审核后的不可变资料对比版本，支持最近结果恢复和 trace 追溯。资料对比结果保持独立，不自动进入路径或练习。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -377,7 +377,7 @@ Phase 7.2 明确学习路径是课程级能力，后续应基于课程学习状�
 
 Phase 9 开始实际复用本表保存课程级学习路径，不新增迁移。生成新路径时，服务层会把同一用户同一课程旧 `active` 路径归档为 `archived`，再写入新的 `active` 路径。`plan_json` 只保存安全摘要、生成规则、计数、依据说明和可展示 metadata，不保存系统提示词、模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
-Phase 16 的 `ExamSprintGraph` 继续复用本表保存课程级期末冲刺计划。冲刺计划使用 `status="sprint_active"` 和 `status="sprint_archived"`，`plan_json.kind="exam_sprint"`；新计划审核通过并写入后才归档同课程旧 `sprint_active`，不归档普通 `active` 学习路径。v2 `plan_json` 保存 `trigger`、`revision_of`、`comparison_id`、来源练习 ID、保留任务数、生成/审核模式、高频点、薄弱点和安全证据计数，不保存完整资料、作答或模型输入。
+当前普通路径使用 `plan_json.schema_version=3` 和 `schedule_mode="continuous"`。系统根据画像目标和学习节奏推导每日任务容量，任务日期按容量自然延展；练习回流保留已完成进度并生成新的 active 路径。历史 `sprint_active/sprint_archived` 行保持原样，不删除、不迁移，也不再由业务接口读取或更新。
 
 字段：
 
@@ -390,7 +390,7 @@ Phase 16 的 `ExamSprintGraph` 继续复用本表保存课程级期末冲刺计�
 | `goal` | text | 学习目标 |
 | `status` | varchar | 状态 |
 | `plan_json` | jsonb | 路径结构 |
-| `agent_trace_id` | varchar | 路径或冲刺 Graph 轨迹，可为空 |
+| `agent_trace_id` | varchar | `PathPlanningGraph` 轨迹，可为空 |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -400,7 +400,7 @@ Phase 16 的 `ExamSprintGraph` 继续复用本表保存课程级期末冲刺计�
 
 Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `reviewing` 弱点、`confirmed` 弱点、未覆盖知识点排序；`pending` 和 `dismissed` 弱点不进入路径任务。普通路径任务类型固定为 `review`、`learn`、`resource`，任务状态固定为 `todo`、`doing`、`completed`；第一条任务为 `doing`，其余为 `todo`。`recommended_resource_ids` 最多保存 3 个同课程资源 ID，优先匹配同知识点资源，没有知识点时按安全标题匹配。
 
-期末冲刺计划也复用本表保存每日任务，`task_type` 使用 `sprint_review`、`sprint_practice`、`sprint_resource`。只有从 `sprint_practice` 任务发起的练习才会完成来源任务并触发独立重排；重排失败时任务完成事实已独立提交，旧 active 计划保持可用。
+历史冲刺任务可能仍保留 `sprint_review`、`sprint_practice`、`sprint_resource` 类型，但生产代码不再创建、读取或更新这些任务。
 
 字段：
 
@@ -412,7 +412,7 @@ Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `r
 | `course_id` | bigint | 课程 |
 | `knowledge_point_id` | bigint | 知识点 |
 | `title` | varchar | 任务标题 |
-| `task_type` | varchar | 普通路径为 `review`、`learn`、`resource`；期末冲刺为 `sprint_review`、`sprint_practice`、`sprint_resource` |
+| `task_type` | varchar | 当前路径使用 `review`、`learn`、`resource`；历史数据可能包含已退役的 `sprint_*` 类型 |
 | `reason` | text | 推荐理由 |
 | `recommended_resource_ids` | jsonb | 推荐资源 ID 列表 |
 | `status` | varchar | `todo`、`doing`、`completed` |
@@ -889,14 +889,14 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 16. Phase 7.3 后，课程问答弱点候选事件可通过 `/courses/{course_id}/learning-state` 同步为当前课程 `weakness_review_queue` 的 `pending` 项，服务层强制绑定 `course_id`。
 17. Phase 7.4 后，弱点复习项通过课程绑定接口进行确认、开始、完成和软忽略；`dismissed` 项不返回主列表，但必须继续参与去重。
 18. Phase 10 后，练习会话、作答、报告和练习评估来源弱点都复用已有表；练习错题或低分题可生成 `practice_assessment` 来源的 `confirmed` 队列项，并影响 `/courses/{course_id}/mastery-map` 和 `/courses/{course_id}/learning-state`。
-19. Phase 11.1 后，期末冲刺计划复用 `learning_paths` 和 `learning_tasks`，使用 `sprint_active` / `sprint_archived` 与 `plan_json.kind="exam_sprint"` 区分普通学习路径，不新增表或迁移。
+19. 历史期末冲刺计划曾复用 `learning_paths` 和 `learning_tasks`；当前已退役且不清理历史行，普通路径仍只查询 `status="active"`。
 20. Phase 16 后，资料对比复用资料与课程切片收集证据，并把审核后的安全版本写入 `material_comparison_runs`；`material_ids` 指资料库 `materials.id`，服务层强制校验当前用户所有权和课程绑定关系。
-21. Phase 13.1 后，课程、资料、资源、路径、冲刺、练习和报告等学习产物可通过 nullable `agent_trace_id` 反查对应 Graph；字段为空时仍保持旧数据兼容。
+21. Phase 13.1 后，课程、资料、资源、路径、练习和报告等学习产物可通过 nullable `agent_trace_id` 反查对应 Graph；字段为空时仍保持旧数据兼容。
 22. Phase 13.2 后，`export_jobs` 可记录 Markdown/PDF/DOCX 异步导出任务状态、文件路径、脱敏失败摘要和 `agent_trace_id`；下载接口必须按 `user_id` 隔离。
 23. HomeTutorGraph 升级后，已解析资料生成稳定 `material_chunks`；既有资料可惰性补齐，检索只能读取当前用户本次选中的资料，删除资料必须级联删除切片。
 24. Phase 14 后，`practice_sessions.assessment_json` 保存可刷新恢复的闭环摘要；弱点通过来源引用精确绑定错题，但不保存原始模型输入。
 25. Phase 15 后，画像隐式信号必须通过独立来源与置信度门控；课程结构保存来源覆盖和真实知识点先修 ID；练习草稿只能写当前用户未完成会话。
-26. Phase 16 后，只有带成对冲刺来源 ID 的练习触发 `ExamSprintGraph` 重排；来源任务完成先独立提交，Graph 失败不得回滚练习、弱点或任务完成状态。
+26. 持续路径收敛后，练习只触发已有普通路径的 `PathPlanningGraph` 重排；`assessment_json` 中历史冲刺键可继续存在，但响应和生产流程不再消费。
 
 当前已验证：
 

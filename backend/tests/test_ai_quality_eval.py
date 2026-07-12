@@ -13,7 +13,6 @@ def test_offline_quality_cases_cover_core_model_boundaries() -> None:
         "assessment",
         "report",
         "material_comparison",
-        "exam_sprint",
     }
     assert all(result["passed"] for result in run_offline())
 

@@ -16,7 +16,7 @@
 - Agent trace 查询和资源生成 trace。
 - 六类结构化课程资源、并行 Worker、质量审核、Markmap/Mermaid/Pyodide 和 PPTX 导出。
 - 前端镜像会把 `pyodide.mjs` 与配套运行时复制到版本化目录 `/pyodide/0.29.2/`，Web Worker 直接导入自托管 loader；版本目录用于隔离 immutable 浏览器缓存。Nginx 必须保留 `.js`、`.mjs`、`.wasm`、`.json` 的正确 MIME，并按 Pyodide 官方分发兼容方式以 `application/wasm` 提供标准库 zip，同时返回 CORS、CORP 与 `nosniff` 安全头。
-- 学习路径、规则掌握度图、练习评估、学习报告、期末冲刺、资料对比和 Markdown/PDF/DOCX 学习档案导出。
+- 持续学习路径、规则掌握度图、练习评估、学习报告、资料对比和 Markdown/PDF/DOCX 学习档案导出。
 - 主页联网搜索、深度回答指令、浏览器语音输入/朗读和 `home_tutor` trace。
 - 交付基线文档、开源说明、MIT 许可证和验收证据索引。
 - 前端本地开发、生产构建和 Nginx 统一入口草案。
@@ -38,7 +38,7 @@
 - 受保护课程接口 `/api/v1/courses/from-materials`、`/api/v1/courses`、`/api/v1/courses/{course_id}`、`/api/v1/courses/{course_id}/overview`、`/api/v1/courses/{course_id}/knowledge-points`、`/api/v1/courses/{course_id}/learning-state` 和 `/api/v1/courses/{course_id}/mastery-map`。
 - 受保护 RAG 检索接口 `/api/v1/rag/search`，支持关键词/向量混合召回和本地 fallback 状态。
 - 受保护模型设置接口 `/api/v1/settings/model`、`/api/v1/settings/model/test` 和 `/api/v1/settings/model/configs` 系列接口。
-- 受保护画像、Agent trace、资源、学习路径、练习、报告、期末冲刺、资料对比、Markdown 同步导出和异步导出任务接口。
+- 受保护画像、Agent trace、资源、学习路径、练习、报告、资料对比、Markdown 同步导出和异步导出任务接口。
 - React + TypeScript + Vite 前端本地开发服务器。
 - 前端 lint、Vitest 和生产构建命令。
 - 前端 API 合同模块，默认请求基础路径 `/api/v1`。

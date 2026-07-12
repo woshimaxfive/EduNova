@@ -46,11 +46,6 @@ PATH_PLANNING_GRAPH = WorkflowSpec(
     artifact_type="learning_path",
     steps=("profile", "collect_evidence", "deterministic_rank", "model_plan", "review", "repair", "persist"),
 )
-EXAM_SPRINT_GRAPH = WorkflowSpec(
-    name="exam_sprint",
-    artifact_type="learning_path",
-    steps=("profile", "collect_evidence", "comparison_context", "deterministic_rank", "model_plan", "build_tasks", "review", "repair", "persist"),
-)
 ASSESSMENT_GRAPH = WorkflowSpec(
     name="assessment",
     artifact_type="practice_session",
@@ -66,7 +61,6 @@ ASSESSMENT_GRAPH = WorkflowSpec(
         "repair",
         "persist",
         "path_replan",
-        "sprint_replan",
     ),
 )
 REPORT_GRAPH = WorkflowSpec(
@@ -84,7 +78,6 @@ WORKFLOW_SPECS = {
         COURSE_TUTOR_GRAPH,
         RESOURCE_GENERATION_GRAPH,
         PATH_PLANNING_GRAPH,
-        EXAM_SPRINT_GRAPH,
         ASSESSMENT_GRAPH,
         REPORT_GRAPH,
     )

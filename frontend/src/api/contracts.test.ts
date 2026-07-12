@@ -5,7 +5,6 @@ import { AUTH_ENDPOINTS, login } from "./auth";
 import { apiClient } from "./client";
 import { COURSE_ENDPOINTS, getCourseLearningState, getMasteryMap, updateCourseWeaknessReviewItem } from "./courses";
 import { DASHBOARD_ENDPOINTS } from "./dashboard";
-import { EXAM_SPRINT_ENDPOINTS, generateExamSprintPlan, getCurrentExamSprintPlan, getExamSprintPlan } from "./examSprint";
 import {
   createLearningDossierExportJob,
   downloadExportJob,
@@ -122,9 +121,6 @@ describe("frontend API contracts", () => {
     expect(PATH_ENDPOINTS.generate).toBe("/paths/generate");
     expect(PATH_ENDPOINTS.current).toBe("/paths/current");
     expect(PATH_ENDPOINTS.updateTask(9)).toBe("/paths/tasks/9");
-    expect(EXAM_SPRINT_ENDPOINTS.generate).toBe("/exam-sprint/plans");
-    expect(EXAM_SPRINT_ENDPOINTS.current).toBe("/exam-sprint/plans/current");
-    expect(EXAM_SPRINT_ENDPOINTS.detail(12)).toBe("/exam-sprint/plans/12");
     expect(EXPORT_ENDPOINTS.learningDossier).toBe("/exports/learning-dossier");
     expect(EXPORT_ENDPOINTS.learningDossierJob).toBe("/exports/learning-dossier/jobs");
     expect(EXPORT_ENDPOINTS.job(44)).toBe("/exports/44");
@@ -964,7 +960,7 @@ describe("frontend API contracts", () => {
     };
 
     try {
-      const generated = await generatePath({ course_id: 7, duration_days: 7, goal: "期末前掌握搜索算法" });
+      const generated = await generatePath({ course_id: 7 });
       const current = await getCurrentPath(7);
       const updated = await updatePathTask(1001, { status: "completed" });
 
@@ -972,7 +968,7 @@ describe("frontend API contracts", () => {
         {
           url: PATH_ENDPOINTS.generate,
           method: "post",
-          data: { course_id: 7, duration_days: 7, goal: "期末前掌握搜索算法" },
+          data: { course_id: 7 },
           params: undefined
         },
         {
@@ -991,103 +987,6 @@ describe("frontend API contracts", () => {
       expect(generated.data.tasks[0].recommended_resources[0].title).toBe("启发式搜索讲解");
       expect(current.data.evidence_summary.knowledge_point_count).toBe(3);
       expect(updated.data.status).toBe("completed");
-    } finally {
-      apiClient.defaults.adapter = previousAdapter;
-    }
-  });
-
-  it("uses typed exam sprint APIs through the shared client", async () => {
-    const previousAdapter = apiClient.defaults.adapter;
-    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
-
-    apiClient.defaults.adapter = async (config) => {
-      calls.push({
-        url: config.url,
-        method: config.method,
-        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
-      });
-
-      const plan = {
-        id: "3001",
-        course_id: "7",
-        duration_days: 7,
-        goal: "期末冲刺",
-        status: "sprint_active",
-        high_frequency_points: [
-          {
-            knowledge_point_id: "401",
-            title: "启发式搜索",
-            reason: "来自练习低分或错题",
-            score: 120,
-            recommended_resource_ids: ["901"],
-            recommended_resources: [{ id: "901", title: "启发式搜索讲解", resource_type: "doc", knowledge_point_id: "401" }]
-          }
-        ],
-        weak_points: [],
-        daily_tasks: [
-          {
-            id: "4001",
-            day_index: 1,
-            title: "第 1 天复习启发式搜索",
-            task_type: "sprint_review",
-            status: "doing",
-            due_at: "2026-07-05T11:00:00Z",
-            knowledge_point_id: "401",
-            reason: "期末冲刺优先处理薄弱点和高频知识点。",
-            recommended_resource_ids: ["901"],
-            recommended_resources: [{ id: "901", title: "启发式搜索讲解", resource_type: "doc", knowledge_point_id: "401" }]
-          }
-        ],
-        must_do_questions: [
-          {
-            id: "sprint-q1",
-            knowledge_point_id: "401",
-            title: "启发式搜索",
-            question_type: "short_answer",
-            prompt: "用课程证据解释启发式搜索。",
-            reason: "来自弱点、练习低分或高频知识点。"
-          }
-        ],
-        easy_mistake_warnings: [{ knowledge_point_id: "401", title: "启发式搜索", warning: "先复述概念边界。" }],
-        recommended_resources: [{ id: "901", title: "启发式搜索讲解", resource_type: "doc", knowledge_point_id: "401" }],
-        evidence_summary: {
-          knowledge_point_count: 3,
-          weakness_count: 1,
-          practice_low_score_count: 1,
-          resource_count: 1,
-          report_suggestion_count: 1,
-          material_filter_count: 0,
-          basis: ["课程知识点 3 个。"]
-        },
-        created_at: "2026-07-05T11:00:00Z",
-        updated_at: "2026-07-05T11:00:00Z"
-      };
-
-      return {
-        data: {
-          data: plan,
-          trace_id: "trace_exam_sprint_contract"
-        },
-        status: 200,
-        statusText: "OK",
-        headers: {},
-        config
-      };
-    };
-
-    try {
-      const generated = await generateExamSprintPlan({ course_id: 7, duration_days: 7, material_ids: [], goal: "期末冲刺" });
-      const detail = await getExamSprintPlan(3001);
-      const current = await getCurrentExamSprintPlan(7);
-
-      expect(calls).toEqual([
-        { url: EXAM_SPRINT_ENDPOINTS.generate, method: "post", data: { course_id: 7, duration_days: 7, material_ids: [], goal: "期末冲刺" } },
-        { url: EXAM_SPRINT_ENDPOINTS.detail(3001), method: "get", data: undefined },
-        { url: EXAM_SPRINT_ENDPOINTS.current, method: "get", data: undefined }
-      ]);
-      expect(generated.data.status).toBe("sprint_active");
-      expect(detail.data.daily_tasks[0].day_index).toBe(1);
-      expect(current.data?.id).toBe("3001");
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }

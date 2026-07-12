@@ -349,10 +349,6 @@ export function LibraryPage() {
         {isComparingMaterials ? "对比中" : "生成资料对比"}
       </button>
     </>
-  ) : displayedComparison?.id ? (
-    <button className="primary-action" type="button" onClick={() => navigate(`${PATHS.path}?course_id=${displayedComparison.course_id}&comparison_id=${displayedComparison.id}`)}>
-      用于期末冲刺
-    </button>
   ) : undefined;
 
   return (

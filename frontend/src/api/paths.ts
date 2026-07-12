@@ -12,8 +12,6 @@ export type PathTaskStatus = "todo" | "doing" | "completed";
 
 export type GeneratePathRequest = {
   course_id: number;
-  duration_days: 3 | 7 | 14;
-  goal: string;
 };
 
 export type UpdatePathTaskRequest = {

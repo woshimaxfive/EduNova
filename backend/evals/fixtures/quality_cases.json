@@ -94,15 +94,5 @@
     "allowed_citation_ids": ["material:21:chunk:2", "material:22:chunk:5"],
     "required_terms": ["共同重点", "资料 A", "资料 B"],
     "forbidden_terms": ["不存在资料", "虚假考点"]
-  },
-  {
-    "id": "exam_sprint_progress_guard",
-    "workflow": "exam_sprint",
-    "question": "重排七天冲刺计划",
-    "candidate": "七天周期保持不变，保留 3 个已完成任务，并将确认弱点提前。",
-    "citation_ids": ["comparison:8", "practice:19", "task:3"],
-    "allowed_citation_ids": ["comparison:8", "practice:19", "task:3"],
-    "required_terms": ["七天", "保留", "确认弱点"],
-    "forbidden_terms": ["修改周期", "删除已完成"]
   }
 ]

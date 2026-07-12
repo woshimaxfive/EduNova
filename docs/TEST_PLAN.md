@@ -54,12 +54,11 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 | RAG 检索 | 切片、向量化、检索、引用来源展示 |
 | 多智能体 | Agent 流程、trace_id、agent_run_logs、失败记录 |
 | 资源生成 | 讲解、Markmap 思维导图、交互练习、Pyodide 代码实操、真实 PPTX、动画图解 |
-| 学习路径 | 任务排序、进度更新、推荐理由 |
+| 学习路径 | 画像目标、持续排程、任务排序、进度更新、推荐理由和练习回流 |
 | 掌握度地图 | 知识点状态、薄弱点、复习队列 |
 | AI 辅导 | 课程空间问答、引用来源、资料不足提示、开始提问聚焦和旧地址兼容跳转 |
 | 课程空间双模式 | 默认问答、逐回答引用与 trace、历史问题资源生成、学习进度抽屉、课程内容目录/概览/图谱、覆盖式 AI 辅导、历史隔离 |
 | 练习评估 | 出题、作答、批改、错题讲解、报告生成 |
-| 期末冲刺 | 3/7/14 天计划、高频考点、必刷题、易错提醒 |
 | 资料对比 | 多资料重复重点、试卷独有考点、优先复习顺序 |
 | 导出 | Markdown 同步兼容接口、Markdown/PDF/DOCX 异步学习档案导出 |
 | 快速体验 | 注册示例课程入口、用户数据隔离和 fallback 标记 |
@@ -259,7 +258,7 @@ cd ..
 - 资料库与资源工坊视觉回归必须确认工具栏、列表库和内容区共用一层连续画布，不出现重复外框、独立白卡阴影或抽屉透底。
 - 工作区色彩回归必须确认 `/app`、`/app/library` 和 `/app/studio` 的背景、工具栏、表头、成果库与空画布属于同一低饱和青灰色系，不出现近白工作台贴在青色背景上的断层；输入控件、资源正文和抽屉仍需保持清晰边界。
 - 资源工坊生成/详情抽屉的层级节点不得位于 `.page-workbench` 内，遮罩边界必须等于浏览器视口；资料库详情/对比抽屉和主页全部课程抽屉同样不得被工作台外框或滚动容器裁切。
-- 资料对比测试覆盖主列表多选、不可选原因、共同课程交集、无共同课程、结果 Tab、最近对比、错误保留选择、Graph 轨迹和冲刺入口；页面不得恢复常驻对比大面板或复制资料列表。
+- 资料对比测试覆盖主列表多选、不可选原因、共同课程交集、无共同课程、结果 Tab、最近对比、错误保留选择和 Graph 轨迹；页面不得恢复常驻对比大面板、复制资料列表或跨页冲刺入口。
 - 主页选料测试覆盖从资料详情带入路由状态、完整资料列表自动选中，以及发送请求真实携带对应 `selected_material_ids`。
 - Phase 13.2 后，从资料生成课程必须走 `/courses/from-materials`：`/app` 主页资料库浮层和 `/app/library` 都调用真实建课接口，成功后刷新 summary/materials 并跳转 `/app/courses/{course_id}`；选择未解析、解析失败、旧版 DOC/PPT、图片或扫描件资料时必须显示后端错误并保留用户选择；课程空间标题、资料数、知识点数和知识点列表来自课程接口。
 
@@ -308,14 +307,14 @@ cd ..
 -> 对新课程生成资源和路径
 ```
 
-期末冲刺流程：
+资料对比流程：
 
 ```text
 登录
 -> 上传课件和样例试题
 -> 执行资料对比
--> 生成 3/7/14 天冲刺计划
--> 查看高频考点、必刷题和易错提醒
+-> 查看共同重点、疑似考点、差异遗漏、复习优先级和安全来源
+-> 关闭抽屉后，学习路径保持原状态
 ```
 
 计划命令：
@@ -565,7 +564,7 @@ cd ..
 | `sample_ai_slides.pptx` | 测试 PPTX 解析 |
 | `sample_ai_chapter.pdf` | 测试 PDF 解析 |
 | `sample_ai_review.docx` | 测试 DOCX 解析 |
-| `sample_exam_questions.md` | 测试期末冲刺和资料对比 |
+| `sample_exam_questions.md` | 测试资料对比与考点提炼 |
 
 ### 9.3 Starter 示例数据
 
@@ -614,7 +613,7 @@ cd ..
 | Phase 8.2 | 多智能体资源生成：六 Worker 生成六类 v2 资源、质量分、审核和真实轨迹 |
 | Phase 9 | 学习路径、掌握度图和薄弱点队列可用 |
 | Phase 10 | AI 辅导、练习、评估报告闭环通过 |
-| Phase 11.1 | 期末冲刺模式可演示 |
+| Phase 11.1 | 历史冲刺模式验收记录保留，当前能力已退役 |
 | Phase 11.2 | 资料对比可演示 |
 | Phase 12 | 快速演示、导出、开源准备和交付基线文档可用 |
 | Phase 13 | 自动化测试、Docker、浏览器验收和产品打磨通过 |
@@ -694,20 +693,19 @@ Phase 1A 起，仓库提供统一验证脚本：
 - 导出测试覆盖 `export_jobs.resource_id`、PPTX 创建/复用/状态/下载、真实 OOXML 页面内容、非 PPT 拒绝、用户隔离，以及 Markdown/PDF/DOCX 学习档案不回退。
 - 前端测试覆盖共享 `ResourceRenderer`、结构化讲解、Markmap、交互题、Python 成功与安全拦截、PPT 自动排队、Mermaid 场景、legacy fallback、课程空间六类生成和资源 API 合同。
 - Phase 8.2.1 前端测试覆盖资源卡显示“模型增强 / 本地可用稿 / 低依据”，低依据资源打开后显示“资料依据不足”局部提示，质量区展示真实评分理由。
-- Phase 9 后端测试覆盖 `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}` 的无 token 401、非本人课程/任务 404、空路径、生成路径、旧 active 路径归档、任务状态更新、多用户隔离；路径生成只消费 `confirmed/reviewing` 弱点，忽略 `pending/dismissed`，按知识点推荐同课程资源，并保证响应和 `plan_json` 不泄露系统提示词、模型输入、API Key、完整资料原文或完整画像原文。
+- Phase 9 后端测试覆盖 `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}` 的无 token 401、非本人课程/任务 404、空路径、一键生成、旧 active 路径归档、任务状态更新、多用户隔离；请求只包含 `course_id`，路径生成读取画像目标和节奏，使用 v3 连续排程，只消费 `confirmed/reviewing` 弱点，忽略 `pending/dismissed`，并保证响应和 `plan_json` 不泄露敏感内容。
 - Phase 9 后端测试覆盖 `/courses/{course_id}/mastery-map` 空课程、弱点状态映射、路径任务映射、资源推荐、多用户隔离和隐私字段；覆盖 `/courses/{course_id}/learning-state` 的真实 `path_summary`、`mastery_summary`、弱点推荐资源和 `next_review_at`。
-- Phase 9 前端测试覆盖 `PATH_ENDPOINTS`、`generatePath`、`getCurrentPath`、`updatePathTask` 和 `COURSE_ENDPOINTS.masteryMap` API 合同；`LearningPathPage` 继续覆盖课程预选、空路径、生成路径、任务状态更新、推荐资源和局部错误，并新增双模式 URL、任务状态筛选、当前任务置顶、掌握度/依据/轨迹抽屉测试。
+- Phase 9 前端测试覆盖 `PATH_ENDPOINTS`、`generatePath`、`getCurrentPath`、`updatePathTask` 和 `COURSE_ENDPOINTS.masteryMap` API 合同；`LearningPathPage` 覆盖课程预选、空路径、一键生成/更新、任务状态、当前任务置顶、推荐资源、掌握度/依据/轨迹抽屉、局部错误和旧冲刺 URL 参数清理。
 - 课程闭环缓存测试覆盖统一 Query Key、知识点平均掌握度的空值/边界/四舍五入，以及课程问答、弱点、资源任务、路径、练习和报告操作后的课程级失效；课程空间测试覆盖抽屉强制刷新五组数据、目标和下一步重算、部分失败保留旧内容与手动重试。
 - Phase 10 后端测试覆盖 `/practice/sessions` 创建练习、知识点过滤、跨课程校验、单选/多选/简答确定性批改、空答案校验、重复提交策略、错题或低分题写入 `weakness_review_queue`、多用户隔离、报告生成和 latest 读取，以及 `/mastery-map` 和 `/learning-state` 对练习结果的反哺。
 - Phase 10 前端测试覆盖 `PRACTICE_ENDPOINTS`、`REPORT_ENDPOINTS` 类型化 API 合同；`PracticePage` 覆盖课程预选、创建练习、作答、提交反馈、空状态和局部错误；`ReportsPage` 覆盖课程预选、空报告、生成报告、真实报告渲染和局部错误；`CourseSpacePage` 覆盖练习/报告入口携带 `course_id`。
-- Phase 11.1 后端测试覆盖 `/exam-sprint/plans` 的无 token 401、非本人课程/资料/计划 404、`duration_days=3/7/14` 校验、空课程知识点可解释错误、生成计划写入 `learning_paths`/`learning_tasks`、新计划只归档旧 `sprint_active` 而不归档普通 `active` 学习路径、弱点/练习低分/资源/报告建议进入证据、隐私字段不泄露。
-- Phase 11.1 前端测试覆盖 `EXAM_SPRINT_ENDPOINTS`、`generateExamSprintPlan`、`getExamSprintPlan` 类型化 API 合同；`LearningPathPage` 覆盖 `view=sprint`、显式对比/冲刺参数自动选中、3/7/14 天生成、按日任务、针对性练习链接、失败保留配置和切回普通路径不回退。
+- 退役回归测试覆盖 `/exam-sprint/*` 不再注册、工作流列表和离线评测不再包含 `exam_sprint`，旧 `sprint_*` 数据不会被普通 active 路径查询或重排。
 - Phase 11.2 后端测试覆盖 `/materials/compare` 无 token 401、非本人课程/资料和未绑定当前课程资料 404、少于两份资料 400 或 422、课程切片对比、TXT/Markdown fallback、重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序、安全引用和隐私字段不泄露。
 - Phase 11.2 前端测试覆盖 `MATERIAL_ENDPOINTS.compare` 和 `compareMaterials` 类型化 API 合同；`LibraryPage` 覆盖课程选择、资料筛选、少于两份禁用提示、生成对比成功渲染、局部错误提示，且不影响上传、资料列表和生成课程。
 - Phase 12.1 后端测试覆盖 `/exports/learning-dossier` 无 token 401、非本人课程 404、无报告导出真实空状态、有报告导出课程级 Markdown、路径任务/资源/练习证据进入摘要、文件名安全，以及不泄露完整资料原文、完整作答原文、内部指令、模型请求内容、密钥、登录令牌或完整用户画像。
 - Phase 12.1 前端测试覆盖 `EXPORT_ENDPOINTS.learningDossier` 和 `exportLearningDossier` 类型化 API 合同；`ReportsPage` 覆盖导出按钮、接口调用、Blob 下载、成功提示、失败局部提示和无报告仍可导出。
 - Phase 12.2 文档验收覆盖 `docs/AGENT_DESIGN.md`、`docs/DEVELOPMENT_GUIDE.md`、`docs/OPEN_SOURCE_NOTICE.md`、`docs/DEFENSE_QA.md`、`docs/DEVELOPMENT_REPORT.md`、`docs/TEST_REPORT.md`、`docs/USER_GUIDE.md`、`docs/AI_CODING_USAGE.md`、`LICENSE` 和 `docs/evidence/PHASE_12_2_ACCEPTANCE.md`；新增文档必须与当前实现一致，不把未实现的 PDF/Word、OCR、深度解析、独立 demo reset 或完整 E2E 写成已完成。
-- Phase 13.1 后端测试覆盖学习产物 nullable `agent_trace_id` 迁移、trace 索引、`/agents/traces/{trace_id}` 扩展响应、资源生成真实节点顺序、ReviewAgent 风险标记、资源持久化 trace、课程问答 SSE metadata、路径/冲刺/练习/报告/导出 trace 兼容字段和 metadata 脱敏。
+- Phase 13.1 后端测试覆盖学习产物 nullable `agent_trace_id` 迁移、trace 索引、`/agents/traces/{trace_id}` 扩展响应、资源生成真实节点顺序、ReviewAgent 风险标记、资源持久化 trace、课程问答 SSE metadata、路径/练习/报告/导出 trace 兼容字段和 metadata 脱敏。
 - Phase 13.1 前端测试覆盖课程空间展示真实课堂协作轨迹、资源工坊展示 `ResourceGenerationGraph`、路径/练习/报告页显示轻量 trace 入口、报告空态不误报失败，以及新增 `agent_trace_id` API 合同。
 - Phase 13.2 后端测试覆盖 PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT 和图片 uploaded、不支持 OCR、已解析资料建课、主页联网/深思/资料参数、无搜索 Key 不伪造来源、`home_tutor` trace、`export_jobs` 创建/状态流转/Markdown/PDF/DOCX 下载/失败分支和用户隔离。
 - HomeTutorGraph hardening 后端测试覆盖资料稳定分块、Markdown 章节、普通文档 800/120 窗口、既有资料惰性补齐、用户隔离、选中资料限制、关键词/pgvector 混合排序和级联迁移合同；覆盖九节点顺序、条件规划、Prompt 回显、真实 Review、无效 Review warning、单次 Repair、第二次失败降级、流式 replace、模型失败不写半截消息和 trace metadata 脱敏。
@@ -759,7 +757,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - 多模态资源浏览器验收使用 `agent-browser` 覆盖 `/app/studio` 和课程空间桌面/390px：生成六类资源，验证 Markmap 非空、练习可答、Python 可运行/停止、PPT 可翻页并下载、动画可播放，旧资源可读且无水平溢出。
 - Phase 9 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/path` 和 `/app/courses/{course_id}` 桌面与 390px：路径生成、任务状态更新、掌握度图、课程页真实路径摘要、弱点推荐资源和下次复习时间可见；页面不展示静态假路径且无水平溢出。
 - Phase 10 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/practice`、`/app/reports` 和 `/app/courses/{course_id}` 桌面与 390px：能创建练习、提交答案、看到反馈、生成报告、弱点和掌握度更新可见；页面不展示静态假练习或假报告，无水平溢出。
-- Phase 11.1 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/path` 和 `/app` 桌面与 390px：可生成课程级期末冲刺计划，每日任务、高频点、薄弱点、必刷题、易错提醒和推荐资源可见，普通学习路径仍可用，学习主页期末冲刺入口可见，页面无水平溢出。
+- 历史 Phase 11.1 浏览器验收记录保留，不再作为当前产品门禁；当前门禁以持续学习路径收敛验收为准。
 - Phase 11.2 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/library` 桌面与 390px：用两份 Markdown/TXT 资料生成课程后执行资料对比，重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先顺序和安全引用可见，响应不展示完整资料原文，页面无水平溢出。
 - Phase 12.1 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/reports` 桌面与 390px：导出学习档案入口可见，点击后出现真实成功或失败局部反馈，报告读取和生成不受影响，页面无水平溢出。
 - Phase 12.2 浏览器验收需要优先使用 `agent-browser` 覆盖桌面和 390px 主链路抽查：注册示例课程、资料库、课程空间问答、资源工坊、学习路径、练习、报告和 Markdown 导出可见；验收结果写入 `docs/evidence/PHASE_12_2_ACCEPTANCE.md`，非阻断问题进入 Phase 13 backlog。
@@ -833,23 +831,22 @@ docker compose down
 
 验收证据记录在 `docs/evidence/PHASE_13_FRONTEND_VISUAL_HARDENING.md`。
 
-## 16. Phase 16 资料证据与冲刺闭环验收
+## 16. 持续学习路径收敛验收
 
 ### 16.1 后端与数据
 
-- `MaterialComparisonGraph` 节点顺序固定为 `validate_scope -> collect_evidence -> deterministic_compare -> model_compare -> review -> repair? -> persist`，每次调用创建不可变版本，并验证用户、课程、资料和引用归属。
-- `ExamSprintGraph` 节点顺序固定为 `profile -> collect_evidence -> comparison_context -> deterministic_rank -> model_plan -> build_tasks -> review -> repair? -> persist`。
-- 无模型环境必须返回完整 `deterministic_source` / `rules_only` 结果；模型不得更改周期、证据 ID、知识点 ID、资源 ID 或已完成状态。
-- 只有携带成对 `sprint_plan_id` / `sprint_task_id` 的来源练习触发重排；普通练习不得触发。重排失败时评分、弱点和来源任务完成状态必须保持。
-- Alembic 空库升级必须创建 `material_comparison_runs` 及用户课程时间、trace 索引。
+- `PathPlanningGraph` 节点顺序保持 `profile -> collect_evidence -> deterministic_rank -> model_plan -> review -> repair? -> persist`。
+- `POST /paths/generate` 只接收 `course_id`；画像目标缺失时使用课程标题 fallback，每日任务容量缺失时默认为 2。
+- 新路径写入 `schema_version=3`、`schedule_mode="continuous"`，任务日期按每日容量自然延展；旧 v2 普通路径在练习回流或手动更新时自然升级。
+- `/exam-sprint/*` 不再注册，评估图不再包含冲刺来源或 `sprint_replan`；历史 `sprint_*` 行保持不变且不被普通路径查询。
+- `MaterialComparisonGraph` 继续保存不可变结果，但不向路径或练习传递 `comparison_id`。
 
 ### 16.2 前端与浏览器
 
-- `/app/library` 刷新后恢复最近资料对比，展示 warning、审核模式和真实 `MaterialComparisonGraph`，并且只有点击“用于期末冲刺”才携带 `comparison_id`。
-- `/app/path` 恢复当前 `sprint_active` 计划并自动进入冲刺工作台，展示显式对比来源和 `ExamSprintGraph`；按真实日期浏览任务，必刷题进入指定知识点 adaptive 练习并携带冲刺来源。
-- `/app/practice` 提交来源练习后展示任务完成、冲刺重排状态、新计划入口和可展开 trace；失败采用局部反馈。
-- 隔离 Docker E2E 覆盖上传两份资料、建课、对比、生成冲刺、故意答错、重排和刷新恢复；桌面与 390px 均不得出现页面级横向溢出。
-
+- `/app/path` 只有持续学习工作台，不显示模式切换、冲刺日期或天数输入；空路径一键生成，已有路径一键更新。
+- 旧 `view`、`comparison_id`、`sprint_plan_id` URL 参数会被清理并保留 `course_id`；练习页同样清理旧冲刺来源参数。
+- `/app/library` 的资料对比结果保留引用、审核和 `MaterialComparisonGraph`，不显示“用于期末冲刺”。
+- 隔离 Docker E2E 覆盖一键建路径、故意答错、路径重排、资料对比独立恢复以及桌面与 390px 无水平溢出。
 ## 17. Phase 17 AI 长任务运行时验收
 
 ### 17.1 后端与数据
@@ -860,7 +857,7 @@ docker compose down
 - 取消在节点和持久化前生效；失败或取消不得产生半成品课程/资源，资料惰性切片可保留。
 - 手动重试创建新任务并关联来源，最多 3 次，且重新校验资料、课程和知识点归属。
 - Graph 与 job 共用 trace；建课 9 节点和资源公共节点/六 Worker 记录真实进度。资源部分失败仍完成，全部失败才失败。
-- 同步 `/courses/from-materials`、`/resources/generate`、文件导出 Worker 和十条生产 Graph 合同保持通过。
+- 同步 `/courses/from-materials`、`/resources/generate`、文件导出 Worker 和九条生产 Graph 合同保持通过。
 
 ### 17.2 前端与浏览器
 
@@ -877,6 +874,6 @@ docker compose down
 - Runtime 测试覆盖 `0.5s -> 1.5s` 同配置重试、认证错误不重试、无效响应只重试一次、用户/全局并发、熔断与半开探测。
 - 流式测试覆盖首 token 前重试、首 token 后禁止重放、断流不保存半截消息和输入保留。
 - `model_call_runs` 测试覆盖独立持久化、trace/用户隔离、30 天清理和 Prompt、回答、资料、密钥脱敏。
-- `python -m backend.evals.run --mode offline` 使用十条 Graph 固定中文案例验证引用白名单、敏感输出、必要结构和确定性数字；标准测试不访问网络。
+- `python -m backend.evals.run --mode offline` 使用九条 Graph 固定中文案例验证引用白名单、敏感输出、必要结构和确定性数字；标准测试不访问网络。
 - `scripts/run_ai_eval.ps1` 只有在 `EDUNOVA_EVAL_ALLOW_NETWORK=1` 且显式提供评测 Base URL/模型后才调用真实模型，报告写入忽略目录 `output/ai-eval`。
 - Docker 验证迁移、Redis 并发/熔断状态、AIJob 取消与重试；`agent-browser` 验证主页、课程空间、任务面板和轨迹摘要在桌面与 390px 下可恢复。

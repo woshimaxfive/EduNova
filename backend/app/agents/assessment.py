@@ -33,8 +33,6 @@ class AssessmentState(TypedDict, total=False):
     question_count: int
     difficulty: str
     requested_difficulty: str
-    sprint_plan_id: int | None
-    sprint_task_id: int | None
     submitted_answers: list[SubmitPracticeAnswerItem | dict]
     course: Any
     points: list[Any]
@@ -75,8 +73,6 @@ class AssessmentGraphRunner:
         knowledge_point_ids: list[int],
         question_count: int,
         difficulty: str,
-        sprint_plan_id: int | None = None,
-        sprint_task_id: int | None = None,
     ) -> PracticeSessionDetail:
         state: AssessmentState = {
             "trace_id": make_trace_id(),
@@ -88,8 +84,6 @@ class AssessmentGraphRunner:
             "question_count": question_count,
             "difficulty": difficulty,
             "requested_difficulty": difficulty,
-            "sprint_plan_id": sprint_plan_id,
-            "sprint_task_id": sprint_task_id,
             "repair_count": 0,
         }
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, purpose="question_generation")):
@@ -141,7 +135,6 @@ class AssessmentGraphRunner:
         graph.add_node("repair", self._answer_repair_node)
         graph.add_node("persist", self._submit_persist_node)
         graph.add_node("path_replan", self._path_replan_node)
-        graph.add_node("sprint_replan", self._sprint_replan_node)
         graph.add_edge(START, "load")
         graph.add_edge("load", "deterministic_score")
         graph.add_edge("deterministic_score", "diagnose_errors")
@@ -150,8 +143,7 @@ class AssessmentGraphRunner:
         graph.add_conditional_edges("review", self._review_route, {"repair": "repair", "persist": "persist"})
         graph.add_edge("repair", "persist")
         graph.add_edge("persist", "path_replan")
-        graph.add_conditional_edges("path_replan", self._sprint_route, {"sprint_replan": "sprint_replan", "end": END})
-        graph.add_edge("sprint_replan", END)
+        graph.add_edge("path_replan", END)
         return graph.compile()
 
     def _create_context_node(self, state: AssessmentState) -> dict[str, Any]:
@@ -235,8 +227,6 @@ class AssessmentGraphRunner:
             assessment_json={
                 "requested_difficulty": state.get("requested_difficulty", state.get("difficulty", "medium")),
                 "effective_difficulty": state.get("difficulty", "medium"),
-                "sprint_plan_id": str(state["sprint_plan_id"]) if state.get("sprint_plan_id") else None,
-                "sprint_task_id": str(state["sprint_task_id"]) if state.get("sprint_task_id") else None,
             },
             created_at=now,
             updated_at=now,
@@ -359,9 +349,6 @@ class AssessmentGraphRunner:
                 "weaknesses_updated": int(state.get("weaknesses_updated") or 0),
                 "path_update_status": "not_started",
                 "path_agent_trace_id": None,
-                "sprint_update_status": "not_started",
-                "sprint_plan_id": (session.assessment_json or {}).get("sprint_plan_id"),
-                "sprint_agent_trace_id": None,
                 "recommended_resource_ids": [str(item) for item in state.get("recommended_resource_ids", [])],
                 "generation_mode": state.get("generation_mode", "deterministic_source"),
                 "review_mode": state.get("review_mode", "rules_only"),
@@ -414,64 +401,6 @@ class AssessmentGraphRunner:
             return {"detail": detail}, summary, node_status, {"path_update_status": status}
 
         return self._run_node(state, "path_replan", 8, "按练习结果重排已存在的学习路径", work)
-
-    def _sprint_replan_node(self, state: AssessmentState) -> dict[str, Any]:
-        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
-            session = state["session"]
-            assessment = dict(session.assessment_json or {})
-            plan_id = self.service._safe_int(assessment.get("sprint_plan_id"))
-            task_id = self.service._safe_int(assessment.get("sprint_task_id"))
-            status = "not_started"
-            next_plan_id = plan_id
-            trace_id = None
-            if plan_id is not None and task_id is not None and self.service.sprint_service is not None:
-                try:
-                    result = self.service.sprint_service.replan_after_assessment(
-                        state["user"],
-                        int(state["course_id"]),
-                        session.id,
-                        plan_id,
-                        task_id,
-                    )
-                    status = str(getattr(result, "status", "unchanged"))
-                    next_plan_id = getattr(result, "plan_id", None) or plan_id
-                    trace_id = getattr(result, "trace_id", None)
-                except Exception:
-                    status = "failed"
-            session.assessment_json = {
-                **assessment,
-                "sprint_update_status": status,
-                "sprint_plan_id": str(next_plan_id) if next_plan_id is not None else None,
-                "sprint_agent_trace_id": trace_id,
-            }
-            self.service.repository.commit()
-            self.service.repository.refresh(session)
-            detail = session_to_api(session, self.service.repository.list_answers_for_session(session.id))
-            if status == "replanned":
-                summary = "冲刺计划已根据本次必刷题结果重排。"
-                node_status = "completed"
-            elif status == "failed":
-                summary = "冲刺计划重排失败，练习结果已保留。"
-                node_status = "warning"
-            elif status == "unchanged":
-                summary = "冲刺计划状态已变化，本次未重排。"
-                node_status = "warning"
-            else:
-                summary = "本次练习不是从冲刺任务发起，不更新冲刺计划。"
-                node_status = "completed"
-            return (
-                {"detail": detail},
-                summary,
-                node_status,
-                {"sprint_update_status": status, "artifact_id": str(session.id)},
-            )
-
-        return self._run_node(state, "sprint_replan", 9, "仅为冲刺来源练习重排对应计划", work)
-
-    @staticmethod
-    def _sprint_route(state: AssessmentState) -> str:
-        assessment = dict(state["session"].assessment_json or {})
-        return "sprint_replan" if assessment.get("sprint_plan_id") and assessment.get("sprint_task_id") else "end"
 
     def _review_questions_or_answers(self, state: AssessmentState, *, question_mode: bool, step_index: int) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:

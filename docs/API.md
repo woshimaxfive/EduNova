@@ -46,7 +46,6 @@ resources
 paths
 practice
 reports
-exam-sprint
 exports
 ```
 
@@ -1221,11 +1220,11 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 - 所有接口必须携带 JWT。
 - 学习路径属于课程级能力，只允许访问当前用户自己的课程和任务。
-- 生成路径时归档同课程旧 `active` 路径为 `archived`，再写入新的 `learning_paths` 和 `learning_tasks`。
+- 生成或更新路径时归档同课程旧 `active` 路径为 `archived`，再写入新的 `learning_paths` 和 `learning_tasks`。
 - 路径生成只消费 `confirmed/reviewing` 弱点队列、课程知识点、同课程生成资源和用户级画像叠层；`pending/dismissed` 不进入路径任务。
 - 任务类型固定为 `review`、`learn`、`resource`，任务状态固定为 `todo`、`doing`、`completed`。
 - `plan_json` 只保存安全摘要、生成规则、计数、依据说明和可展示 metadata，不保存系统提示词、模型输入、API Key、完整资料原文或完整画像原文。
-- 路径响应可携带 `agent_trace_id`，用于前端展示 `PathPlanningGraph` 或 `ExamSprintGraph` 的轻量轨迹入口。
+- 路径响应可携带 `agent_trace_id`，用于前端展示 `PathPlanningGraph` 的轻量轨迹入口。
 
 ### POST `/paths/generate`
 
@@ -1235,15 +1234,13 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 ```json
 {
-  "course_id": 1,
-  "duration_days": 7,
-  "goal": "期末复习神经网络"
+  "course_id": 1
 }
 ```
 
 - `course_id` 必填，必须是当前用户自己的课程。
-- `duration_days` 只能为 `3`、`7` 或 `14`。
-- `goal` 可选，作为本次路径目标保存到路径摘要。
+- 学习目标优先读取用户画像；画像未提供目标时使用当前课程标题生成安全 fallback。
+- 用户不需要设置固定天数。系统根据画像节奏推导每日任务容量，并让任务日期自然延展。
 
 响应：
 
@@ -1256,12 +1253,14 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
     "path": {
       "id": "901",
       "course_id": "101",
-      "title": "机器学习期末复习 学习路径",
-      "goal": "期末复习神经网络",
+      "title": "机器学习 学习路径",
+      "goal": "完成《机器学习》学习",
       "status": "active",
       "plan_json": {
-        "duration_days": 7,
-        "generation_rule": "reviewing -> confirmed -> uncovered_knowledge_points",
+        "schema_version": 3,
+        "schedule_mode": "continuous",
+        "strategy": "reviewing_first_then_confirmed_then_uncovered",
+        "personalization": {"daily_task_capacity": 2},
         "basis": ["课程知识点 6 个。", "已确认或复习中的薄弱点 2 个。"]
       },
       "created_at": "2026-07-05T16:00:00Z",
@@ -1614,13 +1613,9 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
   "course_id": 1,
   "knowledge_point_ids": [8],
   "question_count": 5,
-  "difficulty": "adaptive",
-  "sprint_plan_id": 3001,
-  "sprint_task_id": 4002
+  "difficulty": "adaptive"
 }
 ```
-
-`sprint_plan_id` 与 `sprint_task_id` 必须同时出现，且必须属于当前用户、当前课程和当前 active 冲刺计划中的 `sprint_practice` 任务。普通练习不传这两个字段。
 
 响应：
 
@@ -1727,15 +1722,11 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
   "weaknesses_updated": 0,
   "path_update_status": "replanned",
   "path_agent_trace_id": "trace_path_replan",
-  "recommended_resource_ids": ["801"],
-  "sprint_update_status": "replanned",
-  "sprint_plan_id": "3002",
-  "sprint_agent_trace_id": "trace_sprint_replan"
+  "recommended_resource_ids": ["801"]
 }
 ```
 
 `path_update_status` 为 `not_started | replanned | unchanged | failed`。路径失败不影响已完成练习和弱点更新。
-`sprint_update_status` 仅在练习带有效冲刺来源时出现，取值为 `replanned | unchanged | failed`。冲刺重排失败不回滚评分、弱点或已完成的来源任务，旧 active 冲刺计划继续可用。
 
 ### POST `/reports/generate`
 
@@ -1910,147 +1901,9 @@ course_id=101
 - `completed -> dismissed`
 - `dismissed` 只允许重复 `dismiss`，不允许再开始或完成。
 
-## 16. Exam Sprint 接口
+## 16. 已退役接口
 
-状态：Phase 16 已由 `ExamSprintGraph` 接管。课程级 3/7/14 天冲刺计划可显式消费已保存的资料对比；规则负责周期、证据、任务状态和进度，模型只增强排序解释与任务表述。
-
-统一规则：
-
-- 所有接口必须携带 JWT。
-- 只能访问当前用户自己的课程、资料和冲刺计划；非本人课程、资料或计划返回 404。
-- 计划复用 `learning_paths` 和 `learning_tasks` 持久化，`learning_paths.plan_json.kind="exam_sprint"`。
-- 冲刺计划状态使用 `sprint_active` / `sprint_archived`，不会污染 `/paths/current` 的普通 `active` 学习路径。
-- 同一用户同一课程生成新冲刺计划时，只归档旧 `sprint_active`，不归档普通学习路径。
-- `comparison_id` 仅在请求显式携带时使用；直接进入路径页不会隐式套用最近对比。
-- 同时传 `comparison_id` 和 `material_ids` 时，两者资料范围必须一致，否则返回 400。
-- 只有携带有效 `sprint_plan_id` / `sprint_task_id` 创建的练习会完成来源任务并独立触发冲刺重排；普通课程练习不影响冲刺计划。
-- 响应和 `plan_json` 不保存系统提示词、模型输入、API Key、完整资料原文、完整用户画像原文或完整练习原始答案。
-
-### POST `/exam-sprint/plans`
-
-用途：生成期末冲刺计划。
-
-请求：
-
-```json
-{
-  "course_id": 1,
-  "duration_days": 7,
-  "material_ids": [1, 2],
-  "comparison_id": 1201,
-  "goal": "复习人工智能导论期末考试"
-}
-```
-
-字段：
-
-- `course_id`：必填，当前用户自己的课程 ID。
-- `duration_days`：只允许 `3`、`7`、`14`。
-- `material_ids`：可选，必须属于当前用户且已关联当前课程；用于限定证据来源。
-- `comparison_id`：可选，必须是当前用户、当前课程且资料范围一致的已保存对比。
-- `goal`：可选，最长 500 字。
-
-响应：
-
-```json
-{
-  "data": {
-    "id": "3001",
-    "course_id": "101",
-    "duration_days": 7,
-    "goal": "复习人工智能导论期末考试",
-    "status": "sprint_active",
-    "comparison_id": "1201",
-    "trigger": "manual",
-    "revision_of": null,
-    "source_practice_session_id": null,
-    "preserved_task_count": 0,
-    "generation_mode": "deterministic_source",
-    "review_mode": "rules_only",
-    "review_result": {"review_status":"passed","confidence":0.82,"risk_flags":[],"safety_summary":"规则审核通过。"},
-    "warnings": [],
-    "high_frequency_points": [
-      {
-        "knowledge_point_id": "402",
-        "title": "启发式搜索",
-        "reason": "来自练习低分或错题；已有同课程资源可复用",
-        "score": 120,
-        "recommended_resource_ids": ["901"],
-        "recommended_resources": [
-          {
-            "id": "901",
-            "title": "启发式搜索讲解",
-            "resource_type": "doc",
-            "knowledge_point_id": "402"
-          }
-        ]
-      }
-    ],
-    "weak_points": [],
-    "daily_tasks": [
-      {
-        "id": "4001",
-        "day_index": 1,
-        "title": "第 1 天复习启发式搜索",
-        "task_type": "sprint_review",
-        "status": "doing",
-        "due_at": "2026-07-05T11:00:00Z",
-        "knowledge_point_id": "402",
-        "reason": "期末冲刺优先处理薄弱点和高频知识点。",
-        "recommended_resource_ids": ["901"],
-        "recommended_resources": []
-      }
-    ],
-    "must_do_questions": [
-      {
-        "id": "sprint-q1",
-        "knowledge_point_id": "402",
-        "title": "启发式搜索",
-        "question_type": "short_answer",
-        "prompt": "用课程证据解释启发式搜索的核心概念、常见误区和解题步骤。",
-        "reason": "来自弱点、练习低分或高频知识点。"
-      }
-    ],
-    "easy_mistake_warnings": [
-      {
-        "knowledge_point_id": "402",
-        "title": "启发式搜索",
-        "warning": "启发式搜索：先复述概念边界，再做题；错题要标出依据缺口。"
-      }
-    ],
-    "recommended_resources": [],
-    "evidence_summary": {
-      "knowledge_point_count": 3,
-      "weakness_count": 1,
-      "practice_low_score_count": 1,
-      "resource_count": 2,
-      "report_suggestion_count": 1,
-      "material_filter_count": 2,
-      "basis": ["课程知识点 3 个。"]
-    },
-    "agent_trace_id": "trace_exam_sprint",
-    "created_at": "2026-07-05T11:00:00Z",
-    "updated_at": "2026-07-05T11:00:00Z"
-  },
-  "trace_id": "trace_exam_sprint"
-}
-```
-
-错误：
-
-- 未登录返回 401。
-- 课程不存在、非本人课程、资料不存在或资料不属于当前课程返回 404。
-- `duration_days` 不为 `3/7/14` 或课程没有可用知识点时返回 400/422，且不生成假计划。
-- `comparison_id` 不属于当前用户/课程返回 404；对比资料范围冲突返回 400。
-
-### GET `/exam-sprint/plans/{plan_id}`
-
-用途：查看当前用户自己的冲刺计划。非本人计划返回 404，避免跨用户枚举。
-
-### GET `/exam-sprint/plans/current?course_id=...`
-
-用途：恢复当前用户当前课程的 `sprint_active` 计划；没有计划时返回 `data=null`。
-
+`/exam-sprint/*` 已停止注册。日常学习统一使用 `/paths/*` 持续学习路径；历史 `sprint_active/sprint_archived` 数据保留但不再通过业务接口读取或更新。
 ## 17. Export 接口
 
 状态：异步任务支持 Markdown、PDF、DOCX 学习档案和资源 PPTX。旧 `POST /exports/learning-dossier` Markdown 同步接口保留兼容；所有异步文件都写入 `export_jobs` 并由 Redis/RQ worker 渲染。

@@ -11,9 +11,9 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 18 AI 执行可靠性与质量评测**。十条学习主链路继续由真实 LangGraph 编排；`ModelExecutionRuntime` 统一处理同配置重试、Redis 并发限制、熔断、流中断、长任务取消和隐私安全调用审计，`AIJobRuntime` 继续负责智能建课与六类资源生成的后台执行。
+当前最新完成到 **Phase 18 AI 执行可靠性与质量评测**。九条学习主链路继续由真实 LangGraph 编排；`ModelExecutionRuntime` 统一处理同配置重试、Redis 并发限制、熔断、流中断、长任务取消和隐私安全调用审计，`AIJobRuntime` 继续负责智能建课与六类资源生成的后台执行。
 
-当前十条真实生产 Graph 为 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph`、`MaterialComparisonGraph` 和 `ExamSprintGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
+当前九条真实生产 Graph 为 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
 
 已经具备的主链路：
 
@@ -29,12 +29,11 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - 课程级弱点复习项已支持确认、开始、完成和软忽略状态流转；软忽略项不在主列表展示，但继续参与去重。
 - `/agents/traces/{trace_id}` 已实现当前用户 Agent 轨迹查询，响应包含 `workflow`、`artifact_type`、`artifact_id` 和白名单 metadata；课程空间“课堂协作轨迹”读取真实 trace 或真实空状态。
 - `/resources/generate` 保留同步兼容；新入口 `/resources/generation-jobs` 通过 `AIJobRuntime` 和独立 `edunova_ai` 队列执行讲解、思维导图、练习、代码实操、PPT、动画图解六类结构化资源。`ResourceGenerationGraph` 通过独立 Worker 并行生成并执行规则与模型审核，前端支持跨页面观察、刷新恢复、取消和失败重试。
-- `/paths/generate`、`/paths/current` 和 `/paths/tasks/{task_id}` 已实现课程级学习路径生成、当前路径读取和任务状态更新；`PathPlanningGraph` 会综合画像、确认弱点、练习诊断、掌握度、资源和旧路径进度，练习回流只重排已有路径并保留已完成任务。
+- `/paths/generate`、`/paths/current` 和 `/paths/tasks/{task_id}` 已实现课程级持续学习路径生成、当前路径读取和任务状态更新；用户不需要设置天数或重复填写目标，`PathPlanningGraph` 会综合画像、确认弱点、练习诊断、掌握度、资源和旧路径进度，按画像节奏自然排程，练习回流只重排已有路径并保留已完成任务。
 - `/courses/{course_id}/mastery-map` 已实现规则掌握度图，`/courses/{course_id}/learning-state` 已返回真实 `path_summary`、`mastery_summary`、弱点推荐资源和下次复习时间。
 - `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已由 `AssessmentGraph` 编排出题和评估，支持 `adaptive` 难度；最近练习与未提交草稿可通过 URL、最近会话接口和草稿接口恢复。客观分数始终由规则决定。
 - `/reports/generate` 和 `/reports/latest` 已由 `ReportGraph` 聚合最近 5 次练习、掌握度、弱点、路径和资源。分数与趋势由规则计算，模型只增强叙事和建议；报告继续由用户主动生成。学习档案同步/异步导出接口保持兼容。
-- `/exam-sprint/plans` 已由 `ExamSprintGraph` 接管；复用 `learning_paths` / `learning_tasks`，可消费显式选中的资料对比证据，并且只有带冲刺任务来源的练习才会完成来源任务和独立重排剩余计划。
-- `/materials/compare` 已由 `MaterialComparisonGraph` 接管；每次对比保存不可变版本，可恢复最近结果、追溯真实资料分块和审核轨迹，并从资料库显式带入期末冲刺。
+- `/materials/compare` 已由 `MaterialComparisonGraph` 接管；每次对比保存不可变版本，可恢复最近结果、追溯真实资料分块和审核轨迹。资料对比是资料库内的独立辅助工具，不会隐式修改学习路径或练习。
 - AI 辅导直接在 `/app/courses/:courseId` 课程空间内完成；已移除无独立能力的中转页，旧 `/app/tutor` 地址会回到学习主页。
 - 多套个人模型配置、默认配置切换、服务器 `.env` 兜底。
 - 模型调用采用当前配置有限重试，不在故障后自动转发到另一 Provider；失败时保留各 Graph 的确定性 fallback。
@@ -97,7 +96,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - 个性化学习路径。
 - AI 辅导和苏格拉底追问。
 - 练习评估、掌握度地图和薄弱点复习队列。
-- 期末冲刺和资料对比。
+- 资料对比与考点提炼。
 - Markdown/PDF/DOCX 学习档案异步导出，旧 Markdown 同步接口保留兼容。
 - 快速演示通过注册页示例课程模式完成；独立共享 demo reset 不作为当前主线。
 - Docker Compose 部署。

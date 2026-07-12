@@ -37,19 +37,6 @@ class PracticePathService(Protocol):
     def replan_after_assessment(self, user: User, course_id: int, assessment_session_id: int): ...
 
 
-class PracticeSprintService(Protocol):
-    def validate_practice_source(self, user: User, course_id: int, plan_id: int, task_id: int): ...
-
-    def replan_after_assessment(
-        self,
-        user: User,
-        course_id: int,
-        assessment_session_id: int,
-        plan_id: int,
-        task_id: int,
-    ): ...
-
-
 class PracticeRepository(Protocol):
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None: ...
 
@@ -183,14 +170,12 @@ class PracticeService:
         model_service: PracticeModelService | None = None,
         trace_recorder: AgentTraceRecorder | None = None,
         path_service: PracticePathService | None = None,
-        sprint_service: PracticeSprintService | None = None,
         profile_service: object | None = None,
     ) -> None:
         self.repository = repository
         self.model_service = model_service
         self.trace_recorder = trace_recorder
         self.path_service = path_service
-        self.sprint_service = sprint_service
         self.profile_service = profile_service
 
     def create_session(
@@ -200,26 +185,11 @@ class PracticeService:
         knowledge_point_ids: list[int],
         question_count: int,
         difficulty: str,
-        sprint_plan_id: int | None = None,
-        sprint_task_id: int | None = None,
     ) -> PracticeSessionDetail:
         if question_count < 1 or question_count > 12:
             raise PracticeValidationError("题目数量必须在 1 到 12 之间。")
         if difficulty not in self.valid_difficulties:
             raise PracticeValidationError("练习难度只能是 adaptive、easy、medium 或 hard。")
-        if (sprint_plan_id is None) != (sprint_task_id is None):
-            raise PracticeValidationError("sprint_plan_id 与 sprint_task_id 必须同时提供。")
-        if sprint_plan_id is not None and sprint_task_id is not None:
-            if self.sprint_service is None:
-                raise PracticeValidationError("冲刺练习服务暂不可用。")
-            try:
-                task = self.sprint_service.validate_practice_source(user, course_id, sprint_plan_id, sprint_task_id)
-            except Exception as exc:
-                raise PracticeNotFoundError(str(exc)) from exc
-            if task.knowledge_point_id is not None:
-                if knowledge_point_ids and task.knowledge_point_id not in knowledge_point_ids:
-                    raise PracticeValidationError("练习知识点与冲刺任务不一致。")
-                knowledge_point_ids = [task.knowledge_point_id]
         from backend.app.agents.assessment import AssessmentGraphRunner
 
         return AssessmentGraphRunner(self).create_session(
@@ -228,8 +198,6 @@ class PracticeService:
             knowledge_point_ids=knowledge_point_ids,
             question_count=question_count,
             difficulty=difficulty,
-            sprint_plan_id=sprint_plan_id,
-            sprint_task_id=sprint_task_id,
         )
 
     def get_session(self, user: User, session_id: int) -> PracticeSessionDetail:

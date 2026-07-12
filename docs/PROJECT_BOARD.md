@@ -32,15 +32,15 @@ EduNova 坚持“基础不牢，地动山摇”的开发原则。
 | 项目 | 状态 |
 | --- | --- |
 | 最新完成阶段 | Phase 18 |
-| 当前主链路 | 动态画像、智能建课、主页/课程问答、资源、路径、练习评估、报告、资料对比和冲刺已由十条真实 LangGraph 接管 |
+| 当前主链路 | 动态画像、智能建课、主页/课程问答、资源、持续路径、练习评估、报告和资料对比已由九条真实 LangGraph 接管 |
 | 当前主要缺口 | OCR、旧版 Office、扫描件解析，以及其余同步 Graph 的超时边界和持续产品打磨 |
 | 下一步建议 | 基于 Phase 18 可靠性与质量回归结果继续产品打磨，不制作交付材料 |
 
-Phase 13.2 已完成资料解析、主页工具和异步导出增强；Phase 14 已完成路径、评估、报告三条真实 Graph；Phase 15 已完成 ProfileGraph、CourseBuilderGraph、个性化策略、练习恢复和 React Flow/ECharts 可视化；Phase 16 已完成资料对比、冲刺和来源练习回流。后续继续做十条 Graph 的可见证据、移动体验和异常恢复。
+Phase 13.2 已完成资料解析、主页工具和异步导出增强；Phase 14 已完成路径、评估、报告三条真实 Graph；Phase 15 已完成 ProfileGraph、CourseBuilderGraph、个性化策略、练习恢复和 React Flow/ECharts 可视化；Phase 16 完成过资料对比与冲刺，当前冲刺已退役并收敛为九条 Graph。后续继续做九条 Graph 的可见证据、移动体验和异常恢复。
 
-Phase 17 已新增统一 `AIJobRuntime`，智能建课和资源生成进入独立后台队列；四个前端入口共用持久化进度、SSE/轮询恢复、取消和重试。同步旧接口与十条 Graph 合同保持兼容。
+Phase 17 已新增统一 `AIJobRuntime`，智能建课和资源生成进入独立后台队列；四个前端入口共用持久化进度、SSE/轮询恢复、取消和重试。
 
-Phase 18 已新增统一 `ModelExecutionRuntime` 和 `model_call_runs`，十条 Graph、流式问答与 Embedding 共用同配置重试、并发、熔断、取消和安全审计；离线质量评测固定覆盖十条 Graph，不消耗真实模型 Key。
+Phase 18 已新增统一 `ModelExecutionRuntime` 和 `model_call_runs`，九条 Graph、流式问答与 Embedding 共用同配置重试、并发、熔断、取消和安全审计；离线质量评测固定覆盖九条 Graph，不消耗真实模型 Key。
 
 ## 4. 里程碑
 
@@ -83,7 +83,7 @@ Phase 18 已新增统一 `ModelExecutionRuntime` 和 `model_call_runs`，十条 
 | Phase 8.2.1 | 已完成并增强 | 确定性稿优先、逐 Worker 模型增强、规则与模型 Review、单次 Repair |
 | Phase 9 | 已完成 | 课程级学习路径、规则掌握度图、弱点队列推荐资源和复习时间 |
 | Phase 10 | 已完成 | 练习生成、确定性批改、弱点/掌握度反哺和学习报告展示第一刀 |
-| Phase 11.1 | 已完成 | 期末冲刺模式第一刀，生成 3/7/14 天课程级冲刺计划 |
+| Phase 11.1 | 历史完成，当前退役 | 曾生成 3/7/14 天课程级冲刺计划，历史数据保留 |
 | Phase 11.2 | 已完成 | 资料对比第一刀，输出同课程资料重复重点、疑似考点、独有点、遗漏点和安全引用 |
 | Phase 12.1 | 已完成 | Markdown 学习档案导出第一刀，报告页可下载课程级学习档案 |
 | Phase 12.2 | 已完成 | 交付基线、开源准备、MIT 许可证、测试报告、用户指南、答辩问答和验收证据 |
@@ -106,7 +106,7 @@ Phase 18 已新增统一 `ModelExecutionRuntime` 和 `model_call_runs`，十条 
 - [x] Phase 9：基于课程学习状态、已确认/复习中的弱点、课程知识点和用户级画像生成学习路径、掌握度图并完善复习队列。
 - [x] 继续保持课程问答事件隐私安全，不保存完整用户问题、系统提示词、模型输入或资料原文。
 - [x] Phase 10：练习评估与学习报告闭环第一刀，真实练习、作答批改、弱点/掌握度反哺和报告展示已接入。
-- [x] Phase 11.1：期末冲刺模式第一刀，生成课程级 3/7/14 天冲刺计划并接入 `/app/path` 和学习主页入口。
+- [x] Phase 11.1 历史实现：课程级 3/7/14 天冲刺计划曾接入；当前入口和生产逻辑已退役。
 - [x] Phase 11.2：资料对比第一刀，接入 `/materials/compare` 和 `/app/library` 资料对比区域。
 - [x] Phase 12.1：Markdown 学习档案导出第一刀，接入 `/exports/learning-dossier` 和 `/app/reports` 下载入口。
 - [x] Phase 12.2：交付基线、开源准备与验收证据，补齐提交前文档、MIT 许可证和验收索引。
@@ -126,7 +126,7 @@ Phase 18 已新增统一 `ModelExecutionRuntime` 和 `model_call_runs`，十条 
 - [x] 练习评估和弱点队列来源扩展第一刀。
 - [x] 学习报告真实数据第一刀。
 - [x] 学习报告 Markdown 导出。
-- [x] 资料对比结果不可变持久化，并通过显式 `comparison_id` 与期末冲刺联动。
+- [x] 资料对比结果不可变持久化并独立恢复，不自动影响路径或练习。
 - [x] PDF/PPTX/DOCX 文本解析专项第一刀。
 - [x] 开源准备和提交材料文档专项第一刀。
 - [x] Phase 13 前端视觉硬化第一轮：统一设计 token 和品牌色，补可见焦点，优化登录页/主页/课程首屏，并把移动端完整侧栏改为紧凑顶栏 + 覆盖式抽屉。
@@ -141,13 +141,13 @@ Phase 18 已新增统一 `ModelExecutionRuntime` 和 `model_call_runs`，十条 
 - [x] LangGraph 真接管主页问答：`HomeTutorGraph` 生产链路已接管 context、route、material_retriever、web_search、planner、answer、review、repair、persist；主页资料来源来自 `material_chunks` 相关片段，SSE 失败不写半截消息。
 - [x] Phase 15：`ProfileGraph` 真接管画像更新与学习信号门控，`CourseBuilderGraph` 真接管资料建课，生产 Graph 增至八条。
 - [x] Phase 15：adaptive 练习、最近会话、草稿恢复、React Flow 课程知识图谱和 ECharts 掌握度/趋势图落地。
-- [x] Phase 16：`MaterialComparisonGraph` 与 `ExamSprintGraph` 真接管，生产 Graph 增至十条。
-- [x] Phase 16：资料对比版本恢复、显式冲刺入口、当前计划恢复、针对性练习和失败隔离回流落地。
+- [x] Phase 16 历史实现：`MaterialComparisonGraph` 与 `ExamSprintGraph` 曾接管资料对比和冲刺；当前仅保留 `MaterialComparisonGraph`。
+- [x] 持续路径收敛：退役 `ExamSprintGraph`、冲刺 API 与来源练习分支，保留历史数据；资料对比回归资料库独立工具。
 - [x] Phase 17：`ai_jobs`、独立 `edunova_ai` 队列、建课/资源后台任务、节点级进度、幂等、取消、重试和失联检测落地。
 - [x] Phase 17：首页、资料库、课程空间、资源工坊接入局部进度与全局任务托盘，支持刷新和跨路由恢复。
 - [x] Phase 18：模型错误分类、同配置有限重试、Redis 用户/全局并发、熔断、首 token 后禁止重放和安全错误恢复落地。
-- [x] Phase 18：`model_call_runs`、Agent trace 模型调用摘要、十 Graph 离线质量回归和显式真实模型评测命令落地。
-- [x] 文档口径同步：统一为十条真实生产 Graph；学习档案导出保持普通异步服务。
+- [x] Phase 18：`model_call_runs`、Agent trace 模型调用摘要、九 Graph 离线质量回归和显式真实模型评测命令落地。
+- [x] 文档口径同步：统一为九条真实生产 Graph；学习档案导出保持普通异步服务。
 - [x] 大模型参与度补强：路径使用模型排序理由，练习使用题目增强与错因诊断，报告使用叙事增强；客观数字保持确定性规则，模型失败完整 fallback。
 - [x] 检索能力升级：主页资料级和课程级 RAG 都可使用 pgvector SQL cosine 候选；课程侧按 embedding 来源/模型隔离，本地 hash 不宣称语义命中。
 - [x] 多模态资源补强：已完成 Markmap 思维导图、Mermaid 动画图解、交互练习、Pyodide Python 和真实 PPTX；不宣称生成视频。
@@ -173,7 +173,7 @@ Phase 18 已新增统一 `ModelExecutionRuntime` 和 `model_call_runs`，十条 
 - [x] 课程空间学习进度实时同步：问答、资源、路径、练习、报告和弱点操作完成后刷新闭环缓存；抽屉保留旧内容同步并支持部分失败重试。
 - [x] 资料库桌面重做：宽屏文件工作台、真实资料详情、章节与课程摘要、多选对比抽屉、`material_id` 恢复和带资料回主页提问。
 - [x] 主页轻调：真实昵称问候、移除预设快捷问题、最近学习层级、按需全部课程抽屉和完整资料库选择。
-- [x] 学习路径桌面重做：宽屏连续画布、普通路径/期末冲刺双模式、真实状态与日期导航、当前任务置顶、生成/详情覆盖抽屉和显式资料对比来源。
+- [x] 学习路径桌面收敛：宽屏连续画布、单一持续路径、真实状态筛选、当前任务置顶、一键生成/更新和详情覆盖抽屉。
 - [x] 宽屏工作区材质收口：资料库与资源工坊共用连续画布，移除工具栏、列表库和中央内容之间的重复卡片边界。
 - [x] 宽屏工作区色温收口：主页、资料库和资源工坊统一为低饱和青灰背景；工具栏、弱表面和控件使用独立同色阶 token，正文与抽屉保持高对比，应用固定使用这套浅色主题。
 - [x] `900px` 及以下视口默认收起侧栏为紧凑顶栏，展开后显示覆盖式抽屉；首页、普通路由和课程路由复用 `useResponsiveSidebarState`。

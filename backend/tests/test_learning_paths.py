@@ -219,7 +219,7 @@ def make_repo() -> FakePathRepository:
                 id=9,
                 user_id=1,
                 profile_json={
-                    "learning_goal": "期末前掌握搜索算法",
+                    "learning_goal": "掌握搜索算法",
                     "knowledge_foundation": "机器学习刚入门",
                     "weak_points": ["启发式搜索"],
                 },
@@ -265,13 +265,15 @@ def test_generate_path_archives_previous_active_path_and_prioritizes_confirmed_r
     repo.paths.append(previous_path)
     service = PathService(repo)
 
-    result = as_dict(service.generate_path(make_user(), course_id=101, duration_days=7, goal="搜索算法冲刺"))
+    result = as_dict(service.generate_path(make_user(), course_id=101))
 
     assert previous_path.status == "archived"
     assert result["status"] == "active"
     assert result["path"]["course_id"] == "101"
-    assert result["path"]["goal"] == "搜索算法冲刺"
-    assert result["path"]["plan_json"]["duration_days"] == 7
+    assert result["path"]["goal"] == "掌握搜索算法"
+    assert result["path"]["plan_json"]["schema_version"] == 3
+    assert result["path"]["plan_json"]["schedule_mode"] == "continuous"
+    assert result["path"]["plan_json"]["personalization"]["daily_task_capacity"] == 2
     assert result["path"]["plan_json"]["source_counts"]["confirmed_or_reviewing_weaknesses"] == 2
     assert [task["knowledge_point_id"] for task in result["tasks"][:3]] == ["402", "401", "403"]
     assert [task["task_type"] for task in result["tasks"]] == ["review", "review", "learn"]
@@ -279,6 +281,9 @@ def test_generate_path_archives_previous_active_path_and_prioritizes_confirmed_r
     assert result["tasks"][1]["status"] == "todo"
     assert result["tasks"][0]["recommended_resource_ids"] == ["802"]
     assert result["tasks"][1]["recommended_resource_ids"] == ["801"]
+    first_due = datetime.fromisoformat(result["tasks"][0]["due_at"].replace("Z", "+00:00"))
+    third_due = datetime.fromisoformat(result["tasks"][2]["due_at"].replace("Z", "+00:00"))
+    assert third_due > first_due
     serialized = str(result)
     assert "系统提示词" not in serialized
     assert "模型输入" not in serialized
@@ -305,7 +310,7 @@ def test_get_current_path_returns_empty_state_and_scopes_course() -> None:
 def test_update_task_status_is_user_scoped_and_validated() -> None:
     repo = make_repo()
     service = PathService(repo)
-    generated = as_dict(service.generate_path(make_user(), course_id=101, duration_days=3, goal=""))
+    generated = as_dict(service.generate_path(make_user(), course_id=101))
     task_id = int(generated["tasks"][1]["id"])
 
     updated = as_dict(service.update_task_status(make_user(), task_id, "completed"))
@@ -338,11 +343,11 @@ def test_paths_routes_require_login_and_return_envelopes() -> None:
     token = create_access_token(str(user.id), settings=settings)
     headers = {"Authorization": f"Bearer {token}"}
 
-    unauthorized = client.post("/api/v1/paths/generate", json={"course_id": 101, "duration_days": 7, "goal": ""})
+    unauthorized = client.post("/api/v1/paths/generate", json={"course_id": 101})
     generated = client.post(
         "/api/v1/paths/generate",
         headers=headers,
-        json={"course_id": 101, "duration_days": 7, "goal": "搜索算法冲刺"},
+        json={"course_id": 101},
     )
     current = client.get("/api/v1/paths/current?course_id=101", headers=headers)
     updated = client.patch(
@@ -351,15 +356,17 @@ def test_paths_routes_require_login_and_return_envelopes() -> None:
         json={"status": "completed"},
     )
     missing = client.get("/api/v1/paths/current?course_id=202", headers=headers)
+    retired_sprint = client.get("/api/v1/exam-sprint/plans/current?course_id=101", headers=headers)
 
     assert unauthorized.status_code == 401
     assert generated.status_code == 200
-    assert generated.json()["data"]["path"]["goal"] == "搜索算法冲刺"
+    assert generated.json()["data"]["path"]["goal"] == "掌握搜索算法"
     assert current.status_code == 200
     assert current.json()["data"]["status"] == "active"
     assert updated.status_code == 200
     assert updated.json()["data"]["status"] == "completed"
     assert missing.status_code == 404
+    assert retired_sprint.status_code == 404
 
 
 def test_path_planning_graph_runs_real_model_review_and_trace_nodes() -> None:
@@ -375,9 +382,10 @@ def test_path_planning_graph_runs_real_model_review_and_trace_nodes() -> None:
     )
     service = PathService(repo, model_service=model, trace_recorder=make_trace_recorder(logs))
 
-    detail = as_dict(service.generate_path(make_user(), 101, 7, "搜索算法冲刺"))
+    detail = as_dict(service.generate_path(make_user(), 101))
 
-    assert detail["path"]["plan_json"]["schema_version"] == 2
+    assert detail["path"]["plan_json"]["schema_version"] == 3
+    assert detail["path"]["plan_json"]["schedule_mode"] == "continuous"
     assert detail["path"]["plan_json"]["generation_mode"] == "model_enhanced"
     assert detail["path"]["plan_json"]["review_mode"] == "model_and_rules"
     assert [task["knowledge_point_id"] for task in detail["tasks"]] == ["401", "402", "403"]
@@ -399,7 +407,7 @@ def test_assessment_replan_preserves_completed_progress_and_does_not_create_miss
     service = PathService(repo)
     assert service.replan_after_assessment(make_user(), 101, 501).status == "not_started"
 
-    first = service.generate_path(make_user(), 101, 7, "保持原目标")
+    first = service.generate_path(make_user(), 101)
     assert first.path is not None
     old_path_id = int(first.path.id)
     old_tasks = repo.list_tasks_for_path(old_path_id)
@@ -414,8 +422,61 @@ def test_assessment_replan_preserves_completed_progress_and_does_not_create_miss
     assert replanned.detail.path is not None
     assert replanned.detail.path.plan_json["trigger"] == "assessment"
     assert replanned.detail.path.plan_json["revision_of"] == str(old_path_id)
-    assert replanned.detail.path.goal == "保持原目标"
+    assert replanned.detail.path.goal == "掌握搜索算法"
+    assert replanned.detail.path.plan_json["schema_version"] == 3
     assert replanned.detail.tasks[0].status == "completed"
     assert replanned.detail.tasks[0].knowledge_point_id == "402"
     assert any(task.knowledge_point_id == "403" and task.task_type == "review" for task in replanned.detail.tasks)
     assert next(path for path in repo.paths if path.id == old_path_id).status == "archived"
+
+
+def test_legacy_v2_path_upgrades_on_replan_and_sprint_rows_are_not_current_paths() -> None:
+    repo = make_repo()
+    legacy = LearningPath(
+        id=810,
+        user_id=1,
+        course_id=101,
+        title="旧版普通路径",
+        goal="保留旧目标",
+        status="active",
+        plan_json={"schema_version": 2, "duration_days": 3},
+    )
+    legacy.created_at = NOW
+    legacy.updated_at = NOW
+    sprint_history = LearningPath(
+        id=811,
+        user_id=1,
+        course_id=101,
+        title="历史冲刺计划",
+        goal="历史记录",
+        status="sprint_active",
+        plan_json={"kind": "exam_sprint", "duration_days": 7},
+    )
+    sprint_history.created_at = NOW
+    sprint_history.updated_at = NOW
+    repo.paths.extend([legacy, sprint_history])
+    repo.add_task(
+        LearningTask(
+            path_id=legacy.id,
+            user_id=1,
+            course_id=101,
+            knowledge_point_id=401,
+            title="学习启发式搜索",
+            task_type="learn",
+            reason="旧版任务",
+            recommended_resource_ids=[],
+            status="completed",
+            due_at=NOW,
+            next_review_at=None,
+        )
+    )
+
+    replanned = PathService(repo).replan_after_assessment(make_user(), 101, 501)
+
+    assert replanned.detail is not None
+    assert replanned.detail.path is not None
+    assert replanned.detail.path.plan_json["schema_version"] == 3
+    assert replanned.detail.path.plan_json["schedule_mode"] == "continuous"
+    assert "duration_days" not in replanned.detail.path.plan_json
+    assert sprint_history.status == "sprint_active"
+    assert repo.get_active_path(1, 101).id != sprint_history.id

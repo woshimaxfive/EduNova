@@ -347,7 +347,7 @@ describe("PracticePage", () => {
     expect(screen.getByText("实际难度：基础")).toBeInTheDocument();
   });
 
-  it("sends sprint source and shows the replanned sprint after submission", async () => {
+  it("ignores retired sprint parameters and creates an ordinary adaptive practice", async () => {
     const user = userEvent.setup();
     const calls: Array<{ url: string; payload: unknown }> = [];
 
@@ -364,31 +364,6 @@ describe("PracticePage", () => {
       if (url === PRACTICE_ENDPOINTS.sessions) {
         return { data: { data: practiceSession }, status: 200, statusText: "OK", headers: {}, config };
       }
-      if (url === PRACTICE_ENDPOINTS.answers(501)) {
-        return {
-          data: {
-            data: {
-              ...practiceSession,
-              status: "completed",
-              score: 0,
-              closure_update: {
-                weaknesses_added: 1,
-                weaknesses_updated: 0,
-                path_update_status: "not_started",
-                recommended_resource_ids: [],
-                sprint_update_status: "replanned",
-                sprint_plan_id: "3002",
-                sprint_agent_trace_id: "trace_sprint_replan"
-              },
-              answers: []
-            }
-          },
-          status: 200,
-          statusText: "OK",
-          headers: {},
-          config
-        };
-      }
       throw new Error(`Unexpected request ${url}`);
     };
 
@@ -400,23 +375,15 @@ describe("PracticePage", () => {
     await screen.findByDisplayValue("人工智能导论");
     await user.click(screen.getByRole("button", { name: "生成练习" }));
     await screen.findByText("关于启发式搜索，哪一项最符合课程复习重点？");
-    await user.click(screen.getByRole("button", { name: "提交答案" }));
-
-    expect(await screen.findByText("期末冲刺计划已根据本次必刷题重排")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看更新后的冲刺计划" })).toHaveAttribute(
-      "href",
-      "/app/path?course_id=808&sprint_plan_id=3002"
-    );
     expect(calls).toContainEqual({
       url: PRACTICE_ENDPOINTS.sessions,
       payload: {
         course_id: 808,
         knowledge_point_ids: [401],
         question_count: 5,
-        difficulty: "adaptive",
-        sprint_plan_id: 3001,
-        sprint_task_id: 4002
+        difficulty: "adaptive"
       }
     });
+    expect(screen.queryByText("期末冲刺")).not.toBeInTheDocument();
   });
 });

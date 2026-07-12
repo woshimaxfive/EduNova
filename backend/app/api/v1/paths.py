@@ -41,8 +41,6 @@ def generate_path(
             service.generate_path(
                 current_user,
                 course_id=payload.course_id,
-                duration_days=payload.duration_days,
-                goal=payload.goal,
             ).model_dump()
         )
     except PathNotFoundError as exc:

@@ -152,9 +152,10 @@ describe("EduNova routes", () => {
     renderRoutes(["/app/path"]);
 
     expect(await screen.findByRole("heading", { name: "学习路径" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "个性化路径" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("持续学习安排")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "任务状态" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成计划" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成学习安排" })).toBeInTheDocument();
+    expect(screen.queryByText("期末冲刺")).not.toBeInTheDocument();
   });
 
   it("treats the retired design lab route as not found", async () => {

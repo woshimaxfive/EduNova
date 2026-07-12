@@ -183,16 +183,12 @@ class PathService:
         self.model_service = model_service
         self.trace_recorder = trace_recorder
 
-    def generate_path(self, user: User, course_id: int, duration_days: int, goal: str = "") -> LearningPathDetail:
-        if duration_days not in {3, 7, 14}:
-            raise PathValidationError("学习路径时长只能是 3、7 或 14 天。")
+    def generate_path(self, user: User, course_id: int) -> LearningPathDetail:
         from backend.app.agents.path_planning import PathPlanningGraphRunner
 
         return PathPlanningGraphRunner(self).run(
             user=user,
             course_id=course_id,
-            duration_days=duration_days,
-            goal=goal,
             trigger="manual",
         ).detail  # type: ignore[return-value]
 
@@ -200,17 +196,11 @@ class PathService:
         active_path = self.repository.get_active_path(user.id, course_id)
         if active_path is None:
             return PathReplanResult(status="not_started", trace_id=None, detail=None)
-        plan_json = active_path.plan_json or {}
-        duration_days = int(plan_json.get("duration_days") or 7)
-        if duration_days not in {3, 7, 14}:
-            duration_days = 7
-
         from backend.app.agents.path_planning import PathPlanningGraphRunner
 
         return PathPlanningGraphRunner(self).run(
             user=user,
             course_id=course_id,
-            duration_days=duration_days,
             goal=active_path.goal or "",
             trigger="assessment",
             assessment_session_id=assessment_session_id,

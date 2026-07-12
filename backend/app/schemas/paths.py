@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel
 
 from backend.app.models import GeneratedResource, LearningPath, LearningTask
 
@@ -14,13 +14,6 @@ PathTaskType = Literal["review", "learn", "resource"]
 
 class GeneratePathRequest(BaseModel):
     course_id: int
-    duration_days: Literal[3, 7, 14] = 7
-    goal: str = Field(default="", max_length=500)
-
-    @field_validator("goal")
-    @classmethod
-    def normalize_goal(cls, value: str) -> str:
-        return " ".join(value.split())[:500]
 
 
 class UpdatePathTaskRequest(BaseModel):

@@ -1627,7 +1627,8 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
 - 练习题先生成确定性底稿，模型可增强题干和解析；数字评分始终采用确定性规则，模型不得修改。
 - 练习题第一刀支持 `single_choice`、`multiple_choice`、`short_answer`。
 - 练习提交后，低分或错误题会按课程和知识点合并进入 `weakness_review_queue`，并用 `source_ref_type="practice_answer"`、`source_ref_id` 和 `diagnosis_json` 保存安全证据；已有普通路径会在独立 trace 中重排，无路径时不自动创建。
-- 响应不返回标准答案，不保存或返回系统提示词、模型输入、API Key、完整课程资料原文或完整用户画像原文。
+- `in_progress` 练习的 `correct_answer` 始终为 `null`，避免答题前泄题；只有练习完成后，提交和读取响应才返回当前题目的正确答案，用于错题复盘。
+- 响应不保存或返回系统提示词、模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
 ### POST `/practice/sessions`
 
@@ -1705,6 +1706,8 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
 ### POST `/practice/sessions/{session_id}/answers`
 
 用途：提交答案，写入 `practice_answers`，更新 `practice_sessions.status/score`，并把低分或错误题反哺到课程级弱点队列。
+
+成功响应中 `status="completed"`，题目 `correct_answer` 恢复为真实答案；前端据此标绿正确选项、标红错误选择，并在错题详情展示正确答案。客观评分仍以服务端确定性结果为准。
 
 请求：
 

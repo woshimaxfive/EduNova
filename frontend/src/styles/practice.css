@@ -351,10 +351,22 @@
   background: var(--green-soft);
 }
 
+.practice-choice-list button.correct > span {
+  border-color: var(--green);
+  color: #fff;
+  background: var(--green);
+}
+
 .practice-choice-list button.wrong {
   border-color: color-mix(in srgb, var(--coral) 45%, var(--wide-workspace-divider));
   color: var(--coral);
   background: var(--coral-soft);
+}
+
+.practice-choice-list button.wrong > span {
+  border-color: var(--coral);
+  color: #fff;
+  background: var(--coral);
 }
 
 .practice-choice-list button:disabled { opacity: 1; }

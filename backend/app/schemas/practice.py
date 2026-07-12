@@ -113,7 +113,10 @@ def iso_timestamp(value: datetime | None) -> str | None:
 
 
 def session_to_api(session: PracticeSession, answers: list[PracticeAnswer]) -> PracticeSessionDetail:
-    questions = [PracticeQuestion(**public_question(item)) for item in (session_questions(session, answers) or [])]
+    questions = [
+        PracticeQuestion(**public_question(item, reveal_answer=session.status == "completed"))
+        for item in (session_questions(session, answers) or [])
+    ]
     answer_items = [answer_to_api(answer) for answer in answers if answer.answer_text is not None or answer.is_correct is not None]
     assessment = session.assessment_json if isinstance(getattr(session, "assessment_json", None), dict) else {}
     requested_difficulty = str(assessment.get("requested_difficulty") or assessment.get("difficulty") or "medium")
@@ -147,8 +150,8 @@ def session_questions(session: PracticeSession, answers: list[PracticeAnswer]) -
     return [answer.question_json for answer in answers if isinstance(answer.question_json, dict)]
 
 
-def public_question(question: dict) -> dict:
-    return {**question, "correct_answer": None}
+def public_question(question: dict, *, reveal_answer: bool = False) -> dict:
+    return {**question, "correct_answer": question.get("correct_answer") if reveal_answer else None}
 
 
 def answer_to_api(answer: PracticeAnswer) -> PracticeAnswerResponse:

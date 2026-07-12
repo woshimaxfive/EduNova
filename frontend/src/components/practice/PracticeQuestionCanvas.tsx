@@ -70,7 +70,7 @@ export function PracticeQuestionCanvas({
         <div className="practice-choice-list" role="group" aria-label="答案选项">
           {question.options.map((option, optionIndex) => {
             const isSelected = selected.includes(option);
-            const isCorrectOption = completed && correct.includes(option);
+            const isCorrectOption = completed && (correct.includes(option) || (feedback?.is_correct === true && isSelected));
             const isWrongSelection = completed && isSelected && !isCorrectOption;
             return (
               <button
@@ -119,7 +119,7 @@ export function PracticeQuestionCanvas({
             <div className="practice-review-detail">
               <dl>
                 <div><dt>你的答案</dt><dd>{feedback.answer_text || "未作答"}</dd></div>
-                {correct.length > 0 ? <div><dt>参考答案</dt><dd>{correct.join("、")}</dd></div> : null}
+                {correct.length > 0 ? <div><dt>正确答案</dt><dd>{correct.join("、")}</dd></div> : null}
               </dl>
               <div>
                 <strong>解析</strong>

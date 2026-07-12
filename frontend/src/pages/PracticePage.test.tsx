@@ -340,6 +340,16 @@ describe("PracticePage", () => {
     expect(within(summary).getByRole("link", { name: "学习薄弱知识点" })).toHaveAttribute("href", "/app/courses/808?knowledge_point_id=402");
     expect(screen.getByText("把评估函数误认为随机选择。")).toBeInTheDocument();
     expect(screen.getByText("实际代价")).toBeInTheDocument();
+    const wrongReview = screen.getByRole("region", { name: "q2 批改结果" });
+    expect(within(wrongReview).getByText("正确答案")).toBeInTheDocument();
+    expect(within(wrongReview).getByText("实际代价 g(n)、估计代价 h(n)")).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "答案选项" })).getByRole("button", { name: /随机数/ })).toHaveClass("wrong");
+    expect(within(screen.getByRole("group", { name: "答案选项" })).getByRole("button", { name: /实际代价 g\(n\)/ })).toHaveClass("correct");
+
+    await user.click(screen.getByRole("button", { name: "第 1 题，正确" }));
+    const correctChoice = within(screen.getByRole("group", { name: "答案选项" })).getByRole("button", { name: /估计剩余代价/ });
+    expect(correctChoice).toHaveClass("correct");
+    expect(correctChoice).not.toHaveClass("wrong");
 
     await user.click(within(summary).getByRole("button", { name: "查看学习更新" }));
     const drawer = screen.getByRole("dialog", { name: "学习结果" });

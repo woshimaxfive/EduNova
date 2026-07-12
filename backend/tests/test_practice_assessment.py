@@ -345,6 +345,8 @@ def test_submit_practice_answers_scores_and_writes_confirmed_weakness_items() ->
     assert evaluated["answers"][0]["is_correct"] is False
     assert evaluated["answers"][0]["feedback"]["score"] == 0
     assert evaluated["answers"][2]["feedback"]["score"] > 0
+    assert evaluated["questions"][0]["correct_answer"] == "人工智能概述"
+    assert evaluated["questions"][1]["correct_answer"] == ["关键概念", "课程引用"]
     assert repo.sessions[0].score == Decimal("67")
     assert repo.sessions[0].status == "completed"
     assert len(repo.weakness_items) == 1

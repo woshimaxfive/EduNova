@@ -38,9 +38,12 @@ import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { ToastStack } from "../components/feedback/ToastStack";
 import { useToastQueue } from "../components/feedback/useToastQueue";
 import {
-  getProviderPreset,
-  inferProviderPresetId,
-  MODEL_PROVIDER_PRESETS
+  CHAT_MODEL_PROVIDER_PRESETS,
+  EMBEDDING_MODEL_PROVIDER_PRESETS,
+  getChatProviderPreset,
+  getEmbeddingProviderPreset,
+  inferChatProviderPresetId,
+  inferEmbeddingProviderPresetId
 } from "../config/modelProviders";
 import { mapApiUserToStudentUser } from "../features/auth/authMappers";
 import { useAuthStore } from "../features/auth/authStore";
@@ -66,13 +69,13 @@ type ModelConfigDraft = {
 };
 
 const EMPTY_CONFIG_DRAFT: ModelConfigDraft = {
-  display_name: "星火 Lite",
+  display_name: "星火 4.0 Ultra",
   preset_id: "spark",
   base_url: "https://spark-api-open.xf-yun.com/v1",
   api_key: "",
-  chat_model: "lite",
-  embedding_preset_id: "qwen",
-  embedding_base_url: "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+  chat_model: "4.0Ultra",
+  embedding_preset_id: "none",
+  embedding_base_url: "",
   embedding_api_key: "",
   embedding_model: ""
 };
@@ -82,25 +85,27 @@ const VALID_SECTIONS = new Set<SettingsSection>(["model", "account", "privacy"])
 function draftFromConfig(config: ModelConfigSummary): ModelConfigDraft {
   return {
     display_name: config.display_name,
-    preset_id: inferProviderPresetId(config.base_url, config.preset_id),
+    preset_id: inferChatProviderPresetId(config.base_url, config.preset_id),
     base_url: config.base_url ?? "",
     api_key: "",
     chat_model: config.chat_model ?? "",
-    embedding_preset_id: inferProviderPresetId(
-      config.embedding_base_url ?? config.base_url,
-      config.embedding_preset_id ?? config.preset_id
-    ),
-    embedding_base_url: config.embedding_base_url ?? config.base_url ?? "",
+    embedding_preset_id: config.embedding_model
+      ? inferEmbeddingProviderPresetId(
+        config.embedding_base_url ?? config.base_url,
+        config.embedding_preset_id ?? config.preset_id
+      )
+      : "none",
+    embedding_base_url: config.embedding_model ? config.embedding_base_url ?? config.base_url ?? "" : "",
     embedding_api_key: "",
     embedding_model: config.embedding_model ?? ""
   };
 }
 
 function newDraftFromPreset(presetId = "spark"): ModelConfigDraft {
-  const preset = getProviderPreset(presetId);
-  const embeddingPreset = getProviderPreset("qwen");
+  const preset = getChatProviderPreset(presetId);
+  const embeddingPreset = getEmbeddingProviderPreset("none");
   return {
-    display_name: preset.name.includes("讯飞") ? "星火 Lite" : `${preset.name} 配置`,
+    display_name: preset.name.includes("讯飞") ? "星火 4.0 Ultra" : `${preset.name} 配置`,
     preset_id: preset.id,
     base_url: preset.baseUrl,
     api_key: "",
@@ -206,8 +211,8 @@ export function SettingsPage() {
     return defaultChatConfig ?? defaultEmbeddingConfig ?? configs[0] ?? null;
   }, [configs, defaultChatConfig, defaultEmbeddingConfig, selectedConfigId]);
   const currentDraft = selectedConfigId === null && selectedConfig ? draftFromConfig(selectedConfig) : draft;
-  const selectedChatPreset = getProviderPreset(currentDraft.preset_id);
-  const selectedEmbeddingPreset = getProviderPreset(currentDraft.embedding_preset_id);
+  const selectedChatPreset = getChatProviderPreset(currentDraft.preset_id);
+  const selectedEmbeddingPreset = getEmbeddingProviderPreset(currentDraft.embedding_preset_id);
   const activeConfigId = typeof selectedConfigId === "number" ? selectedConfigId : selectedConfig?.id ?? null;
   const isCreating = selectedConfigId === "new" || !selectedConfig;
   const isDirty = isCreating || (selectedConfig ? !draftsMatch(currentDraft, draftFromConfig(selectedConfig)) : false);
@@ -370,19 +375,20 @@ export function SettingsPage() {
   }
 
   function applyChatProviderPreset(presetId: string) {
-    const preset = getProviderPreset(presetId);
+    const preset = getChatProviderPreset(presetId);
     if (selectedConfigId === null && selectedConfig) setSelectedConfigId(selectedConfig.id);
     setDraft({
       ...currentDraft,
       preset_id: preset.id,
       base_url: preset.id === "custom" ? currentDraft.base_url : preset.baseUrl,
-      chat_model: preset.id === "custom" ? currentDraft.chat_model : preset.chatModel
+      chat_model: preset.id === "custom" ? currentDraft.chat_model : preset.chatModel,
+      api_key: preset.id === currentDraft.preset_id ? currentDraft.api_key : ""
     });
     setModelFeedback(null);
   }
 
   function applyEmbeddingProviderPreset(presetId: string) {
-    const preset = getProviderPreset(presetId);
+    const preset = getEmbeddingProviderPreset(presetId);
     if (selectedConfigId === null && selectedConfig) setSelectedConfigId(selectedConfig.id);
     setDraft({
       ...currentDraft,
@@ -390,7 +396,8 @@ export function SettingsPage() {
       embedding_base_url: preset.id === "custom" ? currentDraft.embedding_base_url : preset.baseUrl,
       embedding_model: preset.id === "custom"
         ? currentDraft.embedding_model
-        : (preset.embeddingModel ?? "")
+        : preset.embeddingModel,
+      embedding_api_key: preset.id === currentDraft.embedding_preset_id ? currentDraft.embedding_api_key : ""
     });
     setModelFeedback(null);
   }
@@ -670,7 +677,7 @@ export function SettingsPage() {
                             <label>
                               <span>回答服务商</span>
                               <select aria-label="回答服务商" value={currentDraft.preset_id} onChange={(event) => applyChatProviderPreset(event.target.value)}>
-                                {MODEL_PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                                {CHAT_MODEL_PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
                               </select>
                             </label>
                             <label>
@@ -714,14 +721,14 @@ export function SettingsPage() {
                             <span aria-hidden="true"><Database size={18} weight="duotone" /></span>
                             <div>
                               <h4 id="embedding-service-title">向量服务</h4>
-                              <p>负责把资料转换成语义向量，提升 RAG 检索相关性；未配置时使用关键词检索。</p>
+                              <p>只提供真实兼容 1536 维检索库的预设；未配置时使用关键词检索。</p>
                             </div>
                           </header>
                           <div className="settings-service-grid">
                             <label>
                               <span>向量服务商</span>
                               <select aria-label="向量服务商" value={currentDraft.embedding_preset_id} onChange={(event) => applyEmbeddingProviderPreset(event.target.value)}>
-                            {MODEL_PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                                {EMBEDDING_MODEL_PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
                               </select>
                             </label>
                             <label>
@@ -730,6 +737,7 @@ export function SettingsPage() {
                                 aria-label="向量模型"
                                 value={currentDraft.embedding_model}
                                 placeholder="可留空，届时使用关键词检索"
+                                disabled={selectedEmbeddingPreset.id === "none"}
                                 onChange={(event) => updateDraft("embedding_model", event.target.value)}
                               />
                             </label>
@@ -743,6 +751,7 @@ export function SettingsPage() {
                               <input
                                 aria-label="向量 Base URL"
                                 value={currentDraft.embedding_base_url}
+                                disabled={selectedEmbeddingPreset.id === "none"}
                                 onChange={(event) => updateDraft("embedding_base_url", event.target.value)}
                               />
                             </label>
@@ -753,6 +762,7 @@ export function SettingsPage() {
                                 type="password"
                                 autoComplete="off"
                                 value={currentDraft.embedding_api_key}
+                                disabled={selectedEmbeddingPreset.id === "none"}
                                 placeholder={embeddingConnectionChanged
                                   ? selectedEmbeddingPreset.apiKeyPlaceholder
                                   : selectedConfig?.has_embedding_api_key

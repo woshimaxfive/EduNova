@@ -1855,6 +1855,11 @@ describe("student interaction affordances", () => {
     expect(within(chatProviderPreset).getAllByRole("option")[0]).toHaveTextContent("讯飞星火 Spark");
     expect(within(chatProviderPreset).getByRole("option", { name: "百度千帆" })).toBeInTheDocument();
     expect(within(chatProviderPreset).getByRole("option", { name: "腾讯混元" })).toBeInTheDocument();
+    const embeddingProviderPreset = screen.getByRole("combobox", { name: "向量服务商" });
+    expect(within(embeddingProviderPreset).getByRole("option", { name: "暂不配置" })).toBeInTheDocument();
+    expect(within(embeddingProviderPreset).getByRole("option", { name: "阿里云百炼 · 文本向量" })).toBeInTheDocument();
+    expect(within(embeddingProviderPreset).queryByRole("option", { name: "DeepSeek" })).not.toBeInTheDocument();
+    expect(within(embeddingProviderPreset).queryByRole("option", { name: "Kimi" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /通义向量/ }));
     await user.click(screen.getByRole("button", { name: "设为向量默认" }));
@@ -1872,7 +1877,7 @@ describe("student interaction affordances", () => {
       "https://api.hunyuan.cloud.tencent.com/v1"
     );
     expect(screen.getByRole("textbox", { name: "向量 Base URL" })).toHaveValue(
-      "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+      "https://dashscope.aliyuncs.com/compatible-mode/v1"
     );
     expect(screen.getByRole("textbox", { name: "回答模型" })).toHaveValue("hunyuan-turbos-latest");
     expect(screen.getByRole("textbox", { name: "向量模型" })).toHaveValue("text-embedding-v4");
@@ -1902,7 +1907,7 @@ describe("student interaction affordances", () => {
         chat_model: "hunyuan-turbos-latest",
         embedding_preset_id: "qwen",
         embedding_provider: "openai_compatible",
-        embedding_base_url: "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+        embedding_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
         embedding_api_key: "qwen-embedding-secret",
         embedding_model: "text-embedding-v4",
         make_default: false,

@@ -519,7 +519,7 @@ Provider 抽象目标能力：
 Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已实现 OpenAI-compatible streaming 解析，Provider 会在请求回答连接的 `{base_url}/chat/completions` 时附带 `stream=true` 并解析 `data: {...}` 和 `[DONE]`。Phase 6.4 已实现 OpenAI-compatible embeddings：请求向量连接的 `{embedding_base_url}/embeddings` 时携带 `input`、`model` 和 `dimensions=1536`，若服务不支持 `dimensions` 会重试一次不带该字段，返回向量长度不等于 1536 时拒绝写入。设置页支持：
 
 - 多套用户个人配置，互相隔离保存和测试。
-- Provider 预设，首位为讯飞星火 Spark，OpenRouter 不再作为可见预设。
+- 回答 Provider 与向量 Provider 使用两套独立预设。回答侧首位为讯飞星火 Spark，并收录国内常用生成服务；向量侧只展示能够通过 OpenAI-compatible `/embeddings` 返回 1536 维结果的百炼 `text-embedding-v4`、硅基流动 `Qwen/Qwen3-Embedding-8B` 和自定义兼容服务，不把只有聊天能力或维度不兼容的服务伪装成可用向量预设。
 - 同一配置方案内并列的回答服务和向量服务；两组分别填写 Provider 预设、Base URL、API Key / APIPassword 和模型。
 - 向量服务用于资料与课程知识库向量化；缺省时明确使用关键词检索 fallback。
 - 指定配置的连通性测试。

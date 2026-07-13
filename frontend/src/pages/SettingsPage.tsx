@@ -22,6 +22,7 @@ import {
   createModelConfig,
   deleteModelConfig,
   listModelConfigs,
+  setDefaultEmbeddingConfig,
   setDefaultModelConfig,
   testModelConfig,
   testModelSettings,
@@ -106,10 +107,17 @@ function draftsMatch(left: ModelConfigDraft, right: ModelConfigDraft) {
 
 function configTestLabel(config: ModelConfigSummary) {
   const chatTest = config.connection_tests?.chat;
-  if (chatTest?.ok) return "回答已验证";
-  if (chatTest && !chatTest.ok) return "回答测试失败";
-  if (config.last_test_ok === true) return "回答已验证";
-  if (config.last_test_ok === false) return "回答测试失败";
+  const embeddingTest = config.connection_tests?.embedding;
+  if (config.chat_model) {
+    if (chatTest?.ok) return config.embedding_model && embeddingTest?.ok ? "两项已验证" : "回答已验证";
+    if (chatTest && !chatTest.ok) return "回答测试失败";
+    if (config.last_test_ok === true) return "回答已验证";
+    if (config.last_test_ok === false) return "回答测试失败";
+  }
+  if (config.embedding_model) {
+    if (embeddingTest?.ok) return "向量已验证";
+    if (embeddingTest && !embeddingTest.ok) return "向量测试失败";
+  }
   return "尚未测试";
 }
 
@@ -167,25 +175,37 @@ export function SettingsPage() {
   });
   const settingsList = modelConfigsQuery.data?.data ?? null;
   const configs = useMemo(() => settingsList?.configs ?? [], [settingsList?.configs]);
-  const defaultConfigId = settingsList?.default_config_id ?? null;
-  const defaultConfig = configs.find((config) => config.id === defaultConfigId) ?? null;
+  const defaultChatConfigId = settingsList?.default_chat_config_id ?? settingsList?.default_config_id ?? null;
+  const defaultEmbeddingConfigId = settingsList?.default_embedding_config_id ?? null;
+  const defaultChatConfig = configs.find((config) => config.id === defaultChatConfigId) ?? null;
+  const defaultEmbeddingConfig = configs.find((config) => config.id === defaultEmbeddingConfigId) ?? null;
   const selectedConfig = useMemo(() => {
     if (selectedConfigId === "new") return null;
     if (typeof selectedConfigId === "number") {
       return configs.find((config) => config.id === selectedConfigId) ?? null;
     }
-    return defaultConfig ?? configs[0] ?? null;
-  }, [configs, defaultConfig, selectedConfigId]);
+    return defaultChatConfig ?? defaultEmbeddingConfig ?? configs[0] ?? null;
+  }, [configs, defaultChatConfig, defaultEmbeddingConfig, selectedConfigId]);
   const currentDraft = selectedConfigId === null && selectedConfig ? draftFromConfig(selectedConfig) : draft;
   const selectedPreset = getProviderPreset(currentDraft.preset_id);
   const activeConfigId = typeof selectedConfigId === "number" ? selectedConfigId : selectedConfig?.id ?? null;
   const isCreating = selectedConfigId === "new" || !selectedConfig;
   const isDirty = isCreating || (selectedConfig ? !draftsMatch(currentDraft, draftFromConfig(selectedConfig)) : false);
-  const canSave = Boolean(currentDraft.display_name.trim() && currentDraft.base_url.trim() && currentDraft.chat_model.trim());
+  const canSave = Boolean(
+    currentDraft.display_name.trim()
+    && currentDraft.base_url.trim()
+    && (currentDraft.chat_model.trim() || currentDraft.embedding_model.trim())
+  );
   const systemSummary = settingsList?.system_summary ?? null;
-  const effectiveSource = defaultConfig ? "个人默认配置" : systemSummary?.source === "system" ? "服务器兜底" : "尚未配置";
-  const effectiveChatReady = defaultConfig?.can_use_model ?? systemSummary?.can_use_model ?? false;
-  const effectiveEmbeddingModel = defaultConfig?.embedding_model || systemSummary?.embedding_model || null;
+  const effectiveSource = defaultChatConfig?.display_name
+    ?? (systemSummary?.source === "system" ? "服务器回答配置" : "回答未配置");
+  const effectiveChatReady = defaultChatConfig?.can_use_model ?? systemSummary?.can_use_model ?? false;
+  const effectiveEmbeddingModel = defaultEmbeddingConfig?.embedding_model || systemSummary?.embedding_model || null;
+  const effectiveEmbeddingReady = defaultEmbeddingConfig?.can_use_embedding_model
+    ?? systemSummary?.can_use_embedding_model
+    ?? false;
+  const effectiveEmbeddingSource = defaultEmbeddingConfig?.display_name
+    ?? (systemSummary?.embedding_model ? "服务器向量配置" : null);
   const starterModeLabel = authUser?.starterMode === "ai_intro" ? "示例课程开始" : "空白开始";
 
   function selectSection(section: SettingsSection) {
@@ -227,9 +247,19 @@ export function SettingsPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["settings", "model-configs"] });
       await queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
-      showToast("已设为默认模型配置。", "success");
+      showToast("已设为默认回答配置。", "success");
     },
-    onError: (error) => setModelFeedback(getApiErrorMessage(error, "默认配置切换失败，请稍后重试。"))
+    onError: (error) => setModelFeedback(getApiErrorMessage(error, "默认回答配置切换失败，请稍后重试。"))
+  });
+
+  const embeddingDefaultConfigMutation = useMutation({
+    mutationFn: (configId: number) => setDefaultEmbeddingConfig(configId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["settings", "model-configs"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
+      showToast("已设为默认向量配置。", "success");
+    },
+    onError: (error) => setModelFeedback(getApiErrorMessage(error, "默认向量配置切换失败，请稍后重试。"))
   });
 
   const testConnectionMutation = useMutation({
@@ -254,7 +284,8 @@ export function SettingsPage() {
     onSuccess: async (response) => {
       queryClient.setQueryData(["settings", "model-configs"], response);
       await queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
-      const nextConfig = response.data.configs.find((config) => config.id === response.data.default_config_id)
+      const nextConfig = response.data.configs.find((config) => config.id === response.data.default_chat_config_id)
+        ?? response.data.configs.find((config) => config.id === response.data.default_embedding_config_id)
         ?? response.data.configs[0]
         ?? null;
       setSelectedConfigId(nextConfig?.id ?? "new");
@@ -327,7 +358,7 @@ export function SettingsPage() {
 
   function saveModelConfiguration() {
     if (!canSave) {
-      setModelFeedback("请先补全配置名称、Base URL 和回答模型。");
+      setModelFeedback("请先补全配置名称、Base URL，并至少填写回答模型或向量模型中的一项。");
       return;
     }
     const apiKey = currentDraft.api_key.trim();
@@ -341,7 +372,11 @@ export function SettingsPage() {
       ...(apiKey ? { api_key: apiKey } : {})
     };
     if (isCreating || activeConfigId === null) {
-      createConfigMutation.mutate({ ...payload, make_default: configs.length === 0 });
+      createConfigMutation.mutate({
+        ...payload,
+        make_default: !defaultChatConfig && Boolean(payload.chat_model),
+        make_embedding_default: !defaultEmbeddingConfig && Boolean(payload.embedding_model)
+      });
     } else {
       updateConfigMutation.mutate({ configId: activeConfigId, payload });
     }
@@ -397,9 +432,13 @@ export function SettingsPage() {
               </div>
             </div>
             <div className="settings-effective-state" aria-label="当前模型状态">
-              <span>{effectiveSource}</span>
+              <span>回答 · {effectiveSource}</span>
               <strong>{effectiveChatReady ? "回答可用" : "回答未就绪"}</strong>
-              <small>{effectiveEmbeddingModel ? `向量 · ${effectiveEmbeddingModel}` : "向量未配置"}</small>
+              <small>
+                {effectiveEmbeddingModel
+                  ? `${effectiveEmbeddingReady ? "向量可用" : "向量未就绪"} · ${effectiveEmbeddingSource} · ${effectiveEmbeddingModel}`
+                  : "向量未配置"}
+              </small>
             </div>
           </header>
 
@@ -434,34 +473,38 @@ export function SettingsPage() {
                     </div>
                   ) : null}
 
-                  {!modelConfigsQuery.isError && !defaultConfig ? (
+                  {!modelConfigsQuery.isError && (!defaultChatConfig || !defaultEmbeddingConfig) ? (
                     <section className="settings-system-fallback" aria-label="服务器模型配置">
                       <header>
                         <div>
                           <span>当前运行来源</span>
-                          <strong>{systemSummary?.source === "system" ? "服务器兜底配置" : "尚未配置可用模型"}</strong>
+                          <strong>{systemSummary?.source === "system" ? "缺失用途将使用服务器兜底" : "部分模型用途尚未配置"}</strong>
                         </div>
-                        <small>服务器配置只读，个人配置保存并设为默认后将优先使用。</small>
+                        <small>回答与向量分别选择默认配置，互不覆盖。</small>
                       </header>
                       <div className="settings-test-grid">
-                        <ConnectionTestCard
-                          operation="chat"
-                          model={systemSummary?.chat_model ?? null}
-                          result={systemTests.chat}
-                          dirty={false}
-                          disabled={testConnectionMutation.isPending}
-                          pending={testPending("chat")}
-                          onTest={() => runConnectionTest("chat", null)}
-                        />
-                        <ConnectionTestCard
-                          operation="embedding"
-                          model={systemSummary?.embedding_model ?? null}
-                          result={systemTests.embedding}
-                          dirty={false}
-                          disabled={testConnectionMutation.isPending}
-                          pending={testPending("embedding")}
-                          onTest={() => runConnectionTest("embedding", null)}
-                        />
+                        {!defaultChatConfig ? (
+                          <ConnectionTestCard
+                            operation="chat"
+                            model={systemSummary?.chat_model ?? null}
+                            result={systemTests.chat}
+                            dirty={false}
+                            disabled={testConnectionMutation.isPending}
+                            pending={testPending("chat")}
+                            onTest={() => runConnectionTest("chat", null)}
+                          />
+                        ) : null}
+                        {!defaultEmbeddingConfig ? (
+                          <ConnectionTestCard
+                            operation="embedding"
+                            model={systemSummary?.embedding_model ?? null}
+                            result={systemTests.embedding}
+                            dirty={false}
+                            disabled={testConnectionMutation.isPending}
+                            pending={testPending("embedding")}
+                            onTest={() => runConnectionTest("embedding", null)}
+                          />
+                        ) : null}
                       </div>
                     </section>
                   ) : null}
@@ -482,9 +525,12 @@ export function SettingsPage() {
                           >
                             <span className="settings-config-row-title">
                               <strong>{config.display_name}</strong>
-                              {config.is_default ? <small>默认</small> : null}
+                              <span className="settings-config-defaults">
+                                {config.is_default ? <small>回答</small> : null}
+                                {config.is_embedding_default ? <small>向量</small> : null}
+                              </span>
                             </span>
-                            <span>{config.chat_model || "未填写回答模型"}</span>
+                            <span>{config.chat_model || config.embedding_model || "尚未填写模型"}</span>
                             <em className={configTestLabel(config).includes("失败") ? "failed" : ""}>{configTestLabel(config)}</em>
                           </button>
                         ))}
@@ -498,7 +544,7 @@ export function SettingsPage() {
                         {selectedConfigId === "new" ? (
                           <button type="button" className="active settings-config-draft">
                             <span className="settings-config-row-title"><strong>新建配置</strong><small>草稿</small></span>
-                            <span>{currentDraft.chat_model || "待填写回答模型"}</span>
+                            <span>{currentDraft.chat_model || currentDraft.embedding_model || "待填写模型"}</span>
                             <em>保存后可测试</em>
                           </button>
                         ) : null}
@@ -508,7 +554,17 @@ export function SettingsPage() {
                     <section className="settings-config-editor" aria-label="模型配置编辑器">
                       <header>
                         <div>
-                          <span>{isCreating ? "新配置" : selectedConfig?.is_default ? "默认配置" : "个人配置"}</span>
+                          <span>
+                            {isCreating
+                              ? "新配置"
+                              : selectedConfig?.is_default && selectedConfig?.is_embedding_default
+                                ? "回答与向量默认"
+                                : selectedConfig?.is_default
+                                  ? "回答默认"
+                                  : selectedConfig?.is_embedding_default
+                                    ? "向量默认"
+                                    : "个人配置"}
+                          </span>
                           <h3>{currentDraft.display_name || "未命名配置"}</h3>
                         </div>
                         {selectedConfig?.api_key_masked ? (
@@ -549,7 +605,12 @@ export function SettingsPage() {
                         </label>
                         <label>
                           <span>回答模型</span>
-                          <input aria-label="回答模型" value={currentDraft.chat_model} onChange={(event) => updateDraft("chat_model", event.target.value)} />
+                          <input
+                            aria-label="回答模型"
+                            value={currentDraft.chat_model}
+                            placeholder="仅作为向量配置时可留空"
+                            onChange={(event) => updateDraft("chat_model", event.target.value)}
+                          />
                         </label>
                       </div>
 
@@ -564,7 +625,7 @@ export function SettingsPage() {
                             onChange={(event) => updateDraft("embedding_model", event.target.value)}
                           />
                         </label>
-                        <p>向量模型只用于资料与课程切片的语义召回，不参与回答生成。</p>
+                        <p>向量模型只用于资料语义召回。保存后可将本配置单独设为向量默认，不会改变回答模型。</p>
                       </details>
 
                       {!isCreating ? (
@@ -572,6 +633,11 @@ export function SettingsPage() {
                           <ConnectionTestCard
                             operation="chat"
                             model={selectedConfig?.chat_model ?? null}
+                            missingMessage={defaultChatConfig
+                              ? `此配置只承担向量检索；回答继续使用 ${defaultChatConfig.display_name}。`
+                              : settingsList?.system_summary.can_use_model
+                                ? "此配置只承担向量检索；回答继续使用服务器配置。"
+                                : "此配置只承担向量检索；当前没有可用回答模型。"}
                             result={selectedConfig?.connection_tests?.chat ?? null}
                             dirty={isDirty}
                             disabled={isDirty || testConnectionMutation.isPending}
@@ -581,6 +647,11 @@ export function SettingsPage() {
                           <ConnectionTestCard
                             operation="embedding"
                             model={selectedConfig?.embedding_model ?? null}
+                            missingMessage={defaultEmbeddingConfig
+                              ? `此配置只承担回答；向量检索继续使用 ${defaultEmbeddingConfig.display_name}。`
+                              : settingsList?.system_summary.can_use_embedding_model
+                                ? "此配置只承担回答；向量检索继续使用服务器配置。"
+                                : "此配置只承担回答；向量检索将使用关键词检索。"}
                             result={selectedConfig?.connection_tests?.embedding ?? null}
                             dirty={isDirty}
                             disabled={isDirty || testConnectionMutation.isPending}
@@ -612,9 +683,19 @@ export function SettingsPage() {
                             <Trash size={16} weight="duotone" aria-hidden="true" />
                           </button>
                         ) : null}
-                        {!isCreating && !selectedConfig?.is_default ? (
+                        {!isCreating && currentDraft.chat_model && !selectedConfig?.is_default ? (
                           <button type="button" className="secondary-action" onClick={() => activeConfigId && defaultConfigMutation.mutate(activeConfigId)} disabled={defaultConfigMutation.isPending || isDirty}>
-                            设为默认
+                            设为回答默认
+                          </button>
+                        ) : null}
+                        {!isCreating && currentDraft.embedding_model && !selectedConfig?.is_embedding_default ? (
+                          <button
+                            type="button"
+                            className="secondary-action"
+                            onClick={() => activeConfigId && embeddingDefaultConfigMutation.mutate(activeConfigId)}
+                            disabled={embeddingDefaultConfigMutation.isPending || isDirty}
+                          >
+                            设为向量默认
                           </button>
                         ) : null}
                         <button type="button" className="primary-action" onClick={saveModelConfiguration} disabled={!canSave || savePending}>

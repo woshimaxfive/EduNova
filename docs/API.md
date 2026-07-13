@@ -1034,7 +1034,7 @@ Authorization: Bearer <token>
 - 无 token 返回 401。
 - 访问他人课程返回 404。
 - 无命中时 `results=[]`，前端必须显示资料不足，不得伪造引用。
-- Phase 6.4 后，后端会优先使用当前用户默认模型配置中的 `embedding_model` 调用 OpenAI-compatible `{base_url}/embeddings`，请求维度为 1536；如果服务不支持 `dimensions` 参数，会自动重试一次不带该字段。
+- 后端优先使用当前用户向量默认配置中的 `embedding_model` 调用该配置的 OpenAI-compatible `{base_url}/embeddings`，请求维度为 1536；如果服务不支持 `dimensions` 参数，会自动重试一次不带该字段。向量默认与回答默认可以来自不同配置。
 - 如果用户默认配置和服务器兜底都没有可用 embedding 模型，或 Provider 调用失败，后端使用关键词 fallback 保证开源和测试环境仍可检索；返回 `local_fallback` 或 `provider_failed`，`local-hash-1536` 不进入课程向量候选。
 - 外部 embedding 失败时不阻断问答，接口会退回关键词检索并通过 `embedding_status` 暴露状态。
 - 本轮不接讯飞原生 Embeddingp/Embeddingq；其独立授权、签名鉴权和 2560 维输出放到后续专项。
@@ -2124,7 +2124,7 @@ course_id=101
 
 ### POST `/settings/model/test`
 
-用途：测试当前有效模型连通性。Phase 6.2 后该接口作为兼容接口保留，测试当前用户默认配置；没有默认配置时测试服务器兜底配置。请求体可省略，省略时仍按旧行为测试回答模型；`operation=embedding` 时执行一次独立向量探测。两种探测都不自动重试，也不跨 Provider 切换。
+用途：测试当前有效模型连通性。请求体省略时测试当前回答默认配置；`operation=embedding` 时测试当前向量默认配置。对应用途没有个人默认时，分别回退服务器配置。两种探测都不自动重试，也不跨 Provider 切换。
 
 可选请求：
 
@@ -2156,7 +2156,7 @@ course_id=101
 
 ### GET `/settings/model/configs`
 
-用途：读取当前用户所有模型配置和服务器兜底摘要。Phase 6.2 已实现，必须携带 JWT。每条用户配置互相隔离，Key 只返回脱敏值。
+用途：读取当前用户所有模型配置和服务器兜底摘要。必须携带 JWT。每条用户配置互相隔离，Key 只返回脱敏值；`can_use_model` 表示回答能力，`can_use_embedding_model` 独立表示向量能力。
 
 响应：
 
@@ -2176,7 +2176,9 @@ course_id=101
         "has_api_key": true,
         "api_key_masked": "sp-u...oken",
         "can_use_model": true,
+        "can_use_embedding_model": false,
         "is_default": true,
+        "is_embedding_default": false,
         "last_test_ok": true,
         "last_test_message": "模型连接成功。",
         "last_tested_at": "2026-07-13T10:00:00Z",
@@ -2201,9 +2203,12 @@ course_id=101
       "embedding_model": null,
       "has_api_key": false,
       "api_key_masked": null,
-      "can_use_model": false
+      "can_use_model": false,
+      "can_use_embedding_model": false
     },
-    "default_config_id": 1
+    "default_config_id": 1,
+    "default_chat_config_id": 1,
+    "default_embedding_config_id": null
   },
   "trace_id": "trace_settings_configs"
 }
@@ -2211,7 +2216,7 @@ course_id=101
 
 ### POST `/settings/model/configs`
 
-用途：创建当前用户的一条模型配置。`display_name` 在同一用户内不能重复；`make_default=true` 时会取消该用户其他默认项。第一条个人配置会自动成为默认配置。
+用途：创建当前用户的一条模型配置。`display_name` 在同一用户内不能重复；回答模型与向量模型至少填写一项。`make_default=true` 只设置回答默认，`make_embedding_default=true` 只设置向量默认；同一配置也可以同时承担两种用途。
 
 请求：
 
@@ -2224,7 +2229,8 @@ course_id=101
   "api_key": "example-key",
   "chat_model": "lite",
   "embedding_model": null,
-  "make_default": true
+  "make_default": true,
+  "make_embedding_default": false
 }
 ```
 
@@ -2236,7 +2242,11 @@ course_id=101
 
 ### POST `/settings/model/configs/{config_id}/default`
 
-用途：把当前用户自己的某条配置设为默认，并取消同用户其他默认项。课程 RAG 回答运行时优先使用这条默认配置；默认不存在时才回退服务器 `.env` 配置。
+用途：把当前用户自己的某条配置设为回答默认，并取消同用户其他回答默认项。主页、课程问答和生成型 Graph 优先使用回答默认；不存在时回退服务器 `.env` 回答配置。`default_config_id` 继续作为 `default_chat_config_id` 的兼容别名。
+
+### POST `/settings/model/configs/{config_id}/embedding-default`
+
+用途：把包含 `embedding_model` 的配置设为向量默认，并取消同用户其他向量默认项。资料与课程 RAG 只从该配置解析 Base URL、Key 和向量模型；不存在时独立回退服务器 `.env` 向量配置，不再跟随回答默认。
 
 ### POST `/settings/model/configs/{config_id}/test`
 
@@ -2244,14 +2254,15 @@ course_id=101
 
 ### DELETE `/settings/model/configs/{config_id}`
 
-用途：删除当前用户自己的某条模型配置。删除默认配置后，后端会把剩余配置中最近更新的一条设为默认；没有个人配置时回退服务器配置。
+用途：删除当前用户自己的某条模型配置。若该配置承担回答或向量默认，对应用途分别选择剩余的可用配置；没有候选时独立回退服务器配置。
 
 模型 Provider 第一版按 OpenAI-compatible 协议实现：
 
 - 聊天回答：`{base_url}/chat/completions`。
 - 向量生成：`{base_url}/embeddings`。
-- 课程回答运行时优先使用当前用户默认配置。
-- 用户没有默认配置时回退服务器 `.env` 兜底配置。
+- 回答运行时优先使用当前用户回答默认配置。
+- Embedding 运行时优先使用当前用户向量默认配置。
+- 某一用途没有个人默认时，仅该用途回退服务器 `.env` 兜底配置。
 
 Phase 6.2 后设置页可见预设收敛为：
 

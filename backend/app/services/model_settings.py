@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Iterator, Literal, Protocol
 
 from cryptography.fernet import Fernet, InvalidToken
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
@@ -49,11 +49,13 @@ class ModelNotConfiguredError(RuntimeError):
 class ModelSettingsRepository(Protocol):
     def get_for_user(self, user_id: int) -> ModelSetting | None: ...
     def get_default_for_user(self, user_id: int) -> ModelSetting | None: ...
+    def get_embedding_default_for_user(self, user_id: int) -> ModelSetting | None: ...
     def list_for_user(self, user_id: int) -> list[ModelSetting]: ...
     def get_by_id_for_user(self, setting_id: int, user_id: int) -> ModelSetting | None: ...
     def save(self, setting: ModelSetting) -> None: ...
     def delete(self, setting: ModelSetting) -> None: ...
     def unset_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
+    def unset_embedding_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
     def commit(self) -> None: ...
     def rollback(self) -> None: ...
 
@@ -86,7 +88,7 @@ class SaveModelSettingsRequest(BaseModel):
     provider: Literal["openai_compatible"]
     base_url: str = Field(min_length=1, max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
-    chat_model: str = Field(min_length=1, max_length=120)
+    chat_model: str | None = Field(default=None, max_length=120)
     embedding_model: str | None = Field(default=None, max_length=120)
 
     @field_validator("base_url", "api_key", "chat_model", "embedding_model", mode="before")
@@ -96,11 +98,18 @@ class SaveModelSettingsRequest(BaseModel):
             return None
         return str(value).strip()
 
+    @model_validator(mode="after")
+    def require_at_least_one_model(self) -> SaveModelSettingsRequest:
+        if not self.chat_model and not self.embedding_model:
+            raise ValueError("回答模型和向量模型至少填写一项。")
+        return self
+
 
 class SaveModelConfigRequest(SaveModelSettingsRequest):
     display_name: str = Field(min_length=1, max_length=120)
     preset_id: str | None = Field(default=None, max_length=80)
     make_default: bool = False
+    make_embedding_default: bool = False
 
     @field_validator("display_name", "preset_id", mode="before")
     @classmethod
@@ -116,9 +125,10 @@ class UpdateModelConfigRequest(BaseModel):
     provider: Literal["openai_compatible"] | None = None
     base_url: str | None = Field(default=None, min_length=1, max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
-    chat_model: str | None = Field(default=None, min_length=1, max_length=120)
+    chat_model: str | None = Field(default=None, max_length=120)
     embedding_model: str | None = Field(default=None, max_length=120)
     make_default: bool | None = None
+    make_embedding_default: bool | None = None
 
     @field_validator("display_name", "preset_id", "base_url", "api_key", "chat_model", "embedding_model", mode="before")
     @classmethod
@@ -154,6 +164,7 @@ class ModelSettingsSummary(BaseModel):
     has_api_key: bool
     api_key_masked: str | None
     can_use_model: bool
+    can_use_embedding_model: bool
 
 
 class ModelConfigSummary(BaseModel):
@@ -168,7 +179,9 @@ class ModelConfigSummary(BaseModel):
     has_api_key: bool
     api_key_masked: str | None
     can_use_model: bool
+    can_use_embedding_model: bool
     is_default: bool
+    is_embedding_default: bool
     last_test_ok: bool | None
     last_test_message: str | None
     last_tested_at: datetime | None
@@ -179,6 +192,8 @@ class ModelSettingsListResponse(BaseModel):
     configs: list[ModelConfigSummary]
     system_summary: ModelSettingsSummary
     default_config_id: int | None
+    default_chat_config_id: int | None
+    default_embedding_config_id: int | None
 
 
 class ModelConnectionTestResponse(BaseModel):
@@ -220,12 +235,24 @@ class SqlAlchemyModelSettingsRepository:
             .order_by(ModelSetting.updated_at.desc(), ModelSetting.id.desc())
         )
 
+    def get_embedding_default_for_user(self, user_id: int) -> ModelSetting | None:
+        return self.db.scalar(
+            select(ModelSetting)
+            .where(ModelSetting.user_id == user_id, ModelSetting.is_embedding_default.is_(True))
+            .order_by(ModelSetting.updated_at.desc(), ModelSetting.id.desc())
+        )
+
     def list_for_user(self, user_id: int) -> list[ModelSetting]:
         return list(
             self.db.scalars(
                 select(ModelSetting)
                 .where(ModelSetting.user_id == user_id)
-                .order_by(ModelSetting.is_default.desc(), ModelSetting.updated_at.desc(), ModelSetting.id.desc())
+                .order_by(
+                    ModelSetting.is_default.desc(),
+                    ModelSetting.is_embedding_default.desc(),
+                    ModelSetting.updated_at.desc(),
+                    ModelSetting.id.desc(),
+                )
             )
         )
 
@@ -247,6 +274,12 @@ class SqlAlchemyModelSettingsRepository:
         if except_setting_id is not None:
             statement = statement.where(ModelSetting.id != except_setting_id)
         self.db.execute(statement.values(is_default=False))
+
+    def unset_embedding_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None:
+        statement = update(ModelSetting).where(ModelSetting.user_id == user_id)
+        if except_setting_id is not None:
+            statement = statement.where(ModelSetting.id != except_setting_id)
+        self.db.execute(statement.values(is_embedding_default=False))
 
     def commit(self) -> None:
         self.db.commit()
@@ -287,14 +320,19 @@ class ModelSettingsService:
 
     def list_configs(self, user: User) -> ModelSettingsListResponse:
         configs = [self._config_summary(setting) for setting in self.repository.list_for_user(user.id)]
-        default_config = next((config for config in configs if config.is_default), None)
+        default_chat_config = next((config for config in configs if config.is_default), None)
+        default_embedding_config = next((config for config in configs if config.is_embedding_default), None)
         return ModelSettingsListResponse(
             configs=configs,
             system_summary=self._system_summary(),
-            default_config_id=default_config.id if default_config else None,
+            default_config_id=default_chat_config.id if default_chat_config else None,
+            default_chat_config_id=default_chat_config.id if default_chat_config else None,
+            default_embedding_config_id=default_embedding_config.id if default_embedding_config else None,
         )
 
     def save(self, user: User, payload: SaveModelSettingsRequest) -> ModelSettingsSummary:
+        if not payload.chat_model:
+            raise ModelSettingsValidationError("兼容设置接口必须填写回答模型。")
         existing = self.repository.get_default_for_user(user.id)
         setting = existing or ModelSetting(
             user_id=user.id,
@@ -306,22 +344,31 @@ class ModelSettingsService:
         self._apply_settings_payload(setting, payload)
         setting.is_default = True
         self.repository.unset_defaults_for_user(user.id, except_setting_id=setting.id)
+        setting.is_embedding_default = bool(setting.embedding_model)
+        if setting.is_embedding_default:
+            self.repository.unset_embedding_defaults_for_user(user.id, except_setting_id=setting.id)
         self._save_and_commit(setting)
         return self.get_summary(user)
 
     def create_config(self, user: User, payload: SaveModelConfigRequest) -> ModelConfigSummary:
         existing_configs = self.repository.list_for_user(user.id)
         self._ensure_unique_display_name(user.id, payload.display_name)
+        has_chat_default = any(candidate.is_default for candidate in existing_configs)
+        has_embedding_default = any(candidate.is_embedding_default for candidate in existing_configs)
         setting = ModelSetting(
             user_id=user.id,
             display_name=payload.display_name,
             preset_id=payload.preset_id or None,
             provider="openai_compatible",
-            is_default=payload.make_default or not existing_configs,
+            is_default=bool(payload.chat_model) and (payload.make_default or not has_chat_default),
+            is_embedding_default=bool(payload.embedding_model)
+            and (payload.make_embedding_default or not has_embedding_default),
         )
         self._apply_settings_payload(setting, payload)
         if setting.is_default:
             self.repository.unset_defaults_for_user(user.id)
+        if setting.is_embedding_default:
+            self.repository.unset_embedding_defaults_for_user(user.id)
         self._save_and_commit(setting)
         return self._config_summary(setting)
 
@@ -338,27 +385,48 @@ class ModelSettingsService:
         if payload.base_url is not None:
             setting.base_url = payload.base_url
         if payload.chat_model is not None:
-            setting.chat_model = payload.chat_model
+            setting.chat_model = payload.chat_model or None
         if payload.embedding_model is not None:
             setting.embedding_model = payload.embedding_model or None
         if payload.api_key:
             setting.api_key_ciphertext = self._encrypt_api_key(payload.api_key)
         if payload.make_default:
+            if not setting.chat_model:
+                raise ModelSettingsValidationError("该配置没有回答模型，不能设为回答默认。")
             self.repository.unset_defaults_for_user(user.id, except_setting_id=config_id)
             setting.is_default = True
+        if payload.make_embedding_default:
+            if not setting.embedding_model:
+                raise ModelSettingsValidationError("该配置没有向量模型，不能设为向量默认。")
+            self.repository.unset_embedding_defaults_for_user(user.id, except_setting_id=config_id)
+            setting.is_embedding_default = True
+        if not setting.chat_model and not setting.embedding_model:
+            raise ModelSettingsValidationError("回答模型和向量模型至少填写一项。")
+        if setting.is_default and not setting.chat_model:
+            raise ModelSettingsValidationError("回答默认配置不能清空回答模型。")
+        if setting.is_embedding_default and not setting.embedding_model:
+            raise ModelSettingsValidationError("向量默认配置不能清空向量模型。")
         self._save_and_commit(setting)
         return self._config_summary(setting)
 
     def delete_config(self, user: User, config_id: int) -> ModelSettingsListResponse:
         setting = self._get_user_setting_or_raise(user, config_id)
         was_default = setting.is_default
+        was_embedding_default = setting.is_embedding_default
         try:
             self.repository.delete(setting)
             if was_default:
                 remaining = [candidate for candidate in self.repository.list_for_user(user.id) if candidate.id != config_id]
-                if remaining:
-                    remaining[0].is_default = True
-                    self.repository.save(remaining[0])
+                next_chat = next((candidate for candidate in remaining if candidate.chat_model), None)
+                if next_chat:
+                    next_chat.is_default = True
+                    self.repository.save(next_chat)
+            if was_embedding_default:
+                remaining = [candidate for candidate in self.repository.list_for_user(user.id) if candidate.id != config_id]
+                next_embedding = next((candidate for candidate in remaining if candidate.embedding_model), None)
+                if next_embedding:
+                    next_embedding.is_embedding_default = True
+                    self.repository.save(next_embedding)
             self.repository.commit()
         except Exception:
             self.repository.rollback()
@@ -367,8 +435,19 @@ class ModelSettingsService:
 
     def set_default_config(self, user: User, config_id: int) -> ModelSettingsListResponse:
         setting = self._get_user_setting_or_raise(user, config_id)
+        if not setting.chat_model:
+            raise ModelSettingsValidationError("该配置没有回答模型，不能设为回答默认。")
         setting.is_default = True
         self.repository.unset_defaults_for_user(user.id, except_setting_id=config_id)
+        self._save_and_commit(setting)
+        return self.list_configs(user)
+
+    def set_embedding_default_config(self, user: User, config_id: int) -> ModelSettingsListResponse:
+        setting = self._get_user_setting_or_raise(user, config_id)
+        if not setting.embedding_model:
+            raise ModelSettingsValidationError("该配置没有向量模型，不能设为向量默认。")
+        setting.is_embedding_default = True
+        self.repository.unset_embedding_defaults_for_user(user.id, except_setting_id=config_id)
         self._save_and_commit(setting)
         return self.list_configs(user)
 
@@ -393,7 +472,7 @@ class ModelSettingsService:
         )
 
     def resolve_embedding_runtime_config(self, user: User) -> RuntimeModelConfig:
-        user_setting = self.repository.get_default_for_user(user.id)
+        user_setting = self.repository.get_embedding_default_for_user(user.id)
         if user_setting is not None:
             user_runtime = self._embedding_runtime_from_user_setting(user_setting)
             if user_runtime.can_use_model:
@@ -710,6 +789,7 @@ class ModelSettingsService:
 
     def _config_summary(self, setting: ModelSetting) -> ModelConfigSummary:
         runtime = self._runtime_from_user_setting(setting)
+        embedding_runtime = self._embedding_runtime_from_user_setting(setting)
         return ModelConfigSummary(
             id=setting.id,
             display_name=setting.display_name,
@@ -721,7 +801,9 @@ class ModelSettingsService:
             has_api_key=bool(runtime.api_key),
             api_key_masked=self._mask_api_key(runtime.api_key),
             can_use_model=runtime.can_use_model,
+            can_use_embedding_model=embedding_runtime.can_use_model,
             is_default=setting.is_default,
+            is_embedding_default=setting.is_embedding_default,
             last_test_ok=setting.last_test_ok,
             last_test_message=setting.last_test_message,
             last_tested_at=setting.last_tested_at,
@@ -738,6 +820,12 @@ class ModelSettingsService:
             has_api_key=bool(runtime.api_key),
             api_key_masked=self._mask_api_key(runtime.api_key),
             can_use_model=runtime.can_use_model,
+            can_use_embedding_model=self._can_use_embedding_model(
+                provider=runtime.provider,
+                base_url=runtime.base_url,
+                api_key=runtime.api_key,
+                embedding_model=runtime.embedding_model,
+            ),
         )
 
     def _system_summary(self) -> ModelSettingsSummary:
@@ -757,12 +845,13 @@ class ModelSettingsService:
             has_api_key=False,
             api_key_masked=None,
             can_use_model=False,
+            can_use_embedding_model=False,
         )
 
     def _apply_settings_payload(self, setting: ModelSetting, payload: SaveModelSettingsRequest) -> None:
         setting.provider = self._normalize_provider(payload.provider)
         setting.base_url = payload.base_url
-        setting.chat_model = payload.chat_model
+        setting.chat_model = payload.chat_model or None
         setting.embedding_model = payload.embedding_model or None
         if isinstance(payload, SaveModelConfigRequest):
             setting.display_name = payload.display_name

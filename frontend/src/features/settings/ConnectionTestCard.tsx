@@ -8,6 +8,7 @@ import type {
 type ConnectionTestCardProps = {
   operation: ModelConnectionOperation;
   model: string | null;
+  missingMessage?: string;
   result?: ModelConnectionTestSnapshot | null;
   disabled: boolean;
   pending: boolean;
@@ -30,6 +31,7 @@ function formatTestTime(value?: string | null) {
 export function ConnectionTestCard({
   operation,
   model,
+  missingMessage,
   result,
   disabled,
   pending,
@@ -64,7 +66,7 @@ export function ConnectionTestCard({
       </header>
       <p>
         {!model
-          ? isEmbedding ? "此配置未设置向量模型，运行时将使用服务器配置或关键词 fallback。" : "请先填写并保存回答模型。"
+          ? missingMessage ?? (isEmbedding ? "此配置未设置向量模型。" : "此配置未设置回答模型。")
           : dirty
             ? "配置已有修改，保存后才能测试当前值。"
             : result?.message || "尚未执行连接测试。"}

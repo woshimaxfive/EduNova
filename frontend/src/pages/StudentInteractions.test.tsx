@@ -1588,13 +1588,36 @@ describe("student interaction affordances", () => {
           has_api_key: true,
           api_key_masked: "sp-u...oken",
           can_use_model: true,
+          can_use_embedding_model: false,
           is_default: true,
+          is_embedding_default: false,
+          last_test_ok: null,
+          last_test_message: null,
+          last_tested_at: null
+        },
+        {
+          id: 3,
+          source: "user",
+          display_name: "通义向量",
+          preset_id: "qwen",
+          provider: "openai_compatible",
+          base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+          chat_model: null,
+          embedding_model: "text-embedding-v4",
+          has_api_key: true,
+          api_key_masked: "qw-u...oken",
+          can_use_model: false,
+          can_use_embedding_model: true,
+          is_default: false,
+          is_embedding_default: false,
           last_test_ok: null,
           last_test_message: null,
           last_tested_at: null
         }
       ],
       default_config_id: 1,
+      default_chat_config_id: 1,
+      default_embedding_config_id: null,
       system_summary: {
         source: "system",
         provider: "openai_compatible",
@@ -1603,7 +1626,8 @@ describe("student interaction affordances", () => {
         embedding_model: "system-embedding",
         has_api_key: true,
         api_key_masked: "sk-s...cret",
-        can_use_model: true
+        can_use_model: true,
+        can_use_embedding_model: true
       }
     };
     const calls: Array<{ method: string; url: string; payload: unknown }> = [];
@@ -1656,7 +1680,9 @@ describe("student interaction affordances", () => {
           has_api_key: true,
           api_key_masked: "hy-u...oken",
           can_use_model: true,
+          can_use_embedding_model: Boolean(data.embedding_model),
           is_default: false,
+          is_embedding_default: false,
           last_test_ok: null,
           last_test_message: null,
           last_tested_at: null
@@ -1679,6 +1705,7 @@ describe("student interaction affordances", () => {
         settingsList = {
           ...settingsList,
           default_config_id: 2,
+          default_chat_config_id: 2,
           configs: settingsList.configs.map((item) => ({
             ...item,
             is_default: item.id === 2
@@ -1687,6 +1714,25 @@ describe("student interaction affordances", () => {
 
         return {
           data: { data: settingsList, trace_id: "trace_settings_default" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === SETTINGS_ENDPOINTS.embeddingDefaultConfig(3) && method === "post") {
+        settingsList = {
+          ...settingsList,
+          default_embedding_config_id: 3,
+          configs: settingsList.configs.map((item) => ({
+            ...item,
+            is_embedding_default: item.id === 3
+          }))
+        };
+
+        return {
+          data: { data: settingsList, trace_id: "trace_settings_embedding_default" },
           status: 200,
           statusText: "OK",
           headers: {},
@@ -1729,6 +1775,7 @@ describe("student interaction affordances", () => {
         settingsList = {
           ...settingsList,
           default_config_id: 1,
+          default_chat_config_id: 1,
           configs: settingsList.configs
             .filter((item) => item.id !== 2)
             .map((item) => ({ ...item, is_default: item.id === 1 }))
@@ -1774,17 +1821,26 @@ describe("student interaction affordances", () => {
     renderPage(<SettingsPage />);
 
     expect(await screen.findByRole("button", { name: /星火 Lite/ })).toBeInTheDocument();
-    expect(screen.getByText("默认配置")).toBeInTheDocument();
+    expect(screen.getByText("回答默认")).toBeInTheDocument();
     expect(screen.getByText("sp-u...oken")).toBeInTheDocument();
     expect(screen.queryByText("sk-••••••••")).not.toBeInTheDocument();
     expect(screen.queryByText("深度思考")).not.toBeInTheDocument();
     expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();
     expect(screen.queryByText("OpenRouter")).not.toBeInTheDocument();
+    expect(screen.getByText("此配置只承担回答；向量检索继续使用服务器配置。")).toBeInTheDocument();
 
     const providerPreset = screen.getByRole("combobox", { name: "Provider 预设" });
     expect(within(providerPreset).getAllByRole("option")[0]).toHaveTextContent("讯飞星火 Spark");
     expect(within(providerPreset).getByRole("option", { name: "百度千帆" })).toBeInTheDocument();
     expect(within(providerPreset).getByRole("option", { name: "腾讯混元" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /通义向量/ }));
+    await user.click(screen.getByRole("button", { name: "设为向量默认" }));
+    await waitFor(() => expect(calls).toContainEqual({
+      method: "post",
+      url: SETTINGS_ENDPOINTS.embeddingDefaultConfig(3)
+    }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("已设为默认向量配置。"));
 
     await user.click(screen.getByRole("button", { name: "新建配置" }));
     await user.selectOptions(providerPreset, "tencent-hunyuan");
@@ -1814,17 +1870,18 @@ describe("student interaction affordances", () => {
         api_key: "hunyuan-user-secret",
         chat_model: "hunyuan-turbos-latest",
         embedding_model: "",
-        make_default: false
+        make_default: false,
+        make_embedding_default: false
       }
     });
 
-    await user.click(screen.getByRole("button", { name: "设为默认" }));
+    await user.click(screen.getByRole("button", { name: "设为回答默认" }));
     await waitFor(() => expect(calls).toContainEqual({
       method: "post",
       url: SETTINGS_ENDPOINTS.defaultConfig(2)
     }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("已设为默认模型配置。"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("已设为默认回答配置。"));
 
     await user.click(screen.getByRole("button", { name: "测试回答模型" }));
 

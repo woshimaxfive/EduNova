@@ -134,13 +134,14 @@ Docker Compose 会把仓库根目录的 `.env` 作为 backend 容器的可选运
 
 个人模型配置通过 `/settings/model/configs` 保存到 `model_settings`：
 
-- 课程回答优先使用当前用户默认配置。
-- 用户没有默认配置时才回退服务器配置。
+- 主页、课程回答和生成型 Graph 优先使用当前用户回答默认配置。
+- 资料与课程 RAG 的 Embedding 优先使用当前用户向量默认配置。
+- 两种用途可选择不同 Provider、Base URL 和 Key；某一用途没有个人默认时，只回退该用途的服务器配置。
 - 用户 API Key 使用 Fernet 加密保存。
 - 接口只返回脱敏 Key，不返回明文。
 
-`SYSTEM_EMBEDDING_MODEL` 在 Phase 6.4 后用于 OpenAI-compatible `{base_url}/embeddings`。
-为空或不可用时，课程知识库会显式使用 `local-hash-1536` 本地 fallback。
+`SYSTEM_EMBEDDING_MODEL` 在没有个人向量默认时用于 OpenAI-compatible `{base_url}/embeddings`。
+为空或不可用时，课程知识库显式退回关键词检索，不把本地 hash 宣称为语义向量命中。
 
 `MODEL_SETTINGS_ENCRYPTION_KEY` 必须使用 Fernet key。
 生产环境必须替换为不可公开的强随机值；没有该值时，后端拒绝保存用户 API Key。

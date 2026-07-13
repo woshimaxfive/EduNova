@@ -151,7 +151,7 @@ cd ..
 | `/materials/upload`、`/materials`、`/materials/{material_id}`、`/materials/{material_id}/progress`、`/courses/{course_id}/materials` | 无 token 401、当前用户隔离、TXT/Markdown 轻解析、PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT uploaded、图片仅入库且不 OCR、不支持扩展名、大小限制、未归属筛选、课程关联唯一性、进度状态稳定 |
 | `/courses/from-materials`、`/courses/*` | 无 token 401、用户隔离、五类已解析资料建课、v2 结构、来源覆盖、先修 ID 映射、环路拦截、embedding warning、事务回滚和旧课程兼容 |
 | `/rag/search` | 无 token 401、用户隔离、关键词命中、向量命中、混合排序、懒加载、fallback、无命中和新增分数字段 |
-| `/settings/model`、`/settings/model/test`、`/settings/model/configs` | 无 token 401、多配置隔离、默认配置、Key 加密、脱敏返回、回答/向量独立测试、未配置向量不污染回答状态、测试摘要持久化、OpenAI-compatible embedding 和不泄露 Key |
+| `/settings/model`、`/settings/model/test`、`/settings/model/configs` | 无 token 401、多配置隔离、回答/向量独立默认、跨 Provider 运行时解析、旧默认迁移、Key 加密、脱敏返回、独立测试、未配置向量不污染回答状态、测试摘要持久化和不泄露 Key |
 | `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、会话改名、软删除归档、删除后列表/详情隐藏、主页已选资料/联网/深思字段、同一 session 多轮上下文、上下文化 RAG/联网 query、无搜索 Key 不伪造来源、`home_tutor` trace、模型回答、SSE 流式、错误回滚和历史恢复 |
 | `/profiles/me`、`/profiles/chat`、`/profiles/events` | 无 token 401、稳定 8 维结构、显式更新、候选阈值、来源去重、自动应用、Review/Repair、逐维可信度、事件倒序、用户隔离和 metadata 脱敏 |
 | `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要、上下文计数 metadata 和 metadata 白名单 |
@@ -684,7 +684,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 5.2 前端测试覆盖 `rag.ts` API 合同、课程空间发送问题调用 `/rag/search`、命中时显示真实引用来源和片段、无命中时显示资料不足、检索失败时保留输入。
 - Phase 5.3 前端测试覆盖课程页加载 `scope=course&course_id=...` 会话列表、首次发送创建课程会话再发送消息、连续发送复用当前课程会话、点击课程内历史恢复真实 messages 和引用、无依据回答显示资料不足、发送失败保留输入。
 - Phase 6.1 前端测试覆盖 `settings.ts` 类型化 API 合同、设置页服务器/个人/未配置状态渲染、讯飞星火 Spark 首位 Provider 预设、保存模型配置、连接测试成功/失败反馈、不显示固定假 Key、不在设置页显示深度思考/联网搜索、课程空间渲染后端返回的模型回答和真实引用、模型失败时保留输入。
-- Phase 6.2 前端测试覆盖多套模型配置列表、创建配置、默认配置切换、删除配置、不同 Provider 的 Key 脱敏展示、指定配置连接测试、切换 Provider 不误用旧 Key，以及国内常用 Provider 和本地兼容服务的预设顺序与默认值；前端 API 合同测试覆盖新增 configs 路径、创建、更新、设默认、测试和删除函数。
+- Phase 6.2 及后续设置测试覆盖多套模型配置列表、创建配置、回答默认与向量默认独立切换、仅回答/仅向量配置、删除后的按能力接替、不同 Provider 的 Key 脱敏展示和指定配置连接测试；前端 API 合同测试覆盖创建、更新、两类默认、测试和删除函数。
 - Phase 6.3 前端测试覆盖课程页首次发送先创建课程会话再调用 stream endpoint、连续追问不重复创建会话、token 分片逐步显示、done 后渲染持久化消息和真实引用、stream error 时保留输入、显示输入区局部错误且不生成全局提示条。
 - Phase 6.4 前端测试覆盖课程页引用区显示混合检索状态、本地 fallback 状态和关键词 fallback 状态；引用仍可展开，流式回答和历史恢复不回归。
 - Phase 6.5 及 2026-07-11 重做后的前端测试覆盖默认问答、无常驻知识画布/证据层/资源区、空会话推荐问题、逐回答引用与 trace 隔离、历史问题资源生成、课程内容默认知识点和返回问答后 session 不丢失。

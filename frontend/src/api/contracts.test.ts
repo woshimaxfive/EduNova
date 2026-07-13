@@ -33,6 +33,7 @@ import {
   getModelSettings,
   listModelConfigs,
   saveModelSettings,
+  setDefaultEmbeddingConfig,
   setDefaultModelConfig,
   SETTINGS_ENDPOINTS,
   testModelConfig,
@@ -1811,6 +1812,8 @@ describe("frontend API contracts", () => {
               ? {
                   configs: [],
                   default_config_id: null,
+                  default_chat_config_id: null,
+                  default_embedding_config_id: null,
                   system_summary: {
                     source: "none",
                     provider: "openai_compatible",
@@ -1819,7 +1822,8 @@ describe("frontend API contracts", () => {
                     embedding_model: null,
                     has_api_key: false,
                     api_key_masked: null,
-                    can_use_model: false
+                    can_use_model: false,
+                    can_use_embedding_model: false
                   }
                 }
               : config.url?.endsWith("/test")
@@ -1842,7 +1846,9 @@ describe("frontend API contracts", () => {
                     has_api_key: true,
                     api_key_masked: "sp-u...oken",
                     can_use_model: true,
+                    can_use_embedding_model: false,
                     is_default: true,
+                    is_embedding_default: false,
                     last_test_ok: null,
                     last_test_message: null,
                     last_tested_at: null
@@ -1869,6 +1875,7 @@ describe("frontend API contracts", () => {
       });
       await updateModelConfig(3, { chat_model: "4.0Ultra", api_key: "" });
       await setDefaultModelConfig(3);
+      await setDefaultEmbeddingConfig(3);
       await testModelConfig(3);
       await deleteModelConfig(3);
 
@@ -1889,6 +1896,7 @@ describe("frontend API contracts", () => {
         },
         { url: SETTINGS_ENDPOINTS.config(3), method: "patch", data: { chat_model: "4.0Ultra", api_key: "" } },
         { url: SETTINGS_ENDPOINTS.defaultConfig(3), method: "post", data: undefined },
+        { url: SETTINGS_ENDPOINTS.embeddingDefaultConfig(3), method: "post", data: undefined },
         { url: SETTINGS_ENDPOINTS.testConfig(3), method: "post", data: { operation: "chat" } },
         { url: SETTINGS_ENDPOINTS.config(3), method: "delete", data: undefined }
       ]);

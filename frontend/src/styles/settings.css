@@ -438,6 +438,21 @@
   font-weight: 850;
 }
 
+.settings-config-defaults {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.settings-config-defaults small {
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--wide-workspace-divider));
+  border-radius: 4px;
+  padding: 1px 5px;
+  background: color-mix(in srgb, var(--accent-soft) 68%, transparent);
+}
+
 .settings-config-scroll button > span,
 .settings-config-scroll button > em {
   overflow: hidden;

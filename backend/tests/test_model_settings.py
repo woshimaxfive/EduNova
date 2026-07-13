@@ -70,10 +70,20 @@ class FakeModelSettingsRepository:
         )
         return default or self.settings_by_user.get(user_id)
 
+    def get_embedding_default_for_user(self, user_id: int) -> ModelSetting | None:
+        return next(
+            (
+                setting
+                for setting in self.settings_by_id.values()
+                if setting.user_id == user_id and setting.is_embedding_default
+            ),
+            None,
+        )
+
     def list_for_user(self, user_id: int) -> list[ModelSetting]:
         return sorted(
             [setting for setting in self.settings_by_id.values() if setting.user_id == user_id],
-            key=lambda setting: (not setting.is_default, -(setting.id or 0)),
+            key=lambda setting: (not setting.is_default, not setting.is_embedding_default, -(setting.id or 0)),
         )
 
     def get_by_id_for_user(self, setting_id: int, user_id: int) -> ModelSetting | None:
@@ -101,6 +111,11 @@ class FakeModelSettingsRepository:
                 setting.is_default = False
         if except_setting_id is None:
             self.settings_by_user.pop(user_id, None)
+
+    def unset_embedding_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None:
+        for setting in self.settings_by_id.values():
+            if setting.user_id == user_id and setting.id != except_setting_id:
+                setting.is_embedding_default = False
 
     def commit(self) -> None:
         self.committed = True
@@ -403,6 +418,88 @@ def test_multi_model_configs_are_independently_saved_and_defaulted() -> None:
     assert runtime.can_use_model is True
     assert configs["default_config_id"] == local["id"]
     assert [config["is_default"] for config in configs["configs"]] == [True, False]
+
+
+def test_chat_and_embedding_defaults_can_use_different_configs() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=FakeProvider())
+
+    spark = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="星火回答",
+            preset_id="spark",
+            provider="openai_compatible",
+            base_url="https://spark-api-open.xf-yun.com/v1",
+            api_key="spark-secret",
+            chat_model="lite",
+            make_default=True,
+        ),
+    ))
+    qwen_embedding = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="通义向量",
+            preset_id="qwen",
+            provider="openai_compatible",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            api_key="qwen-secret",
+            embedding_model="text-embedding-v4",
+            make_embedding_default=True,
+        ),
+    ))
+
+    configs = as_dict(service.list_configs(user))
+    chat_runtime = service.resolve_runtime_config(user)
+    embedding_runtime = service.resolve_embedding_runtime_config(user)
+
+    assert configs["default_config_id"] == spark["id"]
+    assert configs["default_chat_config_id"] == spark["id"]
+    assert configs["default_embedding_config_id"] == qwen_embedding["id"]
+    assert chat_runtime.base_url == "https://spark-api-open.xf-yun.com/v1"
+    assert chat_runtime.chat_model == "lite"
+    assert chat_runtime.api_key == "spark-secret"
+    assert embedding_runtime.base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    assert embedding_runtime.embedding_model == "text-embedding-v4"
+    assert embedding_runtime.api_key == "qwen-secret"
+
+
+def test_setting_default_requires_matching_capability() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=FakeProvider())
+    embedding_only = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="仅向量",
+            preset_id="custom",
+            provider="openai_compatible",
+            base_url="https://embedding.example.local/v1",
+            api_key="embedding-secret",
+            embedding_model="embedding-model",
+        ),
+    ))
+
+    with pytest.raises(module.ModelSettingsValidationError, match="没有回答模型"):
+        service.set_default_config(user, embedding_only["id"])
+
+
+def test_split_model_defaults_migration_preserves_existing_embedding_default() -> None:
+    migration_path = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "20260713_0018_split_model_defaults.py"
+    )
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert 'revision = "20260713_0018"' in migration_text
+    assert 'down_revision = "20260713_0017"' in migration_text
+    assert "is_embedding_default" in migration_text
+    assert "WHERE is_default = true" in migration_text
 
 
 def test_update_config_preserves_key_and_cross_user_access_is_blocked() -> None:
@@ -839,6 +936,11 @@ def test_model_settings_routes_use_documented_envelopes() -> None:
         json={"operation": "embedding"},
     )
     configs_response = client.get("/api/v1/settings/model/configs", headers={"Authorization": f"Bearer {token}"})
+    embedding_config_id = configs_response.json()["data"]["default_config_id"]
+    embedding_default_response = client.post(
+        f"/api/v1/settings/model/configs/{embedding_config_id}/embedding-default",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     create_response = client.post(
         "/api/v1/settings/model/configs",
         headers={"Authorization": f"Bearer {token}"},
@@ -884,7 +986,11 @@ def test_model_settings_routes_use_documented_envelopes() -> None:
     assert embedding_test_response.json()["data"]["model"] == "user-embedding"
     assert configs_response.status_code == 200
     assert configs_response.json()["data"]["default_config_id"] is not None
+    assert configs_response.json()["data"]["default_chat_config_id"] == embedding_config_id
+    assert configs_response.json()["data"]["default_embedding_config_id"] == embedding_config_id
     assert "sk-user-secret" not in str(configs_response.json())
+    assert embedding_default_response.status_code == 200
+    assert embedding_default_response.json()["data"]["default_embedding_config_id"] == embedding_config_id
     assert create_response.status_code == 200
     assert create_response.json()["data"]["display_name"] == "本地 Ollama"
     assert default_response.status_code == 200

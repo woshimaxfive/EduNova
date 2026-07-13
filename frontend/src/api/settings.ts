@@ -7,7 +7,8 @@ export const SETTINGS_ENDPOINTS = {
   configs: "/settings/model/configs",
   config: (configId: number) => `/settings/model/configs/${configId}`,
   testConfig: (configId: number) => `/settings/model/configs/${configId}/test`,
-  defaultConfig: (configId: number) => `/settings/model/configs/${configId}/default`
+  defaultConfig: (configId: number) => `/settings/model/configs/${configId}/default`,
+  embeddingDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/embedding-default`
 } as const;
 
 export type ModelSettingsSource = "user" | "system" | "none";
@@ -20,7 +21,7 @@ export type ModelSettingsRequest = {
   provider: ModelSettingsProvider;
   base_url: string;
   api_key?: string;
-  chat_model: string;
+  chat_model?: string;
   embedding_model?: string;
 };
 
@@ -28,6 +29,7 @@ export type ModelConfigRequest = ModelSettingsRequest & {
   display_name: string;
   preset_id?: string | null;
   make_default?: boolean;
+  make_embedding_default?: boolean;
 };
 
 export type ModelConfigUpdateRequest = Partial<ModelSettingsRequest> & {
@@ -46,6 +48,7 @@ export type ModelSettingsSummary = {
   has_api_key: boolean;
   api_key_masked: string | null;
   can_use_model: boolean;
+  can_use_embedding_model: boolean;
 };
 
 export type ModelConfigSummary = ModelSettingsSummary & {
@@ -53,6 +56,7 @@ export type ModelConfigSummary = ModelSettingsSummary & {
   display_name: string;
   preset_id: string | null;
   is_default: boolean;
+  is_embedding_default: boolean;
   last_test_ok: boolean | null;
   last_test_message: string | null;
   last_tested_at: string | null;
@@ -72,6 +76,8 @@ export type ModelConnectionTestSnapshot = {
 export type ModelSettingsListResponse = {
   configs: ModelConfigSummary[];
   default_config_id: number | null;
+  default_chat_config_id: number | null;
+  default_embedding_config_id: number | null;
   system_summary: ModelSettingsSummary;
 };
 
@@ -125,6 +131,13 @@ export async function deleteModelConfig(configId: number) {
 
 export async function setDefaultModelConfig(configId: number) {
   const response = await apiClient.post<ApiEnvelope<ModelSettingsListResponse>>(SETTINGS_ENDPOINTS.defaultConfig(configId));
+  return response.data;
+}
+
+export async function setDefaultEmbeddingConfig(configId: number) {
+  const response = await apiClient.post<ApiEnvelope<ModelSettingsListResponse>>(
+    SETTINGS_ENDPOINTS.embeddingDefaultConfig(configId)
+  );
   return response.data;
 }
 

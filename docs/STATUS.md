@@ -28,6 +28,8 @@ Phase 18 使用 Alembic `20260711_0015` 新增隐私安全的 `model_call_runs`�
 
 2026-07-13 已完成设置中心重做：`/app/settings` 采用模型连接、账号安全、数据隐私三分区连续工作区；回答与向量模型可独立测试并保存安全结果。Alembic `20260713_0017` 增加 `model_settings.connection_test_json` 和 `users.auth_version`；修改密码会使所有旧 JWT 失效，设置页随后清理当前登录态并返回登录页。
 
+2026-07-13 已拆分回答与向量默认配置：Alembic `20260713_0018` 增加 `is_embedding_default` 并兼容迁移旧配置；运行时分别解析回答默认和向量默认，因此讯飞/DeepSeek 可负责回答，通义等 OpenAI-compatible Embedding 服务可独立负责语义检索。设置页分别显示、切换和测试两种用途，某一用途缺失时只回退对应服务器配置。
+
 2026-07-13 已完成全站文字可读性收口：主页、课程空间、资料库、资源工坊、学习路径、练习、报告、画像和设置统一使用五级排版 token，可见辅助文字最低为 `13px`，控件与紧凑正文提升至约 `14.4–16px`；画像雷达与学习图表标签同步提升。Docker 入口已用 `agent-browser` 验收 `1440px`、`1920px` 和 `390px`，核心页面无横向溢出，设置页桌面与移动最小可见字号均为 `13px`。
 
 2026-07-13 已进一步收口学习路径工作台：从课程空间返回的入口并入固定工具栏并改为紧凑图标，顶栏按页面身份、课程、进度和操作重新分组；任务状态轨道收窄，空路径与任务画布获得更稳定的阅读宽度。路径生成、任务状态和课程返回上下文保持不变。
@@ -111,7 +113,7 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 | 课程详情 | 课程列表、详情、概览、知识点 | `/api/v1/courses/*` |
 | RAG 检索 | 外部 embedding + pgvector SQL 与关键词混合；本地关键词 fallback | `/api/v1/rag/search` |
 | 课程会话 | 课程内历史、消息、引用持久化、历史改名、软删除和刷新恢复 | `/api/v1/tutor/sessions?scope=course` |
-| 模型设置 | 多套个人模型配置、默认配置、回答/向量独立连接测试、服务器兜底 | `/api/v1/settings/model/configs` |
+| 模型设置 | 多套个人模型配置、回答/向量独立默认、独立连接测试和按用途服务器兜底 | `/api/v1/settings/model/configs` |
 | 账号设置 | 昵称保存、安全换密及旧 JWT 全部失效 | `PATCH /api/v1/auth/me`、`PATCH /api/v1/auth/me/password` |
 | 课程回答 | `CourseTutorGraph` 接管非流式与流式课程 RAG 回答 | `/messages`、`/messages/stream` |
 | Embedding | OpenAI-compatible `/embeddings`；本地 hash 仅标记关键词 fallback | `EmbeddingService` |
@@ -200,7 +202,7 @@ Phase 7.2 的分层口径：
 | --- | --- |
 | OCR 和图片题目识别 | 图片只入库，不做识别；扫描件 PDF 不伪装 OCR |
 | 旧版 Office 解析 | `.doc`、`.ppt` 只入库，不做深度解析 |
-| 讯飞原生 Embeddingp/Embeddingq | 暂不接入，当前用 OpenAI-compatible embeddings 或本地 fallback |
+| 讯飞原生 Embeddingp/Embeddingq | 暂不接入，当前用 OpenAI-compatible embeddings；不可用时退回关键词检索 |
 | 资料对比增强 | 已完成安全结果持久化、最近版本恢复和真实 Graph 轨迹；保持资料库独立工具，不提供完整原文对照页 |
 | 资源增强 | 六类 v2 资源、逐 Worker 模型增强、规则+模型审核、单次 Repair、交互渲染和 PPTX 队列已接入；资源版本编辑、个人全局资源仍未接入 |
 | Agent 编排 hardening | 九条学习主链路已真接管；学习档案导出明确保持普通 Service + RQ Worker |

@@ -47,6 +47,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260711_0015_create_model_call_runs.py`：创建隐私安全模型调用审计表 `model_call_runs`，不保存 Prompt、回答、资料原文或密钥。
 - `backend/migrations/versions/20260712_0016_add_chat_session_material_context.py`：为主页会话增加会话级参考资料 ID 数组，默认空数组。
 - `backend/migrations/versions/20260713_0017_complete_settings_center.py`：为模型配置增加回答/向量独立安全测试摘要，并为用户增加认证版本，支持换密后旧 JWT 失效。
+- `backend/migrations/versions/20260713_0018_split_model_defaults.py`：为模型配置增加独立向量默认标记；旧回答默认中已配置向量模型的记录自动继承向量默认。
 
 Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
@@ -651,7 +652,8 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 | `chat_model` | varchar | 聊天模型 |
 | `embedding_model` | varchar | 可空向量模型，Phase 6.4 后用于 OpenAI-compatible `/embeddings`；缺省时使用显式本地 fallback |
 | `tool_flags_json` | jsonb | 预留工具标记，当前设置页不管理联网搜索或深度思考 |
-| `is_default` | boolean | 是否为当前用户默认配置 |
+| `is_default` | boolean | 是否为当前用户回答默认配置，保留旧字段名兼容 |
+| `is_embedding_default` | boolean | 是否为当前用户向量默认配置 |
 | `last_test_ok` | boolean | 最近一次连接测试是否成功 |
 | `last_test_message` | text | 最近一次连接测试的脱敏结果摘要 |
 | `last_tested_at` | timestamptz | 最近一次连接测试时间 |
@@ -666,11 +668,12 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - 前端只显示脱敏 Key。
 - `api_key` 为空字符串或请求缺省时，保存接口保留原密钥。
 - 缺少 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，不允许保存新的用户 Key。
-- 同一用户可保存多套配置；运行时只使用当前用户 `is_default=true` 的配置，默认不存在时回退服务器 `.env`。
-- 删除默认配置后，后端会把剩余配置中最近更新的一条设为默认。
+- 同一用户可保存多套配置；回答运行时读取 `is_default=true`，Embedding 运行时读取 `is_embedding_default=true`，某一用途缺失时独立回退服务器 `.env`。
+- 删除默认配置后，后端只在包含对应模型的剩余配置中选择该用途的新默认。
 - 设置页 Provider 预设首位为讯飞星火 Spark；预设只负责填充 OpenAI-compatible 连接参数，不改变后端协议。
 - `connection_test_json` 只保存操作类型、模型名、成功状态、安全错误分类、是否可重试和测试时间；不保存 Prompt、回答、向量、密钥或 Provider 原始错误。旧 `last_test_*` 继续兼容回答模型最近测试。
 - `20260704_0006` 迁移为旧数据补 `display_name` 和 `is_default=true`，保证 Phase 6.1 的旧单配置继续可用。
+- `20260713_0018` 将旧回答默认中非空的 `embedding_model` 迁移为向量默认，升级后不丢失原有语义检索配置。
 
 ### 4.20 `export_jobs`
 

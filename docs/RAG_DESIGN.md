@@ -31,7 +31,7 @@ Phase 5.2 到 Phase 6.4 只读取或复用现有数据表：
 - `knowledge_points`：提供知识点和章节上下文。
 - `knowledge_chunks`：提供可检索文本切片，并在 `embedding Vector(1536)` 保存 OpenAI-compatible 或本地 fallback 向量。
 - `chat_sessions`、`chat_messages`：保存课程会话消息和 assistant `citation_json`。
-- `model_settings`：保存用户自己的 OpenAI-compatible 模型配置和加密 Key；Phase 6.2 起同一用户可保存多套配置，课程回答只使用当前默认配置，默认不存在时回退服务器 `.env`。
+- `model_settings`：保存用户自己的 OpenAI-compatible 模型配置和加密 Key；同一用户可分别选择回答默认与向量默认，课程回答和 Embedding 不要求共用 Provider、Base URL 或 Key。
 
 本阶段不新增数据库迁移，继续复用既有 `knowledge_chunks.embedding Vector(1536)`。`metadata_json` 写入 `embedding_source`、`embedding_model`、`embedding_dimension`、`embedded_at`，用于识别本地 fallback、过期模型和后续重建。
 
@@ -109,14 +109,14 @@ Phase 6.1 到 Phase 6.4 的课程回答生成规则：
 - assistant `content` 保存模型返回文本，`citation_json` 保留检索引用，`trace_id` 记录本次模型调用。
 - 流式接口先返回 `metadata`，再通过多个 `token` 事件逐段返回文本，最后通过 `done` 返回最终 `TutorSessionDetail`。
 - 只有 `done` 前完整生成成功，才持久化 user 消息、完整 assistant、引用和 `trace_id`。
-- 模型运行时配置解析为：当前用户默认配置优先，服务器 `.env` 兜底；非默认个人配置只在设置页保存、测试和切换默认时使用。
+- 回答运行时解析为：当前用户回答默认优先，服务器回答配置兜底；向量默认不会参与回答生成。
 - 模型不可用、超时、鉴权失败、非 JSON、空内容或流式中途失败时返回可恢复错误，前端保留输入，不写入半截 assistant 消息。
 
 ## 6. Embedding 边界
 
 Phase 6.4 的 embedding 规则：
 
-- 优先使用当前用户默认模型配置中的 `embedding_model`，目标接口为 OpenAI-compatible `{base_url}/embeddings`。
+- 优先使用当前用户向量默认配置中的 `embedding_model`，目标接口为该配置的 OpenAI-compatible `{base_url}/embeddings`；不存在个人向量默认时才回退服务器向量配置。
 - 请求维度固定为 1536；如果服务不支持 `dimensions` 参数，Provider 会自动重试一次不带该字段。
 - 返回向量长度必须为 1536，否则拒绝写入，避免破坏现有 `Vector(1536)` 合同。
 - 如果没有可用 embedding 模型，使用 `local-hash-1536` 确定性本地 fallback，并在 API 和 UI 中明确展示。

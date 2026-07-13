@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+import re
 from typing import Protocol
 from uuid import uuid4
 
@@ -592,13 +593,29 @@ class MaterialService:
         display_titles: dict[str, str] = {}
         for item in evidence:
             title = item.title.strip() or "资料重点"
-            group_key = self._normalize_title(title)
+            group_key = self._concept_group_key(item)
             groups.setdefault(group_key, []).append(item)
             display_title = self._display_comparison_title(title)
             current_title = display_titles.get(group_key)
             if current_title is None or self._is_exam_material(current_title):
                 display_titles[group_key] = display_title
         return {display_titles.get(group_key, group_key): items for group_key, items in groups.items()}
+
+    @classmethod
+    def _concept_group_key(cls, item: MaterialEvidence) -> str:
+        combined = f"{item.title} {item.section_title or ''} {item.content[:500]}".casefold()
+        aliases = (
+            ("concept:a-star", (r"\ba\s*\*", r"\bastar\b", r"a星", r"启发式搜索", r"f\s*\(n\)\s*=\s*g\s*\(n\)\s*\+\s*h\s*\(n\)")),
+            ("concept:backpropagation", (r"反向传播", r"误差反传", r"back\s*propagation", r"\bbackprop\b")),
+            ("concept:forward-propagation", (r"前向传播", r"forward\s*propagation")),
+            ("concept:gradient-descent", (r"梯度下降", r"gradient\s*descent")),
+        )
+        for key, patterns in aliases:
+            if any(re.search(pattern, combined, re.IGNORECASE) for pattern in patterns):
+                return key
+        if item.knowledge_point_id is not None:
+            return f"knowledge-point:{item.knowledge_point_id}"
+        return cls._normalize_title(item.title)
 
     def _comparison_point(self, title: str, evidence: list[MaterialEvidence]) -> MaterialComparisonPoint:
         material_ids = sorted({item.material_id for item in evidence})

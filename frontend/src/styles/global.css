@@ -7327,12 +7327,17 @@ a {
   z-index: 80;
   right: 18px;
   bottom: 18px;
-  width: min(340px, calc(100vw - 32px));
+  width: max-content;
+  max-width: calc(100vw - 32px);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--surface-strong) 94%, transparent);
   box-shadow: var(--shadow-md);
   backdrop-filter: blur(14px);
+}
+
+.ai-job-tray--expanded {
+  width: min(340px, calc(100vw - 32px));
 }
 
 .ai-job-tray__toggle {

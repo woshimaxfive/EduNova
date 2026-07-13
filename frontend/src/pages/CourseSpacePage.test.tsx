@@ -1372,7 +1372,7 @@ describe("CourseSpacePage course tutor sessions", () => {
           payload: expect.objectContaining({
             learning_goal: "第一问：启发函数是什么？",
             knowledge_point_id: 401,
-            difficulty: "easy"
+            difficulty: "medium"
           })
         })
       );
@@ -1395,7 +1395,7 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     await waitFor(() => {
       const request = calls.find((call) => call.method === "post" && call.url === RESOURCE_ENDPOINTS.generationJobs);
-      expect(request?.payload).toEqual(expect.objectContaining({ learning_goal: "量子通信怎么复习？", difficulty: "easy" }));
+      expect(request?.payload).toEqual(expect.objectContaining({ learning_goal: "量子通信怎么复习？", difficulty: "medium" }));
       expect(request?.payload).not.toHaveProperty("knowledge_point_id");
     });
   });

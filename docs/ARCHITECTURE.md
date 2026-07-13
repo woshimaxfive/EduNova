@@ -418,7 +418,9 @@ AssessmentGraph 规则评分
 - SlideWorker：结构化 PPT 页面与真实 PPTX 源数据。
 - AnimationWorker：可播放的 Mermaid 教学场景，不伪装成视频。
 
-资源内容采用 `schema_version=2`，以 `artifact.kind` 区分 `document`、`mindmap`、`quiz`、`code_lab`、`slide_deck`、`animation`，同时保存 Markdown fallback。前端 `ResourceRenderer` 按类型加载 Markmap、Mermaid、CodeMirror/Pyodide 等渲染器；PPTX 复用 Redis/RQ 导出 worker 异步生成。
+资源内容采用 `schema_version=3`，以 `artifact.kind` 区分 `document`、`mindmap`、`quiz`、`code_lab`、`slide_deck`、`animation`，并保存引用绑定、质量门禁、Prompt 版本和 Markdown fallback。模型直接生成类型化 artifact；无有效结构差异时不得标记 `model_enhanced`。前端 `ResourceRenderer` 继续兼容 v1/v2，并按类型加载 Markmap、Mermaid、CodeMirror/Pyodide 等渲染器。
+
+代码资源在持久化前调用内部 `code-verifier`。该服务位于独立 internal Docker 网络，采用非 root、只读根文件系统、无外网、能力移除和 CPU/内存/PID 限制；每次请求创建独立 Pyodide Worker，执行安全 AST 门禁、5 秒超时、20KB 输出限制和预期输出精确比对。服务不可用或结果不符时，代码 Worker 失败且不保存资源。
 
 ## 7. RAG 与可信生成架构
 
@@ -638,3 +640,11 @@ flowchart LR
 - `student_profiles` 仍是唯一长期画像来源；不创建 `course_profiles`，避免课程状态复制后失真。
 - `CourseLearnerContext` 只携带通过可信度门槛的安全摘要，并生成 `context_hash`；课程弱点始终按 `course_id` 隔离。
 - 资源、路径和报告使用画像应用版本判断 `current/stale/legacy`。画像变化不自动重算成果，用户从原有入口主动更新。
+
+## 15. Phase 19 质量内核
+
+- `ResourceGenerationGraph` 的 ReviewAgent 读取安全资料摘录、学习目标和完整 artifact；结构修复和内容修订各最多一次，单类失败不污染其他成果。
+- `AssessmentGraph` 从课程切片形成题目蓝图，模型只改写题面、合理干扰项和解析，不得改变知识点、题型或规则答案；错因诊断逐题读取题干、正确答案、学生答案、得分和证据。
+- `ReportGraph` 将五类确定性统计作为不可变字段，模型叙事出现额外数字或混淆统计时触发修订；修订稿需再次经过模型与规则审核。
+- 掌握度和路径状态彻底分离。知识点没有有效学习证据时返回未评估，课程平均值只计算 `score != null` 的知识点。
+- 资料对比先按概念别名归并 A*、启发式搜索、反向传播等同义内容；会话检索在明显换题时停止拼接旧问题。

@@ -32,8 +32,9 @@ describe("course learning recommendation", () => {
   });
 
   it("derives resource difficulty from deterministic mastery", () => {
-    const point = (score: number) => ({ id: "1", title: "知识点", chapter: null, order_index: 0, status: "learning" as const, score, prerequisite_ids: [], weakness_item_ids: [], recommended_resource_ids: [] });
-    expect(resourceDifficultyForPoint(undefined)).toBe("easy");
+    const point = (score: number | null) => ({ id: "1", title: "知识点", chapter: null, order_index: 0, status: "learning" as const, score, prerequisite_ids: [], weakness_item_ids: [], recommended_resource_ids: [] });
+    expect(resourceDifficultyForPoint(undefined)).toBe("medium");
+    expect(resourceDifficultyForPoint(point(null))).toBe("medium");
     expect(resourceDifficultyForPoint(point(44))).toBe("easy");
     expect(resourceDifficultyForPoint(point(45))).toBe("medium");
     expect(resourceDifficultyForPoint(point(75))).toBe("hard");

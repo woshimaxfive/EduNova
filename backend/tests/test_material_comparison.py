@@ -285,6 +285,26 @@ def test_compare_materials_uses_text_fallback_when_course_chunks_are_missing(tmp
     assert any(point["title"] == "启发式搜索" for point in result["repeated_concepts"])
 
 
+def test_comparison_groups_aliases_before_matching_titles_or_knowledge_point_ids(tmp_path: Path) -> None:
+    from backend.app.services.materials import MaterialEvidence
+
+    service = MaterialService(repository=make_repo(), settings=make_settings(tmp_path))
+    groups = service._group_evidence(
+        [
+            MaterialEvidence(1, "算法讲义.md", "A* 搜索", "A* 使用 f(n)=g(n)+h(n)。", "路径搜索", None, None, "high"),
+            MaterialEvidence(2, "复习题.md", "启发式搜索", "启发式搜索用估价函数扩展节点。", "启发式搜索", None, 31, "high"),
+            MaterialEvidence(1, "算法讲义.md", "误差反传", "误差反传使用链式法则。", "神经网络训练", None, None, "high"),
+            MaterialEvidence(2, "复习题.md", "反向传播", "反向传播计算参数梯度。", "反向传播", None, 32, "high"),
+        ]
+    )
+
+    grouped_material_ids = [
+        {item.material_id for item in evidence}
+        for evidence in groups.values()
+    ]
+    assert grouped_material_ids.count({1, 2}) == 2
+
+
 def test_compare_materials_route_requires_login() -> None:
     client = TestClient(create_app())
 

@@ -55,7 +55,7 @@ function EChartCanvas({ label, optionFactory }: EChartCanvasProps) {
 }
 
 export function MasteryOverviewChart({ points }: { points: CourseMasteryPoint[] }) {
-  const visiblePoints = useMemo(() => points.slice(0, 12), [points]);
+  const visiblePoints = useMemo(() => points.filter((point) => point.score !== null).slice(0, 12), [points]);
   const optionFactory = useMemo(
     () => (palette: ChartPalette): EChartsCoreOption => ({
       animation: typeof window.matchMedia !== "function" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches,

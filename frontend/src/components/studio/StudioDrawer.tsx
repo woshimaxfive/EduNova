@@ -221,6 +221,15 @@ function DetailsPanel(props: StudioDrawerProps) {
 
       {props.detailTab === "quality" ? (
         <section role="tabpanel" aria-label="资源质量">
+          {props.resource?.content_json.quality ? (
+            <article className="studio-quality-row">
+              <div><strong>内容门禁</strong><span>{props.resource.content_json.quality.status === "passed" ? "通过" : "未通过"}</span></div>
+              <p>
+                协议 {props.resource.content_json.quality.prompt_version ?? "legacy"}
+                {props.resource.content_json.quality.code_verification?.status === "passed" ? " · 代码已实际运行验证" : ""}
+              </p>
+            </article>
+          ) : null}
           {props.qualityScores.length > 0 ? props.qualityScores.map((score) => (
             <article className="studio-quality-row" key={score.id}>
               <div><strong>{qualityLabels[score.score_name] ?? score.score_name}</strong><span>{score.score_value.toFixed(2)}</span></div>

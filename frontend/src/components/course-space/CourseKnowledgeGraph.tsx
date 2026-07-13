@@ -102,7 +102,7 @@ function buildGraph(points: CourseMasteryPoint[], selectedId?: string | null) {
         label: (
           <div className="course-knowledge-node-content">
             <strong>{point.title}</strong>
-            <span>{statusLabels[point.status] ?? point.status} · {point.score} 分</span>
+            <span>{statusLabels[point.status] ?? point.status} · {point.score === null ? "未评估" : `${point.score} 分`}</span>
           </div>
         )
       },

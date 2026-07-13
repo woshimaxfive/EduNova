@@ -440,7 +440,7 @@ Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `r
 
 用途：保存 AI 生成学习资源。
 
-该表现在保存六类课程资源：`doc`、`mindmap`、`quiz`、`code`、`slide`、`animation`。新产物使用 `content_json.schema_version=2` 和 `artifact.kind` 保存结构化内容，同时保留 Markdown fallback；历史 v1 资源不批量迁移。资源分层仍为 `course_id != null` 表示课程资源，`course_id == null` 预留个人全局资源。`agent_trace_id` 同时写入独立字段和安全 metadata。
+该表现在保存六类课程资源：`doc`、`mindmap`、`quiz`、`code`、`slide`、`animation`。Phase 19 新产物使用 `content_json.schema_version=3` 和 `artifact.kind` 保存类型化内容、引用绑定、质量门禁、Prompt 版本和代码验证摘要，同时保留 Markdown fallback；历史 v1/v2 资源不批量迁移。资源分层仍为 `course_id != null` 表示课程资源，`course_id == null` 预留个人全局资源。`agent_trace_id` 同时写入独立字段和安全 metadata。
 
 服务层必须保证：
 
@@ -937,6 +937,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 27. 画像可信度 2.0 继续复用 `student_profiles.dimension_confidence_json` 和 `profile_events.evidence_json`：逐维证据分数、来源系数与审核摘要保存在安全 JSON 中，不新增迁移。
 28. 课程画像不是持久化实体。`CourseLearnerContext` 在请求时组合总画像、当前课程掌握度、弱点、路径、练习、资源和报告，不新增 `course_profiles` 表，也不复制完整画像。
 29. 新生成资源、路径和报告在既有 JSON metadata 中保存 `profile_applied_version` 与 `course_context_hash`；旧数据缺失时按 `legacy` 兼容，画像版本落后时按 `stale` 提示用户主动更新。
+30. Phase 19 不新增迁移。题目引用、生成模式和质量摘要继续保存在 `practice_answers.question_json`；报告不可变统计与审核摘要继续保存在 `assessment_reports.report_json`；资源 v3 质量与代码验证摘要继续保存在 `generated_resources.content_json`。代码正文和运行输出不写入独立验证日志。
 
 当前已验证：
 

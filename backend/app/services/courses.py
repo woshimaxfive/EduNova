@@ -520,7 +520,7 @@ class CourseService:
                 course_goal=effective_goal,
                 foundation_summary=foundation_summary,
                 active_weaknesses=effective_weaknesses,
-                mastery_average=learner_context.mastery_average if learner_context is not None else 0,
+                mastery_average=learner_context.mastery_average if learner_context is not None else None,
                 current_task_title=learner_context.current_task_title if learner_context is not None else None,
                 recent_practice_score=learner_context.recent_practice_score if learner_context is not None else None,
                 learning_preference=str(global_context.advisory_value("learning_preference") or "") if global_context is not None else "",
@@ -857,7 +857,12 @@ class CourseService:
             point_weaknesses = weaknesses_by_point.get(point.id, [])
             point_tasks = tasks_by_point.get(point.id, [])
             point_answers = answers_by_point.get(point.id, [])
-            status = cls._mastery_status(point_weaknesses, point_tasks, now, point_answers)
+            status, score, evidence_count, confidence, last_assessed_at = cls._mastery_measure(
+                point_weaknesses,
+                point_tasks,
+                now,
+                point_answers,
+            )
             points.append(
                 CourseMasteryPoint(
                     id=str(point.id),
@@ -865,7 +870,14 @@ class CourseService:
                     chapter=point.chapter,
                     order_index=point.order_index,
                     status=status,
-                    score=cls._mastery_score(status),
+                    score=score,
+                    evidence_count=evidence_count,
+                    confidence=confidence,
+                    last_assessed_at=(
+                        last_assessed_at.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+                        if last_assessed_at is not None
+                        else None
+                    ),
                     prerequisite_ids=cls._safe_prerequisite_ids(point.prerequisites_json),
                     weakness_item_ids=[str(item.id) for item in point_weaknesses if item.status != "dismissed"],
                     recommended_resource_ids=[str(resource.id) for resource in resources_by_point.get(point.id, [])[:3]],
@@ -874,41 +886,45 @@ class CourseService:
         return points
 
     @staticmethod
-    def _mastery_status(
+    def _mastery_measure(
         weaknesses: list[WeaknessReviewItem],
         tasks: list[LearningTask],
         now: datetime,
         practice_answers: list[PracticeAnswer] | None = None,
-    ) -> str:
-        if any(item.status in {"confirmed", "reviewing"} for item in weaknesses):
-            return "weak"
-        if any(CourseService._practice_answer_score(answer) < 60 for answer in practice_answers or [] if answer.answer_text is not None):
-            return "weak"
-        if any(item.status == "completed" and item.next_review_at is not None and item.next_review_at <= now for item in weaknesses):
-            return "recommended_review"
-        if any(task.status in {"todo", "doing"} for task in tasks):
-            return "learning"
-        if any(
-            answer.answer_text is not None and (answer.is_correct is True or CourseService._practice_answer_score(answer) >= 80)
-            for answer in practice_answers or []
-        ):
-            return "mastered"
-        if any(task.status == "completed" for task in tasks) or any(item.status == "completed" for item in weaknesses):
-            return "mastered"
-        return "not_started"
+    ) -> tuple[str, int | None, int, float, datetime | None]:
+        answered = [answer for answer in practice_answers or [] if answer.answer_text is not None]
+        active_weaknesses = [item for item in weaknesses if item.status in {"confirmed", "reviewing"}]
+        completed_weaknesses = [item for item in weaknesses if item.status == "completed"]
+        evidence_count = len(answered) + len(active_weaknesses) + len(completed_weaknesses)
+        timestamps = [
+            value
+            for value in [
+                *(getattr(answer, "created_at", None) for answer in answered),
+                *(getattr(item, "updated_at", None) for item in weaknesses),
+            ]
+            if value is not None
+        ]
+        last_assessed_at = max(timestamps) if timestamps else None
+        confidence = min(0.95, 0.55 + max(0, evidence_count - 1) * 0.08) if evidence_count else 0.0
 
-    @staticmethod
-    def _mastery_score(status: str) -> int:
-        return {
-            "weak": 35,
-            "recommended_review": 55,
-            "learning": 60,
-            "mastered": 90,
-            "not_started": 0,
-        }.get(status, 0)
+        if answered:
+            score = round(sum(CourseService._practice_answer_score(answer) for answer in answered) / len(answered))
+            if active_weaknesses or score < 60:
+                return "weak", min(score, 59), evidence_count, confidence, last_assessed_at
+            if any(item.next_review_at is not None and item.next_review_at <= now for item in completed_weaknesses):
+                return "recommended_review", score, evidence_count, confidence, last_assessed_at
+            return ("mastered" if score >= 80 else "learning"), score, evidence_count, confidence, last_assessed_at
+        if active_weaknesses:
+            return "weak", 35, evidence_count, confidence, last_assessed_at
+        if any(item.next_review_at is not None and item.next_review_at <= now for item in completed_weaknesses):
+            return "recommended_review", 55, evidence_count, confidence, last_assessed_at
+        if completed_weaknesses:
+            return "learning", 65, evidence_count, confidence, last_assessed_at
+        return "not_started", None, 0, 0.0, None
 
     @staticmethod
     def _build_mastery_summary(points: list[CourseMasteryPoint]) -> CourseMasterySummary:
+        assessed_scores = [point.score for point in points if point.score is not None]
         return CourseMasterySummary(
             total_count=len(points),
             weak_count=sum(1 for point in points if point.status == "weak"),
@@ -916,6 +932,9 @@ class CourseService:
             mastered_count=sum(1 for point in points if point.status == "mastered"),
             recommended_review_count=sum(1 for point in points if point.status == "recommended_review"),
             not_started_count=sum(1 for point in points if point.status == "not_started"),
+            assessed_count=len(assessed_scores),
+            unassessed_count=sum(1 for point in points if point.score is None),
+            average_score=round(sum(assessed_scores) / len(assessed_scores)) if assessed_scores else None,
         )
 
     @classmethod

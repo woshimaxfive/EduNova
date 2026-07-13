@@ -97,7 +97,7 @@ class CourseLearnerContextResponse(BaseModel):
     course_goal: str = ""
     foundation_summary: str = ""
     active_weaknesses: list[str] = Field(default_factory=list)
-    mastery_average: int = 0
+    mastery_average: int | None = None
     current_task_title: str | None = None
     recent_practice_score: int | None = None
     learning_preference: str = ""
@@ -152,6 +152,9 @@ class CourseMasterySummary(BaseModel):
     mastered_count: int
     recommended_review_count: int
     not_started_count: int
+    assessed_count: int = 0
+    unassessed_count: int = 0
+    average_score: int | None = None
 
 
 class CourseMasteryPoint(BaseModel):
@@ -160,7 +163,10 @@ class CourseMasteryPoint(BaseModel):
     chapter: str | None
     order_index: int
     status: str
-    score: int
+    score: int | None
+    evidence_count: int = 0
+    confidence: float = 0
+    last_assessed_at: str | None = None
     prerequisite_ids: list[str]
     weakness_item_ids: list[str]
     recommended_resource_ids: list[str]

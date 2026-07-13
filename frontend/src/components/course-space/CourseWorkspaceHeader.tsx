@@ -7,7 +7,7 @@ export type CourseWorkspaceMode = "chat" | "study";
 
 type CourseWorkspaceHeaderProps = {
   title: string;
-  progressPercent: number;
+  progressPercent: number | null;
   materialCount: number;
   knowledgePointCount: number;
   weaknessCount: number;
@@ -34,7 +34,7 @@ export function CourseWorkspaceHeader({
         </Link>
         <div className="course-workspace-title">
           <h1>{title}</h1>
-          <span aria-label="课程状态">{materialCount} 份资料 · {knowledgePointCount} 个知识点 · 掌握度 {progressPercent}%</span>
+          <span aria-label="课程状态">{materialCount} 份资料 · {knowledgePointCount} 个知识点 · 掌握度 {progressPercent === null ? "未评估" : `${progressPercent}%`}</span>
         </div>
       </div>
 
@@ -62,7 +62,7 @@ export function CourseWorkspaceHeader({
         <button className="course-progress-trigger" type="button" onClick={onOpenProgress}>
           <ChartDonut size={18} weight="duotone" aria-hidden="true" />
           <span>学习进度</span>
-          <em>{weaknessCount > 0 ? `${weaknessCount} 项待处理` : `掌握度 ${progressPercent}%`}</em>
+          <em>{weaknessCount > 0 ? `${weaknessCount} 项待处理` : `掌握度 ${progressPercent === null ? "未评估" : `${progressPercent}%`}`}</em>
         </button>
       </div>
     </header>

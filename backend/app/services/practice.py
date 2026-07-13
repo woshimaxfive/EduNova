@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import re
 from typing import Protocol
 
 from sqlalchemy import case, select
@@ -12,6 +13,7 @@ from backend.app.services.learner_context import context_service_from_repository
 from backend.app.models import (
     Course,
     GeneratedResource,
+    KnowledgeChunk,
     KnowledgePoint,
     PracticeAnswer,
     PracticeSession,
@@ -44,6 +46,8 @@ class PracticeRepository(Protocol):
     def list_knowledge_points(self, course_id: int) -> list[KnowledgePoint]: ...
 
     def list_generated_resources(self, user_id: int, course_id: int) -> list[GeneratedResource]: ...
+
+    def list_knowledge_chunks(self, course_id: int) -> list[KnowledgeChunk]: ...
 
     def add_practice_session(self, session: PracticeSession) -> PracticeSession: ...
 
@@ -92,6 +96,15 @@ class SqlAlchemyPracticeRepository:
                 select(GeneratedResource)
                 .where(GeneratedResource.user_id == user_id, GeneratedResource.course_id == course_id)
                 .order_by(GeneratedResource.updated_at.desc(), GeneratedResource.id.desc())
+            )
+        )
+
+    def list_knowledge_chunks(self, course_id: int) -> list[KnowledgeChunk]:
+        return list(
+            self.db.scalars(
+                select(KnowledgeChunk)
+                .where(KnowledgeChunk.course_id == course_id)
+                .order_by(KnowledgeChunk.knowledge_point_id, KnowledgeChunk.id)
             )
         )
 
@@ -356,17 +369,39 @@ class PracticeService:
         resources: list[GeneratedResource],
         question_count: int,
         difficulty: str,
+        chunks: list[KnowledgeChunk] | None = None,
     ) -> list[dict]:
         if not points:
             return []
+        chunks = chunks or []
+        evidence_by_point = {
+            point.id: self._evidence_for_point(point, chunks, resources)
+            for point in points
+        }
+        all_statements = [
+            (point_id, row["text"])
+            for point_id, rows in evidence_by_point.items()
+            for row in rows
+        ]
         questions: list[dict] = []
         question_types = ["single_choice", "multiple_choice", "short_answer"]
         for index in range(question_count):
             point = points[index % len(points)]
-            question_type = question_types[index % len(question_types)]
-            keywords = self._keywords_for_point(point)
-            resource_title = next((resource.title for resource in resources if resource.knowledge_point_id == point.id), None)
+            evidence = evidence_by_point[point.id]
+            target_statements = [row["text"] for row in evidence]
+            distractors = [text for point_id, text in all_statements if point_id != point.id and text not in target_statements]
+            requested_type = question_types[index % len(question_types)]
+            if requested_type == "single_choice" and len(distractors) < 3:
+                question_type = "short_answer"
+            elif requested_type == "multiple_choice" and (len(target_statements) < 2 or len(distractors) < 2):
+                question_type = "short_answer"
+            else:
+                question_type = requested_type
+            keywords = self._keywords_for_evidence(point, " ".join(target_statements))
             question_id = f"q{index + 1}"
+            focus = ("概念含义", "关键关系", "应用条件", "推导思路", "常见误区", "实际应用")[index % 6]
+            citation_refs = [str(row["chunk_id"]) for row in evidence if row["chunk_id"] is not None][:3]
+            source_excerpt = target_statements[index % len(target_statements)]
             base = {
                 "id": question_id,
                 "question_type": question_type,
@@ -374,44 +409,84 @@ class PracticeService:
                 "knowledge_point_title": point.title,
                 "keywords": keywords,
                 "difficulty": difficulty,
-                "explanation": f"复习{point.title}时，需要围绕{keywords[0]}、{keywords[1]}和课程引用说明理解依据。",
-                "source_summary": resource_title or point.summary or point.title,
+                "explanation": f"课程证据指出：{source_excerpt}",
+                "source_summary": source_excerpt,
+                "source_excerpt": source_excerpt,
+                "citation_refs": citation_refs,
+                "prompt_version": "assessment-v3.1",
+                "generation_mode": "deterministic_source",
+                "quality": {"evidence_bound": bool(citation_refs), "answer_locked": True},
             }
             if question_type == "single_choice":
+                correct = target_statements[index % len(target_statements)]
+                options = [correct, *distractors[:3]]
+                rotation = index % len(options)
+                options = options[rotation:] + options[:rotation]
                 questions.append(
                     {
                         **base,
-                        "prompt": f"关于{point.title}，哪一项最符合课程复习重点？",
-                        "options": [keywords[0], "无关概念", "跳过资料依据", "只背结论"],
-                        "correct_answer": keywords[0],
+                        "prompt": f"根据课程资料，哪一项最准确地描述“{point.title}”？",
+                        "options": options,
+                        "correct_answer": correct,
                     }
                 )
             elif question_type == "multiple_choice":
+                correct = target_statements[:2]
+                options = [*correct, *distractors[:2]]
+                rotation = index % len(options)
+                options = options[rotation:] + options[:rotation]
                 questions.append(
                     {
                         **base,
-                        "prompt": f"复习{point.title}时，哪些信息可以作为答题依据？",
-                        "options": [keywords[0], keywords[1], "课程引用", "无关提示"],
-                        "correct_answer": [keywords[1], "课程引用"],
+                        "prompt": f"根据课程资料，哪些表述直接属于“{point.title}”？",
+                        "options": options,
+                        "correct_answer": correct,
                     }
                 )
             else:
                 questions.append(
                     {
                         **base,
-                        "prompt": f"请用{keywords[0]}、{keywords[1]}和复习线索解释{point.title}。",
+                        "prompt": f"请从{focus}角度，依据课程资料解释“{point.title}”，并说明“{keywords[0]}”与“{keywords[1]}”的作用。",
                         "options": [],
-                        "correct_answer": "；".join(keywords),
-                        "keywords": ["概念", "误区", "复习线索"],
+                        "correct_answer": source_excerpt,
+                        "keywords": keywords[:3],
                     }
                 )
         return questions
 
     @staticmethod
-    def _keywords_for_point(point: KnowledgePoint) -> list[str]:
-        words = [part for part in " ".join([point.title, point.summary or "", point.chapter or ""]).replace("，", " ").replace("。", " ").split() if part]
-        keywords = list(dict.fromkeys([point.title, "关键概念", "课程引用", "常见误区", *words]))
-        return keywords[:4] if len(keywords) >= 4 else [*keywords, "复习线索"][:4]
+    def _keywords_for_evidence(point: KnowledgePoint, evidence: str) -> list[str]:
+        tokens = re.findall(r"[A-Za-z][A-Za-z0-9_*+()\-]{1,24}|[一-龥]{2,8}", f"{point.title} {point.summary or ''} {evidence}")
+        keywords = list(dict.fromkeys([point.title, *tokens]))
+        return (keywords + ["核心关系", "应用条件", "推导过程"])[:4]
+
+    @classmethod
+    def _evidence_for_point(
+        cls,
+        point: KnowledgePoint,
+        chunks: list[KnowledgeChunk],
+        resources: list[GeneratedResource],
+    ) -> list[dict[str, object]]:
+        rows: list[dict[str, object]] = []
+        for chunk in chunks:
+            if chunk.knowledge_point_id != point.id:
+                continue
+            for sentence in cls._sentences(chunk.content):
+                rows.append({"chunk_id": chunk.id, "text": sentence})
+                if len(rows) >= 3:
+                    return rows
+        fallback = point.summary or next(
+            (resource.title for resource in resources if resource.knowledge_point_id == point.id),
+            point.title,
+        )
+        sentences = cls._sentences(fallback)
+        return [{"chunk_id": None, "text": sentence} for sentence in sentences[:3]] or [{"chunk_id": None, "text": point.title}]
+
+    @staticmethod
+    def _sentences(content: str) -> list[str]:
+        sentences = [" ".join(item.split())[:220] for item in re.split(r"[。！？!?；;\n]+", str(content or ""))]
+        return list(dict.fromkeys(item for item in sentences if len(item) >= 8))
 
     @staticmethod
     def _normalize_answers(answers: list[SubmitPracticeAnswerItem | dict]) -> list[dict[str, str]]:

@@ -155,7 +155,7 @@ cd ..
 | `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、会话改名、软删除归档、删除后列表/详情隐藏、主页已选资料/联网/深思字段、同一 session 多轮上下文、上下文化 RAG/联网 query、无搜索 Key 不伪造来源、`home_tutor` trace、模型回答、SSE 流式、错误回滚和历史恢复 |
 | `/profiles/me`、`/profiles/chat`、`/profiles/events` | 无 token 401、稳定 8 维结构、显式更新、候选阈值、来源去重、自动应用、Review/Repair、逐维可信度、事件倒序、用户隔离和 metadata 脱敏 |
 | `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要、上下文计数 metadata 和 metadata 白名单 |
-| `/resources/generate`、资源详情/质量、`/resources/{resource_id}/exports` | 无 token 401、用户隔离、六类 v2 资源、并行 Worker、模型/规则审核、单次修订、部分失败、PPTX 任务和隐私安全 |
+| `/resources/generate`、资源详情/质量、`/resources/{resource_id}/exports` | 无 token 401、用户隔离、六类 v3 证据型资源、并行 Worker、完整 artifact 审核、结构修复、内容修订、严格类型失败、代码实跑验证、部分失败、PPTX 任务和隐私安全 |
 | `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}`、`/courses/{course_id}/mastery-map` | 无 token 401、课程/任务用户隔离、空路径、路径生成、旧路径归档、任务状态更新、掌握度映射、推荐资源、隐私安全 |
 | `/practice/sessions`、`/practice/sessions/{session_id}`、`/practice/sessions/{session_id}/answers` | 无 token 401、课程/练习用户隔离、知识点过滤、题型生成、确定性批改、空答案校验、弱点队列反哺、掌握度回归、隐私安全 |
 | `/reports/generate`、`/reports/latest` | 无 token 401、课程/练习/报告用户隔离、空报告、报告生成、最新报告读取、掌握度摘要、下一步建议、隐私安全 |
@@ -618,7 +618,7 @@ cd ..
 | Phase 7.3 | 课程级弱点追踪和待确认复习队列第一刀 |
 | Phase 7.4 | 课程级弱点复习队列确认与状态流转 |
 | Phase 8.1 | Agent Graph 与可观测轨迹底座：查询当前用户自己的 Agent trace 并在课程页展示 |
-| Phase 8.2 | 多智能体资源生成：六 Worker 生成六类 v2 资源、质量分、审核和真实轨迹 |
+| Phase 8.2 | 多智能体资源生成：六 Worker 生成六类结构化资源、质量分、审核和真实轨迹；Phase 19 起新产物统一使用 v3 证据与质量协议 |
 | Phase 9 | 学习路径、掌握度图和薄弱点队列可用 |
 | Phase 10 | AI 辅导、练习、评估报告闭环通过 |
 | Phase 11.1 | 历史冲刺模式验收记录保留，当前能力已退役 |
@@ -899,3 +899,31 @@ docker compose down
 - 九条 Graph trace 断言 `profile_applied_version`、可信维度数量、完整度和上下文使用状态，同时禁止画像原文、完整作答和模型输入进入 metadata。
 - 画像应用变化后资源、路径、报告为 `stale`，候选事件不触发；旧成果为 `legacy`，重新生成或更新后恢复 `current`。
 - 前端验证双指标、课程画像摘要、三类成果新鲜度提示和画像更新后的课程闭环缓存失效。
+
+## 20. Phase 19 AI 产物质量内核验收
+
+### 20.1 结构化资源与代码验证
+
+- 六个 Resource Worker 必须直接产出 `schema_version=3` 类型化 artifact；Markdown 只作为兼容展示，不能成为模型增强的唯一结果。
+- A* 固定资料生成的讲解、导图和 PPT 必须引用并解释 `f(n)=g(n)+h(n)` 等真实概念，不能只输出通用学习建议。
+- 练习、代码和动画未通过内容门禁时不得持久化；讲解、导图和 PPT 仅允许保存通过证据校验的确定性降级稿。
+- `model_enhanced` 必须表示模型相对底稿产生了有效差异，并通过完整 artifact 审核；模型无效或审核回退必须如实标记 warning。
+- `code-verifier` 必须验证策略、标准错误、20KB 输出上限、5 秒超时和标准化预期输出；验证不可用、代码越权或输出不一致时代码资源失败。
+- Docker 验收确认验证服务无宿主机端口、非 root、只读文件系统、无外网、移除 capabilities，并在每次请求后销毁执行 Worker。
+- 隔离 Docker E2E 必须通过 `backend.integration.code_verifier_check` 直接调用内部验证服务，覆盖正确输出、输出错配、文件访问、反射式底层属性访问、网络模块和硬超时。
+
+### 20.2 练习、掌握度与报告
+
+- 练习题从真实课程切片和证据型蓝图生成；请求 5 题时必须得到 5 个不同题面、合法且唯一的选项，以及与引用一致的答案和解析。
+- 错因诊断必须绑定当前题目的题干、正确答案、学生答案、得分和证据摘要，不允许不同题目复用无关诊断。
+- 未产生有效学习证据的知识点返回 `score=null` 和“未评估”，不进入平均掌握度；路径任务状态不得制造掌握度分数。
+- 一次 0 分练习必须保留 0 分证据，不得因路径存在而抬高课程平均分。
+- 报告必须分别统计练习会话数、已作答题数、正确题数、已评估知识点数和已完成路径任务数；ReportAgent 不能修改这些确定性数字。
+- ReviewAgent 与持久化前门禁必须拦截叙事中的数字矛盾，例如把 1 次练习描述成 5 次学习。
+
+### 20.3 对比、检索与降级真实性
+
+- 资料对比按知识点、标题别名、关键词和向量相似度归并概念；A*、启发式搜索和反向传播等同义概念应保留各资料真实引用。
+- 会话话题明显切换时，检索查询只使用当前问题；代词追问或同主题延续时才合并最近问题。
+- Embedding、Rerank、模型调用或 Worker 失败时允许按既定层级降级，但来源、任务结果和 trace 必须展示实际模式与安全 warning。
+- 离线 AI 质量回归覆盖主题匹配、引用覆盖、重复率、代码验证、数字一致性和降级真实性；标准验证不消耗真实密钥。

@@ -294,7 +294,7 @@ export function LearningPathDrawer({
           </div>
           {detailTab === "mastery" ? (
             <div className="path-detail-panel" role="tabpanel">
-              {masteryPoints.length > 0 ? <><MasteryOverviewChart points={masteryPoints} /><div className="path-mastery-list">{masteryPoints.map((point) => <article key={point.id}><div><strong>{point.title}</strong><span>{point.chapter ?? "未分章"}</span></div><em>{masteryStatusLabel(point.status)} · {point.score}</em><div><span style={{ width: `${point.score}%` }} /></div></article>)}</div></> : <p className="path-drawer-empty">暂无掌握度数据。</p>}
+              {masteryPoints.length > 0 ? <><MasteryOverviewChart points={masteryPoints} /><div className="path-mastery-list">{masteryPoints.map((point) => <article key={point.id}><div><strong>{point.title}</strong><span>{point.chapter ?? "未分章"}</span></div><em>{masteryStatusLabel(point.status)} · {point.score === null ? "未评估" : `${point.score} 分`}</em><div><span style={{ width: `${point.score ?? 0}%` }} /></div></article>)}</div></> : <p className="path-drawer-empty">暂无掌握度数据。</p>}
             </div>
           ) : null}
           {detailTab === "evidence" ? (

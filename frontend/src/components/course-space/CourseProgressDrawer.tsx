@@ -93,7 +93,7 @@ export function CourseProgressDrawer({
           <dl className="course-progress-counts">
             <div><dt>画像完整度</dt><dd>{Math.round(learnerContext?.completeness_score ?? 0)}%</dd></div>
             <div><dt>可信维度</dt><dd>{learnerContext?.trusted_dimensions.length ?? 0}</dd></div>
-            <div><dt>课程掌握度</dt><dd>{Math.round(learnerContext?.mastery_average ?? 0)}%</dd></div>
+            <div><dt>课程掌握度</dt><dd>{learnerContext?.mastery_average === null || learnerContext?.mastery_average === undefined ? "未评估" : `${Math.round(learnerContext.mastery_average)}%`}</dd></div>
             <div><dt>课程弱点</dt><dd>{learnerContext?.active_weaknesses.length ?? 0}</dd></div>
           </dl>
           <p className="course-progress-empty">

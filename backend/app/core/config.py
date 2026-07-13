@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     ai_job_timeout_seconds: int = 900
     ai_job_stale_seconds: int = 180
     ai_job_max_active_per_user: int = 2
+    code_verifier_url: str = ""
+    code_verifier_timeout_seconds: float = 40.0
 
     @field_validator("system_embedding_dimension", mode="before")
     @classmethod

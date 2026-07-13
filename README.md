@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前已完成 **X2-Flash、动态向量与重排序生产化**。九条学习主链路继续由真实 LangGraph 编排；`ModelExecutionRuntime` 统一处理同配置重试、Redis 并发限制、熔断、流中断、长任务取消和隐私安全调用审计，`AIJobRuntime` 继续负责智能建课、六类资源生成和向量重建后台任务。
+当前已完成 **Phase 19 AI 产物质量内核与学习指标纠偏**。九条学习主链路继续由真实 LangGraph 编排；资源、练习和报告改为证据驱动的结构化生成与完整内容审核，代码资源必须通过内部隔离运行验证，未评估知识点不再被伪装为低分或参与课程平均掌握度。
 
 当前九条真实生产 Graph 为 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
 
@@ -28,11 +28,11 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - `/courses/{course_id}/learning-state` 已实现课程级学习状态第一刀，可把课程问答弱点候选事件同步为 `pending` 待确认复习项，并在课程空间展示待复习弱点摘要。
 - 课程级弱点复习项已支持确认、开始、完成和软忽略状态流转；软忽略项不在主列表展示，但继续参与去重。
 - `/agents/traces/{trace_id}` 已实现当前用户 Agent 轨迹查询，响应包含 `workflow`、`artifact_type`、`artifact_id` 和白名单 metadata；课程空间“课堂协作轨迹”读取真实 trace 或真实空状态。
-- `/resources/generate` 保留同步兼容；新入口 `/resources/generation-jobs` 通过 `AIJobRuntime` 和独立 `edunova_ai` 队列执行讲解、思维导图、练习、代码实操、PPT、动画图解六类结构化资源。`ResourceGenerationGraph` 通过独立 Worker 并行生成并执行规则与模型审核，前端支持跨页面观察、刷新恢复、取消和失败重试。
+- `/resources/generate` 保留同步兼容；新入口 `/resources/generation-jobs` 通过 `AIJobRuntime` 和独立 `edunova_ai` 队列执行六类 v3 结构化资源。六个 Worker 直接生成类型化 artifact，ReviewAgent 读取安全证据和完整候选内容；讲解、导图、PPT 可保留通过门禁的证据型降级稿，练习、代码和动画未通过门禁时不会持久化。
 - `/paths/generate`、`/paths/current` 和 `/paths/tasks/{task_id}` 已实现课程级个性化学习路径生成、当前路径读取和任务状态更新；路径只表达学习顺序、当前任务和完成状态，不设置日期或期限。`PathPlanningGraph` 会综合画像、确认弱点、练习诊断、掌握度、资源和旧路径进度，练习回流只重排已有路径并保留已完成任务。
-- `/courses/{course_id}/mastery-map` 已实现规则掌握度图，`/courses/{course_id}/learning-state` 已返回真实 `path_summary`、`mastery_summary`、弱点推荐资源和下次复习时间。
-- `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已由 `AssessmentGraph` 编排出题和评估，支持 `adaptive` 难度；最近练习与未提交草稿可通过 URL、最近会话接口和草稿接口恢复。客观分数始终由规则决定。
-- `/reports/generate` 和 `/reports/latest` 已由 `ReportGraph` 聚合最近 5 次练习、掌握度、弱点、路径和资源。分数与趋势由规则计算，模型只增强叙事和建议；报告继续由用户主动生成。学习档案同步/异步导出接口保持兼容。
+- `/courses/{course_id}/mastery-map` 只使用有效练习作答和课程弱点等明确证据；未评估知识点返回 `score=null`，不参与课程平均值。路径任务只表达学习进度，不再制造掌握度分数。
+- `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已由 `AssessmentGraph` 编排证据型题目和逐题诊断，支持 `adaptive` 难度；题目引用、生成模式、Prompt 版本和质量摘要可追溯，客观分数始终由规则决定。
+- `/reports/generate` 和 `/reports/latest` 已由 `ReportGraph` 聚合最近 5 次练习、掌握度、弱点、路径和资源。练习会话数、已作答题数、正确题数、已评估知识点数和已完成路径任务数分别锁定，模型只能增强叙事和建议，数字矛盾必须修订或退回确定性报告。
 - `/materials/compare` 已由 `MaterialComparisonGraph` 接管；每次对比保存不可变版本，可恢复最近结果、追溯真实资料分块和审核轨迹。资料对比是资料库内的独立辅助工具，不会隐式修改学习路径或练习。
 - AI 辅导直接在 `/app/courses/:courseId` 课程空间内完成；已移除无独立能力的中转页，旧 `/app/tutor` 地址会回到学习主页。
 - 多套个人模型配置；每套配置可组合回答、向量和重排序三个不同服务商，并为三类能力分别保存连接、加密凭证、连接验证和默认用途。新配置推荐 Spark X2-Flash 回答、讯飞 LLM Embedding 和硅基 BGE Reranker，未提供完整凭证的能力保持未启用。
@@ -40,6 +40,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - 模型调用采用当前配置有限重试，不在故障后自动转发到另一 Provider；失败时保留各 Graph 的确定性 fallback。
 - `model_call_runs` 只记录模型名、状态、尝试次数、耗时和安全错误分类，Agent trace 可查看聚合调用摘要，不保存 Prompt 或回答正文。
 - 讯飞原生 2560 维 Embedding、百炼/硅基 OpenAI-compatible Embeddings、动态 pgvector 与可选 Rerank 已接入；主页资料与课程 RAG 使用关键词 Top 30、向量 Top 30、RRF Top 20、重排序后 Top 5，任一外部能力不可用时按层降级。
+- Docker Compose 新增仅内部网络可访问的 `code-verifier`。生成代码在非 root、只读文件系统、无外网和资源限制下由 Pyodide 独立 Worker 运行，只有安全策略、运行结果和预期输出全部一致时才允许保存。
 - Phase 12.2 已补交付基线文档、测试报告、用户指南、开源说明、答辩问答、AI 辅助开发说明和 MIT 许可证。
 
 主页回答已由 `HomeTutorGraph` 接管，按需检索当前用户选中资料的相关切片、Tavily-compatible 联网结果和安全深度规划，并通过 SSE 展示状态、真实来源、增量 Markdown、Review/Repair 和九节点安全 trace；未配置搜索 Key 时 warning 只进入来源/轨迹区，不伪造网页来源。主页语音输入和朗读使用浏览器 Web Speech API，不上传音频。课程空间继续使用严格课程引用、混合检索和流式 RAG。课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件，并通过课程学习状态同步为待确认复习项；这仍是“待确认/待复习”，不是已完成正式诊断。学生确认后才进入待复习、复习中或已完成语义，Phase 9 路径生成只消费已确认/复习中的弱点，不直接消费 `pending` 候选项。后续不会为每门课复制完整画像，而是通过课程级学习状态聚合目标、薄弱点、掌握度、复习队列和路径依据。

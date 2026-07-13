@@ -63,7 +63,7 @@ export function buildCourseLearningRecommendation(input: CourseRecommendationInp
   }
 
   const lowestPoint = [...input.masteryPoints]
-    .filter((item) => item.score < 75)
+    .filter((item): item is CourseMasteryPoint & { score: number } => item.score !== null && item.score < 75)
     .sort((left, right) => left.score - right.score || left.order_index - right.order_index)[0];
   if (lowestPoint) {
     return {
@@ -112,7 +112,8 @@ export function findBestCitationKnowledgePoint(citations: RagSearchResultItem[])
 }
 
 export function resourceDifficultyForPoint(point: CourseMasteryPoint | undefined): ResourceDifficulty {
-  if (!point || point.score < 45) return "easy";
+  if (!point || point.score === null) return "medium";
+  if (point.score < 45) return "easy";
   if (point.score < 75) return "medium";
   return "hard";
 }

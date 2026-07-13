@@ -579,7 +579,7 @@ Authorization: Bearer <token>
 
 状态：Phase 9 已实现。
 
-用途：获取课程级规则掌握度图。掌握度第一版不单独持久化，而是按课程知识点、`confirmed/reviewing/completed` 弱点队列、当前 active 学习路径任务、同课程生成资源和 Phase 10 练习评估结果实时计算。
+用途：获取课程级证据掌握度图。掌握度不单独持久化，按已完成练习中的有效作答、当前课程弱点及明确完成的学习证据实时计算；路径任务和资源存在性不再直接产生分数。
 
 规则：
 
@@ -587,9 +587,9 @@ Authorization: Bearer <token>
 - `confirmed/reviewing` 弱点映射为 `weak`。
 - Phase 10 后，练习作答低分或错误的知识点映射为 `weak`，正确或高分知识点可提升为 `mastered`。
 - 已完成弱点到达 `next_review_at` 时映射为 `recommended_review`。
-- 有进行中或待做路径任务的知识点映射为 `learning`。
-- 完成路径任务或完成弱点且未到复习时间映射为 `mastered`。
-- 其他知识点映射为 `not_started`。
+- 完成练习中的真实作答按客观得分形成证据；零分必须保留为零分。
+- 没有有效证据的知识点返回 `status=not_started`、`score=null`，不参与课程平均掌握度。
+- 路径任务只表达学习顺序和完成进度，不改变掌握度。
 - 响应不包含完整用户问题、系统提示词、模型输入、API Key、完整课程资料原文或完整画像原文。
 
 响应：
@@ -604,7 +604,10 @@ Authorization: Bearer <token>
       "learning_count": 1,
       "mastered_count": 1,
       "recommended_review_count": 0,
-      "not_started_count": 0
+      "not_started_count": 0,
+      "assessed_count": 3,
+      "unassessed_count": 0,
+      "average_score": 58
     },
     "points": [
       {
@@ -614,6 +617,9 @@ Authorization: Bearer <token>
         "order_index": 1,
         "status": "weak",
         "score": 35,
+        "evidence_count": 2,
+        "confidence": 0.78,
+        "last_assessed_at": "2026-07-14T08:00:00Z",
         "prerequisite_ids": [],
         "weakness_item_ids": ["7001"],
         "recommended_resource_ids": ["8001"]
@@ -1048,8 +1054,9 @@ Authorization: Bearer <token>
 - 所有接口必须携带 JWT。
 - 只能生成和读取当前用户自己的课程、知识点、资源和质量分；非本人资源或课程返回 404。
 - `resource_type` 支持 `doc`、`mindmap`、`quiz`、`code`、`slide`、`animation`。
-- `ResourceGenerationGraph` 使用 LangGraph `Send` 为每个请求类型并行派发独立 Worker。每个 Worker 先生成 v2 确定性结构化稿，再独立调用模型增强；ReviewAgent 结合结构规则与模型复核，失败资源最多修订一次。
-- `content_json.schema_version=2` 时必须包含 `format=rich`、`artifact.kind` 和 Markdown fallback。`generation_mode` 标记模型增强或确定性来源，`review_mode` 标记 `model_and_rules` 或 `rules_only`，不能把规则 fallback 写成模型审核。
+- `ResourceGenerationGraph` 使用 LangGraph `Send` 为每个请求类型并行派发独立 Worker。每个 Worker 直接生成 v3 类型化 artifact；ReviewAgent 读取安全资料摘录、学习目标和完整候选内容，失败资源最多执行一次结构修复和一次内容修订。
+- `content_json.schema_version=3` 必须包含 `format=rich`、`artifact.kind`、Markdown fallback、引用绑定、`quality` 和 Prompt 版本。`generation_mode=model_enhanced` 仅在模型结果相对底稿存在有效差异并通过门禁时使用。
+- 讲解、导图和 PPT 可保存通过规则门禁的证据型降级稿；练习、代码和动画不合格时进入 `failed_resource_types` 且不持久化。代码还必须通过内部 Pyodide 运行验证，验证服务不可用时不得保存未经运行的代码。
 - 响应、资源内容、质量分和 Agent trace 只保存安全摘要、引用标题和白名单 metadata，不返回系统提示词、完整模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
 ### POST `/resources/generate`
@@ -1092,7 +1099,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
         "resource_type": "doc",
         "title": "反向传播个性化讲解",
         "content_json": {
-          "schema_version": 2,
+          "schema_version": 3,
           "format": "rich",
           "markdown": "# 反向传播个性化讲解\n\n先理解链式法则，再看计算图中的梯度传递。",
           "artifact": {
@@ -1106,11 +1113,19 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
             "agent_trace_id": "trace_20260705_resource_001",
             "generation_mode": "model_enhanced",
             "review_mode": "model_and_rules",
+            "prompt_version": "resource-doc-v3",
             "repair_count": 0,
             "difficulty": "medium",
             "has_learning_goal": true,
             "source_excerpt_count": 3,
             "model_enhancement_failed": false
+          },
+          "quality": {
+            "status": "passed",
+            "source_coverage": 1.0,
+            "topic_relevant": true,
+            "prompt_echo_detected": false,
+            "code_verification": null
           }
         },
         "citation_json": [
@@ -1668,7 +1683,7 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
 - 所有接口必须携带 JWT。
 - 只能创建、读取和提交当前用户自己课程下的练习。
 - 只能生成和读取当前用户自己课程下的报告。
-- 练习题先生成确定性底稿，模型可增强题干和解析；数字评分始终采用确定性规则，模型不得修改。
+- 练习题先从真实课程切片生成证据型蓝图，包含知识点、能力目标、引用和不可变规则答案；模型可增强题面、合理干扰项和解析，数字评分始终采用确定性规则。
 - 练习题第一刀支持 `single_choice`、`multiple_choice`、`short_answer`。
 - 练习提交后，低分或错误题会按课程和知识点合并进入 `weakness_review_queue`，并用 `source_ref_type="practice_answer"`、`source_ref_id` 和 `diagnosis_json` 保存安全证据；已有普通路径会在独立 trace 中重排，无路径时不自动创建。
 - `in_progress` 练习的 `correct_answer` 始终为 `null`，避免答题前泄题；只有练习完成后，提交和读取响应才返回当前题目的正确答案，用于错题复盘。
@@ -1676,7 +1691,7 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
 
 ### POST `/practice/sessions`
 
-用途：创建当前用户课程练习，并返回题目。题目来自课程知识点、同课程资源和薄弱点线索的确定性组合。
+用途：创建当前用户课程练习，并返回题目。题目由真实课程切片和知识点证据形成蓝图，再经模型增强、重复率/选项/答案/引用门禁和 ReviewAgent 审核。
 
 请求：
 
@@ -1708,12 +1723,16 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
         "question_type": "single_choice",
         "knowledge_point_id": "8",
         "knowledge_point_title": "启发式搜索",
-        "prompt": "关于启发式搜索，哪一项最符合课程复习重点？",
-        "options": ["启发式搜索", "无关概念"],
+        "prompt": "A* 搜索中，哪一项正确描述了 f(n)=g(n)+h(n)？",
+        "options": ["g(n) 表示已走代价，h(n) 表示剩余代价估计", "g(n) 与 h(n) 都只表示节点深度", "h(n) 表示已走代价，g(n) 表示目标概率", "f(n) 与路径代价无关"],
         "correct_answer": null,
         "keywords": ["启发式搜索", "关键概念"],
-        "explanation": "围绕课程引用复习。",
-        "difficulty": "medium"
+        "explanation": "课程证据说明 g(n) 是已走代价，h(n) 是剩余代价的启发估计。",
+        "difficulty": "medium",
+        "citation_refs": ["302"],
+        "generation_mode": "model_enhanced",
+        "prompt_version": "assessment-v3.1",
+        "quality": {"evidence_bound": true, "answer_locked": true}
       }
     ],
     "answers": [],
@@ -1810,7 +1829,7 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
 
 ### POST `/reports/generate`
 
-用途：由 `ReportGraph` 聚合当前课程最近 5 次已完成练习、掌握度、弱点、当前路径和资源，写入 `assessment_reports`。数字统计和趋势由规则产生，模型只增强总结与建议。
+用途：由 `ReportGraph` 聚合当前课程最近 5 次已完成练习、掌握度、弱点、当前路径和资源，写入 `assessment_reports`。练习会话、已作答题、正确题、已评估知识点和已完成路径任务分别统计并锁定；模型只增强总结与建议，数字矛盾必须修订或退回确定性报告。
 
 请求：
 
@@ -1862,9 +1881,19 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
       "evidence_summary": {
         "practice_count": 3,
         "answer_count": 15,
+        "correct_answer_count": 9,
+        "assessed_knowledge_point_count": 4,
+        "completed_path_task_count": 2,
         "weakness_count": 1,
         "path_status": "active",
         "resource_count": 2
+      },
+      "deterministic_statistics": {
+        "practice_session_count": 3,
+        "answered_question_count": 15,
+        "correct_answer_count": 9,
+        "assessed_knowledge_point_count": 4,
+        "completed_path_task_count": 2
       },
       "review_result": {
         "review_status": "passed",

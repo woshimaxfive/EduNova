@@ -24,7 +24,36 @@ def test_mastery_scores_keep_course_evidence_isolated() -> None:
         WeaknessReviewItem(id=2, user_id=1, course_id=202, knowledge_point_id=99, title="其他课程", source_type="practice", status="confirmed"),
     ]
 
-    assert LearnerContextService._mastery_scores(points, weaknesses, [], []) == [35, 0]
+    assert LearnerContextService._mastery_scores(points, weaknesses, []) == [35]
+
+
+def test_mastery_scores_use_answer_evidence_and_ignore_path_progress() -> None:
+    from backend.app.models import KnowledgePoint, PracticeAnswer, WeaknessReviewItem
+
+    points = [KnowledgePoint(id=11, course_id=101, title="反向传播", order_index=0, difficulty="medium")]
+    weaknesses = [
+        WeaknessReviewItem(
+            id=1,
+            user_id=1,
+            course_id=101,
+            knowledge_point_id=11,
+            title="反向传播",
+            source_type="practice",
+            status="confirmed",
+        )
+    ]
+    answers = [
+        PracticeAnswer(
+            id=1,
+            session_id=1,
+            user_id=1,
+            question_json={"knowledge_point_id": 11},
+            answer_text="错误回答",
+            feedback_json={"score": 0},
+            is_correct=False,
+        )
+    ]
+    assert LearnerContextService._mastery_scores(points, weaknesses, answers) == [0]
 
 
 def test_all_graph_state_contracts_preserve_learner_context() -> None:

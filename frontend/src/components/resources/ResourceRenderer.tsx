@@ -17,7 +17,7 @@ function legacyMermaidSource(markdown: string) {
 
 export function ResourceRenderer({ resource }: { resource: GeneratedResource }) {
   const content = resource.content_json;
-  const artifact = content.schema_version === 2 ? content.artifact : undefined;
+  const artifact = content.schema_version === 2 || content.schema_version === 3 ? content.artifact : undefined;
 
   if (artifact?.kind === "document") {
     return (

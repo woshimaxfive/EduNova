@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from difflib import SequenceMatcher
+import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from time import perf_counter
@@ -23,6 +25,11 @@ from backend.app.services.model_execution import execution_context_for_state, mo
 from backend.app.services.learner_context import context_service_from_repository
 
 
+ASSESSMENT_PROMPT_VERSION = "assessment-v3.1"
+ASSESSMENT_REVIEW_PROMPT_VERSION = "assessment-review-v3.1"
+DIAGNOSIS_PROMPT_VERSION = "diagnosis-v3.1"
+
+
 class AssessmentState(TypedDict, total=False):
     trace_id: str
     operation: str
@@ -39,6 +46,7 @@ class AssessmentState(TypedDict, total=False):
     points: list[Any]
     selected_points: list[Any]
     resources: list[Any]
+    chunks: list[Any]
     learner_context: Any
     deterministic_questions: list[dict[str, Any]]
     questions: list[dict[str, Any]]
@@ -154,13 +162,15 @@ class AssessmentGraphRunner:
             points = self.service.repository.list_knowledge_points(course.id)
             selected = self.service._select_points(points, list(state.get("knowledge_point_ids", [])))
             resources = self.service.repository.list_generated_resources(int(state["user_id"]), course.id)
+            list_chunks = getattr(self.service.repository, "list_knowledge_chunks", None)
+            chunks = list_chunks(course.id) if callable(list_chunks) else []
             if not selected:
                 raise PracticeValidationError("当前课程还没有可用于生成练习的知识点。")
             effective_difficulty = self.service.resolve_difficulty(state["user"], course.id, selected, str(state.get("requested_difficulty") or state["difficulty"]))
             context_service = context_service_from_repository(self.service.repository)
             learner_context = context_service.course_context(int(state["user_id"]), course.id) if context_service is not None else None
             return (
-                {"course": course, "points": points, "selected_points": selected, "resources": resources, "difficulty": effective_difficulty, "learner_context": learner_context},
+                {"course": course, "points": points, "selected_points": selected, "resources": resources, "chunks": chunks, "difficulty": effective_difficulty, "learner_context": learner_context},
                 f"已选择 {len(selected)} 个知识点和 {len(resources)} 个课程资源。",
                 "completed",
                 {
@@ -181,6 +191,7 @@ class AssessmentGraphRunner:
                 list(state.get("resources", [])),
                 int(state["question_count"]),
                 str(state["difficulty"]),
+                list(state.get("chunks", [])),
             )
             if not questions:
                 raise PracticeValidationError("当前课程还没有可用于生成练习的知识点。")
@@ -208,18 +219,34 @@ class AssessmentGraphRunner:
     def _question_repair_node(self, state: AssessmentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             repaired = self._model_questions(state, repair=True)
-            if repaired is None or self._question_risks(state, repaired):
+            rule_risks = self._question_risks(state, repaired) if repaired is not None else ["repair_unavailable"]
+            model_review = self._model_review(state, question_mode=True, candidate=repaired) if repaired is not None and not rule_risks else None
+            model_rejected = model_review is not None and model_review["review_status"] == "revise"
+            if repaired is None or rule_risks or model_rejected:
                 repaired = list(state.get("deterministic_questions", []))
                 mode = "deterministic_source"
+                review_mode = "model_and_rules" if model_review is not None else "rules_only"
+                review = {
+                    "review_status": "warning",
+                    "confidence": 0.64,
+                    "risk_flags": [],
+                    "safety_summary": "修订稿未通过完整审核，已保留通过规则校验的证据型题稿。",
+                }
+            elif model_review is None:
+                mode = "model_enhanced"
+                review_mode = "rules_only"
+                review = {
+                    "review_status": "warning",
+                    "confidence": 0.64,
+                    "risk_flags": [],
+                    "safety_summary": "修订题稿已通过结构、答案、引用和隐私规则校验，模型审核不可用。",
+                }
             else:
                 mode = "model_enhanced"
-            review = {
-                "review_status": "passed",
-                "confidence": 0.72 if mode == "model_enhanced" else 0.64,
-                "risk_flags": [],
-                "safety_summary": "已修订一次并通过题目结构、答案和隐私规则校验。",
-            }
-            return {"questions": repaired, "generation_mode": mode, "review_result": review, "repair_count": 1}, review["safety_summary"], "completed", {**review, "repair_count": 1}
+                review_mode = "model_and_rules"
+                review = {**model_review, "review_status": "passed", "risk_flags": []}
+            node_status = "completed" if review["review_status"] == "passed" else "warning"
+            return {"questions": repaired, "generation_mode": mode, "review_mode": review_mode, "review_result": review, "repair_count": 1}, review["safety_summary"], node_status, {**review, "repair_count": 1}
 
         return self._run_node(state, "repair", 5, "按审核结果修订一次题目", work)
 
@@ -347,8 +374,8 @@ class AssessmentGraphRunner:
                 weakness = state.get("touched_weaknesses", {}).get(question_id)
                 if weakness is not None:
                     self._apply_diagnosis_to_weakness(weakness, diagnosis, row.id)
-            review = {"review_status": "passed", "confidence": 0.66, "risk_flags": [], "safety_summary": "已使用确定性错因摘要完成一次修订，并重新校验分数。"}
-            return {"diagnoses": diagnoses, "generation_mode": "deterministic_source", "review_result": review, "repair_count": 1}, review["safety_summary"], "completed", {**review, "repair_count": 1}
+            review = {"review_status": "warning", "confidence": 0.66, "risk_flags": [], "safety_summary": "模型诊断未通过审核，已使用逐题确定性错因摘要并重新校验分数。"}
+            return {"diagnoses": diagnoses, "generation_mode": "deterministic_source", "review_mode": "rules_only", "review_result": review, "repair_count": 1}, review["safety_summary"], "warning", {**review, "repair_count": 1}
 
         return self._run_node(state, "repair", 6, "修订错因摘要但保持规则分数不变", work)
 
@@ -422,27 +449,7 @@ class AssessmentGraphRunner:
     def _review_questions_or_answers(self, state: AssessmentState, *, question_mode: bool, step_index: int) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             risks = self._question_risks(state, list(state.get("questions", []))) if question_mode else self._answer_risks(state)
-            model_review = None
-            if state.get("generation_mode") == "model_enhanced" and self.service.model_service is not None:
-                try:
-                    raw = self.service.model_service.chat_completion(
-                        state["user"],
-                        [
-                            {"role": "system", "content": "你是 AssessmentGraph 的 ReviewAgent。只输出 JSON，不得修改客观分数。"},
-                            {
-                                "role": "user",
-                                "content": (
-                                    f"审核类型={'题目' if question_mode else '错因反馈'}，数量="
-                                    f"{len(state.get('questions', [])) if question_mode else len(state.get('evaluated', []))}。"
-                                    "返回 {\"review_status\":\"passed|revise\",\"confidence\":0.0,"
-                                    "\"risk_flags\":[],\"safety_summary\":\"\"}。"
-                                ),
-                            },
-                        ],
-                    )
-                    model_review = review_contract(parse_json_object(raw), default_summary="已完成练习结构、分数与隐私审核。")
-                except Exception:
-                    model_review = None
+            model_review = self._model_review(state, question_mode=question_mode) if state.get("generation_mode") == "model_enhanced" else None
             if model_review and model_review["review_status"] == "revise":
                 risks.extend(str(item) for item in model_review["risk_flags"])
             risks = list(dict.fromkeys(risks))
@@ -457,6 +464,37 @@ class AssessmentGraphRunner:
 
         return self._run_node(state, "review", step_index, "审核题目或反馈的结构、分数与安全边界", work)
 
+    def _model_review(
+        self,
+        state: AssessmentState,
+        *,
+        question_mode: bool,
+        candidate: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any] | None:
+        if self.service.model_service is None:
+            return None
+        payload_state = {**state, "questions": candidate} if question_mode and candidate is not None else state
+        try:
+            raw = self.service.model_service.chat_completion(
+                state["user"],
+                [
+                    {"role": "system", "content": "你是 AssessmentGraph 的 ReviewAgent。只输出 JSON，不得修改客观分数。"},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"审核协议={ASSESSMENT_REVIEW_PROMPT_VERSION}。"
+                            f"审核类型={'题目' if question_mode else '错因反馈'}。"
+                            f"候选内容={json.dumps(self._safe_review_payload(payload_state, question_mode=question_mode), ensure_ascii=False)}。"
+                            "返回 {\"review_status\":\"passed|revise\",\"confidence\":0.0,"
+                            "\"risk_flags\":[],\"safety_summary\":\"\"}。"
+                        ),
+                    },
+                ],
+            )
+            return review_contract(parse_json_object(raw), default_summary="已完成练习结构、分数与隐私审核。")
+        except Exception:
+            return None
+
     @staticmethod
     def _review_route(state: AssessmentState) -> str:
         return "repair" if state.get("needs_repair") else "persist"
@@ -465,7 +503,21 @@ class AssessmentGraphRunner:
         if self.service.model_service is None:
             return None
         drafts = list(state.get("deterministic_questions", []))
-        prompt_rows = [{"id": item["id"], "question_type": item["question_type"], "knowledge_point_id": item["knowledge_point_id"], "prompt": item["prompt"], "options": item["options"], "explanation": item["explanation"]} for item in drafts]
+        prompt_rows = [
+            {
+                "id": item["id"],
+                "question_type": item["question_type"],
+                "knowledge_point_id": item["knowledge_point_id"],
+                "knowledge_point_title": item.get("knowledge_point_title"),
+                "source_excerpt": item.get("source_excerpt"),
+                "citation_refs": item.get("citation_refs"),
+                "prompt": item["prompt"],
+                "options": item["options"],
+                "correct_answer": item.get("correct_answer"),
+                "explanation": item["explanation"],
+            }
+            for item in drafts
+        ]
         learner_context = state.get("learner_context")
         personalization = learner_context.prompt_summary() if learner_context is not None else {}
         instruction = "这是唯一一次修订机会。" if repair else "增强题干、干扰项和解析，但不得改变题目 ID、类型、知识点或规则答案。"
@@ -473,8 +525,8 @@ class AssessmentGraphRunner:
             raw = self.service.model_service.chat_completion(
                 state["user"],
                 [
-                    {"role": "system", "content": "你是 AssessmentGraph 出题 Agent。只输出 JSON，禁止泄露答案生成规则。"},
-                    {"role": "user", "content": f"{instruction} 可信课程画像提示={personalization}。题目底稿={prompt_rows}。返回 {{\"questions\":[{{\"id\":\"q1\",\"prompt\":\"\",\"options\":[],\"explanation\":\"\"}}]}}。"},
+                    {"role": "system", "content": "你是 AssessmentGraph 出题 Agent。依据课程证据生成各不相同、可回答且干扰项合理的题目，只输出 JSON。"},
+                    {"role": "user", "content": f"协议={ASSESSMENT_PROMPT_VERSION}。{instruction} 可信课程画像提示={personalization}。题目蓝图={json.dumps(prompt_rows, ensure_ascii=False)}。选择题必须保留正确答案原文并生成四个互不重复的合理选项；不同题目不得复用题面。返回 {{\"questions\":[{{\"id\":\"q1\",\"prompt\":\"\",\"options\":[],\"explanation\":\"\"}}]}}。"},
                 ],
             )
         except Exception:
@@ -498,7 +550,7 @@ class AssessmentGraphRunner:
                 if all(item in options for item in expected):
                     candidate["options"] = options
             enhanced.append(candidate)
-        return enhanced
+        return enhanced if enhanced != drafts else None
 
     def _model_diagnoses(self, state: AssessmentState) -> dict[str, dict[str, Any]] | None:
         if self.service.model_service is None:
@@ -510,8 +562,12 @@ class AssessmentGraphRunner:
             {
                 "question_id": str(item.question.get("id")),
                 "knowledge_point": safe_text(item.question.get("knowledge_point_title"), limit=120),
-                "answer": safe_text(item.answer_text, limit=500),
+                "question": safe_text(item.question.get("prompt"), limit=800),
+                "correct_answer": item.question.get("correct_answer"),
+                "standard_explanation": safe_text(item.question.get("explanation"), limit=800),
+                "student_answer": safe_text(item.answer_text, limit=500),
                 "missing_keywords": list(item.feedback.get("missing_keywords") or [])[:5],
+                "source_excerpt": safe_text(item.question.get("source_excerpt"), limit=500),
                 "score": int(item.feedback["score"]),
             }
             for item in wrong
@@ -522,8 +578,8 @@ class AssessmentGraphRunner:
             raw = self.service.model_service.chat_completion(
                 state["user"],
                 [
-                    {"role": "system", "content": "你是 AssessmentGraph 错因诊断 Agent。不得修改分数，只输出 JSON。"},
-                    {"role": "user", "content": f"可信课程画像提示={personalization}。诊断这些低分题={rows}。返回 {{\"diagnoses\":[{{\"question_id\":\"q1\",\"misconception\":\"\",\"missing_concepts\":[],\"recommended_action\":\"\",\"confidence\":0.0}}]}}。"},
+                    {"role": "system", "content": "你是 AssessmentGraph 错因诊断 Agent。逐题对照题干、正确答案、学生答案和课程证据诊断，不得修改分数，只输出 JSON。"},
+                    {"role": "user", "content": f"协议={DIAGNOSIS_PROMPT_VERSION}。可信课程画像提示={personalization}。低分题={json.dumps(rows, ensure_ascii=False)}。每道题必须给出与本题直接相关且不重复套用的错因。返回 {{\"diagnoses\":[{{\"question_id\":\"q1\",\"misconception\":\"\",\"missing_concepts\":[],\"recommended_action\":\"\",\"confidence\":0.0}}]}}。"},
                 ],
             )
         except Exception:
@@ -644,6 +700,7 @@ class AssessmentGraphRunner:
             return ["question_count_mismatch"]
         draft_by_id = {str(item["id"]): item for item in drafts}
         risks: list[str] = []
+        normalized_prompts: list[str] = []
         for question in questions:
             question_id = str(question.get("id"))
             draft = draft_by_id.get(question_id)
@@ -654,13 +711,56 @@ class AssessmentGraphRunner:
                 if question.get(immutable) != draft.get(immutable):
                     risks.append("answer_contract_changed")
             options = [str(value) for value in question.get("options") or []]
+            normalized_options = [" ".join(value.split()).casefold() for value in options]
             correct = question.get("correct_answer")
             expected = [str(value) for value in correct] if isinstance(correct, list) else ([str(correct)] if correct else [])
             if any(value not in options for value in expected) and question.get("question_type") != "short_answer":
                 risks.append("correct_answer_missing")
+            if question.get("question_type") != "short_answer" and (len(options) < 4 or len(normalized_options) != len(set(normalized_options))):
+                risks.append("invalid_options")
+            if any(value in {"无关概念", "跳过资料依据", "只背结论", "无关提示"} for value in options):
+                risks.append("trivial_distractor")
+            prompt = "".join(safe_text(question.get("prompt"), limit=800).casefold().split())
+            if len(prompt) < 12:
+                risks.append("question_too_short")
+            if any(SequenceMatcher(None, prompt, previous).ratio() >= 0.86 for previous in normalized_prompts):
+                risks.append("duplicate_question")
+            normalized_prompts.append(prompt)
+            source_excerpt = safe_text(question.get("source_excerpt"), limit=500)
+            if not source_excerpt:
+                risks.append("missing_evidence")
             if contains_sensitive_text(question):
                 risks.append("sensitive_output")
         return list(dict.fromkeys(risks))
+
+    @staticmethod
+    def _safe_review_payload(state: AssessmentState, *, question_mode: bool) -> list[dict[str, Any]]:
+        if question_mode:
+            return [
+                {
+                    "id": item.get("id"),
+                    "question_type": item.get("question_type"),
+                    "knowledge_point": safe_text(item.get("knowledge_point_title"), limit=120),
+                    "prompt": safe_text(item.get("prompt"), limit=800),
+                    "options": safe_string_list(item.get("options"), limit=8, item_limit=240),
+                    "correct_answer": item.get("correct_answer"),
+                    "explanation": safe_text(item.get("explanation"), limit=800),
+                    "source_excerpt": safe_text(item.get("source_excerpt"), limit=500),
+                }
+                for item in state.get("questions", [])
+            ]
+        return [
+            {
+                "question_id": str(item.question.get("id")),
+                "question": safe_text(item.question.get("prompt"), limit=800),
+                "correct_answer": item.question.get("correct_answer"),
+                "student_answer": safe_text(item.answer_text, limit=500),
+                "score": int(item.feedback.get("score") or 0),
+                "diagnosis": state.get("diagnoses", {}).get(str(item.question.get("id"))),
+            }
+            for item in state.get("evaluated", [])
+            if int(item.feedback.get("score") or 0) < 60
+        ]
 
     def _answer_risks(self, state: AssessmentState) -> list[str]:
         evaluated_by_id = {str(item.question.get("id")): item for item in state.get("evaluated", [])}

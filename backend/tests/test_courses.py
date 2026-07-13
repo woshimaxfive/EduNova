@@ -972,8 +972,10 @@ def test_learning_state_returns_real_path_mastery_and_resource_recommendations()
     }
     assert state["mastery_summary"]["total_count"] == 3
     assert state["mastery_summary"]["weak_count"] == 1
-    assert state["mastery_summary"]["learning_count"] == 1
+    assert state["mastery_summary"]["learning_count"] == 0
     assert state["mastery_summary"]["recommended_review_count"] == 1
+    assert state["mastery_summary"]["assessed_count"] == 2
+    assert state["mastery_summary"]["unassessed_count"] == 1
     by_title = {item["title"]: item for item in state["weakness_review_queue"]}
     assert by_title["启发式搜索"]["recommended_resource_ids"] == ["801"]
     assert by_title["启发式搜索"]["recommended_resources"][0]["title"] == "启发式搜索讲解"
@@ -1008,9 +1010,12 @@ def test_mastery_map_maps_weaknesses_tasks_resources_and_scopes_course() -> None
     assert by_title["启发式搜索"]["score"] == 35
     assert by_title["启发式搜索"]["weakness_item_ids"] == ["55"]
     assert by_title["启发式搜索"]["recommended_resource_ids"] == ["801"]
-    assert by_title["局部搜索"]["status"] == "mastered"
+    assert by_title["局部搜索"]["status"] == "not_started"
+    assert by_title["局部搜索"]["score"] is None
     assert mastery["summary"]["weak_count"] == 1
-    assert mastery["summary"]["mastered_count"] == 2
+    assert mastery["summary"]["mastered_count"] == 0
+    assert mastery["summary"]["learning_count"] == 1
+    assert mastery["summary"]["unassessed_count"] == 1
 
     serialized = str(mastery)
     assert "系统提示词" not in serialized
@@ -1040,9 +1045,10 @@ def test_mastery_map_uses_practice_answers_to_mark_weak_and_mastered_points() ->
 
     by_title = {point["title"]: point for point in mastery["points"]}
     assert by_title["启发式搜索"]["status"] == "weak"
-    assert by_title["启发式搜索"]["score"] == 35
+    assert by_title["启发式搜索"]["score"] == 0
     assert by_title["A* 搜索"]["status"] == "mastered"
-    assert by_title["A* 搜索"]["score"] == 90
+    assert by_title["A* 搜索"]["score"] == 100
+    assert mastery["summary"]["average_score"] == 50
     assert mastery["summary"]["weak_count"] == 1
     assert mastery["summary"]["mastered_count"] == 1
 

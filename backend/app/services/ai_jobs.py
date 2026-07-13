@@ -604,6 +604,7 @@ class AiJobService:
 
     def _run_resource_generation(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:
         from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
+        from backend.app.services.code_verifier import HttpCodeVerifier
         from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
         from backend.app.services.resources import ResourceGenerationGraphRunner, ResourceGenerationService, SqlAlchemyResourceRepository
 
@@ -616,6 +617,10 @@ class AiJobService:
             SqlAlchemyResourceRepository(self.repository.db),
             model_settings_service=model_service,
             trace_recorder=AgentTraceRecorder(),
+            code_verifier=HttpCodeVerifier(
+                self.settings.code_verifier_url,
+                timeout_seconds=self.settings.code_verifier_timeout_seconds,
+            ),
         )
         request = dict(job.request_json or {})
         course = service._require_course(user, int(request["course_id"]))

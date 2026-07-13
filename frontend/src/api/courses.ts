@@ -142,6 +142,9 @@ export type CourseMasterySummary = {
   mastered_count: number;
   recommended_review_count: number;
   not_started_count: number;
+  assessed_count?: number;
+  unassessed_count?: number;
+  average_score?: number | null;
 };
 
 export type CourseMasteryStatus = "not_started" | "learning" | "mastered" | "weak" | "recommended_review";
@@ -152,7 +155,10 @@ export type CourseMasteryPoint = {
   chapter: string | null;
   order_index: number;
   status: CourseMasteryStatus;
-  score: number;
+  score: number | null;
+  evidence_count?: number;
+  confidence?: number | null;
+  last_assessed_at?: string | null;
   prerequisite_ids: string[];
   weakness_item_ids: string[];
   recommended_resource_ids: string[];
@@ -181,7 +187,7 @@ export type CourseLearnerContext = {
   course_goal: string;
   foundation_summary: string;
   active_weaknesses: string[];
-  mastery_average: number;
+  mastery_average: number | null;
   current_task_title: string | null;
   recent_practice_score: number | null;
   learning_preference: string;

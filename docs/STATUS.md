@@ -1,10 +1,10 @@
 # EduNova 当前状态
 
-更新时间：2026-07-13
+更新时间：2026-07-14
 
 ## 状态摘要
 
-当前最新完成到 **X2-Flash、动态向量与重排序生产化**。
+当前最新完成到 **Phase 19 AI 产物质量内核与学习指标纠偏**。
 
 Phase 计划的历史过程继续保留在 `docs/superpowers`。Phase 13 已完成主页问答、课程问答和资源生成的真实 Graph 编排，Phase 14 已让路径、练习评估和报告进入真实 LangGraph，Phase 15 已让画像和资料建课进入生产 Graph，Phase 16 曾实现资料对比和独立期末冲刺；当前产品已收敛为九条生产 Graph 和一条个性化学习路径。
 
@@ -13,6 +13,8 @@ Phase 16 使用 Alembic `20260711_0013` 新增不可变 `material_comparison_run
 Phase 17 使用 Alembic `20260711_0014` 新增 `ai_jobs`。`CourseBuilderGraph` 和 `ResourceGenerationGraph` 继续保持原有同步接口兼容，同时通过 `edunova_ai` RQ 队列提供后台任务入口。任务状态由服务端持久化，Graph 节点通过独立 session 更新真实进度和心跳；取消在节点与持久化边界协作执行，失败或取消不保存半成品课程或资源。
 
 Phase 18 使用 Alembic `20260711_0015` 新增隐私安全的 `model_call_runs`。九条 Graph、主页/课程流式问答和 Embedding 共用 `ModelExecutionRuntime`：只在当前配置内对瞬时故障有限重试，Redis 统一限制用户/全局并发并维护熔断状态；首 token 后的流中断不自动重放，也不持久化半截回答。离线 AI 质量回归集覆盖九条 Graph 的引用、敏感输出、结构和确定性数字边界，不依赖真实 API Key。
+
+Phase 19 未新增数据库迁移。六类新资源升级为 v3 类型化 artifact 和完整内容门禁；代码资源必须由内部 `code-verifier` 实际运行并匹配预期输出。AssessmentGraph 使用真实课程切片形成题目蓝图和逐题诊断，ReportGraph 分离并锁定五类统计。掌握度只计算有效证据，未评估知识点返回 `score=null`，路径任务不再制造分数。资料对比增加概念别名归并，会话检索在明显换题时停止拼接旧问题。
 
 2026-07-12 已补齐主页完整历史与会话资料记忆：Alembic `20260712_0016` 为 `chat_sessions` 增加 `selected_material_ids`；侧栏首批读取 30 条主页会话并支持继续加载，服务端搜索覆盖标题和消息正文。会话资料确认后持久化，刷新、跨页选择和历史恢复均读取同一范围；主页建课选料保持独立，不反向污染对话资料。课程会话和旧列表接口保持兼容。
 
@@ -126,7 +128,7 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 | Agent 轨迹 | 当前用户自己的 Agent trace 查询、步骤排序、Graph 工作流和安全摘要返回 | `/api/v1/agents/traces/{trace_id}` |
 | 课程资源 | `ResourceGenerationGraph` 接管六类结构化资源、质量审核、PPTX 导出和 trace | `/api/v1/resources/*` |
 | 学习路径 | `PathPlanningGraph` 按画像、弱点、掌握度和课程结构生成/重排有序路径并保留进度 | `/api/v1/paths/*` |
-| 掌握度图 | 按课程知识点、弱点队列、路径任务、资源推荐和练习结果计算规则掌握度 | `/api/v1/courses/{course_id}/mastery-map` |
+| 掌握度图 | 按有效练习作答和课程弱点证据计算；未评估知识点不参与均值，路径状态与掌握度分离 | `/api/v1/courses/{course_id}/mastery-map` |
 | 练习评估 | `AssessmentGraph` 出题、确定性评分、错因诊断、弱点与路径回流 | `/api/v1/practice/*` |
 | 学习报告 | `ReportGraph` 聚合最近练习、掌握度、弱点、路径、资源与趋势 | `/api/v1/reports/*` |
 | 学习档案导出 | 同步 Markdown 兼容接口与 Markdown/PDF/DOCX 异步导出任务 | `/api/v1/exports/*` |
@@ -175,7 +177,7 @@ Phase 13 前端视觉硬化后，桌面端继续保留 264px / 68px 的展开与
 | 模型 | Spark X2-Flash、OpenAI-compatible chat/stream、讯飞与兼容 embeddings、Rerank 已接入 |
 | 学习画像 | `ProfileGraph` 已接入显式/隐式更新、证据门控、Review/Repair 和逐维可信度；不为每门课复制完整画像 |
 | Agent 轨迹 | `agents` router 已接入，复用 `agent_run_logs`，支持当前用户 trace 查询、Graph 工作流字段和安全摘要返回 |
-| 课程资源 | `resources` router 已接入，支持六类 v2 结构化资源、并行 Worker、真实审核、旧资源兼容和 PPTX 异步导出 |
+| 课程资源 | `resources` router 已接入，支持六类 v3 类型化资源、完整内容门禁、代码运行验证、旧资源兼容和 PPTX 异步导出 |
 | 学习路径 | `paths` router 已接入，复用 `learning_paths` 和 `learning_tasks`，支持课程级路径生成和任务状态更新 |
 | 练习评估 | `practice` router 已接入，复用 `practice_sessions`、`practice_answers` 和 `weakness_review_queue`，支持确定性出题、批改和弱点反哺 |
 | 学习报告 | `reports` router 已接入，复用 `assessment_reports`，支持课程最新报告读取和报告生成 |
@@ -185,7 +187,7 @@ Phase 13 前端视觉硬化后，桌面端继续保留 264px / 68px 的展开与
 
 当前后端已挂载的业务 router 是 `auth`、`dashboard`、`courses`、`materials`、`profiles`、`rag`、`settings`、`tutor`、`agents`、`ai_jobs`、`resources`、`paths`、`practice`、`reports` 和 `exports`。`demo` 仍只是前端 API 常量与后续接口设计，不属于当前已实现后端能力。
 
-资源分层口径保持不变：`course_id != null` 是课程资源，`course_id == null` 预留个人全局资源。新资源使用 `content_json.schema_version=2` 和 `artifact.kind` 保存结构化产物，同时保留 Markdown fallback；旧资源不批量改写。`generation_mode` 区分模型增强与确定性来源，`review_mode` 区分 `model_and_rules` 和 `rules_only`，不能把规则 fallback 伪装成模型审核。资源、质量分和 trace 均不保存系统提示词、完整模型输入、密钥、完整资料或完整画像原文。
+资源分层口径保持不变：`course_id != null` 是课程资源，`course_id == null` 预留个人全局资源。新资源使用 `content_json.schema_version=3` 和 `artifact.kind` 保存类型化产物、质量门禁、引用绑定、Prompt 版本和代码验证摘要，同时保留 Markdown fallback；旧 v1/v2 资源不批量改写。`generation_mode` 区分模型增强与确定性来源，`review_mode` 区分 `model_and_rules` 和 `rules_only`，不能把规则 fallback 伪装成模型审核。资源、质量分和 trace 均不保存系统提示词、完整模型输入、密钥、完整资料或完整画像原文。
 
 课程问答在 Phase 7.1 后会把明确困惑/薄弱信号沉淀为画像候选事件，但只保存课程、会话、消息、`trace_id` 和引用摘要，不保存完整用户问题、系统提示词、模型输入或资料原文。Phase 7.3 的 `/courses/{course_id}/learning-state` 会把当前课程的这些候选事件按知识点或安全标题同步为 `pending` 待确认复习项，不把候选事件直接宣称为已诊断弱点。Phase 7.4 后，学生可以把队列项确认为 `confirmed`、开始为 `reviewing`、完成为 `completed`，也可以软忽略为 `dismissed`；`dismissed` 不在主列表展示，但继续参与去重。
 
@@ -208,7 +210,7 @@ Phase 7.2 的分层口径：
 | 旧版 Office 解析 | `.doc`、`.ppt` 只入库，不做深度解析 |
 | 多模态 Embedding/Rerank | 当前只处理文本资料，图片与视频向量不在本轮范围 |
 | 资料对比增强 | 已完成安全结果持久化、最近版本恢复和真实 Graph 轨迹；保持资料库独立工具，不提供完整原文对照页 |
-| 资源增强 | 六类 v2 资源、逐 Worker 模型增强、规则+模型审核、单次 Repair、交互渲染和 PPTX 队列已接入；资源版本编辑、个人全局资源仍未接入 |
+| 资源增强 | 六类 v3 资源、逐 Worker 类型化生成、完整内容门禁、代码验证、单次 Repair、交互渲染和 PPTX 队列已接入；资源版本编辑、个人全局资源仍未接入 |
 | Agent 编排 hardening | 九条学习主链路已真接管；学习档案导出明确保持普通 Service + RQ Worker |
 | 弱点复习增强 | Phase 14 已接入错题精确证据、诊断去重更新、已有路径重排；队列项编辑仍未接入 |
 | 学习路径 | Phase 9 已接入真实路径生成、当前路径读取、任务状态更新和课程页摘要 |
@@ -254,6 +256,7 @@ Phase 7.2 的分层口径：
 | Phase 16 | 已完成后收敛 | 保留 `MaterialComparisonGraph` 不可变对比版本；`ExamSprintGraph` 已退役 |
 | Phase 17 | 已完成 | `AIJobRuntime`、`ai_jobs`、独立 AI Worker、建课/资源后台任务、节点进度、恢复、取消、重试和全局任务托盘 |
 | Phase 18 | 已完成 | `ModelExecutionRuntime`、同配置重试、Redis 并发/熔断、模型调用安全审计、Trace 聚合和九 Graph 离线质量评测 |
+| Phase 19 | 已完成 | 资源 v3 质量门禁、隔离代码验证、证据型练习、逐题诊断、掌握度空值、报告数字一致性、概念归并和话题切换 |
 
 ### 画像可信度与课程上下文联动（2026-07-13）
 
@@ -265,7 +268,7 @@ Phase 7.2 的分层口径：
 
 ## 下一步建议
 
-Phase 18 已完成九条 Graph 共用的模型执行可靠性底座。后续应优先根据 Docker、真实模型评测和移动端验收发现的问题继续产品打磨；OCR、旧版 Office 和扫描件仍作为独立范围，不与可靠性底座混写。
+Phase 19 已完成产物质量内核和学习指标纠偏。后续应优先用固定 A*、神经网络资料继续做真实模型质量对比与产品打磨；只有同一质量集证明某个 Worker 受模型能力限制时，才评估更强模型。OCR、旧版 Office 和扫描件仍作为独立范围。
 
 原因：
 

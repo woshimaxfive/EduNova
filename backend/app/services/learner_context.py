@@ -62,7 +62,7 @@ class CourseLearnerContext:
     course_goal: str
     foundation_summary: str
     active_weaknesses: tuple[str, ...]
-    mastery_average: int
+    mastery_average: int | None
     knowledge_point_count: int
     current_task_title: str | None
     recent_practice_score: int | None
@@ -212,8 +212,8 @@ class LearnerContextService:
                 )
             )
         )
-        mastery_scores = self._mastery_scores(knowledge_points, weaknesses, tasks, practice_answers)
-        mastery_average = round(sum(mastery_scores) / len(mastery_scores)) if mastery_scores else 0
+        mastery_scores = self._mastery_scores(knowledge_points, weaknesses, practice_answers)
+        mastery_average = round(sum(mastery_scores) / len(mastery_scores)) if mastery_scores else None
         knowledge_point_count = len(knowledge_points)
         resource_types = tuple(dict.fromkeys(
             self.db.scalars(
@@ -235,7 +235,7 @@ class LearnerContextService:
         course_goal = course_goal or global_goal or f"完成《{course.title}》学习"
         foundation = str(global_context.advisory_value("knowledge_foundation") or "").strip()
         foundation_summary = foundation or "尚未形成可信基础判断"
-        if knowledge_point_count:
+        if knowledge_point_count and mastery_average is not None:
             foundation_summary = f"{foundation_summary}；当前课程掌握度约 {mastery_average}%"
         payload = {
             "course_id": course_id,
@@ -271,7 +271,6 @@ class LearnerContextService:
     def _mastery_scores(
         knowledge_points: list[KnowledgePoint],
         weaknesses: list[WeaknessReviewItem],
-        tasks: list[LearningTask],
         answers: list[PracticeAnswer],
     ) -> list[int]:
         weakness_ids = {
@@ -279,10 +278,6 @@ class LearnerContextService:
             for item in weaknesses
             if item.knowledge_point_id is not None and item.status in {"confirmed", "reviewing"}
         }
-        tasks_by_point: dict[int, list[LearningTask]] = {}
-        for task in tasks:
-            if task.knowledge_point_id is not None:
-                tasks_by_point.setdefault(task.knowledge_point_id, []).append(task)
         answers_by_point: dict[int, list[PracticeAnswer]] = {}
         for answer in answers:
             raw_point_id = (answer.question_json or {}).get("knowledge_point_id")
@@ -296,24 +291,10 @@ class LearnerContextService:
                 for answer in point_answers
                 if answer.answer_text is not None
             ]
-            point_tasks = tasks_by_point.get(point.id, [])
-            if point.id in weakness_ids or any(score < 60 for score in answer_scores):
+            if answer_scores:
+                result.append(round(sum(answer_scores) / len(answer_scores)))
+            elif point.id in weakness_ids:
                 result.append(35)
-            elif any(
-                answer.answer_text is not None
-                and (
-                    answer.is_correct is True
-                    or int((answer.feedback_json or {}).get("score") or 0) >= 80
-                )
-                for answer in point_answers
-            ):
-                result.append(90)
-            elif any(task.status in {"todo", "doing"} for task in point_tasks):
-                result.append(60)
-            elif any(task.status == "completed" for task in point_tasks):
-                result.append(90)
-            else:
-                result.append(0)
         return result
 
     @staticmethod

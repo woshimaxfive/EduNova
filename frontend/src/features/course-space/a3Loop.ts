@@ -14,7 +14,7 @@ export type CourseLoopInput = {
   courseTitle: string;
   materialCount: number;
   knowledgePointCount: number;
-  progressPercent: number;
+  progressPercent: number | null;
   latestQuestion: string | null;
   citationCount: number;
   pendingWeaknessCount: number;
@@ -46,15 +46,13 @@ export type StudyStep = {
   status: StudyStepStatus;
 };
 
-export function calculateMasteryPercent(points: Array<{ score: number }>) {
-  if (points.length === 0) return 0;
-
-  const total = points.reduce((sum, point) => {
-    const score = Number.isFinite(point.score) ? point.score : 0;
-    return sum + Math.min(100, Math.max(0, score));
-  }, 0);
-
-  return Math.min(100, Math.max(0, Math.round(total / points.length)));
+export function calculateMasteryPercent(points: Array<{ score: number | null }>) {
+  const assessed = points
+    .map((point) => point.score)
+    .filter((score): score is number => typeof score === "number" && Number.isFinite(score));
+  if (assessed.length === 0) return null;
+  const total = assessed.reduce((sum, score) => sum + Math.min(100, Math.max(0, score)), 0);
+  return Math.min(100, Math.max(0, Math.round(total / assessed.length)));
 }
 
 export function buildCourseLoopSummary(input: CourseLoopInput): CourseLoopSummary {
@@ -66,7 +64,7 @@ export function buildCourseLoopSummary(input: CourseLoopInput): CourseLoopSummar
     currentGoal: input.recommendedGoal,
     evidenceLine: `${input.materialCount} 份资料 · ${input.knowledgePointCount} 个知识点 · ${input.citationCount} 条引用 · ${input.resourceCount} 个资源`,
     nextAction: input.recommendedAction,
-    progressLabel: `${input.progressPercent}%`,
+    progressLabel: input.progressPercent === null ? "未评估" : `${input.progressPercent}%`,
     traceLabel
   };
 }

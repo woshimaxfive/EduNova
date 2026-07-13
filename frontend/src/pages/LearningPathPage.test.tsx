@@ -178,7 +178,7 @@ describe("LearningPathPage", () => {
 
     await user.click(screen.getByRole("button", { name: "路径详情" }));
     const drawer = screen.getByRole("dialog", { name: "路径详情" });
-    expect(within(drawer).getByText("薄弱 · 35")).toBeInTheDocument();
+    expect(within(drawer).getByText("薄弱 · 35 分")).toBeInTheDocument();
     await user.click(within(drawer).getByRole("tab", { name: "规划依据" }));
     expect(within(drawer).getByText("模型增强 · 模型与规则审核")).toBeInTheDocument();
     await user.click(within(drawer).getByRole("tab", { name: "协作轨迹" }));

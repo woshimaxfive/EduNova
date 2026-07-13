@@ -132,10 +132,11 @@ export function ReportDrawer({
                   <section>
                     <span>证据摘要</span>
                     <div className="report-evidence-facts">
-                      <strong>{body?.evidence_summary?.practice_count ?? 0}<small>次练习</small></strong>
-                      <strong>{body?.evidence_summary?.answer_count ?? 0}<small>条作答</small></strong>
-                      <strong>{body?.evidence_summary?.weakness_count ?? 0}<small>个弱点</small></strong>
-                      <strong>{body?.evidence_summary?.resource_count ?? 0}<small>个资源</small></strong>
+                      <strong>{body?.deterministic_statistics?.practice_session_count ?? body?.evidence_summary?.practice_count ?? 0}<small>次练习</small></strong>
+                      <strong>{body?.deterministic_statistics?.answered_question_count ?? body?.evidence_summary?.answer_count ?? 0}<small>道已作答</small></strong>
+                      <strong>{body?.deterministic_statistics?.correct_answer_count ?? body?.evidence_summary?.correct_answer_count ?? 0}<small>道正确</small></strong>
+                      <strong>{body?.deterministic_statistics?.assessed_knowledge_point_count ?? body?.evidence_summary?.assessed_knowledge_point_count ?? 0}<small>个已评估知识点</small></strong>
+                      <strong>{body?.deterministic_statistics?.completed_path_task_count ?? body?.evidence_summary?.completed_path_task_count ?? 0}<small>项已完成任务</small></strong>
                     </div>
                   </section>
                   <section><span>薄弱点证据</span>{body?.weakness_list.length ? <ul>{body.weakness_list.map((item) => <li key={`${item.knowledge_point_id}-${item.title}`}><ShieldCheck size={16} />{item.title}</li>)}</ul> : <p>本次快照没有记录薄弱点。</p>}</section>

@@ -73,6 +73,8 @@ services:
       MODEL_MAX_CONCURRENT_GLOBAL: ${MODEL_MAX_CONCURRENT_GLOBAL:-12}
       MODEL_CONCURRENCY_WAIT_SECONDS: ${MODEL_CONCURRENCY_WAIT_SECONDS:-2}
       MODEL_CALL_LOG_RETENTION_DAYS: ${MODEL_CALL_LOG_RETENTION_DAYS:-30}
+      CODE_VERIFIER_URL: http://code-verifier:8090
+      CODE_VERIFIER_TIMEOUT_SECONDS: ${CODE_VERIFIER_TIMEOUT_SECONDS:-40}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -82,6 +84,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      code-verifier:
+        condition: service_healthy
+    networks:
+      - default
+      - verification_net
     healthcheck:
       test:
         [
@@ -164,6 +171,8 @@ services:
       MODEL_MAX_CONCURRENT_GLOBAL: ${MODEL_MAX_CONCURRENT_GLOBAL:-12}
       MODEL_CONCURRENCY_WAIT_SECONDS: ${MODEL_CONCURRENCY_WAIT_SECONDS:-2}
       MODEL_CALL_LOG_RETENTION_DAYS: ${MODEL_CALL_LOG_RETENTION_DAYS:-30}
+      CODE_VERIFIER_URL: http://code-verifier:8090
+      CODE_VERIFIER_TIMEOUT_SECONDS: ${CODE_VERIFIER_TIMEOUT_SECONDS:-40}
     command: ["sh", "-c", "rq worker $${AI_JOB_QUEUE_NAME:-edunova_ai} --url $${REDIS_URL}"]
     depends_on:
       backend:
@@ -172,6 +181,39 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      code-verifier:
+        condition: service_healthy
+    networks:
+      - default
+      - verification_net
+
+  code-verifier:
+    build:
+      context: .
+      dockerfile: docker/code-verifier.Dockerfile
+    environment:
+      PORT: 8090
+      CODE_RUN_TIMEOUT_MS: 5000
+      CODE_READY_TIMEOUT_MS: 30000
+    expose:
+      - "8090"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 512m
+    cpus: 0.75
+    networks:
+      - verification_net
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8090/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
 
   frontend:
     build:
@@ -213,3 +255,7 @@ services:
 volumes:
   postgres_data:
   export_data:
+
+networks:
+  verification_net:
+    internal: true

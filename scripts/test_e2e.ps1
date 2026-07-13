@@ -41,6 +41,9 @@ try {
   Write-Host "== Verify PostgreSQL/pgvector cosine ranking =="
   Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.pgvector_rag_check"))
 
+  Write-Host "== Verify isolated code execution policy =="
+  Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.code_verifier_check"))
+
   Write-Host "== Run learning closure Playwright E2E =="
   Push-Location "$repoRoot\frontend"
   try {

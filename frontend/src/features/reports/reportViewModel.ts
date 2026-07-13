@@ -12,8 +12,9 @@ export type ReportPrimaryAction =
   | { type: "course"; label: string; description: string };
 
 export function calculateAverageMastery(points: CourseMasteryPoint[]) {
-  if (points.length === 0) return 0;
-  const average = points.reduce((total, point) => total + point.score, 0) / points.length;
+  const assessed = points.filter((point): point is CourseMasteryPoint & { score: number } => point.score !== null);
+  if (assessed.length === 0) return null;
+  const average = assessed.reduce((total, point) => total + point.score, 0) / assessed.length;
   return Math.min(100, Math.max(0, Math.round(average)));
 }
 
@@ -41,7 +42,11 @@ export function buildCurrentTrendScores(
 }
 
 export function sortMasteryPoints(points: CourseMasteryPoint[]) {
-  return [...points].sort((left, right) => left.score - right.score || left.order_index - right.order_index);
+  return [...points].sort((left, right) => {
+    if (left.score === null) return right.score === null ? left.order_index - right.order_index : 1;
+    if (right.score === null) return -1;
+    return left.score - right.score || left.order_index - right.order_index;
+  });
 }
 
 export function buildReportPrimaryAction(input: {
@@ -62,7 +67,7 @@ export function buildReportPrimaryAction(input: {
     return {
       type: "practice",
       label: `练习 ${weakPoint.title}`,
-      description: `当前掌握度 ${weakPoint.score} 分，优先通过针对性练习巩固。`,
+      description: `当前掌握度 ${weakPoint.score ?? "未评估"}，优先通过针对性练习巩固。`,
       knowledgePoint: weakPoint
     };
   }

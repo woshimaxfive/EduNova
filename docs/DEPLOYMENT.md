@@ -1,6 +1,6 @@
 # EduNova 部署说明
 
-日期：2026-07-13
+日期：2026-07-14
 
 ## 1. 当前部署范围
 
@@ -14,7 +14,8 @@
 - 三能力模型配置、Spark X2-Flash、动态 Embedding、可选 Rerank、课程流式回答和课程空间双模式前端。
 - 学习画像、课程学习状态、弱点复习队列和状态流转。
 - Agent trace 查询和资源生成 trace。
-- 六类结构化课程资源、并行 Worker、质量审核、Markmap/Mermaid/Pyodide 和 PPTX 导出。
+- 六类 v3 证据型课程资源、并行 Worker、完整 artifact 质量审核、Markmap/Mermaid/Pyodide 和 PPTX 导出。
+- 内部 `code-verifier` 使用 Pyodide 对生成的 Python 代码执行策略与预期输出验证；验证失败或服务不可用时不保存代码资源。
 - 前端镜像会把 `pyodide.mjs` 与配套运行时复制到版本化目录 `/pyodide/0.29.2/`，Web Worker 直接导入自托管 loader；版本目录用于隔离 immutable 浏览器缓存。Nginx 必须保留 `.js`、`.mjs`、`.wasm`、`.json` 的正确 MIME，并按 Pyodide 官方分发兼容方式以 `application/wasm` 提供标准库 zip，同时返回 CORS、CORP 与 `nosniff` 安全头。
 - 持续学习路径、规则掌握度图、练习评估、学习报告、资料对比和 Markdown/PDF/DOCX 学习档案导出。
 - 主页联网搜索、深度回答指令、浏览器语音输入/朗读和 `home_tutor` trace。
@@ -25,6 +26,8 @@
 - PostgreSQL + pgvector。
 - Redis。
 - RQ export worker。
+- RQ AI worker。
+- 仅 Docker 内部可访问的 code-verifier。
 - React 前端静态服务。
 - Nginx 统一入口。
 - Nginx 使用 Docker 内置 DNS 动态解析前端与后端容器地址，服务重建后无需手动重启网关，也不会继续访问旧容器地址。
@@ -116,6 +119,15 @@ EXPORT_QUEUE_NAME=edunova_exports
 ```
 
 `WEB_SEARCH_API_KEY` 为空时，主页联网搜索只返回“未配置” warning，不生成假来源。Docker Compose 中 backend 和 `export-worker` 共享导出卷，确保 worker 生成的学习档案可由下载接口读取；数据库迁移由 backend 启动命令执行，`export-worker` 等 backend 健康后只消费 RQ 队列。
+
+生成代码验证变量：
+
+```text
+CODE_VERIFIER_URL=http://code-verifier:8090
+CODE_VERIFIER_TIMEOUT_SECONDS=8
+```
+
+本地不使用 Docker 时可以将 `CODE_VERIFIER_URL` 留空；此时代码资源明确失败，不能退回为未经运行的代码。Compose 中该服务不映射宿主机端口，只允许 backend 和 `ai-worker` 通过内部 `verification_net` 调用。
 
 模型 Provider 相关变量：
 
@@ -217,6 +229,9 @@ docker compose down
 | `postgres` | `pgvector/pgvector:pg16` | `5432` | PostgreSQL + pgvector |
 | `redis` | `redis:7-alpine` | `6379` | 缓存、进度和后续限流 |
 | `backend` | `docker/backend.Dockerfile` | `8000` | FastAPI 后端 |
+| `ai-worker` | `docker/backend.Dockerfile` | 无 | 建课、资源和向量重建 RQ Worker |
+| `export-worker` | `docker/backend.Dockerfile` | 无 | 学习档案与 PPTX 导出 RQ Worker |
+| `code-verifier` | `docker/code-verifier.Dockerfile` | 仅内部 `8090` | 生成 Python 代码的隔离验证服务 |
 | `frontend` | `docker/frontend.Dockerfile` | 内部 `80` | Vite 生产构建后的静态前端，只供 Nginx 访问 |
 | `nginx` | `nginx:1.27-alpine` | `8080` | 统一入口，`/api/` 转发后端，其余转发前端 |
 
@@ -309,7 +324,8 @@ docker compose exec -T backend python -m backend.app.cli seed-ai-intro
 部署层重点只保留以下口径：
 
 - `docker compose config` 必须通过。
-- `backend`、`export-worker`、`postgres`、`redis`、`frontend`、`nginx` 服务必须可解析。
+- `backend`、`ai-worker`、`export-worker`、`code-verifier`、`postgres`、`redis`、`frontend`、`nginx` 服务必须可解析。
+- `code-verifier` 必须无宿主机端口、使用内部网络、非 root、只读文件系统、临时目录、能力全移除和进程/内存/CPU 限制。
 - 数据库必须能 `alembic upgrade head`。
 - 前端必须能 `pnpm lint`、`pnpm test`、`pnpm build`。
 - 真实用户链路需要通过浏览器验收。

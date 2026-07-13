@@ -120,7 +120,7 @@ export type ResourceArtifact =
   | ResourceAnimationArtifact;
 
 export type GeneratedResourceContent = {
-  schema_version?: 1 | 2;
+  schema_version?: 1 | 2 | 3;
   markdown?: string;
   format?: string;
   topic?: string;
@@ -129,6 +129,18 @@ export type GeneratedResourceContent = {
   learning_objectives?: string[];
   artifact?: ResourceArtifact;
   citation_summaries?: string[];
+  quality?: {
+    status?: "passed" | "failed" | string;
+    risk_flags?: string[];
+    prompt_version?: string;
+    source_coverage?: number;
+    model_delta?: boolean;
+    code_verification?: {
+      status?: "passed" | "failed" | string;
+      code?: string;
+      output_length?: number;
+    } | null;
+  };
   metadata?: {
     agent_trace_id?: string;
     generation_mode?: ResourceGenerationMode;

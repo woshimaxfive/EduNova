@@ -35,6 +35,10 @@ export type PracticeQuestion = {
   keywords: string[];
   explanation: string;
   difficulty: string;
+  citation_refs?: string[];
+  generation_mode?: string;
+  prompt_version?: string;
+  quality?: Record<string, unknown>;
 };
 
 export type PracticeAnswerFeedback = {

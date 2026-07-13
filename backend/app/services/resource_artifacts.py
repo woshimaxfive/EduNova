@@ -45,7 +45,7 @@ def build_resource_content(source: ArtifactBuildInput) -> dict[str, Any]:
     artifact = _artifact_builders()[source.resource_type](source)
     markdown = artifact_to_markdown(source.resource_type, artifact, source)
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "format": "rich",
         "topic": source.topic,
         "course_title": source.course_title,
@@ -60,7 +60,7 @@ def build_resource_content(source: ArtifactBuildInput) -> dict[str, Any]:
 
 def validate_resource_content(resource_type: str, content: dict[str, Any]) -> list[str]:
     risks: list[str] = []
-    if content.get("schema_version") != 2 or content.get("format") != "rich":
+    if content.get("schema_version") not in {2, 3} or content.get("format") != "rich":
         risks.append("invalid_schema")
     artifact = content.get("artifact")
     if not isinstance(artifact, dict) or artifact.get("kind") != ARTIFACT_KINDS.get(resource_type):
@@ -184,14 +184,30 @@ def _citation_ref(source: ArtifactBuildInput) -> list[int]:
     return list(source.citation_refs[:5])
 
 
+def _evidence_concepts(source: ArtifactBuildInput, *, limit: int = 3) -> list[str]:
+    concepts: list[str] = []
+    for line in source.excerpt_lines:
+        cleaned = line.removeprefix("- ").strip()
+        if not cleaned:
+            continue
+        compact = cleaned if len(cleaned) <= 110 else f"{cleaned[:107]}..."
+        if compact not in concepts:
+            concepts.append(compact)
+        if len(concepts) >= limit:
+            break
+    return concepts
+
+
 def _build_document(source: ArtifactBuildInput) -> dict[str, Any]:
-    evidence = "；".join(line.removeprefix("- ") for line in source.excerpt_lines[:3])
+    evidence_concepts = _evidence_concepts(source)
+    evidence = "；".join(evidence_concepts)
+    lead_concept = evidence_concepts[0] if evidence_concepts else source.topic
     return {
         "kind": "document",
         "sections": [
             {
                 "heading": "概念解释",
-                "body": f"{source.topic} 是本节需要掌握的核心对象。先明确它解决的问题、输入条件和输出，再结合课程依据理解其边界。",
+                "body": f"围绕 {source.topic}，先抓住课程中的真实结论：{lead_concept}。再区分它的输入、条件、过程和输出。",
             },
             {"heading": "课程依据", "body": evidence},
             {
@@ -215,14 +231,19 @@ def _build_document(source: ArtifactBuildInput) -> dict[str, Any]:
 
 
 def _build_mindmap(source: ArtifactBuildInput) -> dict[str, Any]:
+    evidence_concepts = _evidence_concepts(source)
     evidence_titles = [line.removeprefix("- ").split("（", 1)[0] for line in source.citation_lines[:3]] or ["课程知识点"]
     markmap_lines = [
         f"# {source.topic}",
-        "## 核心概念",
-        "- 目标与边界",
-        "- 输入、步骤与输出",
+        "## 真实概念",
+        *[f"- {concept}" for concept in evidence_concepts],
         "## 课程依据",
         *[f"- {title}" for title in evidence_titles],
+        "## 概念关系",
+        f"- {source.topic}",
+        "  - 条件与输入",
+        "  - 处理过程",
+        "  - 结果与验证",
         "## 学习动作",
         "- 复述概念",
         "- 做题验证",
@@ -237,7 +258,14 @@ def _build_mindmap(source: ArtifactBuildInput) -> dict[str, Any]:
             "id": "root",
             "title": source.topic,
             "children": [
-                {"id": "concept", "title": "核心概念", "children": [{"id": "boundary", "title": "目标与边界", "children": []}]},
+                {
+                    "id": "concept",
+                    "title": "真实概念",
+                    "children": [
+                        {"id": f"concept-{index}", "title": concept, "children": []}
+                        for index, concept in enumerate(evidence_concepts, start=1)
+                    ],
+                },
                 {
                     "id": "evidence",
                     "title": "课程依据",
@@ -332,7 +360,7 @@ def _build_code(source: ArtifactBuildInput) -> dict[str, Any]:
         "entry_file": "study_case.py",
         "files": [{"path": "study_case.py", "content": code}],
         "instructions": ["点击运行，在浏览器隔离环境中查看输出。", f"把排序过程对应回 {source.topic} 的判断步骤。"],
-        "expected_output": "work-example: priority=2.8\nexplain-in-words: priority=2.7\nread-concept: priority=3.0",
+        "expected_output": "explain-in-words: priority=2.7\nwork-example: priority=2.8\nread-concept: priority=3.0",
         "tasks": [f"增加一个针对“{source.weak_points}”的学习步骤。", "调整代价并解释排序变化。"],
         "citation_refs": _citation_ref(source),
     }

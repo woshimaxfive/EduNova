@@ -366,7 +366,7 @@ export function CourseSpacePage() {
         description: isCourseLoading ? "正在读取这门课的资料、知识点和历史对话。" : "请从学习主页或课程列表重新进入。",
         subject: "课程空间",
         sourceType: "uploaded" as const,
-        progressPercent: 0
+        progressPercent: null
       };
   const latestAssistantWithRetrieval = [...displayedCourseMessages].reverse().find((message) => message.role === "assistant" && message.citations !== undefined);
   const latestRagResults = latestAssistantWithRetrieval?.citations ?? [];

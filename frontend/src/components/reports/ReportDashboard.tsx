@@ -12,7 +12,7 @@ type ReportDashboardProps = {
   masteryMap: CourseMasteryMap | null | undefined;
   latestPractice: PracticeSessionSummary | null | undefined;
   freshness: ReportFreshness;
-  averageMastery: number;
+  averageMastery: number | null;
   trendScores: number[];
   trendDelta: number | null;
   trendLabel: string;
@@ -95,8 +95,8 @@ export function ReportDashboard({
         </article>
         <article>
           <span>平均掌握度</span>
-          <strong>{averageMastery}%</strong>
-          <small>{summary?.total_count ?? 0} 个知识点实时均值</small>
+          <strong>{averageMastery === null ? "未评估" : `${averageMastery}%`}</strong>
+          <small>{summary?.assessed_count ?? 0} 个知识点有有效证据</small>
         </article>
         <article>
           <span>已掌握</span>
@@ -144,11 +144,11 @@ export function ReportDashboard({
             </div>
             <Target size={22} weight="duotone" aria-hidden="true" />
           </header>
-          {masteryPoints.length > 0 ? (
+          {(summary?.assessed_count ?? 0) > 0 ? (
             <>
               <MasteryOverviewChart points={masteryPoints} />
               <ol className="report-mastery-fallback" aria-label="知识点掌握度文本列表">
-                {masteryPoints.map((point) => <li key={point.id}><span>{point.title}</span><strong>{point.score} 分</strong></li>)}
+                {masteryPoints.map((point) => <li key={point.id}><span>{point.title}</span><strong>{point.score === null ? "未评估" : `${point.score} 分`}</strong></li>)}
               </ol>
             </>
           ) : (
@@ -177,7 +177,7 @@ export function ReportDashboard({
                 <li key={point.id}>
                   <span>{String(index + 1).padStart(2, "0")}</span>
                   <div><strong>{point.title}</strong><small>{point.chapter || "课程知识点"} · {point.status === "weak" ? "薄弱" : "建议复习"}</small></div>
-                  <b>{point.score}</b>
+                  <b>{point.score === null ? "未评估" : point.score}</b>
                   <Link to={buildPracticeHref(point.id)} aria-label={`针对练习${point.title}`}>
                     <ArrowRight size={16} weight="bold" aria-hidden="true" />
                   </Link>

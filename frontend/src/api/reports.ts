@@ -45,9 +45,24 @@ export type AssessmentReportContent = {
   evidence_summary?: {
     practice_count: number;
     answer_count: number;
+    correct_answer_count?: number;
+    assessed_knowledge_point_count?: number;
+    completed_path_task_count?: number;
     weakness_count: number;
     path_status: string;
     resource_count: number;
+  };
+  deterministic_statistics?: {
+    practice_session_count: number;
+    answered_question_count: number;
+    correct_answer_count: number;
+    assessed_knowledge_point_count: number;
+    completed_path_task_count: number;
+  };
+  quality?: {
+    prompt_version: string;
+    review_prompt_version: string;
+    statistics_locked: boolean;
   };
   review_result?: {
     review_status: string;

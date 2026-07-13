@@ -1255,8 +1255,31 @@ class TutorSessionService:
         ][-CONTEXT_RETRIEVAL_USER_MESSAGE_LIMIT:]
         if not previous_user_questions:
             return message_text
+        if not self._should_use_previous_questions(message_text, previous_user_questions[-1]):
+            return message_text
         query = "\n".join([*previous_user_questions, message_text])
         return self._safe_query_text(query, limit=CONTEXT_MESSAGE_CHAR_LIMIT)
+
+    @classmethod
+    def _should_use_previous_questions(cls, current: str, previous: str) -> bool:
+        cleaned = " ".join(str(current or "").split()).casefold()
+        if any(marker in cleaned for marker in ("这个", "那个", "它", "刚才", "上面", "上述", "继续", "再讲", "然后呢", "还有呢")):
+            return True
+        current_terms = cls._query_topic_terms(cleaned)
+        previous_terms = cls._query_topic_terms(previous)
+        if not current_terms or not previous_terms:
+            return len(cleaned) <= 8
+        overlap = len(current_terms & previous_terms) / max(1, min(len(current_terms), len(previous_terms)))
+        return overlap >= 0.22
+
+    @staticmethod
+    def _query_topic_terms(value: str) -> set[str]:
+        text = str(value or "").casefold()
+        terms = set(re.findall(r"[a-z][a-z0-9*+()\-]{1,24}", text))
+        for segment in re.findall(r"[一-龥]{2,}", text):
+            terms.update(segment[index:index + 2] for index in range(max(0, len(segment) - 1)))
+        stop = {"什么", "怎么", "如何", "为什", "么是", "可以", "一下", "请问", "还有", "讲讲"}
+        return {term for term in terms if term not in stop}
 
     @staticmethod
     def _context_metadata(

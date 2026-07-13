@@ -11,7 +11,7 @@ import {
   getReportFreshness
 } from "./reportViewModel";
 
-const point = (id: string, score: number, status: CourseMasteryPoint["status"]): CourseMasteryPoint => ({
+const point = (id: string, score: number | null, status: CourseMasteryPoint["status"]): CourseMasteryPoint => ({
   id,
   title: `知识点 ${id}`,
   chapter: null,
@@ -55,7 +55,8 @@ const practice = {
 
 describe("reportViewModel", () => {
   it("calculates rounded and clamped current mastery", () => {
-    expect(calculateAverageMastery([])).toBe(0);
+    expect(calculateAverageMastery([])).toBeNull();
+    expect(calculateAverageMastery([point("1", null, "not_started")])).toBeNull();
     expect(calculateAverageMastery([point("1", 44, "weak"), point("2", 75, "mastered")])).toBe(60);
     expect(calculateAverageMastery([point("1", -20, "weak"), point("2", 240, "mastered")])).toBe(100);
   });
@@ -83,7 +84,7 @@ describe("reportViewModel", () => {
       freshness: "current",
       masteryMap: {
         course_id: "808",
-        summary: { total_count: 2, weak_count: 1, learning_count: 1, mastered_count: 0, recommended_review_count: 0, not_started_count: 0 },
+        summary: { total_count: 2, weak_count: 1, learning_count: 1, mastered_count: 0, recommended_review_count: 0, not_started_count: 0, assessed_count: 2, unassessed_count: 0, average_score: 43 },
         points: [point("1", 54, "learning"), point("2", 31, "weak")]
       },
       currentPath: null

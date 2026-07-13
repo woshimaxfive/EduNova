@@ -17,6 +17,7 @@ from backend.app.models import (
     AssessmentReport,
     Course,
     GeneratedResource,
+    KnowledgeChunk,
     KnowledgePoint,
     PracticeAnswer,
     PracticeSession,
@@ -58,6 +59,7 @@ class FakePracticeRepository:
     courses: list[Course] = field(default_factory=list)
     knowledge_points: list[KnowledgePoint] = field(default_factory=list)
     resources: list[GeneratedResource] = field(default_factory=list)
+    chunks: list[KnowledgeChunk] = field(default_factory=list)
     sessions: list[PracticeSession] = field(default_factory=list)
     answers: list[PracticeAnswer] = field(default_factory=list)
     weakness_items: list[WeaknessReviewItem] = field(default_factory=list)
@@ -80,6 +82,9 @@ class FakePracticeRepository:
 
     def list_generated_resources(self, user_id: int, course_id: int) -> list[GeneratedResource]:
         return [resource for resource in self.resources if resource.user_id == user_id and resource.course_id == course_id]
+
+    def list_knowledge_chunks(self, course_id: int) -> list[KnowledgeChunk]:
+        return [chunk for chunk in self.chunks if chunk.course_id == course_id]
 
     def add_practice_session(self, session: PracticeSession) -> PracticeSession:
         session.id = self.next_session_id
@@ -239,6 +244,10 @@ def make_repo() -> FakePracticeRepository:
             make_point(499, "其他课程知识点", 0, course_id=202),
         ],
         resources=[make_resource(901, 401, "人工智能概述讲解"), make_resource(902, 402, "启发式搜索练习")],
+        chunks=[
+            KnowledgeChunk(id=301, course_id=101, material_id=201, knowledge_point_id=401, content="人工智能研究感知、推理与行动。机器学习从数据中学习规律。智能体依据环境状态选择动作。", section_title="人工智能概述", metadata_json={}),
+            KnowledgeChunk(id=302, course_id=101, material_id=201, knowledge_point_id=402, content="A* 使用 f(n)=g(n)+h(n) 评价节点。g(n) 是已走代价。h(n) 是剩余代价的启发估计。", section_title="启发式搜索", metadata_json={}),
+        ],
     )
 
 
@@ -277,7 +286,20 @@ def test_create_practice_session_generates_deterministic_questions_and_validates
     assert detail["questions"][0]["knowledge_point_id"] == "401"
     assert detail["questions"][0]["options"]
     assert detail["questions"][0]["correct_answer"] is None
+    assert detail["questions"][0]["citation_refs"]
+    assert detail["questions"][0]["generation_mode"] == "deterministic_source"
+    assert detail["questions"][0]["prompt_version"] == "assessment-v3.1"
+    assert detail["questions"][0]["quality"]["evidence_bound"] is True
     assert detail["answers"] == []
+    stored = [row.question_json for row in repo.list_answers_for_session(int(detail["id"]))]
+    assert len({question["prompt"] for question in stored}) == 3
+    assert all(question["source_excerpt"] for question in stored)
+    assert all(question["citation_refs"] for question in stored)
+    assert not any(
+        option in {"无关概念", "跳过资料依据", "只背结论", "无关提示"}
+        for question in stored
+        for option in question.get("options", [])
+    )
     assert repo.sessions[0].status == "in_progress"
     assert repo.sessions[0].score is None
     assert "系统提示词" not in str(detail)
@@ -331,10 +353,13 @@ def test_submit_practice_answers_scores_and_writes_confirmed_weakness_items() ->
     service = PracticeService(repo)
     created = as_dict(service.create_session(make_user(), 101, [401, 402], 3, "medium"))
     session_id = int(created["id"])
+    stored_questions = [row.question_json for row in repo.list_answers_for_session(session_id)]
+    second_answer = ", ".join(stored_questions[1]["correct_answer"])
+    third_answer = " ".join(stored_questions[2]["keywords"][:3])
     answers = [
         {"question_id": created["questions"][0]["id"], "answer_text": "错误选项"},
-        {"question_id": created["questions"][1]["id"], "answer_text": "关键概念, 课程引用"},
-        {"question_id": created["questions"][2]["id"], "answer_text": "我会用概念和误区解释复习线索。"},
+        {"question_id": created["questions"][1]["id"], "answer_text": second_answer},
+        {"question_id": created["questions"][2]["id"], "answer_text": third_answer},
     ]
 
     evaluated = as_dict(service.submit_answers(make_user(), session_id, answers))
@@ -345,8 +370,8 @@ def test_submit_practice_answers_scores_and_writes_confirmed_weakness_items() ->
     assert evaluated["answers"][0]["is_correct"] is False
     assert evaluated["answers"][0]["feedback"]["score"] == 0
     assert evaluated["answers"][2]["feedback"]["score"] > 0
-    assert evaluated["questions"][0]["correct_answer"] == "人工智能概述"
-    assert evaluated["questions"][1]["correct_answer"] == ["关键概念", "课程引用"]
+    assert evaluated["questions"][0]["correct_answer"] == stored_questions[0]["correct_answer"]
+    assert evaluated["questions"][1]["correct_answer"] == stored_questions[1]["correct_answer"]
     assert repo.sessions[0].score == Decimal("67")
     assert repo.sessions[0].status == "completed"
     assert len(repo.weakness_items) == 1
@@ -385,13 +410,14 @@ def test_generate_and_read_latest_report_uses_practice_and_learning_state_eviden
     practice_service = PracticeService(repo)
     report_service = ReportService(repo)
     created = as_dict(practice_service.create_session(make_user(), 101, [401, 402], 3, "medium"))
+    stored_questions = [row.question_json for row in repo.list_answers_for_session(int(created["id"]))]
     practice_service.submit_answers(
         make_user(),
         int(created["id"]),
         [
             {"question_id": created["questions"][0]["id"], "answer_text": "错误选项"},
-            {"question_id": created["questions"][1]["id"], "answer_text": "关键概念, 课程引用"},
-            {"question_id": created["questions"][2]["id"], "answer_text": "概念 误区 复习线索"},
+            {"question_id": created["questions"][1]["id"], "answer_text": ", ".join(stored_questions[1]["correct_answer"])},
+            {"question_id": created["questions"][2]["id"], "answer_text": " ".join(stored_questions[2]["keywords"][:3])},
         ],
     )
 
@@ -404,6 +430,13 @@ def test_generate_and_read_latest_report_uses_practice_and_learning_state_eviden
     assert report["report"]["mastery_update"]["weak_count"] == 1
     assert report["report"]["weakness_list"][0]["knowledge_point_id"] == "401"
     assert report["report"]["next_step_suggestions"]
+    assert report["report"]["deterministic_statistics"] == {
+        "practice_session_count": 1,
+        "answered_question_count": 3,
+        "correct_answer_count": 2,
+        "assessed_knowledge_point_count": 2,
+        "completed_path_task_count": 0,
+    }
     assert latest["id"] == report["id"]
     assert "系统提示词" not in str(report)
     assert "模型输入" not in str(report)
@@ -545,7 +578,8 @@ def test_report_graph_aggregates_recent_trend_without_allowing_model_to_change_n
     first = practice.create_session(make_user(), 101, [401], 1, "easy")
     practice.submit_answers(make_user(), int(first.id), [{"question_id": "q1", "answer_text": "错误选项"}])
     second = practice.create_session(make_user(), 101, [401], 1, "easy")
-    practice.submit_answers(make_user(), int(second.id), [{"question_id": "q1", "answer_text": "人工智能概述"}])
+    second_question = repo.list_answers_for_session(int(second.id))[0].question_json
+    practice.submit_answers(make_user(), int(second.id), [{"question_id": "q1", "answer_text": " ".join(second_question["keywords"][:3])}])
     logs: list[Any] = []
     model = FakeModelService(
         responses=[
@@ -576,3 +610,32 @@ def test_report_graph_aggregates_recent_trend_without_allowing_model_to_change_n
         "review",
         "persist",
     ]
+
+
+def test_report_graph_repairs_numeric_inconsistency_and_reviews_the_repair() -> None:
+    from backend.app.services.practice import PracticeService
+    from backend.app.services.reports import ReportService
+
+    repo = make_repo()
+    practice = PracticeService(repo)
+    first = practice.create_session(make_user(), 101, [401], 1, "easy")
+    practice.submit_answers(make_user(), int(first.id), [{"question_id": "q1", "answer_text": "错误选项"}])
+    second = practice.create_session(make_user(), 101, [401], 1, "easy")
+    second_question = repo.list_answers_for_session(int(second.id))[0].question_json
+    practice.submit_answers(make_user(), int(second.id), [{"question_id": "q1", "answer_text": second_question["correct_answer"]}])
+    model = FakeModelService(
+        responses=[
+            '{"summary":"完成了 5 次练习并回答了 9 道题。","next_step_suggestions":["继续学习"]}',
+            '{"review_status":"passed","confidence":0.9,"risk_flags":[],"safety_summary":"审核通过。"}',
+            '{"summary":"已完成 2 次练习，后一次表现有所改善。","next_step_suggestions":["继续依据错题复习"]}',
+            '{"review_status":"passed","confidence":0.88,"risk_flags":[],"safety_summary":"修订稿与统计一致。"}',
+        ]
+    )
+
+    report = as_dict(ReportService(repo, model_service=model).generate_report(make_user(), 101))
+
+    assert "5 次" not in report["report"]["summary"]
+    assert "9 道" not in report["report"]["summary"]
+    assert report["report"]["deterministic_statistics"]["practice_session_count"] == 2
+    assert report["report"]["review_result"]["review_status"] == "passed"
+    assert report["report"]["quality"]["repair_count"] == 1

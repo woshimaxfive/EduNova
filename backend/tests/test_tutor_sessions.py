@@ -865,6 +865,26 @@ def test_append_course_message_uses_recent_user_questions_for_retrieval_and_mode
     assert "A 星算法为什么" not in str(repo.agent_logs[0].metadata_json)
 
 
+def test_append_course_message_does_not_pollute_retrieval_after_topic_switch() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    citation_searcher = FakeCourseCitationSearcher(results=[])
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=citation_searcher,
+        course_answer_generator=FakeCourseAnswerGenerator(),
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+    add_history_message(repo, session, "user", "A 星算法为什么要估价函数？")
+    add_history_message(repo, session, "assistant", "估价函数帮助排序待扩展节点。")
+
+    service.append_message(user=user, session_id=session.id, content="反向传播中的链式法则怎么计算？")
+
+    assert citation_searcher.calls[0]["query"] == "反向传播中的链式法则怎么计算？"
+    assert repo.agent_logs[0].metadata_json["retrieval_query_mode"] == "direct"
+
+
 def test_append_course_message_records_profile_candidate_event_after_messages_have_ids() -> None:
     module = load_tutor_module()
     user = make_user(1)

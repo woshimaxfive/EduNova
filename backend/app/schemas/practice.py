@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -48,6 +48,10 @@ class PracticeQuestion(BaseModel):
     keywords: list[str]
     explanation: str
     difficulty: str
+    citation_refs: list[str] = Field(default_factory=list)
+    generation_mode: str = "deterministic_source"
+    prompt_version: str = "legacy"
+    quality: dict[str, Any] = Field(default_factory=dict)
 
 
 class PracticeFeedback(BaseModel):

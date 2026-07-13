@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+import json
+import re
 from time import perf_counter
 from typing import Any, Callable, TypedDict
 
@@ -14,6 +16,10 @@ from backend.app.schemas.reports import ReportEnvelope, report_to_api
 from backend.app.services.reports import ReportNotFoundError, ReportService
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
+
+
+REPORT_PROMPT_VERSION = "report-v3.1"
+REPORT_REVIEW_PROMPT_VERSION = "report-review-v3.1"
 
 
 class ReportState(TypedDict, total=False):
@@ -161,6 +167,19 @@ class ReportGraphRunner:
                 for answer in rows
                 if answer.answer_text is not None
             )
+            all_answered = [
+                answer
+                for rows in state.get("answers_by_session", {}).values()
+                for answer in rows
+                if answer.answer_text is not None
+            ]
+            correct_count = sum(1 for answer in all_answered if answer.is_correct is True)
+            assessed_point_ids = {
+                str((answer.question_json or {}).get("knowledge_point_id"))
+                for answer in all_answered
+                if (answer.question_json or {}).get("knowledge_point_id") is not None
+            }
+            completed_task_count = sum(1 for task in state.get("path_tasks", []) if task.status == "completed")
             report["trend"] = {
                 "direction": direction,
                 "score_delta": delta,
@@ -170,9 +189,24 @@ class ReportGraphRunner:
             report["evidence_summary"] = {
                 "practice_count": len(state.get("practices", [])),
                 "answer_count": answered_count,
+                "correct_answer_count": correct_count,
+                "assessed_knowledge_point_count": len(assessed_point_ids),
+                "completed_path_task_count": completed_task_count,
                 "weakness_count": sum(1 for item in state.get("weaknesses", []) if item.status in {"confirmed", "reviewing"}),
                 "path_status": state.get("active_path").status if state.get("active_path") is not None else "not_started",
                 "resource_count": len(state.get("resources", [])),
+            }
+            report["deterministic_statistics"] = {
+                "practice_session_count": len(state.get("practices", [])),
+                "answered_question_count": answered_count,
+                "correct_answer_count": correct_count,
+                "assessed_knowledge_point_count": len(assessed_point_ids),
+                "completed_path_task_count": completed_task_count,
+            }
+            report["quality"] = {
+                "prompt_version": REPORT_PROMPT_VERSION,
+                "review_prompt_version": REPORT_REVIEW_PROMPT_VERSION,
+                "statistics_locked": True,
             }
             learner_context = state.get("learner_context")
             if learner_context is not None:
@@ -197,19 +231,7 @@ class ReportGraphRunner:
     def _review_node(self, state: ReportState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             risks = self._report_risks(state)
-            model_review = None
-            if state.get("generation_mode") == "model_enhanced" and self.service.model_service is not None:
-                try:
-                    raw = self.service.model_service.chat_completion(
-                        state["user"],
-                        [
-                            {"role": "system", "content": "你是 ReportGraph 的 ReviewAgent。只输出 JSON，不得修改统计数据。"},
-                            {"role": "user", "content": f"审核报告总结是否与证据一致。练习数={len(state.get('practices', []))}，趋势={state['deterministic_report'].get('trend', {}).get('direction')}。返回 {{\"review_status\":\"passed|revise\",\"confidence\":0.0,\"risk_flags\":[],\"safety_summary\":\"\"}}。"},
-                        ],
-                    )
-                    model_review = review_contract(parse_json_object(raw), default_summary="已完成报告证据和隐私审核。")
-                except Exception:
-                    model_review = None
+            model_review = self._model_review(state, state.get("report_json", {})) if state.get("generation_mode") == "model_enhanced" else None
             if model_review and model_review["review_status"] == "revise":
                 risks.extend(str(item) for item in model_review["risk_flags"])
             risks = list(dict.fromkeys(risks))
@@ -233,15 +255,51 @@ class ReportGraphRunner:
             narrative = self._model_narrative(state, repair=True)
             report = {**state["deterministic_report"], **narrative} if narrative is not None else dict(state["deterministic_report"])
             repaired_state = {**state, "report_json": report}
-            if self._report_risks(repaired_state):
+            rule_risks = self._report_risks(repaired_state)
+            model_review = self._model_review(state, report) if narrative is not None and not rule_risks else None
+            model_rejected = model_review is not None and model_review["review_status"] == "revise"
+            if rule_risks or model_rejected:
                 report = dict(state["deterministic_report"])
                 mode = "deterministic_source"
-            else:
+                review_mode = "model_and_rules" if model_review is not None else "rules_only"
+                review = {
+                    "review_status": "warning",
+                    "confidence": 0.65,
+                    "risk_flags": [],
+                    "safety_summary": "修订稿仍未通过完整审核，已保留确定性统计报告。",
+                }
+            elif model_review is None:
                 mode = "model_enhanced" if narrative is not None else "deterministic_source"
-            review = {"review_status": "passed", "confidence": 0.72 if mode == "model_enhanced" else 0.65, "risk_flags": [], "safety_summary": "已修订一次并通过统计、证据和隐私规则复核。"}
-            return {"report_json": report, "generation_mode": mode, "review_result": review, "repair_count": 1}, review["safety_summary"], "completed", {**review, "repair_count": 1}
+                review_mode = "rules_only"
+                review = {
+                    "review_status": "warning",
+                    "confidence": 0.65,
+                    "risk_flags": [],
+                    "safety_summary": "修订稿已通过统计、证据和隐私规则复核，模型审核不可用。",
+                }
+            else:
+                mode = "model_enhanced"
+                review_mode = "model_and_rules"
+                review = {**model_review, "review_status": "passed", "risk_flags": []}
+            node_status = "completed" if review["review_status"] == "passed" else "warning"
+            return {"report_json": report, "generation_mode": mode, "review_mode": review_mode, "review_result": review, "repair_count": 1}, review["safety_summary"], node_status, {**review, "repair_count": 1}
 
         return self._run_node(state, "repair", 6, "按审核风险修订一次报告叙事", work)
+
+    def _model_review(self, state: ReportState, report: dict[str, Any]) -> dict[str, Any] | None:
+        if self.service.model_service is None:
+            return None
+        try:
+            raw = self.service.model_service.chat_completion(
+                state["user"],
+                [
+                    {"role": "system", "content": "你是 ReportGraph 的 ReviewAgent。只输出 JSON，不得修改统计数据。"},
+                    {"role": "user", "content": f"审核协议={REPORT_REVIEW_PROMPT_VERSION}。审核这份安全报告是否与不可变统计一致：{json.dumps(report, ensure_ascii=False)[:10000]}。返回 {{\"review_status\":\"passed|revise\",\"confidence\":0.0,\"risk_flags\":[],\"safety_summary\":\"\"}}。"},
+                ],
+            )
+            return review_contract(parse_json_object(raw), default_summary="已完成报告证据和隐私审核。")
+        except Exception:
+            return None
 
     def _persist_node(self, state: ReportState) -> dict[str, Any]:
         started = perf_counter()
@@ -250,6 +308,12 @@ class ReportGraphRunner:
         report_json = {
             **state["report_json"],
             "review_result": state.get("review_result", {}),
+            "quality": {
+                **dict(state.get("report_json", {}).get("quality", {})),
+                "generation_mode": state.get("generation_mode", "deterministic_source"),
+                "review_mode": state.get("review_mode", "rules_only"),
+                "repair_count": int(state.get("repair_count", 0)),
+            },
             "profile_applied_version": (
                 learner_context.global_context.profile_applied_version if learner_context is not None else 0
             ),
@@ -286,6 +350,7 @@ class ReportGraphRunner:
             "trend": deterministic.get("trend"),
             "weakness_titles": [safe_text(item.get("title"), limit=120) for item in deterministic.get("weakness_list", [])],
             "evidence_summary": deterministic.get("evidence_summary"),
+            "deterministic_statistics": deterministic.get("deterministic_statistics"),
         }
         learner_context = state.get("learner_context")
         personalization = learner_context.prompt_summary() if learner_context is not None else {}
@@ -295,7 +360,7 @@ class ReportGraphRunner:
                 state["user"],
                 [
                     {"role": "system", "content": "你是 ReportGraph 报告 Agent。不得修改数字、编造练习或输出隐私，只输出 JSON。"},
-                    {"role": "user", "content": f"{instruction} 可信课程画像提示={personalization}。证据={evidence}。返回 {{\"summary\":\"\",\"next_step_suggestions\":[]}}。"},
+                    {"role": "user", "content": f"协议={REPORT_PROMPT_VERSION}。{instruction} 可信课程画像提示={personalization}。不可变证据={json.dumps(evidence, ensure_ascii=False)}。数字必须逐字遵守，不得把练习次数、题目数量、正确题数、知识点数或任务数混为一谈。返回 {{\"summary\":\"\",\"next_step_suggestions\":[]}}。"},
                 ],
             )
         except Exception:
@@ -314,11 +379,28 @@ class ReportGraphRunner:
         report = state.get("report_json", {})
         deterministic = state.get("deterministic_report", {})
         risks: list[str] = []
-        for key in ("mastery_update", "weakness_list", "evidence_refs", "trend", "evidence_summary"):
+        for key in ("mastery_update", "weakness_list", "evidence_refs", "trend", "evidence_summary", "deterministic_statistics", "quality"):
             if report.get(key) != deterministic.get(key):
                 risks.append("deterministic_evidence_changed")
         if contains_sensitive_text(report.get("summary")) or contains_sensitive_text(report.get("next_step_suggestions")):
             risks.append("sensitive_output")
+        allowed_numbers = {
+            int(value)
+            for value in [
+                state.get("score"),
+                deterministic.get("trend", {}).get("score_delta"),
+                *deterministic.get("trend", {}).get("scores", []),
+                *deterministic.get("deterministic_statistics", {}).values(),
+            ]
+            if isinstance(value, (int, float))
+        }
+        narrative_text = " ".join([
+            safe_text(report.get("summary"), limit=600),
+            *safe_string_list(report.get("next_step_suggestions"), limit=4, item_limit=240),
+        ])
+        narrative_numbers = {int(value) for value in re.findall(r"(?<![A-Za-z])\d{1,4}(?![A-Za-z])", narrative_text)}
+        if narrative_numbers - allowed_numbers:
+            risks.append("numeric_inconsistency")
         valid_answer_ids = {
             str(answer.id)
             for rows in state.get("answers_by_session", {}).values()

@@ -20,6 +20,7 @@ from backend.app.services.exports import (
     SqlAlchemyExportRepository,
 )
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
+from backend.app.services.code_verifier import HttpCodeVerifier
 from backend.app.services.resources import (
     ResourceGenerationError,
     ResourceGenerationService,
@@ -34,15 +35,17 @@ router = APIRouter(prefix="/resources", tags=["resources"])
 
 
 def get_resource_generation_service(db=Depends(get_db_session)) -> ResourceGenerationService:
+    settings = get_settings()
     model_settings_service = ModelSettingsService(
         repository=SqlAlchemyModelSettingsRepository(db),
-        settings=get_settings(),
+        settings=settings,
         provider=OpenAICompatibleChatProvider(),
     )
     return ResourceGenerationService(
         repository=SqlAlchemyResourceRepository(db),
         model_settings_service=model_settings_service,
         trace_recorder=AgentTraceRecorder(),
+        code_verifier=HttpCodeVerifier(settings.code_verifier_url, timeout_seconds=settings.code_verifier_timeout_seconds),
     )
 
 

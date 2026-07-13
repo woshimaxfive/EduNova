@@ -13,7 +13,7 @@ export function AiJobTray() {
   if (!isAuthenticated || visible.length === 0) return null;
 
   return (
-    <aside className="ai-job-tray" aria-label="后台 AI 任务">
+    <aside className={`ai-job-tray${expanded ? " ai-job-tray--expanded" : ""}`} aria-label="后台 AI 任务">
       <button type="button" className="ai-job-tray__toggle" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
         <CircleNotch className={visible.some((job) => job.status === "running") ? "spin" : ""} size={17} />
         <span>{visible.length} 个后台任务</span>

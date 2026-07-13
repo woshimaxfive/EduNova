@@ -65,6 +65,13 @@ def run_check() -> None:
         db.flush()
 
         metadata = {"embedding_source": "openai_compatible", "embedding_model": "test-embedding"}
+        profile_hash = "integration-openai-compatible-1536"
+        embedding_columns = {
+            "embedding_provider": "openai_compatible",
+            "embedding_model": "test-embedding",
+            "embedding_dimension": 1536,
+            "embedding_profile_hash": profile_hash,
+        }
         near = KnowledgeChunk(
             course_id=course.id,
             material_id=material.id,
@@ -72,6 +79,7 @@ def run_check() -> None:
             content="nearest",
             embedding=_vector(1.0),
             metadata_json=metadata,
+            **embedding_columns,
         )
         middle = KnowledgeChunk(
             course_id=course.id,
@@ -80,6 +88,7 @@ def run_check() -> None:
             content="middle",
             embedding=_vector(0.8, 0.6),
             metadata_json=metadata,
+            **embedding_columns,
         )
         far = KnowledgeChunk(
             course_id=course.id,
@@ -88,6 +97,7 @@ def run_check() -> None:
             content="far",
             embedding=_vector(0.0, 1.0),
             metadata_json=metadata,
+            **embedding_columns,
         )
         wrong_model = KnowledgeChunk(
             course_id=course.id,
@@ -96,6 +106,7 @@ def run_check() -> None:
             content="wrong model",
             embedding=_vector(1.0),
             metadata_json={**metadata, "embedding_model": "other-model"},
+            **{**embedding_columns, "embedding_model": "other-model"},
         )
         isolated = KnowledgeChunk(
             course_id=other_course.id,
@@ -103,6 +114,7 @@ def run_check() -> None:
             content="other user",
             embedding=_vector(1.0),
             metadata_json=metadata,
+            **embedding_columns,
         )
         db.add_all([near, middle, far, wrong_model, isolated])
         db.commit()
@@ -113,6 +125,8 @@ def run_check() -> None:
             _vector(1.0),
             embedding_source="openai_compatible",
             embedding_model="test-embedding",
+            embedding_dimension=1536,
+            embedding_profile_hash=profile_hash,
             limit=10,
         )
 

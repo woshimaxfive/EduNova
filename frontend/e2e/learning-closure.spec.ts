@@ -4,20 +4,24 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function createAndSubmitWrongPractice(page: Page) {
   await page.goto("/app/practice");
-  await expect(page.getByRole("button", { name: "生成练习" })).toBeEnabled();
-  await page.getByLabel("题量").selectOption("3");
-  await page.getByRole("button", { name: "生成练习" }).click();
+  const start = page.getByRole("button", { name: /开始新练习|开始针对性练习/ }).first();
+  await expect(start).toBeVisible();
+  await start.click();
 
-  const answerBoxes = page.getByRole("textbox", { name: /作答区/ });
-  await expect(answerBoxes).toHaveCount(3);
-  for (let index = 0; index < 3; index += 1) {
-    await answerBoxes.nth(index).fill("这是一次故意提交的错误答案");
-  }
+  const settings = page.getByRole("dialog", { name: "练习设置" });
+  await settings.getByRole("button", { name: "3 题" }).click();
+  const generate = settings.getByRole("button", { name: /开始针对性练习|生成新练习/ });
+  await expect(generate).toBeEnabled();
+  await generate.click();
 
-  await page.getByRole("button", { name: "提交答案" }).click();
-  await expect(page.getByText("练习已完成")).toBeVisible();
-  await expect(page.getByText("错因诊断").first()).toBeVisible();
-  await expect(page.getByText("已有路径已按本次练习重排")).toBeVisible();
+  await expect(page.getByRole("article", { name: "第 1 题" })).toBeVisible();
+  await page.getByRole("button", { name: "提交练习" }).click();
+  const confirm = page.getByRole("dialog", { name: /还有 3 题未作答/ });
+  await confirm.getByRole("button", { name: "仍然提交" }).click();
+  await expect(page.getByText("练习完成")).toBeVisible();
+  await expect(page.getByText("错因与复习动作").first()).toBeVisible();
+  await page.getByRole("button", { name: "查看学习更新" }).click();
+  await expect(page.getByText("学习路径已按本次结果重排")).toBeVisible();
 }
 
 test("rules-only Docker environment closes the learning loop with real traces", async ({ page }) => {
@@ -54,9 +58,13 @@ test("rules-only Docker environment closes the learning loop with real traces", 
   await page.goto("/app/reports");
   await expect(page.getByRole("button", { name: "生成学习报告" })).toBeEnabled();
   await page.getByRole("button", { name: "生成学习报告" }).click();
-  await expect(page.getByRole("button", { name: "查看 ReportGraph" })).toBeVisible();
-  await expect(page.getByText("2 次练习")).toBeVisible();
-  await page.getByRole("button", { name: "查看 ReportGraph" }).click();
+  await page.getByRole("button", { name: "报告详情" }).click();
+  const reportDrawer = page.getByRole("dialog", { name: "报告详情" });
+  await reportDrawer.getByRole("tab", { name: "证据与审核" }).click();
+  await expect(reportDrawer.locator(".report-evidence-facts strong").filter({ hasText: "次练习" })).toContainText("2");
+  await reportDrawer.getByRole("tab", { name: "协作轨迹" }).click();
+  await expect(reportDrawer.getByRole("button", { name: "查看 ReportGraph" })).toBeVisible();
+  await reportDrawer.getByRole("button", { name: "查看 ReportGraph" }).click();
   await expect(page.getByText("aggregate_evidence")).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });

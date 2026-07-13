@@ -113,7 +113,7 @@
 
 .course-workspace-title span {
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   font-variant-numeric: tabular-nums;
 }
 
@@ -144,7 +144,7 @@
   border-radius: 6px;
   color: var(--text-muted);
   background: transparent;
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   font-weight: 700;
 }
 
@@ -173,7 +173,7 @@
   padding-left: 7px;
   border-left: 1px solid rgba(8, 127, 115, 0.18);
   color: var(--accent-strong);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-style: normal;
   font-variant-numeric: tabular-nums;
 }
@@ -251,7 +251,7 @@
 
 .course-assistant-turn > .markdown-body {
   max-width: 76ch;
-  font-size: 0.98rem;
+  font-size: var(--font-body);
   line-height: 1.78;
 }
 
@@ -276,7 +276,7 @@
   border-radius: 6px;
   color: var(--text-muted);
   background: transparent;
-  font-size: 0.77rem;
+  font-size: var(--font-control);
   font-weight: 650;
   text-decoration: none;
 }
@@ -291,7 +291,7 @@
 
 .course-closed-loop-actions em {
   color: inherit;
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
   font-style: normal;
   opacity: 0.78;
 }
@@ -362,7 +362,7 @@
 .course-start-panel .course-answer-label {
   margin: 0;
   color: var(--accent-strong);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   font-weight: 760;
 }
 
@@ -391,7 +391,7 @@
 .course-question-suggestions > span {
   margin-bottom: 3px;
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--font-control);
 }
 
 .course-question-suggestions button {
@@ -429,7 +429,7 @@
   border-radius: 6px;
   color: var(--text-muted);
   background: rgba(16, 24, 32, 0.035);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
   text-decoration: none;
 }
 
@@ -582,7 +582,7 @@
 .course-drawer-header span,
 .course-content-assistant > header span {
   color: var(--accent-strong);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 760;
 }
 
@@ -603,7 +603,7 @@
 .course-progress-summary > span,
 .course-progress-summary > div span {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
 }
 
 .course-progress-summary > strong {
@@ -615,7 +615,7 @@
 .course-progress-summary > p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
   line-height: 1.6;
 }
 
@@ -633,13 +633,13 @@
 }
 
 .course-progress-summary > div strong {
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
   line-height: 1.55;
 }
 
 .course-progress-summary > div em {
   color: var(--accent-strong);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
   font-style: normal;
   font-variant-numeric: tabular-nums;
 }
@@ -669,13 +669,13 @@
 
 .course-progress-section-heading h3 {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: var(--font-body);
   letter-spacing: 0;
 }
 
 .course-progress-section-heading span {
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
 }
 
 .course-progress-steps,
@@ -711,21 +711,21 @@
   grid-column: 2;
   grid-row: 1;
   color: inherit;
-  font-size: 0.66rem;
+  font-size: var(--font-caption);
 }
 
 .course-progress-steps li strong {
   grid-column: 1;
   grid-row: 1;
   color: var(--text-strong);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
 }
 
 .course-progress-steps li p {
   grid-column: 1 / -1;
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.74rem;
+  font-size: var(--font-control);
   line-height: 1.5;
 }
 
@@ -746,13 +746,13 @@
 
 .course-progress-counts dt {
   color: var(--text-muted);
-  font-size: 0.65rem;
+  font-size: var(--font-caption);
 }
 
 .course-progress-counts dd {
   margin: 0;
   color: var(--text-strong);
-  font-size: 0.88rem;
+  font-size: var(--font-body);
   font-weight: 760;
   font-variant-numeric: tabular-nums;
 }
@@ -772,13 +772,13 @@
 
 .course-progress-weaknesses strong {
   color: var(--text-strong);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
 }
 
 .course-progress-weaknesses span,
 .course-progress-weaknesses small {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
 }
 
 .course-progress-weaknesses small {
@@ -800,13 +800,13 @@
   border-radius: 6px;
   color: var(--accent-strong);
   background: rgba(223, 244, 240, 0.54);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
 }
 
 .course-progress-empty {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   line-height: 1.6;
 }
 
@@ -838,12 +838,12 @@
 
 .course-content-outline-heading strong {
   color: var(--text-strong);
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
 }
 
 .course-content-outline-heading span {
   color: var(--text-muted);
-  font-size: 0.69rem;
+  font-size: var(--font-caption);
 }
 
 .course-content-outline nav {
@@ -859,7 +859,7 @@
 .course-content-outline h2 {
   margin: 0 8px 5px;
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
   font-weight: 760;
   letter-spacing: 0;
 }
@@ -889,7 +889,7 @@
 
 .course-content-outline nav button span {
   overflow: hidden;
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -897,7 +897,7 @@
 
 .course-content-outline nav button small {
   color: var(--text-muted);
-  font-size: 0.62rem;
+  font-size: var(--font-caption);
 }
 
 .course-content-main {
@@ -941,7 +941,7 @@
 
 .course-content-kicker {
   color: var(--accent-strong);
-  font-size: 0.75rem;
+  font-size: var(--font-control);
   font-weight: 760;
 }
 
@@ -985,13 +985,13 @@
 
 .course-content-reader dt {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
 }
 
 .course-content-reader dd {
   margin: 0;
   color: var(--text-strong);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   font-weight: 680;
 }
 
@@ -1015,7 +1015,7 @@
 .course-content-citation-focus span,
 .course-content-section small {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
 }
 
 .course-content-loading {
@@ -1063,7 +1063,7 @@
   border-radius: 7px;
   color: var(--accent-strong);
   background: rgba(255, 255, 255, 0.64);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
   font-weight: 700;
   text-decoration: none;
 }
@@ -1122,7 +1122,7 @@
 .course-content-assistant-empty {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   line-height: 1.7;
 }
 
@@ -1139,7 +1139,7 @@
 
 .course-content-composer label {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
 }
 
 .course-content-composer textarea {

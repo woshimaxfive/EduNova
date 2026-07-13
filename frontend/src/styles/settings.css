@@ -69,7 +69,7 @@
 
 .settings-toolbar-identity strong {
   color: var(--text-strong);
-  font-size: 0.92rem;
+  font-size: var(--font-body);
 }
 
 .settings-toolbar-identity small,
@@ -95,7 +95,7 @@
 }
 
 .settings-toolbar-identity small {
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
 }
 
 .settings-effective-state {
@@ -110,7 +110,7 @@
   min-height: 28px;
   padding: 5px 8px;
   border-left: 1px solid var(--wide-workspace-divider);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
   white-space: nowrap;
 }
 
@@ -148,13 +148,13 @@
 }
 
 .settings-navigation-heading span {
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
   font-weight: 800;
 }
 
 .settings-navigation-heading strong {
   color: var(--text-strong);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
 }
 
 .settings-navigation button {
@@ -180,12 +180,12 @@
 
 .settings-navigation button strong {
   color: inherit;
-  font-size: 0.78rem;
+  font-size: var(--font-control);
 }
 
 .settings-navigation button small {
   overflow: hidden;
-  font-size: 0.67rem;
+  font-size: var(--font-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -233,7 +233,7 @@
 }
 
 .settings-panel-heading span {
-  font-size: 0.67rem;
+  font-size: var(--font-caption);
   font-weight: 850;
 }
 
@@ -254,7 +254,7 @@
 
 .settings-panel-heading p {
   max-width: 64ch;
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   line-height: 1.65;
 }
 
@@ -269,7 +269,7 @@
   padding: 0 12px;
   color: var(--text-muted);
   background: color-mix(in srgb, var(--wide-workspace-muted) 62%, transparent);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 700;
 }
 
@@ -305,7 +305,7 @@
   color: var(--text);
   background: var(--wide-workspace-control);
   font: inherit;
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 800;
   text-decoration: none;
   white-space: nowrap;
@@ -343,12 +343,12 @@
 
 .settings-system-fallback > header span {
   color: var(--text-muted);
-  font-size: 0.66rem;
+  font-size: var(--font-caption);
 }
 
 .settings-system-fallback > header strong {
   color: var(--text-strong);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
 }
 
 .settings-model-layout {
@@ -383,7 +383,7 @@
 
 .settings-config-list > header span {
   color: var(--text-strong);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 850;
 }
 
@@ -426,7 +426,7 @@
 .settings-config-row-title strong {
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -434,14 +434,14 @@
 .settings-config-row-title small {
   flex: 0 0 auto;
   color: var(--accent-strong);
-  font-size: 0.62rem;
+  font-size: var(--font-caption);
   font-weight: 850;
 }
 
 .settings-config-scroll button > span,
 .settings-config-scroll button > em {
   overflow: hidden;
-  font-size: 0.66rem;
+  font-size: var(--font-caption);
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -491,14 +491,14 @@
 }
 
 .settings-config-editor > header > div > span {
-  font-size: 0.65rem;
+  font-size: var(--font-caption);
 }
 
 .settings-key-summary {
   gap: 5px;
   color: var(--text-muted);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 0.67rem;
+  font-size: var(--font-caption);
 }
 
 .settings-form-grid {
@@ -522,7 +522,7 @@
 .settings-password-form label > span,
 .settings-embedding-settings label > span {
   color: var(--text-muted);
-  font-size: 0.69rem;
+  font-size: var(--font-caption);
   font-weight: 750;
 }
 
@@ -567,12 +567,12 @@
 
 .settings-provider-context strong {
   color: var(--accent-strong);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
 }
 
 .settings-provider-context span,
 .settings-provider-context small {
-  font-size: 0.67rem;
+  font-size: var(--font-caption);
 }
 
 .settings-provider-context small {
@@ -589,7 +589,7 @@
 .settings-embedding-settings summary {
   color: var(--text-strong);
   cursor: pointer;
-  font-size: 0.74rem;
+  font-size: var(--font-control);
   font-weight: 850;
 }
 
@@ -599,7 +599,7 @@
 
 .settings-embedding-settings p {
   padding-top: 7px;
-  font-size: 0.67rem;
+  font-size: var(--font-caption);
   line-height: 1.55;
 }
 
@@ -659,19 +659,19 @@
 
 .settings-connection-test > header strong {
   color: var(--text-strong);
-  font-size: 0.73rem;
+  font-size: var(--font-meta);
 }
 
 .settings-connection-test > header span {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.65rem;
+  font-size: var(--font-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .settings-connection-test p {
-  font-size: 0.67rem;
+  font-size: var(--font-caption);
   line-height: 1.5;
 }
 
@@ -683,13 +683,13 @@
 }
 
 .settings-connection-test footer span {
-  font-size: 0.62rem;
+  font-size: var(--font-caption);
 }
 
 .settings-connection-test button {
   min-height: 30px;
   padding-inline: 8px;
-  font-size: 0.65rem;
+  font-size: var(--font-caption);
 }
 
 .settings-save-first-note {
@@ -698,7 +698,7 @@
   padding: 11px 12px;
   color: var(--text-muted);
   background: var(--wide-workspace-muted);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
 }
 
 .settings-inline-feedback {
@@ -718,7 +718,7 @@
   gap: 5px;
   min-width: 0;
   color: var(--text-muted);
-  font-size: 0.66rem;
+  font-size: var(--font-caption);
 }
 
 .settings-editor-actions > div svg {
@@ -775,11 +775,11 @@
 
 .settings-account-grid > section > header strong {
   color: var(--text-strong);
-  font-size: 0.79rem;
+  font-size: var(--font-control);
 }
 
 .settings-account-grid > section > header span {
-  font-size: 0.66rem;
+  font-size: var(--font-caption);
 }
 
 .settings-account-meta {
@@ -800,7 +800,7 @@
 .settings-account-meta dt,
 .settings-account-meta dd {
   margin: 0;
-  font-size: 0.69rem;
+  font-size: var(--font-caption);
 }
 
 .settings-account-meta dt { color: var(--text-muted); }
@@ -817,7 +817,7 @@
 }
 
 .settings-password-form small {
-  font-size: 0.65rem;
+  font-size: var(--font-caption);
 }
 
 .settings-account-grid > section > button {
@@ -849,12 +849,12 @@
 
 .settings-privacy-list article strong {
   color: var(--text-strong);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
 }
 
 .settings-privacy-list p {
   max-width: 72ch;
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
   line-height: 1.6;
 }
 
@@ -862,7 +862,7 @@
 .settings-privacy-list article > a {
   align-self: center;
   min-height: 30px;
-  font-size: 0.66rem;
+  font-size: var(--font-caption);
 }
 
 .settings-privacy-list article > span {
@@ -920,14 +920,14 @@
 .settings-dialog h2 {
   margin: 0;
   color: var(--text-strong);
-  font-size: 0.91rem;
+  font-size: var(--font-body);
   font-weight: 850;
 }
 
 .settings-dialog p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
   line-height: 1.6;
 }
 
@@ -956,7 +956,7 @@
   border-radius: 5px;
   padding: 0 12px;
   font: inherit;
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 800;
 }
 
@@ -1055,11 +1055,11 @@
   .settings-toolbar-identity small,
   .settings-effective-state > span,
   .settings-effective-state > small { display: none; }
-  .settings-effective-state > strong { font-size: 0.66rem; }
+  .settings-effective-state > strong { font-size: var(--font-caption); }
   .settings-navigation button { min-width: 128px; grid-template-columns: 22px minmax(0, 1fr); padding-inline: 7px; }
   .settings-navigation button small { display: none; }
   .settings-panel-heading { align-items: flex-start; gap: 12px; }
-  .settings-panel-heading p { font-size: 0.7rem; }
+  .settings-panel-heading p { font-size: var(--font-meta); }
   .settings-new-button { min-width: 36px; padding-inline: 8px; font-size: 0; }
   .settings-new-button svg { width: 17px; height: 17px; }
   .settings-system-fallback > header { align-items: flex-start; flex-direction: column; gap: 5px; }

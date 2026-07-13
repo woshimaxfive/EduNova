@@ -37,20 +37,20 @@
   align-items: center;
   gap: 8px;
   color: var(--text-strong);
-  font-size: 0.92rem;
+  font-size: var(--font-body);
 }
 
 .library-toolbar-summary .library-toolbar-kicker {
   flex: 0 0 auto;
   color: var(--accent-strong);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
   font-weight: 850;
 }
 
 .library-toolbar-summary span {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -102,7 +102,7 @@
   padding: 0 10px;
   color: var(--text-muted);
   background: transparent;
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
@@ -142,12 +142,12 @@
 
 .library-compare-mode-note strong {
   color: var(--accent-strong);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
 }
 
 .library-compare-mode-note span {
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
 }
 
 .library-compare-mode-note button,
@@ -192,7 +192,7 @@
   padding-inline: 12px;
   color: var(--text-muted);
   background: var(--wide-workspace-muted);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
   font-weight: 800;
 }
 
@@ -201,7 +201,7 @@
   border-bottom: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
   padding-inline: 12px;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   transition: background 150ms ease;
 }
 
@@ -269,12 +269,12 @@
 
 .library-row-name strong {
   color: var(--text-strong);
-  font-size: 0.84rem;
+  font-size: var(--font-body-compact);
 }
 
 .library-row-name small {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
 }
 
 .library-row-selector {
@@ -303,7 +303,7 @@
   padding: 0 7px;
   color: var(--text-muted);
   background: var(--wide-workspace-muted);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
   font-weight: 700;
 }
 
@@ -388,7 +388,7 @@
 
 .library-drawer-header span {
   color: var(--accent-strong);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
   font-weight: 800;
 }
 
@@ -434,7 +434,7 @@
   flex: 1;
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
 }
 
 .library-detail-actions {
@@ -470,7 +470,7 @@
   padding: 0 8px;
   color: var(--text-muted);
   background: transparent;
-  font-size: 0.71rem;
+  font-size: var(--font-meta);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -517,12 +517,12 @@
 
 .library-detail-metrics span {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
 }
 
 .library-detail-metrics strong {
   color: var(--text-strong);
-  font-size: 0.87rem;
+  font-size: var(--font-body-compact);
 }
 
 .library-preview-block,
@@ -540,7 +540,7 @@
 .library-selected-materials h3 {
   margin: 0 0 7px;
   color: var(--text-strong);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
 }
 
 .library-preview-block p,
@@ -549,7 +549,7 @@
 .library-comparison-sources p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   line-height: 1.65;
   white-space: pre-wrap;
 }
@@ -569,14 +569,14 @@
 .library-section-list article strong,
 .library-comparison-sources article strong {
   color: var(--text-strong);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
 }
 
 .library-section-list article span,
 .library-section-list article small,
 .library-comparison-sources article small {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
 }
 
 .library-section-more,
@@ -585,7 +585,7 @@
   padding: 24px 8px;
   color: var(--text-muted);
   text-align: center;
-  font-size: 0.76rem;
+  font-size: var(--font-control);
 }
 
 .library-linked-courses button {
@@ -609,12 +609,12 @@
 
 .library-linked-courses strong {
   color: var(--text-strong);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
 }
 
 .library-linked-courses small {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
 }
 
 .library-selected-materials {
@@ -629,7 +629,7 @@
   border-radius: 7px;
   color: var(--text-muted);
   text-align: center;
-  font-size: 0.76rem;
+  font-size: var(--font-control);
 }
 
 .library-selected-materials > div {
@@ -643,14 +643,14 @@
 
 .library-selected-materials > div span {
   color: var(--accent-strong);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
   font-weight: 800;
 }
 
 .library-selected-materials > div strong {
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -662,7 +662,7 @@
 
 .library-drawer-field > span {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 800;
 }
 
@@ -688,14 +688,14 @@
 
 .library-comparison-result > header strong {
   color: var(--text-strong);
-  font-size: 0.88rem;
+  font-size: var(--font-body);
   line-height: 1.45;
 }
 
 .library-comparison-result > header span,
 .library-comparison-result > header small {
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
 }
 
 .library-comparison-group ul {
@@ -715,13 +715,13 @@
 
 .library-comparison-group li strong {
   color: var(--text-strong);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
 }
 
 .library-comparison-group li span,
 .library-comparison-group li small {
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
   line-height: 1.5;
 }
 
@@ -733,7 +733,7 @@
 .library-compare-again {
   justify-self: start;
   margin-top: 4px;
-  font-size: 0.75rem;
+  font-size: var(--font-control);
 }
 
 .library-recent-empty {
@@ -747,7 +747,7 @@
 
 .library-recent-empty strong {
   color: var(--text-strong);
-  font-size: 0.84rem;
+  font-size: var(--font-body-compact);
 }
 
 .library-course-materials button:disabled {

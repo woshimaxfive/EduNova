@@ -31,6 +31,11 @@
   --shadow-float: 0 28px 80px rgba(35, 59, 53, 0.15);
   --focus-ring: 0 0 0 3px rgba(11, 143, 127, 0.2);
   --font-mono: "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  --font-caption: 0.8125rem;
+  --font-meta: 0.85rem;
+  --font-control: 0.9rem;
+  --font-body-compact: 0.95rem;
+  --font-body: 1rem;
   --radius: 14px;
   --radius-small: 8px;
   --radius-medium: 12px;
@@ -74,6 +79,10 @@ textarea {
   font: inherit;
 }
 
+small {
+  font-size: var(--font-caption);
+}
+
 button,
 a {
   -webkit-tap-highlight-color: transparent;
@@ -104,7 +113,7 @@ a {
   padding: 8px 10px;
   border: 1px solid rgba(16, 24, 32, 0.1);
   border-radius: 8px;
-  font-size: 0.84rem;
+  font-size: var(--font-body-compact);
   font-weight: 760;
   line-height: 1.45;
 }
@@ -177,7 +186,7 @@ a {
 
 .toast-message span {
   min-width: 0;
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
   font-weight: 780;
   line-height: 1.45;
 }
@@ -501,7 +510,7 @@ a {
 .section-kicker {
   margin: 0 0 4px;
   color: var(--accent-strong);
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
   font-weight: 800;
 }
 
@@ -781,7 +790,7 @@ a {
   margin-left: auto;
   color: var(--text-muted);
   font-style: normal;
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
 }
 
 .timeline-icon {
@@ -868,7 +877,7 @@ a {
 
 .course-space-metrics dt {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 760;
 }
 
@@ -980,7 +989,7 @@ a {
 .course-answer-label {
   margin: 0;
   color: var(--accent-strong);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   font-weight: 850;
 }
 
@@ -1010,7 +1019,7 @@ a {
 
 .course-question-suggestions > span {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   font-weight: 820;
 }
 
@@ -1056,7 +1065,7 @@ a {
   border-radius: var(--radius-control);
   color: var(--accent-strong);
   background: var(--accent-soft);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   font-weight: 780;
 }
 
@@ -1173,7 +1182,7 @@ a {
 
 .course-task-list span {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
 }
 
 .course-task-list li.doing strong {
@@ -1274,7 +1283,7 @@ a {
   width: min(920px, 100%);
   margin: 8px auto 0;
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: var(--font-body);
   font-weight: 720;
 }
 
@@ -1554,7 +1563,7 @@ a {
   border-radius: var(--radius-control);
   color: var(--accent-strong);
   background: var(--accent-soft);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   font-weight: 800;
 }
 
@@ -1665,7 +1674,7 @@ a {
   border-radius: var(--radius-control);
   color: var(--text);
   background: rgba(255, 255, 255, 0.62);
-  font-size: 0.9rem;
+  font-size: var(--font-body);
   font-weight: 800;
   cursor: pointer;
   transition:
@@ -1738,7 +1747,7 @@ a {
   border-radius: 8px;
   color: var(--accent-strong);
   background: var(--accent-soft);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 900;
   text-align: center;
 }
@@ -1776,7 +1785,7 @@ a {
 
 .ownership-list span {
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: var(--font-body);
 }
 
 .evidence-tag {
@@ -1826,7 +1835,7 @@ a {
 
 .tutor-composer span {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   font-weight: 800;
 }
 
@@ -1913,7 +1922,7 @@ a {
 .compact-action {
   min-height: 32px;
   padding: 0 10px;
-  font-size: 0.78rem;
+  font-size: var(--font-control);
 }
 
 .danger-action {
@@ -2032,7 +2041,7 @@ a {
     border: 1px solid var(--line);
     border-radius: 999px;
     text-align: center;
-    font-size: 0.9rem;
+    font-size: var(--font-body);
     color: var(--text-muted);
     background: rgba(255, 255, 255, 0.66);
   }
@@ -2212,7 +2221,7 @@ a {
 .status-course span,
 .status-metrics dt {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 800;
 }
 
@@ -2352,7 +2361,7 @@ a {
   color: var(--text);
   background: rgba(255, 255, 255, 0.64);
   font-family: var(--font-mono);
-  font-size: 0.88rem;
+  font-size: var(--font-body);
   line-height: 1.65;
 }
 
@@ -2692,7 +2701,7 @@ a {
   margin-top: 8px;
   padding: 10px 10px 4px;
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
   font-weight: 780;
 }
 
@@ -2757,7 +2766,7 @@ a {
   outline: 0;
   color: var(--text);
   background: transparent;
-  font-size: 0.88rem;
+  font-size: var(--font-body);
 }
 
 .history-search-field input::placeholder {
@@ -2845,7 +2854,7 @@ a {
 .history-search-dialog h2 {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
   font-weight: 760;
 }
 
@@ -2906,7 +2915,7 @@ a {
 
 .history-search-empty {
   margin: 10px 4px;
-  font-size: 0.92rem;
+  font-size: var(--font-body);
 }
 
 .home-thread.active {
@@ -2939,7 +2948,7 @@ a {
   border-radius: 7px;
   color: var(--accent-strong);
   background: rgba(8, 127, 115, 0.055);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   font-weight: 760;
 }
 
@@ -3071,7 +3080,7 @@ a {
   color: var(--text);
   text-align: left;
   background: transparent;
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
   font-weight: 760;
 }
 
@@ -3106,7 +3115,7 @@ a {
   outline: 0;
   color: var(--text);
   background: rgba(255, 255, 255, 0.92);
-  font-size: 0.9rem;
+  font-size: var(--font-body);
   font-weight: 760;
   box-shadow: 0 0 0 3px rgba(8, 127, 115, 0.08);
 }
@@ -3183,7 +3192,7 @@ a {
   border-radius: 999px;
   color: #ffffff;
   background: #24323a;
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 900;
 }
 
@@ -3191,7 +3200,7 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.88rem;
+  font-size: var(--font-body);
 }
 
 .home-chat-stage {
@@ -3229,7 +3238,7 @@ a {
 .home-kicker {
   margin: 0 0 12px;
   color: var(--accent-strong);
-  font-size: 0.88rem;
+  font-size: var(--font-body);
   font-weight: 850;
 }
 
@@ -3403,7 +3412,7 @@ a {
   width: min(760px, 100%);
   margin: 8px auto 0;
   color: var(--text-muted);
-  font-size: 0.92rem;
+  font-size: var(--font-body);
 }
 
 .selected-materials-note > span {
@@ -3470,7 +3479,7 @@ a {
 
 .message-thinking {
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
 }
 
 .message-speak-button {
@@ -3485,7 +3494,7 @@ a {
   border-radius: 999px;
   color: var(--text-muted);
   background: rgba(255, 255, 255, 0.46);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 760;
 }
 
@@ -3518,7 +3527,7 @@ a {
   border-radius: 999px;
   color: rgba(98, 112, 109, 0.88);
   background: rgba(255, 255, 255, 0.38);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   font-weight: 720;
   transition:
     color 0.2s ease,
@@ -3576,7 +3585,7 @@ a {
   color: var(--warning-text, #7a5412);
   border: 1px solid rgba(170, 116, 20, 0.14);
   background: rgba(255, 247, 225, 0.72);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   line-height: 1.55;
 }
 
@@ -3590,13 +3599,13 @@ a {
 .insight-source-list strong,
 .insight-trace-list strong {
   color: var(--text);
-  font-size: 0.84rem;
+  font-size: var(--font-body-compact);
 }
 
 .insight-source-list span,
 .insight-trace-list span {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   line-height: 1.5;
 }
 
@@ -3608,7 +3617,7 @@ a {
 .insight-source-list a {
   overflow-wrap: anywhere;
   color: var(--accent-strong);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   text-decoration: none;
 }
 
@@ -3617,7 +3626,7 @@ a {
   align-items: center;
   gap: 6px;
   color: var(--accent-strong);
-  font-size: 0.84rem;
+  font-size: var(--font-body-compact);
   font-weight: 830;
 }
 
@@ -3634,7 +3643,7 @@ a {
   justify-content: space-between;
   margin-bottom: 10px;
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: var(--font-body);
   font-weight: 780;
 }
 
@@ -3704,14 +3713,14 @@ a {
 .recent-course-progress small,
 .course-next small {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
   font-style: normal;
 }
 
 .recent-course-copy small b {
   margin-right: 5px;
   color: color-mix(in srgb, var(--text-muted) 78%, transparent);
-  font-size: 0.64rem;
+  font-size: var(--font-caption);
 }
 
 .recent-course:hover {
@@ -3728,12 +3737,12 @@ a {
 
 .course-next {
   min-width: 62px;
-  font-size: 0.78rem;
+  font-size: var(--font-control);
 }
 
 .course-next strong {
   color: var(--text-strong);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
 }
 
 .home-course-drawer-layer {
@@ -3774,7 +3783,7 @@ a {
 
 .home-course-drawer-header span {
   color: var(--accent-strong);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
   font-weight: 800;
 }
 
@@ -3832,7 +3841,7 @@ a {
 
 .home-course-drawer-toolbar > span {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   white-space: nowrap;
 }
 
@@ -3891,13 +3900,13 @@ a {
 
 .home-course-drawer-copy strong {
   color: var(--text-strong);
-  font-size: 0.84rem;
+  font-size: var(--font-body-compact);
 }
 
 .home-course-drawer-copy small,
 .home-course-drawer-copy > span {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
 }
 
 .home-course-drawer-progress {
@@ -3908,7 +3917,7 @@ a {
 
 .home-course-drawer-progress em {
   color: var(--accent-strong);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
   font-style: normal;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
@@ -3935,7 +3944,7 @@ a {
 
 .home-course-drawer-state p {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   line-height: 1.6;
 }
 
@@ -4096,7 +4105,7 @@ a {
   border-radius: 8px;
   color: var(--accent-strong);
   background: rgba(255, 255, 255, 0.78);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   font-weight: 900;
   text-align: center;
 }
@@ -4161,7 +4170,7 @@ a {
   grid-template-columns: minmax(0, 1fr) 92px 78px 22px;
   padding: 9px 8px;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
   font-weight: 780;
 }
 
@@ -4196,7 +4205,7 @@ a {
   border-radius: 8px;
   color: var(--accent-strong);
   background: rgba(8, 127, 115, 0.09);
-  font-size: 0.74rem;
+  font-size: var(--font-control);
   font-weight: 900;
 }
 
@@ -4588,7 +4597,7 @@ a {
   gap: 6px;
   align-items: center;
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
   font-weight: 760;
 }
 
@@ -4600,7 +4609,7 @@ a {
 
 .mode-current {
   margin-top: 10px;
-  font-size: 0.9rem;
+  font-size: var(--font-body);
   font-weight: 760;
 }
 
@@ -4667,7 +4676,7 @@ a {
   border-bottom: 1px solid var(--line);
   color: var(--text-muted);
   background: rgba(244, 248, 247, 0.9);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 760;
 }
 
@@ -4697,7 +4706,7 @@ a {
 
 .resource-code-toolbar span {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
 }
 
 .resource-visual-toolbar button,
@@ -4826,7 +4835,7 @@ a {
 .resource-quiz-question > span,
 .resource-animation-copy > span {
   color: var(--accent-strong);
-  font-size: 0.74rem;
+  font-size: var(--font-control);
   font-weight: 820;
 }
 
@@ -4918,7 +4927,7 @@ a {
   justify-content: space-between;
   gap: 10px;
   color: #8ea6a2;
-  font-size: 0.74rem;
+  font-size: var(--font-control);
 }
 
 .resource-code-output pre,
@@ -4927,7 +4936,7 @@ a {
   overflow: auto;
   white-space: pre-wrap;
   font-family: var(--font-mono);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   line-height: 1.55;
 }
 
@@ -5008,13 +5017,13 @@ a {
 
 .resource-slide-thumbnails button span {
   color: var(--accent-strong);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 820;
 }
 
 .resource-slide-thumbnails button strong {
   overflow: hidden;
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   line-height: 1.35;
 }
 
@@ -5043,7 +5052,7 @@ a {
 
 .resource-slide-canvas > span {
   color: var(--accent-strong);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 820;
 }
 
@@ -5064,7 +5073,7 @@ a {
   padding-top: 12px;
   border-top: 1px solid rgba(16, 24, 32, 0.1);
   color: #60706d;
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   line-height: 1.5;
 }
 
@@ -5075,7 +5084,7 @@ a {
   gap: 12px;
   padding: 0 12px 12px;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 760;
 }
 
@@ -5083,7 +5092,7 @@ a {
   margin: 0;
   padding: 0 14px 12px;
   color: var(--warning-strong, #9a651a);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
 }
 
 .resource-animation-stage {
@@ -5142,7 +5151,7 @@ a {
 .resource-legacy-visual summary {
   cursor: pointer;
   color: var(--accent-strong);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   font-weight: 760;
 }
 
@@ -5389,7 +5398,7 @@ a {
 .material-file-empty {
   margin: 8px 8px 0;
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: var(--font-body);
   line-height: 1.52;
 }
 
@@ -5596,7 +5605,7 @@ a {
 .course-space-title p:not(.section-kicker) {
   max-width: 70ch;
   margin-top: 5px;
-  font-size: 0.92rem;
+  font-size: var(--font-body);
 }
 
 .course-space-metrics {
@@ -5670,7 +5679,7 @@ a {
 .course-knowledge-strip > span {
   flex: 0 0 auto;
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   font-weight: 840;
 }
 
@@ -5770,7 +5779,7 @@ a {
 }
 
 .course-composer label {
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
 }
 
 .course-composer textarea {
@@ -5840,7 +5849,7 @@ a {
 
 .course-study-meta dt {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 800;
 }
 
@@ -5860,7 +5869,7 @@ a {
 .course-study-assistant .course-panel-heading p {
   margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: var(--font-body);
 }
 
 .course-study-mini-thread {
@@ -5967,7 +5976,7 @@ a {
   min-height: 32px;
   grid-column: 1 / -1;
   width: max-content;
-  font-size: 0.88rem;
+  font-size: var(--font-body);
   font-weight: 600;
 }
 
@@ -5989,12 +5998,12 @@ a {
 }
 
 .course-space-metrics dt {
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
 }
 
 .course-space-metrics dd {
   margin-top: 1px;
-  font-size: 0.92rem;
+  font-size: var(--font-body);
 }
 
 .course-mode-tabs {
@@ -6235,7 +6244,7 @@ a {
 }
 
 .course-study-mini-thread .course-message.assistant {
-  font-size: 0.92rem;
+  font-size: var(--font-body);
 }
 
 .course-study-assistant .course-composer::before {
@@ -6421,12 +6430,12 @@ a {
 }
 
 .course-space-metrics dt {
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
 }
 
 .course-space-metrics dd {
   color: var(--accent-strong);
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
 }
 
 .course-closed-loop-actions {
@@ -6475,7 +6484,7 @@ a {
 
 .course-inline-resource-heading span {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 760;
 }
 
@@ -6519,7 +6528,7 @@ a {
 .course-inline-resource-summary,
 .course-inline-resource-feedback {
   margin: 0;
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
 }
 
 .course-inline-resource-summary {
@@ -6640,7 +6649,7 @@ a {
 
 .course-weakness-counts dt {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 760;
 }
 
@@ -6692,14 +6701,14 @@ a {
 
 .course-weakness-main small {
   color: var(--text-muted);
-  font-size: 0.74rem;
+  font-size: var(--font-control);
   font-weight: 720;
 }
 
 .course-weakness-list em {
   flex: 0 0 auto;
   color: var(--accent-strong);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-style: normal;
   font-weight: 820;
 }
@@ -6722,7 +6731,7 @@ a {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
   color: var(--text-strong);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   font-weight: 820;
   cursor: pointer;
 }
@@ -6740,7 +6749,7 @@ a {
 .course-weakness-empty {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: var(--font-body);
   font-weight: 720;
 }
 
@@ -6824,7 +6833,7 @@ a {
 .course-study-picker > span {
   flex: 1 0 100%;
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   font-weight: 840;
 }
 
@@ -7063,7 +7072,7 @@ a {
 .markdown-body pre code {
   padding: 0;
   background: transparent;
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
   line-height: 1.6;
 }
 
@@ -7080,7 +7089,7 @@ a {
   margin: 10px 0;
   overflow-x: auto;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: var(--font-body);
 }
 
 .markdown-body th,
@@ -7159,7 +7168,7 @@ a {
 .course-knowledge-graph-heading span,
 .course-knowledge-graph-legend {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
 }
 
 .course-knowledge-graph-canvas {
@@ -7212,7 +7221,7 @@ a {
 
 .course-knowledge-node-content span {
   color: var(--text-muted);
-  font-size: 0.74rem;
+  font-size: var(--font-control);
 }
 
 .course-knowledge-graph-legend {
@@ -7280,7 +7289,7 @@ a {
 .ai-job-progress__steps,
 .ai-job-progress__error {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
 }
 
 .ai-job-progress__bar {
@@ -7394,7 +7403,7 @@ a {
   border-radius: 7px;
   color: var(--accent-strong);
   background: rgba(255, 255, 255, 0.66);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
   font-weight: 700;
   text-decoration: none;
 }

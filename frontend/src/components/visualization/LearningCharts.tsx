@@ -64,19 +64,20 @@ export function MasteryOverviewChart({ points }: { points: CourseMasteryPoint[] 
         type: "value",
         min: 0,
         max: 100,
-        axisLabel: { color: palette.muted },
+        axisLabel: { color: palette.muted, fontSize: 13 },
         splitLine: { lineStyle: { color: palette.border, opacity: 0.55 } }
       },
       yAxis: {
         type: "category",
         data: visiblePoints.map((point) => point.title),
-        axisLabel: { color: palette.text, width: 130, overflow: "truncate" },
+        axisLabel: { color: palette.text, fontSize: 13, width: 130, overflow: "truncate" },
         axisTick: { show: false },
         axisLine: { show: false }
       },
       tooltip: {
         trigger: "axis",
-        formatter: "{b}：{c} 分"
+        formatter: "{b}：{c} 分",
+        textStyle: { fontSize: 13 }
       },
       series: [
         {
@@ -87,7 +88,7 @@ export function MasteryOverviewChart({ points }: { points: CourseMasteryPoint[] 
           })),
           barMaxWidth: 18,
           itemStyle: { borderRadius: [0, 3, 3, 0] },
-          label: { show: true, position: "right", color: palette.muted, formatter: "{c}" }
+          label: { show: true, position: "right", color: palette.muted, fontSize: 13, formatter: "{c}" }
         }
       ]
     }),
@@ -106,17 +107,17 @@ export function PracticeTrendChart({ scores }: { scores: number[] }) {
         type: "category",
         boundaryGap: false,
         data: scores.map((_, index) => `第 ${index + 1} 次`),
-        axisLabel: { color: palette.muted },
+        axisLabel: { color: palette.muted, fontSize: 13 },
         axisLine: { lineStyle: { color: palette.border } }
       },
       yAxis: {
         type: "value",
         min: 0,
         max: 100,
-        axisLabel: { color: palette.muted },
+        axisLabel: { color: palette.muted, fontSize: 13 },
         splitLine: { lineStyle: { color: palette.border, opacity: 0.55 } }
       },
-      tooltip: { trigger: "axis" },
+      tooltip: { trigger: "axis", textStyle: { fontSize: 13 } },
       series: [
         {
           type: "line",

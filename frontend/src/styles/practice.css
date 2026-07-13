@@ -35,7 +35,7 @@
 .practice-toolbar-metrics > span {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.67rem;
+  font-size: var(--font-caption);
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -45,7 +45,7 @@
 .practice-toolbar-metrics > strong {
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
   font-weight: 850;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -70,7 +70,7 @@
 
 .practice-toolbar-metrics > small {
   color: var(--accent-strong);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
   font-weight: 750;
 }
 
@@ -96,7 +96,7 @@
   padding: 0 12px;
   color: var(--text);
   background: var(--wide-workspace-control);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 800;
   text-decoration: none;
 }
@@ -134,7 +134,7 @@
   justify-content: space-between;
   padding: 0 8px 12px;
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
   font-weight: 850;
 }
 
@@ -159,7 +159,7 @@
   border-radius: 5px;
   color: var(--text-muted);
   background: transparent;
-  font-size: 0.75rem;
+  font-size: var(--font-control);
   font-weight: 850;
 }
 
@@ -206,7 +206,7 @@
   align-items: center;
   gap: 7px;
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
   font-weight: 700;
 }
 
@@ -262,13 +262,13 @@
 .practice-result-copy > span,
 .practice-result-detail section > span {
   color: var(--accent-strong);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
   font-weight: 850;
 }
 
 .practice-question-canvas > header strong {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
 }
 
 .practice-question-tags {
@@ -323,13 +323,13 @@
   border-radius: 5px;
   color: var(--text-muted);
   background: var(--wide-workspace-control);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   font-weight: 850;
 }
 
 .practice-choice-list button > strong {
   min-width: 0;
-  font-size: 0.88rem;
+  font-size: var(--font-body);
   line-height: 1.55;
 }
 
@@ -378,7 +378,7 @@
 
 .practice-short-answer > span {
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--font-control);
   font-weight: 800;
 }
 
@@ -463,7 +463,7 @@
 .practice-review-detail > div > strong,
 .practice-review-diagnosis > strong {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 850;
 }
 
@@ -493,7 +493,7 @@
   border-radius: 4px;
   color: var(--coral);
   background: var(--coral-soft);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 750;
 }
 
@@ -515,7 +515,7 @@
 .practice-session-actions > span {
   justify-self: center;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 750;
 }
 
@@ -548,7 +548,7 @@
 
 .practice-result-score span {
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
   font-weight: 800;
 }
 
@@ -584,7 +584,7 @@
   align-items: center;
   gap: 5px;
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
@@ -600,7 +600,7 @@
   border-left: 3px solid var(--coral);
   color: var(--coral);
   background: var(--coral-soft);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 750;
 }
 
@@ -618,7 +618,7 @@
 .practice-empty-canvas > span {
   margin-top: 16px;
   color: var(--accent-strong);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 850;
 }
 
@@ -645,7 +645,7 @@
 .practice-empty-canvas > small {
   margin-top: 12px;
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--font-control);
 }
 
 .practice-loading-state {
@@ -709,7 +709,7 @@
 
 .practice-drawer > header span {
   color: var(--accent-strong);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
   font-weight: 850;
 }
 
@@ -755,7 +755,7 @@
 .practice-settings-form label > span,
 .practice-settings-form legend {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 850;
 }
 
@@ -786,7 +786,7 @@
 
 .practice-segmented-control button {
   min-height: 38px;
-  font-size: 0.75rem;
+  font-size: var(--font-control);
   font-weight: 800;
 }
 
@@ -813,13 +813,13 @@
 
 .practice-difficulty-options span {
   color: inherit;
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
   font-weight: 850;
 }
 
 .practice-difficulty-options small {
   color: var(--text-muted);
-  font-size: 0.67rem;
+  font-size: var(--font-caption);
   line-height: 1.45;
 }
 
@@ -837,7 +837,7 @@
 .practice-drawer > footer > span {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -872,7 +872,7 @@
 .practice-result-detail h3 {
   margin: 0;
   color: var(--text-strong);
-  font-size: 0.9rem;
+  font-size: var(--font-body);
   line-height: 1.5;
 }
 
@@ -880,7 +880,7 @@
 .practice-result-detail a,
 .practice-result-facts span {
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   line-height: 1.55;
 }
 

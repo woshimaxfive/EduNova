@@ -39,7 +39,7 @@
 .studio-difficulty-control legend,
 .studio-type-grid legend {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
@@ -82,12 +82,12 @@
 
 .studio-toolbar-context strong {
   color: var(--text-strong);
-  font-size: 0.93rem;
+  font-size: var(--font-body);
 }
 
 .studio-toolbar-context span {
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
 }
 
 .studio-toolbar-actions {
@@ -124,12 +124,12 @@
 }
 
 .studio-job-strip strong {
-  font-size: 0.84rem;
+  font-size: var(--font-body-compact);
 }
 
 .studio-job-strip span {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
 }
 
 .studio-job-strip progress {
@@ -198,7 +198,7 @@
 
 .studio-resource-library header > div span {
   color: var(--text-muted);
-  font-size: 0.74rem;
+  font-size: var(--font-control);
   font-variant-numeric: tabular-nums;
 }
 
@@ -226,7 +226,7 @@
 
 .studio-resource-filter select {
   min-height: 34px;
-  font-size: 0.78rem;
+  font-size: var(--font-control);
 }
 
 .studio-resource-list {
@@ -281,7 +281,7 @@
 .studio-resource-row-copy strong {
   display: -webkit-box;
   overflow: hidden;
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   line-height: 1.35;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
@@ -290,12 +290,12 @@
 
 .studio-resource-row-copy small {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
 }
 
 .studio-resource-row > em {
   color: var(--text-muted);
-  font-size: 0.65rem;
+  font-size: var(--font-caption);
   font-style: normal;
   white-space: nowrap;
 }
@@ -308,7 +308,7 @@
   margin: 0;
   padding: 22px 12px;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
   text-align: center;
 }
 
@@ -364,7 +364,7 @@
 .studio-artifact-header p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
 }
 
 .studio-artifact-header h2 {
@@ -413,7 +413,7 @@
 .studio-canvas-empty p {
   max-width: 440px;
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: var(--font-body-compact);
   line-height: 1.6;
 }
 
@@ -468,7 +468,7 @@
 
 .studio-drawer-header span {
   color: var(--accent-strong);
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
   font-weight: 750;
 }
 
@@ -576,7 +576,7 @@
 
 .studio-type-grid span {
   min-width: 0;
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
   font-weight: 700;
 }
 
@@ -600,7 +600,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -651,7 +651,7 @@
 
 .studio-quality-row span {
   color: var(--accent-strong);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-variant-numeric: tabular-nums;
 }
 
@@ -660,7 +660,7 @@
 .studio-source-row small {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   line-height: 1.5;
 }
 
@@ -668,7 +668,7 @@
   margin: 0;
   padding: 28px 12px;
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   text-align: center;
 }
 

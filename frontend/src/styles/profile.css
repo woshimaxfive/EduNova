@@ -49,7 +49,7 @@
 .profile-toolbar-identity h2 {
   margin: 0;
   color: var(--text-strong);
-  font-size: 0.92rem;
+  font-size: var(--font-body);
   line-height: 1.15;
   letter-spacing: 0;
 }
@@ -57,14 +57,14 @@
 .profile-toolbar-identity small,
 .profile-toolbar-facts dt {
   color: var(--text-muted);
-  font-size: 0.66rem;
+  font-size: var(--font-caption);
   font-weight: 760;
 }
 
 .profile-toolbar-identity small strong {
   margin-left: 4px;
   color: var(--accent-strong);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
 }
 
 .profile-toolbar-facts {
@@ -92,7 +92,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 850;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -112,7 +112,7 @@
   color: #ffffff;
   background: var(--accent);
   font: inherit;
-  font-size: 0.74rem;
+  font-size: var(--font-control);
   font-weight: 850;
   white-space: nowrap;
 }
@@ -152,7 +152,7 @@
 .profile-related-events > header span,
 .profile-graph-replay > header span {
   color: var(--accent-strong);
-  font-size: 0.66rem;
+  font-size: var(--font-caption);
   font-weight: 850;
 }
 
@@ -160,13 +160,13 @@
 .profile-evolution-heading h2 {
   margin: 0;
   color: var(--text-strong);
-  font-size: 0.96rem;
+  font-size: var(--font-body);
   letter-spacing: 0;
 }
 
 .profile-radar-heading small {
   color: var(--text-muted);
-  font-size: 0.63rem;
+  font-size: var(--font-caption);
 }
 
 .profile-radar-canvas {
@@ -225,18 +225,18 @@
   justify-content: space-between;
   gap: 8px;
   color: var(--text-strong);
-  font-size: 0.73rem;
+  font-size: var(--font-meta);
 }
 
 .profile-dimension-nav strong b {
   color: var(--accent-strong);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
 }
 
 .profile-dimension-nav small {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: var(--font-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -267,7 +267,7 @@
   border-radius: 50%;
   color: var(--coral);
   background: color-mix(in srgb, var(--coral) 7%, var(--wide-workspace-control));
-  font-size: 0.62rem;
+  font-size: var(--font-caption);
   font-weight: 900;
 }
 
@@ -319,7 +319,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -357,12 +357,12 @@
 .profile-stream-empty h3 {
   margin: 14px 0 6px;
   color: var(--text-strong);
-  font-size: 0.96rem;
+  font-size: var(--font-body);
 }
 
 .profile-stream-empty p {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
 }
 
 .profile-event-entry {
@@ -436,7 +436,7 @@
 
 .profile-event-meta strong {
   color: var(--accent-strong);
-  font-size: 0.67rem;
+  font-size: var(--font-caption);
 }
 
 .profile-event-meta small {
@@ -444,13 +444,13 @@
   align-items: center;
   gap: 4px;
   color: var(--text-muted);
-  font-size: 0.62rem;
+  font-size: var(--font-caption);
 }
 
 .profile-event-entry > button > b {
   grid-column: 1 / -1;
   color: var(--text-strong);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
   line-height: 1.45;
 }
 
@@ -464,14 +464,14 @@
   border-left: 2px solid var(--accent);
   padding-left: 6px;
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: var(--font-caption);
   font-weight: 780;
 }
 
 .profile-event-status {
   justify-self: end;
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: var(--font-caption);
   font-weight: 760;
 }
 
@@ -495,7 +495,7 @@
   padding: 10px 13px;
   color: #ffffff;
   background: var(--text-strong);
-  font-size: 0.75rem;
+  font-size: var(--font-control);
   line-height: 1.55;
 }
 
@@ -520,7 +520,7 @@
 
 .profile-receipt-body strong {
   color: var(--text-strong);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
 }
 
 .profile-receipt-body p {
@@ -529,7 +529,7 @@
   gap: 8px;
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.66rem;
+  font-size: var(--font-caption);
 }
 
 .profile-receipt-body p > span:first-child {
@@ -565,7 +565,7 @@
 
 .profile-updating-state p {
   margin: 0;
-  font-size: 0.7rem;
+  font-size: var(--font-meta);
 }
 
 @keyframes profile-spin { to { transform: rotate(360deg); } }
@@ -601,26 +601,26 @@
 
 .profile-next-question small {
   color: var(--accent-strong);
-  font-size: 0.64rem;
+  font-size: var(--font-caption);
   font-weight: 850;
 }
 
 .profile-next-question strong {
   color: var(--text-strong);
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   line-height: 1.35;
 }
 
 .profile-next-question em {
   color: var(--text-muted);
-  font-size: 0.66rem;
+  font-size: var(--font-caption);
   font-style: normal;
   line-height: 1.4;
 }
 
 .profile-question-examples {
   color: color-mix(in srgb, var(--text-muted) 86%, var(--text));
-  font-size: 0.64rem;
+  font-size: var(--font-caption);
   line-height: 1.45;
   text-wrap: pretty;
 }
@@ -656,7 +656,7 @@
   background: transparent;
   outline: 0;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   line-height: 1.55;
 }
 
@@ -676,7 +676,7 @@
   color: #ffffff;
   background: var(--text-strong);
   font: inherit;
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   font-weight: 850;
 }
 
@@ -727,7 +727,7 @@
 
 .profile-drawer > header span {
   color: var(--accent-strong);
-  font-size: 0.68rem;
+  font-size: var(--font-caption);
   font-weight: 850;
 }
 
@@ -778,7 +778,7 @@
 .profile-evidence-summary small,
 .profile-graph-replay small {
   color: var(--text-muted);
-  font-size: 0.66rem;
+  font-size: var(--font-caption);
 }
 
 .profile-dimension-summary strong {
@@ -789,7 +789,7 @@
 .profile-dimension-summary p {
   margin: 0;
   color: var(--text-strong);
-  font-size: 0.82rem;
+  font-size: var(--font-body-compact);
   line-height: 1.6;
 }
 
@@ -812,14 +812,14 @@
 .profile-drawer-facts dt,
 .profile-evidence-facts dt {
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: var(--font-caption);
 }
 
 .profile-drawer-facts dd,
 .profile-evidence-facts dd {
   margin: 0;
   color: var(--text-strong);
-  font-size: 0.78rem;
+  font-size: var(--font-control);
   font-weight: 850;
 }
 
@@ -837,7 +837,7 @@
 }
 
 .profile-related-events > header strong {
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
 }
 
 .profile-related-events ol {
@@ -871,12 +871,12 @@
 
 .profile-related-events button strong {
   color: var(--text-strong);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
 }
 
 .profile-related-events button small {
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: var(--font-caption);
 }
 
 .profile-evidence-summary {
@@ -900,7 +900,7 @@
 
 .profile-evidence-summary strong {
   color: var(--text-strong);
-  font-size: 0.8rem;
+  font-size: var(--font-body-compact);
   line-height: 1.5;
 }
 
@@ -933,14 +933,14 @@
 
 .profile-evidence-dimensions span {
   color: var(--accent-strong);
-  font-size: 0.66rem;
+  font-size: var(--font-caption);
   font-weight: 850;
 }
 
 .profile-evidence-dimensions p {
   margin: 0 0 8px;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-meta);
   line-height: 1.55;
 }
 

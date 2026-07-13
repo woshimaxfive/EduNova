@@ -42,7 +42,7 @@ function buildOption(dimensions: ProfileDimensionView[], selectedKey: ProfileDim
       indicator: dimensions.map((item) => ({ name: item.shortLabel, max: 100 })),
       axisName: {
         color: palette.muted,
-        fontSize: 11,
+        fontSize: 13,
         formatter: (name: string) => {
           const selected = dimensions.find((item) => item.key === selectedKey)?.shortLabel;
           return name === selected ? `{selected|${name}}` : name;

@@ -29,9 +29,12 @@ export function ProfileWorkspaceToolbar({
 }: ProfileWorkspaceToolbarProps) {
   return (
     <header className="profile-workspace-toolbar">
-      <div className="profile-toolbar-score">
+      <div className="profile-toolbar-identity">
         <TrendUp size={20} weight="duotone" aria-hidden="true" />
-        <span><small>综合可信度</small><strong>{Math.round(confidence)}%</strong></span>
+        <span>
+          <h2>动态学习画像</h2>
+          <small>综合可信度 <strong>{Math.round(confidence)}%</strong></small>
+        </span>
       </div>
       <dl className="profile-toolbar-facts">
         <div><dt>画像版本</dt><dd>v{version}</dd></div>

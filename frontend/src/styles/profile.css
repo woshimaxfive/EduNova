@@ -33,7 +33,7 @@
   background: var(--wide-workspace-emphasis);
 }
 
-.profile-toolbar-score {
+.profile-toolbar-identity {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -41,23 +41,30 @@
   color: var(--accent-strong);
 }
 
-.profile-toolbar-score > span {
+.profile-toolbar-identity > span {
   display: grid;
-  grid-template-columns: auto auto;
-  align-items: baseline;
-  gap: 7px;
+  gap: 2px;
 }
 
-.profile-toolbar-score small,
+.profile-toolbar-identity h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 0.92rem;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.profile-toolbar-identity small,
 .profile-toolbar-facts dt {
   color: var(--text-muted);
   font-size: 0.66rem;
   font-weight: 760;
 }
 
-.profile-toolbar-score strong {
-  color: var(--text-strong);
-  font-size: 1.08rem;
+.profile-toolbar-identity small strong {
+  margin-left: 4px;
+  color: var(--accent-strong);
+  font-size: 0.72rem;
 }
 
 .profile-toolbar-facts {
@@ -572,12 +579,43 @@
 }
 
 .profile-next-question {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
   gap: 7px;
+  max-width: 920px;
+  width: 100%;
+  margin: 0 auto;
+  color: var(--text-muted);
+}
+
+.profile-next-question > svg {
+  margin-top: 3px;
   color: var(--accent-strong);
-  font-size: 0.68rem;
-  font-weight: 780;
+}
+
+.profile-next-question > span {
+  display: grid;
+  gap: 2px;
+}
+
+.profile-next-question small {
+  color: var(--accent-strong);
+  font-size: 0.64rem;
+  font-weight: 850;
+}
+
+.profile-next-question strong {
+  color: var(--text-strong);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.profile-next-question em {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-style: normal;
+  line-height: 1.4;
 }
 
 .profile-composer-box {
@@ -981,7 +1019,8 @@
     border-top-color: color-mix(in srgb, var(--wide-workspace-divider) 88%, transparent);
     box-shadow: 0 -12px 30px rgba(16, 34, 29, 0.08);
   }
-  .profile-next-question { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .profile-next-question { align-items: start; }
+  .profile-next-question > span { min-width: 0; }
   .profile-composer-box { grid-template-columns: minmax(0, 1fr) 40px; }
   .profile-composer-box > button { min-width: 40px; width: 40px; padding: 0; }
   .profile-composer-box > button span { display: none; }

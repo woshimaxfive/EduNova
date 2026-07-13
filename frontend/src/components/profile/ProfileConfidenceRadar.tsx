@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { EChartsCoreOption, EChartsType } from "echarts/core";
 
 import type { ProfileDimensionKey, ProfileDimensionView } from "../../features/profile/profileViewModel";
+import { radarDimensionIndexFromPoint } from "../../features/profile/profileRadarGeometry";
 
 type ProfileConfidenceRadarProps = {
   dimensions: ProfileDimensionView[];
@@ -36,6 +37,7 @@ function buildOption(dimensions: ProfileDimensionView[], selectedKey: ProfileDim
       center: ["50%", "51%"],
       radius: "64%",
       startAngle: 90,
+      clockwise: false,
       splitNumber: 4,
       indicator: dimensions.map((item) => ({ name: item.shortLabel, max: 100 })),
       axisName: {
@@ -114,14 +116,13 @@ export function ProfileConfidenceRadar({ dimensions, selectedKey, onSelect }: Pr
         if (!hostRef.current || typeof event !== "object" || event === null) return;
         const point = event as { offsetX?: number; offsetY?: number };
         if (typeof point.offsetX !== "number" || typeof point.offsetY !== "number") return;
-        const width = hostRef.current.clientWidth;
-        const height = hostRef.current.clientHeight;
-        const dx = point.offsetX - width / 2;
-        const dy = point.offsetY - height * 0.51;
-        const distance = Math.hypot(dx, dy);
-        if (distance < Math.min(width, height) * 0.16 || distance > Math.min(width, height) * 0.48) return;
-        const clockwiseFromTop = (Math.atan2(dx, -dy) + Math.PI * 2) % (Math.PI * 2);
-        const index = Math.round(clockwiseFromTop / (Math.PI * 2 / dimensionsRef.current.length)) % dimensionsRef.current.length;
+        const index = radarDimensionIndexFromPoint(
+          { x: point.offsetX, y: point.offsetY },
+          hostRef.current.clientWidth,
+          hostRef.current.clientHeight,
+          dimensionsRef.current.length,
+        );
+        if (index === null) return;
         const dimension = dimensionsRef.current[index];
         if (dimension) onSelectRef.current(dimension.key);
       };

@@ -39,7 +39,7 @@ PROFILE_QUESTIONS = {
     "knowledge_foundation": "关于当前课程，你已经学过哪些基础内容？",
     "learning_goal": "这门课你最想先解决什么问题？",
     "cognitive_style": "遇到新概念时，你通常怎样理解得最快？",
-    "learning_preference": "你更喜欢图解、案例、代码、视频还是练习？",
+    "learning_preference": "什么样的内容呈现和练习方式更适合你？",
     "weak_points": "最近哪一个知识点最容易卡住或出错？",
     "learning_pace": "你通常每次或每周能安排多少学习时间？",
     "motivation_interest": "是什么目标或兴趣让你想继续学这门课？",
@@ -133,10 +133,12 @@ class ProfileService:
     def get_my_profile(self, user: User) -> StudentProfileResponse:
         profile = self.repository.get_profile(user.id)
         events = self.repository.list_events(user.id, 100)
+        next_question_dimension, next_question = self._next_question_target(profile)
         return profile_to_api(
             profile,
             version=self.repository.count_events_for_profile(profile.id if profile is not None else None),
-            next_question=self._next_question(profile),
+            next_question=next_question,
+            next_question_dimension=next_question_dimension,
             evidence_summary=self._evidence_summary(events),
         )
 
@@ -466,18 +468,26 @@ class ProfileService:
     def _clip_sentence(message_text: str) -> str:
         return message_text.strip().rstrip("。")[:80]
 
-    def _next_question(self, profile: StudentProfile | None, preferred_dimensions: list[str] | None = None) -> str:
+    def _next_question_target(
+        self,
+        profile: StudentProfile | None,
+        preferred_dimensions: list[str] | None = None,
+    ) -> tuple[str, str]:
         profile_json = normalize_profile_json(profile.profile_json if profile is not None else None)
         confidence = dict(getattr(profile, "dimension_confidence_json", None) or {}) if profile is not None else {}
         preferred = [key for key in (preferred_dimensions or []) if key in PROFILE_QUESTIONS]
         for key in preferred:
             if not profile_json[key]:
-                return PROFILE_QUESTIONS[key]
+                return key, PROFILE_QUESTIONS[key]
         missing = [key for key in PROFILE_QUESTION_ORDER if not profile_json[key]]
         if missing:
-            return PROFILE_QUESTIONS[missing[0]]
+            key = missing[0]
+            return key, PROFILE_QUESTIONS[key]
         lowest = min(PROFILE_QUESTION_ORDER, key=lambda key: float(confidence.get(key, 0)))
-        return PROFILE_QUESTIONS[lowest]
+        return lowest, PROFILE_QUESTIONS[lowest]
+
+    def _next_question(self, profile: StudentProfile | None, preferred_dimensions: list[str] | None = None) -> str:
+        return self._next_question_target(profile, preferred_dimensions)[1]
 
     def _current_time(self) -> datetime:
         current = self.now or datetime.now(UTC)

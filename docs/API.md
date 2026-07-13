@@ -386,6 +386,7 @@ Authorization: Bearer <token>
 - 空画像也返回稳定 8 维结构，字符串字段为空字符串，`weak_points=[]`。
 - `version` 由当前画像关联的画像事件数量派生。
 - `next_question` 用于前端画像对话入口，不等同于强制问卷；优先追问本轮提及但未识别的维度，其次选择缺失或可信度最低的维度。
+- `next_question_dimension` 向后兼容标识该问题对应的八维字段，前端据此展示一句回答范围说明；旧客户端可忽略，旧响应缺少时前端使用通用引导。
 - `profile_json` 是用户级画像。`knowledge_foundation`、`weak_points`、`learning_goal` 可以在后续展示和推荐中叠加课程级状态，但 `/profiles/me` 不返回每门课程一份画像。
 - `dimension_confidence` 返回 8 个维度各自的 0-100 可信度，`evidence_summary` 返回候选/已应用证据计数。
 
@@ -412,7 +413,8 @@ Authorization: Bearer <token>
     "evidence_summary": {"candidate_count": 1, "applied_count": 3},
     "updated_reason": "更新学习画像：学习目标、知识基础",
     "updated_at": "2026-07-05T09:00:00Z",
-    "next_question": "这门课你最担心哪一章？"
+    "next_question": "这门课你最担心哪一章？",
+    "next_question_dimension": "weak_points"
   },
   "trace_id": "trace_profile_me"
 }

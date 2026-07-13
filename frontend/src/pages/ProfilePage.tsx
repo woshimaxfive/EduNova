@@ -48,7 +48,8 @@ const EMPTY_PROFILE: StudentProfileResponse = {
   evidence_summary: {},
   updated_reason: null,
   updated_at: null,
-  next_question: "这门课你最想先解决什么问题？"
+  next_question: "这门课你最想先解决什么问题？",
+  next_question_dimension: "learning_goal"
 };
 
 export function ProfilePage() {
@@ -159,7 +160,7 @@ export function ProfilePage() {
 
   return (
     <>
-      <PageFrame title="学习画像" variant="wide-workspace">
+      <PageFrame title="学习画像" titleMode="sr-only" variant="wide-workspace">
         <section className="profile-workspace" aria-label="动态学习画像工作台">
           <ProfileWorkspaceToolbar
             confidence={profile.confidence_score}
@@ -191,6 +192,7 @@ export function ProfilePage() {
                 inputRef={composerRef}
                 value={profileAnswer}
                 nextQuestion={profile.next_question}
+                nextQuestionDimension={profile.next_question_dimension}
                 isUpdating={updateProfileMutation.isPending}
                 onChange={setProfileAnswer}
                 onSubmit={submitProfileAnswer}

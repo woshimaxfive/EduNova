@@ -169,6 +169,7 @@ def test_empty_profile_returns_stable_eight_dimension_shape() -> None:
     }
     assert profile["confidence_score"] == 0
     assert profile["next_question"] == "这门课你最想先解决什么问题？"
+    assert profile["next_question_dimension"] == "learning_goal"
 
 
 def test_profile_chat_creates_profile_and_event_from_deterministic_extraction() -> None:
@@ -403,6 +404,29 @@ def test_profile_next_question_targets_missing_or_low_confidence_dimension() -> 
     result = as_dict(service.get_my_profile(user))
 
     assert result["next_question"] == "最近哪一个知识点最容易卡住或出错？"
+    assert result["next_question_dimension"] == "weak_points"
+
+
+def test_profile_next_question_reports_preferred_unresolved_dimension() -> None:
+    module = load_profile_module()
+    profile = StudentProfile(
+        id=7,
+        user_id=1,
+        profile_json={"learning_goal": "掌握机器学习"},
+        confidence_score=Decimal("72"),
+        dimension_confidence_json={"learning_goal": 72},
+    )
+    service = module.ProfileService(FakeProfileRepository(profiles={1: profile}), now=NOW)
+
+    dimension, question = service._next_question_target(profile, ["cognitive_style"])
+
+    assert dimension == "cognitive_style"
+    assert question == "遇到新概念时，你通常怎样理解得最快？"
+
+    dimension, question = service._next_question_target(profile, ["learning_preference"])
+
+    assert dimension == "learning_preference"
+    assert question == "什么样的内容呈现和练习方式更适合你？"
 
 
 def test_profile_graph_records_real_nodes_and_dimension_confidence() -> None:

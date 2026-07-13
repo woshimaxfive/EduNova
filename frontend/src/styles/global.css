@@ -5639,6 +5639,13 @@ a {
   letter-spacing: 0;
 }
 
+.route-titlebar-sr-only {
+  min-height: 0;
+  height: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
 .route-main-surface .page-workbench {
   width: min(1080px, 100%);
   margin: 0 auto;

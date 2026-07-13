@@ -6,7 +6,8 @@ import {
   buildProfileEventView,
   buildProfileUpdateReceipt,
   PROFILE_DIMENSIONS,
-  profileEventsForDimension
+  profileEventsForDimension,
+  profileQuestionGuidance
 } from "./profileViewModel";
 
 const profile = (overrides: Partial<StudentProfileResponse> = {}): StudentProfileResponse => ({
@@ -52,6 +53,17 @@ const event = (overrides: Partial<ProfileEventResponse> = {}): ProfileEventRespo
 });
 
 describe("profileViewModel", () => {
+  it("provides concise guidance for every profile dimension", () => {
+    for (const dimension of PROFILE_DIMENSIONS) {
+      expect(profileQuestionGuidance(dimension.key)).toMatchObject({
+        key: dimension.key,
+        label: dimension.label,
+        guidance: expect.stringMatching(/即可。$/)
+      });
+    }
+    expect(profileQuestionGuidance(undefined)).toBeNull();
+  });
+
   it("keeps the A3 eight-dimension order and counts applied and candidate evidence", () => {
     const dimensions = buildProfileDimensions(profile(), [event()]);
     expect(dimensions.map((item) => item.key)).toEqual(PROFILE_DIMENSIONS.map((item) => item.key));

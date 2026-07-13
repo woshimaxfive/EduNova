@@ -264,7 +264,8 @@ describe("student core pages", () => {
               evidence_summary: { applied_count: 5, candidate_count: 1 },
               updated_reason: "更新学习画像：学习目标、基础",
               updated_at: "2026-07-05T09:00:00Z",
-              next_question: "这门课你最担心哪一章？"
+              next_question: "这门课你最担心哪一章？",
+              next_question_dimension: "weak_points"
             },
             trace_id: "trace_profile_me"
           },
@@ -350,12 +351,16 @@ describe("student core pages", () => {
     renderPage(<ProfilePage />);
 
     expect(screen.getByRole("region", { name: "动态学习画像工作台" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "学习画像" })).toHaveClass("visually-hidden");
+    expect(screen.getByRole("heading", { name: "动态学习画像" })).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "八维学习画像" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "画像动态" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "八维画像可信度雷达图" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "画像维度" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "画像问题回答" })).toBeInTheDocument();
     expect(await screen.findByText("期末前掌握神经网络")).toBeInTheDocument();
+    expect(screen.getByText("建议补充 · 薄弱点")).toBeInTheDocument();
+    expect(screen.getByText("指出目前最难理解、最容易出错或经常卡住的部分即可。")).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "画像动态" })).toHaveTextContent("更新学习画像：学习目标、基础");
     expect(screen.queryByRole("button", { name: "更新目标" })).not.toBeInTheDocument();
   });

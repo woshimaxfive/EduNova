@@ -37,6 +37,7 @@ export type StudentProfileResponse = {
   updated_reason: string | null;
   updated_at: string | null;
   next_question: string;
+  next_question_dimension?: keyof ProfileJson | null;
 };
 
 export type ProfileEventResponse = {

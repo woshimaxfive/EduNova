@@ -13,9 +13,10 @@ type PageFrameProps = {
   title: string;
   children: ReactNode;
   variant?: "standard" | "wide-workspace";
+  titleMode?: "visible" | "sr-only";
 };
 
-export function PageFrame({ title, children, variant = "standard" }: PageFrameProps) {
+export function PageFrame({ title, children, variant = "standard", titleMode = "visible" }: PageFrameProps) {
   const navigate = useNavigate();
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
   const [historySearch, setHistorySearch] = useState("");
@@ -70,8 +71,8 @@ export function PageFrame({ title, children, variant = "standard" }: PageFramePr
           }
         />
         <section className={variant === "wide-workspace" ? "route-main-surface route-main-surface-wide" : "route-main-surface"}>
-          <header className="route-titlebar">
-            <h1>{title}</h1>
+          <header className={titleMode === "sr-only" ? "route-titlebar route-titlebar-sr-only" : "route-titlebar"}>
+            <h1 className={titleMode === "sr-only" ? "visually-hidden" : undefined}>{title}</h1>
           </header>
           <section className="page-workbench">{children}</section>
         </section>

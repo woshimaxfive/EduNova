@@ -7,6 +7,7 @@ export type ProfileDimensionMeta = {
   label: string;
   shortLabel: string;
   description: string;
+  guidance: string;
 };
 
 export type ProfileDimensionView = ProfileDimensionMeta & {
@@ -39,14 +40,14 @@ export type ProfileUpdateReceipt = {
 };
 
 export const PROFILE_DIMENSIONS: ProfileDimensionMeta[] = [
-  { key: "major_background", label: "专业背景", shortLabel: "背景", description: "专业方向与已有学习经历" },
-  { key: "knowledge_foundation", label: "知识基础", shortLabel: "基础", description: "当前知识储备与先修能力" },
-  { key: "learning_goal", label: "学习目标", shortLabel: "目标", description: "希望达成的学习结果" },
-  { key: "cognitive_style", label: "认知风格", shortLabel: "认知", description: "理解、推理与组织知识的方式" },
-  { key: "learning_preference", label: "学习偏好", shortLabel: "偏好", description: "更适合的内容与练习形式" },
-  { key: "weak_points", label: "薄弱点", shortLabel: "薄弱", description: "重复出现且有证据支持的困难" },
-  { key: "learning_pace", label: "学习节奏", shortLabel: "节奏", description: "任务密度与复习节奏偏好" },
-  { key: "motivation_interest", label: "动机兴趣", shortLabel: "动机", description: "持续学习的兴趣与驱动力" }
+  { key: "major_background", label: "专业背景", shortLabel: "背景", description: "专业方向与已有学习经历", guidance: "描述你目前所学的方向、阶段或相关学习经历即可。" },
+  { key: "knowledge_foundation", label: "知识基础", shortLabel: "基础", description: "当前知识储备与先修能力", guidance: "说说你已经接触过的相关课程、概念或技能即可。" },
+  { key: "learning_goal", label: "学习目标", shortLabel: "目标", description: "希望达成的学习结果", guidance: "说明你现阶段最想掌握、完成或解决的内容即可。" },
+  { key: "cognitive_style", label: "认知风格", shortLabel: "认知", description: "理解、推理与组织知识的方式", guidance: "描述你理解、分析和整理新知识时的习惯即可。" },
+  { key: "learning_preference", label: "学习偏好", shortLabel: "偏好", description: "更适合的内容与练习形式", guidance: "说明什么样的内容呈现和练习方式更适合你即可。" },
+  { key: "weak_points", label: "薄弱点", shortLabel: "薄弱", description: "重复出现且有证据支持的困难", guidance: "指出目前最难理解、最容易出错或经常卡住的部分即可。" },
+  { key: "learning_pace", label: "学习节奏", shortLabel: "节奏", description: "任务密度与复习节奏偏好", guidance: "描述你通常能投入的学习时间和学习频率即可。" },
+  { key: "motivation_interest", label: "动机兴趣", shortLabel: "动机", description: "持续学习的兴趣与驱动力", guidance: "说说促使你学习的原因、期待或感兴趣的方向即可。" }
 ];
 
 const dimensionKeySet = new Set<ProfileDimensionKey>(PROFILE_DIMENSIONS.map((item) => item.key));
@@ -57,6 +58,12 @@ export function isProfileDimensionKey(value: unknown): value is ProfileDimension
 
 export function profileDimensionMeta(key: ProfileDimensionKey) {
   return PROFILE_DIMENSIONS.find((item) => item.key === key) ?? PROFILE_DIMENSIONS[0];
+}
+
+export function profileQuestionGuidance(key: unknown) {
+  return isProfileDimensionKey(key)
+    ? profileDimensionMeta(key)
+    : null;
 }
 
 export function profileValue(profile: StudentProfileResponse, key: ProfileDimensionKey) {

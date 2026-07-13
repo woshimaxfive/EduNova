@@ -395,6 +395,10 @@ class ProfileGraphRunner:
         events = self.service.repository.list_events(int(state["user_id"]), 100)
         summary = self.service._evidence_summary(events)
         candidate_count = len(proposed) - len(applied)
+        next_question_dimension, next_question = self.service._next_question_target(
+            profile,
+            state.get("unresolved_hints"),
+        )
         response = ProfileChatResponse(
             reply=(
                 "已更新你的学习画像，并保留了需要更多证据确认的候选判断。"
@@ -407,7 +411,8 @@ class ProfileGraphRunner:
             profile=profile_to_api(
                 profile,
                 version=self.service.repository.count_events_for_profile(profile.id),
-                next_question=self.service._next_question(profile, state.get("unresolved_hints")),
+                next_question=next_question,
+                next_question_dimension=next_question_dimension,
                 evidence_summary=summary,
             ),
             event=event_to_api(event),

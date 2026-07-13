@@ -1,16 +1,21 @@
 import { PaperPlaneTilt, Sparkle } from "@phosphor-icons/react";
 import type { KeyboardEvent, RefObject } from "react";
 
+import { profileQuestionGuidance, type ProfileDimensionKey } from "../../features/profile/profileViewModel";
+
 type ProfileComposerProps = {
   inputRef: RefObject<HTMLTextAreaElement | null>;
   value: string;
   nextQuestion: string;
+  nextQuestionDimension?: ProfileDimensionKey | null;
   isUpdating: boolean;
   onChange: (value: string) => void;
   onSubmit: () => void;
 };
 
-export function ProfileComposer({ inputRef, value, nextQuestion, isUpdating, onChange, onSubmit }: ProfileComposerProps) {
+export function ProfileComposer({ inputRef, value, nextQuestion, nextQuestionDimension, isUpdating, onChange, onSubmit }: ProfileComposerProps) {
+  const questionGuidance = profileQuestionGuidance(nextQuestionDimension);
+
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -22,7 +27,11 @@ export function ProfileComposer({ inputRef, value, nextQuestion, isUpdating, onC
     <footer className="profile-composer">
       <div className="profile-next-question">
         <Sparkle size={16} weight="duotone" aria-hidden="true" />
-        <span>下一问：{nextQuestion}</span>
+        <span>
+          <small>建议补充{questionGuidance ? ` · ${questionGuidance.label}` : ""}</small>
+          <strong>{nextQuestion}</strong>
+          <em>{questionGuidance?.guidance ?? "用自己的话描述当前情况即可，不需要使用专业术语。"}</em>
+        </span>
       </div>
       <div className="profile-composer-box">
         <textarea
@@ -30,7 +39,7 @@ export function ProfileComposer({ inputRef, value, nextQuestion, isUpdating, onC
           rows={2}
           value={value}
           aria-label="画像问题回答"
-          placeholder="告诉 EduNova 你的目标、基础或最近遇到的困难"
+          placeholder="用自己的话回答即可"
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
         />

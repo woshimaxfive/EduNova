@@ -1,14 +1,26 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 from backend.app.models import ProfileEvent, StudentProfile
 
 
-PROFILE_DIMENSIONS = [
+ProfileDimension = Literal[
+    "major_background",
+    "knowledge_foundation",
+    "learning_goal",
+    "cognitive_style",
+    "learning_preference",
+    "weak_points",
+    "learning_pace",
+    "motivation_interest",
+]
+
+
+PROFILE_DIMENSIONS: list[ProfileDimension] = [
     "major_background",
     "knowledge_foundation",
     "learning_goal",
@@ -56,6 +68,7 @@ class StudentProfileResponse(BaseModel):
     updated_reason: str | None
     updated_at: str | None
     next_question: str
+    next_question_dimension: ProfileDimension | None = None
 
 
 class ProfileEventResponse(BaseModel):
@@ -105,6 +118,7 @@ def profile_to_api(
     version: int,
     next_question: str,
     *,
+    next_question_dimension: ProfileDimension | None = None,
     evidence_summary: dict[str, int | str | None] | None = None,
 ) -> StudentProfileResponse:
     if profile is None:
@@ -119,6 +133,7 @@ def profile_to_api(
             updated_reason=None,
             updated_at=None,
             next_question=next_question,
+            next_question_dimension=next_question_dimension,
         )
 
     return StudentProfileResponse(
@@ -136,6 +151,7 @@ def profile_to_api(
         updated_reason=profile.updated_reason,
         updated_at=_iso_timestamp(profile.updated_at),
         next_question=next_question,
+        next_question_dimension=next_question_dimension,
     )
 
 

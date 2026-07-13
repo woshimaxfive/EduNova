@@ -1766,7 +1766,7 @@ describe("student interaction affordances", () => {
         settingsList = {
           ...settingsList,
           configs: settingsList.configs.map((item) =>
-            item.id === 2 ? { ...item, last_test_ok: true, last_test_message: "模型连接成功。" } : item
+            item.id === 2 ? { ...item, last_test_ok: true, last_test_message: "AI 服务连接正常。" } : item
           )
         };
 
@@ -1781,7 +1781,7 @@ describe("student interaction affordances", () => {
               code: null,
               retryable: false,
               tested_at: "2026-07-13T09:30:00Z",
-              message: "模型连接成功。",
+              message: "AI 服务连接正常。",
               config_id: 2
             },
             trace_id: "trace_settings_test"
@@ -1849,7 +1849,7 @@ describe("student interaction affordances", () => {
     expect(screen.queryByText("深度思考")).not.toBeInTheDocument();
     expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();
     expect(screen.queryByText("OpenRouter")).not.toBeInTheDocument();
-    expect(screen.getByText("此配置只承担回答；向量检索继续使用服务器配置。")).toBeInTheDocument();
+    expect(screen.getByText("资料检索继续使用系统默认服务。")).toBeInTheDocument();
 
     const chatProviderPreset = screen.getByRole("combobox", { name: "回答服务商" });
     expect(within(chatProviderPreset).getAllByRole("option")[0]).toHaveTextContent("讯飞星火 X2-Flash");
@@ -1933,7 +1933,7 @@ describe("student interaction affordances", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("已设为默认回答配置。"));
 
-    await user.click(screen.getByRole("button", { name: "测试回答模型" }));
+    await user.click(screen.getByRole("button", { name: "验证回答服务连接" }));
 
     await waitFor(() => expect(calls).toContainEqual({
       method: "post",
@@ -1941,7 +1941,7 @@ describe("student interaction affordances", () => {
       payload: { operation: "chat" }
     }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("模型连接成功。"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("AI 服务连接正常。"));
 
     await user.click(screen.getByRole("button", { name: "删除配置" }));
     const deleteDialog = screen.getByRole("dialog", { name: "删除模型配置" });

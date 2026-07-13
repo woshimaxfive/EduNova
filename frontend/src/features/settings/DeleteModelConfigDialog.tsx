@@ -26,7 +26,7 @@ export function DeleteModelConfigDialog({
             <div>
               <Dialog.Title>删除模型配置</Dialog.Title>
               <Dialog.Description id="settings-delete-description">
-                删除“{configName}”后无法恢复；如果它是默认配置，系统会切换到下一套个人配置或服务器兜底。
+                删除“{configName}”后无法恢复；如果它是默认配置，系统会切换到下一套个人配置或系统默认服务。
               </Dialog.Description>
             </div>
             <Dialog.Close className="settings-dialog-close" aria-label="关闭删除确认">

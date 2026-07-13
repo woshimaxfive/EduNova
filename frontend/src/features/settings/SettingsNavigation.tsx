@@ -10,8 +10,8 @@ type SettingsNavigationProps = {
 const ITEMS = [
   {
     id: "model" as const,
-    label: "模型连接",
-    description: "回答与向量检索",
+    label: "AI 服务",
+    description: "回答、检索与排序",
     icon: Robot
   },
   {

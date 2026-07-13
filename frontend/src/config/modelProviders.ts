@@ -30,7 +30,7 @@ export const CHAT_MODEL_PROVIDER_PRESETS: ChatModelProviderPreset[] = [
   {
     id: "spark",
     name: "讯飞星火 X2-Flash",
-    description: "赛题出题企业相关模型，支持标准回答与可控深度思考。联网仍由 EduNova 的来源检索负责。",
+    description: "讯飞星火轻量高速模型，支持日常学习问答与可控深度思考。联网来源由 EduNova 统一管理。",
     baseUrl: "https://spark-api-open.xf-yun.com/agent/v1/",
     chatModel: "spark-x",
     apiKeyLabel: "API Key / APIPassword",
@@ -138,7 +138,7 @@ export const EMBEDDING_MODEL_PROVIDER_PRESETS: EmbeddingModelProviderPreset[] = 
   {
     id: "none",
     name: "暂不配置",
-    description: "不调用外部向量服务，资料检索继续使用关键词 fallback。",
+    description: "不调用外部向量服务，资料检索继续使用基础关键词匹配。",
     baseUrl: "",
     embeddingModel: "",
     apiKeyLabel: "API Key",

@@ -1781,7 +1781,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.getByText(/模型回答：启发式搜索复习/)).toBeInTheDocument();
     expect(screen.getAllByText("启发式搜索")).not.toHaveLength(0);
     expect(screen.getAllByText("混合检索")).not.toHaveLength(0);
-    expect(screen.getAllByText(/本地 fallback/)).not.toHaveLength(0);
+    expect(screen.getAllByText(/基础关键词检索/)).not.toHaveLength(0);
     expect(screen.getByText(/启发函数估计路径代价/)).toBeInTheDocument();
     expect(screen.queryByText("监督学习先抓住“数据、目标、泛化”三件事")).not.toBeInTheDocument();
   });
@@ -1906,7 +1906,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(within(studyMode).getByRole("heading", { name: "启发式搜索", level: 2 })).toBeInTheDocument();
     expect(within(studyMode).getByText(/启发函数估计路径代价/)).toBeInTheDocument();
     expect(within(studyMode).getByLabelText("本次回答引用")).toHaveTextContent("人工智能导论讲义.md");
-    expect(within(studyMode).getByLabelText("本次回答引用")).toHaveTextContent("本地 fallback");
+    expect(within(studyMode).getByLabelText("本次回答引用")).toHaveTextContent("基础检索");
     expect(within(studyMode).getByText("启发式搜索使用启发函数估计剩余代价。")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "围绕这里提问" }));
     expect(screen.getByRole("dialog", { name: "AI 辅导" })).toHaveTextContent("历史里的回答保留真实引用。");

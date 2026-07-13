@@ -250,8 +250,8 @@ function retrievalSourceLabel(source?: string | null) {
 }
 
 function embeddingStatusLabel(status?: string | null) {
-  if (status === "local_fallback") return "本地 fallback";
+  if (status === "local_fallback") return "基础检索";
   if (status === "completed") return "真实向量";
-  if (status === "provider_failed") return "关键词兜底";
+  if (status === "provider_failed") return "关键词检索";
   return "关键词检索";
 }

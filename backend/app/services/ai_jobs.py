@@ -649,7 +649,7 @@ class AiJobService:
         )
         profile = EmbeddingService(model_service).expected_profile(user)
         if profile is None:
-            raise AiJobValidationError("当前默认向量配置不可用，请先完成连接测试。")
+            raise AiJobValidationError("当前默认向量服务不可用，请先完成连接验证。")
         course_chunks = list(
             self.repository.db.scalars(
                 select(KnowledgeChunk)

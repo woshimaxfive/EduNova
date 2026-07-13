@@ -882,7 +882,7 @@ Authorization: Bearer <token>
 - 确定性底稿可由模型合并、拆分和重排，规则审核知识点数量、重复标题、来源覆盖、先修引用、环路、难度和隐私边界，最多修订一次。
 - 后端会创建 `Course`、`CourseEnrollment`、兼容旧链路的 `CourseMaterial`、`CourseMaterialLink`、`KnowledgePoint` 和 `KnowledgeChunk`。
 - 课程生成会 best-effort 为新 `KnowledgeChunk` 写入当前默认配置的真实外部 embedding；实际维度与配置指纹一并保存，失败只记录 warning 并回退关键词检索。
-- `knowledge_chunks.metadata_json` 会记录 `embedding_source`、`embedding_model`、`embedding_dimension`、`embedded_at`，便于识别本地 fallback、过期模型和后续重建。
+- `knowledge_chunks.metadata_json` 会记录 `embedding_source`、`embedding_model`、`embedding_dimension`、`embedded_at`，便于识别基础检索状态、过期模型和后续重建。
 - 前端 `/app` 主页资料库浮层和 `/app/library` 使用同一接口；成功后刷新 summary/materials 并跳转 `/app/courses/{course_id}`。
 - Phase 17 起当前前端改用 `POST /courses/from-materials/jobs`；本同步接口保留给旧客户端和内部兼容调用。
 
@@ -2156,7 +2156,7 @@ course_id=101
     "code": null,
     "retryable": false,
     "tested_at": "2026-07-13T10:00:00Z",
-    "message": "模型连接成功。",
+    "message": "AI 服务连接正常。",
     "config_id": 1
   },
   "trace_id": "trace_settings_002"
@@ -2165,7 +2165,7 @@ course_id=101
 
 ### GET `/settings/model/configs`
 
-用途：读取当前用户所有模型配置和服务器兜底摘要。必须携带 JWT。每条配置可包含回答、向量和重排序三组独立连接；所有 Key 只返回脱敏状态。`can_use_model`、`can_use_embedding_model` 和 `can_use_rerank_model` 分别表示三项能力。
+用途：读取当前用户所有模型配置和系统默认服务摘要。必须携带 JWT。每条配置可包含回答、向量和重排序三组独立连接；所有 Key 只返回脱敏状态。`can_use_model`、`can_use_embedding_model` 和 `can_use_rerank_model` 分别表示三项能力。
 
 响应：
 
@@ -2194,14 +2194,14 @@ course_id=101
         "is_default": true,
         "is_embedding_default": true,
         "last_test_ok": true,
-        "last_test_message": "模型连接成功。",
+        "last_test_message": "AI 服务连接正常。",
         "last_tested_at": "2026-07-13T10:00:00Z",
         "connection_tests": {
           "chat": {
             "operation": "chat",
             "ok": true,
             "model": "lite",
-            "message": "模型连接成功。",
+            "message": "AI 服务连接正常。",
             "code": null,
             "retryable": false,
             "tested_at": "2026-07-13T10:00:00Z"

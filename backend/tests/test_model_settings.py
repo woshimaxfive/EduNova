@@ -814,7 +814,7 @@ def test_connection_test_can_target_one_config_and_persist_safe_status() -> None
     assert result["source"] == "user"
     assert result["chat_model"] == "lite"
     assert stored.last_test_ok is True
-    assert stored.last_test_message == "模型连接成功。"
+    assert stored.last_test_message == "AI 服务连接正常。"
     assert isinstance(stored.last_tested_at, datetime)
     assert provider.calls is not None
     assert provider.calls[0]["config"].chat_model == "lite"

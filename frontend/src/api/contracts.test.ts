@@ -1733,7 +1733,7 @@ describe("frontend API contracts", () => {
                   ok: true,
                   source: "user",
                   chat_model: "deepseek-v4-pro",
-                  message: "模型连接成功。"
+                  message: "AI 服务连接正常。"
                 }
               : {
                   source: "user",
@@ -1845,7 +1845,7 @@ describe("frontend API contracts", () => {
                     ok: true,
                     source: "user",
                     chat_model: "lite",
-                    message: "模型连接成功。",
+                    message: "AI 服务连接正常。",
                     config_id: 3
                   }
                 : {

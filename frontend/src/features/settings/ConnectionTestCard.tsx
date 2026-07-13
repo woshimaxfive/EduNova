@@ -40,7 +40,7 @@ export function ConnectionTestCard({
 }: ConnectionTestCardProps) {
   const isEmbedding = operation === "embedding";
   const isRerank = operation === "rerank";
-  const label = isEmbedding ? "向量模型" : isRerank ? "重排序模型" : "回答模型";
+  const label = isEmbedding ? "向量服务" : isRerank ? "重排序服务" : "回答服务";
   const testedAt = formatTestTime(result?.tested_at);
   const status = !model
     ? "not-configured"
@@ -52,31 +52,34 @@ export function ConnectionTestCard({
 
   return (
     <article className={`settings-connection-test ${status}`} aria-label={`${label}连接状态`}>
-      <header>
-        <span className="settings-connection-icon" aria-hidden="true">
-          {status === "success"
-            ? <CheckCircle size={20} weight="fill" />
-            : status === "failed"
-              ? <WarningCircle size={20} weight="fill" />
-              : <PlugsConnected size={20} weight="duotone" />}
-        </span>
-        <div>
-          <strong>{label}</strong>
-          <span>{model ? `${model}${isEmbedding && result?.dimension ? ` · ${result.dimension} 维` : ""}` : "未配置"}</span>
-        </div>
-      </header>
+      <span className="settings-connection-icon" aria-hidden="true">
+        {status === "success"
+          ? <CheckCircle size={20} weight="fill" />
+          : status === "failed"
+            ? <WarningCircle size={20} weight="fill" />
+            : <PlugsConnected size={20} weight="duotone" />}
+      </span>
+      <div className="settings-connection-name">
+        <strong>{label}</strong>
+        <span>{model ? `${model}${isEmbedding && result?.dimension ? ` · ${result.dimension} 维` : ""}` : "未配置"}</span>
+      </div>
       <p>
         {!model
           ? missingMessage ?? (isEmbedding ? "此配置未设置向量模型。" : isRerank ? "此配置未设置重排序模型。" : "此配置未设置回答模型。")
           : dirty
-            ? "配置已有修改，保存后才能测试当前值。"
-            : result?.message || "尚未执行连接测试。"}
+            ? "保存修改后可验证当前连接。"
+            : result?.message || "尚未验证连接。"}
       </p>
       <footer>
-        <span>{testedAt ? `最近测试 ${testedAt}` : "暂无测试记录"}</span>
-        <button type="button" onClick={onTest} disabled={disabled || !model || pending}>
+        <span>{testedAt ? `最近验证 ${testedAt}` : "暂无验证记录"}</span>
+        <button
+          type="button"
+          aria-label={`验证${label}连接`}
+          onClick={onTest}
+          disabled={disabled || !model || pending}
+        >
           <PlugsConnected size={15} weight="bold" aria-hidden="true" />
-          {pending ? "测试中" : `测试${label}`}
+          {pending ? "验证中" : "验证连接"}
         </button>
       </footer>
     </article>

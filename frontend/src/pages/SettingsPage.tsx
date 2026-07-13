@@ -187,15 +187,15 @@ function configTestLabel(config: ModelConfigSummary) {
   }
   if (config.chat_model) {
     if (chatTest?.ok) return config.embedding_model && embeddingTest?.ok ? "两项已验证" : "回答已验证";
-    if (chatTest && !chatTest.ok) return "回答测试失败";
+    if (chatTest && !chatTest.ok) return "回答连接异常";
     if (config.last_test_ok === true) return "回答已验证";
-    if (config.last_test_ok === false) return "回答测试失败";
+    if (config.last_test_ok === false) return "回答连接异常";
   }
   if (config.embedding_model) {
     if (embeddingTest?.ok) return "向量已验证";
-    if (embeddingTest && !embeddingTest.ok) return "向量测试失败";
+    if (embeddingTest && !embeddingTest.ok) return "向量连接异常";
   }
-  return "尚未测试";
+  return "尚未验证";
 }
 
 function testSnapshot(
@@ -315,15 +315,13 @@ export function SettingsPage() {
     && (!selectedRerankPreset.requiresWorkspaceId || !currentDraft.rerank_model.trim() || currentDraft.rerank_workspace_id.trim())
   );
   const systemSummary = settingsList?.system_summary ?? null;
-  const effectiveSource = defaultChatConfig?.display_name
-    ?? (systemSummary?.source === "system" ? "服务器回答配置" : "回答未配置");
   const effectiveChatReady = defaultChatConfig?.can_use_model ?? systemSummary?.can_use_model ?? false;
-  const effectiveEmbeddingModel = defaultEmbeddingConfig?.embedding_model || systemSummary?.embedding_model || null;
   const effectiveEmbeddingReady = defaultEmbeddingConfig?.can_use_embedding_model
     ?? systemSummary?.can_use_embedding_model
     ?? false;
-  const effectiveEmbeddingSource = defaultEmbeddingConfig?.display_name
-    ?? (systemSummary?.embedding_model ? "服务器向量配置" : null);
+  const effectiveRerankReady = defaultRerankConfig?.can_use_rerank_model
+    ?? systemSummary?.can_use_rerank_model
+    ?? false;
   const starterModeLabel = authUser?.starterMode === "ai_intro" ? "示例课程开始" : "空白开始";
 
   function selectSection(section: SettingsSection) {
@@ -404,7 +402,7 @@ export function SettingsPage() {
       }
       showToast(response.data.message, response.data.ok ? "success" : "warning");
     },
-    onError: (error) => setModelFeedback(getApiErrorMessage(error, "连接测试失败，请稍后重试。"))
+    onError: (error) => setModelFeedback(getApiErrorMessage(error, "连接验证失败，请稍后重试。"))
   });
 
   const reindexMutation = useMutation({
@@ -577,7 +575,7 @@ export function SettingsPage() {
 
   function runConnectionTest(operation: ModelConnectionOperation, configId: number | null = activeConfigId) {
     if (configId !== null && isDirty) {
-      setModelFeedback("当前配置有未保存修改，请先保存再测试。");
+      setModelFeedback("当前配置有未保存修改，请先保存再验证连接。");
       return;
     }
     testConnectionMutation.mutate({ configId, operation });
@@ -621,17 +619,13 @@ export function SettingsPage() {
               <span aria-hidden="true"><Robot size={20} weight="duotone" /></span>
               <div>
                 <strong>系统设置</strong>
-                <small>学生账号与 AI 连接</small>
+                <small>学习账号与 AI 服务</small>
               </div>
             </div>
-            <div className="settings-effective-state" aria-label="当前模型状态">
-              <span>回答 · {effectiveSource}</span>
-              <strong>{effectiveChatReady ? "回答可用" : "回答未就绪"}</strong>
-              <small>
-                {effectiveEmbeddingModel
-                  ? `${effectiveEmbeddingReady ? "向量可用" : "向量未就绪"} · ${effectiveEmbeddingSource} · ${effectiveEmbeddingModel}`
-                  : "向量未配置"}
-              </small>
+            <div className="settings-effective-state" aria-label="当前 AI 服务状态">
+              <span className={effectiveChatReady ? "ready" : "inactive"}>回答{effectiveChatReady ? "正常" : "未连接"}</span>
+              <span className={effectiveEmbeddingReady ? "ready" : "inactive"}>向量{effectiveEmbeddingReady ? "正常" : "未连接"}</span>
+              <span className={effectiveRerankReady ? "ready" : "inactive"}>重排序{effectiveRerankReady ? "正常" : "未连接"}</span>
             </div>
           </header>
 
@@ -642,9 +636,9 @@ export function SettingsPage() {
                 <section className="settings-panel" role="region" aria-label="模型设置">
                   <header className="settings-panel-heading">
                     <div>
-                      <span>AI 运行基础</span>
-                      <h2>模型连接</h2>
-                      <p>回答负责生成，向量负责召回，重排序负责从候选中选出更相关的依据；三项独立验证。</p>
+                      <span>AI 服务</span>
+                      <h2>连接配置</h2>
+                      <p>组合回答、向量和重排序服务。只配置回答也能正常使用，检索能力可按需补充。</p>
                     </div>
                     <button type="button" className="settings-new-button" onClick={createNewConfig}>
                       <Plus size={16} weight="bold" aria-hidden="true" />
@@ -667,14 +661,14 @@ export function SettingsPage() {
                   ) : null}
 
                   {!modelConfigsQuery.isError && (!defaultChatConfig || !defaultEmbeddingConfig || !defaultRerankConfig) ? (
-                    <section className="settings-system-fallback" aria-label="服务器模型配置">
-                      <header>
+                    <details className="settings-system-fallback">
+                      <summary>
                         <div>
-                          <span>当前运行来源</span>
-                          <strong>{systemSummary?.source === "system" ? "缺失用途将使用服务器兜底" : "部分模型用途尚未配置"}</strong>
+                          <span>系统默认服务</span>
+                          <strong>{systemSummary?.source === "system" ? "当前账号可直接使用已部署的 AI 服务" : "部分 AI 能力尚未连接"}</strong>
                         </div>
-                        <small>回答、向量与重排序分别选择默认配置，互不覆盖。</small>
-                      </header>
+                        <small>查看默认连接</small>
+                      </summary>
                       <div className="settings-test-grid">
                         {!defaultChatConfig ? (
                           <ConnectionTestCard
@@ -710,10 +704,10 @@ export function SettingsPage() {
                           />
                         ) : null}
                       </div>
-                    </section>
+                    </details>
                   ) : null}
 
-                  <div className="settings-model-layout" aria-busy={modelConfigsQuery.isPending}>
+                  <div className={`settings-model-layout ${configs.length === 0 ? "single-editor" : ""}`} aria-busy={modelConfigsQuery.isPending}>
                     <aside className="settings-config-list" aria-label="模型配置列表">
                       <header>
                         <span>个人配置</span>
@@ -740,7 +734,7 @@ export function SettingsPage() {
                               {config.embedding_model ? ` · 向量 ${config.embedding_model}` : " · 向量未配置"}
                               {config.rerank_model ? ` · 重排 ${config.rerank_model}` : ""}
                             </span>
-                            <em className={configTestLabel(config).includes("失败") ? "failed" : ""}>{configTestLabel(config)}</em>
+                            <em className={configTestLabel(config).includes("异常") ? "failed" : ""}>{configTestLabel(config)}</em>
                           </button>
                         ))}
                         {configs.length === 0 && selectedConfigId !== "new" ? (
@@ -758,7 +752,7 @@ export function SettingsPage() {
                               {currentDraft.embedding_model ? ` · 向量 ${currentDraft.embedding_model}` : " · 向量未配置"}
                               {currentDraft.rerank_model ? ` · 重排 ${currentDraft.rerank_model}` : ""}
                             </span>
-                            <em>保存后可测试</em>
+                            <em>保存后可验证</em>
                           </button>
                         ) : null}
                       </div>
@@ -854,6 +848,20 @@ export function SettingsPage() {
                               />
                             </label>
                           </div>
+                          <ConnectionTestCard
+                            operation="chat"
+                            model={currentDraft.chat_model || null}
+                            missingMessage={defaultChatConfig
+                              ? `回答继续使用 ${defaultChatConfig.display_name}。`
+                              : settingsList?.system_summary.can_use_model
+                                ? "回答继续使用系统默认服务。"
+                                : "当前没有可用的回答服务。"}
+                            result={selectedConfig?.connection_tests?.chat ?? null}
+                            dirty={isCreating || isDirty}
+                            disabled={isCreating || isDirty || testConnectionMutation.isPending}
+                            pending={testPending("chat")}
+                            onTest={() => runConnectionTest("chat")}
+                          />
                         </section>
 
                         <section className="settings-service-group" aria-labelledby="embedding-service-title">
@@ -885,7 +893,7 @@ export function SettingsPage() {
                               <span>实际维度</span>
                               <input
                                 aria-label="向量实际维度"
-                                value={currentDraft.embedding_dimension || "连接测试后自动识别"}
+                                value={currentDraft.embedding_dimension || "连接验证后自动识别"}
                                 disabled
                               />
                             </label>
@@ -946,6 +954,20 @@ export function SettingsPage() {
                               </>
                             ) : null}
                           </div>
+                          <ConnectionTestCard
+                            operation="embedding"
+                            model={currentDraft.embedding_model || null}
+                            missingMessage={defaultEmbeddingConfig
+                              ? `资料检索继续使用 ${defaultEmbeddingConfig.display_name}。`
+                              : settingsList?.system_summary.can_use_embedding_model
+                                ? "资料检索继续使用系统默认服务。"
+                                : "未连接向量服务，资料检索将使用关键词匹配。"}
+                            result={selectedConfig?.connection_tests?.embedding ?? null}
+                            dirty={isCreating || isDirty}
+                            disabled={isCreating || isDirty || testConnectionMutation.isPending}
+                            pending={testPending("embedding")}
+                            onTest={() => runConnectionTest("embedding")}
+                          />
                         </section>
 
                         <section className="settings-service-group" aria-labelledby="rerank-service-title">
@@ -1010,60 +1032,22 @@ export function SettingsPage() {
                               />
                             </label>
                           </div>
-                        </section>
-                      </div>
-
-                      {!isCreating ? (
-                        <div className="settings-test-grid">
-                          <ConnectionTestCard
-                            operation="chat"
-                            model={selectedConfig?.chat_model ?? null}
-                            missingMessage={defaultChatConfig
-                              ? `此配置只承担向量检索；回答继续使用 ${defaultChatConfig.display_name}。`
-                              : settingsList?.system_summary.can_use_model
-                                ? "此配置只承担向量检索；回答继续使用服务器配置。"
-                                : "此配置只承担向量检索；当前没有可用回答模型。"}
-                            result={selectedConfig?.connection_tests?.chat ?? null}
-                            dirty={isDirty}
-                            disabled={isDirty || testConnectionMutation.isPending}
-                            pending={testPending("chat")}
-                            onTest={() => runConnectionTest("chat")}
-                          />
-                          <ConnectionTestCard
-                            operation="embedding"
-                            model={selectedConfig?.embedding_model ?? null}
-                            missingMessage={defaultEmbeddingConfig
-                              ? `此配置只承担回答；向量检索继续使用 ${defaultEmbeddingConfig.display_name}。`
-                              : settingsList?.system_summary.can_use_embedding_model
-                                ? "此配置只承担回答；向量检索继续使用服务器配置。"
-                                : "此配置只承担回答；向量检索将使用关键词检索。"}
-                            result={selectedConfig?.connection_tests?.embedding ?? null}
-                            dirty={isDirty}
-                            disabled={isDirty || testConnectionMutation.isPending}
-                            pending={testPending("embedding")}
-                            onTest={() => runConnectionTest("embedding")}
-                          />
                           <ConnectionTestCard
                             operation="rerank"
-                            model={selectedConfig?.rerank_model ?? null}
+                            model={currentDraft.rerank_model || null}
                             missingMessage={defaultRerankConfig
-                              ? `重排序继续使用 ${defaultRerankConfig.display_name}。`
+                              ? `检索排序继续使用 ${defaultRerankConfig.display_name}。`
                               : settingsList?.system_summary.can_use_rerank_model
-                                ? "重排序继续使用服务器配置。"
-                                : "当前未配置重排序，检索将使用 RRF 混合排序。"}
+                                ? "检索排序继续使用系统默认服务。"
+                                : "未连接重排序服务，系统将保留当前检索顺序。"}
                             result={selectedConfig?.connection_tests?.rerank ?? null}
-                            dirty={isDirty}
-                            disabled={isDirty || testConnectionMutation.isPending}
+                            dirty={isCreating || isDirty}
+                            disabled={isCreating || isDirty || testConnectionMutation.isPending}
                             pending={testPending("rerank")}
                             onTest={() => runConnectionTest("rerank")}
                           />
-                        </div>
-                      ) : (
-                        <div className="settings-save-first-note">
-                          <LockKey size={18} weight="duotone" aria-hidden="true" />
-                          保存配置后才能执行真实连接测试。
-                        </div>
-                      )}
+                        </section>
+                      </div>
 
                       <InlineFeedback message={modelFeedback} tone="warning" className="settings-inline-feedback" />
                       <footer className="settings-editor-actions">

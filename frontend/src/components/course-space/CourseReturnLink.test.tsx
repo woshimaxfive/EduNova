@@ -33,4 +33,14 @@ describe("CourseReturnLink", () => {
     );
     expect(screen.queryByRole("link", { name: "返回课程空间继续学习" })).not.toBeInTheDocument();
   });
+
+  it("supports a compact icon entry without losing its accessible name", () => {
+    render(
+      <MemoryRouter initialEntries={["/app/path?course_id=808&return_to=course"]}>
+        <CourseReturnLink courseId={808} compact />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: "返回课程空间" })).toHaveClass("course-return-link-compact");
+  });
 });

@@ -27,6 +27,7 @@ type CourseOption = {
 };
 
 type LearningPathToolbarProps = {
+  returnLink: ReactNode;
   courses: CourseOption[];
   courseId: number | null;
   courseTitle: string;
@@ -40,6 +41,7 @@ type LearningPathToolbarProps = {
 };
 
 export function LearningPathToolbar({
+  returnLink,
   courses,
   courseId,
   courseTitle,
@@ -55,6 +57,14 @@ export function LearningPathToolbar({
 
   return (
     <header className="path-workspace-toolbar">
+      <div className="path-toolbar-identity">
+        {returnLink ? <div className="path-toolbar-return">{returnLink}</div> : null}
+        <div>
+          <span>学习路径</span>
+          <strong>个性化学习安排</strong>
+        </div>
+      </div>
+
       <label className="path-course-select">
         <span>当前课程</span>
         <select value={courseId ?? ""} onChange={onCourseChange} disabled={courses.length === 0}>
@@ -65,18 +75,14 @@ export function LearningPathToolbar({
         </select>
       </label>
 
-      <div className="path-toolbar-title">
-        <span>个性化学习路径</span>
-        <strong>{courseTitle}</strong>
-      </div>
-
       <div className="path-toolbar-progress" aria-label={`${courseTitle}完成进度 ${progressPercent}%`}>
-        <span>{completedCount}/{totalCount} 已完成</span>
+        <span>学习进度</span>
+        <strong>{completedCount}/{totalCount} 已完成</strong>
         <div><span style={{ width: `${progressPercent}%` }} /></div>
       </div>
 
       <div className="path-toolbar-actions">
-        <button className="soft-button" type="button" disabled={courseId === null || generatePending} onClick={onGenerate}>
+        <button className={hasPlan ? "soft-button" : "primary-action"} type="button" disabled={courseId === null || generatePending} onClick={onGenerate}>
           <Sparkle size={17} weight="duotone" aria-hidden="true" />
           {generatePending ? "正在规划" : hasPlan ? "更新学习路径" : "生成学习路径"}
         </button>

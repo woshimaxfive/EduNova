@@ -12,7 +12,7 @@
   position: relative;
   z-index: 8;
   display: grid;
-  grid-template-columns: minmax(170px, 0.6fr) auto minmax(150px, 0.45fr) auto;
+  grid-template-columns: minmax(190px, 0.72fr) minmax(170px, 0.62fr) minmax(150px, 0.46fr) auto;
   align-items: center;
   gap: 14px;
   min-height: 66px;
@@ -22,16 +22,65 @@
   backdrop-filter: blur(18px);
 }
 
-.path-course-select {
+.path-toolbar-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.path-toolbar-identity > div:last-child {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.path-course-select > span {
+.path-toolbar-identity span,
+.path-course-select > span,
+.path-toolbar-progress > span {
   color: var(--text-muted);
   font-size: 0.66rem;
   font-weight: 800;
+}
+
+.path-toolbar-identity strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-toolbar-return {
+  flex: 0 0 auto;
+}
+
+.path-toolbar-return .course-return-link-compact {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  place-items: center;
+  margin: 0;
+  border-color: var(--wide-workspace-divider);
+  border-radius: 5px;
+  padding: 0;
+  color: var(--text-muted);
+  background: var(--wide-workspace-control);
+}
+
+.path-toolbar-return .course-return-link-compact:hover {
+  color: var(--accent-strong);
+}
+
+.path-toolbar-return .course-return-link-compact span {
+  display: none;
+}
+
+.path-course-select {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
 .path-course-select select {
@@ -47,40 +96,22 @@
   text-overflow: ellipsis;
 }
 
-.path-toolbar-title {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.path-toolbar-title span {
-  color: var(--accent-strong);
-  font-size: 0.66rem;
-  font-weight: 800;
-}
-
-.path-toolbar-title strong {
-  overflow: hidden;
-  color: var(--text-strong);
-  font-size: 0.84rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .path-toolbar-progress {
   display: grid;
-  gap: 7px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 10px;
   min-width: 0;
 }
 
-.path-toolbar-progress > span {
-  color: var(--text-muted);
+.path-toolbar-progress > strong {
+  color: var(--text-strong);
   font-size: 0.7rem;
-  font-weight: 700;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
 .path-toolbar-progress > div {
+  grid-column: 1 / -1;
   height: 4px;
   border-radius: 2px;
   background: color-mix(in srgb, var(--line) 82%, transparent);
@@ -109,7 +140,7 @@
 
 .path-workspace-body {
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: 188px minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -122,8 +153,8 @@
   min-height: 0;
   overflow-y: auto;
   border-right: 1px solid var(--wide-workspace-divider);
-  padding: 18px 12px;
-  background: color-mix(in srgb, var(--wide-workspace-muted) 74%, transparent);
+  padding: 16px 10px;
+  background: color-mix(in srgb, var(--wide-workspace-muted) 48%, transparent);
 }
 
 .path-rail-heading {
@@ -148,7 +179,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 42px;
+  min-height: 40px;
   border: 0;
   border-radius: 5px;
   padding: 0 9px;
@@ -165,14 +196,20 @@
 }
 
 .path-workspace-rail > button[aria-current="page"] {
+  box-shadow: inset 2px 0 var(--accent);
   color: var(--accent-strong);
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
 }
 
 .path-workspace-rail > button small {
+  min-width: 24px;
+  border-radius: 3px;
+  padding: 2px 5px;
   color: inherit;
+  background: color-mix(in srgb, var(--wide-workspace-control) 68%, transparent);
   font-size: 0.68rem;
   font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .path-workspace-main {
@@ -376,7 +413,14 @@
 }
 
 .path-workspace-empty svg {
+  box-sizing: content-box;
+  width: 28px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--wide-workspace-divider));
+  border-radius: 50%;
+  padding: 12px;
   color: var(--accent-strong);
+  background: var(--accent-soft);
 }
 
 .path-workspace-empty strong {
@@ -640,7 +684,7 @@
 
 @media (max-width: 1180px) {
   .path-workspace-toolbar {
-    grid-template-columns: minmax(160px, 0.55fr) auto minmax(120px, 0.35fr);
+    grid-template-columns: minmax(180px, 0.7fr) minmax(160px, 0.6fr) minmax(120px, 0.4fr);
   }
 
   .path-toolbar-actions {

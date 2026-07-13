@@ -152,7 +152,7 @@ describe("EduNova routes", () => {
     renderRoutes(["/app/path"]);
 
     expect(await screen.findByRole("heading", { name: "学习路径" })).toHaveClass("visually-hidden");
-    expect(screen.getByText("个性化学习路径")).toBeInTheDocument();
+    expect(screen.getByText("个性化学习安排")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "任务状态" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成学习路径" })).toBeInTheDocument();
     expect(screen.queryByText("期末冲刺")).not.toBeInTheDocument();

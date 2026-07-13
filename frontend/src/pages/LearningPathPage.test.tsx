@@ -171,7 +171,7 @@ describe("LearningPathPage", () => {
     renderWithProviders(<LearningPathPage />);
 
     expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
-    expect(screen.getByText("个性化学习路径")).toBeInTheDocument();
+    expect(screen.getByText("个性化学习安排")).toBeInTheDocument();
     expect(screen.queryByText("期末冲刺")).not.toBeInTheDocument();
     expect(screen.getByText("由练习结果更新 · 保留 2 个既有任务")).toBeInTheDocument();
     expect(screen.getByText("学习画像已变化，可更新学习路径以应用新的安排依据。")).toBeInTheDocument();

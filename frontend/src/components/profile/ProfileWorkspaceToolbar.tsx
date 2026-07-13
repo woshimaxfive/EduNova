@@ -1,7 +1,8 @@
 import { ChatCircleDots, ClockCounterClockwise, TrendUp } from "@phosphor-icons/react";
 
 type ProfileWorkspaceToolbarProps = {
-  confidence: number;
+  completeness: number;
+  evidenceConfidence: number;
   version: number;
   appliedCount: number;
   candidateCount: number;
@@ -20,7 +21,8 @@ function formatUpdatedAt(value: string | null) {
 }
 
 export function ProfileWorkspaceToolbar({
-  confidence,
+  completeness,
+  evidenceConfidence,
   version,
   appliedCount,
   candidateCount,
@@ -33,7 +35,7 @@ export function ProfileWorkspaceToolbar({
         <TrendUp size={20} weight="duotone" aria-hidden="true" />
         <span>
           <h2>动态学习画像</h2>
-          <small>综合可信度 <strong>{Math.round(confidence)}%</strong></small>
+          <small>完整度 <strong>{Math.round(completeness)}%</strong> · 证据可信度 <strong>{Math.round(evidenceConfidence)}%</strong></small>
         </span>
       </div>
       <dl className="profile-toolbar-facts">

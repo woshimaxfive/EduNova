@@ -194,6 +194,12 @@ export function PathTaskCanvas({
           <span>由练习结果更新 · 保留 {Number(pathDetail.path.plan_json.preserved_task_count ?? 0)} 个既有任务</span>
         </div>
       ) : null}
+      {pathDetail.path.personalization?.status === "stale" ? (
+        <div className="path-reflow-band">
+          <Sparkle size={17} weight="duotone" aria-hidden="true" />
+          <span>学习画像已变化，可更新学习路径以应用新的安排依据。</span>
+        </div>
+      ) : null}
       <InlineFeedback message={errorMessage} tone="warning" />
       {visibleTasks.length === 0 ? (
         <div className="path-filter-empty">当前筛选下没有任务。</div>

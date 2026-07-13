@@ -14,6 +14,7 @@ from backend.app.api.errors import make_trace_id
 from backend.app.models import Course, CourseEnrollment, CourseMaterialLink, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, User
 from backend.app.schemas.courses import CreateCourseFromMaterialsResult
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
+from backend.app.services.learner_context import context_service_from_repository
 
 
 class CourseBuilderState(TypedDict, total=False):
@@ -24,6 +25,7 @@ class CourseBuilderState(TypedDict, total=False):
     requested_title: str
     materials: list[Material]
     source_chunks: list[MaterialChunk]
+    learner_context: Any
     source_units: list[dict[str, Any]]
     deterministic_structure: dict[str, Any]
     structure: dict[str, Any]
@@ -126,7 +128,18 @@ class CourseBuilderGraphRunner:
                     chunks = generated
             if not chunks:
                 raise self.service.generation_error("当前资料没有可用于建课的有效内容。")
-            return {"materials": materials, "source_chunks": chunks}, f"已读取 {len(materials)} 份资料和 {len(chunks)} 个来源分块。", "completed", {"material_count": len(materials), "candidate_count": len(chunks)}
+            context_service = context_service_from_repository(self.service.repository)
+            learner_context = context_service.global_context(int(state["user_id"])) if context_service is not None else None
+            return (
+                {"materials": materials, "source_chunks": chunks, "learner_context": learner_context},
+                f"已读取 {len(materials)} 份资料和 {len(chunks)} 个来源分块。",
+                "completed",
+                {
+                    "material_count": len(materials),
+                    "candidate_count": len(chunks),
+                    **(learner_context.trace_metadata() if learner_context is not None else {"profile_context_used": False}),
+                },
+            )
 
         return self._run_node(state, "read_materials", 1, "读取当前用户选中的已解析资料", work)
 
@@ -354,6 +367,9 @@ class CourseBuilderGraphRunner:
                 "source_coverage": {"source_unit_count": len(state["source_units"]), "mapped_source_count": len(used_sources)},
                 "knowledge_key_map": key_to_id,
                 "warnings": list(state.get("warnings", [])),
+                "profile_applied_version": (
+                    state["learner_context"].profile_applied_version if state.get("learner_context") is not None else 0
+                ),
             }
             self.service.repository.commit()
             self.service.repository.refresh(created)
@@ -397,6 +413,13 @@ class CourseBuilderGraphRunner:
         if self.service.model_service is None:
             return None
         source_lines = [f"{unit['key']} | {unit['title']} | {unit['excerpt'][:260]}" for unit in state["source_units"]]
+        learner_context = state.get("learner_context")
+        personalization = {
+            "learning_goal": learner_context.advisory_value("learning_goal") if learner_context is not None else "",
+            "knowledge_foundation": learner_context.trusted_value("knowledge_foundation") if learner_context is not None else "",
+            "cognitive_style": learner_context.advisory_value("cognitive_style") if learner_context is not None else "",
+            "learning_preference": learner_context.advisory_value("learning_preference") if learner_context is not None else "",
+        }
         try:
             raw = self.service.model_service.chat_completion(
                 state["user"],
@@ -414,6 +437,7 @@ class CourseBuilderGraphRunner:
                             ("根据审核风险修订一次。\n" if repair else "生成适合学生学习的课程结构。\n")
                             + "来源单元：\n"
                             + "\n".join(source_lines)
+                            + f"\n可信画像提示={personalization}。中等可信内容只能调整表达，不得删改来源事实。"
                             + "\n返回 title、subject、description、learning_objectives、knowledge_points；"
                             + "每个知识点包含 key、title、chapter、summary、difficulty、prerequisite_keys、source_keys。"
                         ),

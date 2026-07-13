@@ -22,6 +22,7 @@ import { ProfileWorkspaceToolbar } from "../components/profile/ProfileWorkspaceT
 import {
   buildProfileDimensions,
   buildProfileUpdateReceipt,
+  calculateProfileCompleteness,
   profileEventsForDimension,
   type ProfileDimensionKey
 } from "../features/profile/profileViewModel";
@@ -44,7 +45,11 @@ const EMPTY_PROFILE: StudentProfileResponse = {
     motivation_interest: ""
   },
   confidence_score: 0,
+  completeness_score: 0,
+  evidence_confidence_score: 0,
+  applied_version: 0,
   dimension_confidence: {},
+  dimension_evidence_summary: {},
   evidence_summary: {},
   updated_reason: null,
   updated_at: null,
@@ -115,6 +120,10 @@ export function ProfilePage() {
         trace_id: response.trace_id
       }));
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state"] });
+      void queryClient.invalidateQueries({ queryKey: ["resources", "course"] });
+      void queryClient.invalidateQueries({ queryKey: ["paths", "current"] });
+      void queryClient.invalidateQueries({ queryKey: ["reports", "latest"] });
       setLocalInteraction({
         message: variables.message,
         reply: response.data.reply,
@@ -163,7 +172,8 @@ export function ProfilePage() {
       <PageFrame title="学习画像" titleMode="sr-only" variant="wide-workspace">
         <section className="profile-workspace" aria-label="动态学习画像工作台">
           <ProfileWorkspaceToolbar
-            confidence={profile.confidence_score}
+            completeness={calculateProfileCompleteness(profile)}
+            evidenceConfidence={profile.evidence_confidence_score ?? profile.confidence_score}
             version={profile.version}
             appliedCount={appliedCount}
             candidateCount={candidateCount}

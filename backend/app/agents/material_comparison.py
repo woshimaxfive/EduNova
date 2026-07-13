@@ -10,6 +10,7 @@ from backend.app.api.errors import make_trace_id
 from backend.app.models import Course, KnowledgePoint, Material, MaterialComparisonRun, User
 from backend.app.schemas.materials import MaterialComparisonPoint, MaterialComparisonResult
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
+from backend.app.services.learner_context import context_service_from_repository
 
 
 class MaterialComparisonState(TypedDict, total=False):
@@ -22,6 +23,7 @@ class MaterialComparisonState(TypedDict, total=False):
     materials: list[Material]
     knowledge_points: list[KnowledgePoint]
     evidence: list[Any]
+    learner_context: Any
     deterministic_result: MaterialComparisonResult
     comparison_result: MaterialComparisonResult
     generation_mode: str
@@ -107,11 +109,17 @@ class MaterialComparisonGraphRunner:
             comparable_ids = {item.material_id for item in evidence}
             if len(comparable_ids) < 2:
                 raise self.service.validation_error("至少需要两份已解析且可比较的课程资料。")
+            context_service = context_service_from_repository(self.service.repository)
+            learner_context = context_service.course_context(int(state["user_id"]), int(state["course_id"])) if context_service is not None else None
             return (
-                {"knowledge_points": knowledge_points, "evidence": evidence},
+                {"knowledge_points": knowledge_points, "evidence": evidence, "learner_context": learner_context},
                 f"已收集 {len(evidence)} 条安全资料证据。",
                 "completed",
-                {"material_count": len(comparable_ids), "candidate_count": len(evidence)},
+                {
+                    "material_count": len(comparable_ids),
+                    "candidate_count": len(evidence),
+                    **(learner_context.trace_metadata() if learner_context is not None else {"profile_context_used": False}),
+                },
             )
 
         return self._run_node(state, "collect_evidence", 2, "收集课程切片和资料分块证据", work)
@@ -243,6 +251,11 @@ class MaterialComparisonGraphRunner:
         payload = result.model_dump(exclude={"id", "course_id", "material_ids", "agent_trace_id", "generation_mode", "review_mode", "created_at"})
         payload["review_result"] = state.get("review_result", {})
         payload["warnings"] = list(dict.fromkeys(state.get("warnings", [])))
+        learner_context = state.get("learner_context")
+        payload["profile_applied_version"] = (
+            learner_context.global_context.profile_applied_version if learner_context is not None else 0
+        )
+        payload["course_context_hash"] = learner_context.context_hash if learner_context is not None else "legacy"
         try:
             run = self.service.repository.add_comparison_run(
                 MaterialComparisonRun(
@@ -280,6 +293,11 @@ class MaterialComparisonGraphRunner:
         draft = state["deterministic_result"]
         all_points = self._all_points(draft)
         titles = list(dict.fromkeys(point.title for point in all_points))
+        learner_context = state.get("learner_context")
+        priority_hint = {
+            "course_goal": learner_context.course_goal if learner_context is not None else "",
+            "active_weaknesses": list(learner_context.active_weaknesses) if learner_context is not None else [],
+        }
         try:
             raw = self.service.model_service.chat_completion(
                 state["user"],
@@ -293,6 +311,7 @@ class MaterialComparisonGraphRunner:
                         "content": (
                             ("这是唯一一次修订机会。" if repair else "优化复习优先级和简短理由。")
                             + f"合法标题={titles}。"
+                            + f"复习排序提示={priority_hint}。提示只影响排序理由，不得修改共同点或差异事实。"
                             + "返回 {\"ordered_titles\":[\"...\"],\"rationales\":{\"标题\":\"理由\"},\"summary_message\":\"...\"}。"
                         ),
                     },

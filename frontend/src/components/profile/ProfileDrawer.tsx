@@ -103,6 +103,8 @@ export function ProfileDrawer({ mode, dimension, event, relatedEvents, onClose, 
             <dl className="profile-drawer-facts">
               <div><dt>已应用证据</dt><dd>{dimension.appliedCount}</dd></div>
               <div><dt>候选证据</dt><dd>{dimension.candidateCount}</dd></div>
+              <div><dt>独立来源</dt><dd>{dimension.sourceCount}</dd></div>
+              <div><dt>可信等级</dt><dd>{dimension.evidenceLevel === "trusted" ? "可信" : dimension.evidenceLevel === "advisory" ? "参考" : "待补充"}</dd></div>
             </dl>
             <section className="profile-related-events">
               <header><span>相关证据</span><strong>{relatedEvents.length} 条</strong></header>

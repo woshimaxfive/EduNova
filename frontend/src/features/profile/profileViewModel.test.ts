@@ -5,6 +5,7 @@ import {
   buildProfileDimensions,
   buildProfileEventView,
   buildProfileUpdateReceipt,
+  calculateProfileCompleteness,
   PROFILE_DIMENSIONS,
   profileEventsForDimension,
   profileQuestionGuidance
@@ -53,6 +54,27 @@ const event = (overrides: Partial<ProfileEventResponse> = {}): ProfileEventRespo
 });
 
 describe("profileViewModel", () => {
+  it("separates eight-dimension completeness from evidence confidence and supports legacy responses", () => {
+    const partial = profile({
+      profile_json: {
+        ...profile().profile_json,
+        major_background: "计算机专业",
+        learning_goal: "掌握机器学习",
+        knowledge_foundation: "",
+        cognitive_style: "",
+        learning_preference: "",
+        weak_points: [],
+        learning_pace: "",
+        motivation_interest: ""
+      },
+      completeness_score: undefined,
+      evidence_confidence_score: 88
+    });
+
+    expect(calculateProfileCompleteness(partial)).toBe(25);
+    expect(calculateProfileCompleteness(profile({ completeness_score: 62.5 }))).toBe(62.5);
+  });
+
   it("provides friendly labels, guidance and plain-text examples for every profile dimension", () => {
     expect(PROFILE_DIMENSIONS.map((item) => item.label)).toEqual([
       "学习背景",

@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 from backend.app.models import GeneratedResource, ResourceQualityScore
+from backend.app.schemas.personalization import PersonalizationFreshnessResponse
 
 
 ResourceType = Literal["doc", "mindmap", "quiz", "code", "slide", "animation"]
@@ -38,6 +39,7 @@ class GeneratedResourceResponse(BaseModel):
     review_status: str
     confidence_score: float | None
     agent_trace_id: str | None
+    personalization: PersonalizationFreshnessResponse | None = None
     created_at: str
     updated_at: str
 
@@ -80,7 +82,10 @@ def decimal_to_float(value: Decimal | None) -> float | None:
     return float(value)
 
 
-def generated_resource_to_api(resource: GeneratedResource) -> GeneratedResourceResponse:
+def generated_resource_to_api(
+    resource: GeneratedResource,
+    personalization: PersonalizationFreshnessResponse | None = None,
+) -> GeneratedResourceResponse:
     content_json = resource.content_json or {}
     metadata = content_json.get("metadata")
     agent_trace_id = getattr(resource, "agent_trace_id", None)
@@ -99,6 +104,7 @@ def generated_resource_to_api(resource: GeneratedResource) -> GeneratedResourceR
         review_status=resource.review_status,
         confidence_score=decimal_to_float(resource.confidence_score),
         agent_trace_id=agent_trace_id,
+        personalization=personalization,
         created_at=iso_timestamp(resource.created_at),
         updated_at=iso_timestamp(resource.updated_at),
     )

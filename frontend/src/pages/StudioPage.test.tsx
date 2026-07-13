@@ -74,6 +74,12 @@ function makeResource(overrides: Partial<GeneratedResource> = {}): GeneratedReso
     review_status: "passed",
     confidence_score: 0.82,
     agent_trace_id: "trace_resource",
+    personalization: {
+      status: "stale",
+      profile_applied_version: 2,
+      current_profile_applied_version: 3,
+      reason: "学习画像已变化"
+    },
     created_at: "2026-07-05T14:00:00Z",
     updated_at: "2026-07-05T14:00:00Z",
     ...overrides
@@ -476,6 +482,7 @@ describe("StudioPage resource generation", () => {
     renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808&resource_id=902`);
 
     expect(await screen.findByRole("button", { name: "打开成果 启发式搜索练习题" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("学习画像已变化，可重新生成以应用新的个性化依据。")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("资料依据不足");
     expect(screen.getByRole("region", { name: "资源完整内容" })).toHaveTextContent("答案：B。");
 

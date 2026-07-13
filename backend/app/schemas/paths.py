@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from backend.app.models import GeneratedResource, LearningPath, LearningTask
+from backend.app.schemas.personalization import PersonalizationFreshnessResponse
 
 
 PathTaskStatus = Literal["todo", "doing", "completed"]
@@ -49,6 +50,7 @@ class LearningPathResponse(BaseModel):
     status: str
     agent_trace_id: str | None = None
     plan_json: dict
+    personalization: PersonalizationFreshnessResponse | None = None
     created_at: str
     updated_at: str
 
@@ -87,7 +89,10 @@ def resource_brief(resource: GeneratedResource) -> PathResourceBrief:
     )
 
 
-def path_to_api(path: LearningPath) -> LearningPathResponse:
+def path_to_api(
+    path: LearningPath,
+    personalization: PersonalizationFreshnessResponse | None = None,
+) -> LearningPathResponse:
     return LearningPathResponse(
         id=str(path.id),
         course_id=str(path.course_id),
@@ -96,6 +101,7 @@ def path_to_api(path: LearningPath) -> LearningPathResponse:
         status=path.status,
         agent_trace_id=getattr(path, "agent_trace_id", None),
         plan_json=path.plan_json or {},
+        personalization=personalization,
         created_at=iso_timestamp(path.created_at) or "",
         updated_at=iso_timestamp(path.updated_at) or "",
     )

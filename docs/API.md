@@ -374,7 +374,7 @@ Authorization: Bearer <token>
 
 ## 6. Profile 接口
 
-状态：Phase 15 已由 `ProfileGraph` 接管。显式画像回答经过结构化抽取与审核后更新；不确定表达保留为候选证据。课程问答和练习产生的隐式信号使用独立 Graph trace，只有相同归一化结论至少来自 2 个独立来源且聚合置信度不低于 0.75 时才写入长期画像，否则保留候选事件。
+状态：Phase 15 已由 `ProfileGraph` 接管。显式画像回答经过结构化抽取与审核后更新；不确定表达保留为候选证据。课程问答和练习产生的隐式信号使用独立 Graph trace，相同归一化结论至少来自 2 个独立来源且提案聚合置信度不低于 0.60 时才能形成已应用判断；其逐维证据分数仍需达到 70% 才能直接参与下游个性化。
 
 ### GET `/profiles/me`
 
@@ -388,7 +388,10 @@ Authorization: Bearer <token>
 - `next_question` 用于前端画像对话入口，不等同于强制问卷；优先追问本轮提及但未识别的维度，其次选择缺失或可信度最低的维度。
 - `next_question_dimension` 向后兼容标识该问题对应的八维字段，前端据此展示友好维度名、回答范围和不可点击的纯文本例子；旧客户端可忽略，旧响应缺少时前端使用通用引导。
 - `profile_json` 是用户级画像。`knowledge_foundation`、`weak_points`、`learning_goal` 可以在后续展示和推荐中叠加课程级状态，但 `/profiles/me` 不返回每门课程一份画像。
-- `dimension_confidence` 返回 8 个维度各自的 0-100 可信度，`evidence_summary` 返回候选/已应用证据计数。
+- `completeness_score` 按八个非空维度等权计算；薄弱点空数组视为空。它只表示画像填写完整程度。
+- `evidence_confidence_score` 只平均已有维度的证据分数；兼容字段 `confidence_score` 与其保持一致，不再充当完整度。
+- `applied_version` 是已应用画像事件版本；候选事件不增加该版本。
+- `dimension_confidence` 返回各维度 0-100 证据分数，`dimension_evidence_summary` 返回可信等级、独立来源数和最近来源；`evidence_summary` 返回候选/已应用证据计数。
 
 响应：
 
@@ -409,7 +412,13 @@ Authorization: Bearer <token>
       "motivation_interest": "希望提升 AI 实践能力"
     },
     "confidence_score": 72,
+    "completeness_score": 100,
+    "evidence_confidence_score": 72,
+    "applied_version": 3,
     "dimension_confidence": {"major_background": 82, "learning_goal": 76},
+    "dimension_evidence_summary": {
+      "learning_goal": {"confidence": 76, "level": "trusted", "source_count": 2}
+    },
     "evidence_summary": {"candidate_count": 1, "applied_count": 3},
     "updated_reason": "更新学习画像：学习目标、知识基础",
     "updated_at": "2026-07-05T09:00:00Z",
@@ -444,7 +453,7 @@ Authorization: Bearer <token>
       "dimension": "profile_chat",
       "status": "applied",
       "source_type": "profile_chat",
-      "confidence_score": 0.72,
+      "confidence_score": 0.70,
       "agent_trace_id": "trace_profile_graph",
       "change_summary": "更新学习画像：学习目标、薄弱点",
       "evidence_json": {
@@ -454,7 +463,10 @@ Authorization: Bearer <token>
         "generation_mode": "model_enhanced",
         "parse_status": "valid",
         "repair_count": 0,
-        "review_mode": "model_and_rules"
+        "review_mode": "model_and_rules",
+        "dimension_evidence_scores": {"learning_goal": 0.78, "weak_points": 0.70},
+        "source_factor": 1.0,
+        "review_factor": 1.0
       },
       "created_at": "2026-07-05T09:01:00Z"
     }
@@ -612,7 +624,8 @@ Authorization: Bearer <token>
 响应字段：
 
 - `course_id`。
-- `profile_overlay`：用户级画像中的 `learning_goal`、`knowledge_foundation`、`weak_points`。
+- `profile_overlay`：兼容字段，由当前课程上下文派生；目标优先取当前路径目标，基础叠加本课程掌握度摘要，弱点只返回当前课程弱点。
+- `learner_context`：实时派生的课程学习上下文，包含画像应用版本、可信/弱提示维度数量、画像完整度、课程目标、掌握度、当前任务、课程弱点、最近练习、资源类型、报告状态和脱敏 `context_hash`。不复制完整用户画像，也不持久化课程画像表。
 - `weakness_summary`：`candidate_event_count`、`pending_count`、`confirmed_count`、`reviewing_count`、`completed_count`、`dismissed_count`、`latest_evidence_at`。
 - `weakness_review_queue`：复习项数组，包含 `id`、`title`、`status`、`source_type`、`course_id`、`knowledge_point_id`、`recommended_resource_ids`、`recommended_resources`、`next_review_at`、`created_at`、`updated_at`。
 - `path_summary`：`status`、`message`、`path_id`、`current_task_title`、`task_count`、`completed_task_count`。
@@ -1175,7 +1188,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 ## 11. Agent Trace 接口
 
-状态：六条主链路已进入真实 LangGraph：主页问答、课程问答、资源生成、路径、练习评估和报告。其他学习流程继续使用现有服务逻辑和兼容 trace。
+状态：九条学习主链路已进入真实 LangGraph：画像、资料建课、资料对比、主页问答、课程问答、资源生成、路径、练习评估和报告。学习档案导出继续使用普通 Service + RQ Worker。
 
 ### GET `/agents/traces/{trace_id}`
 
@@ -1190,7 +1203,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 - `course_id`：关联课程，可能为空。
 - `status`：由步骤状态派生，可能为 `running`、`completed`、`warning` 或 `failed`。
 - `steps`：按 `step_index`、`created_at`、`id` 排序的步骤列表。
-- `metadata`：仅返回白名单安全摘要，例如引用数量、审核结果、资源数量、`context_message_count`、`context_summary_used`、`retrieval_query_mode` 等；不返回系统提示词、模型输入、完整历史消息、完整资料原文、API Key 或用户隐私原文。
+- `metadata`：仅返回白名单安全摘要，例如引用数量、审核结果、资源数量、`context_message_count`、`profile_applied_version`、可信维度数量、画像完整度、是否使用课程上下文和上下文版本；不返回系统提示词、模型输入、完整历史消息、完整资料原文、API Key 或用户画像原文。
 
 响应：
 

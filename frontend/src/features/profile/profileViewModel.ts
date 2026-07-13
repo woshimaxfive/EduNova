@@ -2,6 +2,18 @@ import type { ProfileEventResponse, ProfileJson, StudentProfileResponse } from "
 
 export type ProfileDimensionKey = keyof ProfileJson;
 
+export function calculateProfileCompleteness(profile: StudentProfileResponse): number {
+  if (typeof profile.completeness_score === "number") {
+    return Math.max(0, Math.min(100, profile.completeness_score));
+  }
+
+  const completed = PROFILE_DIMENSIONS.filter(({ key }) => {
+    const value = profile.profile_json[key];
+    return Array.isArray(value) ? value.length > 0 : value.trim().length > 0;
+  }).length;
+  return Math.round((completed / PROFILE_DIMENSIONS.length) * 1000) / 10;
+}
+
 export type ProfileDimensionMeta = {
   key: ProfileDimensionKey;
   label: string;
@@ -17,6 +29,8 @@ export type ProfileDimensionView = ProfileDimensionMeta & {
   confidence: number;
   appliedCount: number;
   candidateCount: number;
+  sourceCount: number;
+  evidenceLevel: "trusted" | "advisory" | "low";
 };
 
 export type ProfileEventView = {
@@ -218,7 +232,9 @@ export function buildProfileDimensions(profile: StudentProfileResponse, events: 
     value: profileValue(profile, item.key),
     confidence: Math.round(Math.max(0, Math.min(100, profile.dimension_confidence?.[item.key] ?? 0))),
     appliedCount: eventViews.filter((event) => event.appliedDimensions.includes(item.key)).length,
-    candidateCount: eventViews.filter((event) => event.candidateDimensions.includes(item.key)).length
+    candidateCount: eventViews.filter((event) => event.candidateDimensions.includes(item.key)).length,
+    sourceCount: profile.dimension_evidence_summary?.[item.key]?.source_count ?? 0,
+    evidenceLevel: profile.dimension_evidence_summary?.[item.key]?.level ?? "low"
   }));
 }
 

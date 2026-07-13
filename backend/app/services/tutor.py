@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import re
 from time import perf_counter
+from inspect import signature
 from typing import Any, Iterator, Protocol
 
 from langgraph.config import get_stream_writer
@@ -31,6 +32,7 @@ from backend.app.services.course_answers import (
     HomeAnswerReview,
 )
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
+from backend.app.services.learner_context import context_service_from_repository
 from backend.app.providers.openai_compatible import ModelProviderError
 
 
@@ -137,6 +139,7 @@ class CourseAnswerGenerator(Protocol):
         warnings: list[str] | None = None,
         conversation_context: ConversationContext | None = None,
         plan_summary: str | None = None,
+        learner_context: dict[str, Any] | None = None,
     ) -> Any:
         ...
 
@@ -146,6 +149,7 @@ class CourseAnswerGenerator(Protocol):
         question: str,
         citations: list[dict[str, Any]],
         conversation_context: ConversationContext | None = None,
+        learner_context: dict[str, Any] | None = None,
     ) -> Any:
         ...
 
@@ -155,6 +159,7 @@ class CourseAnswerGenerator(Protocol):
         question: str,
         citations: list[dict[str, Any]],
         conversation_context: ConversationContext | None = None,
+        learner_context: dict[str, Any] | None = None,
     ) -> Any:
         ...
 
@@ -168,6 +173,7 @@ class CourseAnswerGenerator(Protocol):
         warnings: list[str] | None = None,
         conversation_context: ConversationContext | None = None,
         plan_summary: str | None = None,
+        learner_context: dict[str, Any] | None = None,
     ) -> Any:
         ...
 
@@ -193,6 +199,17 @@ class CourseAnswerGenerator(Protocol):
         risk_flags: list[str],
     ) -> str | None:
         ...
+
+
+def _supported_context_kwargs(callable_value: Any, learner_context: dict[str, Any] | None) -> dict[str, Any]:
+    if not learner_context:
+        return {}
+    try:
+        if "learner_context" in signature(callable_value).parameters:
+            return {"learner_context": learner_context}
+    except (TypeError, ValueError):
+        return {}
+    return {}
 
 
 class ProfileEventRecorder(Protocol):
@@ -1510,6 +1527,29 @@ class HomeTutorGraphRunner:
     def _context_node(self, state: AgentState) -> dict[str, Any]:
         conversation_context = self.service._build_conversation_context(state["session"])
         retrieval_query = self.service._build_contextual_query(str(state["message_text"]), conversation_context)
+        context_service = context_service_from_repository(self.service.repository)
+        global_context = context_service.global_context(int(state["user_id"])) if context_service is not None else None
+        learner_context = {
+            key: global_context.advisory_value(key)
+            for key in (
+                "major_background",
+                "knowledge_foundation",
+                "learning_goal",
+                "cognitive_style",
+                "learning_preference",
+                "weak_points",
+                "learning_pace",
+                "motivation_interest",
+            )
+            if global_context is not None and global_context.advisory_value(key)
+        }
+        profile_metadata = global_context.trace_metadata() if global_context is not None else {
+            "profile_applied_version": 0,
+            "profile_completeness": 0,
+            "trusted_dimension_count": 0,
+            "advisory_dimension_count": 0,
+            "profile_context_used": False,
+        }
         context_metadata = self.service._context_metadata(
             conversation_context,
             retrieval_query,
@@ -1528,6 +1568,7 @@ class HomeTutorGraphRunner:
                 "used_model": self.service.course_answer_generator is not None,
                 "steps": HOME_TUTOR_GRAPH_STEPS,
                 **self.service._safe_trace_context_metadata(context_metadata),
+                **profile_metadata,
             },
         )
         return self._run_node(
@@ -1541,10 +1582,12 @@ class HomeTutorGraphRunner:
                     "conversation_context": conversation_context if conversation_context.has_context else None,
                     "retrieval_query": retrieval_query,
                     "context_metadata": context_metadata,
+                    "learner_context": learner_context,
+                    "learner_context_metadata": profile_metadata,
                 },
                 f"已参考最近 {conversation_context.message_count} 条安全会话。",
                 "completed",
-                context_metadata,
+                {**context_metadata, **profile_metadata},
             ),
         )
 
@@ -1719,6 +1762,7 @@ class HomeTutorGraphRunner:
                     warnings=list(state.get("warnings", [])),
                     conversation_context=state.get("conversation_context"),
                     plan_summary=str(state.get("plan_summary") or ""),
+                    **_supported_context_kwargs(stream_home, state.get("learner_context")),
                 )
                 reply = self._consume_stream_tokens(state, getattr(stream_result, "tokens", []))
                 used_model = bool(getattr(stream_result, "used_model", True)) and getattr(stream_result, "trace_id", None) is not None
@@ -1732,6 +1776,7 @@ class HomeTutorGraphRunner:
                     warnings=list(state.get("warnings", [])),
                     conversation_context=state.get("conversation_context"),
                     plan_summary=str(state.get("plan_summary") or ""),
+                    **_supported_context_kwargs(generator.generate_home, state.get("learner_context")),
                 )
                 reply = str(getattr(generated, "content", "") or "").strip()
                 used_model = getattr(generated, "trace_id", None) is not None
@@ -2223,12 +2268,30 @@ class CourseTutorGraphRunner:
         }
 
     def _profile_node(self, state: AgentState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            context_service = context_service_from_repository(self.service.repository)
+            if context_service is None or state.get("course_id") is None:
+                metadata = {
+                    "profile_applied_version": 0,
+                    "profile_completeness": 0,
+                    "trusted_dimension_count": 0,
+                    "advisory_dimension_count": 0,
+                    "profile_context_used": False,
+                }
+                return {"learner_context": {}, "learner_context_metadata": metadata}, "当前运行环境未提供画像上下文。", "warning", metadata
+            learner_context = context_service.course_context(int(state["user_id"]), int(state["course_id"]))
+            metadata = learner_context.trace_metadata()
+            return {
+                "learner_context": learner_context.prompt_summary(),
+                "learner_context_metadata": metadata,
+            }, f"已读取 {metadata['trusted_dimension_count']} 个可信画像维度和课程学习状态。", "completed", metadata
+
         return self._run_node(
             state,
             agent_name="profile",
             step_index=1,
             input_summary="读取学习画像与课程上下文",
-            work=lambda: ({}, "已加载用户画像摘要。", "completed", {}),
+            work=work,
         )
 
     def _retriever_node(self, state: AgentState) -> dict[str, Any]:
@@ -2282,6 +2345,7 @@ class CourseTutorGraphRunner:
                 question=str(state["message_text"]),
                 citations=citations,
                 conversation_context=state.get("conversation_context"),
+                **_supported_context_kwargs(self.service.course_answer_generator.generate, state.get("learner_context")),
             )
             trace_id = getattr(answer, "trace_id", None) or state["trace_id"]
             return (
@@ -2331,6 +2395,7 @@ class CourseTutorGraphRunner:
                 question=str(state["message_text"]),
                 citations=citations,
                 conversation_context=state.get("conversation_context"),
+                **_supported_context_kwargs(self.service.course_answer_generator.stream, state.get("learner_context")),
             )
             trace_id = getattr(stream_result, "trace_id", None) or state["trace_id"]
             return (

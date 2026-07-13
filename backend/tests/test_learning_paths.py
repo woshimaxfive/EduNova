@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -247,6 +248,35 @@ def make_trace_recorder(logs: list[Any]) -> AgentTraceRecorder:
         return log
 
     return AgentTraceRecorder(repository_add_log=add_log)
+
+
+def test_path_graph_persists_the_profile_version_from_learner_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = make_repo()
+    learner_context = SimpleNamespace(
+        global_context=SimpleNamespace(profile_applied_version=4),
+        context_hash="course-context-v4",
+        prompt_summary=lambda: {
+            "learning_goal": "掌握搜索算法",
+            "knowledge_foundation": "机器学习刚入门",
+            "learning_preference": "案例与练习",
+        },
+        trace_metadata=lambda: {
+            "profile_applied_version": 4,
+            "trusted_dimension_count": 3,
+            "profile_context_used": True,
+        },
+    )
+    context_service = SimpleNamespace(course_context=lambda _user_id, _course_id: learner_context)
+    monkeypatch.setattr(
+        "backend.app.agents.path_planning.context_service_from_repository",
+        lambda _repository: context_service,
+    )
+
+    detail = PathService(repo).generate_path(make_user(), 101)
+
+    assert detail.path is not None
+    assert detail.path.plan_json["profile_applied_version"] == 4
+    assert detail.path.plan_json["course_context_hash"] == "course-context-v4"
 
 
 def test_generate_path_archives_previous_active_path_and_prioritizes_confirmed_reviewing_items() -> None:

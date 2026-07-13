@@ -13,6 +13,7 @@ from backend.app.models import AssessmentReport, PracticeAnswer, PracticeSession
 from backend.app.schemas.reports import ReportEnvelope, report_to_api
 from backend.app.services.reports import ReportNotFoundError, ReportService
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
+from backend.app.services.learner_context import context_service_from_repository
 
 
 class ReportState(TypedDict, total=False):
@@ -30,6 +31,7 @@ class ReportState(TypedDict, total=False):
     active_path: Any
     path_tasks: list[Any]
     resources: list[Any]
+    learner_context: Any
     score: int | None
     deterministic_report: dict[str, Any]
     report_json: dict[str, Any]
@@ -54,7 +56,7 @@ class ReportGraphRunner:
         if practice_session_id is None and self.service.repository.get_latest_completed_practice_session(user.id, course_id) is None:
             existing = self.service.repository.get_latest_report(user.id, course_id)
             if existing is not None:
-                return report_to_api(existing)
+                return report_to_api(existing, self.service._report_freshness(user.id, existing))
         state: ReportState = {
             "trace_id": make_trace_id(),
             "user": user,
@@ -118,8 +120,19 @@ class ReportGraphRunner:
             tasks = list_tasks(path.id) if path is not None and callable(list_tasks) else []
             list_resources = getattr(self.service.repository, "list_generated_resources", None)
             resources = list_resources(user_id, course_id) if callable(list_resources) else []
+            context_service = context_service_from_repository(self.service.repository)
+            learner_context = context_service.course_context(user_id, course_id) if context_service is not None else None
             active_weaknesses = sum(1 for item in weaknesses if item.status in {"confirmed", "reviewing"})
-            return {"points": points, "weaknesses": weaknesses, "active_path": path, "path_tasks": tasks, "resources": resources}, f"已聚合 {len(points)} 个知识点、{active_weaknesses} 个活跃弱点和 {len(tasks)} 个路径任务。", "completed", {"weakness_count": active_weaknesses, "resource_count": len(resources)}
+            return (
+                {"points": points, "weaknesses": weaknesses, "active_path": path, "path_tasks": tasks, "resources": resources, "learner_context": learner_context},
+                f"已聚合 {len(points)} 个知识点、{active_weaknesses} 个活跃弱点和 {len(tasks)} 个路径任务。",
+                "completed",
+                {
+                    "weakness_count": active_weaknesses,
+                    "resource_count": len(resources),
+                    **(learner_context.trace_metadata() if learner_context is not None else {"profile_context_used": False}),
+                },
+            )
 
         return self._run_node(state, "collect_mastery", 2, "聚合掌握度、弱点、路径与资源", work)
 
@@ -161,6 +174,12 @@ class ReportGraphRunner:
                 "path_status": state.get("active_path").status if state.get("active_path") is not None else "not_started",
                 "resource_count": len(state.get("resources", [])),
             }
+            learner_context = state.get("learner_context")
+            if learner_context is not None:
+                report["profile_changes"] = [
+                    f"报告应用画像版本 {learner_context.global_context.profile_applied_version}，"
+                    f"参考 {len(learner_context.global_context.trusted_dimensions)} 个可信维度。"
+                ]
             return {"score": score, "deterministic_report": report, "report_json": report}, f"已形成 {len(report.get('evidence_refs', []))} 条报告证据，趋势为 {direction}。", "completed", {"practice_count": len(scores), "trend_direction": direction}
 
         return self._run_node(state, "aggregate_evidence", 3, "计算不可篡改的分数、掌握度与趋势", work)
@@ -227,7 +246,15 @@ class ReportGraphRunner:
     def _persist_node(self, state: ReportState) -> dict[str, Any]:
         started = perf_counter()
         latest = state.get("latest_practice")
-        report_json = {**state["report_json"], "review_result": state.get("review_result", {})}
+        learner_context = state.get("learner_context")
+        report_json = {
+            **state["report_json"],
+            "review_result": state.get("review_result", {}),
+            "profile_applied_version": (
+                learner_context.global_context.profile_applied_version if learner_context is not None else 0
+            ),
+            "course_context_hash": learner_context.context_hash if learner_context is not None else "legacy",
+        }
         report = AssessmentReport(
             user_id=int(state["user_id"]),
             course_id=int(state["course_id"]),
@@ -241,7 +268,7 @@ class ReportGraphRunner:
             self.service.repository.add_assessment_report(report)
             self.service.repository.commit()
             self.service.repository.refresh(report)
-            detail = report_to_api(report)
+            detail = report_to_api(report, self.service._report_freshness(int(state["user_id"]), report))
         except Exception as exc:
             self.service.repository.rollback()
             self._record_failure(state, "persist", 7, "保存审核通过的学习报告", exc, started)
@@ -260,13 +287,15 @@ class ReportGraphRunner:
             "weakness_titles": [safe_text(item.get("title"), limit=120) for item in deterministic.get("weakness_list", [])],
             "evidence_summary": deterministic.get("evidence_summary"),
         }
+        learner_context = state.get("learner_context")
+        personalization = learner_context.prompt_summary() if learner_context is not None else {}
         instruction = "这是唯一一次修订机会。" if repair else "根据结构化证据生成简洁学习总结和 2 到 4 条下一步建议。"
         try:
             raw = self.service.model_service.chat_completion(
                 state["user"],
                 [
                     {"role": "system", "content": "你是 ReportGraph 报告 Agent。不得修改数字、编造练习或输出隐私，只输出 JSON。"},
-                    {"role": "user", "content": f"{instruction} 证据={evidence}。返回 {{\"summary\":\"\",\"next_step_suggestions\":[]}}。"},
+                    {"role": "user", "content": f"{instruction} 可信课程画像提示={personalization}。证据={evidence}。返回 {{\"summary\":\"\",\"next_step_suggestions\":[]}}。"},
                 ],
             )
         except Exception:

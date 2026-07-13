@@ -33,6 +33,8 @@ from backend.app.schemas.resources import (
     generated_resource_to_api,
     quality_score_to_api,
 )
+from backend.app.schemas.personalization import PersonalizationFreshnessResponse
+from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.model_settings import ModelNotConfiguredError
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.resource_artifacts import ArtifactBuildInput, build_resource_content, validate_resource_content
@@ -288,7 +290,7 @@ class ResourceGenerationService:
             self._require_course(user, course_id)
         resources = self.repository.list_resources(user.id, course_id=course_id, resource_type=resource_type)
         return ResourceListResponse(
-            data=[generated_resource_to_api(resource) for resource in resources],
+            data=[self._resource_to_api(user.id, resource) for resource in resources],
             page=1,
             page_size=len(resources),
             total=len(resources),
@@ -298,7 +300,19 @@ class ResourceGenerationService:
         resource = self.repository.get_resource_for_user(user.id, resource_id)
         if resource is None:
             raise ResourceNotFoundError("资源不存在或无权访问。")
-        return generated_resource_to_api(resource)
+        return self._resource_to_api(user.id, resource)
+
+    def _resource_to_api(self, user_id: int, resource: GeneratedResource) -> GeneratedResourceResponse:
+        context_service = context_service_from_repository(self.repository)
+        personalization = None
+        if context_service is not None:
+            metadata = (resource.content_json or {}).get("metadata")
+            freshness = context_service.freshness(
+                metadata if isinstance(metadata, dict) else None,
+                context_service.global_context(user_id).profile_applied_version,
+            )
+            personalization = PersonalizationFreshnessResponse(**freshness.to_dict())
+        return generated_resource_to_api(resource, personalization)
 
     def get_resource_quality(self, user: User, resource_id: int) -> list[Any]:
         resource = self.repository.get_resource_for_user(user.id, resource_id)
@@ -660,6 +674,9 @@ class ResourceGenerationService:
                         f"学习目标：{learning_goal[:200]}",
                         f"画像目标：{profile_summary.get('learning_goal', '')}",
                         f"知识基础：{profile_summary.get('knowledge_foundation', '')}",
+                        f"理解习惯：{profile_summary.get('cognitive_style', '')}",
+                        f"学习方式：{profile_summary.get('learning_preference', '')}",
+                        f"学习动力：{profile_summary.get('motivation_interest', '')}",
                         "课程短摘录：",
                         *[
                             f"- {context.citation.section_title} / {context.citation.source_title}: {context.excerpt}"
@@ -711,6 +728,10 @@ class ResourceGenerationService:
                         f"难度：{difficulty}",
                         f"学习目标：{learning_goal[:200]}",
                         f"画像目标：{profile_summary.get('learning_goal', '')}",
+                        f"知识基础：{profile_summary.get('knowledge_foundation', '')}",
+                        f"理解习惯：{profile_summary.get('cognitive_style', '')}",
+                        f"学习方式：{profile_summary.get('learning_preference', '')}",
+                        f"学习动力：{profile_summary.get('motivation_interest', '')}",
                         f"类型要求：{requirements[resource_type]}",
                         "课程短摘录：",
                         *[
@@ -1102,7 +1123,7 @@ class ResourceGenerationGraphRunner:
 
         return GenerateResourcesResult(
             agent_trace_id=trace_id,
-            resources=[generated_resource_to_api(resource) for resource in result.get("resource_objects", [])],
+            resources=[self.service._resource_to_api(int(result["user_id"]), resource) for resource in result.get("resource_objects", [])],
             quality_scores=result.get("quality_scores", {}),
             warnings=list(result.get("result_warnings", [])),
             failed_resource_types=list(result.get("failed_resource_types", [])),
@@ -1138,18 +1159,27 @@ class ResourceGenerationGraphRunner:
     def _profile_node(self, state: ResourceGenerationState) -> dict[str, Any]:
         started = perf_counter()
         self._job_before(state, "profile")
-        profile = self.service.repository.get_profile(int(state["user_id"]))
-        profile_summary = self.service._profile_summary(profile)
+        context_service = context_service_from_repository(self.service.repository)
+        if context_service is not None:
+            learner_context = context_service.course_context(int(state["user_id"]), int(state["course_id"]))
+            profile_summary = learner_context.prompt_summary()
+            context_metadata = learner_context.trace_metadata()
+        else:
+            profile = self.service.repository.get_profile(int(state["user_id"]))
+            profile_summary = self.service._profile_summary(profile)
+            learner_context = None
+            context_metadata = {"profile_context_used": bool(profile_summary)}
         self._record(
             state,
             agent_name="profile",
             step_index=1,
             input_summary="读取用户级画像摘要",
             output_summary="画像已合入资源生成上下文",
+            metadata=context_metadata,
             started_at=started,
         )
         self._job_after(state, "profile")
-        return {"profile_summary": profile_summary}
+        return {"profile_summary": profile_summary, "learner_context": learner_context}
 
     def _retrieve_node(self, state: ResourceGenerationState) -> dict[str, Any]:
         started = perf_counter()
@@ -1553,6 +1583,16 @@ class ResourceGenerationGraphRunner:
                     "has_learning_goal": bool(str(state.get("learning_goal") or "").strip()),
                     "source_excerpt_count": len(contexts),
                     "model_enhancement_failed": bool(payload.get("model_failed")),
+                    "profile_applied_version": (
+                        state["learner_context"].global_context.profile_applied_version
+                        if state.get("learner_context") is not None
+                        else 0
+                    ),
+                    "course_context_hash": (
+                        state["learner_context"].context_hash
+                        if state.get("learner_context") is not None
+                        else "legacy"
+                    ),
                 },
             }
             resource = self.service.repository.add_resource(

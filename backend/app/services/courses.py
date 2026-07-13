@@ -40,6 +40,7 @@ from backend.app.schemas.courses import (
     CourseOverview,
     CoursePathSummary,
     CourseProfileOverlay,
+    CourseLearnerContextResponse,
     CourseSummary,
     CourseStructureSummary,
     CourseWeaknessReviewItem,
@@ -51,6 +52,7 @@ from backend.app.schemas.courses import (
 )
 from backend.app.schemas.profiles import normalize_profile_json
 from backend.app.services.material_retrieval import MaterialChunkingService
+from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.model_settings import ModelSettingsService
 
 
@@ -492,13 +494,39 @@ class CourseService:
             self.repository.list_practice_answers(user.id, course.id),
         )
         resources_by_id = {resource.id: resource for resource in resources}
+        context_service = context_service_from_repository(self.repository)
+        learner_context = context_service.course_context(user.id, course.id) if context_service is not None else None
+        active_weaknesses = [item.title for item in review_items if item.status in {"confirmed", "reviewing"}]
+        fallback_goal = str(path.goal or "").strip() if path is not None else ""
+        effective_goal = learner_context.course_goal if learner_context is not None else (fallback_goal or profile_json["learning_goal"])
+        foundation_summary = learner_context.foundation_summary if learner_context is not None else profile_json["knowledge_foundation"]
+        effective_weaknesses = list(learner_context.active_weaknesses) if learner_context is not None else active_weaknesses
+        global_context = learner_context.global_context if learner_context is not None else None
 
         return CourseLearningState(
             course_id=str(course.id),
             profile_overlay=CourseProfileOverlay(
-                learning_goal=profile_json["learning_goal"],
-                knowledge_foundation=profile_json["knowledge_foundation"],
-                weak_points=profile_json["weak_points"],
+                learning_goal=effective_goal,
+                knowledge_foundation=foundation_summary,
+                weak_points=effective_weaknesses,
+            ),
+            learner_context=CourseLearnerContextResponse(
+                profile_applied_version=global_context.profile_applied_version if global_context is not None else 0,
+                context_hash=learner_context.context_hash if learner_context is not None else "legacy",
+                completeness_score=global_context.completeness_score if global_context is not None else 0,
+                evidence_confidence_score=global_context.evidence_confidence_score if global_context is not None else float(getattr(profile, "confidence_score", 0) or 0),
+                trusted_dimensions=list(global_context.trusted_dimensions) if global_context is not None else [],
+                advisory_dimensions=list(global_context.advisory_dimensions) if global_context is not None else [],
+                course_goal=effective_goal,
+                foundation_summary=foundation_summary,
+                active_weaknesses=effective_weaknesses,
+                mastery_average=learner_context.mastery_average if learner_context is not None else 0,
+                current_task_title=learner_context.current_task_title if learner_context is not None else None,
+                recent_practice_score=learner_context.recent_practice_score if learner_context is not None else None,
+                learning_preference=str(global_context.advisory_value("learning_preference") or "") if global_context is not None else "",
+                cognitive_style=str(global_context.advisory_value("cognitive_style") or "") if global_context is not None else "",
+                learning_pace=str(global_context.advisory_value("learning_pace") or "") if global_context is not None else "",
+                motivation_interest=str(global_context.advisory_value("motivation_interest") or "") if global_context is not None else "",
             ),
             weakness_summary=self._build_weakness_summary(candidate_events, review_items),
             weakness_review_queue=[weakness_item_to_api(item, resources_by_id) for item in review_items if item.status != "dismissed"],

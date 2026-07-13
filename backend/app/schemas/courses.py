@@ -87,6 +87,25 @@ class CourseProfileOverlay(BaseModel):
     weak_points: list[str]
 
 
+class CourseLearnerContextResponse(BaseModel):
+    profile_applied_version: int = 0
+    context_hash: str = "legacy"
+    completeness_score: float = 0
+    evidence_confidence_score: float = 0
+    trusted_dimensions: list[str] = Field(default_factory=list)
+    advisory_dimensions: list[str] = Field(default_factory=list)
+    course_goal: str = ""
+    foundation_summary: str = ""
+    active_weaknesses: list[str] = Field(default_factory=list)
+    mastery_average: int = 0
+    current_task_title: str | None = None
+    recent_practice_score: int | None = None
+    learning_preference: str = ""
+    cognitive_style: str = ""
+    learning_pace: str = ""
+    motivation_interest: str = ""
+
+
 class CourseWeaknessSummary(BaseModel):
     candidate_event_count: int
     pending_count: int
@@ -163,6 +182,7 @@ class CourseEvidenceSummary(BaseModel):
 class CourseLearningState(BaseModel):
     course_id: str
     profile_overlay: CourseProfileOverlay
+    learner_context: CourseLearnerContextResponse
     weakness_summary: CourseWeaknessSummary
     weakness_review_queue: list[CourseWeaknessReviewItem]
     path_summary: CoursePathSummary

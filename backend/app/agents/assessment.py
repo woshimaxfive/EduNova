@@ -20,6 +20,7 @@ from backend.app.models import PracticeAnswer, PracticeSession, User, WeaknessRe
 from backend.app.schemas.practice import PracticeSessionDetail, SubmitPracticeAnswerItem, session_to_api
 from backend.app.services.practice import EvaluatedAnswer, PracticeService, PracticeValidationError
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
+from backend.app.services.learner_context import context_service_from_repository
 
 
 class AssessmentState(TypedDict, total=False):
@@ -38,6 +39,7 @@ class AssessmentState(TypedDict, total=False):
     points: list[Any]
     selected_points: list[Any]
     resources: list[Any]
+    learner_context: Any
     deterministic_questions: list[dict[str, Any]]
     questions: list[dict[str, Any]]
     session: PracticeSession
@@ -155,11 +157,19 @@ class AssessmentGraphRunner:
             if not selected:
                 raise PracticeValidationError("当前课程还没有可用于生成练习的知识点。")
             effective_difficulty = self.service.resolve_difficulty(state["user"], course.id, selected, str(state.get("requested_difficulty") or state["difficulty"]))
+            context_service = context_service_from_repository(self.service.repository)
+            learner_context = context_service.course_context(int(state["user_id"]), course.id) if context_service is not None else None
             return (
-                {"course": course, "points": points, "selected_points": selected, "resources": resources, "difficulty": effective_difficulty},
+                {"course": course, "points": points, "selected_points": selected, "resources": resources, "difficulty": effective_difficulty, "learner_context": learner_context},
                 f"已选择 {len(selected)} 个知识点和 {len(resources)} 个课程资源。",
                 "completed",
-                {"knowledge_point_id": selected[0].id if len(selected) == 1 else None, "resource_count": len(resources), "requested_difficulty": state.get("requested_difficulty"), "effective_difficulty": effective_difficulty},
+                {
+                    "knowledge_point_id": selected[0].id if len(selected) == 1 else None,
+                    "resource_count": len(resources),
+                    "requested_difficulty": state.get("requested_difficulty"),
+                    "effective_difficulty": effective_difficulty,
+                    **(learner_context.trace_metadata() if learner_context is not None else {"profile_context_used": False}),
+                },
             )
 
         return self._run_node(state, "context", 1, "读取课程、知识点和资源证据", work)
@@ -265,7 +275,14 @@ class AssessmentGraphRunner:
                 raise PracticeValidationError("练习题目不存在。")
             course = self.service._require_course(state["user"], int(session.course_id or 0))
             resources = self.service.repository.list_generated_resources(int(state["user_id"]), course.id)
-            return {"session": session, "course": course, "course_id": course.id, "answer_rows": answer_rows, "questions": questions, "resources": resources}, f"已读取 {len(questions)} 道练习题。", "completed", {"candidate_count": len(questions)}
+            context_service = context_service_from_repository(self.service.repository)
+            learner_context = context_service.course_context(int(state["user_id"]), course.id) if context_service is not None else None
+            return (
+                {"session": session, "course": course, "course_id": course.id, "answer_rows": answer_rows, "questions": questions, "resources": resources, "learner_context": learner_context},
+                f"已读取 {len(questions)} 道练习题。",
+                "completed",
+                {"candidate_count": len(questions), **(learner_context.trace_metadata() if learner_context is not None else {"profile_context_used": False})},
+            )
 
         return self._run_node(state, "load", 1, "读取当前用户练习和题目", work)
 
@@ -449,13 +466,15 @@ class AssessmentGraphRunner:
             return None
         drafts = list(state.get("deterministic_questions", []))
         prompt_rows = [{"id": item["id"], "question_type": item["question_type"], "knowledge_point_id": item["knowledge_point_id"], "prompt": item["prompt"], "options": item["options"], "explanation": item["explanation"]} for item in drafts]
+        learner_context = state.get("learner_context")
+        personalization = learner_context.prompt_summary() if learner_context is not None else {}
         instruction = "这是唯一一次修订机会。" if repair else "增强题干、干扰项和解析，但不得改变题目 ID、类型、知识点或规则答案。"
         try:
             raw = self.service.model_service.chat_completion(
                 state["user"],
                 [
                     {"role": "system", "content": "你是 AssessmentGraph 出题 Agent。只输出 JSON，禁止泄露答案生成规则。"},
-                    {"role": "user", "content": f"{instruction} 题目底稿={prompt_rows}。返回 {{\"questions\":[{{\"id\":\"q1\",\"prompt\":\"\",\"options\":[],\"explanation\":\"\"}}]}}。"},
+                    {"role": "user", "content": f"{instruction} 可信课程画像提示={personalization}。题目底稿={prompt_rows}。返回 {{\"questions\":[{{\"id\":\"q1\",\"prompt\":\"\",\"options\":[],\"explanation\":\"\"}}]}}。"},
                 ],
             )
         except Exception:
@@ -497,12 +516,14 @@ class AssessmentGraphRunner:
             }
             for item in wrong
         ]
+        learner_context = state.get("learner_context")
+        personalization = learner_context.prompt_summary() if learner_context is not None else {}
         try:
             raw = self.service.model_service.chat_completion(
                 state["user"],
                 [
                     {"role": "system", "content": "你是 AssessmentGraph 错因诊断 Agent。不得修改分数，只输出 JSON。"},
-                    {"role": "user", "content": f"诊断这些低分题={rows}。返回 {{\"diagnoses\":[{{\"question_id\":\"q1\",\"misconception\":\"\",\"missing_concepts\":[],\"recommended_action\":\"\",\"confidence\":0.0}}]}}。"},
+                    {"role": "user", "content": f"可信课程画像提示={personalization}。诊断这些低分题={rows}。返回 {{\"diagnoses\":[{{\"question_id\":\"q1\",\"misconception\":\"\",\"missing_concepts\":[],\"recommended_action\":\"\",\"confidence\":0.0}}]}}。"},
                 ],
             )
         except Exception:

@@ -68,6 +68,7 @@ class CourseAnswerService:
         warnings: list[str] | None = None,
         conversation_context: ConversationContext | None = None,
         plan_summary: str | None = None,
+        learner_context: dict[str, Any] | None = None,
     ) -> CourseAnswerGeneration:
         trace_id = make_trace_id()
         messages = self._build_home_messages(
@@ -78,6 +79,7 @@ class CourseAnswerService:
             warnings=warnings or [],
             conversation_context=conversation_context,
             plan_summary=plan_summary,
+            learner_context=learner_context,
         )
         try:
             content = self.model_settings_service.chat_completion(user=user, messages=messages)
@@ -98,6 +100,7 @@ class CourseAnswerService:
         warnings: list[str] | None = None,
         conversation_context: ConversationContext | None = None,
         plan_summary: str | None = None,
+        learner_context: dict[str, Any] | None = None,
     ) -> CourseAnswerStream:
         messages = self._build_home_messages(
             question=question,
@@ -107,6 +110,7 @@ class CourseAnswerService:
             warnings=warnings or [],
             conversation_context=conversation_context,
             plan_summary=plan_summary,
+            learner_context=learner_context,
         )
         trace_id = make_trace_id()
         try:
@@ -265,12 +269,18 @@ class CourseAnswerService:
         question: str,
         citations: list[dict[str, Any]],
         conversation_context: ConversationContext | None = None,
+        learner_context: dict[str, Any] | None = None,
     ) -> CourseAnswerGeneration:
         if not citations:
             return CourseAnswerGeneration(content="我先检查了课程资料，但还没有足够依据支撑这个问题。", trace_id=None)
 
         trace_id = make_trace_id()
-        messages = self._build_messages(question=question, citations=citations, conversation_context=conversation_context)
+        messages = self._build_messages(
+            question=question,
+            citations=citations,
+            conversation_context=conversation_context,
+            learner_context=learner_context,
+        )
         try:
             content = self.model_settings_service.chat_completion(user=user, messages=messages)
         except ModelNotConfiguredError:
@@ -286,6 +296,7 @@ class CourseAnswerService:
         question: str,
         citations: list[dict[str, Any]],
         conversation_context: ConversationContext | None = None,
+        learner_context: dict[str, Any] | None = None,
     ) -> CourseAnswerStream:
         if not citations:
             return CourseAnswerStream(
@@ -295,7 +306,12 @@ class CourseAnswerService:
             )
 
         trace_id = make_trace_id()
-        messages = self._build_messages(question=question, citations=citations, conversation_context=conversation_context)
+        messages = self._build_messages(
+            question=question,
+            citations=citations,
+            conversation_context=conversation_context,
+            learner_context=learner_context,
+        )
         try:
             tokens = self.model_settings_service.chat_completion_stream(user=user, messages=messages)
         except ModelNotConfiguredError:
@@ -325,6 +341,7 @@ class CourseAnswerService:
         warnings: list[str] | None = None,
         conversation_context: ConversationContext | None = None,
         plan_summary: str | None = None,
+        learner_context: dict[str, Any] | None = None,
     ) -> list[dict[str, str]]:
         citation_blocks: list[str] = []
         for index, citation in enumerate((citations or [])[:8], start=1):
@@ -378,6 +395,8 @@ class CourseAnswerService:
                         "\n".join(warning_lines) if warning_lines else "无。",
                         "安全规划摘要：",
                         str(plan_summary or "未启用独立规划。")[:1000],
+                        "可信学习画像摘要：",
+                        CourseAnswerService._learner_context_text(learner_context),
                         "请直接回答当前问题；如果信息不足，请明确说明缺少什么。",
                     ]
                 ),
@@ -390,6 +409,7 @@ class CourseAnswerService:
         question: str,
         citations: list[dict[str, Any]],
         conversation_context: ConversationContext | None = None,
+        learner_context: dict[str, Any] | None = None,
     ) -> list[dict[str, str]]:
         citation_blocks = []
         for index, citation in enumerate(citations[:5], start=1):
@@ -432,12 +452,20 @@ class CourseAnswerService:
                         f"学生问题：{question}",
                         "课程引用：",
                         "\n\n".join(citation_blocks),
+                        "可信课程画像摘要：",
+                        CourseAnswerService._learner_context_text(learner_context),
                         "请基于上述引用生成学习回答；不要在正文列出来源编号、匹配度或片段，来源证据由前端来源面板展示。",
                     ]
                 ),
             },
         )
         return messages
+
+    @staticmethod
+    def _learner_context_text(learner_context: dict[str, Any] | None) -> str:
+        if not learner_context:
+            return "暂无达到使用门槛的画像信息。"
+        return json.dumps(learner_context, ensure_ascii=False, separators=(",", ":"))[:1600]
 
     @staticmethod
     def _conversation_context_messages(conversation_context: ConversationContext | None) -> list[dict[str, str]]:

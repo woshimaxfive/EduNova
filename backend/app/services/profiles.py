@@ -62,6 +62,9 @@ class ProfileRepository(Protocol):
     def count_events_for_profile(self, profile_id: int | None) -> int:
         ...
 
+    def count_applied_events_for_profile(self, profile_id: int | None) -> int:
+        ...
+
     def flush(self) -> None:
         ...
 
@@ -106,6 +109,19 @@ class SqlAlchemyProfileRepository:
             or 0
         )
 
+    def count_applied_events_for_profile(self, profile_id: int | None) -> int:
+        if profile_id is None:
+            return 0
+        return int(
+            self.db.scalar(
+                select(func.count()).select_from(ProfileEvent).where(
+                    ProfileEvent.profile_id == profile_id,
+                    ProfileEvent.status == "applied",
+                )
+            )
+            or 0
+        )
+
     def flush(self) -> None:
         self.db.flush()
 
@@ -140,6 +156,8 @@ class ProfileService:
             next_question=next_question,
             next_question_dimension=next_question_dimension,
             evidence_summary=self._evidence_summary(events),
+            applied_version=self._count_applied_events(profile.id if profile is not None else None, events),
+            dimension_evidence_summary=self._dimension_evidence_summary(profile, events),
         )
 
     def update_by_chat(self, user: User, message: str) -> ProfileChatResponse:
@@ -240,7 +258,7 @@ class ProfileService:
             source_ref_type="chat_message",
             source_ref_id=user_message.id,
             status="candidate",
-            confidence_score=Decimal("0.78"),
+            confidence_score=Decimal("0.60"),
             proposal_json={"weak_points": [self._safe_citations(citation_json)[0].get("section_title")]} if self._safe_citations(citation_json) and self._safe_citations(citation_json)[0].get("section_title") else {},
         )
         self.repository.add_event(event)
@@ -523,3 +541,58 @@ class ProfileService:
             "applied_count": sum(1 for event in events if getattr(event, "status", None) == "applied"),
             "last_trace_id": next((event.agent_trace_id for event in events if getattr(event, "agent_trace_id", None)), None),
         }
+
+    def _count_applied_events(self, profile_id: int | None, events: list[ProfileEvent] | None = None) -> int:
+        counter = getattr(self.repository, "count_applied_events_for_profile", None)
+        if callable(counter):
+            return int(counter(profile_id))
+        if profile_id is None:
+            return 0
+        source_events = events or []
+        return sum(1 for event in source_events if getattr(event, "status", None) == "applied")
+
+    @classmethod
+    def _dimension_evidence_summary(
+        cls,
+        profile: StudentProfile | None,
+        events: list[ProfileEvent],
+    ) -> dict[str, dict[str, Any]]:
+        if profile is None:
+            return {}
+        profile_json = normalize_profile_json(profile.profile_json)
+        confidence = dict(getattr(profile, "dimension_confidence_json", None) or {})
+        summary: dict[str, dict[str, Any]] = {}
+        for dimension in PROFILE_QUESTION_ORDER:
+            value = profile_json.get(dimension)
+            if not value:
+                continue
+            normalized = cls._normalized_profile_value(value)
+            supporting = [
+                event
+                for event in events
+                if getattr(event, "status", None) == "applied"
+                and cls._normalized_profile_value((getattr(event, "proposal_json", None) or {}).get(dimension)) == normalized
+            ]
+            source_refs = {
+                (
+                    str(getattr(event, "source_type", None) or "legacy"),
+                    str(getattr(event, "source_ref_type", None) or ""),
+                    str(getattr(event, "source_ref_id", None) or getattr(event, "id", "legacy")),
+                )
+                for event in supporting
+            }
+            score = float(confidence.get(dimension, 0))
+            summary[dimension] = {
+                "confidence": round(score, 2),
+                "level": "trusted" if score >= 70 else "advisory" if score >= 50 else "low",
+                "source_count": len(source_refs),
+                "applied_event_count": len(supporting),
+                "latest_source_type": str(getattr(supporting[0], "source_type", None) or "legacy") if supporting else None,
+            }
+        return summary
+
+    @staticmethod
+    def _normalized_profile_value(value: Any) -> str:
+        if isinstance(value, list):
+            return "|".join(sorted(str(item).strip().lower() for item in value if str(item).strip()))
+        return " ".join(str(value or "").split()).lower()

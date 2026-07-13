@@ -2,6 +2,7 @@ import { ArrowClockwise, ArrowRight, CheckCircle, Circle, Sparkle, X } from "@ph
 
 import {
   type CourseWeaknessReviewAction,
+  type CourseLearnerContext,
   type CourseWeaknessReviewItem,
   type CourseWeaknessSummary
 } from "../../api/courses";
@@ -16,6 +17,7 @@ type CourseProgressDrawerProps = {
   steps: StudyStep[];
   traceId?: string | null;
   weaknessSummary?: CourseWeaknessSummary;
+  learnerContext?: CourseLearnerContext;
   weaknessItems: CourseWeaknessReviewItem[];
   updatingWeaknessItemId: string | null;
   learningStateError: boolean;
@@ -33,6 +35,7 @@ export function CourseProgressDrawer({
   steps,
   traceId,
   weaknessSummary,
+  learnerContext,
   weaknessItems,
   updatingWeaknessItemId,
   learningStateError,
@@ -81,6 +84,22 @@ export function CourseProgressDrawer({
           </div>
           <InlineFeedback message={refreshWarning} tone="warning" className="course-progress-sync-feedback" />
         </div>
+
+        <section className="course-progress-section" aria-label="课程画像摘要">
+          <div className="course-progress-section-heading">
+            <h3>课程画像</h3>
+            <span>总画像 + 本课程实时状态</span>
+          </div>
+          <dl className="course-progress-counts">
+            <div><dt>画像完整度</dt><dd>{Math.round(learnerContext?.completeness_score ?? 0)}%</dd></div>
+            <div><dt>可信维度</dt><dd>{learnerContext?.trusted_dimensions.length ?? 0}</dd></div>
+            <div><dt>课程掌握度</dt><dd>{Math.round(learnerContext?.mastery_average ?? 0)}%</dd></div>
+            <div><dt>课程弱点</dt><dd>{learnerContext?.active_weaknesses.length ?? 0}</dd></div>
+          </dl>
+          <p className="course-progress-empty">
+            总画像提供稳定的学习方式与目标，本课程掌握度、弱点和当前任务只在这门课内生效。
+          </p>
+        </section>
 
         <section className="course-progress-section" aria-label="A3 学习步骤">
           <div className="course-progress-section-heading">

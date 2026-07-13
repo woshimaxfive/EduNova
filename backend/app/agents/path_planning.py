@@ -12,6 +12,7 @@ from backend.app.models import LearningPath, LearningTask, User
 from backend.app.schemas.profiles import normalize_profile_json
 from backend.app.services.paths import PathReplanResult, PathService, PlannedTask
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
+from backend.app.services.learner_context import context_service_from_repository
 
 
 class PathPlanningState(TypedDict, total=False):
@@ -26,6 +27,7 @@ class PathPlanningState(TypedDict, total=False):
     previous_tasks: list[LearningTask]
     course: Any
     profile_summary: dict[str, Any]
+    learner_context: Any
     knowledge_points: list[Any]
     weaknesses: list[Any]
     resources: list[Any]
@@ -103,9 +105,18 @@ class PathPlanningGraphRunner:
 
     def _profile_node(self, state: PathPlanningState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            context_service = context_service_from_repository(self.service.repository)
+            if context_service is not None:
+                learner_context = context_service.course_context(int(state["user_id"]), int(state["course_id"]))
+                return (
+                    {"profile_summary": learner_context.prompt_summary(), "learner_context": learner_context},
+                    "已读取可信总画像与当前课程学习状态。",
+                    "completed",
+                    learner_context.trace_metadata(),
+                )
             profile = self.service.repository.get_profile(int(state["user_id"]))
             summary = normalize_profile_json(profile.profile_json if profile is not None else None)
-            return {"profile_summary": summary}, "已读取安全画像摘要。", "completed", {}
+            return {"profile_summary": summary}, "已读取安全画像摘要。", "completed", {"profile_context_used": bool(profile)}
 
         return self._run_node(state, "profile", 1, "读取用户级画像摘要", work)
 
@@ -294,6 +305,16 @@ class PathPlanningGraphRunner:
                         "generation_mode": state.get("generation_mode", "deterministic_source"),
                         "review_mode": state.get("review_mode", "rules_only"),
                         "review_result": state.get("review_result", {}),
+                        "profile_applied_version": (
+                            state["learner_context"].global_context.profile_applied_version
+                            if state.get("learner_context") is not None
+                            else 0
+                        ),
+                        "course_context_hash": (
+                            state["learner_context"].context_hash
+                            if state.get("learner_context") is not None
+                            else "legacy"
+                        ),
                         "personalization": {
                             "learning_preference": safe_text(profile.get("learning_preference"), limit=80),
                             "knowledge_foundation": safe_text(profile.get("knowledge_foundation"), limit=80),
@@ -396,7 +417,9 @@ class PathPlanningGraphRunner:
                         "content": (
                             f"{instruction} 画像目标={safe_text(state.get('profile_summary', {}).get('learning_goal'), limit=120)}；"
                             f"学习基础={safe_text(state.get('profile_summary', {}).get('knowledge_foundation'), limit=120)}；"
-                            f"学习偏好={safe_text(state.get('profile_summary', {}).get('learning_preference'), limit=120)}。"
+                            f"学习偏好={safe_text(state.get('profile_summary', {}).get('learning_preference'), limit=120)}；"
+                            f"理解习惯={safe_text(state.get('profile_summary', {}).get('cognitive_style'), limit=120)}；"
+                            f"学习节奏={safe_text(state.get('profile_summary', {}).get('learning_pace'), limit=120)}。"
                             f"候选任务={candidates}。"
                             "返回 {\"ordered_task_keys\":[\"...\"],\"rationales\":{\"task_key\":\"简短理由\"}}。"
                         ),

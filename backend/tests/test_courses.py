@@ -791,7 +791,8 @@ def test_learning_state_promotes_course_question_candidate_to_pending_review_ite
     assert created_item.recommended_resource_ids == []
     assert created_item.next_review_at is None
     assert state["profile_overlay"]["learning_goal"] == "期末前掌握搜索算法"
-    assert state["profile_overlay"]["weak_points"] == ["链式法则"]
+    assert state["profile_overlay"]["weak_points"] == []
+    assert state["learner_context"]["active_weaknesses"] == []
     assert state["weakness_summary"]["candidate_event_count"] == 1
     assert state["weakness_summary"]["pending_count"] == 1
     assert state["weakness_summary"]["latest_evidence_at"] == "2026-07-05T08:30:00Z"

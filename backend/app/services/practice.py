@@ -8,6 +8,7 @@ from sqlalchemy import case, select
 from sqlalchemy.orm import Session
 
 from backend.app.agents.runtime import AgentTraceRecorder
+from backend.app.services.learner_context import context_service_from_repository
 from backend.app.models import (
     Course,
     GeneratedResource,
@@ -305,11 +306,23 @@ class PracticeService:
                 return "easy"
             if average < 75:
                 return "medium"
+            context_service = context_service_from_repository(self.repository)
+            global_context = context_service.global_context(user.id) if context_service is not None else None
             profile = self.repository.get_profile(user.id)
-            foundation = str((profile.profile_json if profile is not None else {}).get("knowledge_foundation") or "")
+            foundation = str(
+                global_context.trusted_value("knowledge_foundation")
+                if global_context is not None
+                else (profile.profile_json if profile is not None else {}).get("knowledge_foundation") or ""
+            )
             return "medium" if any(word in foundation for word in ("入门", "薄弱", "刚开始")) else "hard"
+        context_service = context_service_from_repository(self.repository)
+        global_context = context_service.global_context(user.id) if context_service is not None else None
         profile = self.repository.get_profile(user.id)
-        foundation = str((profile.profile_json if profile is not None else {}).get("knowledge_foundation") or "")
+        foundation = str(
+            global_context.trusted_value("knowledge_foundation")
+            if global_context is not None
+            else (profile.profile_json if profile is not None else {}).get("knowledge_foundation") or ""
+        )
         if any(word in foundation for word in ("入门", "薄弱", "刚开始")):
             return "easy"
         if any(word in foundation for word in ("扎实", "熟练", "基础较稳")):

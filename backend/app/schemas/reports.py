@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pydantic import BaseModel
 
 from backend.app.models import AssessmentReport
+from backend.app.schemas.personalization import PersonalizationFreshnessResponse
 
 
 class GenerateReportRequest(BaseModel):
@@ -20,6 +21,7 @@ class ReportEnvelope(BaseModel):
     agent_trace_id: str | None = None
     score: int | None
     report: dict
+    personalization: PersonalizationFreshnessResponse | None = None
     created_at: str | None
 
 
@@ -48,11 +50,15 @@ def empty_report(course_id: int) -> ReportEnvelope:
             "review_queue_updates": [],
             "profile_changes": [],
         },
+        personalization=None,
         created_at=None,
     )
 
 
-def report_to_api(report: AssessmentReport) -> ReportEnvelope:
+def report_to_api(
+    report: AssessmentReport,
+    personalization: PersonalizationFreshnessResponse | None = None,
+) -> ReportEnvelope:
     return ReportEnvelope(
         id=str(report.id),
         course_id=str(report.course_id),
@@ -61,5 +67,6 @@ def report_to_api(report: AssessmentReport) -> ReportEnvelope:
         agent_trace_id=getattr(report, "agent_trace_id", None),
         score=int(report.score) if report.score is not None else None,
         report=report.report_json or {},
+        personalization=personalization,
         created_at=iso_timestamp(report.created_at),
     )

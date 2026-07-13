@@ -31,6 +31,7 @@ class ProfileState(TypedDict, total=False):
     deterministic_updates: dict[str, Any]
     proposed_updates: dict[str, Any]
     proposal_confidence: dict[str, float]
+    dimension_evidence_scores: dict[str, float]
     uncertain_dimensions: list[str]
     unresolved_hints: list[str]
     extraction_mode: str
@@ -131,7 +132,27 @@ class ProfileGraphRunner:
                 )
                 self.service.repository.add_profile(profile)
                 self.service.repository.flush()
-            return {"profile": profile}, "已读取用户级画像和安全证据摘要。", "completed", {}
+            profile_values = self.service._empty_profile()
+            profile_values.update(profile.profile_json or {})
+            dimension_confidence = profile.dimension_confidence_json or {}
+            events = self.service.repository.list_events(int(state["user_id"]), 100)
+            metadata = {
+                "profile_applied_version": self.service._count_applied_events(profile.id, events),
+                "profile_completeness": round(
+                    sum(1 for key in profile_values if bool(profile_values.get(key))) / len(profile_values) * 100,
+                    2,
+                ),
+                "trusted_dimension_count": sum(
+                    1 for key, value in dimension_confidence.items()
+                    if bool(profile_values.get(key)) and isinstance(value, (int, float)) and value >= 70
+                ),
+                "advisory_dimension_count": sum(
+                    1 for key, value in dimension_confidence.items()
+                    if bool(profile_values.get(key)) and isinstance(value, (int, float)) and 50 <= value < 70
+                ),
+                "profile_context_used": any(bool(value) for value in profile_values.values()),
+            }
+            return {"profile": profile}, "已读取用户级画像和安全证据摘要。", "completed", metadata
 
         return self._run_node(state, "collect_context", 1, "读取当前画像与证据计数", work)
 
@@ -139,7 +160,7 @@ class ProfileGraphRunner:
         def work():
             if state.get("operation") == "learning_signal":
                 deterministic = self._sanitize_updates(state.get("suggested_updates", {}))
-                confidence = {key: 0.78 for key in deterministic}
+                confidence = {key: 0.60 for key in deterministic}
                 return {
                     "deterministic_updates": deterministic,
                     "proposed_updates": deterministic,
@@ -154,7 +175,7 @@ class ProfileGraphRunner:
             message = str(state.get("message") or "")
             deterministic = self._sanitize_updates(self.service._extract_profile_updates(message))
             proposed = dict(deterministic)
-            confidence = {key: 0.72 for key in proposed}
+            confidence = {key: 0.70 for key in proposed}
             uncertain_dimensions = self.service._uncertain_profile_dimensions(message, deterministic)
             hints = self.service._profile_dimension_hints(message)
             model_used = False
@@ -180,7 +201,7 @@ class ProfileGraphRunner:
                         model_updates, model_confidence, model_uncertain = parsed
                         for key, value in model_updates.items():
                             proposed[key] = value
-                            confidence[key] = min(0.95, model_confidence.get(key, 0.72))
+                            confidence[key] = min(0.90, max(0.55, model_confidence.get(key, 0.70)))
                         uncertain_dimensions.extend(
                             key for key in model_uncertain if key in model_updates
                         )
@@ -241,10 +262,15 @@ class ProfileGraphRunner:
                     if event.status != "candidate" or self._normalized_value(proposal.get(dimension)) != normalized:
                         continue
                     refs.add((str(event.source_ref_type or ""), int(event.source_ref_id or 0)))
-                    if event.confidence_score is not None:
+                    evidence = getattr(event, "evidence_json", None) or {}
+                    extraction_scores = evidence.get("dimension_extraction_confidence")
+                    prior_confidence = extraction_scores.get(dimension) if isinstance(extraction_scores, dict) else None
+                    if isinstance(prior_confidence, (int, float)):
+                        confidence_values.append(float(prior_confidence))
+                    elif event.confidence_score is not None:
                         confidence_values.append(float(event.confidence_score))
                 aggregate = sum(confidence_values) / max(1, len(confidence_values))
-                if len(refs) >= 2 and aggregate >= 0.75:
+                if len(refs) >= 2 and aggregate >= 0.60:
                     applied[dimension] = value
             status = "completed" if applied else "warning"
             return {"applied_updates": applied}, (
@@ -308,6 +334,7 @@ class ProfileGraphRunner:
         def work():
             repaired = self._sanitize_updates(state.get("deterministic_updates", {}))
             applied = {key: value for key, value in state.get("applied_updates", {}).items() if key in repaired}
+            baseline = 0.60 if state.get("operation") == "learning_signal" else 0.70
             review = {
                 "review_status": "passed",
                 "confidence": 0.64,
@@ -318,6 +345,7 @@ class ProfileGraphRunner:
             return {
                 "proposed_updates": repaired,
                 "applied_updates": applied,
+                "proposal_confidence": {key: baseline for key in repaired},
                 "review_result": review,
                 "repair_count": repair_count,
                 "generation_mode": "deterministic_source",
@@ -330,19 +358,28 @@ class ProfileGraphRunner:
     def _apply_node(self, state: ProfileState) -> dict[str, Any]:
         def work():
             applied = dict(state.get("applied_updates", {}))
+            proposed = dict(state.get("proposed_updates", {}))
             profile = state["profile"]
+            dimension_evidence_scores = self._dimension_evidence_scores(state, proposed)
             if applied:
                 profile.profile_json = self.service._merge_profile_json(profile.profile_json, applied)
                 dimension_confidence = dict(getattr(profile, "dimension_confidence_json", None) or {})
                 for key in applied:
-                    proposed_confidence = float(state.get("proposal_confidence", {}).get(key, 0.72)) * 100
-                    dimension_confidence[key] = round(max(float(dimension_confidence.get(key, 0)), proposed_confidence), 2)
+                    dimension_confidence[key] = round(dimension_evidence_scores.get(key, 0.0) * 100, 2)
                 profile.dimension_confidence_json = dimension_confidence
                 values = [float(value) for value in dimension_confidence.values() if isinstance(value, (int, float))]
                 profile.confidence_score = Decimal(str(round(sum(values) / len(values), 2))) if values else Decimal("0.00")
                 profile.updated_reason = self.service._change_summary(self.service._changed_labels(applied))
                 profile.updated_at = datetime.now(UTC)
-            return {"profile": profile}, f"已应用 {len(applied)} 个画像维度。", "completed" if applied else "warning", {"applied_count": len(applied)}
+            return {
+                "profile": profile,
+                "dimension_evidence_scores": dimension_evidence_scores,
+            }, f"已应用 {len(applied)} 个画像维度。", "completed" if applied else "warning", {
+                "applied_count": len(applied),
+                "scored_dimension_count": len(dimension_evidence_scores),
+                "source_factor": self._source_factor(state),
+                "review_factor": self._review_factor(state),
+            }
 
         return self._run_node(state, "apply", 6, "更新长期画像与逐维可信度", work)
 
@@ -364,6 +401,18 @@ class ProfileGraphRunner:
                 "parse_status": state.get("parse_status", "not_applicable"),
                 "repair_count": int(state.get("repair_count", 0)),
                 "review_mode": state.get("review_mode", "rules_only"),
+                "source_factor": self._source_factor(state),
+                "review_factor": self._review_factor(state),
+                "dimension_evidence_scores": {
+                    key: round(float(value), 4)
+                    for key, value in state.get("dimension_evidence_scores", {}).items()
+                    if key in proposed
+                },
+                "dimension_extraction_confidence": {
+                    key: round(float(value), 4)
+                    for key, value in state.get("proposal_confidence", {}).items()
+                    if key in proposed
+                },
                 "trace_id": state["trace_id"],
                 "parent_trace_id": state.get("parent_trace_id"),
             },
@@ -372,7 +421,11 @@ class ProfileGraphRunner:
             source_ref_type=state.get("source_ref_type"),
             source_ref_id=state.get("source_ref_id"),
             status="applied" if applied else "candidate",
-            confidence_score=Decimal(str(round(sum(state.get("proposal_confidence", {}).values()) / max(1, len(state.get("proposal_confidence", {}))), 2))),
+            confidence_score=Decimal(str(round(
+                sum(state.get("dimension_evidence_scores", {}).values())
+                / max(1, len(state.get("dimension_evidence_scores", {}))),
+                2,
+            ))),
             proposal_json=proposed,
             applied_at=datetime.now(UTC) if applied else None,
         )
@@ -406,6 +459,8 @@ class ProfileGraphRunner:
                 next_question=next_question,
                 next_question_dimension=next_question_dimension,
                 evidence_summary=summary,
+                applied_version=self.service._count_applied_events(profile.id, events),
+                dimension_evidence_summary=self.service._dimension_evidence_summary(profile, events),
             ),
             event=event_to_api(event),
         )
@@ -495,15 +550,78 @@ class ProfileGraphRunner:
         confidence: dict[str, float] = {}
         for key in updates:
             try:
-                value = float(raw_confidence.get(key, 0.72)) if isinstance(raw_confidence, dict) else 0.72
+                value = float(raw_confidence.get(key, 0.70)) if isinstance(raw_confidence, dict) else 0.70
             except (TypeError, ValueError):
-                value = 0.72
-            confidence[key] = min(1.0, max(0.0, value))
+                value = 0.70
+            confidence[key] = min(0.90, max(0.55, value))
         uncertain = payload.get("uncertain_dimensions")
         uncertain_dimensions = [
             key for key in uncertain if isinstance(key, str) and key in updates
         ] if isinstance(uncertain, list) else []
         return updates, confidence, list(dict.fromkeys(uncertain_dimensions))
+
+    def _dimension_evidence_scores(
+        self,
+        state: ProfileState,
+        applied: dict[str, Any],
+    ) -> dict[str, float]:
+        if not applied:
+            return {}
+        source_factor = self._source_factor(state)
+        review_factor = self._review_factor(state)
+        current_ref = (
+            str(state.get("source_type") or ""),
+            str(state.get("source_ref_type") or ""),
+            str(state.get("source_ref_id") or state.get("trace_id") or "current"),
+        )
+        previous_events = self.service.repository.list_events(int(state["user_id"]), 100)
+        scores: dict[str, float] = {}
+        for dimension, value in applied.items():
+            normalized = self._normalized_value(value)
+            current_strength = min(
+                0.95,
+                max(0.0, float(state.get("proposal_confidence", {}).get(dimension, 0.70)))
+                * source_factor
+                * review_factor,
+            )
+            strengths = [current_strength]
+            refs = {current_ref}
+            for event in previous_events:
+                proposal = getattr(event, "proposal_json", None) or {}
+                if (
+                    getattr(event, "status", None) != "applied"
+                    or self._normalized_value(proposal.get(dimension)) != normalized
+                ):
+                    continue
+                evidence = getattr(event, "evidence_json", None) or {}
+                per_dimension = evidence.get("dimension_evidence_scores")
+                raw_score = per_dimension.get(dimension) if isinstance(per_dimension, dict) else None
+                if not isinstance(raw_score, (int, float)) and event.confidence_score is not None:
+                    raw_score = float(event.confidence_score)
+                if isinstance(raw_score, (int, float)):
+                    strengths.append(min(0.95, max(0.0, float(raw_score))))
+                refs.add((
+                    str(getattr(event, "source_type", None) or "legacy"),
+                    str(getattr(event, "source_ref_type", None) or ""),
+                    str(getattr(event, "source_ref_id", None) or getattr(event, "id", "legacy")),
+                ))
+            bonus = 0.05 * min(2, max(0, len(refs) - 1))
+            scores[dimension] = round(min(0.95, max(strengths) + bonus), 4)
+        return scores
+
+    @staticmethod
+    def _source_factor(state: ProfileState) -> float:
+        return {
+            "profile_chat": 1.0,
+            "practice_assessment": 0.95,
+            "course_question": 0.75,
+        }.get(str(state.get("source_type") or ""), 0.70)
+
+    @staticmethod
+    def _review_factor(state: ProfileState) -> float:
+        if state.get("parse_status") == "review_fallback":
+            return 0.80
+        return 1.0 if state.get("review_mode") == "model_and_rules" else 0.90
 
     @staticmethod
     def _parse_json_candidate(raw: str) -> dict[str, Any] | None:

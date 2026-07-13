@@ -171,9 +171,29 @@ export type CourseEvidenceSummary = {
   latest_section_title: string | null;
 };
 
+export type CourseLearnerContext = {
+  profile_applied_version: number;
+  context_hash: string;
+  completeness_score: number;
+  evidence_confidence_score: number;
+  trusted_dimensions: string[];
+  advisory_dimensions: string[];
+  course_goal: string;
+  foundation_summary: string;
+  active_weaknesses: string[];
+  mastery_average: number;
+  current_task_title: string | null;
+  recent_practice_score: number | null;
+  learning_preference: string;
+  cognitive_style: string;
+  learning_pace: string;
+  motivation_interest: string;
+};
+
 export type CourseLearningState = {
   course_id: string;
   profile_overlay: CourseProfileOverlay;
+  learner_context?: CourseLearnerContext;
   weakness_summary: CourseWeaknessSummary;
   weakness_review_queue: CourseWeaknessReviewItem[];
   path_summary: CoursePathSummary;

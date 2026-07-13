@@ -28,7 +28,17 @@ export type StudentProfileResponse = {
   has_profile: boolean;
   profile_json: ProfileJson;
   confidence_score: number;
+  completeness_score?: number;
+  evidence_confidence_score?: number;
+  applied_version?: number;
   dimension_confidence?: Partial<Record<keyof ProfileJson, number>>;
+  dimension_evidence_summary?: Partial<Record<keyof ProfileJson, {
+    confidence: number;
+    level: "trusted" | "advisory" | "low";
+    source_count: number;
+    applied_event_count: number;
+    latest_source_type: string | null;
+  }>>;
   evidence_summary?: {
     candidate_count?: number;
     applied_count?: number;

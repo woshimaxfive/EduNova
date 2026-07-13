@@ -85,6 +85,24 @@ const emptyLearningState = {
     knowledge_foundation: "",
     weak_points: []
   },
+  learner_context: {
+    profile_applied_version: 3,
+    context_hash: "ctx-course-808",
+    completeness_score: 50,
+    evidence_confidence_score: 74,
+    trusted_dimensions: ["learning_goal", "learning_preference"],
+    advisory_dimensions: ["learning_pace"],
+    course_goal: "掌握启发式搜索",
+    foundation_summary: "机器学习入门；当前课程掌握度约 35%",
+    active_weaknesses: [],
+    mastery_average: 35,
+    current_task_title: null,
+    recent_practice_score: null,
+    learning_preference: "图解和代码",
+    cognitive_style: "",
+    learning_pace: "每天 45 分钟",
+    motivation_interest: ""
+  },
   weakness_summary: {
     candidate_event_count: 0,
     pending_count: 0,
@@ -1171,6 +1189,8 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.queryByRole("region", { name: "A3 学习步骤" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /学习进度/ }));
     expect(await screen.findByRole("dialog", { name: "学习进度" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "学习进度" })).toHaveTextContent("课程画像");
+    expect(screen.getByRole("dialog", { name: "学习进度" })).toHaveTextContent("总画像 + 本课程实时状态");
     expect(
       screen.getByText(/先确认问答或练习识别出的薄弱点/),
     ).toBeInTheDocument();

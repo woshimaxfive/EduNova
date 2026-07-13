@@ -86,6 +86,13 @@ export function StudioArtifactCanvas({
             className="studio-artifact-warning"
           />
         ) : null}
+        {resource.personalization?.status === "stale" ? (
+          <InlineFeedback
+            message="学习画像已变化，可重新生成以应用新的个性化依据。"
+            tone="warning"
+            className="studio-artifact-warning"
+          />
+        ) : null}
         <div className="studio-artifact-content">
           <ResourceRenderer resource={resource} />
         </div>

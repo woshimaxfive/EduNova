@@ -1,6 +1,7 @@
 import { apiClient } from "./client";
 import { type ApiEnvelope, type ApiListEnvelope } from "../types/api";
 import { type ExportJob } from "./exports";
+import type { PersonalizationFreshness } from "./personalization";
 
 export const RESOURCE_ENDPOINTS = {
   generate: "/resources/generate",
@@ -137,6 +138,8 @@ export type GeneratedResourceContent = {
     model_enhancement_failed?: boolean;
     review_mode?: "model_and_rules" | "rules_only" | string;
     repair_count?: number;
+    profile_applied_version?: number;
+    course_context_hash?: string;
   };
   [key: string]: unknown;
 };
@@ -153,6 +156,7 @@ export type GeneratedResource = {
   review_status: ResourceReviewStatus;
   confidence_score: number | null;
   agent_trace_id: string | null;
+  personalization?: PersonalizationFreshness | null;
   created_at: string;
   updated_at: string;
 };

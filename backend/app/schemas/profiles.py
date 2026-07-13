@@ -63,7 +63,11 @@ class StudentProfileResponse(BaseModel):
     has_profile: bool
     profile_json: dict[str, Any]
     confidence_score: float
+    completeness_score: float = 0
+    evidence_confidence_score: float = 0
+    applied_version: int = 0
     dimension_confidence: dict[str, float] = Field(default_factory=dict)
+    dimension_evidence_summary: dict[str, dict[str, Any]] = Field(default_factory=dict)
     evidence_summary: dict[str, int | str | None] = Field(default_factory=dict)
     updated_reason: str | None
     updated_at: str | None
@@ -120,6 +124,8 @@ def profile_to_api(
     *,
     next_question_dimension: ProfileDimension | None = None,
     evidence_summary: dict[str, int | str | None] | None = None,
+    applied_version: int = 0,
+    dimension_evidence_summary: dict[str, dict[str, Any]] | None = None,
 ) -> StudentProfileResponse:
     if profile is None:
         return StudentProfileResponse(
@@ -128,7 +134,11 @@ def profile_to_api(
             has_profile=False,
             profile_json=empty_profile_json(),
             confidence_score=0,
+            completeness_score=0,
+            evidence_confidence_score=0,
+            applied_version=0,
             dimension_confidence={},
+            dimension_evidence_summary={},
             evidence_summary=evidence_summary or {},
             updated_reason=None,
             updated_at=None,
@@ -136,17 +146,28 @@ def profile_to_api(
             next_question_dimension=next_question_dimension,
         )
 
+    normalized = normalize_profile_json(profile.profile_json)
+    completed_dimensions = sum(
+        1
+        for key in PROFILE_DIMENSIONS
+        if (bool(normalized[key]) if key != "weak_points" else bool(normalized["weak_points"]))
+    )
+    evidence_confidence = float(profile.confidence_score or 0)
     return StudentProfileResponse(
         id=str(profile.id),
         version=version,
         has_profile=True,
-        profile_json=normalize_profile_json(profile.profile_json),
-        confidence_score=float(profile.confidence_score or 0),
+        profile_json=normalized,
+        confidence_score=evidence_confidence,
+        completeness_score=round(completed_dimensions / len(PROFILE_DIMENSIONS) * 100, 2),
+        evidence_confidence_score=evidence_confidence,
+        applied_version=applied_version,
         dimension_confidence={
             key: float(value)
             for key, value in (getattr(profile, "dimension_confidence_json", None) or {}).items()
             if key in PROFILE_DIMENSIONS and isinstance(value, (int, float))
         },
+        dimension_evidence_summary=dimension_evidence_summary or {},
         evidence_summary=evidence_summary or {},
         updated_reason=profile.updated_reason,
         updated_at=_iso_timestamp(profile.updated_at),

@@ -1115,6 +1115,7 @@ export function CourseSpacePage() {
               steps={courseStudySteps}
               traceId={fallbackCourse?.agent_trace_id}
               weaknessSummary={weaknessSummary}
+              learnerContext={learningState?.learner_context}
               weaknessItems={weaknessItems}
               updatingWeaknessItemId={updatingWeaknessItemId}
               learningStateError={learningStateQuery.isError && learningStateQuery.data === undefined}

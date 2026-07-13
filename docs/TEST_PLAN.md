@@ -889,3 +889,13 @@ docker compose down
 - `python -m backend.evals.run --mode offline` 使用九条 Graph 固定中文案例验证引用白名单、敏感输出、必要结构和确定性数字；标准测试不访问网络。
 - `scripts/run_ai_eval.ps1` 只有在 `EDUNOVA_EVAL_ALLOW_NETWORK=1` 且显式提供评测 Base URL/模型后才调用真实模型，报告写入忽略目录 `output/ai-eval`。
 - Docker 验证迁移、Redis 并发/熔断状态、AIJob 取消与重试；`agent-browser` 验证主页、课程空间、任务面板和轨迹摘要在桌面与 390px 下可恢复。
+
+## 19. 画像可信度与全闭环联动验收
+
+- 只填写两个非空维度时完整度为 25%；证据可信度只平均已有维度，兼容 `confidence_score` 与其一致。
+- 覆盖模型省略置信度、规则显式/隐式基准、来源与审核系数、独立来源奖励、候选不计分、矛盾修改和可信度下降。
+- 两个独立隐式来源且提案聚合置信度至少 0.60 才可形成已应用判断；未达门槛必须保留候选事件，应用后低于 70% 的维度仍不得控制下游难度或任务状态。
+- 课程 A 的弱点不得进入课程 B；课程目标优先当前路径目标，兼容 `profile_overlay` 与 `learner_context` 必须来自同一实时上下文。
+- 九条 Graph trace 断言 `profile_applied_version`、可信维度数量、完整度和上下文使用状态，同时禁止画像原文、完整作答和模型输入进入 metadata。
+- 画像应用变化后资源、路径、报告为 `stale`，候选事件不触发；旧成果为 `legacy`，重新生成或更新后恢复 `current`。
+- 前端验证双指标、课程画像摘要、三类成果新鲜度提示和画像更新后的课程闭环缓存失效。

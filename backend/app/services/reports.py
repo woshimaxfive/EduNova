@@ -19,6 +19,8 @@ from backend.app.models import (
     WeaknessReviewItem,
 )
 from backend.app.schemas.reports import ReportEnvelope, empty_report, report_to_api
+from backend.app.schemas.personalization import PersonalizationFreshnessResponse
+from backend.app.services.learner_context import context_service_from_repository
 
 
 class ReportNotFoundError(Exception):
@@ -173,7 +175,21 @@ class ReportService:
         report = self.repository.get_latest_report(user.id, course.id)
         if report is None:
             return empty_report(course.id)
-        return report_to_api(report)
+        return report_to_api(report, self._report_freshness(user.id, report))
+
+    def _report_freshness(
+        self,
+        user_id: int,
+        report: AssessmentReport,
+    ) -> PersonalizationFreshnessResponse | None:
+        context_service = context_service_from_repository(self.repository)
+        if context_service is None:
+            return None
+        freshness = context_service.freshness(
+            report.report_json or {},
+            context_service.global_context(user_id).profile_applied_version,
+        )
+        return PersonalizationFreshnessResponse(**freshness.to_dict())
 
     def _require_course(self, user: User, course_id: int) -> Course:
         course = self.repository.get_course_for_user(user.id, course_id)
@@ -226,7 +242,7 @@ class ReportService:
                 "learning_count": max(len(points) - len(weakness_rows), 0),
             },
             "weakness_list": weakness_rows,
-            "profile_changes": ["练习结果可作为后续画像证据，但本阶段不自动改写用户长期画像。"],
+            "profile_changes": [],
             "evidence_refs": [
                 {
                     "practice_answer_id": str(answer.id),

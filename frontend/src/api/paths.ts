@@ -1,6 +1,7 @@
 import { apiClient } from "./client";
 import { type ApiEnvelope } from "../types/api";
 import { type CourseResourceBrief } from "./courses";
+import type { PersonalizationFreshness } from "./personalization";
 
 export const PATH_ENDPOINTS = {
   generate: "/paths/generate",
@@ -26,6 +27,7 @@ export type LearningPath = {
   status: "active" | "archived" | string;
   agent_trace_id?: string | null;
   plan_json: Record<string, unknown>;
+  personalization?: PersonalizationFreshness | null;
   created_at: string;
   updated_at: string;
 };

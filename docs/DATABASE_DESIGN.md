@@ -899,6 +899,9 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 24. Phase 14 后，`practice_sessions.assessment_json` 保存可刷新恢复的闭环摘要；弱点通过来源引用精确绑定错题，但不保存原始模型输入。
 25. Phase 15 后，画像隐式信号必须通过独立来源与置信度门控；课程结构保存来源覆盖和真实知识点先修 ID；练习草稿只能写当前用户未完成会话。
 26. 持续路径收敛后，练习只触发已有普通路径的 `PathPlanningGraph` 重排；`assessment_json` 中历史冲刺键可继续存在，但响应和生产流程不再消费。
+27. 画像可信度 2.0 继续复用 `student_profiles.dimension_confidence_json` 和 `profile_events.evidence_json`：逐维证据分数、来源系数与审核摘要保存在安全 JSON 中，不新增迁移。
+28. 课程画像不是持久化实体。`CourseLearnerContext` 在请求时组合总画像、当前课程掌握度、弱点、路径、练习、资源和报告，不新增 `course_profiles` 表，也不复制完整画像。
+29. 新生成资源、路径和报告在既有 JSON metadata 中保存 `profile_applied_version` 与 `course_context_hash`；旧数据缺失时按 `legacy` 兼容，画像版本落后时按 `stale` 提示用户主动更新。
 
 当前已验证：
 

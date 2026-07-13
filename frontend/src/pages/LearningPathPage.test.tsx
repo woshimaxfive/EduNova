@@ -74,6 +74,12 @@ const activePathResponse = {
       generation_mode: "model_enhanced",
       review_mode: "model_and_rules"
     },
+    personalization: {
+      status: "stale",
+      profile_applied_version: 2,
+      current_profile_applied_version: 3,
+      reason: "学习画像已变化"
+    },
     created_at: "2026-07-05T09:00:00Z",
     updated_at: "2026-07-05T09:00:00Z"
   },
@@ -168,6 +174,7 @@ describe("LearningPathPage", () => {
     expect(screen.getByText("个性化学习路径")).toBeInTheDocument();
     expect(screen.queryByText("期末冲刺")).not.toBeInTheDocument();
     expect(screen.getByText("由练习结果更新 · 保留 2 个既有任务")).toBeInTheDocument();
+    expect(screen.getByText("学习画像已变化，可更新学习路径以应用新的安排依据。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "路径详情" }));
     const drawer = screen.getByRole("dialog", { name: "路径详情" });

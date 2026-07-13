@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -251,6 +251,9 @@ describe("student core pages", () => {
                 motivation_interest: "提升 AI 实践能力"
               },
               confidence_score: 72,
+              completeness_score: 100,
+              evidence_confidence_score: 72,
+              applied_version: 5,
               dimension_confidence: {
                 major_background: 72,
                 knowledge_foundation: 68,
@@ -353,6 +356,9 @@ describe("student core pages", () => {
     expect(screen.getByRole("region", { name: "动态学习画像工作台" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "学习画像" })).toHaveClass("visually-hidden");
     expect(screen.getByRole("heading", { name: "动态学习画像" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/完整度/)).toHaveTextContent("完整度 100% · 证据可信度 72%");
+    });
     expect(screen.getByRole("complementary", { name: "八维学习画像" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "画像动态" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "八维画像可信度雷达图" })).toBeInTheDocument();

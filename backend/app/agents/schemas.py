@@ -14,6 +14,8 @@ class AgentState(TypedDict, total=False):
     intent: str
     profile: dict[str, Any]
     profile_summary: dict[str, Any]
+    learner_context: Any
+    learner_context_metadata: dict[str, Any]
     retrieved_chunks: list[dict[str, Any]]
     citations: list[dict[str, Any]]
     diagnosis: dict[str, Any]

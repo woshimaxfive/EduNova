@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import { type ApiEnvelope } from "../types/api";
+import type { PersonalizationFreshness } from "./personalization";
 
 export const REPORT_ENDPOINTS = {
   generate: "/reports/generate",
@@ -65,6 +66,7 @@ export type AssessmentReport = {
   score: number | null;
   report: AssessmentReportContent;
   created_at: string | null;
+  personalization?: PersonalizationFreshness | null;
 };
 
 export async function generateReport(payload: GenerateReportRequest) {

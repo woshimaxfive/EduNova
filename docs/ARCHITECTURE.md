@@ -620,3 +620,20 @@ http://localhost:8080/api/health
 6. 示例课程和确定性 fallback 能稳定跑通核心链路。
 7. Docker Compose 能启动核心服务。
 8. 主要设计能在答辩时用图和日志解释清楚。
+
+## 14. 画像上下文架构
+
+```mermaid
+flowchart LR
+  P["用户总画像"] --> C["CourseLearnerContext 实时派生"]
+  M["课程掌握度"] --> C
+  W["课程弱点"] --> C
+  T["当前路径与练习"] --> C
+  R["资源与报告状态"] --> C
+  C --> G["九条生产 Graph"]
+  G --> A["带画像版本的资源、路径、报告"]
+```
+
+- `student_profiles` 仍是唯一长期画像来源；不创建 `course_profiles`，避免课程状态复制后失真。
+- `CourseLearnerContext` 只携带通过可信度门槛的安全摘要，并生成 `context_hash`；课程弱点始终按 `course_id` 隔离。
+- 资源、路径和报告使用画像应用版本判断 `current/stale/legacy`。画像变化不自动重算成果，用户从原有入口主动更新。

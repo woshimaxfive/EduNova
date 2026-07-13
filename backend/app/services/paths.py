@@ -25,6 +25,8 @@ from backend.app.schemas.paths import (
     task_to_api,
     path_to_api,
 )
+from backend.app.schemas.personalization import PersonalizationFreshnessResponse
+from backend.app.services.learner_context import context_service_from_repository
 
 
 class PathNotFoundError(Exception):
@@ -298,7 +300,7 @@ class PathService:
 
     def _build_detail(
         self,
-        _user: User,
+        user: User,
         course: Course,
         path: LearningPath,
         tasks: list[LearningTask],
@@ -317,10 +319,24 @@ class PathService:
                 else ("当前学习路径进行中。" if path.status == "active" else "学习路径已归档。")
             ),
             agent_trace_id=getattr(path, "agent_trace_id", None),
-            path=path_to_api(path),
+            path=path_to_api(path, self._path_freshness(user.id, path)),
             tasks=[task_to_api(task, resources_by_id) for task in tasks],
             evidence_summary=self._build_evidence(knowledge_points, weakness_items, resources),
         )
+
+    def _path_freshness(
+        self,
+        user_id: int,
+        path: LearningPath,
+    ) -> PersonalizationFreshnessResponse | None:
+        context_service = context_service_from_repository(self.repository)
+        if context_service is None:
+            return None
+        freshness = context_service.freshness(
+            path.plan_json or {},
+            context_service.global_context(user_id).profile_applied_version,
+        )
+        return PersonalizationFreshnessResponse(**freshness.to_dict())
 
     @staticmethod
     def _build_evidence(

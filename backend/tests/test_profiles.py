@@ -168,6 +168,8 @@ def test_empty_profile_returns_stable_eight_dimension_shape() -> None:
         "motivation_interest": "",
     }
     assert profile["confidence_score"] == 0
+    assert profile["completeness_score"] == 0
+    assert profile["evidence_confidence_score"] == 0
     assert profile["next_question"] == "接下来你最想学会、完成或解决什么？"
     assert profile["next_question_dimension"] == "learning_goal"
 
@@ -534,7 +536,9 @@ def test_profile_graph_records_real_nodes_and_dimension_confidence() -> None:
     assert len({log.trace_id for log in logs}) == 1
     assert result["event"]["agent_trace_id"] == logs[0].trace_id
     assert result["event"]["status"] == "applied"
-    assert result["profile"]["dimension_confidence"]["major_background"] >= 70
+    assert result["profile"]["dimension_confidence"]["major_background"] == 63
+    assert result["profile"]["completeness_score"] == 37.5
+    assert result["profile"]["evidence_confidence_score"] == 63
     assert "计算机专业大二学生" not in str(logs[0].metadata_json)
 
 

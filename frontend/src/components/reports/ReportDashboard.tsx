@@ -72,6 +72,13 @@ export function ReportDashboard({
           <button type="button" onClick={onGenerate}>更新报告</button>
         </div>
       ) : null}
+      {report?.personalization?.status === "stale" ? (
+        <div className="report-freshness-note" role="status">
+          <WarningCircle size={18} weight="duotone" aria-hidden="true" />
+          <span>学习画像已变化，实时数据不受影响；更新报告后会应用新的个性化依据。</span>
+          <button type="button" onClick={onGenerate}>更新报告</button>
+        </div>
+      ) : null}
       {dataWarning ? <p className="report-data-warning">{dataWarning}</p> : null}
       {reportError ? (
         <div className="form-error report-workspace-error" role="alert">

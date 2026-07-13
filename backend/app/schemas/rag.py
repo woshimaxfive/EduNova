@@ -31,6 +31,10 @@ class RagSearchResultItem(BaseModel):
     vector_score: float = 0.0
     retrieval_source: str = "keyword"
     embedding_status: str = "unavailable"
+    embedding_provider: str | None = None
+    embedding_dimension: int | None = None
+    rerank_score: float | None = None
+    rerank_status: str = "not_configured"
 
 
 class RagSearchResponse(BaseModel):

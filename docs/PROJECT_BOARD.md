@@ -121,6 +121,7 @@ Phase 18 已新增统一 `ModelExecutionRuntime` 和 `model_call_runs`，九条 
 - [x] HomeTutorGraph Docker/浏览器验收：资料章节命中、联网 warning、深度模式、连续追问上下文、真实 trace、桌面/390px 固定输入框和内部滚动均通过；临时验收账号已清理。
 - [x] Phase 14：PathPlanningGraph、AssessmentGraph、ReportGraph 真接管后半程，规则分数不可被模型修改，错题精确绑定作答证据并回流已有路径。
 - [x] Phase 14 课程 RAG：真实外部 embedding 使用 pgvector SQL cosine 候选；本地 hash 与 Provider 失败仅使用关键词 fallback。
+- [x] 动态检索生产化：Spark X2-Flash、讯飞原生 2560 维与兼容动态 Embedding、配置指纹隔离、RRF、硅基/百炼 Rerank 和显式向量重建任务。
 - [x] Phase 14 独立 Docker E2E：空库迁移、建路径、两次错题、弱点诊断、路径重排、报告、三类轨迹和 390px 无溢出通过，结束自动 `down -v`。
 
 ### P1 可排期专项

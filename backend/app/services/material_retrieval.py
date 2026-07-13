@@ -10,7 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.models import Material, MaterialChunk, User
-from backend.app.services.embeddings import EMBEDDING_DIMENSION, EmbeddingService
+from backend.app.services.embeddings import EmbeddingService
+from backend.app.services.model_settings import ModelNotConfiguredError
 
 
 MATERIAL_CHUNK_SIZE = 800
@@ -22,6 +23,7 @@ class MaterialRetrievalResult:
     citations: list[dict[str, Any]]
     retrieval_mode: str
     embedding_status: str
+    rerank_status: str = "not_configured"
 
 
 class MaterialChunkingService:
@@ -143,6 +145,10 @@ class MaterialRetrievalRepository(Protocol):
         user_id: int,
         material_ids: list[int],
         query_vector: list[float],
+        embedding_provider: str,
+        embedding_model: str,
+        embedding_dimension: int,
+        embedding_profile_hash: str,
         limit: int,
     ) -> list[tuple[MaterialChunk, float]]: ...
 
@@ -185,6 +191,11 @@ class SqlAlchemyMaterialRetrievalRepository:
         user_id: int,
         material_ids: list[int],
         query_vector: list[float],
+        *,
+        embedding_provider: str,
+        embedding_model: str,
+        embedding_dimension: int,
+        embedding_profile_hash: str,
         limit: int,
     ) -> list[tuple[MaterialChunk, float]]:
         if not material_ids:
@@ -197,6 +208,10 @@ class SqlAlchemyMaterialRetrievalRepository:
                 Material.user_id == user_id,
                 Material.id.in_(material_ids),
                 MaterialChunk.embedding.is_not(None),
+                MaterialChunk.embedding_provider == embedding_provider,
+                MaterialChunk.embedding_model == embedding_model,
+                MaterialChunk.embedding_dimension == embedding_dimension,
+                MaterialChunk.embedding_profile_hash == embedding_profile_hash,
             )
             .order_by(distance)
             .limit(limit)
@@ -210,10 +225,12 @@ class MaterialRetrievalService:
         repository: MaterialRetrievalRepository,
         embedding_service: EmbeddingService | None = None,
         chunking_service: MaterialChunkingService | None = None,
+        rerank_service: Any | None = None,
     ) -> None:
         self.repository = repository
         self.embedding_service = embedding_service
         self.chunking_service = chunking_service or MaterialChunkingService()
+        self.rerank_service = rerank_service
 
     def search(
         self,
@@ -247,74 +264,151 @@ class MaterialRetrievalService:
         if not chunks:
             return MaterialRetrievalResult(citations=[], retrieval_mode="keyword", embedding_status="unavailable")
 
-        embedding_status, query_vector = self._ensure_embeddings(user, chunks, cleaned_query)
+        embedding_status, query_vector, embedding_profile = self._ensure_embeddings(user, chunks, cleaned_query)
         vector_candidates: dict[int, float] = {}
         if query_vector is not None:
-            for chunk, distance in self.repository.vector_candidates(user.id, searchable_ids, query_vector, limit=20):
+            for chunk, distance in self.repository.vector_candidates(
+                user.id,
+                searchable_ids,
+                query_vector,
+                embedding_provider=embedding_profile[0],
+                embedding_model=embedding_profile[1],
+                embedding_dimension=embedding_profile[2],
+                embedding_profile_hash=embedding_profile[3],
+                limit=30,
+            ):
                 if chunk.id is not None:
                     vector_candidates[chunk.id] = max(0.0, min(1.0, 1.0 - distance))
 
         terms = self._query_terms(cleaned_query)
-        scored: list[tuple[float, float, float, MaterialChunk]] = []
-        for chunk in chunks:
-            keyword_score = self._keyword_score(chunk, cleaned_query, terms)
-            vector_score = vector_candidates.get(chunk.id or -1, 0.0)
-            if keyword_score <= 0 and vector_score < 0.25:
+        keyword_rows = sorted(
+            [(chunk, self._keyword_score(chunk, cleaned_query, terms)) for chunk in chunks],
+            key=lambda item: (-item[1], item[0].material_id, item[0].chunk_index),
+        )
+        keyword_rows = [item for item in keyword_rows if item[1] > 0][:30]
+        vector_rows = sorted(
+            [(chunk, vector_candidates.get(chunk.id or -1, 0.0)) for chunk in chunks if (chunk.id or -1) in vector_candidates],
+            key=lambda item: (-item[1], item[0].material_id, item[0].chunk_index),
+        )[:30]
+        rrf: dict[int, float] = {}
+        by_id: dict[int, MaterialChunk] = {}
+        keyword_scores = {chunk.id: score for chunk, score in keyword_rows}
+        vector_scores = {chunk.id: score for chunk, score in vector_rows}
+        for rank, (chunk, _) in enumerate(keyword_rows, start=1):
+            if chunk.id is None:
                 continue
-            scored.append((keyword_score + vector_score, keyword_score, vector_score, chunk))
-        scored.sort(key=lambda item: (-item[0], -item[2], item[3].material_id, item[3].chunk_index))
+            by_id[chunk.id] = chunk
+            rrf[chunk.id] = rrf.get(chunk.id, 0.0) + 1.0 / (60 + rank)
+        for rank, (chunk, _) in enumerate(vector_rows, start=1):
+            if chunk.id is None:
+                continue
+            by_id[chunk.id] = chunk
+            rrf[chunk.id] = rrf.get(chunk.id, 0.0) + 1.0 / (60 + rank)
+        merged = sorted(rrf, key=lambda chunk_id: (-rrf[chunk_id], chunk_id))[:20]
+        rerank_scores: dict[int, float] = {}
+        rerank_status = "not_configured"
+        if self.rerank_service is not None and merged:
+            try:
+                items = self.rerank_service.rerank_documents(
+                    user,
+                    cleaned_query,
+                    [by_id[chunk_id].content for chunk_id in merged],
+                    top_n=max(1, min(top_k, 5)),
+                )
+                rerank_scores = {merged[item.index]: float(item.score) for item in items}
+                merged = [merged[item.index] for item in items]
+                rerank_status = "completed"
+            except ModelNotConfiguredError:
+                rerank_status = "not_configured"
+            except Exception:
+                rerank_status = "provider_failed"
+        scored = [
+            (
+                rerank_scores.get(chunk_id, rrf[chunk_id]),
+                keyword_scores.get(chunk_id, 0.0),
+                vector_scores.get(chunk_id, 0.0),
+                by_id[chunk_id],
+                rerank_scores.get(chunk_id),
+            )
+            for chunk_id in merged
+        ]
 
         by_material = {item.id: item for item in searchable_materials}
         citations = [
-            self._citation(by_material[item[3].material_id], item[3], item[0], item[1], item[2], embedding_status)
+            self._citation(
+                by_material[item[3].material_id],
+                item[3],
+                item[0],
+                item[1],
+                item[2],
+                embedding_status,
+                embedding_profile,
+                item[4],
+                rerank_status,
+            )
             for item in scored[: max(1, min(top_k, 10))]
         ]
         mode = "hybrid" if query_vector is not None else "keyword"
-        return MaterialRetrievalResult(citations=citations, retrieval_mode=mode, embedding_status=embedding_status)
+        return MaterialRetrievalResult(
+            citations=citations,
+            retrieval_mode=mode,
+            embedding_status=embedding_status,
+            rerank_status=rerank_status,
+        )
 
     def _ensure_embeddings(
         self,
         user: User,
         chunks: list[MaterialChunk],
         query: str,
-    ) -> tuple[str, list[float] | None]:
+    ) -> tuple[str, list[float] | None, tuple[str, str, int, str]]:
         if self.embedding_service is None:
-            return "unavailable", None
+            return "unavailable", None, ("", "", 0, "")
         try:
-            expected_source, expected_model, expected_dimension = self.embedding_service.expected_metadata(user)
+            profile = self.embedding_service.expected_profile(user)
+            if profile is None:
+                return "local_fallback", None, ("", "", 0, "")
+            expected_source, expected_model, expected_dimension = profile.provider, profile.model, profile.dimension
             targets = [
                 chunk
                 for chunk in chunks
                 if not self._valid_vector(chunk.embedding)
-                or (chunk.metadata_json or {}).get("embedding_source") != expected_source
-                or (chunk.metadata_json or {}).get("embedding_model") != expected_model
-                or (chunk.metadata_json or {}).get("embedding_dimension") != expected_dimension
+                or chunk.embedding_provider != expected_source
+                or chunk.embedding_model != expected_model
+                or chunk.embedding_dimension != expected_dimension
+                or chunk.embedding_profile_hash != profile.profile_hash
             ]
             if targets:
-                batch = self.embedding_service.embed_texts(user, [chunk.content for chunk in targets])
+                batch = self.embedding_service.embed_documents(user, [chunk.content for chunk in targets])
                 self._apply_embeddings(targets, batch)
                 if len(getattr(batch, "vectors", [])) == len(targets):
                     self.repository.save_chunks()
-            query_batch = self.embedding_service.embed_texts(user, [query])
+            query_batch = self.embedding_service.embed_query(user, query)
             vectors = list(getattr(query_batch, "vectors", []))
             status = str(getattr(query_batch, "status", "unavailable"))
             if len(vectors) == 1 and self._valid_vector(vectors[0]):
-                return status, vectors[0]
-            return status, None
+                return status, vectors[0], (profile.provider, profile.model, profile.dimension, profile.profile_hash)
+            return status, None, (profile.provider, profile.model, profile.dimension, profile.profile_hash)
         except Exception:
-            return "provider_failed", None
+            return "provider_failed", None, ("", "", 0, "")
 
     @staticmethod
     def _apply_embeddings(chunks: list[MaterialChunk], batch: Any) -> None:
         vectors = list(getattr(batch, "vectors", []))
-        dimension = int(getattr(batch, "dimension", EMBEDDING_DIMENSION))
-        if len(vectors) != len(chunks) or dimension != EMBEDDING_DIMENSION:
+        dimension = int(getattr(batch, "dimension", 0))
+        profile_hash = str(getattr(batch, "profile_hash", ""))
+        if len(vectors) != len(chunks) or dimension <= 0:
             return
         embedded_at = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         for chunk, vector in zip(chunks, vectors, strict=True):
             if not MaterialRetrievalService._valid_vector(vector):
                 continue
             chunk.embedding = vector
+            chunk.embedding_provider = str(getattr(batch, "source", "unknown"))
+            chunk.embedding_model = str(getattr(batch, "model", "unknown"))
+            chunk.embedding_dimension = dimension
+            chunk.embedding_profile_hash = profile_hash
+            chunk.embedding_updated_at = datetime.now(UTC)
             chunk.metadata_json = {
                 **(chunk.metadata_json or {}),
                 "embedding_source": str(getattr(batch, "source", "unknown")),
@@ -353,7 +447,7 @@ class MaterialRetrievalService:
 
     @staticmethod
     def _valid_vector(vector: Any) -> bool:
-        return isinstance(vector, list) and len(vector) == EMBEDDING_DIMENSION
+        return isinstance(vector, list) and bool(vector)
 
     @staticmethod
     def _citation(
@@ -363,6 +457,9 @@ class MaterialRetrievalService:
         keyword_score: float,
         vector_score: float,
         embedding_status: str,
+        embedding_profile: tuple[str, str, int, str],
+        rerank_score: float | None,
+        rerank_status: str,
     ) -> dict[str, Any]:
         if keyword_score > 0 and vector_score > 0:
             retrieval_source = "hybrid"
@@ -380,4 +477,8 @@ class MaterialRetrievalService:
             "score": round(score, 4),
             "retrieval_source": retrieval_source,
             "embedding_status": embedding_status,
+            "embedding_provider": embedding_profile[0] or None,
+            "embedding_dimension": embedding_profile[2] or None,
+            "rerank_score": round(rerank_score, 6) if rerank_score is not None else None,
+            "rerank_status": rerank_status,
         }

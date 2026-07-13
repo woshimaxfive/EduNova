@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
 
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
@@ -9,6 +9,7 @@ from backend.app.db.session import get_db_session
 from backend.app.models import User
 from backend.app.providers.openai_compatible import ModelProviderError, OpenAICompatibleChatProvider
 from backend.app.services.model_settings import (
+    EmbeddingReindexRequest,
     ModelSettingsNotFoundError,
     ModelSettingsValidationError,
     ModelSettingsConfigurationError,
@@ -18,6 +19,13 @@ from backend.app.services.model_settings import (
     SaveModelSettingsRequest,
     SqlAlchemyModelSettingsRepository,
     UpdateModelConfigRequest,
+)
+from backend.app.services.ai_jobs import (
+    AiJobConflictError,
+    AiJobService,
+    AiJobValidationError,
+    RqAiJobQueue,
+    SqlAlchemyAiJobRepository,
 )
 
 
@@ -29,6 +37,15 @@ def get_model_settings_service(db=Depends(get_db_session)) -> ModelSettingsServi
         repository=SqlAlchemyModelSettingsRepository(db),
         settings=get_settings(),
         provider=OpenAICompatibleChatProvider(),
+    )
+
+
+def get_settings_ai_job_service(db=Depends(get_db_session)) -> AiJobService:
+    settings = get_settings()
+    return AiJobService(
+        SqlAlchemyAiJobRepository(db),
+        settings=settings,
+        queue=RqAiJobQueue(settings),
     )
 
 
@@ -193,6 +210,29 @@ def set_embedding_default_model_config(
     return api_response(configs.model_dump())
 
 
+@router.post("/model/configs/{config_id}/rerank-default")
+def set_rerank_default_model_config(
+    config_id: int,
+    current_user: User = Depends(get_current_user),
+    service: ModelSettingsService = Depends(get_model_settings_service),
+) -> dict:
+    try:
+        configs = service.set_rerank_default_config(current_user, config_id)
+    except ModelSettingsNotFoundError as exc:
+        raise ApiError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="MODEL_SETTINGS_NOT_FOUND",
+            message=str(exc),
+        ) from exc
+    except ModelSettingsValidationError as exc:
+        raise ApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="MODEL_SETTINGS_INVALID",
+            message=str(exc),
+        ) from exc
+    return api_response(configs.model_dump())
+
+
 @router.post("/model/configs/{config_id}/test")
 def test_model_config(
     config_id: int,
@@ -241,3 +281,23 @@ def test_model_settings(
         ) from exc
 
     return api_response(result.model_dump())
+
+
+@router.post("/model/embedding/reindex-jobs", status_code=202)
+def create_embedding_reindex_job(
+    payload: EmbeddingReindexRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    current_user: User = Depends(get_current_user),
+    service: AiJobService = Depends(get_settings_ai_job_service),
+) -> dict:
+    try:
+        job = service.create_embedding_reindex_job(
+            current_user,
+            config_id=payload.config_id,
+            idempotency_key=idempotency_key,
+        )
+    except AiJobValidationError as exc:
+        raise ApiError(status.HTTP_400_BAD_REQUEST, "VALIDATION_ERROR", str(exc)) from exc
+    except AiJobConflictError as exc:
+        raise ApiError(status.HTTP_409_CONFLICT, "CONFLICT", str(exc)) from exc
+    return api_response(job.model_dump(mode="json"))

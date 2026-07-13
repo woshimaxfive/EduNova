@@ -26,6 +26,7 @@ def get_rag_service(db=Depends(get_db_session)) -> RagService:
     return RagService(
         SqlAlchemyRagRepository(db),
         embedding_service=EmbeddingService(model_settings_service),
+        rerank_service=model_settings_service,
     )
 
 

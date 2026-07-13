@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,7 +24,15 @@ class Settings(BaseSettings):
     system_embedding_provider: str = ""
     system_embedding_base_url: str = ""
     system_embedding_api_key: str = ""
+    system_embedding_app_id: str = ""
+    system_embedding_api_secret: str = ""
     system_embedding_model: str = "example-embedding-model"
+    system_embedding_dimension: int | None = None
+    system_rerank_provider: str = ""
+    system_rerank_base_url: str = ""
+    system_rerank_api_key: str = ""
+    system_rerank_model: str = ""
+    system_rerank_workspace_id: str = ""
     model_settings_encryption_key: str = ""
     model_request_timeout_seconds: float = 20.0
     model_max_attempts: int = 3
@@ -47,6 +56,13 @@ class Settings(BaseSettings):
     ai_job_timeout_seconds: int = 900
     ai_job_stale_seconds: int = 180
     ai_job_max_active_per_user: int = 2
+
+    @field_validator("system_embedding_dimension", mode="before")
+    @classmethod
+    def empty_embedding_dimension_is_unset(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     model_config = SettingsConfigDict(
         env_file=".env",

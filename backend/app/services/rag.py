@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 import math
 from typing import Any, Protocol
 
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.app.models import Course, KnowledgeChunk, User
 from backend.app.schemas.rag import RagSearchResponse, RagSearchResultItem
-from backend.app.services.embeddings import EMBEDDING_DIMENSION
+from backend.app.services.model_settings import ModelNotConfiguredError
 
 
 class RagCourseNotFoundError(Exception):
@@ -28,6 +29,10 @@ class ScoredChunk:
     vector_score: float = 0.0
     retrieval_source: str = "keyword"
     embedding_status: str = "unavailable"
+    embedding_provider: str | None = None
+    embedding_dimension: int | None = None
+    rerank_score: float | None = None
+    rerank_status: str = "not_configured"
 
 
 class RagEmbeddingService(Protocol):
@@ -36,6 +41,10 @@ class RagEmbeddingService(Protocol):
     def apply_embeddings(self, user: User, chunks: list[KnowledgeChunk]) -> Any: ...
 
     def chunk_needs_embedding(self, user: User, chunk: KnowledgeChunk) -> bool: ...
+
+
+class RagRerankService(Protocol):
+    def rerank_documents(self, user: User, query: str, documents: list[str], top_n: int = 5) -> list[Any]: ...
 
 
 class SqlAlchemyRagRepository:
@@ -66,6 +75,8 @@ class SqlAlchemyRagRepository:
         *,
         embedding_source: str,
         embedding_model: str,
+        embedding_dimension: int,
+        embedding_profile_hash: str,
         limit: int,
     ) -> list[tuple[KnowledgeChunk, float]]:
         distance = KnowledgeChunk.embedding.cosine_distance(query_vector)
@@ -74,8 +85,10 @@ class SqlAlchemyRagRepository:
             .where(
                 KnowledgeChunk.course_id == course_id,
                 KnowledgeChunk.embedding.is_not(None),
-                KnowledgeChunk.metadata_json["embedding_source"].as_string() == embedding_source,
-                KnowledgeChunk.metadata_json["embedding_model"].as_string() == embedding_model,
+                KnowledgeChunk.embedding_provider == embedding_source,
+                KnowledgeChunk.embedding_model == embedding_model,
+                KnowledgeChunk.embedding_dimension == embedding_dimension,
+                KnowledgeChunk.embedding_profile_hash == embedding_profile_hash,
             )
             .options(selectinload(KnowledgeChunk.material), selectinload(KnowledgeChunk.knowledge_point))
             .order_by(distance.asc(), KnowledgeChunk.id.asc())
@@ -87,9 +100,15 @@ class SqlAlchemyRagRepository:
 class RagService:
     generic_terms = {"问题", "这个", "那个", "什么"}
 
-    def __init__(self, repository: SqlAlchemyRagRepository, embedding_service: RagEmbeddingService | None = None) -> None:
+    def __init__(
+        self,
+        repository: SqlAlchemyRagRepository,
+        embedding_service: RagEmbeddingService | None = None,
+        rerank_service: RagRerankService | None = None,
+    ) -> None:
         self.repository = repository
         self.embedding_service = embedding_service
+        self.rerank_service = rerank_service
 
     def search(self, user: User, course_id: int, query: str, top_k: int = 5) -> RagSearchResponse:
         cleaned_query = query.strip()
@@ -117,35 +136,74 @@ class RagService:
             retrieval_mode = "hybrid"
             vector_search = getattr(self.repository, "vector_candidates", None)
             if callable(vector_search):
-                rows = vector_search(
-                    course.id,
-                    query_embedding["vector"],
-                    embedding_source=query_embedding["source"],
-                    embedding_model=query_embedding["model"],
-                    limit=max(top_k * 4, 12),
-                )
+                try:
+                    rows = vector_search(
+                        course.id,
+                        query_embedding["vector"],
+                        embedding_source=query_embedding["source"],
+                        embedding_model=query_embedding["model"],
+                        embedding_dimension=query_embedding["dimension"],
+                        embedding_profile_hash=query_embedding["profile_hash"],
+                        limit=30,
+                    )
+                except TypeError:
+                    rows = vector_search(
+                        course.id,
+                        query_embedding["vector"],
+                        embedding_source=query_embedding["source"],
+                        embedding_model=query_embedding["model"],
+                        limit=30,
+                    )
                 vector_candidates = {chunk.id: (chunk, max(0.0, 1.0 - distance)) for chunk, distance in rows}
-
-        chunks_by_id = {chunk.id: chunk for chunk in chunks}
-        chunks_by_id.update({chunk_id: row[0] for chunk_id, row in vector_candidates.items()})
-        scored_chunks = []
-        for chunk in chunks_by_id.values():
-            keyword_score = self._score_chunk(chunk, cleaned_query, terms)
-            vector_score = round(vector_candidates.get(chunk.id, (chunk, 0.0))[1] * 6.0, 4)
-            score = round(keyword_score + vector_score, 4)
-            if keyword_score <= 0 and vector_score < 0.25:
-                continue
-            scored_chunks.append(
-                ScoredChunk(
-                    chunk=chunk,
-                    score=score,
-                    keyword_score=keyword_score,
-                    vector_score=vector_score,
-                    retrieval_source=self._retrieval_source(keyword_score, vector_score),
-                    embedding_status=embedding_status,
+        keyword_rows = sorted(
+            [(chunk, self._score_chunk(chunk, cleaned_query, terms)) for chunk in chunks],
+            key=lambda item: (-item[1], item[0].id),
+        )
+        keyword_rows = [item for item in keyword_rows if item[1] > 0][:30]
+        vector_rows = sorted(vector_candidates.values(), key=lambda item: (-item[1], item[0].id))[:30]
+        rrf_scores: dict[int, float] = {}
+        by_id: dict[int, KnowledgeChunk] = {}
+        keyword_scores = {chunk.id: score for chunk, score in keyword_rows}
+        vector_scores = {chunk.id: score for chunk, score in vector_rows}
+        for rank, (chunk, _) in enumerate(keyword_rows, start=1):
+            by_id[chunk.id] = chunk
+            rrf_scores[chunk.id] = rrf_scores.get(chunk.id, 0.0) + 1.0 / (60 + rank)
+        for rank, (chunk, _) in enumerate(vector_rows, start=1):
+            by_id[chunk.id] = chunk
+            rrf_scores[chunk.id] = rrf_scores.get(chunk.id, 0.0) + 1.0 / (60 + rank)
+        merged = sorted(rrf_scores, key=lambda chunk_id: (-rrf_scores[chunk_id], chunk_id))[:20]
+        rerank_scores: dict[int, float] = {}
+        rerank_status = "not_configured"
+        if self.rerank_service is not None and merged:
+            try:
+                reranked = self.rerank_service.rerank_documents(
+                    user,
+                    cleaned_query,
+                    [by_id[chunk_id].content for chunk_id in merged],
+                    top_n=min(top_k, 5),
                 )
+                rerank_scores = {merged[item.index]: float(item.score) for item in reranked}
+                merged = [merged[item.index] for item in reranked]
+                rerank_status = "completed"
+            except ModelNotConfiguredError:
+                rerank_status = "not_configured"
+            except Exception:
+                rerank_status = "provider_failed"
+        scored_chunks = [
+            ScoredChunk(
+                chunk=by_id[chunk_id],
+                score=round(rerank_scores.get(chunk_id, rrf_scores[chunk_id]), 6),
+                keyword_score=round(keyword_scores.get(chunk_id, 0.0), 4),
+                vector_score=round(vector_scores.get(chunk_id, 0.0), 4),
+                retrieval_source=self._retrieval_source(keyword_scores.get(chunk_id, 0.0), vector_scores.get(chunk_id, 0.0)),
+                embedding_status=embedding_status,
+                embedding_provider=query_embedding.get("source") if query_embedding else None,
+                embedding_dimension=query_embedding.get("dimension") if query_embedding else None,
+                rerank_score=rerank_scores.get(chunk_id),
+                rerank_status=rerank_status,
             )
-        scored_chunks.sort(key=lambda item: (-item.score, -item.vector_score, item.chunk.id))
+            for chunk_id in merged
+        ]
 
         return RagSearchResponse(
             course_id=course.id,
@@ -159,6 +217,10 @@ class RagService:
                     vector_score=item.vector_score,
                     retrieval_source=item.retrieval_source,
                     embedding_status=item.embedding_status,
+                    embedding_provider=item.embedding_provider,
+                    embedding_dimension=item.embedding_dimension,
+                    rerank_score=item.rerank_score,
+                    rerank_status=item.rerank_status,
                 )
                 for item in scored_chunks[:top_k]
             ],
@@ -170,19 +232,23 @@ class RagService:
         if self.embedding_service is None:
             return None
         try:
-            batch = self.embedding_service.embed_texts(user, [query])
+            embed_query = getattr(self.embedding_service, "embed_query", None)
+            batch = embed_query(user, query) if callable(embed_query) else self.embedding_service.embed_texts(user, [query])
         except Exception:
             return None
         vectors = list(getattr(batch, "vectors", []))
         status = str(getattr(batch, "status", "unavailable"))
         source = str(getattr(batch, "source", "unknown"))
         model = str(getattr(batch, "model", "unknown"))
-        dimension = int(getattr(batch, "dimension", EMBEDDING_DIMENSION))
+        dimension = int(getattr(batch, "dimension", 0))
+        profile_hash = str(getattr(batch, "profile_hash", "")) or sha256(
+            f"{source}|{model}|{dimension}".encode("utf-8")
+        ).hexdigest()
         if status != "completed":
-            return {"vector": None, "status": status, "source": source, "model": model}
-        if len(vectors) != 1 or dimension != EMBEDDING_DIMENSION or not self._valid_vector(vectors[0]):
-            return {"vector": None, "status": "provider_failed", "source": source, "model": model}
-        return {"vector": vectors[0], "status": status, "source": source, "model": model}
+            return {"vector": None, "status": status, "source": source, "model": model, "dimension": dimension, "profile_hash": profile_hash}
+        if len(vectors) != 1 or dimension <= 0 or not self._valid_vector(vectors[0], dimension) or not profile_hash:
+            return {"vector": None, "status": "provider_failed", "source": source, "model": model, "dimension": dimension, "profile_hash": profile_hash}
+        return {"vector": vectors[0], "status": status, "source": source, "model": model, "dimension": dimension, "profile_hash": profile_hash}
 
     def _ensure_chunk_embeddings(self, user: User, chunks: list[KnowledgeChunk]) -> None:
         if self.embedding_service is None or not chunks:
@@ -191,7 +257,7 @@ class RagService:
             expected_metadata = getattr(self.embedding_service, "expected_metadata", None)
             if callable(expected_metadata):
                 expected_source, expected_model, _ = expected_metadata(user)
-                if expected_source == "local" or expected_model == "local-hash-1536":
+                if expected_source == "local" or expected_model == "keyword-only":
                     return
             needs_embedding = getattr(self.embedding_service, "chunk_needs_embedding", None)
             if callable(needs_embedding):
@@ -220,11 +286,16 @@ class RagService:
             return
         source = str(getattr(batch, "source", "unknown"))
         model = str(getattr(batch, "model", "unknown"))
-        dimension = int(getattr(batch, "dimension", EMBEDDING_DIMENSION))
+        dimension = int(getattr(batch, "dimension", 0))
+        profile_hash = str(getattr(batch, "profile_hash", ""))
         for chunk, vector in zip(chunks, vectors, strict=True):
             if len(vector) != dimension:
                 continue
             chunk.embedding = vector
+            chunk.embedding_provider = source
+            chunk.embedding_model = model
+            chunk.embedding_dimension = dimension
+            chunk.embedding_profile_hash = profile_hash
             chunk.metadata_json = {
                 **(chunk.metadata_json or {}),
                 "embedding_source": source,
@@ -233,12 +304,12 @@ class RagService:
             }
 
     @staticmethod
-    def _valid_vector(vector: list[float] | None) -> bool:
-        return isinstance(vector, list) and len(vector) == EMBEDDING_DIMENSION
+    def _valid_vector(vector: list[float] | None, dimension: int | None = None) -> bool:
+        return isinstance(vector, list) and bool(vector) and (dimension is None or len(vector) == dimension)
 
     @classmethod
     def _vector_score(cls, query_vector: list[float], chunk_vector: list[float] | None) -> float:
-        if not cls._valid_vector(chunk_vector):
+        if not cls._valid_vector(chunk_vector, len(query_vector)):
             return 0.0
         similarity = cls._cosine_similarity(query_vector, chunk_vector)
         return round(max(similarity, 0.0) * 6.0, 4)
@@ -367,6 +438,10 @@ class RagService:
         vector_score: float = 0.0,
         retrieval_source: str = "keyword",
         embedding_status: str = "unavailable",
+        embedding_provider: str | None = None,
+        embedding_dimension: int | None = None,
+        rerank_score: float | None = None,
+        rerank_status: str = "not_configured",
     ) -> RagSearchResultItem:
         source_title = ""
         if chunk.material is not None:
@@ -388,4 +463,8 @@ class RagService:
             vector_score=vector_score,
             retrieval_source=retrieval_source,
             embedding_status=embedding_status,
+            embedding_provider=embedding_provider,
+            embedding_dimension=embedding_dimension,
+            rerank_score=rerank_score,
+            rerank_status=rerank_status,
         )

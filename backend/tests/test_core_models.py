@@ -66,7 +66,14 @@ def test_course_materials_and_chunks_keep_json_and_vector_columns() -> None:
     assert isinstance(chunk_table.c.metadata_json.type, JSONB)
     assert isinstance(KnowledgePoint.__table__.c.prerequisites_json.type, JSONB)
     assert isinstance(chunk_table.c.embedding.type, Vector)
-    assert chunk_table.c.embedding.type.dim == 1536
+    assert chunk_table.c.embedding.type.dim is None
+    assert {
+        "embedding_provider",
+        "embedding_model",
+        "embedding_dimension",
+        "embedding_profile_hash",
+        "embedding_updated_at",
+    } <= set(chunk_table.c.keys())
 
 
 def test_independent_material_library_model_contract() -> None:

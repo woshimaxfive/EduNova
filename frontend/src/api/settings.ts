@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import { type ApiEnvelope } from "../types/api";
+import { type AiJob } from "./aiJobs";
 
 export const SETTINGS_ENDPOINTS = {
   model: "/settings/model",
@@ -8,14 +9,16 @@ export const SETTINGS_ENDPOINTS = {
   config: (configId: number) => `/settings/model/configs/${configId}`,
   testConfig: (configId: number) => `/settings/model/configs/${configId}/test`,
   defaultConfig: (configId: number) => `/settings/model/configs/${configId}/default`,
-  embeddingDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/embedding-default`
+  embeddingDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/embedding-default`,
+  rerankDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/rerank-default`,
+  embeddingReindexJobs: "/settings/model/embedding/reindex-jobs"
 } as const;
 
 export type ModelSettingsSource = "user" | "system" | "none";
 
-export type ModelSettingsProvider = "openai_compatible";
+export type ModelSettingsProvider = "openai_compatible" | "xfyun_embedding" | "siliconflow_rerank" | "bailian_rerank";
 
-export type ModelConnectionOperation = "chat" | "embedding";
+export type ModelConnectionOperation = "chat" | "embedding" | "rerank";
 
 export type ModelSettingsRequest = {
   provider: ModelSettingsProvider;
@@ -25,21 +28,32 @@ export type ModelSettingsRequest = {
   embedding_provider?: ModelSettingsProvider;
   embedding_base_url?: string;
   embedding_api_key?: string;
+  embedding_app_id?: string;
+  embedding_api_secret?: string;
   embedding_model?: string;
+  embedding_dimension?: number | null;
+  rerank_provider?: ModelSettingsProvider;
+  rerank_base_url?: string;
+  rerank_api_key?: string;
+  rerank_model?: string;
+  rerank_workspace_id?: string;
 };
 
 export type ModelConfigRequest = ModelSettingsRequest & {
   display_name: string;
   preset_id?: string | null;
   embedding_preset_id?: string | null;
+  rerank_preset_id?: string | null;
   make_default?: boolean;
   make_embedding_default?: boolean;
+  make_rerank_default?: boolean;
 };
 
 export type ModelConfigUpdateRequest = Partial<ModelSettingsRequest> & {
   display_name?: string;
   preset_id?: string | null;
   embedding_preset_id?: string | null;
+  rerank_preset_id?: string | null;
   is_default?: boolean;
   make_default?: boolean;
 };
@@ -52,12 +66,23 @@ export type ModelSettingsSummary = {
   embedding_model: string | null;
   embedding_provider?: ModelSettingsProvider | null;
   embedding_base_url?: string | null;
+  embedding_dimension?: number | null;
   has_api_key: boolean;
   api_key_masked: string | null;
   has_embedding_api_key?: boolean;
   embedding_api_key_masked?: string | null;
+  has_embedding_app_id?: boolean;
+  embedding_app_id_masked?: string | null;
+  has_embedding_api_secret?: boolean;
+  rerank_model?: string | null;
+  rerank_provider?: ModelSettingsProvider | null;
+  rerank_base_url?: string | null;
+  rerank_workspace_id?: string | null;
+  has_rerank_api_key?: boolean;
+  rerank_api_key_masked?: string | null;
   can_use_model: boolean;
   can_use_embedding_model: boolean;
+  can_use_rerank_model?: boolean;
 };
 
 export type ModelConfigSummary = ModelSettingsSummary & {
@@ -65,8 +90,10 @@ export type ModelConfigSummary = ModelSettingsSummary & {
   display_name: string;
   preset_id: string | null;
   embedding_preset_id?: string | null;
+  rerank_preset_id?: string | null;
   is_default: boolean;
   is_embedding_default: boolean;
+  is_rerank_default?: boolean;
   last_test_ok: boolean | null;
   last_test_message: string | null;
   last_tested_at: string | null;
@@ -81,6 +108,7 @@ export type ModelConnectionTestSnapshot = {
   code: string | null;
   retryable: boolean;
   tested_at: string;
+  dimension?: number | null;
 };
 
 export type ModelSettingsListResponse = {
@@ -88,6 +116,7 @@ export type ModelSettingsListResponse = {
   default_config_id: number | null;
   default_chat_config_id: number | null;
   default_embedding_config_id: number | null;
+  default_rerank_config_id?: number | null;
   system_summary: ModelSettingsSummary;
 };
 
@@ -102,6 +131,7 @@ export type ModelConnectionTestResponse = {
   code: string | null;
   retryable: boolean;
   tested_at: string;
+  dimension?: number | null;
 };
 
 export async function getModelSettings() {
@@ -151,10 +181,26 @@ export async function setDefaultEmbeddingConfig(configId: number) {
   return response.data;
 }
 
+export async function setDefaultRerankConfig(configId: number) {
+  const response = await apiClient.post<ApiEnvelope<ModelSettingsListResponse>>(
+    SETTINGS_ENDPOINTS.rerankDefaultConfig(configId)
+  );
+  return response.data;
+}
+
 export async function testModelConfig(configId: number, operation: ModelConnectionOperation = "chat") {
   const response = await apiClient.post<ApiEnvelope<ModelConnectionTestResponse>>(
     SETTINGS_ENDPOINTS.testConfig(configId),
     { operation }
   );
   return response.data;
+}
+
+export async function createEmbeddingReindexJob(configId: number, idempotencyKey: string) {
+  const response = await apiClient.post<ApiEnvelope<AiJob>>(
+    SETTINGS_ENDPOINTS.embeddingReindexJobs,
+    { config_id: configId },
+    { headers: { "Idempotency-Key": idempotencyKey } }
+  );
+  return response.data.data;
 }

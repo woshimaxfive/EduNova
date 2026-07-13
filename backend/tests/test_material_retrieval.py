@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from backend.app.models import Material, MaterialChunk, User
+from backend.app.providers.retrieval import RerankItem
 from backend.app.services.material_retrieval import MaterialChunkingService, MaterialRetrievalService
 
 
@@ -36,6 +37,18 @@ class FakeMaterialRetrievalRepository:
         limit: int,
     ) -> list[tuple[MaterialChunk, float]]:
         return []
+
+
+@dataclass
+class FakeMaterialRerankService:
+    items: list[RerankItem] = field(default_factory=list)
+    error: Exception | None = None
+
+    def rerank_documents(self, _user: User, _query: str, _documents: list[str], top_n: int = 5) -> list[RerankItem]:
+        del top_n
+        if self.error is not None:
+            raise self.error
+        return self.items
 
 
 def test_markdown_chunking_preserves_section_titles_and_stable_indexes() -> None:
@@ -115,6 +128,52 @@ def test_material_retrieval_returns_empty_when_selected_material_has_no_relevant
     )
 
     assert result.citations == []
+
+
+def test_material_retrieval_reranks_keyword_candidates() -> None:
+    material = make_material(
+        material_id=51,
+        user_id=1,
+        text=(
+            "# 机器学习\n机器学习从数据中总结规律。\n"
+            "## 深度学习\n深度学习使用多层神经网络表示复杂规律。"
+        ),
+    )
+    service = MaterialRetrievalService(
+        FakeMaterialRetrievalRepository(materials=[material]),
+        rerank_service=FakeMaterialRerankService(
+            items=[RerankItem(index=1, score=0.94), RerankItem(index=0, score=0.71)]
+        ),
+    )
+
+    result = service.search(make_user(1), [51], "学习", top_k=2)
+
+    assert [item["section_title"] for item in result.citations] == ["深度学习", "机器学习"]
+    assert result.citations[0]["rerank_score"] == 0.94
+    assert result.citations[0]["rerank_status"] == "completed"
+    assert result.rerank_status == "completed"
+
+
+def test_material_retrieval_keeps_keyword_order_when_rerank_fails() -> None:
+    material = make_material(
+        material_id=52,
+        user_id=1,
+        text=(
+            "# 机器学习\n机器学习从数据中总结规律。\n"
+            "## 深度学习\n深度学习使用多层神经网络表示复杂规律。"
+        ),
+    )
+    service = MaterialRetrievalService(
+        FakeMaterialRetrievalRepository(materials=[material]),
+        rerank_service=FakeMaterialRerankService(error=RuntimeError("provider failed")),
+    )
+
+    result = service.search(make_user(1), [52], "学习", top_k=2)
+
+    assert [item["section_title"] for item in result.citations] == ["机器学习", "深度学习"]
+    assert all(item["rerank_score"] is None for item in result.citations)
+    assert all(item["rerank_status"] == "provider_failed" for item in result.citations)
+    assert result.rerank_status == "provider_failed"
 
 
 def make_material(

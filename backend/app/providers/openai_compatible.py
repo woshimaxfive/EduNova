@@ -29,6 +29,7 @@ class OpenAICompatibleConfig:
     base_url: str
     api_key: str
     chat_model: str
+    thinking_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,8 @@ class OpenAICompatibleChatProvider:
             "messages": messages,
             "temperature": 0.2,
         }
+        if config.thinking_type in {"enabled", "disabled", "auto"}:
+            payload["thinking"] = {"type": config.thinking_type}
         headers = {
             "Authorization": f"Bearer {config.api_key}",
             "Content-Type": "application/json",
@@ -96,6 +99,8 @@ class OpenAICompatibleChatProvider:
             "temperature": 0.2,
             "stream": True,
         }
+        if config.thinking_type in {"enabled", "disabled", "auto"}:
+            payload["thinking"] = {"type": config.thinking_type}
         headers = {
             "Authorization": f"Bearer {config.api_key}",
             "Content-Type": "application/json",
@@ -149,14 +154,15 @@ class OpenAICompatibleChatProvider:
         config: OpenAICompatibleEmbeddingConfig,
         texts: list[str],
         timeout_seconds: float,
-        dimensions: int = 1536,
+        dimensions: int | None = None,
     ) -> list[list[float]]:
         url = f"{config.base_url.rstrip('/')}/embeddings"
         payload: dict[str, Any] = {
             "model": config.embedding_model,
             "input": texts,
-            "dimensions": dimensions,
         }
+        if dimensions is not None:
+            payload["dimensions"] = dimensions
         headers = {
             "Authorization": f"Bearer {config.api_key}",
             "Content-Type": "application/json",
@@ -177,7 +183,12 @@ class OpenAICompatibleChatProvider:
         vectors = self._extract_embeddings(data)
         if not vectors:
             raise ModelProviderError("模型服务没有返回可用向量。", code="invalid_response", retryable=True)
-        if len(vectors) != len(texts) or any(len(vector) != dimensions for vector in vectors):
+        if len(vectors) != len(texts):
+            raise ModelProviderError("模型服务返回了不匹配的向量维度。", code="invalid_response", retryable=True)
+        actual_dimensions = {len(vector) for vector in vectors}
+        if len(actual_dimensions) != 1 or 0 in actual_dimensions:
+            raise ModelProviderError("模型服务返回了不一致的向量维度。", code="invalid_response", retryable=True)
+        if dimensions is not None and actual_dimensions != {dimensions}:
             raise ModelProviderError("模型服务返回了不匹配的向量维度。", code="invalid_response", retryable=True)
         return vectors
 

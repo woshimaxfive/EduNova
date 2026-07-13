@@ -1303,7 +1303,16 @@ class TutorSessionService:
                 "score",
             )
         }
-        for key in ("keyword_score", "vector_score", "retrieval_source", "embedding_status"):
+        for key in (
+            "keyword_score",
+            "vector_score",
+            "retrieval_source",
+            "embedding_status",
+            "embedding_provider",
+            "embedding_dimension",
+            "rerank_score",
+            "rerank_status",
+        ):
             value = getattr(item, key, None)
             if value is not None:
                 citation[key] = value
@@ -1641,11 +1650,13 @@ class HomeTutorGraphRunner:
             citations = list(getattr(result, "citations", []))
             retrieval_mode = str(getattr(result, "retrieval_mode", "keyword"))
             embedding_status = str(getattr(result, "embedding_status", "unavailable"))
+            rerank_status = str(getattr(result, "rerank_status", "not_configured"))
             return (
                 {
                     "citation_json": citations,
                     "retrieval_mode": retrieval_mode,
                     "embedding_status": embedding_status,
+                    "rerank_status": rerank_status,
                 },
                 f"命中 {len(citations)} 条相关资料片段。",
                 "completed" if citations else "warning",
@@ -1654,6 +1665,7 @@ class HomeTutorGraphRunner:
                     "source_count": len(citations),
                     "retrieval_mode": retrieval_mode,
                     "embedding_status": embedding_status,
+                    "rerank_status": rerank_status,
                 },
             )
 

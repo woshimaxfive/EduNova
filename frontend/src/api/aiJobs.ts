@@ -4,7 +4,7 @@ import { type ApiEnvelope } from "../types/api";
 import { type CreateCourseFromMaterialsRequest } from "./courses";
 import { type GenerateResourcesRequest } from "./resources";
 
-export type AiJobWorkflow = "course_builder" | "resource_generation";
+export type AiJobWorkflow = "course_builder" | "resource_generation" | "embedding_reindex";
 export type AiJobStatus = "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed";
 
 export type AiJobStep = {

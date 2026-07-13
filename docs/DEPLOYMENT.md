@@ -1,17 +1,17 @@
 # EduNova 部署说明
 
-日期：2026-07-01
+日期：2026-07-13
 
 ## 1. 当前部署范围
 
 本文档记录 EduNova 的本地开发、Docker Compose 和部署准备方式。
 
-当前部署范围覆盖到 Phase 13.2：
+当前部署范围覆盖九条生产 Graph、AI 任务运行时和动态检索：
 
 - 工程骨架和 Docker Compose。
 - 数据库迁移和内置课程包导入。
 - 真实认证、首页、资料库、PDF/DOCX/PPTX 解析、规则建课、课程 RAG 和课程会话。
-- 模型配置、课程流式回答、Embedding、混合检索和课程空间双模式前端。
+- 三能力模型配置、Spark X2-Flash、动态 Embedding、可选 Rerank、课程流式回答和课程空间双模式前端。
 - 学习画像、课程学习状态、弱点复习队列和状态流转。
 - Agent trace 查询和资源生成 trace。
 - 六类结构化课程资源、并行 Worker、质量审核、Markmap/Mermaid/Pyodide 和 PPTX 导出。
@@ -36,7 +36,7 @@
 - 受保护主页会话接口 `/api/v1/tutor/sessions`。
 - 受保护资料库接口 `/api/v1/materials/upload`、`/api/v1/materials`、`/api/v1/materials/{material_id}`、`/api/v1/materials/{material_id}/progress` 和 `/api/v1/courses/{course_id}/materials`。
 - 受保护课程接口 `/api/v1/courses/from-materials`、`/api/v1/courses`、`/api/v1/courses/{course_id}`、`/api/v1/courses/{course_id}/overview`、`/api/v1/courses/{course_id}/knowledge-points`、`/api/v1/courses/{course_id}/learning-state` 和 `/api/v1/courses/{course_id}/mastery-map`。
-- 受保护 RAG 检索接口 `/api/v1/rag/search`，支持关键词/向量混合召回和本地 fallback 状态。
+- 受保护 RAG 检索接口 `/api/v1/rag/search`，支持关键词、动态向量、RRF、可选重排序和关键词 fallback 状态。
 - 受保护模型设置接口 `/api/v1/settings/model`、`/api/v1/settings/model/test` 和 `/api/v1/settings/model/configs` 系列接口。
 - 受保护画像、Agent trace、资源、学习路径、练习、报告、资料对比、Markdown 同步导出和异步导出任务接口。
 - React + TypeScript + Vite 前端本地开发服务器。
@@ -46,7 +46,7 @@
 
 以下能力还未接入当前部署：
 
-- 讯飞原生 Embeddingp/Embeddingq、OCR、旧版 Office 解析、扫描件解析和完整浏览器 E2E。
+- OCR、旧版 Office、扫描件解析和文本之外的多模态向量检索。
 
 这些能力会在后续阶段逐步加入，并同步更新本文档。
 
@@ -126,12 +126,20 @@ SYSTEM_CHAT_MODEL=example-chat-model
 SYSTEM_EMBEDDING_PROVIDER=openai_compatible
 SYSTEM_EMBEDDING_BASE_URL=https://embedding.example.com/v1
 SYSTEM_EMBEDDING_API_KEY=replace-with-your-embedding-key
+SYSTEM_EMBEDDING_APP_ID=
+SYSTEM_EMBEDDING_API_SECRET=
 SYSTEM_EMBEDDING_MODEL=example-embedding-model
+SYSTEM_EMBEDDING_DIMENSION=
+SYSTEM_RERANK_PROVIDER=
+SYSTEM_RERANK_BASE_URL=
+SYSTEM_RERANK_API_KEY=
+SYSTEM_RERANK_MODEL=
+SYSTEM_RERANK_WORKSPACE_ID=
 MODEL_SETTINGS_ENCRYPTION_KEY=replace-with-fernet-key
 MODEL_REQUEST_TIMEOUT_SECONDS=20
 ```
 
-`SYSTEM_MODEL_*` 是服务器回答兜底配置。`SYSTEM_EMBEDDING_*` 是可选的向量兜底连接；向量 Base URL 为空时兼容复用回答连接，填写后使用独立 Provider、Base URL 和 Key。
+`SYSTEM_MODEL_*`、`SYSTEM_EMBEDDING_*` 和 `SYSTEM_RERANK_*` 分别是服务器回答、向量和重排序兜底配置。讯飞向量额外需要 APPID 与 APISecret；三类用途互相独立。
 
 Docker Compose 会把仓库根目录的 `.env` 作为 backend 容器的可选运行时环境文件读取，用于注入 `SYSTEM_MODEL_*`、`MODEL_SETTINGS_ENCRYPTION_KEY` 等服务器配置。`.env` 已被 `.gitignore` 忽略，不能提交真实密钥。为了避免把密钥展开到终端日志，统一验证脚本只运行 `docker compose config --quiet`。
 
@@ -139,13 +147,12 @@ Docker Compose 会把仓库根目录的 `.env` 作为 backend 容器的可选运
 
 - 主页、课程回答和生成型 Graph 优先使用当前用户回答默认配置。
 - 资料与课程 RAG 的 Embedding 优先使用当前用户向量默认配置。
-- 每套个人配置都能为回答和向量分别保存 Provider 预设、Base URL、Key 和模型；同一套方案可组合不同服务商。
-- 回答默认和向量默认仍可指向同一套或不同套配置；某一用途没有个人默认时，只回退该用途的服务器配置。
+- 每套个人配置都能为回答、向量和重排序分别保存 Provider、地址、凭证和模型；同一套方案可组合不同服务商。
+- 三类默认可指向同一套或不同套配置；某一用途没有个人默认时，只回退该用途的服务器配置。
 - 用户 API Key 使用 Fernet 加密保存。
 - 接口只返回脱敏 Key，不返回明文。
 
-`SYSTEM_EMBEDDING_MODEL` 在没有个人向量默认时用于 OpenAI-compatible `{SYSTEM_EMBEDDING_BASE_URL}/embeddings`；未填写独立向量地址时兼容使用 `SYSTEM_MODEL_BASE_URL`。
-为空或不可用时，课程知识库显式退回关键词检索，不把本地 hash 宣称为语义向量命中。
+`SYSTEM_EMBEDDING_MODEL` 在没有个人向量默认时使用。Provider 为 `xfyun_embedding` 时走讯飞原生签名协议；其他 Provider 走 OpenAI-compatible `/embeddings`。为空或不可用时显式退回关键词检索。
 
 `MODEL_SETTINGS_ENCRYPTION_KEY` 必须使用 Fernet key。
 生产环境必须替换为不可公开的强随机值；没有该值时，后端拒绝保存用户 API Key。
@@ -153,11 +160,11 @@ Docker Compose 会把仓库根目录的 `.env` 作为 backend 容器的可选运
 比赛演示建议优先配置讯飞星火 Spark：
 
 ```text
-SYSTEM_MODEL_BASE_URL=https://spark-api-open.xf-yun.com/v1
-SYSTEM_CHAT_MODEL=lite
+SYSTEM_MODEL_BASE_URL=https://spark-api-open.xf-yun.com/agent/v1/
+SYSTEM_CHAT_MODEL=spark-x
 ```
 
-讯飞原生 Embeddingp/Embeddingq 不在当前部署范围内。
+讯飞 LLM Embedding 可通过独立服务器向量配置或用户设置页启用；免费额度与授权状态以讯飞控制台为准。
 真实密钥只能放在 `.env` 或用户加密配置中，不能写入仓库。
 
 ## 4. 启动最小服务
@@ -293,7 +300,7 @@ docker compose exec -T backend python -m backend.app.cli seed-ai-intro
 16. 已解析 TXT/Markdown/PDF/DOCX/PPTX 资料可以通过 `/api/v1/courses/from-materials` 生成当前用户自己的课程结构，成功后前端进入 `/app/courses/{course_id}` 并读取真实标题和知识点；旧版 DOC/PPT、图片和扫描件不伪装解析。
 17. `/app/settings` 可以读取模型配置摘要和多配置列表，保存个人 OpenAI-compatible 配置，设为默认、删除并测试连接；前端不显示明文 Key。
 18. 课程空间命中资料引用且模型配置可用时，可以通过 `/api/v1/tutor/sessions/{session_id}/messages` 或流式接口保存真实模型回答和引用；模型未配置时显示明确提示。
-19. Phase 14 后，课程空间命中资料问题时引用区应显示外部向量混合检索或关键词 fallback；`local-hash-1536` 不作为课程语义命中，刷新后消息、引用和状态仍可恢复。
+19. 课程空间命中资料问题时引用区应显示关键词、向量、混合与重排序状态；外部能力不可用时显示关键词 fallback，刷新后消息、引用和状态仍可恢复。
 20. Phase 6.5 后，课程空间默认进入问答模式，知识点入口和引用可进入学习模式，默认首屏不常驻知识画布、资源区、证据层、横向知识点条或主区重复历史。
 
 当前已验证记录按阶段存放在 [TEST_PLAN.md](TEST_PLAN.md)。

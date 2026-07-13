@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前最新完成到 **Phase 18 AI 执行可靠性与质量评测**。九条学习主链路继续由真实 LangGraph 编排；`ModelExecutionRuntime` 统一处理同配置重试、Redis 并发限制、熔断、流中断、长任务取消和隐私安全调用审计，`AIJobRuntime` 继续负责智能建课与六类资源生成的后台执行。
+当前已完成 **X2-Flash、动态向量与重排序生产化**。九条学习主链路继续由真实 LangGraph 编排；`ModelExecutionRuntime` 统一处理同配置重试、Redis 并发限制、熔断、流中断、长任务取消和隐私安全调用审计，`AIJobRuntime` 继续负责智能建课、六类资源生成和向量重建后台任务。
 
 当前九条真实生产 Graph 为 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
 
@@ -35,11 +35,11 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - `/reports/generate` 和 `/reports/latest` 已由 `ReportGraph` 聚合最近 5 次练习、掌握度、弱点、路径和资源。分数与趋势由规则计算，模型只增强叙事和建议；报告继续由用户主动生成。学习档案同步/异步导出接口保持兼容。
 - `/materials/compare` 已由 `MaterialComparisonGraph` 接管；每次对比保存不可变版本，可恢复最近结果、追溯真实资料分块和审核轨迹。资料对比是资料库内的独立辅助工具，不会隐式修改学习路径或练习。
 - AI 辅导直接在 `/app/courses/:courseId` 课程空间内完成；已移除无独立能力的中转页，旧 `/app/tutor` 地址会回到学习主页。
-- 多套个人模型配置；每套配置可分别填写回答与向量服务商、Base URL、Key 和模型，例如同一方案由星火回答、百炼向量检索。回答预设收录国内常用生成模型，向量预设只收录兼容当前 1536 维检索库的真实 Embedding 服务，两套清单彼此独立。回答默认与向量默认仍可分别选择，缺失用途独立回退服务器 `.env`。
-- 设置中心将回答模型与向量模型分开测试并持久保存安全结果；账号区支持修改昵称和密码，密码更新后所有旧 JWT 立即失效；隐私区只说明真实的数据边界和档案导出入口。
+- 多套个人模型配置；每套配置可组合回答、向量和重排序三个不同服务商，并为三类能力分别保存连接、加密凭证、连接测试和默认用途。新配置推荐 Spark X2-Flash 回答、讯飞 LLM Embedding 和硅基 BGE Reranker，未提供完整凭证的能力保持未启用。
+- 设置中心支持回答、向量与重排序独立测试，并提供显式向量重建任务；账号区支持修改昵称和密码，密码更新后所有旧 JWT 立即失效；隐私区只说明真实的数据边界和档案导出入口。
 - 模型调用采用当前配置有限重试，不在故障后自动转发到另一 Provider；失败时保留各 Graph 的确定性 fallback。
 - `model_call_runs` 只记录模型名、状态、尝试次数、耗时和安全错误分类，Agent trace 可查看聚合调用摘要，不保存 Prompt 或回答正文。
-- OpenAI-compatible Embeddings 与 pgvector SQL cosine 候选；未配置或 Provider 失败时退回关键词检索，`local-hash-1536` 不再标记为语义命中。
+- 讯飞原生 2560 维 Embedding、百炼/硅基 OpenAI-compatible Embeddings、动态 pgvector 与可选 Rerank 已接入；主页资料与课程 RAG 使用关键词 Top 30、向量 Top 30、RRF Top 20、重排序后 Top 5，任一外部能力不可用时按层降级。
 - Phase 12.2 已补交付基线文档、测试报告、用户指南、开源说明、答辩问答、AI 辅助开发说明和 MIT 许可证。
 
 主页回答已由 `HomeTutorGraph` 接管，按需检索当前用户选中资料的相关切片、Tavily-compatible 联网结果和安全深度规划，并通过 SSE 展示状态、真实来源、增量 Markdown、Review/Repair 和九节点安全 trace；未配置搜索 Key 时 warning 只进入来源/轨迹区，不伪造网页来源。主页语音输入和朗读使用浏览器 Web Speech API，不上传音频。课程空间继续使用严格课程引用、混合检索和流式 RAG。课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件，并通过课程学习状态同步为待确认复习项；这仍是“待确认/待复习”，不是已完成正式诊断。学生确认后才进入待复习、复习中或已完成语义，Phase 9 路径生成只消费已确认/复习中的弱点，不直接消费 `pending` 候选项。后续不会为每门课复制完整画像，而是通过课程级学习状态聚合目标、薄弱点、掌握度、复习队列和路径依据。
@@ -49,7 +49,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 还没有进入的能力：
 
 - OCR、图片题目识别、旧版 Office 和扫描件解析。
-- 讯飞原生 Embeddingp/Embeddingq。
+- OCR、图片题目识别之外的多模态向量检索。
 - 个人全局资源生成入口和资源版本化编辑；课程级结构化资源生成已进入后台 AI 任务，个人全局资源仍未接入。
 - 学习档案导出的 Agent 化；当前确定性 Service + RQ 已满足业务需要，不列为默认开发目标。
 
@@ -113,7 +113,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 | 前端 | React、TypeScript、Vite、Tailwind CSS、React Router、Zustand、React Query |
 | 后端 | FastAPI、SQLAlchemy、Alembic、Pydantic、PyJWT、bcrypt |
 | 数据 | PostgreSQL、pgvector、Redis、本地文件存储 |
-| AI | OpenAI-compatible Chat Completions、SSE、OpenAI-compatible Embeddings、pgvector SQL 与关键词 fallback |
+| AI | Spark X2-Flash / OpenAI-compatible Chat、讯飞与兼容 Embeddings、可选 Rerank、动态 pgvector、SSE 与关键词 fallback |
 | 工程 | Docker Compose、Nginx、pytest、Vitest、Playwright、ESLint、ruff、PowerShell 检查脚本 |
 
 ## 编码规则

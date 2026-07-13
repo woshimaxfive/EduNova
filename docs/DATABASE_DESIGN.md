@@ -49,6 +49,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260713_0017_complete_settings_center.py`：为模型配置增加回答/向量独立安全测试摘要，并为用户增加认证版本，支持换密后旧 JWT 失效。
 - `backend/migrations/versions/20260713_0018_split_model_defaults.py`：为模型配置增加独立向量默认标记；旧回答默认中已配置向量模型的记录自动继承向量默认。
 - `backend/migrations/versions/20260713_0019_split_embedding_connection.py`：为同一模型配置增加向量专用 Provider 预设、Base URL 和加密 Key；旧非空向量配置从共享连接兼容复制。
+- `backend/migrations/versions/20260713_0020_dynamic_embedding_and_rerank.py`：把课程/资料向量列升级为动态维度，增加向量配置指纹字段，并为模型配置增加讯飞向量凭证与独立重排序连接。
 
 Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
@@ -224,7 +225,12 @@ Phase 16 的 `MaterialComparisonGraph` 继续复用 `materials`、`course_materi
 | `section_title` | varchar | Markdown 标题或解析章节，可空 |
 | `page_number` | integer | 来源页码，可空 |
 | `content` | text | 检索正文 |
-| `embedding` | vector(1536) | 外部 embedding 或 `local-hash-1536` fallback，可空 |
+| `embedding` | vector | 当前配置生成的动态维度外部向量，可空 |
+| `embedding_provider` | varchar | 向量 Provider，可空；旧向量为空 |
+| `embedding_model` | varchar | 向量模型，可空 |
+| `embedding_dimension` | integer | 实际维度，可空 |
+| `embedding_profile_hash` | varchar | Provider、模型、维度和连接配置的安全指纹，可空 |
+| `embedding_updated_at` | timestamptz | 最近向量更新时间，可空 |
 | `metadata_json` | jsonb | 来源文件名、embedding 来源/模型/维度/时间等安全元数据 |
 | `created_at` | timestamptz | 创建时间 |
 
@@ -233,8 +239,8 @@ Phase 16 的 `MaterialComparisonGraph` 继续复用 `materials`、`course_materi
 - `material_id + chunk_index` 唯一。
 - `material_id` 外键指向 `materials.id`，`ON DELETE CASCADE`。
 - `ix_material_chunks_material(material_id)` 支持选中资料范围检索。
-- `ix_material_chunks_embedding` 使用 `ivfflat` 和 `vector_cosine_ops`。
-- 查询先按当前用户资料所有权和本次 `selected_material_ids` 限定候选，再融合中文关键词分数与 pgvector cosine 分数；不返回完整资料原文。
+- `ix_material_chunks_material_embedding_profile(material_id, embedding_profile_hash)` 支持当前配置精确检索。
+- 查询先按当前用户资料所有权、本次 `selected_material_ids`、Provider、模型、维度和配置指纹限定候选，再融合关键词、cosine 与可选重排序；不返回完整资料原文。
 
 ### 4.4.3 `course_material_links`
 
@@ -300,7 +306,7 @@ Phase 16 的 `MaterialComparisonGraph` 继续复用 `materials`、`course_materi
 
 ### 4.6 `knowledge_chunks`
 
-用途：RAG 检索切片。Phase 13.2 会把已解析 TXT/Markdown/PDF/DOCX/PPTX 资料按知识点切成文本片段写入本表，Phase 6.4 会复用既有 `Vector(1536)` 字段保存 OpenAI-compatible embedding 或显式本地 fallback 向量。
+用途：RAG 检索切片。已解析 TXT/Markdown/PDF/DOCX/PPTX 资料按知识点切成文本片段；Alembic `0020` 后保存当前默认配置生成的动态维度外部向量。
 
 字段：
 
@@ -313,14 +319,19 @@ Phase 16 的 `MaterialComparisonGraph` 继续复用 `materials`、`course_materi
 | `content` | text | 切片内容 |
 | `page_number` | integer | 页码 |
 | `section_title` | varchar | 小节标题 |
-| `embedding` | vector | 1536 维向量，可为空 |
-| `metadata_json` | jsonb | 来源元数据；Phase 6.4 后记录 `embedding_source`、`embedding_model`、`embedding_dimension`、`embedded_at` |
+| `embedding` | vector | 动态维度向量，可为空 |
+| `embedding_provider` | varchar | 向量 Provider，可空 |
+| `embedding_model` | varchar | 向量模型，可空 |
+| `embedding_dimension` | integer | 实际向量维度，可空 |
+| `embedding_profile_hash` | varchar | 当前连接配置的安全指纹，可空 |
+| `embedding_updated_at` | timestamptz | 最近向量更新时间，可空 |
+| `metadata_json` | jsonb | 来源和兼容向量元数据 |
 
 索引：
 
 - `course_id`。
 - `knowledge_point_id`。
-- `embedding` 向量索引。
+- `course_id + embedding_profile_hash` 组合索引；混合维度范围内使用精确 cosine 检索，不创建 IVFFlat 索引。
 
 ### 4.7 `student_profiles`
 
@@ -648,21 +659,31 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 | `display_name` | varchar | 当前用户内的配置名称 |
 | `preset_id` | varchar | 前端 Provider 预设标识，如 `spark`、`deepseek`、`ollama` |
 | `provider` | varchar | 模型协议供应商，当前统一为 `openai_compatible` |
-| `base_url` | text | OpenAI-compatible 接口地址，讯飞星火 Spark 推荐 `https://spark-api-open.xf-yun.com/v1` |
+| `base_url` | text | 回答接口地址，讯飞 Spark X2-Flash 为 `https://spark-api-open.xf-yun.com/agent/v1/` |
 | `api_key_ciphertext` | text | 加密后的 API Key |
 | `chat_model` | varchar | 聊天模型 |
-| `embedding_provider` | varchar | 可空向量协议供应商；当前统一为 `openai_compatible` |
+| `embedding_provider` | varchar | `openai_compatible` 或 `xfyun_embedding` |
 | `embedding_preset_id` | varchar | 可空向量 Provider 预设标识，可与回答预设不同 |
-| `embedding_base_url` | text | 可空向量 OpenAI-compatible 接口地址，可与回答地址不同 |
+| `embedding_base_url` | text | 可空向量接口地址，可与回答地址不同 |
 | `embedding_api_key_ciphertext` | text | 可空向量 API Key 密文，与回答 Key 独立加密 |
-| `embedding_model` | varchar | 可空向量模型，用于 OpenAI-compatible `/embeddings`；缺省时使用关键词检索 fallback |
+| `embedding_app_id_ciphertext` | text | 讯飞向量 APPID 密文，可空 |
+| `embedding_api_secret_ciphertext` | text | 讯飞向量 APISecret 密文，可空 |
+| `embedding_model` | varchar | 可空向量模型；缺省时使用关键词检索 fallback |
+| `embedding_dimension` | integer | 连接测试识别或预设确认的实际维度，可空 |
+| `rerank_provider` | varchar | 可空重排序协议供应商 |
+| `rerank_preset_id` | varchar | 可空重排序预设标识 |
+| `rerank_base_url` | text | 可空重排序地址 |
+| `rerank_api_key_ciphertext` | text | 可空重排序 Key 密文 |
+| `rerank_model` | varchar | 可空重排序模型 |
+| `rerank_workspace_id` | varchar | 百炼 Workspace ID，可空 |
 | `tool_flags_json` | jsonb | 预留工具标记，当前设置页不管理联网搜索或深度思考 |
 | `is_default` | boolean | 是否为当前用户回答默认配置，保留旧字段名兼容 |
 | `is_embedding_default` | boolean | 是否为当前用户向量默认配置 |
+| `is_rerank_default` | boolean | 是否为当前用户重排序默认配置 |
 | `last_test_ok` | boolean | 最近一次连接测试是否成功 |
 | `last_test_message` | text | 最近一次连接测试的脱敏结果摘要 |
 | `last_tested_at` | timestamptz | 最近一次连接测试时间 |
-| `connection_test_json` | jsonb | 回答/向量模型独立安全测试摘要，非空默认 `{}` |
+| `connection_test_json` | jsonb | 回答/向量/重排序独立安全测试摘要，非空默认 `{}` |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -671,15 +692,15 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - 不保存明文 Key。
 - 日志不记录 Key。
 - 前端只显示脱敏 Key。
-- 回答或向量连接未变化时，`api_key` 或 `embedding_api_key` 为空字符串或请求缺省会分别保留原密钥；Provider 或 Base URL 变化时必须重新提供对应 Key，否则清除旧密文。
+- 回答、向量或重排序连接未变化时，空 Key 会保留原密钥；Provider 或 Base URL 变化时必须重新提供对应 Key，否则清除旧密文。
 - 缺少 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，不允许保存新的用户 Key。
-- 同一用户可保存多套配置；每套配置可组合不同回答和向量服务商。回答运行时读取 `is_default=true` 下的回答连接，Embedding 运行时读取 `is_embedding_default=true` 下的向量连接，某一用途缺失时独立回退服务器 `.env`。
+- 同一用户可保存多套配置；每套配置可组合不同回答、向量和重排序服务商。三类运行时分别读取自己的默认标记，某一用途缺失时独立回退服务器 `.env`。
 - 删除默认配置后，后端只在包含对应模型的剩余配置中选择该用途的新默认。
-- 设置页 Provider 预设首位为讯飞星火 Spark；预设只负责填充 OpenAI-compatible 连接参数，不改变后端协议。
+- 设置页回答预设首位为讯飞 Spark X2-Flash；向量和重排序预设可使用各自原生协议，不能伪装为聊天接口。
 - `connection_test_json` 只保存操作类型、模型名、成功状态、安全错误分类、是否可重试和测试时间；不保存 Prompt、回答、向量、密钥或 Provider 原始错误。旧 `last_test_*` 继续兼容回答模型最近测试。
 - `20260704_0006` 迁移为旧数据补 `display_name` 和 `is_default=true`，保证 Phase 6.1 的旧单配置继续可用。
 - `20260713_0018` 将旧回答默认中非空的 `embedding_model` 迁移为向量默认，升级后不丢失原有语义检索配置。
-- `20260713_0019` 将旧记录的 `provider`、`preset_id`、`base_url` 和 `api_key_ciphertext` 复制到新增向量连接字段；升级后旧共享连接行为不变，新配置可分别保存两套连接。
+- `20260713_0019` 将旧共享连接兼容复制到向量字段；`20260713_0020` 取消固定 1536 维，旧向量因缺少配置指纹保持 legacy，不参与新配置召回。
 
 ### 4.20 `export_jobs`
 
@@ -900,7 +921,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 11. 两个不同用户的数据互不可见。
 12. Demo 数据可重置且不污染普通用户数据。
 13. Phase 6.2 后，用户模型 Key 必须按配置独立加密保存，读取设置只能返回来源、模型、默认配置、脱敏 Key 和可用性；课程 RAG 回答的 `trace_id` 和 `citation_json` 必须可追溯。
-14. Phase 6.4 后，知识切片向量必须保持 1536 维合同，外部 embedding 失败不得阻断建课或问答，fallback 来源必须写入 metadata。
+14. Alembic `0020` 后，知识和资料切片必须按 Provider、模型、实际维度和配置指纹隔离；外部 embedding 失败不得阻断建课或问答。
 15. Phase 7.2 后，用户级画像只保留一份，课程级学习状态通过课程相关事件、弱点队列、路径和后续聚合接口表达，不新增通用 `learning_events` 表。
 16. Phase 7.3 后，课程问答弱点候选事件可通过 `/courses/{course_id}/learning-state` 同步为当前课程 `weakness_review_queue` 的 `pending` 项，服务层强制绑定 `course_id`。
 17. Phase 7.4 后，弱点复习项通过课程绑定接口进行确认、开始、完成和软忽略；`dismissed` 项不返回主列表，但必须继续参与去重。
@@ -921,9 +942,9 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 
 - Alembic 能创建 `users`、`courses`、`course_enrollments`、`course_materials`、`materials`、`material_chunks`、`course_material_links`、`knowledge_points`、`knowledge_chunks`。
 - Alembic metadata 已注册并迁移创建 `student_profiles`、`profile_events`、`material_comparison_runs`、`learning_paths`、`learning_tasks`、`generated_resources`、`resource_quality_scores`、`agent_run_logs`、`practice_sessions`、`practice_answers`、`assessment_reports`、`weakness_review_queue`、`chat_sessions`、`chat_messages` 和 `model_settings`。
-- `knowledge_chunks.embedding` 使用 `vector(1536)`。
-- `knowledge_chunks.embedding` 已建立 `ivfflat` 向量索引。
-- `material_chunks.embedding` 已建立 `ivfflat` cosine 向量索引，删除资料会级联删除资料切片。
+- `knowledge_chunks.embedding` 和 `material_chunks.embedding` 使用动态 `vector`，允许不同配置使用不同维度。
+- 混合维度列不使用 IVFFlat；当前用户课程或已选资料范围内按配置指纹执行精确 cosine 检索。
+- 删除资料会级联删除资料切片。
 - 第二条迁移已完成 downgrade/upgrade 往返验证。
 - `users.starter_mode` 已进入模型和迁移合同，旧用户默认 `blank`。
 - 人工智能导论内置课程包可导入，包含 12 个知识点和 24 个基础资料切片。
@@ -932,7 +953,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - Phase 4.4 资料库服务已验证上传、列表、详情、进度和加入课程都只访问当前用户数据；迁移 `0005` 会把旧 `course_materials` 兼容复制为 `materials` 与 `course_material_links`。
 - Phase 13.2 资料解析和课程生成服务已验证 TXT/Markdown/PDF/DOCX/PPTX 资料能创建 `courses`、`course_enrollments`、`course_materials`、`course_material_links`、`knowledge_points` 和 `knowledge_chunks`；损坏 PDF/DOCX/PPTX 标记 `failed`，旧版 DOC/PPT 和图片不伪装解析完成；A 用户不能用 B 用户资料建课，也不能读取 B 用户课程。
 - 模型设置服务已验证用户 API Key 不以明文进入数据库，同一用户多套模型配置互相隔离；连接不变时空 Key 保留原密钥，连接变化且没有新 Key 时清除旧凭据，缺少加密 Key 时拒绝保存用户 Key。课程会话命中引用且默认模型配置可用时，assistant 内容来自模型回答，`citation_json` 保留真实引用，`trace_id` 非空。
-- Phase 6.4 已验证 OpenAI-compatible embedding 请求、`dimensions` 重试、维度不匹配拒绝、本地 `local-hash-1536` fallback、课程生成 best-effort 写入向量和 RAG 混合排序字段。
+- 已验证讯飞签名与 2560 维解码、OpenAI-compatible 动态维度、配置指纹隔离、课程生成 best-effort 写入向量、RRF 混合召回和可选重排序。
 - Phase 7.1 已验证 `student_profiles` 和 `profile_events` 支持当前用户画像读取、画像对话更新、事件倒序、多用户隔离，以及课程问答弱点候选事件的隐私安全证据写入。
 - Phase 7.2 已完成用户级画像与课程级学习状态的数据库边界设计；本阶段不新增迁移，不新增 `learning_events`。
 - Phase 7.3 已验证课程学习状态服务能读取当前课程弱点候选事件、按知识点或标题去重生成 `pending` 复习项，并保持多用户、跨课程和隐私隔离。

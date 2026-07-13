@@ -15,18 +15,27 @@ export type ChatModelProviderPreset = ModelProviderPresetBase & {
 
 export type EmbeddingModelProviderPreset = ModelProviderPresetBase & {
   embeddingModel: string;
+  provider: "openai_compatible" | "xfyun_embedding";
+  dimension: number | null;
+  requiresXfyunCredentials?: boolean;
+};
+
+export type RerankModelProviderPreset = ModelProviderPresetBase & {
+  rerankModel: string;
+  provider: "siliconflow_rerank" | "bailian_rerank" | "openai_compatible";
+  requiresWorkspaceId?: boolean;
 };
 
 export const CHAT_MODEL_PROVIDER_PRESETS: ChatModelProviderPreset[] = [
   {
     id: "spark",
-    name: "讯飞星火 Spark",
-    description: "赛题出题企业相关 Provider，按星火 HTTP OpenAI-compatible 接口接入。",
-    baseUrl: "https://spark-api-open.xf-yun.com/v1",
-    chatModel: "4.0Ultra",
+    name: "讯飞星火 X2-Flash",
+    description: "赛题出题企业相关模型，支持标准回答与可控深度思考。联网仍由 EduNova 的来源检索负责。",
+    baseUrl: "https://spark-api-open.xf-yun.com/agent/v1/",
+    chatModel: "spark-x",
     apiKeyLabel: "API Key / APIPassword",
     apiKeyPlaceholder: "填入讯飞控制台对应模型的 APIPassword",
-    modelsHint: "推荐 4.0Ultra；也可使用 generalv3、pro-128k 或 lite。"
+    modelsHint: "默认 Spark X2-Flash（spark-x）；额度与可用能力以讯飞控制台为准。"
   },
   {
     id: "deepseek",
@@ -134,36 +143,104 @@ export const EMBEDDING_MODEL_PROVIDER_PRESETS: EmbeddingModelProviderPreset[] = 
     embeddingModel: "",
     apiKeyLabel: "API Key",
     apiKeyPlaceholder: "无需填写",
-    allowEmptyApiKey: true
+    allowEmptyApiKey: true,
+    provider: "openai_compatible",
+    dimension: null
+  },
+  {
+    id: "xfyun-embedding",
+    name: "讯飞星火 · LLM Embedding",
+    description: "讯飞原生文本向量接口，资料使用 para、问题使用 query，输出 2560 维。",
+    baseUrl: "https://emb-cn-huabei-1.xf-yun.com/",
+    embeddingModel: "llm-embedding",
+    provider: "xfyun_embedding",
+    dimension: 2560,
+    apiKeyLabel: "APIKey",
+    apiKeyPlaceholder: "填入讯飞 Embedding APIKey",
+    modelsHint: "还需要同一服务的 APPID 与 APISecret；额度以讯飞控制台为准。",
+    requiresXfyunCredentials: true
   },
   {
     id: "qwen",
     name: "阿里云百炼 · 文本向量",
-    description: "百炼 OpenAI-compatible 向量接口，可直接输出项目使用的 1536 维向量。",
+    description: "百炼 OpenAI-compatible 向量接口，text-embedding-v4 默认使用 1024 维。",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     embeddingModel: "text-embedding-v4",
+    provider: "openai_compatible",
+    dimension: 1024,
     apiKeyLabel: "API Key",
     apiKeyPlaceholder: "填入百炼 API Key",
-    modelsHint: "推荐 text-embedding-v4；EduNova 请求 1536 维输出。"
+    modelsHint: "推荐 text-embedding-v4；支持的维度以百炼当前文档与控制台为准。"
   },
   {
     id: "siliconflow-embedding",
-    name: "硅基流动 · Qwen3 Embedding",
-    description: "硅基流动 OpenAI-compatible 向量接口，Qwen3 Embedding 支持 1536 维输出。",
+    name: "硅基流动 · BGE-M3",
+    description: "硅基流动 OpenAI-compatible 向量接口，适合中英文学习资料检索。",
     baseUrl: "https://api.siliconflow.cn/v1",
-    embeddingModel: "Qwen/Qwen3-Embedding-8B",
+    embeddingModel: "BAAI/bge-m3",
+    provider: "openai_compatible",
+    dimension: 1024,
     apiKeyLabel: "API Key",
     apiKeyPlaceholder: "填入 SiliconFlow API Key",
-    modelsHint: "推荐 Qwen/Qwen3-Embedding-8B；也可按账号可用模型调整。"
+    modelsHint: "推荐 BAAI/bge-m3（1024 维）；免费额度以硅基流动控制台为准。"
   },
   {
     id: "custom",
-    name: "自定义 1536 维兼容服务",
-    description: "适合私有网关或其它支持 OpenAI /embeddings 且能返回 1536 维向量的服务。",
+    name: "自定义兼容向量服务",
+    description: "适合私有网关或其它支持 OpenAI /embeddings 的文本向量服务。",
     baseUrl: "",
     embeddingModel: "",
+    provider: "openai_compatible",
+    dimension: null,
     apiKeyLabel: "API Key",
     apiKeyPlaceholder: "填入向量服务 API Key"
+  }
+];
+
+export const RERANK_MODEL_PROVIDER_PRESETS: RerankModelProviderPreset[] = [
+  {
+    id: "none",
+    name: "暂不配置",
+    description: "使用关键词与向量的混合排序，不调用外部重排序服务。",
+    baseUrl: "",
+    rerankModel: "",
+    provider: "openai_compatible",
+    apiKeyLabel: "API Key",
+    apiKeyPlaceholder: "无需填写",
+    allowEmptyApiKey: true
+  },
+  {
+    id: "siliconflow-rerank",
+    name: "硅基流动 · BGE Reranker",
+    description: "对混合召回的候选片段进行二次精排，默认最多处理 20 条。",
+    baseUrl: "https://api.siliconflow.cn/v1",
+    rerankModel: "BAAI/bge-reranker-v2-m3",
+    provider: "siliconflow_rerank",
+    apiKeyLabel: "API Key",
+    apiKeyPlaceholder: "填入 SiliconFlow API Key",
+    modelsHint: "推荐 BAAI/bge-reranker-v2-m3；免费额度以控制台为准。"
+  },
+  {
+    id: "bailian-rerank",
+    name: "阿里云百炼 · Qwen3 Rerank",
+    description: "使用百炼 Workspace 兼容接口对文本候选进行精排。",
+    baseUrl: "https://{workspace_id}.cn-beijing.maas.aliyuncs.com/compatible-api/v1",
+    rerankModel: "qwen3-rerank",
+    provider: "bailian_rerank",
+    apiKeyLabel: "API Key",
+    apiKeyPlaceholder: "填入百炼 API Key",
+    modelsHint: "需要填写 Workspace ID；额度以百炼控制台为准。",
+    requiresWorkspaceId: true
+  },
+  {
+    id: "custom",
+    name: "自定义兼容重排序服务",
+    description: "适合提供兼容 rerank 响应的私有服务。",
+    baseUrl: "",
+    rerankModel: "",
+    provider: "openai_compatible",
+    apiKeyLabel: "API Key",
+    apiKeyPlaceholder: "填入重排序服务 API Key"
   }
 ];
 
@@ -174,6 +251,11 @@ export function getChatProviderPreset(presetId: string | null | undefined) {
 export function getEmbeddingProviderPreset(presetId: string | null | undefined) {
   return EMBEDDING_MODEL_PROVIDER_PRESETS.find((preset) => preset.id === presetId)
     ?? EMBEDDING_MODEL_PROVIDER_PRESETS[0];
+}
+
+export function getRerankProviderPreset(presetId: string | null | undefined) {
+  return RERANK_MODEL_PROVIDER_PRESETS.find((preset) => preset.id === presetId)
+    ?? RERANK_MODEL_PROVIDER_PRESETS[0];
 }
 
 export function inferChatProviderPresetId(baseUrl: string | null | undefined, presetId?: string | null) {
@@ -191,6 +273,16 @@ export function inferEmbeddingProviderPresetId(baseUrl: string | null | undefine
   }
   if (!baseUrl) return "none";
   return EMBEDDING_MODEL_PROVIDER_PRESETS.find(
+    (preset) => preset.id !== "none" && preset.id !== "custom" && preset.baseUrl === baseUrl
+  )?.id ?? "custom";
+}
+
+export function inferRerankProviderPresetId(baseUrl: string | null | undefined, presetId?: string | null) {
+  if (presetId && RERANK_MODEL_PROVIDER_PRESETS.some((preset) => preset.id === presetId)) {
+    return presetId;
+  }
+  if (!baseUrl) return "none";
+  return RERANK_MODEL_PROVIDER_PRESETS.find(
     (preset) => preset.id !== "none" && preset.id !== "custom" && preset.baseUrl === baseUrl
   )?.id ?? "custom";
 }

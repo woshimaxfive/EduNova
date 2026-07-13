@@ -1,135 +1,100 @@
 # EduNova RAG 检索与引用设计
 
-日期：2026-07-04
+## 1. 当前目标
 
-## 1. 当前阶段
+EduNova 的主页资料问答与课程问答共用同一套检索底座，但保持不同证据边界：
 
-Phase 5.2 已完成第一版课程知识库检索地基，Phase 5.3 已把检索结果接入课程会话引用持久化，Phase 6.1 已把命中引用的课程会话接入非流式真实模型回答，Phase 6.3 已把课程空间回答切到流式输出，Phase 6.4 已把课程知识切片升级为 embedding 与混合检索：
+- 主页只检索当前用户在该会话中确认选择的资料，并允许模型使用通用知识。
+- 课程空间只检索当前用户课程内的知识切片，回答必须受课程证据约束。
+- 联网搜索仍由 `HomeTutorGraph.web_search` 调用 Tavily-compatible 服务，模型 Provider 不接管网页搜索。
+- 引用只返回安全短片段、来源、章节、页码和检索状态，不返回完整资料、向量或模型输入。
 
-- 已生成课程中的 `knowledge_chunks` 可以通过 `POST /api/v1/rag/search` 检索。
-- 检索只在当前登录用户自己的课程内进行。
-- 返回结果包含知识切片、课程资料、知识点、章节和匹配分数。
-- 课程生成后会 best-effort 为 `knowledge_chunks.embedding` 写入 1536 维向量，RAG 搜索时也会懒加载补齐缺失或过期向量。
-- 检索优先融合关键词分数和 cosine 相似度分数；无可用向量或外部 embedding 失败时回退关键词检索。
-- 没有可用 embedding 配置或 Provider 失败时，课程 RAG 显式退回关键词检索；`local-hash-1536` 不参与课程语义向量命中。真实外部向量通过 pgvector SQL cosine 候选并与中文关键词合并排序。
-- 课程空间发送课程问题时，会通过课程会话调用真实检索，并把引用写入 assistant 消息的 `citation_json`。
-- 刷新课程页或点击课程内历史后，前端从 `/tutor/sessions/{session_id}` 恢复消息和引用。
-- 当课程问题命中引用且模型配置可用时，后端使用 OpenAI-compatible Chat Completions 基于引用生成回答，并保存到 assistant `content`。
-- 课程空间默认调用 `/api/v1/tutor/sessions/{session_id}/messages/stream`，先显示流式 token，完成后再用持久化消息替换临时状态。
-- 当课程问题无引用时，不调用模型，继续返回资料依据不足。
-- 当有引用但模型未配置时，保留引用并提示“已找到资料依据，但当前未配置可用模型。”
-- 模型流式中途失败时返回 `error` 事件，不写入半截 assistant。
+## 2. 向量能力
 
-本阶段已接课程空间流式真实模型回答和第一版混合检索；讯飞原生 Embeddingp/Embeddingq、资源生成、多智能体编排和深度解析仍不在本轮范围内。
+向量连接与回答连接独立保存、独立测试、独立选择默认用途。当前支持：
 
-## 2. 数据来源
+| Provider | 协议 | 默认模型 | 维度 |
+| --- | --- | --- | --- |
+| 讯飞星火 | 原生签名 HTTP | LLM Embedding | 固定 2560 |
+| 阿里云百炼 | OpenAI-compatible `/embeddings` | `text-embedding-v4` | 预设 1024，可按实际响应识别 |
+| 硅基流动 | OpenAI-compatible `/embeddings` | `BAAI/bge-m3` | 1024 |
+| 自定义服务 | OpenAI-compatible `/embeddings` | 用户填写 | 由连接测试和实际响应识别 |
 
-Phase 5.2 到 Phase 6.4 只读取或复用现有数据表：
+讯飞资料使用 `domain=para`，问题使用 `domain=query`。单次输入超过 2KB 时按 UTF-8 字节边界安全拆分，分段向量做均值池化和归一化，不截断中文正文。
 
-- `courses`：确认课程属于当前用户。
-- `course_materials`：提供资料标题和资料来源。
-- `knowledge_points`：提供知识点和章节上下文。
-- `knowledge_chunks`：提供可检索文本切片，并在 `embedding Vector(1536)` 保存 OpenAI-compatible 或本地 fallback 向量。
-- `chat_sessions`、`chat_messages`：保存课程会话消息和 assistant `citation_json`。
-- `model_settings`：保存用户自己的 OpenAI-compatible 模型方案；每套方案内回答与向量分别保存 Provider 预设、Base URL、加密 Key 和模型，同一用户还可分别选择回答默认与向量默认。课程回答和 Embedding 不要求共用服务商或连接。
+`knowledge_chunks.embedding` 和 `material_chunks.embedding` 使用无固定维度的 pgvector `vector`。每条向量同时记录：
 
-本阶段不新增数据库迁移，继续复用既有 `knowledge_chunks.embedding Vector(1536)`。`metadata_json` 写入 `embedding_source`、`embedding_model`、`embedding_dimension`、`embedded_at`，用于识别本地 fallback、过期模型和后续重建。
+- `embedding_provider`
+- `embedding_model`
+- `embedding_dimension`
+- `embedding_profile_hash`
+- `embedding_updated_at`
 
-## 3. 检索规则
+检索必须匹配用户、课程或资料、Provider、模型、维度和配置指纹。旧 1536 维向量保留为 legacy 数据，但缺少新配置指纹，不参与当前向量召回。
 
-当前检索采用混合评分：
+## 3. 混合召回与重排序
 
-1. 保留确定性关键词评分：完整 query 命中权重最高，英文、数字和中文连续片段会被拆成检索词，中文长词会额外拆成二字片段。
-2. 查询有可用 embedding 时，对每个知识切片计算 cosine 相似度，负分归零后转换为 `vector_score`。
-3. 最终 `score = keyword_score + vector_score`；纯向量命中达到阈值时也可以进入结果。
-4. 课程生成时 best-effort 生成向量，搜索时对缺失或模型过期的向量做懒加载补齐。
-5. 外部 embedding 失败时不阻断问答，`embedding_status` 暴露状态并退回关键词检索。
-6. 分数相同按 `chunk_id` 升序返回，保证结果稳定。
+主页资料 RAG 和课程 RAG 使用同一流程：
 
-无命中时返回空 `results`，前端显示资料不足提示，不伪造引用。
+1. 中文关键词召回 Top 30。
+2. 当前向量配置可用时执行精确 cosine 向量召回 Top 30。
+3. 使用 RRF 合并并去重为 Top 20 候选。
+4. 当前重排序配置可用时执行 Rerank。
+5. 返回最终 Top 5 引用。
 
-## 4. API 合同
+当前重排序 Provider：
 
-正式接口：
+- 硅基流动 `/v1/rerank`，默认 `BAAI/bge-reranker-v2-m3`。
+- 阿里云百炼 Workspace `/compatible-api/v1/reranks`，默认 `qwen3-rerank`。
+- 自定义兼容重排序服务。
 
-```http
-POST /api/v1/rag/search
-Authorization: Bearer <token>
+向量未配置或失败时退回关键词召回；重排序未配置、超时、限流或失败时退回 RRF 混合排序。系统不把内容自动转发给另一 Provider，也不把规则 fallback 宣称为语义向量或模型重排。
+
+## 4. 向量重建
+
+切换默认向量配置不会自动消耗额度。用户在设置页显式点击“重建向量索引”后，前端调用：
+
+```text
+POST /api/v1/settings/model/embedding/reindex-jobs
 ```
 
-请求：
+该任务复用 `AIJobRuntime`、Redis/RQ、进度、取消、刷新恢复和失败重试。任务只处理当前用户可访问的课程切片和资料切片，按批次更新向量与配置指纹；同一配置重复执行会覆盖对应切片的当前向量，不创建重复记录。
+
+新资料和新课程仍会 best-effort 生成当前默认配置的向量。既有资料未重建时关键词召回始终可用，命中的缺失切片可在后续流程中渐进补齐。
+
+## 5. 引用字段
+
+引用在原有字段基础上可返回：
 
 ```json
 {
-  "course_id": 101,
-  "query": "启发式搜索怎么复习？",
-  "top_k": 5
+  "retrieval_source": "keyword | vector | hybrid",
+  "embedding_status": "external | local_fallback | provider_failed",
+  "embedding_provider": "xfyun_embedding",
+  "embedding_dimension": 2560,
+  "rerank_score": 0.91,
+  "rerank_status": "completed | not_configured | provider_failed"
 }
 ```
 
-响应：
+`content` 或 `snippet` 始终是受长度限制的安全片段。Trace 只允许返回调用次数、候选数、实际维度、降级状态和安全错误类别，不记录查询全文、资料原文、向量、密钥或 Provider 原始响应。
 
-```json
-{
-  "data": {
-    "course_id": 101,
-    "query": "启发式搜索怎么复习？",
-    "top_k": 5,
-    "retrieval_mode": "hybrid",
-    "embedding_status": "local_fallback",
-    "results": [
-      {
-        "chunk_id": 501,
-        "course_id": 101,
-        "material_id": 301,
-        "knowledge_point_id": 401,
-        "content": "启发式搜索利用启发函数估计路径代价。",
-        "source_title": "人工智能导论讲义.md",
-        "page_number": null,
-        "section_title": "启发式搜索",
-        "score": 9.5,
-        "keyword_score": 5.2,
-        "vector_score": 4.3,
-        "retrieval_source": "hybrid",
-        "embedding_status": "local_fallback"
-      }
-    ]
-  },
-  "trace_id": "trace_xxx"
-}
+## 6. X2-Flash 边界
+
+回答默认预设为讯飞 Spark X2-Flash：
+
+```text
+base_url = https://spark-api-open.xf-yun.com/agent/v1/
+model = spark-x
 ```
 
-## 5. 课程 RAG 回答生成
+主页普通回答发送 `thinking.disabled`，开启深思时发送 `thinking.enabled`；其他 Graph 默认关闭 Provider 深度思考。Provider 只消费最终 `content`，忽略 `reasoning_content`。星火内置 `web_search` 不启用，保证网页来源继续由 EduNova 的 Tavily 节点、引用协议和 Agent trace 统一管理。
 
-Phase 6.1 到 Phase 6.4 的课程回答生成规则：
+## 7. 验收边界
 
-- 只在 `scope=course` 会话中启用，不影响主页 `scope=home` 会话。
-- 先用混合检索搜索课程 `knowledge_chunks`，再决定是否调用模型。
-- prompt 只允许基于引用回答，要求说明依据，不允许编造资料外内容。
-- assistant `content` 保存模型返回文本，`citation_json` 保留检索引用，`trace_id` 记录本次模型调用。
-- 流式接口先返回 `metadata`，再通过多个 `token` 事件逐段返回文本，最后通过 `done` 返回最终 `TutorSessionDetail`。
-- 只有 `done` 前完整生成成功，才持久化 user 消息、完整 assistant、引用和 `trace_id`。
-- 回答运行时解析为：当前用户回答默认优先，服务器回答配置兜底；向量默认不会参与回答生成。
-- 模型不可用、超时、鉴权失败、非 JSON、空内容或流式中途失败时返回可恢复错误，前端保留输入，不写入半截 assistant 消息。
-
-## 6. Embedding 边界
-
-Phase 6.4 的 embedding 规则：
-
-- 优先使用当前用户向量默认配置中的 `embedding_model`，目标接口为该配置的 OpenAI-compatible `{base_url}/embeddings`；不存在个人向量默认时才回退服务器向量配置。
-- 请求维度固定为 1536；如果服务不支持 `dimensions` 参数，Provider 会自动重试一次不带该字段。
-- 返回向量长度必须为 1536，否则拒绝写入，避免破坏现有 `Vector(1536)` 合同。
-- 如果没有可用 embedding 模型，使用 `local-hash-1536` 确定性本地 fallback，并在 API 和 UI 中明确展示。
-- 不记录完整 API Key、JWT、完整 prompt 或资料全文。
-- 讯飞星火聊天接口可走 OpenAI-compatible `/v1/chat/completions`，但讯飞原生 Embeddingp/Embeddingq 是独立授权、签名鉴权且返回 2560 维，本轮不接。
-
-## 7. 后续演进
-
-Phase 6 后续继续演进：
-
-- 接入讯飞原生 Embeddingp/Embeddingq 或其他非 OpenAI-compatible embedding 专项。
-- 在数据量变大后评估 pgvector 数据库侧近邻召回和批量重建任务。
-- 加入低依据提示和 ReviewAgent 审核。
-- 接入资源生成、多智能体编排和学习评估链路。
-
-Phase 5.2 的目标是让引用链路先真实存在，避免后续 AI 回答变成无来源的文本生成。Phase 5.3 则把这条引用链保存到课程会话里，保证刷新页面、切换课程历史后引用仍然可追溯。Phase 6.1 在此基础上接入真实模型，Phase 6.3 补上课程空间流式体验，Phase 6.4 再把引用召回从关键词检索升级为可解释的混合检索。
+- 混合维度向量可以落库，但一次查询只使用当前配置指纹对应的同维向量。
+- 连接测试保存实际向量维度，用户不手填维度。
+- 无向量 Key 时课程问答和主页资料问答仍可使用关键词证据。
+- 无重排序 Key 时混合召回仍可返回引用。
+- 免费额度只在 UI 中提示“以服务商控制台为准”，不写死额度或承诺永久免费。
+- 标准自动测试使用 Mock/Stub，不消耗真实 API Key。

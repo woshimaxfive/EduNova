@@ -213,7 +213,7 @@ frontend/src/
 - `rag.ts`：课程知识库检索和混合检索字段。
 - `tutor.ts`：主页/课程会话、消息、引用、主页联网/深思/资料参数，以及 home/course 共用 SSE 的状态、来源、token、Review 替换和完成事件。
 - `exports.ts`：旧同步 Markdown 学习档案导出和 Markdown/PDF/DOCX 异步导出任务。
-- `settings.ts`：模型配置读取、保存、测试、多配置管理和默认配置。
+- `settings.ts`：回答、向量和重排序连接读取、保存、独立测试、默认用途与向量重建任务。
 
 当前边界：
 
@@ -267,9 +267,10 @@ backend/app/
 | `backend/app/data/builtin_courses` | 内置课程包数据 |
 | `backend/app/services/course_seed.py` | 内置课程导入服务 |
 | `backend/app/services/tutor.py` | 主页/课程会话 API 边界和依赖装配；`HomeTutorGraphRunner` 接管主页上下文、路由、资料检索、联网、规划、回答、Review/Repair 和持久化，`CourseTutorGraphRunner` 接管严格课程 RAG 问答 |
-| `backend/app/services/model_settings.py` | 模型设置服务，负责用户多模型配置、单配置内回答/向量独立连接、系统兜底配置解析、两组 Key 的 Fernet 加密与脱敏、连接测试，以及回答默认和向量默认两套独立运行时优先级 |
+| `backend/app/services/model_settings.py` | 模型设置服务，负责单配置内回答/向量/重排序独立连接、三类默认、系统兜底、凭证加密、连接测试与实际向量维度识别 |
 | `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计 |
-| `backend/app/services/embeddings.py` | Embedding 服务，负责 OpenAI-compatible `/embeddings` 调用编排、本地 `local-hash-1536` fallback、知识切片向量写入和 metadata 标记 |
+| `backend/app/services/embeddings.py` | Embedding 服务，负责讯飞原生与 OpenAI-compatible 动态维度调用、配置指纹和切片向量写入；无配置时只返回关键词 fallback |
+| `backend/app/providers/retrieval.py` | 讯飞签名 Embedding、UTF-8 2KB 分片池化、硅基/百炼 Rerank Provider |
 | `backend/app/services/course_answers.py` | 回答服务，负责主页学习 prompt、资料/网页来源摘要、深度回答指令、课程引用受控 prompt、非流式或流式模型 Provider 调用、未配置和模型失败处理 |
 | `backend/app/services/material_parsers.py` | 资料解析器，负责 TXT/Markdown/PDF/DOCX/PPTX 文本抽取，并明确 OCR、旧版 Office 和扫描件边界 |
 | `backend/app/services/materials.py` | 个人资料库服务，负责上传保存、解析、列表、详情、进度和课程资料关联 |
@@ -285,7 +286,7 @@ backend/app/
 | `backend/app/api/v1/materials.py` | `/api/v1/materials/*` 和 `/api/v1/courses/{course_id}/materials` 受保护资料接口 |
 | `backend/app/api/v1/courses.py` | `/api/v1/courses/*`、同步 `/from-materials` 和异步 `/from-materials/jobs` 受保护课程接口 |
 | `backend/app/api/v1/settings.py` | `/api/v1/settings/model` 和 `/api/v1/settings/model/test` 受保护模型设置接口 |
-| `backend/app/providers/openai_compatible.py` | OpenAI-compatible Provider，支持 `{base_url}/chat/completions` 非流式/流式回答和 `{base_url}/embeddings` 1536 维向量请求 |
+| `backend/app/providers/openai_compatible.py` | OpenAI-compatible Provider，支持非流式/流式回答、Spark thinking 控制、最终 content 隔离和动态维度 `/embeddings` |
 | `backend/migrations` | Alembic 迁移环境、pgvector 扩展迁移、核心学习表迁移、学习闭环表迁移和资料库兼容迁移 |
 
 分层职责：
@@ -430,7 +431,7 @@ DocumentParser 文本提取
   ↓
 ChunkingService 知识切片
   ↓
-Phase 6.4 EmbeddingService 写入或补齐 1536 维向量
+EmbeddingService 写入当前 Provider、模型、实际维度和配置指纹对应的向量
   ↓
 HybridRetriever 关键词 + 向量混合检索
   ↓
@@ -449,9 +450,9 @@ ReviewAgent 审核
 - Phase 5.3 已让课程会话发送消息时复用该检索结果，并把引用写入 `chat_messages.citation_json`。
 - Phase 6.1 已让课程会话在有引用且模型配置可用时调用 OpenAI-compatible Chat Completions 生成非流式回答，并把模型内容保存到 `chat_messages.content`，引用继续保存在 `citation_json`。
 - Phase 6.3 已新增课程消息流式路径：后端通过 `event: metadata/token/done/error` 输出 SSE，完成后一次性持久化完整 assistant；失败时不保存半截内容。
-- `EmbeddingService` 优先使用当前用户向量默认配置或服务器向量兜底的 OpenAI-compatible `/embeddings`，不再跟随回答默认。外部 embedding 成功时，课程 RAG 按用户课程、embedding 来源和模型隔离执行 pgvector cosine SQL 候选，并与中文关键词候选合并排序；首次生成的真实课程向量会提交持久化。
-- 未配置外部 embedding 或 Provider 失败时只使用关键词检索，返回 `local_fallback` 或 `provider_failed`；`local-hash-1536` 不参与课程语义向量命中。API 和前端继续展示 `retrieval_mode`、`embedding_status`、`retrieval_source` 等轻量状态。
-- 后续保留批量向量重建任务和讯飞原生 2560 维 Embedding 专项；ReviewAgent 已作为生成型 Graph 的审核节点接入学习闭环 trace。
+- `EmbeddingService` 优先使用当前用户向量默认配置或对应服务器兜底。讯飞走原生签名 2560 维接口，百炼/硅基/自定义走 OpenAI-compatible `/embeddings`；查询按用户、范围、Provider、模型、维度和配置指纹隔离。
+- 课程与主页资料 RAG 均执行关键词 Top 30、向量 Top 30、RRF Top 20、可选 Rerank、最终 Top 5。向量或重排序失败时逐层回退，API 展示 `retrieval_source`、`embedding_status` 和 `rerank_status`。
+- 切换向量默认不会自动消耗额度；`embedding_reindex` AI Job 由用户显式发起，复用 RQ、进度、取消和重试。
 
 可信机制：
 
@@ -516,15 +517,15 @@ Provider 抽象目标能力：
 - `model_list`。
 - `health_check`。
 
-Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已实现 OpenAI-compatible streaming 解析，Provider 会在请求回答连接的 `{base_url}/chat/completions` 时附带 `stream=true` 并解析 `data: {...}` 和 `[DONE]`。Phase 6.4 已实现 OpenAI-compatible embeddings：请求向量连接的 `{embedding_base_url}/embeddings` 时携带 `input`、`model` 和 `dimensions=1536`，若服务不支持 `dimensions` 会重试一次不带该字段，返回向量长度不等于 1536 时拒绝写入。设置页支持：
+回答 Provider 支持 OpenAI-compatible 非流式与 SSE。Spark X2-Flash 使用 `spark-x`，普通回答关闭 thinking、主页深思开启 thinking，只消费最终 `content`。向量 Provider 支持讯飞原生协议和 OpenAI-compatible 动态维度；设置页支持：
 
 - 多套用户个人配置，互相隔离保存和测试。
-- 回答 Provider 与向量 Provider 使用两套独立预设。回答侧首位为讯飞星火 Spark，并收录国内常用生成服务；向量侧只展示能够通过 OpenAI-compatible `/embeddings` 返回 1536 维结果的百炼 `text-embedding-v4`、硅基流动 `Qwen/Qwen3-Embedding-8B` 和自定义兼容服务，不把只有聊天能力或维度不兼容的服务伪装成可用向量预设。
-- 同一配置方案内并列的回答服务和向量服务；两组分别填写 Provider 预设、Base URL、API Key / APIPassword 和模型。
+- 回答、向量与重排序使用三套独立预设。默认推荐 X2-Flash、讯飞 LLM Embedding、硅基 `BAAI/bge-reranker-v2-m3`；缺少凭证的能力不启用。
+- 同一配置方案内并列回答、向量和重排序服务；三组分别填写自身 Provider、地址、凭证和模型。
 - 向量服务用于资料与课程知识库向量化；缺省时明确使用关键词检索 fallback。
-- 指定配置的连通性测试。
-- 回答模型与向量模型独立的一次性连通性测试；测试结果按配置安全持久化，未配置向量模型不会影响回答可用状态。
-- 回答默认与向量默认独立选择，同一配置可组合两个服务商，也可只承担一种用途。
+- 回答、向量和重排序独立的一次性连通性测试；测试结果按配置安全持久化，未配置某项能力不会影响其他能力。
+- 三类默认用途独立选择，同一配置可组合多个服务商，也可只承担一种用途。
+- 显式创建向量重建 AI Job；切换默认配置不会自动调用外部服务。
 - 学生账号昵称通过 `PATCH /auth/me` 真实保存，并同步到侧栏账号入口；邮箱、角色和 starter mode 保持只读。
 - 学生可通过 `PATCH /auth/me/password` 验证当前密码后换密；JWT 携带 `auth_version`，换密后递增版本并使所有旧登录状态失效。
 - 隐私与数据边界作为只读说明展示，学习档案导出仍从报告页按课程生成。
@@ -535,7 +536,7 @@ Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已
 当前用户对应用途的默认配置 -> .env 中对应用途的 SYSTEM_MODEL_* -> 未配置提示
 ```
 
-用户回答 Key 与向量 Key 使用 `MODEL_SETTINGS_ENCRYPTION_KEY` 派生的 Fernet 分别加密到 `api_key_ciphertext` 和 `embedding_api_key_ciphertext`。每条配置是一套可组合方案：回答和向量分别保存 Provider 预设、Base URL、Key、模型和测试摘要，因此同一方案可让讯飞负责回答、让通义等兼容服务负责 Embedding；两者不要求共用连接。回答默认与向量默认又可指向同一套或不同套方案。`GET /settings/model/configs` 只返回两组脱敏摘要、服务器兜底摘要及两类默认配置 id，不返回明文 Key。旧 `/settings/model`、`default_config_id` 和旧共享连接数据继续兼容。讯飞原生 Embedding 接口因独立授权、签名鉴权和不同维度协议，仍放到后续专项。
+回答 Key、向量 Key、讯飞 APPID/APISecret 与重排序 Key 均使用 Fernet 加密。每条配置保存三项独立连接和测试摘要，三类默认可指向同一套或不同套方案。`GET /settings/model/configs` 只返回脱敏状态、能力可用性和三类默认配置 ID，不返回明文凭证。
 
 Phase 18 后，个人配置只有在字段不完整时才沿用现有服务器配置兜底；已经对个人配置发起的请求发生超时、限流或服务故障时，只在同一配置内有限重试，不把学习内容自动发送给另一 Provider。普通调用与 Embedding 最多 3 次，流式调用只允许在首 token 前重试。Redis 暂不可用时限流与熔断 fail-open，但模型 HTTP 超时、Graph fallback 和安全审计边界继续生效。
 

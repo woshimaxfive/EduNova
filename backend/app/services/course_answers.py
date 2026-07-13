@@ -82,7 +82,7 @@ class CourseAnswerService:
             learner_context=learner_context,
         )
         try:
-            content = self.model_settings_service.chat_completion(user=user, messages=messages)
+            content = self._home_chat_completion(user, messages, deep_thinking)
         except ModelNotConfiguredError:
             return CourseAnswerGeneration(content=HOME_MODEL_NOT_CONFIGURED_MESSAGE, trace_id=None)
         except ModelProviderError as exc:
@@ -114,7 +114,7 @@ class CourseAnswerService:
         )
         trace_id = make_trace_id()
         try:
-            tokens = self.model_settings_service.chat_completion_stream(user=user, messages=messages)
+            tokens = self._home_chat_completion_stream(user, messages, deep_thinking)
         except ModelNotConfiguredError:
             return CourseAnswerStream(tokens=iter([HOME_MODEL_NOT_CONFIGURED_MESSAGE]), trace_id=None, used_model=False)
         except ModelProviderError as exc:
@@ -127,6 +127,36 @@ class CourseAnswerService:
                 raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
 
         return CourseAnswerStream(tokens=guarded_tokens(), trace_id=trace_id, used_model=True)
+
+    def _home_chat_completion(
+        self,
+        user: User,
+        messages: list[dict[str, str]],
+        deep_thinking: bool,
+    ) -> str:
+        try:
+            return self.model_settings_service.chat_completion(
+                user=user,
+                messages=messages,
+                thinking_type="enabled" if deep_thinking else "disabled",
+            )
+        except TypeError:
+            return self.model_settings_service.chat_completion(user=user, messages=messages)
+
+    def _home_chat_completion_stream(
+        self,
+        user: User,
+        messages: list[dict[str, str]],
+        deep_thinking: bool,
+    ) -> Iterator[str]:
+        try:
+            return self.model_settings_service.chat_completion_stream(
+                user=user,
+                messages=messages,
+                thinking_type="enabled" if deep_thinking else "disabled",
+            )
+        except TypeError:
+            return self.model_settings_service.chat_completion_stream(user=user, messages=messages)
 
     def plan_home(self, user: User, question: str, citations: list[dict[str, Any]]) -> str:
         source_titles = [str(item.get("title") or item.get("source_title") or "学习来源")[:120] for item in citations[:6]]

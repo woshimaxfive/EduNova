@@ -11,14 +11,14 @@ from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import make_trace_id
 from backend.app.core.config import Settings, get_settings
 from backend.app.db.session import SessionLocal
-from backend.app.models import AiJob, Course, KnowledgePoint, Material, User
+from backend.app.models import AiJob, Course, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, ModelSetting, User
 from backend.app.schemas.ai_jobs import AiJobListResponse, AiJobResponse, ai_job_to_api, iso_timestamp
 
 
 ACTIVE_STATUSES = {"queued", "running", "cancelling"}
 TERMINAL_STATUSES = {"cancelled", "completed", "failed"}
 RETRYABLE_STATUSES = {"cancelled", "failed"}
-WORKFLOWS = {"course_builder", "resource_generation"}
+WORKFLOWS = {"course_builder", "resource_generation", "embedding_reindex"}
 
 
 class AiJobNotFoundError(Exception):
@@ -317,6 +317,31 @@ class AiJobService:
             idempotency_key=idempotency_key,
         )
 
+    def create_embedding_reindex_job(
+        self,
+        user: User,
+        *,
+        config_id: int | None,
+        idempotency_key: str | None,
+    ) -> AiJobResponse:
+        setting = self.repository.db.scalar(
+            select(ModelSetting).where(
+                ModelSetting.user_id == user.id,
+                ModelSetting.is_embedding_default.is_(True),
+            )
+        )
+        if setting is None or not setting.embedding_model:
+            raise AiJobValidationError("请先保存并设定默认向量配置。")
+        if config_id is not None and int(setting.id) != config_id:
+            raise AiJobValidationError("只能使用当前默认向量配置重建索引。")
+        return self._create(
+            user,
+            workflow="embedding_reindex",
+            course_id=None,
+            request_json={"config_id": int(setting.id), "scope": "all_user_chunks"},
+            idempotency_key=idempotency_key,
+        )
+
     def _create(
         self,
         user: User,
@@ -432,6 +457,26 @@ class AiJobService:
         original.attempt_count = next_attempt
         self.repository.commit()
         request = dict(original.request_json or {})
+        if original.workflow == "embedding_reindex":
+            config_id = int(request["config_id"]) if request.get("config_id") else None
+            setting = self.repository.db.scalar(
+                select(ModelSetting).where(
+                    ModelSetting.user_id == user.id,
+                    ModelSetting.id == config_id,
+                    ModelSetting.is_embedding_default.is_(True),
+                )
+            )
+            if setting is None or not setting.embedding_model:
+                raise AiJobValidationError("当前默认向量配置已变化，请重新发起重建任务。")
+            return self._create(
+                user,
+                workflow="embedding_reindex",
+                course_id=None,
+                request_json=request,
+                idempotency_key=f"retry-{original.id}-{uuid4().hex}",
+                retry_of_job_id=original.id,
+                attempt_count=next_attempt,
+            )
         if original.workflow == "course_builder":
             material_ids = [int(item) for item in request.get("material_ids", [])]
             materials = self.repository.get_materials_for_user(user.id, material_ids)
@@ -488,6 +533,8 @@ class AiJobService:
                 result = self._run_course_builder(user, job, context)
             elif job.workflow == "resource_generation":
                 result = self._run_resource_generation(user, job, context)
+            elif job.workflow == "embedding_reindex":
+                result = self._run_embedding_reindex(user, job, context)
             else:
                 raise AiJobValidationError("不支持的 AI 任务类型。")
             refreshed = self.repository.get_job(job_id, for_update=True) or job
@@ -588,6 +635,79 @@ class AiJobService:
             "resource_ids": [resource.id for resource in result.resources],
             "failed_resource_types": result.failed_resource_types,
             "warnings": result.warnings,
+        }
+
+    def _run_embedding_reindex(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:
+        from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
+        from backend.app.services.embeddings import EmbeddingService
+        from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
+
+        model_service = ModelSettingsService(
+            repository=SqlAlchemyModelSettingsRepository(self.repository.db),
+            settings=self.settings,
+            provider=OpenAICompatibleChatProvider(),
+        )
+        profile = EmbeddingService(model_service).expected_profile(user)
+        if profile is None:
+            raise AiJobValidationError("当前默认向量配置不可用，请先完成连接测试。")
+        course_chunks = list(
+            self.repository.db.scalars(
+                select(KnowledgeChunk)
+                .join(Course, Course.id == KnowledgeChunk.course_id)
+                .where(Course.owner_id == user.id)
+                .order_by(KnowledgeChunk.id)
+            )
+        )
+        material_chunks = list(
+            self.repository.db.scalars(
+                select(MaterialChunk)
+                .join(Material, Material.id == MaterialChunk.material_id)
+                .where(Material.user_id == user.id)
+                .order_by(MaterialChunk.id)
+            )
+        )
+        targets: list[Any] = [*course_chunks, *material_chunks]
+        total = len(targets)
+        if total == 0:
+            return {"embedded_chunk_count": 0, "embedding_dimension": profile.dimension, "warnings": []}
+        embedding_service = EmbeddingService(model_service)
+        completed = 0
+        for start in range(0, total, 24):
+            context.check_cancelled()
+            batch_targets = targets[start : start + 24]
+            batch = embedding_service.embed_documents(user, [chunk.content for chunk in batch_targets])
+            if len(batch.vectors) != len(batch_targets):
+                raise AiJobValidationError("向量服务未返回完整结果，可稍后重试。")
+            now = datetime.now(UTC)
+            for chunk, vector in zip(batch_targets, batch.vectors, strict=True):
+                chunk.embedding = vector
+                chunk.embedding_provider = batch.source
+                chunk.embedding_model = batch.model
+                chunk.embedding_dimension = batch.dimension
+                chunk.embedding_profile_hash = batch.profile_hash
+                chunk.embedding_updated_at = now
+                chunk.metadata_json = {
+                    **(chunk.metadata_json or {}),
+                    "embedding_source": batch.source,
+                    "embedding_model": batch.model,
+                    "embedding_dimension": batch.dimension,
+                    "embedding_profile_hash": batch.profile_hash,
+                }
+                self.repository.db.add(chunk)
+            self.repository.db.commit()
+            completed += len(batch_targets)
+            context.after_node(
+                name="embedding_reindex",
+                label=f"已重建 {completed}/{total} 个资料片段",
+                progress_percent=min(99, round(completed / total * 100)),
+                status="completed" if completed == total else "running",
+            )
+        return {
+            "embedded_chunk_count": completed,
+            "embedding_dimension": profile.dimension,
+            "embedding_provider": profile.provider,
+            "embedding_model": profile.model,
+            "warnings": [],
         }
 
     def _require(self, user: User, job_id: int, *, for_update: bool = False) -> AiJob:

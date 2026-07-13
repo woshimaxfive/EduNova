@@ -11,6 +11,7 @@ from backend.app.core.config import Settings
 from backend.app.core.security import create_access_token
 from backend.app.main import create_app
 from backend.app.models import Course, CourseMaterial, KnowledgeChunk, KnowledgePoint, User
+from backend.app.providers.retrieval import RerankItem
 from backend.app.services.auth import AuthService
 from backend.app.services.rag import RagCourseNotFoundError, RagService
 
@@ -79,6 +80,19 @@ class FakeEmbeddingService:
     def expected_metadata(self, _user: User) -> tuple[str, str, int]:
         batch = self.batches[0]
         return batch.source, batch.model, batch.dimension
+
+
+@dataclass
+class FakeRerankService:
+    items: list[RerankItem] = field(default_factory=list)
+    error: Exception | None = None
+    calls: list[tuple[str, list[str], int]] = field(default_factory=list)
+
+    def rerank_documents(self, _user: User, query: str, documents: list[str], top_n: int = 5) -> list[RerankItem]:
+        self.calls.append((query, documents, top_n))
+        if self.error is not None:
+            raise self.error
+        return self.items
 
 
 def make_user(user_id: int = 1) -> User:
@@ -268,6 +282,37 @@ def test_rag_search_keeps_local_hash_as_keyword_fallback_only() -> None:
     assert result.results[0].retrieval_source == "keyword"
     assert result.results[0].vector_score == 0
     assert repo.saved_chunks == []
+
+
+def test_rag_search_reranks_rrf_candidates_and_exposes_safe_metadata() -> None:
+    rerank_service = FakeRerankService(
+        items=[RerankItem(index=1, score=0.96), RerankItem(index=0, score=0.72)]
+    )
+
+    result = RagService(repository=make_repository(), rerank_service=rerank_service).search(
+        make_user(),
+        course_id=101,
+        query="启发式搜索",
+        top_k=2,
+    )
+
+    assert [item.chunk_id for item in result.results] == [503, 501]
+    assert result.results[0].rerank_score == pytest.approx(0.96)
+    assert result.results[0].rerank_status == "completed"
+    assert rerank_service.calls[0][0] == "启发式搜索"
+    assert len(rerank_service.calls[0][1]) == 3
+    assert rerank_service.calls[0][2] == 2
+
+
+def test_rag_search_keeps_rrf_order_when_rerank_provider_fails() -> None:
+    result = RagService(
+        repository=make_repository(),
+        rerank_service=FakeRerankService(error=RuntimeError("provider failed")),
+    ).search(make_user(), course_id=101, query="启发式搜索", top_k=2)
+
+    assert [item.chunk_id for item in result.results] == [501, 503]
+    assert all(item.rerank_score is None for item in result.results)
+    assert all(item.rerank_status == "provider_failed" for item in result.results)
 
 
 def test_rag_search_denies_other_user_course() -> None:

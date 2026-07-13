@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -148,7 +149,7 @@ class FakeProvider:
         config: Any,
         texts: list[str],
         timeout_seconds: float,
-        dimensions: int = 1536,
+        dimensions: int | None = None,
     ) -> list[list[float]]:
         if self.calls is None:
             self.calls = []
@@ -162,7 +163,8 @@ class FakeProvider:
         )
         if self.should_raise is not None:
             raise self.should_raise
-        return [[1.0, 0.0, 0.0] + [0.0] * (dimensions - 3) for _ in texts]
+        actual_dimension = dimensions or 1024
+        return [[1.0, 0.0, 0.0] + [0.0] * (actual_dimension - 3) for _ in texts]
 
 
 class ImmediateExecutionRuntime:
@@ -203,6 +205,12 @@ def make_settings(**overrides: Any) -> Settings:
     }
     defaults.update(overrides)
     return Settings(**defaults)
+
+
+def test_blank_system_embedding_dimension_is_treated_as_unset() -> None:
+    settings = Settings(_env_file=None, system_embedding_dimension="")  # type: ignore[arg-type]
+
+    assert settings.system_embedding_dimension is None
 
 
 def as_dict(value: Any) -> dict[str, Any]:
@@ -603,6 +611,25 @@ def test_split_embedding_connection_migration_preserves_legacy_values() -> None:
     assert "embedding_api_key_ciphertext" in migration_text
     assert "embedding_provider = provider" in migration_text
     assert "embedding_api_key_ciphertext = api_key_ciphertext" in migration_text
+
+
+def test_dynamic_embedding_and_rerank_migration_contract() -> None:
+    migration_path = (
+        Path(__file__).parents[1]
+        / "migrations"
+        / "versions"
+        / "20260713_0020_dynamic_embedding_and_rerank.py"
+    )
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert 'revision = "20260713_0020"' in migration_text
+    assert 'down_revision = "20260713_0019"' in migration_text
+    assert "ALTER COLUMN embedding TYPE vector" in migration_text
+    assert "embedding_profile_hash" in migration_text
+    assert "embedding_dimension" in migration_text
+    assert "rerank_api_key_ciphertext" in migration_text
+    assert "ix_model_settings_user_rerank_default" in migration_text
+    assert "vector_dims(embedding) <> 1536" in migration_text
 
 
 def test_update_config_preserves_key_and_cross_user_access_is_blocked() -> None:

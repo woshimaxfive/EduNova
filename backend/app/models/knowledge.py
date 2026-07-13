@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -40,13 +41,7 @@ class KnowledgePoint(IdMixin, Base):
 class KnowledgeChunk(IdMixin, CreatedAtMixin, Base):
     __tablename__ = "knowledge_chunks"
     __table_args__ = (
-        Index(
-            "ix_knowledge_chunks_embedding",
-            "embedding",
-            postgresql_using="ivfflat",
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-            postgresql_with={"lists": 100},
-        ),
+        Index("ix_knowledge_chunks_course_embedding_profile", "course_id", "embedding_profile_hash"),
     )
 
     course_id: Mapped[int] = mapped_column(
@@ -69,7 +64,12 @@ class KnowledgeChunk(IdMixin, CreatedAtMixin, Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     section_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(), nullable=True)
+    embedding_provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    embedding_dimension: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_profile_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    embedding_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     course: Mapped["Course"] = relationship(back_populates="knowledge_chunks")

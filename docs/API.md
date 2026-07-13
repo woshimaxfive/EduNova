@@ -881,7 +881,7 @@ Authorization: Bearer <token>
 - Markdown 按标题形成来源大纲，其他文档按段落与稳定窗口切分；每个知识点必须关联真实资料分块，未纳入主结构的来源写入补充来源。
 - 确定性底稿可由模型合并、拆分和重排，规则审核知识点数量、重复标题、来源覆盖、先修引用、环路、难度和隐私边界，最多修订一次。
 - 后端会创建 `Course`、`CourseEnrollment`、兼容旧链路的 `CourseMaterial`、`CourseMaterialLink`、`KnowledgePoint` 和 `KnowledgeChunk`。
-- 课程生成会 best-effort 为新 `KnowledgeChunk` 写入真实外部 1536 维 embedding；失败只记录 warning 并回退关键词检索，不把本地 hash 宣称为语义向量。
+- 课程生成会 best-effort 为新 `KnowledgeChunk` 写入当前默认配置的真实外部 embedding；实际维度与配置指纹一并保存，失败只记录 warning 并回退关键词检索。
 - `knowledge_chunks.metadata_json` 会记录 `embedding_source`、`embedding_model`、`embedding_dimension`、`embedded_at`，便于识别本地 fallback、过期模型和后续重建。
 - 前端 `/app` 主页资料库浮层和 `/app/library` 使用同一接口；成功后刷新 summary/materials 并跳转 `/app/courses/{course_id}`。
 - Phase 17 起当前前端改用 `POST /courses/from-materials/jobs`；本同步接口保留给旧客户端和内部兼容调用。
@@ -1034,10 +1034,10 @@ Authorization: Bearer <token>
 - 无 token 返回 401。
 - 访问他人课程返回 404。
 - 无命中时 `results=[]`，前端必须显示资料不足，不得伪造引用。
-- 后端优先使用当前用户向量默认配置中的 `embedding_model` 调用该配置的 OpenAI-compatible `{base_url}/embeddings`，请求维度为 1536；如果服务不支持 `dimensions` 参数，会自动重试一次不带该字段。向量默认与回答默认可以来自不同配置。
-- 如果用户默认配置和服务器兜底都没有可用 embedding 模型，或 Provider 调用失败，后端使用关键词 fallback 保证开源和测试环境仍可检索；返回 `local_fallback` 或 `provider_failed`，`local-hash-1536` 不进入课程向量候选。
+- 后端优先使用当前用户向量默认配置。讯飞使用原生签名接口和 2560 维 `query/para`；百炼、硅基及自定义服务使用 OpenAI-compatible `/embeddings`，实际维度由预设或连接测试识别。向量默认与回答默认可以来自不同配置。
+- 如果没有可用 embedding 模型或 Provider 调用失败，后端使用关键词 fallback；旧 1536 维数据缺少当前配置指纹时视为 legacy，不进入当前向量候选。
 - 外部 embedding 失败时不阻断问答，接口会退回关键词检索并通过 `embedding_status` 暴露状态。
-- 本轮不接讯飞原生 Embeddingp/Embeddingq；其独立授权、签名鉴权和 2560 维输出放到后续专项。
+- 关键词 Top 30 与向量 Top 30 使用 RRF 合并为 Top 20；配置重排序后返回 Top 5。重排序失败只退回 RRF，不跨 Provider 自动转发。
 
 ## 10. Resource 接口
 
@@ -1580,7 +1580,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 - `selected_material_ids` 只允许当前用户资料，最多 10 个。省略时沿用会话已保存范围，显式数组替换范围，空数组清空。历史资料失效时只忽略失效项并返回安全 warning，不泄露资料归属。后端从 `material_chunks` 检索与上下文化 query 相关的最多 5 个片段，不再固定截取资料开头；无相关片段时返回空资料引用。
 - `use_web_search=true` 时调用 `WebSearchService`。未配置 `WEB_SEARCH_API_KEY` 时返回“联网搜索未配置” warning，不生成假网页来源。
 - `deep_thinking=true` 会执行安全 `planner` 节点，只保存目标、证据需求和回答结构摘要，不展示原始思维链、系统提示词或完整模型输入。
-- `citation_json` 允许课程、资料、网页三类真实来源。资料来源可包含 `source_type`、`material_id`、`title`、`section_title`、`page_number`、`snippet`、`score`、`retrieval_source`、`embedding_status`；网页来源可包含 `title`、`url`、`snippet`。
+- `citation_json` 允许课程、资料、网页三类真实来源。资料来源可包含 `source_type`、`material_id`、`title`、`section_title`、`page_number`、`snippet`、`score`、`retrieval_source`、`embedding_status`、`embedding_provider`、`embedding_dimension`、`rerank_score` 和 `rerank_status`；网页来源可包含 `title`、`url`、`snippet`。
 - 回答使用 `<final_answer>` 边界隔离内部输入。ReviewAgent 检查 `prompt_echo`、`off_topic`、`malformed_markdown`、`citation_mismatch`、`fake_web_source`、`sensitive_output`；不通过时最多修订一次，第二次仍不通过时返回安全降级回答。
 - 成功时 assistant `trace_id` 写入真实 `HomeTutorGraph` trace，正常节点为 `context -> route -> material_retriever -> web_search -> planner -> answer -> review -> persist`；需要修订时在 `review` 和 `persist` 之间执行一次 `repair -> review`。
 - 模型调用失败时返回可恢复错误，不写入半截 assistant 消息。
@@ -1588,7 +1588,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 课程会话规则：
 
-- 命中课程知识切片时，assistant `citation_json` 采用 `/rag/search` 的结果字段结构：`chunk_id`、`course_id`、`material_id`、`knowledge_point_id`、`content`、`source_title`、`page_number`、`section_title`、`score`；Phase 6.4 后可额外包含 `keyword_score`、`vector_score`、`retrieval_source`、`embedding_status`。
+- 命中课程知识切片时，assistant `citation_json` 采用 `/rag/search` 的结果字段结构，并可包含关键词、向量、RRF 与重排序状态；所有引用仍绑定真实 chunk ID。
 - 课程 RAG 查询会把最近 2 条用户问题和当前问题合成上下文化 query，改善“这个”“继续”“刚才那个”等追问的召回；主页联网搜索也使用同样的上下文化 query，但网页来源必须来自真实搜索结果。
 - 无命中时 `citation_json=[]`，assistant 内容提示“资料依据不足”，前端不得伪造引用。
 - 有命中且可解析模型配置时，assistant `content` 保存模型基于引用生成的回答，`trace_id` 写入本次 `CourseTutorGraph` trace。
@@ -1596,7 +1596,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 - 模型调用超时、鉴权失败、非 JSON、空内容或流式中途失败时返回 `MODEL_PROVIDER_ERROR`，前端保留输入，不写入半截 assistant 消息。
 - 课程空间刷新后，前端通过 `GET /tutor/sessions/{session_id}` 恢复消息和引用。
 
-低依据判断、完整 Agent trace 和 ReviewAgent 已在 `CourseTutorGraph` / 资源 Graph 的安全轨迹中接入；embedding 与混合召回已在 Phase 6.4 接入，讯飞原生 2560 维 Embedding 仍未接入。
+低依据判断、完整 Agent trace 和 ReviewAgent 已在 `CourseTutorGraph` / 资源 Graph 的安全轨迹中接入；动态维度 Embedding、讯飞原生 2560 维协议和可选重排序已经接入。
 
 ### POST `/tutor/sessions/{session_id}/messages/stream`
 
@@ -2133,7 +2133,7 @@ course_id=101
 
 ### POST `/settings/model/test`
 
-用途：测试当前有效模型连通性。请求体省略时测试当前回答默认配置；`operation=embedding` 时测试当前向量默认配置。对应用途没有个人默认时，分别回退服务器配置。两种探测都不自动重试，也不跨 Provider 切换。
+用途：测试当前有效模型连通性。请求体省略时测试当前回答默认配置；`operation=embedding` 或 `operation=rerank` 时分别测试当前向量或重排序默认配置。对应用途没有个人默认时分别回退服务器配置。显式探测不自动重试，也不跨 Provider 切换。
 
 可选请求：
 
@@ -2141,7 +2141,7 @@ course_id=101
 { "operation": "chat" }
 ```
 
-`operation` 可为 `chat` 或 `embedding`。未配置向量模型时返回安全的 `not_configured` 结果，不影响回答模型状态。
+`operation` 可为 `chat`、`embedding` 或 `rerank`。未配置某项能力时返回安全的 `not_configured`，不影响其他能力状态；向量测试成功后会保存实际维度。
 
 响应：
 
@@ -2165,7 +2165,7 @@ course_id=101
 
 ### GET `/settings/model/configs`
 
-用途：读取当前用户所有模型配置和服务器兜底摘要。必须携带 JWT。每条配置可包含回答和向量两组独立连接；两组 Key 都只返回脱敏值。`can_use_model` 表示回答能力，`can_use_embedding_model` 独立表示向量能力。
+用途：读取当前用户所有模型配置和服务器兜底摘要。必须携带 JWT。每条配置可包含回答、向量和重排序三组独立连接；所有 Key 只返回脱敏状态。`can_use_model`、`can_use_embedding_model` 和 `can_use_rerank_model` 分别表示三项能力。
 
 响应：
 
@@ -2230,7 +2230,7 @@ course_id=101
 
 ### POST `/settings/model/configs`
 
-用途：创建当前用户的一条模型配置方案。`display_name` 在同一用户内不能重复；回答模型与向量模型至少填写一项。回答和向量分别接受自己的 Provider、预设、Base URL、Key 和模型，因此同一方案可组合不同服务商。`make_default=true` 只设置回答默认，`make_embedding_default=true` 只设置向量默认。
+用途：创建当前用户的一条模型配置方案。`display_name` 在同一用户内不能重复；回答、向量和重排序至少填写一项。三项能力分别接受自己的 Provider、预设、Base URL、Key 和模型，因此同一方案可组合不同服务商。`make_default`、`make_embedding_default`、`make_rerank_default` 只影响各自用途。
 
 请求：
 
@@ -2256,7 +2256,7 @@ course_id=101
 
 ### PATCH `/settings/model/configs/{config_id}`
 
-用途：更新当前用户自己的模型配置。只允许访问当前用户的配置；跨用户配置返回 404。连接未变化时，`api_key` 与 `embedding_api_key` 为空字符串或缺省会分别保留原密钥；Provider 或 Base URL 变化且没有新 Key 时清除该用途旧密钥，防止旧凭据被发送到新服务商。
+用途：更新当前用户自己的模型配置。只允许访问当前用户的配置；跨用户配置返回 404。连接未变化时，回答、向量和重排序空 Key 分别保留原密钥；Provider 或 Base URL 变化且没有新 Key 时清除该用途旧密钥。
 
 ### POST `/settings/model/configs/{config_id}/default`
 
@@ -2266,9 +2266,17 @@ course_id=101
 
 用途：把包含 `embedding_model` 的配置设为向量默认，并取消同用户其他向量默认项。资料与课程 RAG 从该配置的 `embedding_*` 字段解析 Provider、Base URL、Key 和向量模型；旧共享连接记录由迁移兼容。不存在个人向量默认时独立回退服务器 `.env` 向量配置。
 
+### POST `/settings/model/configs/{config_id}/rerank-default`
+
+用途：把包含 `rerank_model` 的配置设为重排序默认，并取消同用户其他重排序默认项。不存在个人重排序默认时独立回退服务器配置；未配置时 RAG 继续使用 RRF 混合排序。
+
+### POST `/settings/model/embedding/reindex-jobs`
+
+用途：使用当前用户的默认向量配置显式重建其课程和资料切片向量。请求体为 `{ "config_id": number | null }`，并支持 `Idempotency-Key`；返回现有 `AiJobResponse`，`workflow=embedding_reindex`。任务支持进度、取消、刷新恢复和失败重试，切换默认配置本身不会自动创建任务。
+
 ### POST `/settings/model/configs/{config_id}/test`
 
-用途：测试指定模型配置。可选请求体与兼容测试接口相同；回答和向量结果分别写入 `connection_test_json.chat`、`connection_test_json.embedding`。旧 `last_test_*` 字段继续映射回答模型最近测试，向量测试不会覆盖回答状态。修改 Base URL、Key 或对应模型后，相关旧测试摘要会被清除。测试失败也不记录明文 Key、完整 prompt、向量或课程资料原文。
+用途：测试指定模型配置。三项结果分别写入 `connection_test_json.chat`、`embedding`、`rerank`。旧 `last_test_*` 继续映射回答模型最近测试；其他测试不会覆盖回答状态。修改对应连接后只清除该项旧测试摘要。
 
 ### DELETE `/settings/model/configs/{config_id}`
 
@@ -2277,7 +2285,8 @@ course_id=101
 模型 Provider 第一版按 OpenAI-compatible 协议实现：
 
 - 聊天回答：`{base_url}/chat/completions`。
-- 向量生成：`{embedding_base_url}/embeddings`；旧共享连接配置兼容使用 `{base_url}`。
+- 向量生成：讯飞使用原生签名地址；兼容服务使用 `{embedding_base_url}/embeddings`。
+- 重排序：硅基使用 `/v1/rerank`，百炼使用 Workspace `/compatible-api/v1/reranks`。
 - 回答运行时优先使用当前用户回答默认配置。
 - Embedding 运行时优先使用当前用户向量默认配置。
 - 某一用途没有个人默认时，仅该用途回退服务器 `.env` 兜底配置。
@@ -2302,9 +2311,9 @@ OpenRouter 不再作为可见预设。
 
 - Base URL：`https://spark-api-open.xf-yun.com/v1`。
 - 默认聊天模型：`lite`。
-- 可选聊天模型：`lite`、`generalv3`、`pro-128k`、`max-32k`、`4.0Ultra`。
+- 默认回答预设：Spark X2-Flash，Base URL `https://spark-api-open.xf-yun.com/agent/v1/`，模型 `spark-x`。
 
-讯飞原生 Embeddingp/Embeddingq 因为独立授权、签名鉴权和 2560 维输出，当前阶段不接入。
+讯飞 LLM Embedding 使用 APPID、APIKey、APISecret 签名鉴权，资料 `para`、问题 `query`，返回 2560 维；三项凭证均加密保存且不通过 API 明文返回。
 
 ## 19. AI 长任务接口
 

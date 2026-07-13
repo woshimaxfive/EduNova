@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from hashlib import sha256
 from typing import Iterator, Literal, Protocol
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -16,6 +17,14 @@ from backend.app.providers.openai_compatible import (
     OpenAICompatibleChatProvider,
     OpenAICompatibleConfig,
     OpenAICompatibleEmbeddingConfig,
+)
+from backend.app.providers.retrieval import (
+    EmbeddingRequestConfig,
+    HttpRerankProvider,
+    RerankItem,
+    RerankRequestConfig,
+    XFYUN_EMBEDDING_DIMENSION,
+    XfyunEmbeddingProvider,
 )
 from backend.app.services.model_execution import (
     ModelExecutionContext,
@@ -50,12 +59,14 @@ class ModelSettingsRepository(Protocol):
     def get_for_user(self, user_id: int) -> ModelSetting | None: ...
     def get_default_for_user(self, user_id: int) -> ModelSetting | None: ...
     def get_embedding_default_for_user(self, user_id: int) -> ModelSetting | None: ...
+    def get_rerank_default_for_user(self, user_id: int) -> ModelSetting | None: ...
     def list_for_user(self, user_id: int) -> list[ModelSetting]: ...
     def get_by_id_for_user(self, setting_id: int, user_id: int) -> ModelSetting | None: ...
     def save(self, setting: ModelSetting) -> None: ...
     def delete(self, setting: ModelSetting) -> None: ...
     def unset_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
     def unset_embedding_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
+    def unset_rerank_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
     def commit(self) -> None: ...
     def rollback(self) -> None: ...
 
@@ -80,7 +91,7 @@ class ModelChatProvider(Protocol):
         config: OpenAICompatibleEmbeddingConfig,
         texts: list[str],
         timeout_seconds: float,
-        dimensions: int = 1536,
+        dimensions: int | None = None,
     ) -> list[list[float]]: ...
 
 
@@ -89,10 +100,18 @@ class SaveModelSettingsRequest(BaseModel):
     base_url: str = Field(min_length=1, max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
     chat_model: str | None = Field(default=None, max_length=120)
-    embedding_provider: Literal["openai_compatible"] | None = None
+    embedding_provider: Literal["openai_compatible", "xfyun_embedding"] | None = None
     embedding_base_url: str | None = Field(default=None, max_length=500)
     embedding_api_key: str | None = Field(default=None, max_length=500)
+    embedding_app_id: str | None = Field(default=None, max_length=500)
+    embedding_api_secret: str | None = Field(default=None, max_length=500)
     embedding_model: str | None = Field(default=None, max_length=120)
+    embedding_dimension: int | None = Field(default=None, ge=1, le=8192)
+    rerank_provider: Literal["siliconflow_rerank", "bailian_rerank", "openai_compatible"] | None = None
+    rerank_base_url: str | None = Field(default=None, max_length=500)
+    rerank_api_key: str | None = Field(default=None, max_length=500)
+    rerank_model: str | None = Field(default=None, max_length=120)
+    rerank_workspace_id: str | None = Field(default=None, max_length=120)
 
     @field_validator(
         "base_url",
@@ -100,7 +119,13 @@ class SaveModelSettingsRequest(BaseModel):
         "chat_model",
         "embedding_base_url",
         "embedding_api_key",
+        "embedding_app_id",
+        "embedding_api_secret",
         "embedding_model",
+        "rerank_base_url",
+        "rerank_api_key",
+        "rerank_model",
+        "rerank_workspace_id",
         mode="before",
     )
     @classmethod
@@ -111,8 +136,8 @@ class SaveModelSettingsRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_at_least_one_model(self) -> SaveModelSettingsRequest:
-        if not self.chat_model and not self.embedding_model:
-            raise ValueError("回答模型和向量模型至少填写一项。")
+        if not self.chat_model and not self.embedding_model and not self.rerank_model:
+            raise ValueError("回答、向量和重排序模型至少填写一项。")
         return self
 
 
@@ -120,10 +145,12 @@ class SaveModelConfigRequest(SaveModelSettingsRequest):
     display_name: str = Field(min_length=1, max_length=120)
     preset_id: str | None = Field(default=None, max_length=80)
     embedding_preset_id: str | None = Field(default=None, max_length=80)
+    rerank_preset_id: str | None = Field(default=None, max_length=80)
     make_default: bool = False
     make_embedding_default: bool = False
+    make_rerank_default: bool = False
 
-    @field_validator("display_name", "preset_id", "embedding_preset_id", mode="before")
+    @field_validator("display_name", "preset_id", "embedding_preset_id", "rerank_preset_id", mode="before")
     @classmethod
     def strip_config_text(cls, value: str | None) -> str | None:
         if value is None:
@@ -138,13 +165,23 @@ class UpdateModelConfigRequest(BaseModel):
     base_url: str | None = Field(default=None, min_length=1, max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
     chat_model: str | None = Field(default=None, max_length=120)
-    embedding_provider: Literal["openai_compatible"] | None = None
+    embedding_provider: Literal["openai_compatible", "xfyun_embedding"] | None = None
     embedding_preset_id: str | None = Field(default=None, max_length=80)
     embedding_base_url: str | None = Field(default=None, max_length=500)
     embedding_api_key: str | None = Field(default=None, max_length=500)
+    embedding_app_id: str | None = Field(default=None, max_length=500)
+    embedding_api_secret: str | None = Field(default=None, max_length=500)
     embedding_model: str | None = Field(default=None, max_length=120)
+    embedding_dimension: int | None = Field(default=None, ge=1, le=8192)
+    rerank_provider: Literal["siliconflow_rerank", "bailian_rerank", "openai_compatible"] | None = None
+    rerank_preset_id: str | None = Field(default=None, max_length=80)
+    rerank_base_url: str | None = Field(default=None, max_length=500)
+    rerank_api_key: str | None = Field(default=None, max_length=500)
+    rerank_model: str | None = Field(default=None, max_length=120)
+    rerank_workspace_id: str | None = Field(default=None, max_length=120)
     make_default: bool | None = None
     make_embedding_default: bool | None = None
+    make_rerank_default: bool | None = None
 
     @field_validator(
         "display_name",
@@ -155,7 +192,14 @@ class UpdateModelConfigRequest(BaseModel):
         "embedding_preset_id",
         "embedding_base_url",
         "embedding_api_key",
+        "embedding_app_id",
+        "embedding_api_secret",
         "embedding_model",
+        "rerank_preset_id",
+        "rerank_base_url",
+        "rerank_api_key",
+        "rerank_model",
+        "rerank_workspace_id",
         mode="before",
     )
     @classmethod
@@ -165,11 +209,15 @@ class UpdateModelConfigRequest(BaseModel):
         return str(value).strip()
 
 
-ModelConnectionOperation = Literal["chat", "embedding"]
+ModelConnectionOperation = Literal["chat", "embedding", "rerank"]
 
 
 class ModelConnectionTestRequest(BaseModel):
     operation: ModelConnectionOperation = "chat"
+
+
+class EmbeddingReindexRequest(BaseModel):
+    config_id: int | None = None
 
 
 class ModelConnectionTestSnapshot(BaseModel):
@@ -180,6 +228,7 @@ class ModelConnectionTestSnapshot(BaseModel):
     code: str | None = None
     retryable: bool = False
     tested_at: datetime
+    dimension: int | None = None
 
 
 class ModelSettingsSummary(BaseModel):
@@ -190,12 +239,23 @@ class ModelSettingsSummary(BaseModel):
     embedding_model: str | None
     embedding_provider: str | None = None
     embedding_base_url: str | None = None
+    embedding_dimension: int | None = None
     has_api_key: bool
     api_key_masked: str | None
     has_embedding_api_key: bool = False
     embedding_api_key_masked: str | None = None
+    has_embedding_app_id: bool = False
+    embedding_app_id_masked: str | None = None
+    has_embedding_api_secret: bool = False
+    rerank_model: str | None = None
+    rerank_provider: str | None = None
+    rerank_base_url: str | None = None
+    rerank_workspace_id: str | None = None
+    has_rerank_api_key: bool = False
+    rerank_api_key_masked: str | None = None
     can_use_model: bool
     can_use_embedding_model: bool
+    can_use_rerank_model: bool = False
 
 
 class ModelConfigSummary(BaseModel):
@@ -210,14 +270,27 @@ class ModelConfigSummary(BaseModel):
     embedding_provider: str | None = None
     embedding_preset_id: str | None = None
     embedding_base_url: str | None = None
+    embedding_dimension: int | None = None
     has_api_key: bool
     api_key_masked: str | None
     has_embedding_api_key: bool = False
     embedding_api_key_masked: str | None = None
+    has_embedding_app_id: bool = False
+    embedding_app_id_masked: str | None = None
+    has_embedding_api_secret: bool = False
+    rerank_model: str | None = None
+    rerank_provider: str | None = None
+    rerank_preset_id: str | None = None
+    rerank_base_url: str | None = None
+    rerank_workspace_id: str | None = None
+    has_rerank_api_key: bool = False
+    rerank_api_key_masked: str | None = None
     can_use_model: bool
     can_use_embedding_model: bool
+    can_use_rerank_model: bool = False
     is_default: bool
     is_embedding_default: bool
+    is_rerank_default: bool = False
     last_test_ok: bool | None
     last_test_message: str | None
     last_tested_at: datetime | None
@@ -230,6 +303,7 @@ class ModelSettingsListResponse(BaseModel):
     default_config_id: int | None
     default_chat_config_id: int | None
     default_embedding_config_id: int | None
+    default_rerank_config_id: int | None = None
 
 
 class ModelConnectionTestResponse(BaseModel):
@@ -243,6 +317,7 @@ class ModelConnectionTestResponse(BaseModel):
     code: str | None = None
     retryable: bool = False
     tested_at: datetime
+    dimension: int | None = None
 
 
 @dataclass(frozen=True)
@@ -255,6 +330,18 @@ class RuntimeModelConfig:
     embedding_model: str | None
     can_use_model: bool
     config_id: int | None = None
+    preset_id: str | None = None
+    app_id: str | None = None
+    api_secret: str | None = None
+    dimensions: int | None = None
+    workspace_id: str | None = None
+
+    @property
+    def profile_hash(self) -> str:
+        raw = "|".join(
+            [self.provider, self.base_url or "", self.embedding_model or self.chat_model or "", str(self.dimensions or "")]
+        )
+        return sha256(raw.encode("utf-8")).hexdigest()
 
 
 class SqlAlchemyModelSettingsRepository:
@@ -278,6 +365,13 @@ class SqlAlchemyModelSettingsRepository:
             .order_by(ModelSetting.updated_at.desc(), ModelSetting.id.desc())
         )
 
+    def get_rerank_default_for_user(self, user_id: int) -> ModelSetting | None:
+        return self.db.scalar(
+            select(ModelSetting)
+            .where(ModelSetting.user_id == user_id, ModelSetting.is_rerank_default.is_(True))
+            .order_by(ModelSetting.updated_at.desc(), ModelSetting.id.desc())
+        )
+
     def list_for_user(self, user_id: int) -> list[ModelSetting]:
         return list(
             self.db.scalars(
@@ -286,6 +380,7 @@ class SqlAlchemyModelSettingsRepository:
                 .order_by(
                     ModelSetting.is_default.desc(),
                     ModelSetting.is_embedding_default.desc(),
+                    ModelSetting.is_rerank_default.desc(),
                     ModelSetting.updated_at.desc(),
                     ModelSetting.id.desc(),
                 )
@@ -317,6 +412,12 @@ class SqlAlchemyModelSettingsRepository:
             statement = statement.where(ModelSetting.id != except_setting_id)
         self.db.execute(statement.values(is_embedding_default=False))
 
+    def unset_rerank_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None:
+        statement = update(ModelSetting).where(ModelSetting.user_id == user_id)
+        if except_setting_id is not None:
+            statement = statement.where(ModelSetting.id != except_setting_id)
+        self.db.execute(statement.values(is_rerank_default=False))
+
     def commit(self) -> None:
         self.db.commit()
 
@@ -338,30 +439,39 @@ class ModelSettingsService:
         settings: Settings,
         provider: ModelChatProvider | None = None,
         execution_runtime: ModelExecutionRuntime | None = None,
+        xfyun_embedding_provider: XfyunEmbeddingProvider | None = None,
+        rerank_provider: HttpRerankProvider | None = None,
     ) -> None:
         self.repository = repository
         self.settings = settings
         self.provider = provider or OpenAICompatibleChatProvider()
+        self.xfyun_embedding_provider = xfyun_embedding_provider or XfyunEmbeddingProvider()
+        self.rerank_provider = rerank_provider or HttpRerankProvider()
         self.execution_runtime = execution_runtime or ModelExecutionRuntime(settings)
 
     def get_summary(self, user: User) -> ModelSettingsSummary:
         chat_runtime = self.resolve_runtime_config(user)
         embedding_runtime = self.resolve_embedding_runtime_config(user)
-        if chat_runtime.source != "none" or embedding_runtime.source != "none":
+        rerank_runtime = self.resolve_rerank_runtime_config(user)
+        if chat_runtime.source != "none" or embedding_runtime.source != "none" or rerank_runtime.source != "none":
             source = chat_runtime.source if chat_runtime.source != "none" else embedding_runtime.source
-            return self._summary_from_runtimes(chat_runtime, embedding_runtime, source=source)
+            if source == "none":
+                source = rerank_runtime.source
+            return self._summary_from_runtimes(chat_runtime, embedding_runtime, rerank_runtime, source=source)
         return self._empty_summary()
 
     def list_configs(self, user: User) -> ModelSettingsListResponse:
         configs = [self._config_summary(setting) for setting in self.repository.list_for_user(user.id)]
         default_chat_config = next((config for config in configs if config.is_default), None)
         default_embedding_config = next((config for config in configs if config.is_embedding_default), None)
+        default_rerank_config = next((config for config in configs if config.is_rerank_default), None)
         return ModelSettingsListResponse(
             configs=configs,
             system_summary=self._system_summary(),
             default_config_id=default_chat_config.id if default_chat_config else None,
             default_chat_config_id=default_chat_config.id if default_chat_config else None,
             default_embedding_config_id=default_embedding_config.id if default_embedding_config else None,
+            default_rerank_config_id=default_rerank_config.id if default_rerank_config else None,
         )
 
     def save(self, user: User, payload: SaveModelSettingsRequest) -> ModelSettingsSummary:
@@ -381,6 +491,9 @@ class ModelSettingsService:
         setting.is_embedding_default = bool(setting.embedding_model)
         if setting.is_embedding_default:
             self.repository.unset_embedding_defaults_for_user(user.id, except_setting_id=setting.id)
+        setting.is_rerank_default = bool(setting.rerank_model)
+        if setting.is_rerank_default:
+            self.repository.unset_rerank_defaults_for_user(user.id, except_setting_id=setting.id)
         self._save_and_commit(setting)
         return self.get_summary(user)
 
@@ -389,6 +502,7 @@ class ModelSettingsService:
         self._ensure_unique_display_name(user.id, payload.display_name)
         has_chat_default = any(candidate.is_default for candidate in existing_configs)
         has_embedding_default = any(candidate.is_embedding_default for candidate in existing_configs)
+        has_rerank_default = any(candidate.is_rerank_default for candidate in existing_configs)
         setting = ModelSetting(
             user_id=user.id,
             display_name=payload.display_name,
@@ -397,12 +511,16 @@ class ModelSettingsService:
             is_default=bool(payload.chat_model) and (payload.make_default or not has_chat_default),
             is_embedding_default=bool(payload.embedding_model)
             and (payload.make_embedding_default or not has_embedding_default),
+            is_rerank_default=bool(payload.rerank_model)
+            and (payload.make_rerank_default or not has_rerank_default),
         )
         self._apply_settings_payload(setting, payload)
         if setting.is_default:
             self.repository.unset_defaults_for_user(user.id)
         if setting.is_embedding_default:
             self.repository.unset_embedding_defaults_for_user(user.id)
+        if setting.is_rerank_default:
+            self.repository.unset_rerank_defaults_for_user(user.id)
         self._save_and_commit(setting)
         return self._config_summary(setting)
 
@@ -426,6 +544,10 @@ class ModelSettingsService:
                 and (payload.embedding_base_url or None) != setting.embedding_base_url
             )
         )
+        rerank_connection_changed = (
+            (payload.rerank_provider is not None and payload.rerank_provider != setting.rerank_provider)
+            or (payload.rerank_base_url is not None and (payload.rerank_base_url or None) != setting.rerank_base_url)
+        )
         self._clear_changed_connection_tests(setting, payload)
         if payload.display_name is not None and payload.display_name != setting.display_name:
             self._ensure_unique_display_name(user.id, payload.display_name, exclude_config_id=config_id)
@@ -446,6 +568,18 @@ class ModelSettingsService:
             setting.embedding_base_url = payload.embedding_base_url or None
         if payload.embedding_model is not None:
             setting.embedding_model = payload.embedding_model or None
+        if payload.embedding_dimension is not None:
+            setting.embedding_dimension = payload.embedding_dimension
+        if payload.rerank_provider is not None:
+            setting.rerank_provider = payload.rerank_provider
+        if payload.rerank_preset_id is not None:
+            setting.rerank_preset_id = payload.rerank_preset_id or None
+        if payload.rerank_base_url is not None:
+            setting.rerank_base_url = payload.rerank_base_url or None
+        if payload.rerank_model is not None:
+            setting.rerank_model = payload.rerank_model or None
+        if payload.rerank_workspace_id is not None:
+            setting.rerank_workspace_id = payload.rerank_workspace_id or None
         if payload.api_key:
             setting.api_key_ciphertext = self._encrypt_api_key(payload.api_key)
         elif chat_connection_changed:
@@ -454,6 +588,18 @@ class ModelSettingsService:
             setting.embedding_api_key_ciphertext = self._encrypt_api_key(payload.embedding_api_key)
         elif embedding_connection_changed:
             setting.embedding_api_key_ciphertext = None
+        if payload.embedding_app_id:
+            setting.embedding_app_id_ciphertext = self._encrypt_api_key(payload.embedding_app_id)
+        elif embedding_connection_changed:
+            setting.embedding_app_id_ciphertext = None
+        if payload.embedding_api_secret:
+            setting.embedding_api_secret_ciphertext = self._encrypt_api_key(payload.embedding_api_secret)
+        elif embedding_connection_changed:
+            setting.embedding_api_secret_ciphertext = None
+        if payload.rerank_api_key:
+            setting.rerank_api_key_ciphertext = self._encrypt_api_key(payload.rerank_api_key)
+        elif rerank_connection_changed:
+            setting.rerank_api_key_ciphertext = None
         if setting.embedding_model:
             setting.embedding_provider = setting.embedding_provider or setting.provider
             setting.embedding_preset_id = setting.embedding_preset_id or setting.preset_id
@@ -470,6 +616,15 @@ class ModelSettingsService:
             setting.embedding_preset_id = None
             setting.embedding_base_url = None
             setting.embedding_api_key_ciphertext = None
+            setting.embedding_app_id_ciphertext = None
+            setting.embedding_api_secret_ciphertext = None
+            setting.embedding_dimension = None
+        if payload.rerank_model is not None and not setting.rerank_model:
+            setting.rerank_provider = None
+            setting.rerank_preset_id = None
+            setting.rerank_base_url = None
+            setting.rerank_api_key_ciphertext = None
+            setting.rerank_workspace_id = None
         if payload.make_default:
             if not setting.chat_model:
                 raise ModelSettingsValidationError("该配置没有回答模型，不能设为回答默认。")
@@ -480,12 +635,19 @@ class ModelSettingsService:
                 raise ModelSettingsValidationError("该配置没有向量模型，不能设为向量默认。")
             self.repository.unset_embedding_defaults_for_user(user.id, except_setting_id=config_id)
             setting.is_embedding_default = True
-        if not setting.chat_model and not setting.embedding_model:
-            raise ModelSettingsValidationError("回答模型和向量模型至少填写一项。")
+        if payload.make_rerank_default:
+            if not setting.rerank_model:
+                raise ModelSettingsValidationError("该配置没有重排序模型，不能设为重排序默认。")
+            self.repository.unset_rerank_defaults_for_user(user.id, except_setting_id=config_id)
+            setting.is_rerank_default = True
+        if not setting.chat_model and not setting.embedding_model and not setting.rerank_model:
+            raise ModelSettingsValidationError("回答、向量和重排序模型至少填写一项。")
         if setting.is_default and not setting.chat_model:
             raise ModelSettingsValidationError("回答默认配置不能清空回答模型。")
         if setting.is_embedding_default and not setting.embedding_model:
             raise ModelSettingsValidationError("向量默认配置不能清空向量模型。")
+        if setting.is_rerank_default and not setting.rerank_model:
+            raise ModelSettingsValidationError("重排序默认配置不能清空重排序模型。")
         self._save_and_commit(setting)
         return self._config_summary(setting)
 
@@ -493,6 +655,7 @@ class ModelSettingsService:
         setting = self._get_user_setting_or_raise(user, config_id)
         was_default = setting.is_default
         was_embedding_default = setting.is_embedding_default
+        was_rerank_default = setting.is_rerank_default
         try:
             self.repository.delete(setting)
             if was_default:
@@ -507,6 +670,12 @@ class ModelSettingsService:
                 if next_embedding:
                     next_embedding.is_embedding_default = True
                     self.repository.save(next_embedding)
+            if was_rerank_default:
+                remaining = [candidate for candidate in self.repository.list_for_user(user.id) if candidate.id != config_id]
+                next_rerank = next((candidate for candidate in remaining if candidate.rerank_model), None)
+                if next_rerank:
+                    next_rerank.is_rerank_default = True
+                    self.repository.save(next_rerank)
             self.repository.commit()
         except Exception:
             self.repository.rollback()
@@ -528,6 +697,15 @@ class ModelSettingsService:
             raise ModelSettingsValidationError("该配置没有向量模型，不能设为向量默认。")
         setting.is_embedding_default = True
         self.repository.unset_embedding_defaults_for_user(user.id, except_setting_id=config_id)
+        self._save_and_commit(setting)
+        return self.list_configs(user)
+
+    def set_rerank_default_config(self, user: User, config_id: int) -> ModelSettingsListResponse:
+        setting = self._get_user_setting_or_raise(user, config_id)
+        if not setting.rerank_model:
+            raise ModelSettingsValidationError("该配置没有重排序模型，不能设为重排序默认。")
+        setting.is_rerank_default = True
+        self.repository.unset_rerank_defaults_for_user(user.id, except_setting_id=config_id)
         self._save_and_commit(setting)
         return self.list_configs(user)
 
@@ -571,7 +749,33 @@ class ModelSettingsService:
             can_use_model=False,
         )
 
-    def chat_completion_with_timeout(self, user: User, messages: list[dict[str, str]], timeout_seconds: float) -> str:
+    def resolve_rerank_runtime_config(self, user: User) -> RuntimeModelConfig:
+        get_default = getattr(self.repository, "get_rerank_default_for_user", None)
+        user_setting = get_default(user.id) if callable(get_default) else None
+        if user_setting is not None:
+            runtime = self._rerank_runtime_from_user_setting(user_setting)
+            if runtime.can_use_model:
+                return runtime
+        runtime = self._rerank_runtime_from_system_settings()
+        if runtime.can_use_model:
+            return runtime
+        return RuntimeModelConfig(
+            source="none",
+            provider="openai_compatible",
+            base_url=None,
+            api_key=None,
+            chat_model=None,
+            embedding_model=None,
+            can_use_model=False,
+        )
+
+    def chat_completion_with_timeout(
+        self,
+        user: User,
+        messages: list[dict[str, str]],
+        timeout_seconds: float,
+        thinking_type: str = "disabled",
+    ) -> str:
         runtime = self.resolve_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
             raise ModelNotConfiguredError(MODEL_NOT_CONFIGURED_MESSAGE)
@@ -579,6 +783,7 @@ class ModelSettingsService:
             base_url=runtime.base_url,
             api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
             chat_model=runtime.chat_model,
+            thinking_type=thinking_type if runtime.preset_id == "spark" else None,
         )
         return self.execution_runtime.execute(
             user_id=user.id,
@@ -590,14 +795,20 @@ class ModelSettingsService:
             timeout_seconds=timeout_seconds,
         )
 
-    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str:
+    def chat_completion(self, user: User, messages: list[dict[str, str]], thinking_type: str = "disabled") -> str:
         return self.chat_completion_with_timeout(
             user,
             messages,
             timeout_seconds=self.settings.model_request_timeout_seconds,
+            thinking_type=thinking_type,
         )
 
-    def chat_completion_stream(self, user: User, messages: list[dict[str, str]]) -> Iterator[str]:
+    def chat_completion_stream(
+        self,
+        user: User,
+        messages: list[dict[str, str]],
+        thinking_type: str = "disabled",
+    ) -> Iterator[str]:
         runtime = self.resolve_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
             raise ModelNotConfiguredError(MODEL_NOT_CONFIGURED_MESSAGE)
@@ -605,6 +816,7 @@ class ModelSettingsService:
             base_url=runtime.base_url,
             api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
             chat_model=runtime.chat_model,
+            thinking_type=thinking_type if runtime.preset_id == "spark" else None,
         )
         return self.execution_runtime.execute_stream(
             user_id=user.id,
@@ -619,43 +831,98 @@ class ModelSettingsService:
             timeout_seconds=self.settings.model_request_timeout_seconds,
         )
 
-    def embedding_vectors(self, user: User, texts: list[str], dimensions: int = 1536) -> list[list[float]]:
+    def embedding_vectors(
+        self,
+        user: User,
+        texts: list[str],
+        dimensions: int | None = None,
+        *,
+        input_type: Literal["document", "query"] = "document",
+    ) -> list[list[float]]:
         runtime = self.resolve_embedding_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.embedding_model is None:
             raise ModelNotConfiguredError("当前未配置可用向量模型。")
-        config = OpenAICompatibleEmbeddingConfig(
-            base_url=runtime.base_url,
-            api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
-            embedding_model=runtime.embedding_model,
-        )
+        requested_dimensions = dimensions or runtime.dimensions
+        def call_provider() -> list[list[float]]:
+            if runtime.provider == "xfyun_embedding":
+                config = EmbeddingRequestConfig(
+                    provider=runtime.provider,
+                    base_url=runtime.base_url or "",
+                    api_key=runtime.api_key or "",
+                    model=runtime.embedding_model or "llm-embedding",
+                    dimensions=XFYUN_EMBEDDING_DIMENSION,
+                    app_id=runtime.app_id,
+                    api_secret=runtime.api_secret,
+                )
+                if input_type == "query":
+                    return [self.xfyun_embedding_provider.embed_query(config, text, self.settings.model_request_timeout_seconds) for text in texts]
+                return self.xfyun_embedding_provider.embed_documents(config, texts, self.settings.model_request_timeout_seconds)
+            config = OpenAICompatibleEmbeddingConfig(
+                base_url=runtime.base_url or "",
+                api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+                embedding_model=runtime.embedding_model or "",
+            )
+            return self.provider.embed_texts(
+                config=config,
+                texts=texts,
+                timeout_seconds=self.settings.model_request_timeout_seconds,
+                dimensions=requested_dimensions,
+            )
         vectors = self.execution_runtime.execute(
             user_id=user.id,
             provider_source=runtime.source,
             model_config_id=runtime.config_id,
             model_name=runtime.embedding_model,
             operation="embedding",
-            call=lambda: self.provider.embed_texts(
-                config=config,
-                texts=texts,
-                timeout_seconds=self.settings.model_request_timeout_seconds,
-                dimensions=dimensions,
+            call=call_provider,
+            timeout_seconds=self.settings.model_request_timeout_seconds,
+        )
+        actual_dimensions = {len(vector) for vector in vectors}
+        if len(vectors) != len(texts) or len(actual_dimensions) != 1 or 0 in actual_dimensions:
+            raise ModelProviderError("模型服务返回了不匹配的向量维度。")
+        if requested_dimensions is not None and actual_dimensions != {requested_dimensions}:
+            raise ModelProviderError("模型服务返回了不匹配的向量维度。")
+        return vectors
+
+    def rerank_documents(
+        self,
+        user: User,
+        query: str,
+        documents: list[str],
+        top_n: int = 5,
+    ) -> list[RerankItem]:
+        runtime = self.resolve_rerank_runtime_config(user)
+        if not runtime.can_use_model or runtime.base_url is None or runtime.embedding_model is None:
+            raise ModelNotConfiguredError("当前未配置可用重排序模型。")
+        config = RerankRequestConfig(
+            provider=runtime.provider,
+            base_url=runtime.base_url,
+            api_key=runtime.api_key or "",
+            model=runtime.embedding_model,
+            workspace_id=runtime.workspace_id,
+        )
+        return self.execution_runtime.execute(
+            user_id=user.id,
+            provider_source=runtime.source,
+            model_config_id=runtime.config_id,
+            model_name=runtime.embedding_model,
+            operation="rerank",
+            call=lambda: self.rerank_provider.rerank(
+                config,
+                query,
+                documents[:20],
+                max(1, min(top_n, 20)),
+                self.settings.model_request_timeout_seconds,
             ),
             timeout_seconds=self.settings.model_request_timeout_seconds,
         )
-        if len(vectors) != len(texts) or any(len(vector) != dimensions for vector in vectors):
-            raise ModelProviderError("模型服务返回了不匹配的向量维度。")
-        return vectors
 
     def test_connection(
         self,
         user: User,
         operation: ModelConnectionOperation = "chat",
     ) -> ModelConnectionTestResponse:
-        runtime = (
-            self.resolve_embedding_runtime_config(user)
-            if operation == "embedding"
-            else self.resolve_runtime_config(user)
-        )
+        runtime = self._runtime_for_operation(user, operation)
         return self._test_runtime(runtime, user_id=user.id, operation=operation)
 
     def test_config_connection(
@@ -665,11 +932,7 @@ class ModelSettingsService:
         operation: ModelConnectionOperation = "chat",
     ) -> ModelConnectionTestResponse:
         setting = self._get_user_setting_or_raise(user, config_id)
-        runtime = (
-            self._embedding_runtime_from_user_setting(setting)
-            if operation == "embedding"
-            else self._runtime_from_user_setting(setting)
-        )
+        runtime = self._runtime_for_setting(setting, operation)
         result = self._test_runtime(runtime, user_id=user.id, operation=operation)
         tests = dict(setting.connection_test_json or {})
         tests[operation] = ModelConnectionTestSnapshot(
@@ -680,12 +943,15 @@ class ModelSettingsService:
             code=result.code,
             retryable=result.retryable,
             tested_at=result.tested_at,
+            dimension=result.dimension,
         ).model_dump(mode="json")
         setting.connection_test_json = tests
         if operation == "chat":
             setting.last_test_ok = result.ok
             setting.last_test_message = result.message
             setting.last_tested_at = result.tested_at
+        elif operation == "embedding" and result.ok and result.dimension:
+            setting.embedding_dimension = result.dimension
         self._save_and_commit(setting)
         return result
 
@@ -697,9 +963,9 @@ class ModelSettingsService:
         operation: ModelConnectionOperation,
     ) -> ModelConnectionTestResponse:
         tested_at = datetime.now(UTC)
-        model = runtime.embedding_model if operation == "embedding" else runtime.chat_model
+        model = runtime.chat_model if operation == "chat" else runtime.embedding_model
         if not runtime.can_use_model or model is None:
-            label = "向量模型" if operation == "embedding" else "回答模型"
+            label = {"chat": "回答模型", "embedding": "向量模型", "rerank": "重排序模型"}[operation]
             return ModelConnectionTestResponse(
                 ok=False,
                 source=runtime.source,
@@ -713,24 +979,68 @@ class ModelSettingsService:
             )
 
         try:
+            actual_dimension: int | None = None
             with model_execution_scope(ModelExecutionContext(purpose="connection_test")):
                 if operation == "embedding":
-                    embedding_config = OpenAICompatibleEmbeddingConfig(
+                    def test_embedding() -> list[list[float]]:
+                        if runtime.provider == "xfyun_embedding":
+                            config = EmbeddingRequestConfig(
+                                provider=runtime.provider,
+                                base_url=runtime.base_url or "",
+                                api_key=runtime.api_key or "",
+                                model=runtime.embedding_model or "llm-embedding",
+                                dimensions=XFYUN_EMBEDDING_DIMENSION,
+                                app_id=runtime.app_id,
+                                api_secret=runtime.api_secret,
+                            )
+                            return self.xfyun_embedding_provider.embed_documents(
+                                config,
+                                ["EduNova 向量连接测试"],
+                                self.settings.model_request_timeout_seconds,
+                            )
+                        embedding_config = OpenAICompatibleEmbeddingConfig(
+                            base_url=runtime.base_url or "",
+                            api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+                            embedding_model=runtime.embedding_model or "",
+                        )
+                        return self.provider.embed_texts(
+                            config=embedding_config,
+                            texts=["EduNova 向量连接测试"],
+                            timeout_seconds=self.settings.model_request_timeout_seconds,
+                            dimensions=runtime.dimensions,
+                        )
+                    vectors = self.execution_runtime.execute(
+                        user_id=user_id,
+                        provider_source=runtime.source,
+                        model_config_id=runtime.config_id,
+                        model_name=model,
+                        operation="embedding",
+                        call=test_embedding,
+                        timeout_seconds=self.settings.model_request_timeout_seconds,
+                        max_attempts=1,
+                        bypass_circuit=True,
+                    )
+                    actual_dimension = len(vectors[0]) if vectors and vectors[0] else None
+                elif operation == "rerank":
+                    rerank_config = RerankRequestConfig(
+                        provider=runtime.provider,
                         base_url=runtime.base_url or "",
-                        api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
-                        embedding_model=runtime.embedding_model or "",
+                        api_key=runtime.api_key or "",
+                        model=runtime.embedding_model or "",
+                        workspace_id=runtime.workspace_id,
                     )
                     self.execution_runtime.execute(
                         user_id=user_id,
                         provider_source=runtime.source,
                         model_config_id=runtime.config_id,
                         model_name=model,
-                        operation="embedding",
-                        call=lambda: self.provider.embed_texts(
-                            config=embedding_config,
-                            texts=["EduNova 向量连接测试"],
-                            timeout_seconds=self.settings.model_request_timeout_seconds,
-                            dimensions=1536,
+                        operation="rerank",
+                        call=lambda: self.rerank_provider.rerank(
+                            rerank_config,
+                            "机器学习",
+                            ["机器学习通过数据学习规律。", "天气晴朗。"],
+                            1,
+                            self.settings.model_request_timeout_seconds,
                         ),
                         timeout_seconds=self.settings.model_request_timeout_seconds,
                         max_attempts=1,
@@ -741,6 +1051,7 @@ class ModelSettingsService:
                         base_url=runtime.base_url or "",
                         api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
                         chat_model=runtime.chat_model or "",
+                        thinking_type="disabled" if runtime.preset_id == "spark" else None,
                     )
                     self.execution_runtime.execute(
                         user_id=user_id,
@@ -795,7 +1106,22 @@ class ModelSettingsService:
             operation=operation,
             model=model,
             tested_at=tested_at,
+            dimension=actual_dimension,
         )
+
+    def _runtime_for_operation(self, user: User, operation: ModelConnectionOperation) -> RuntimeModelConfig:
+        if operation == "embedding":
+            return self.resolve_embedding_runtime_config(user)
+        if operation == "rerank":
+            return self.resolve_rerank_runtime_config(user)
+        return self.resolve_runtime_config(user)
+
+    def _runtime_for_setting(self, setting: ModelSetting, operation: ModelConnectionOperation) -> RuntimeModelConfig:
+        if operation == "embedding":
+            return self._embedding_runtime_from_user_setting(setting)
+        if operation == "rerank":
+            return self._rerank_runtime_from_user_setting(setting)
+        return self._runtime_from_user_setting(setting)
 
     def _runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
         api_key = self._decrypt_api_key(setting.api_key_ciphertext)
@@ -813,6 +1139,7 @@ class ModelSettingsService:
                 chat_model=setting.chat_model,
             ),
             config_id=setting.id,
+            preset_id=setting.preset_id,
         )
 
     def _runtime_from_system_settings(self) -> RuntimeModelConfig:
@@ -830,6 +1157,7 @@ class ModelSettingsService:
                 api_key=api_key,
                 chat_model=self.settings.system_chat_model,
             ),
+            preset_id="spark" if "spark-api-open.xf-yun.com" in self.settings.system_model_base_url else None,
         )
 
     def _embedding_runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
@@ -841,6 +1169,8 @@ class ModelSettingsService:
             if uses_separate_connection
             else setting.api_key_ciphertext
         )
+        app_id = self._decrypt_api_key(setting.embedding_app_id_ciphertext)
+        api_secret = self._decrypt_api_key(setting.embedding_api_secret_ciphertext)
         return RuntimeModelConfig(
             source="user",
             provider=self._normalize_provider(provider),
@@ -853,8 +1183,14 @@ class ModelSettingsService:
                 base_url=base_url,
                 api_key=api_key,
                 embedding_model=setting.embedding_model,
+                app_id=app_id,
+                api_secret=api_secret,
             ),
             config_id=setting.id,
+            preset_id=setting.embedding_preset_id,
+            app_id=app_id,
+            api_secret=api_secret,
+            dimensions=setting.embedding_dimension or (XFYUN_EMBEDDING_DIMENSION if provider == "xfyun_embedding" else None),
         )
 
     def _embedding_runtime_from_system_settings(self) -> RuntimeModelConfig:
@@ -866,6 +1202,8 @@ class ModelSettingsService:
             if has_separate_connection
             else self.settings.system_model_api_key.strip()
         )
+        app_id = self.settings.system_embedding_app_id.strip() or None
+        api_secret = self.settings.system_embedding_api_secret.strip() or None
         return RuntimeModelConfig(
             source="system",
             provider=self._normalize_provider(provider),
@@ -878,13 +1216,62 @@ class ModelSettingsService:
                 base_url=base_url,
                 api_key=api_key,
                 embedding_model=self.settings.system_embedding_model,
+                app_id=app_id,
+                api_secret=api_secret,
             ),
+            app_id=app_id,
+            api_secret=api_secret,
+            dimensions=(
+                XFYUN_EMBEDDING_DIMENSION
+                if self._normalize_provider(provider) == "xfyun_embedding"
+                else self.settings.system_embedding_dimension
+            ),
+        )
+
+    def _rerank_runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
+        api_key = self._decrypt_api_key(setting.rerank_api_key_ciphertext)
+        return RuntimeModelConfig(
+            source="user",
+            provider=setting.rerank_provider or "openai_compatible",
+            base_url=setting.rerank_base_url,
+            api_key=api_key,
+            chat_model=None,
+            embedding_model=setting.rerank_model,
+            can_use_model=self._can_use_rerank_model(
+                setting.rerank_provider,
+                setting.rerank_base_url,
+                api_key,
+                setting.rerank_model,
+                setting.rerank_workspace_id,
+            ),
+            config_id=setting.id,
+            preset_id=setting.rerank_preset_id,
+            workspace_id=setting.rerank_workspace_id,
+        )
+
+    def _rerank_runtime_from_system_settings(self) -> RuntimeModelConfig:
+        provider = self.settings.system_rerank_provider.strip()
+        base_url = self.settings.system_rerank_base_url.strip() or None
+        api_key = self.settings.system_rerank_api_key.strip() or None
+        model = self.settings.system_rerank_model.strip() or None
+        workspace_id = self.settings.system_rerank_workspace_id.strip() or None
+        return RuntimeModelConfig(
+            source="system",
+            provider=provider or "openai_compatible",
+            base_url=base_url,
+            api_key=api_key,
+            chat_model=None,
+            embedding_model=model,
+            can_use_model=self._can_use_rerank_model(provider, base_url, api_key, model, workspace_id),
+            workspace_id=workspace_id,
         )
 
     def _config_summary(self, setting: ModelSetting) -> ModelConfigSummary:
         runtime = self._runtime_from_user_setting(setting)
         embedding_runtime = self._embedding_runtime_from_user_setting(setting)
+        rerank_runtime = self._rerank_runtime_from_user_setting(setting)
         has_embedding = bool(setting.embedding_model)
+        has_rerank = bool(setting.rerank_model)
         return ModelConfigSummary(
             id=setting.id,
             display_name=setting.display_name,
@@ -896,14 +1283,27 @@ class ModelSettingsService:
             embedding_provider=embedding_runtime.provider if has_embedding else None,
             embedding_preset_id=setting.embedding_preset_id if has_embedding else None,
             embedding_base_url=embedding_runtime.base_url if has_embedding else None,
+            embedding_dimension=embedding_runtime.dimensions if has_embedding else None,
             has_api_key=bool(runtime.api_key),
             api_key_masked=self._mask_api_key(runtime.api_key),
             has_embedding_api_key=has_embedding and bool(embedding_runtime.api_key),
             embedding_api_key_masked=self._mask_api_key(embedding_runtime.api_key) if has_embedding else None,
+            has_embedding_app_id=has_embedding and bool(embedding_runtime.app_id),
+            embedding_app_id_masked=self._mask_api_key(embedding_runtime.app_id) if has_embedding else None,
+            has_embedding_api_secret=has_embedding and bool(embedding_runtime.api_secret),
+            rerank_model=rerank_runtime.embedding_model if has_rerank else None,
+            rerank_provider=rerank_runtime.provider if has_rerank else None,
+            rerank_preset_id=setting.rerank_preset_id if has_rerank else None,
+            rerank_base_url=rerank_runtime.base_url if has_rerank else None,
+            rerank_workspace_id=rerank_runtime.workspace_id if has_rerank else None,
+            has_rerank_api_key=has_rerank and bool(rerank_runtime.api_key),
+            rerank_api_key_masked=self._mask_api_key(rerank_runtime.api_key) if has_rerank else None,
             can_use_model=runtime.can_use_model,
             can_use_embedding_model=embedding_runtime.can_use_model,
+            can_use_rerank_model=rerank_runtime.can_use_model,
             is_default=setting.is_default,
             is_embedding_default=setting.is_embedding_default,
+            is_rerank_default=setting.is_rerank_default,
             last_test_ok=setting.last_test_ok,
             last_test_message=setting.last_test_message,
             last_tested_at=setting.last_tested_at,
@@ -914,6 +1314,7 @@ class ModelSettingsService:
         self,
         runtime: RuntimeModelConfig,
         embedding_runtime: RuntimeModelConfig,
+        rerank_runtime: RuntimeModelConfig,
         source: Literal["user", "system"],
     ) -> ModelSettingsSummary:
         return ModelSettingsSummary(
@@ -924,19 +1325,31 @@ class ModelSettingsService:
             embedding_model=embedding_runtime.embedding_model,
             embedding_provider=embedding_runtime.provider,
             embedding_base_url=embedding_runtime.base_url,
+            embedding_dimension=embedding_runtime.dimensions,
             has_api_key=bool(runtime.api_key),
             api_key_masked=self._mask_api_key(runtime.api_key),
             has_embedding_api_key=bool(embedding_runtime.api_key),
             embedding_api_key_masked=self._mask_api_key(embedding_runtime.api_key),
+            has_embedding_app_id=bool(embedding_runtime.app_id),
+            embedding_app_id_masked=self._mask_api_key(embedding_runtime.app_id),
+            has_embedding_api_secret=bool(embedding_runtime.api_secret),
+            rerank_model=rerank_runtime.embedding_model,
+            rerank_provider=rerank_runtime.provider,
+            rerank_base_url=rerank_runtime.base_url,
+            rerank_workspace_id=rerank_runtime.workspace_id,
+            has_rerank_api_key=bool(rerank_runtime.api_key),
+            rerank_api_key_masked=self._mask_api_key(rerank_runtime.api_key),
             can_use_model=runtime.can_use_model,
             can_use_embedding_model=embedding_runtime.can_use_model,
+            can_use_rerank_model=rerank_runtime.can_use_model,
         )
 
     def _system_summary(self) -> ModelSettingsSummary:
         system_runtime = self._runtime_from_system_settings()
         embedding_runtime = self._embedding_runtime_from_system_settings()
-        if system_runtime.base_url or system_runtime.chat_model or embedding_runtime.embedding_model:
-            return self._summary_from_runtimes(system_runtime, embedding_runtime, source="system")
+        rerank_runtime = self._rerank_runtime_from_system_settings()
+        if system_runtime.base_url or system_runtime.chat_model or embedding_runtime.embedding_model or rerank_runtime.embedding_model:
+            return self._summary_from_runtimes(system_runtime, embedding_runtime, rerank_runtime, source="system")
         return self._empty_summary()
 
     @staticmethod
@@ -949,12 +1362,20 @@ class ModelSettingsService:
             embedding_model=None,
             embedding_provider=None,
             embedding_base_url=None,
+            embedding_dimension=None,
             has_api_key=False,
             api_key_masked=None,
             has_embedding_api_key=False,
             embedding_api_key_masked=None,
+            rerank_model=None,
+            rerank_provider=None,
+            rerank_base_url=None,
+            rerank_workspace_id=None,
+            has_rerank_api_key=False,
+            rerank_api_key_masked=None,
             can_use_model=False,
             can_use_embedding_model=False,
+            can_use_rerank_model=False,
         )
 
     def _apply_settings_payload(self, setting: ModelSetting, payload: SaveModelSettingsRequest) -> None:
@@ -962,12 +1383,17 @@ class ModelSettingsService:
         setting.base_url = payload.base_url
         setting.chat_model = payload.chat_model or None
         setting.embedding_model = payload.embedding_model or None
+        setting.embedding_dimension = payload.embedding_dimension
         setting.embedding_provider = (
             self._normalize_provider(payload.embedding_provider or payload.provider)
             if setting.embedding_model
             else None
         )
         setting.embedding_base_url = (payload.embedding_base_url or payload.base_url) if setting.embedding_model else None
+        setting.rerank_model = payload.rerank_model or None
+        setting.rerank_provider = payload.rerank_provider if setting.rerank_model else None
+        setting.rerank_base_url = payload.rerank_base_url if setting.rerank_model else None
+        setting.rerank_workspace_id = payload.rerank_workspace_id if setting.rerank_model else None
         if isinstance(payload, SaveModelConfigRequest):
             setting.display_name = payload.display_name
             setting.preset_id = payload.preset_id or None
@@ -975,6 +1401,7 @@ class ModelSettingsService:
                 (payload.embedding_preset_id or payload.preset_id or None)
                 if setting.embedding_model else None
             )
+            setting.rerank_preset_id = payload.rerank_preset_id if setting.rerank_model else None
         if payload.api_key:
             setting.api_key_ciphertext = self._encrypt_api_key(payload.api_key)
         if setting.embedding_model:
@@ -988,8 +1415,19 @@ class ModelSettingsService:
                 and setting.embedding_base_url == setting.base_url
             ):
                 setting.embedding_api_key_ciphertext = setting.api_key_ciphertext
+            if payload.embedding_app_id:
+                setting.embedding_app_id_ciphertext = self._encrypt_api_key(payload.embedding_app_id)
+            if payload.embedding_api_secret:
+                setting.embedding_api_secret_ciphertext = self._encrypt_api_key(payload.embedding_api_secret)
         else:
             setting.embedding_api_key_ciphertext = None
+            setting.embedding_app_id_ciphertext = None
+            setting.embedding_api_secret_ciphertext = None
+            setting.embedding_dimension = None
+        if setting.rerank_model and payload.rerank_api_key:
+            setting.rerank_api_key_ciphertext = self._encrypt_api_key(payload.rerank_api_key)
+        elif not setting.rerank_model:
+            setting.rerank_api_key_ciphertext = None
 
     def _clear_changed_connection_tests(
         self,
@@ -998,6 +1436,9 @@ class ModelSettingsService:
     ) -> None:
         current_key = self._decrypt_api_key(setting.api_key_ciphertext)
         current_embedding_key = self._decrypt_api_key(setting.embedding_api_key_ciphertext)
+        current_embedding_app_id = self._decrypt_api_key(setting.embedding_app_id_ciphertext)
+        current_embedding_secret = self._decrypt_api_key(setting.embedding_api_secret_ciphertext)
+        current_rerank_key = self._decrypt_api_key(setting.rerank_api_key_ciphertext)
         chat_changed = (
             (
                 payload.provider is not None
@@ -1020,7 +1461,22 @@ class ModelSettingsService:
             )
             or (payload.embedding_base_url is not None and (payload.embedding_base_url or None) != setting.embedding_base_url)
             or (bool(payload.embedding_api_key) and payload.embedding_api_key != current_embedding_key)
+            or (bool(payload.embedding_app_id) and payload.embedding_app_id != current_embedding_app_id)
+            or (bool(payload.embedding_api_secret) and payload.embedding_api_secret != current_embedding_secret)
             or (payload.embedding_model is not None and (payload.embedding_model or None) != setting.embedding_model)
+            or (payload.embedding_dimension is not None and payload.embedding_dimension != setting.embedding_dimension)
+        )
+        rerank_changed = (
+            (payload.rerank_provider is not None and payload.rerank_provider != setting.rerank_provider)
+            or (
+                isinstance(payload, (SaveModelConfigRequest, UpdateModelConfigRequest))
+                and payload.rerank_preset_id is not None
+                and (payload.rerank_preset_id or None) != setting.rerank_preset_id
+            )
+            or (payload.rerank_base_url is not None and (payload.rerank_base_url or None) != setting.rerank_base_url)
+            or (bool(payload.rerank_api_key) and payload.rerank_api_key != current_rerank_key)
+            or (payload.rerank_model is not None and (payload.rerank_model or None) != setting.rerank_model)
+            or (payload.rerank_workspace_id is not None and (payload.rerank_workspace_id or None) != setting.rerank_workspace_id)
         )
         tests = dict(setting.connection_test_json or {})
         if chat_changed:
@@ -1030,12 +1486,14 @@ class ModelSettingsService:
             setting.last_tested_at = None
         if embedding_changed:
             tests.pop("embedding", None)
+        if rerank_changed:
+            tests.pop("rerank", None)
         setting.connection_test_json = tests
 
     @staticmethod
     def _parse_connection_tests(raw_tests: dict | None) -> dict[str, ModelConnectionTestSnapshot]:
         parsed: dict[str, ModelConnectionTestSnapshot] = {}
-        for operation in ("chat", "embedding"):
+        for operation in ("chat", "embedding", "rerank"):
             value = (raw_tests or {}).get(operation)
             if not isinstance(value, dict):
                 continue
@@ -1106,13 +1564,40 @@ class ModelSettingsService:
         base_url: str | None,
         api_key: str | None,
         embedding_model: str | None,
+        app_id: str | None = None,
+        api_secret: str | None = None,
     ) -> bool:
+        normalized = cls._normalize_provider(provider or "")
+        if normalized == "xfyun_embedding":
+            return (
+                cls._is_real_value(base_url)
+                and cls._is_real_api_key(api_key)
+                and cls._is_real_api_key(app_id)
+                and cls._is_real_api_key(api_secret)
+                and cls._is_real_value(embedding_model)
+            )
         return (
-            cls._normalize_provider(provider or "") == "openai_compatible"
+            normalized == "openai_compatible"
             and cls._is_real_value(base_url)
             and (cls._is_real_api_key(api_key) or cls._allows_empty_api_key(base_url))
             and cls._is_real_value(embedding_model)
         )
+
+    @classmethod
+    def _can_use_rerank_model(
+        cls,
+        provider: str | None,
+        base_url: str | None,
+        api_key: str | None,
+        model: str | None,
+        workspace_id: str | None = None,
+    ) -> bool:
+        normalized = cls._normalize_provider(provider or "")
+        if normalized not in {"siliconflow_rerank", "bailian_rerank", "openai_compatible"}:
+            return False
+        if normalized == "bailian_rerank" and not cls._is_real_value(workspace_id):
+            return False
+        return cls._is_real_value(base_url) and cls._is_real_api_key(api_key) and cls._is_real_value(model)
 
     @staticmethod
     def _normalize_provider(provider: str) -> str:

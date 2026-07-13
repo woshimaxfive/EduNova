@@ -39,7 +39,8 @@ export function ConnectionTestCard({
   onTest
 }: ConnectionTestCardProps) {
   const isEmbedding = operation === "embedding";
-  const label = isEmbedding ? "向量模型" : "回答模型";
+  const isRerank = operation === "rerank";
+  const label = isEmbedding ? "向量模型" : isRerank ? "重排序模型" : "回答模型";
   const testedAt = formatTestTime(result?.tested_at);
   const status = !model
     ? "not-configured"
@@ -61,12 +62,12 @@ export function ConnectionTestCard({
         </span>
         <div>
           <strong>{label}</strong>
-          <span>{model || "未配置"}</span>
+          <span>{model ? `${model}${isEmbedding && result?.dimension ? ` · ${result.dimension} 维` : ""}` : "未配置"}</span>
         </div>
       </header>
       <p>
         {!model
-          ? missingMessage ?? (isEmbedding ? "此配置未设置向量模型。" : "此配置未设置回答模型。")
+          ? missingMessage ?? (isEmbedding ? "此配置未设置向量模型。" : isRerank ? "此配置未设置重排序模型。" : "此配置未设置回答模型。")
           : dirty
             ? "配置已有修改，保存后才能测试当前值。"
             : result?.message || "尚未执行连接测试。"}

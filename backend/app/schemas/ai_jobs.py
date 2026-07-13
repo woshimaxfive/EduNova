@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from backend.app.models import AiJob
 
 
-AiJobWorkflow = Literal["course_builder", "resource_generation"]
+AiJobWorkflow = Literal["course_builder", "resource_generation", "embedding_reindex"]
 AiJobStatus = Literal["queued", "running", "cancelling", "cancelled", "completed", "failed"]
 
 

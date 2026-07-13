@@ -3,35 +3,51 @@ import { describe, expect, it } from "vitest";
 import {
   CHAT_MODEL_PROVIDER_PRESETS,
   EMBEDDING_MODEL_PROVIDER_PRESETS,
+  RERANK_MODEL_PROVIDER_PRESETS,
   getChatProviderPreset,
   getEmbeddingProviderPreset,
+  getRerankProviderPreset,
   inferChatProviderPresetId,
-  inferEmbeddingProviderPresetId
+  inferEmbeddingProviderPresetId,
+  inferRerankProviderPresetId
 } from "./modelProviders";
 
 describe("model provider presets", () => {
-  it("keeps chat and embedding providers as separate capability lists", () => {
+  it("keeps chat, embedding, and rerank providers as separate capability lists", () => {
     const chatIds = CHAT_MODEL_PROVIDER_PRESETS.map((preset) => preset.id);
     const embeddingIds = EMBEDDING_MODEL_PROVIDER_PRESETS.map((preset) => preset.id);
+    const rerankIds = RERANK_MODEL_PROVIDER_PRESETS.map((preset) => preset.id);
 
     expect(chatIds).toEqual(expect.arrayContaining(["spark", "deepseek", "qwen", "kimi", "zhipu"]));
-    expect(embeddingIds).toEqual(["none", "qwen", "siliconflow-embedding", "custom"]);
+    expect(embeddingIds).toEqual(["none", "xfyun-embedding", "qwen", "siliconflow-embedding", "custom"]);
+    expect(rerankIds).toEqual(["none", "siliconflow-rerank", "bailian-rerank", "custom"]);
     expect(embeddingIds).not.toEqual(chatIds);
-    expect(embeddingIds).not.toEqual(expect.arrayContaining(["spark", "deepseek", "kimi"]));
+    expect(rerankIds).not.toEqual(embeddingIds);
   });
 
-  it("uses current domestic presets that can satisfy the 1536-dimension store", () => {
-    expect(getChatProviderPreset("spark").chatModel).toBe("4.0Ultra");
+  it("uses X2-Flash and provider-specific dynamic retrieval presets", () => {
+    expect(getChatProviderPreset("spark")).toMatchObject({
+      baseUrl: "https://spark-api-open.xf-yun.com/agent/v1/",
+      chatModel: "spark-x"
+    });
     expect(getChatProviderPreset("deepseek").chatModel).toBe("deepseek-v4-pro");
     expect(getChatProviderPreset("qwen").chatModel).toBe("qwen3.7-plus");
     expect(getChatProviderPreset("zhipu").chatModel).toBe("glm-5");
     expect(getEmbeddingProviderPreset("qwen")).toMatchObject({
       baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      embeddingModel: "text-embedding-v4"
+      embeddingModel: "text-embedding-v4",
+      dimension: 1024
     });
-    expect(getEmbeddingProviderPreset("siliconflow-embedding").embeddingModel).toBe(
-      "Qwen/Qwen3-Embedding-8B"
-    );
+    expect(getEmbeddingProviderPreset("xfyun-embedding")).toMatchObject({
+      provider: "xfyun_embedding",
+      embeddingModel: "llm-embedding",
+      dimension: 2560
+    });
+    expect(getEmbeddingProviderPreset("siliconflow-embedding")).toMatchObject({
+      embeddingModel: "BAAI/bge-m3",
+      dimension: 1024
+    });
+    expect(getRerankProviderPreset("siliconflow-rerank").rerankModel).toBe("BAAI/bge-reranker-v2-m3");
   });
 
   it("infers legacy saved connections without mixing unsupported provider capabilities", () => {
@@ -42,5 +58,9 @@ describe("model provider presets", () => {
     )).toBe("qwen");
     expect(inferEmbeddingProviderPresetId("https://api.deepseek.com", "deepseek")).toBe("custom");
     expect(inferEmbeddingProviderPresetId(null, null)).toBe("none");
+    expect(inferRerankProviderPresetId("https://api.siliconflow.cn/v1", "siliconflow-rerank")).toBe(
+      "siliconflow-rerank"
+    );
+    expect(inferRerankProviderPresetId(null, null)).toBe("none");
   });
 });

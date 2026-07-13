@@ -35,6 +35,8 @@ import {
   saveModelSettings,
   setDefaultEmbeddingConfig,
   setDefaultModelConfig,
+  setDefaultRerankConfig,
+  createEmbeddingReindexJob,
   SETTINGS_ENDPOINTS,
   testModelConfig,
   testModelSettings,
@@ -1806,13 +1808,15 @@ describe("frontend API contracts", () => {
 
   it("uses typed multi-model config API requests through the shared API client", async () => {
     const previousAdapter = apiClient.defaults.adapter;
-    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+    const calls: Array<{ url?: string; method?: string; data?: unknown; headers?: Record<string, string> }> = [];
 
     apiClient.defaults.adapter = async (config) => {
+      const idempotencyKey = config.headers?.get?.("Idempotency-Key");
       calls.push({
         url: config.url,
         method: config.method,
-        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data,
+        ...(idempotencyKey ? { headers: { "Idempotency-Key": String(idempotencyKey) } } : {})
       });
 
       return {
@@ -1888,9 +1892,11 @@ describe("frontend API contracts", () => {
         embedding_model: "text-embedding-v4",
         make_default: true
       });
-      await updateModelConfig(3, { chat_model: "4.0Ultra", api_key: "" });
+      await updateModelConfig(3, { chat_model: "spark-x", api_key: "" });
       await setDefaultModelConfig(3);
       await setDefaultEmbeddingConfig(3);
+      await setDefaultRerankConfig(3);
+      await createEmbeddingReindexJob(3, "reindex-contract-test");
       await testModelConfig(3);
       await deleteModelConfig(3);
 
@@ -1914,9 +1920,16 @@ describe("frontend API contracts", () => {
             make_default: true
           }
         },
-        { url: SETTINGS_ENDPOINTS.config(3), method: "patch", data: { chat_model: "4.0Ultra", api_key: "" } },
+        { url: SETTINGS_ENDPOINTS.config(3), method: "patch", data: { chat_model: "spark-x", api_key: "" } },
         { url: SETTINGS_ENDPOINTS.defaultConfig(3), method: "post", data: undefined },
         { url: SETTINGS_ENDPOINTS.embeddingDefaultConfig(3), method: "post", data: undefined },
+        { url: SETTINGS_ENDPOINTS.rerankDefaultConfig(3), method: "post", data: undefined },
+        {
+          url: SETTINGS_ENDPOINTS.embeddingReindexJobs,
+          method: "post",
+          data: { config_id: 3 },
+          headers: { "Idempotency-Key": "reindex-contract-test" }
+        },
         { url: SETTINGS_ENDPOINTS.testConfig(3), method: "post", data: { operation: "chat" } },
         { url: SETTINGS_ENDPOINTS.config(3), method: "delete", data: undefined }
       ]);

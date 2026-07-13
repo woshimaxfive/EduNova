@@ -503,6 +503,7 @@ class ModelSetting(IdMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_model_settings_user_default", "user_id", "is_default"),
         Index("ix_model_settings_user_embedding_default", "user_id", "is_embedding_default"),
+        Index("ix_model_settings_user_rerank_default", "user_id", "is_rerank_default"),
         Index("ix_model_settings_user_updated", "user_id", "updated_at"),
     )
 
@@ -526,9 +527,19 @@ class ModelSetting(IdMixin, TimestampMixin, Base):
     embedding_preset_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     embedding_base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding_api_key_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_app_id_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_api_secret_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    embedding_dimension: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rerank_provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    rerank_preset_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    rerank_base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rerank_api_key_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rerank_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    rerank_workspace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_embedding_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_rerank_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_test_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

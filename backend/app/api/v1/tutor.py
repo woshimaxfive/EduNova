@@ -49,6 +49,7 @@ def get_tutor_session_service(db=Depends(get_db_session)) -> TutorSessionService
         course_citation_searcher=RagService(
             SqlAlchemyRagRepository(db),
             embedding_service=EmbeddingService(model_settings_service),
+            rerank_service=model_settings_service,
         ),
         course_answer_generator=CourseAnswerService(model_settings_service),
         profile_event_recorder=ProfileService(
@@ -60,6 +61,7 @@ def get_tutor_session_service(db=Depends(get_db_session)) -> TutorSessionService
         material_citation_searcher=MaterialRetrievalService(
             SqlAlchemyMaterialRetrievalRepository(db),
             embedding_service=EmbeddingService(model_settings_service),
+            rerank_service=model_settings_service,
         ),
     )
 

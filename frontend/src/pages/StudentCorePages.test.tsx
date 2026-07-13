@@ -407,9 +407,10 @@ describe("student core pages", () => {
     expect(screen.getByRole("region", { name: "模型设置" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "回答服务商" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "向量服务商" })).toBeInTheDocument();
-    expect(screen.getAllByText("讯飞星火 Spark")).toHaveLength(2);
+    expect(screen.getAllByText("讯飞星火 X2-Flash")).toHaveLength(2);
     const embeddingProviderPreset = screen.getByRole("combobox", { name: "向量服务商" });
-    expect(within(embeddingProviderPreset).queryByRole("option", { name: "讯飞星火 Spark" })).not.toBeInTheDocument();
+    expect(within(embeddingProviderPreset).queryByRole("option", { name: "讯飞星火 X2-Flash" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "重排序服务商" })).toBeInTheDocument();
     expect(within(embeddingProviderPreset).queryByRole("option", { name: "DeepSeek" })).not.toBeInTheDocument();
     expect(screen.queryByText("深度思考")).not.toBeInTheDocument();
     expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();

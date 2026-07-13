@@ -20,10 +20,12 @@ import { changePassword, updateCurrentUser } from "../api/auth";
 import { getApiErrorMessage } from "../api/errors";
 import {
   createModelConfig,
+  createEmbeddingReindexJob,
   deleteModelConfig,
   listModelConfigs,
   setDefaultEmbeddingConfig,
   setDefaultModelConfig,
+  setDefaultRerankConfig,
   testModelConfig,
   testModelSettings,
   updateModelConfig,
@@ -40,13 +42,17 @@ import { useToastQueue } from "../components/feedback/useToastQueue";
 import {
   CHAT_MODEL_PROVIDER_PRESETS,
   EMBEDDING_MODEL_PROVIDER_PRESETS,
+  RERANK_MODEL_PROVIDER_PRESETS,
   getChatProviderPreset,
   getEmbeddingProviderPreset,
+  getRerankProviderPreset,
   inferChatProviderPresetId,
-  inferEmbeddingProviderPresetId
+  inferEmbeddingProviderPresetId,
+  inferRerankProviderPresetId
 } from "../config/modelProviders";
 import { mapApiUserToStudentUser } from "../features/auth/authMappers";
 import { useAuthStore } from "../features/auth/authStore";
+import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import { ConnectionTestCard } from "../features/settings/ConnectionTestCard";
 import { DeleteModelConfigDialog } from "../features/settings/DeleteModelConfigDialog";
 import {
@@ -65,19 +71,35 @@ type ModelConfigDraft = {
   embedding_preset_id: string;
   embedding_base_url: string;
   embedding_api_key: string;
+  embedding_app_id: string;
+  embedding_api_secret: string;
   embedding_model: string;
+  embedding_dimension: string;
+  rerank_preset_id: string;
+  rerank_base_url: string;
+  rerank_api_key: string;
+  rerank_model: string;
+  rerank_workspace_id: string;
 };
 
 const EMPTY_CONFIG_DRAFT: ModelConfigDraft = {
-  display_name: "星火 4.0 Ultra",
+  display_name: "星火 X2-Flash 学习组合",
   preset_id: "spark",
-  base_url: "https://spark-api-open.xf-yun.com/v1",
+  base_url: "https://spark-api-open.xf-yun.com/agent/v1/",
   api_key: "",
-  chat_model: "4.0Ultra",
-  embedding_preset_id: "none",
-  embedding_base_url: "",
+  chat_model: "spark-x",
+  embedding_preset_id: "xfyun-embedding",
+  embedding_base_url: "https://emb-cn-huabei-1.xf-yun.com/",
   embedding_api_key: "",
-  embedding_model: ""
+  embedding_app_id: "",
+  embedding_api_secret: "",
+  embedding_model: "llm-embedding",
+  embedding_dimension: "2560",
+  rerank_preset_id: "siliconflow-rerank",
+  rerank_base_url: "https://api.siliconflow.cn/v1",
+  rerank_api_key: "",
+  rerank_model: "BAAI/bge-reranker-v2-m3",
+  rerank_workspace_id: ""
 };
 
 const VALID_SECTIONS = new Set<SettingsSection>(["model", "account", "privacy"]);
@@ -97,15 +119,26 @@ function draftFromConfig(config: ModelConfigSummary): ModelConfigDraft {
       : "none",
     embedding_base_url: config.embedding_model ? config.embedding_base_url ?? config.base_url ?? "" : "",
     embedding_api_key: "",
-    embedding_model: config.embedding_model ?? ""
+    embedding_app_id: "",
+    embedding_api_secret: "",
+    embedding_model: config.embedding_model ?? "",
+    embedding_dimension: config.embedding_dimension ? String(config.embedding_dimension) : "",
+    rerank_preset_id: config.rerank_model
+      ? inferRerankProviderPresetId(config.rerank_base_url, config.rerank_preset_id)
+      : "none",
+    rerank_base_url: config.rerank_base_url ?? "",
+    rerank_api_key: "",
+    rerank_model: config.rerank_model ?? "",
+    rerank_workspace_id: config.rerank_workspace_id ?? ""
   };
 }
 
 function newDraftFromPreset(presetId = "spark"): ModelConfigDraft {
   const preset = getChatProviderPreset(presetId);
-  const embeddingPreset = getEmbeddingProviderPreset("none");
+  const embeddingPreset = getEmbeddingProviderPreset("xfyun-embedding");
+  const rerankPreset = getRerankProviderPreset("siliconflow-rerank");
   return {
-    display_name: preset.name.includes("讯飞") ? "星火 4.0 Ultra" : `${preset.name} 配置`,
+    display_name: preset.name.includes("讯飞") ? "星火 X2-Flash 学习组合" : `${preset.name} 配置`,
     preset_id: preset.id,
     base_url: preset.baseUrl,
     api_key: "",
@@ -113,7 +146,15 @@ function newDraftFromPreset(presetId = "spark"): ModelConfigDraft {
     embedding_preset_id: embeddingPreset.id,
     embedding_base_url: embeddingPreset.baseUrl,
     embedding_api_key: "",
-    embedding_model: ""
+    embedding_app_id: "",
+    embedding_api_secret: "",
+    embedding_model: embeddingPreset.embeddingModel,
+    embedding_dimension: embeddingPreset.dimension ? String(embeddingPreset.dimension) : "",
+    rerank_preset_id: rerankPreset.id,
+    rerank_base_url: rerankPreset.baseUrl,
+    rerank_api_key: "",
+    rerank_model: rerankPreset.rerankModel,
+    rerank_workspace_id: ""
   };
 }
 
@@ -126,12 +167,24 @@ function draftsMatch(left: ModelConfigDraft, right: ModelConfigDraft) {
     && left.embedding_preset_id === right.embedding_preset_id
     && left.embedding_base_url === right.embedding_base_url
     && !left.embedding_api_key
-    && left.embedding_model === right.embedding_model;
+    && !left.embedding_app_id
+    && !left.embedding_api_secret
+    && left.embedding_model === right.embedding_model
+    && left.embedding_dimension === right.embedding_dimension
+    && left.rerank_preset_id === right.rerank_preset_id
+    && left.rerank_base_url === right.rerank_base_url
+    && !left.rerank_api_key
+    && left.rerank_model === right.rerank_model
+    && left.rerank_workspace_id === right.rerank_workspace_id;
 }
 
 function configTestLabel(config: ModelConfigSummary) {
   const chatTest = config.connection_tests?.chat;
   const embeddingTest = config.connection_tests?.embedding;
+  const rerankTest = config.connection_tests?.rerank;
+  if (chatTest?.ok && (!config.embedding_model || embeddingTest?.ok) && (!config.rerank_model || rerankTest?.ok)) {
+    return "已验证";
+  }
   if (config.chat_model) {
     if (chatTest?.ok) return config.embedding_model && embeddingTest?.ok ? "两项已验证" : "回答已验证";
     if (chatTest && !chatTest.ok) return "回答测试失败";
@@ -155,6 +208,7 @@ function testSnapshot(
     code?: string | null;
     retryable?: boolean;
     tested_at?: string;
+    dimension?: number | null;
   }
 ): ModelConnectionTestSnapshot {
   return {
@@ -164,7 +218,8 @@ function testSnapshot(
     message: data.message,
     code: data.code ?? null,
     retryable: data.retryable ?? false,
-    tested_at: data.tested_at ?? new Date().toISOString()
+    tested_at: data.tested_at ?? new Date().toISOString(),
+    dimension: data.dimension ?? null
   };
 }
 
@@ -177,6 +232,7 @@ export function SettingsPage() {
   const setSession = useAuthStore((state) => state.setSession);
   const clearSession = useAuthStore((state) => state.clearSession);
   const { toast, showToast, dismissToast } = useToastQueue();
+  const { trackJob } = useAiJobs();
 
   const requestedSection = searchParams.get("section") as SettingsSection | null;
   const activeSection = requestedSection && VALID_SECTIONS.has(requestedSection) ? requestedSection : "model";
@@ -201,18 +257,21 @@ export function SettingsPage() {
   const configs = useMemo(() => settingsList?.configs ?? [], [settingsList?.configs]);
   const defaultChatConfigId = settingsList?.default_chat_config_id ?? settingsList?.default_config_id ?? null;
   const defaultEmbeddingConfigId = settingsList?.default_embedding_config_id ?? null;
+  const defaultRerankConfigId = settingsList?.default_rerank_config_id ?? null;
   const defaultChatConfig = configs.find((config) => config.id === defaultChatConfigId) ?? null;
   const defaultEmbeddingConfig = configs.find((config) => config.id === defaultEmbeddingConfigId) ?? null;
+  const defaultRerankConfig = configs.find((config) => config.id === defaultRerankConfigId) ?? null;
   const selectedConfig = useMemo(() => {
     if (selectedConfigId === "new") return null;
     if (typeof selectedConfigId === "number") {
       return configs.find((config) => config.id === selectedConfigId) ?? null;
     }
-    return defaultChatConfig ?? defaultEmbeddingConfig ?? configs[0] ?? null;
-  }, [configs, defaultChatConfig, defaultEmbeddingConfig, selectedConfigId]);
+    return defaultChatConfig ?? defaultEmbeddingConfig ?? defaultRerankConfig ?? configs[0] ?? null;
+  }, [configs, defaultChatConfig, defaultEmbeddingConfig, defaultRerankConfig, selectedConfigId]);
   const currentDraft = selectedConfigId === null && selectedConfig ? draftFromConfig(selectedConfig) : draft;
   const selectedChatPreset = getChatProviderPreset(currentDraft.preset_id);
   const selectedEmbeddingPreset = getEmbeddingProviderPreset(currentDraft.embedding_preset_id);
+  const selectedRerankPreset = getRerankProviderPreset(currentDraft.rerank_preset_id);
   const activeConfigId = typeof selectedConfigId === "number" ? selectedConfigId : selectedConfig?.id ?? null;
   const isCreating = selectedConfigId === "new" || !selectedConfig;
   const isDirty = isCreating || (selectedConfig ? !draftsMatch(currentDraft, draftFromConfig(selectedConfig)) : false);
@@ -225,6 +284,10 @@ export function SettingsPage() {
     || !savedDraft
     || currentDraft.embedding_preset_id !== savedDraft.embedding_preset_id
     || currentDraft.embedding_base_url !== savedDraft.embedding_base_url;
+  const rerankConnectionChanged = isCreating
+    || !savedDraft
+    || currentDraft.rerank_preset_id !== savedDraft.rerank_preset_id
+    || currentDraft.rerank_base_url !== savedDraft.rerank_base_url;
   const chatKeyReady = !currentDraft.chat_model.trim()
     || selectedChatPreset.allowEmptyApiKey
     || Boolean(currentDraft.api_key.trim())
@@ -233,11 +296,23 @@ export function SettingsPage() {
     || selectedEmbeddingPreset.allowEmptyApiKey
     || Boolean(currentDraft.embedding_api_key.trim())
     || (!embeddingConnectionChanged && Boolean(selectedConfig?.has_embedding_api_key));
+  const xfyunEmbeddingCredentialsReady = !currentDraft.embedding_model.trim()
+    || !selectedEmbeddingPreset.requiresXfyunCredentials
+    || (
+      (Boolean(currentDraft.embedding_app_id.trim()) || (!embeddingConnectionChanged && Boolean(selectedConfig?.has_embedding_app_id)))
+      && (Boolean(currentDraft.embedding_api_secret.trim()) || (!embeddingConnectionChanged && Boolean(selectedConfig?.has_embedding_api_secret)))
+    );
+  const rerankKeyReady = !currentDraft.rerank_model.trim()
+    || selectedRerankPreset.allowEmptyApiKey
+    || Boolean(currentDraft.rerank_api_key.trim())
+    || (!rerankConnectionChanged && Boolean(selectedConfig?.has_rerank_api_key));
   const canSave = Boolean(
     currentDraft.display_name.trim()
-    && (currentDraft.chat_model.trim() || currentDraft.embedding_model.trim())
+    && (currentDraft.chat_model.trim() || currentDraft.embedding_model.trim() || currentDraft.rerank_model.trim())
     && (!currentDraft.chat_model.trim() || currentDraft.base_url.trim())
     && (!currentDraft.embedding_model.trim() || currentDraft.embedding_base_url.trim())
+    && (!currentDraft.rerank_model.trim() || currentDraft.rerank_base_url.trim())
+    && (!selectedRerankPreset.requiresWorkspaceId || !currentDraft.rerank_model.trim() || currentDraft.rerank_workspace_id.trim())
   );
   const systemSummary = settingsList?.system_summary ?? null;
   const effectiveSource = defaultChatConfig?.display_name
@@ -305,6 +380,16 @@ export function SettingsPage() {
     onError: (error) => setModelFeedback(getApiErrorMessage(error, "默认向量配置切换失败，请稍后重试。"))
   });
 
+  const rerankDefaultConfigMutation = useMutation({
+    mutationFn: (configId: number) => setDefaultRerankConfig(configId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["settings", "model-configs"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
+      showToast("已设为默认重排序配置。", "success");
+    },
+    onError: (error) => setModelFeedback(getApiErrorMessage(error, "默认重排序配置切换失败，请稍后重试。"))
+  });
+
   const testConnectionMutation = useMutation({
     mutationFn: ({ configId, operation }: { configId: number | null; operation: ModelConnectionOperation }) =>
       configId === null ? testModelSettings(operation) : testModelConfig(configId, operation),
@@ -322,6 +407,18 @@ export function SettingsPage() {
     onError: (error) => setModelFeedback(getApiErrorMessage(error, "连接测试失败，请稍后重试。"))
   });
 
+  const reindexMutation = useMutation({
+    mutationFn: (configId: number) => createEmbeddingReindexJob(
+      configId,
+      `embedding-reindex-${configId}-${crypto.randomUUID()}`
+    ),
+    onSuccess: (job) => {
+      trackJob(job);
+      showToast("向量重建任务已开始，可离开页面继续运行。", "success");
+    },
+    onError: (error) => setModelFeedback(getApiErrorMessage(error, "向量重建任务创建失败，请稍后重试。"))
+  });
+
   const deleteConfigMutation = useMutation({
     mutationFn: (configId: number) => deleteModelConfig(configId),
     onSuccess: async (response) => {
@@ -329,6 +426,7 @@ export function SettingsPage() {
       await queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
       const nextConfig = response.data.configs.find((config) => config.id === response.data.default_chat_config_id)
         ?? response.data.configs.find((config) => config.id === response.data.default_embedding_config_id)
+        ?? response.data.configs.find((config) => config.id === response.data.default_rerank_config_id)
         ?? response.data.configs[0]
         ?? null;
       setSelectedConfigId(nextConfig?.id ?? "new");
@@ -397,7 +495,24 @@ export function SettingsPage() {
       embedding_model: preset.id === "custom"
         ? currentDraft.embedding_model
         : preset.embeddingModel,
-      embedding_api_key: preset.id === currentDraft.embedding_preset_id ? currentDraft.embedding_api_key : ""
+      embedding_dimension: preset.dimension ? String(preset.dimension) : "",
+      embedding_api_key: preset.id === currentDraft.embedding_preset_id ? currentDraft.embedding_api_key : "",
+      embedding_app_id: preset.id === currentDraft.embedding_preset_id ? currentDraft.embedding_app_id : "",
+      embedding_api_secret: preset.id === currentDraft.embedding_preset_id ? currentDraft.embedding_api_secret : ""
+    });
+    setModelFeedback(null);
+  }
+
+  function applyRerankProviderPreset(presetId: string) {
+    const preset = getRerankProviderPreset(presetId);
+    if (selectedConfigId === null && selectedConfig) setSelectedConfigId(selectedConfig.id);
+    setDraft({
+      ...currentDraft,
+      rerank_preset_id: preset.id,
+      rerank_base_url: preset.id === "custom" ? currentDraft.rerank_base_url : preset.baseUrl,
+      rerank_model: preset.id === "custom" ? currentDraft.rerank_model : preset.rerankModel,
+      rerank_api_key: preset.id === currentDraft.rerank_preset_id ? currentDraft.rerank_api_key : "",
+      rerank_workspace_id: preset.id === currentDraft.rerank_preset_id ? currentDraft.rerank_workspace_id : ""
     });
     setModelFeedback(null);
   }
@@ -415,16 +530,17 @@ export function SettingsPage() {
   }
 
   function saveModelConfiguration() {
-    if (!chatKeyReady || !embeddingKeyReady) {
-      setModelFeedback("新建或更换服务连接时，请填写对应服务的 API Key；本地免密预设除外。");
+    if (!chatKeyReady || !embeddingKeyReady || !xfyunEmbeddingCredentialsReady || !rerankKeyReady) {
+      setModelFeedback("请补全已启用能力对应的安全凭证；讯飞向量需要 APPID、APIKey 和 APISecret。");
       return;
     }
     if (!canSave) {
-      setModelFeedback("请填写配置名称和至少一种模型；已启用的回答或向量服务必须填写自己的 Base URL。");
+      setModelFeedback("请填写配置名称和至少一种模型；已启用的回答、向量或重排序服务必须填写自己的连接信息。");
       return;
     }
     const chatApiKey = currentDraft.api_key.trim();
     const embeddingApiKey = currentDraft.embedding_api_key.trim();
+    const rerankApiKey = currentDraft.rerank_api_key.trim();
     const payload = {
       display_name: currentDraft.display_name.trim(),
       preset_id: currentDraft.preset_id,
@@ -432,17 +548,27 @@ export function SettingsPage() {
       base_url: currentDraft.base_url.trim(),
       chat_model: currentDraft.chat_model.trim(),
       embedding_preset_id: currentDraft.embedding_preset_id,
-      embedding_provider: "openai_compatible" as const,
+      embedding_provider: selectedEmbeddingPreset.provider,
       embedding_base_url: currentDraft.embedding_base_url.trim(),
       embedding_model: currentDraft.embedding_model.trim(),
+      embedding_dimension: currentDraft.embedding_dimension ? Number(currentDraft.embedding_dimension) : null,
+      embedding_app_id: currentDraft.embedding_app_id.trim() || undefined,
+      embedding_api_secret: currentDraft.embedding_api_secret.trim() || undefined,
+      rerank_preset_id: currentDraft.rerank_preset_id,
+      rerank_provider: selectedRerankPreset.provider,
+      rerank_base_url: currentDraft.rerank_base_url.trim(),
+      rerank_model: currentDraft.rerank_model.trim(),
+      rerank_workspace_id: currentDraft.rerank_workspace_id.trim(),
       ...(chatApiKey ? { api_key: chatApiKey } : {}),
-      ...(embeddingApiKey ? { embedding_api_key: embeddingApiKey } : {})
+      ...(embeddingApiKey ? { embedding_api_key: embeddingApiKey } : {}),
+      ...(rerankApiKey ? { rerank_api_key: rerankApiKey } : {})
     };
     if (isCreating || activeConfigId === null) {
       createConfigMutation.mutate({
         ...payload,
         make_default: !defaultChatConfig && Boolean(payload.chat_model),
-        make_embedding_default: !defaultEmbeddingConfig && Boolean(payload.embedding_model)
+        make_embedding_default: !defaultEmbeddingConfig && Boolean(payload.embedding_model),
+        make_rerank_default: !defaultRerankConfig && Boolean(payload.rerank_model)
       });
     } else {
       updateConfigMutation.mutate({ configId: activeConfigId, payload });
@@ -518,7 +644,7 @@ export function SettingsPage() {
                     <div>
                       <span>AI 运行基础</span>
                       <h2>模型连接</h2>
-                      <p>回答模型负责生成内容，向量模型负责资料语义检索；两项状态分别验证。</p>
+                      <p>回答负责生成，向量负责召回，重排序负责从候选中选出更相关的依据；三项独立验证。</p>
                     </div>
                     <button type="button" className="settings-new-button" onClick={createNewConfig}>
                       <Plus size={16} weight="bold" aria-hidden="true" />
@@ -540,14 +666,14 @@ export function SettingsPage() {
                     </div>
                   ) : null}
 
-                  {!modelConfigsQuery.isError && (!defaultChatConfig || !defaultEmbeddingConfig) ? (
+                  {!modelConfigsQuery.isError && (!defaultChatConfig || !defaultEmbeddingConfig || !defaultRerankConfig) ? (
                     <section className="settings-system-fallback" aria-label="服务器模型配置">
                       <header>
                         <div>
                           <span>当前运行来源</span>
                           <strong>{systemSummary?.source === "system" ? "缺失用途将使用服务器兜底" : "部分模型用途尚未配置"}</strong>
                         </div>
-                        <small>回答与向量分别选择默认配置，互不覆盖。</small>
+                        <small>回答、向量与重排序分别选择默认配置，互不覆盖。</small>
                       </header>
                       <div className="settings-test-grid">
                         {!defaultChatConfig ? (
@@ -570,6 +696,17 @@ export function SettingsPage() {
                             disabled={testConnectionMutation.isPending}
                             pending={testPending("embedding")}
                             onTest={() => runConnectionTest("embedding", null)}
+                          />
+                        ) : null}
+                        {!defaultRerankConfig ? (
+                          <ConnectionTestCard
+                            operation="rerank"
+                            model={systemSummary?.rerank_model ?? null}
+                            result={systemTests.rerank}
+                            dirty={false}
+                            disabled={testConnectionMutation.isPending}
+                            pending={testPending("rerank")}
+                            onTest={() => runConnectionTest("rerank", null)}
                           />
                         ) : null}
                       </div>
@@ -595,11 +732,13 @@ export function SettingsPage() {
                               <span className="settings-config-defaults">
                                 {config.is_default ? <small>回答</small> : null}
                                 {config.is_embedding_default ? <small>向量</small> : null}
+                                {config.is_rerank_default ? <small>重排</small> : null}
                               </span>
                             </span>
                             <span>
                               {config.chat_model ? `回答 ${config.chat_model}` : "回答未配置"}
                               {config.embedding_model ? ` · 向量 ${config.embedding_model}` : " · 向量未配置"}
+                              {config.rerank_model ? ` · 重排 ${config.rerank_model}` : ""}
                             </span>
                             <em className={configTestLabel(config).includes("失败") ? "failed" : ""}>{configTestLabel(config)}</em>
                           </button>
@@ -617,6 +756,7 @@ export function SettingsPage() {
                             <span>
                               {currentDraft.chat_model ? `回答 ${currentDraft.chat_model}` : "回答未配置"}
                               {currentDraft.embedding_model ? ` · 向量 ${currentDraft.embedding_model}` : " · 向量未配置"}
+                              {currentDraft.rerank_model ? ` · 重排 ${currentDraft.rerank_model}` : ""}
                             </span>
                             <em>保存后可测试</em>
                           </button>
@@ -721,7 +861,7 @@ export function SettingsPage() {
                             <span aria-hidden="true"><Database size={18} weight="duotone" /></span>
                             <div>
                               <h4 id="embedding-service-title">向量服务</h4>
-                              <p>只提供真实兼容 1536 维检索库的预设；未配置时使用关键词检索。</p>
+                              <p>将资料和问题转换为向量；维度由服务返回并随配置隔离，未配置时使用关键词检索。</p>
                             </div>
                           </header>
                           <div className="settings-service-grid">
@@ -739,6 +879,14 @@ export function SettingsPage() {
                                 placeholder="可留空，届时使用关键词检索"
                                 disabled={selectedEmbeddingPreset.id === "none"}
                                 onChange={(event) => updateDraft("embedding_model", event.target.value)}
+                              />
+                            </label>
+                            <label>
+                              <span>实际维度</span>
+                              <input
+                                aria-label="向量实际维度"
+                                value={currentDraft.embedding_dimension || "连接测试后自动识别"}
+                                disabled
                               />
                             </label>
                             <div className="settings-provider-context">
@@ -769,6 +917,96 @@ export function SettingsPage() {
                                     ? "留空保留已保存的向量密钥"
                                     : selectedEmbeddingPreset.apiKeyPlaceholder}
                                 onChange={(event) => updateDraft("embedding_api_key", event.target.value)}
+                              />
+                            </label>
+                            {selectedEmbeddingPreset.requiresXfyunCredentials ? (
+                              <>
+                                <label>
+                                  <span>讯飞 APPID</span>
+                                  <input
+                                    aria-label="讯飞向量 APPID"
+                                    type="password"
+                                    autoComplete="off"
+                                    value={currentDraft.embedding_app_id}
+                                    placeholder={!embeddingConnectionChanged && selectedConfig?.has_embedding_app_id ? "留空保留已保存的 APPID" : "填入 Embedding APPID"}
+                                    onChange={(event) => updateDraft("embedding_app_id", event.target.value)}
+                                  />
+                                </label>
+                                <label>
+                                  <span>讯飞 APISecret</span>
+                                  <input
+                                    aria-label="讯飞向量 APISecret"
+                                    type="password"
+                                    autoComplete="off"
+                                    value={currentDraft.embedding_api_secret}
+                                    placeholder={!embeddingConnectionChanged && selectedConfig?.has_embedding_api_secret ? "留空保留已保存的 APISecret" : "填入 Embedding APISecret"}
+                                    onChange={(event) => updateDraft("embedding_api_secret", event.target.value)}
+                                  />
+                                </label>
+                              </>
+                            ) : null}
+                          </div>
+                        </section>
+
+                        <section className="settings-service-group" aria-labelledby="rerank-service-title">
+                          <header>
+                            <span aria-hidden="true"><Database size={18} weight="duotone" /></span>
+                            <div>
+                              <h4 id="rerank-service-title">重排序服务</h4>
+                              <p>对关键词与向量召回的候选片段进行二次精排；未配置时保留混合检索结果。</p>
+                            </div>
+                          </header>
+                          <div className="settings-service-grid">
+                            <label>
+                              <span>重排序服务商</span>
+                              <select aria-label="重排序服务商" value={currentDraft.rerank_preset_id} onChange={(event) => applyRerankProviderPreset(event.target.value)}>
+                                {RERANK_MODEL_PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                              </select>
+                            </label>
+                            <label>
+                              <span>重排序模型</span>
+                              <input
+                                aria-label="重排序模型"
+                                value={currentDraft.rerank_model}
+                                placeholder="可留空"
+                                disabled={selectedRerankPreset.id === "none"}
+                                onChange={(event) => updateDraft("rerank_model", event.target.value)}
+                              />
+                            </label>
+                            <div className="settings-provider-context">
+                              <strong>{selectedRerankPreset.name}</strong>
+                              <span>{selectedRerankPreset.description}</span>
+                              {selectedRerankPreset.modelsHint ? <small>{selectedRerankPreset.modelsHint}</small> : null}
+                            </div>
+                            <label className="settings-form-span">
+                              <span>重排序 Base URL</span>
+                              <input
+                                aria-label="重排序 Base URL"
+                                value={currentDraft.rerank_base_url}
+                                disabled={selectedRerankPreset.id === "none"}
+                                onChange={(event) => updateDraft("rerank_base_url", event.target.value)}
+                              />
+                            </label>
+                            {selectedRerankPreset.requiresWorkspaceId ? (
+                              <label className="settings-form-span">
+                                <span>百炼 Workspace ID</span>
+                                <input aria-label="百炼 Workspace ID" value={currentDraft.rerank_workspace_id} onChange={(event) => updateDraft("rerank_workspace_id", event.target.value)} />
+                              </label>
+                            ) : null}
+                            <label className="settings-form-span">
+                              <span>重排序 {selectedRerankPreset.apiKeyLabel}</span>
+                              <input
+                                aria-label="重排序 API Key"
+                                type="password"
+                                autoComplete="off"
+                                value={currentDraft.rerank_api_key}
+                                disabled={selectedRerankPreset.id === "none"}
+                                placeholder={rerankConnectionChanged
+                                  ? selectedRerankPreset.apiKeyPlaceholder
+                                  : selectedConfig?.has_rerank_api_key
+                                    ? "留空保留已保存的重排序密钥"
+                                    : selectedRerankPreset.apiKeyPlaceholder}
+                                onChange={(event) => updateDraft("rerank_api_key", event.target.value)}
                               />
                             </label>
                           </div>
@@ -804,6 +1042,20 @@ export function SettingsPage() {
                             disabled={isDirty || testConnectionMutation.isPending}
                             pending={testPending("embedding")}
                             onTest={() => runConnectionTest("embedding")}
+                          />
+                          <ConnectionTestCard
+                            operation="rerank"
+                            model={selectedConfig?.rerank_model ?? null}
+                            missingMessage={defaultRerankConfig
+                              ? `重排序继续使用 ${defaultRerankConfig.display_name}。`
+                              : settingsList?.system_summary.can_use_rerank_model
+                                ? "重排序继续使用服务器配置。"
+                                : "当前未配置重排序，检索将使用 RRF 混合排序。"}
+                            result={selectedConfig?.connection_tests?.rerank ?? null}
+                            dirty={isDirty}
+                            disabled={isDirty || testConnectionMutation.isPending}
+                            pending={testPending("rerank")}
+                            onTest={() => runConnectionTest("rerank")}
                           />
                         </div>
                       ) : (
@@ -843,6 +1095,26 @@ export function SettingsPage() {
                             disabled={embeddingDefaultConfigMutation.isPending || isDirty}
                           >
                             设为向量默认
+                          </button>
+                        ) : null}
+                        {!isCreating && currentDraft.embedding_model && selectedConfig?.is_embedding_default ? (
+                          <button
+                            type="button"
+                            className="secondary-action"
+                            onClick={() => activeConfigId && reindexMutation.mutate(activeConfigId)}
+                            disabled={reindexMutation.isPending || isDirty}
+                          >
+                            {reindexMutation.isPending ? "正在创建任务" : "重建向量索引"}
+                          </button>
+                        ) : null}
+                        {!isCreating && currentDraft.rerank_model && !selectedConfig?.is_rerank_default ? (
+                          <button
+                            type="button"
+                            className="secondary-action"
+                            onClick={() => activeConfigId && rerankDefaultConfigMutation.mutate(activeConfigId)}
+                            disabled={rerankDefaultConfigMutation.isPending || isDirty}
+                          >
+                            设为重排序默认
                           </button>
                         ) : null}
                         <button type="button" className="primary-action" onClick={saveModelConfiguration} disabled={!canSave || savePending}>

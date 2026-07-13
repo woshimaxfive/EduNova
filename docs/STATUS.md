@@ -4,7 +4,7 @@
 
 ## 状态摘要
 
-当前最新完成到 **Phase 18：AI 执行可靠性与质量评测**。
+当前最新完成到 **X2-Flash、动态向量与重排序生产化**。
 
 Phase 计划的历史过程继续保留在 `docs/superpowers`。Phase 13 已完成主页问答、课程问答和资源生成的真实 Graph 编排，Phase 14 已让路径、练习评估和报告进入真实 LangGraph，Phase 15 已让画像和资料建课进入生产 Graph，Phase 16 曾实现资料对比和独立期末冲刺；当前产品已收敛为九条生产 Graph 和一条个性化学习路径。
 
@@ -32,7 +32,7 @@ Phase 18 使用 Alembic `20260711_0015` 新增隐私安全的 `model_call_runs`�
 
 2026-07-13 已支持单套模型方案组合不同服务商：Alembic `20260713_0019` 为向量用途增加独立 Provider 预设、Base URL 和加密 Key；设置编辑器拆为回答服务与向量服务两组连接。同一配置可以由星火负责回答、百炼负责 Embedding，两组连接分别测试、分别脱敏，旧共享连接配置自动迁移且继续可用。
 
-2026-07-13 已进一步拆分前端 Provider 预设：回答侧使用星火 `4.0Ultra`、DeepSeek V4、千问 3.7、Kimi K2.6、GLM-5 等国内常用生成模型；向量侧只保留与当前 1536 维 pgvector 协议真实兼容的百炼 `text-embedding-v4`、硅基流动 Qwen3 Embedding、自定义兼容服务和关键词 fallback。DeepSeek、Kimi、星火等回答服务不再出现在向量下拉中。
+2026-07-13 已完成 X2-Flash、动态向量与重排序生产化：回答首选升级为 Spark X2-Flash `spark-x`，主页普通/深思分别发送 `thinking.disabled/enabled`，仅消费最终 `content`；Alembic `20260713_0020` 将课程和资料向量改为无固定维度并增加 Provider、模型、维度和配置指纹隔离。讯飞原生 LLM Embedding、百炼 `text-embedding-v4`、硅基 `BAAI/bge-m3` 与硅基/百炼 Rerank 已接入，主页资料和课程 RAG 统一使用关键词、向量、RRF 和可选重排序。设置页支持三能力独立默认、测试与显式向量重建任务。
 
 2026-07-13 已完成全站文字可读性收口：主页、课程空间、资料库、资源工坊、学习路径、练习、报告、画像和设置统一使用五级排版 token，可见辅助文字最低为 `13px`，控件与紧凑正文提升至约 `14.4–16px`；画像雷达与学习图表标签同步提升。Docker 入口已用 `agent-browser` 验收 `1440px`、`1920px` 和 `390px`，核心页面无横向溢出，设置页桌面与移动最小可见字号均为 `13px`。
 
@@ -80,7 +80,7 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 - 课程空间可以基于当前用户课程资料检索引用。
 - 命中引用后可以调用当前用户默认模型配置生成回答。
 - 课程回答支持 SSE 流式输出，完成后持久化消息、引用和 `trace_id`。
-- RAG 检索在真实外部 1536 维 embedding 可用时融合 pgvector SQL cosine 候选与关键词候选；本地 hash 和 Provider 失败只走关键词 fallback。
+- RAG 检索按当前配置指纹使用动态维度向量，融合关键词 Top 30、向量 Top 30、RRF Top 20 和可选重排序；外部向量或重排序失败时分层退回，不跨 Provider 自动转发。
 - 主页会话已经从固定模板回复改为调用当前用户默认模型生成通用回答。
 - 主页会话通过 `HomeTutorGraph` 按需读取已选资料相关切片、Tavily-compatible 联网结果和安全深度规划，并展示真实 `home_tutor` trace；未配置搜索 Key 时 warning 进入来源/轨迹区，不伪造网页来源。
 - 主页回答已支持 SSE 增量 Markdown、Graph 安全状态、`sources` 和 Review `replace`；失败时保留输入和已有历史，不持久化半截消息。
@@ -115,12 +115,12 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 | 资料库 | 上传、列表、详情、解析进度、课程关联、不可变资料对比版本和最近结果恢复 | `/api/v1/materials/*` |
 | 智能建课 | `CourseBuilderGraph` 从已解析 TXT/Markdown/PDF/DOCX/PPTX 资料生成 v2 课程结构、知识点、先修关系和来源切片 | `/api/v1/courses/from-materials` |
 | 课程详情 | 课程列表、详情、概览、知识点 | `/api/v1/courses/*` |
-| RAG 检索 | 外部 embedding + pgvector SQL 与关键词混合；本地关键词 fallback | `/api/v1/rag/search` |
+| RAG 检索 | 动态维度 embedding + 关键词/pgvector/RRF + 可选 Rerank；关键词 fallback | `/api/v1/rag/search` |
 | 课程会话 | 课程内历史、消息、引用持久化、历史改名、软删除和刷新恢复 | `/api/v1/tutor/sessions?scope=course` |
-| 模型设置 | 多套个人模型配置、回答/向量独立默认、独立连接测试和按用途服务器兜底 | `/api/v1/settings/model/configs` |
+| 模型设置 | 多套个人配置、回答/向量/重排序独立连接与默认、三类测试、向量重建 | `/api/v1/settings/model/configs` |
 | 账号设置 | 昵称保存、安全换密及旧 JWT 全部失效 | `PATCH /api/v1/auth/me`、`PATCH /api/v1/auth/me/password` |
 | 课程回答 | `CourseTutorGraph` 接管非流式与流式课程 RAG 回答 | `/messages`、`/messages/stream` |
-| Embedding | OpenAI-compatible `/embeddings`；本地 hash 仅标记关键词 fallback | `EmbeddingService` |
+| Embedding | 讯飞原生 2560 维与 OpenAI-compatible 动态维度；配置指纹隔离 | `EmbeddingService` |
 | 学习画像 | `ProfileGraph` 管理 8 维用户级画像、逐维可信度、候选/已应用证据和学习信号门控 | `/api/v1/profiles/*` |
 | 课程学习状态 | 当前课程画像叠层、弱点候选计数、复习队列和状态流转 | `/api/v1/courses/{course_id}/learning-state` |
 | Agent 轨迹 | 当前用户自己的 Agent trace 查询、步骤排序、Graph 工作流和安全摘要返回 | `/api/v1/agents/traces/{trace_id}` |
@@ -171,8 +171,8 @@ Phase 13 前端视觉硬化后，桌面端继续保留 264px / 68px 的展开与
 | 认证 | bcrypt、JWT、`starter_mode` 和当前用户依赖已接入 |
 | 资料库 | `materials`、`material_chunks`、`course_material_links` 与 `material_comparison_runs` 已接入；PDF/DOCX/PPTX 可解析，图片/扫描件不做 OCR；资料对比由真实 Graph 生成并版本化 |
 | 课程 | `CourseBuilderGraph` 智能建课、v2 课程结构、来源覆盖、先修关系和课程学习状态已接入 |
-| RAG | 混合检索、引用字段和检索状态已接入 |
-| 模型 | OpenAI-compatible chat、stream、embeddings 已接入 |
+| RAG | 关键词、动态向量、RRF、可选 Rerank、引用与降级状态已接入 |
+| 模型 | Spark X2-Flash、OpenAI-compatible chat/stream、讯飞与兼容 embeddings、Rerank 已接入 |
 | 学习画像 | `ProfileGraph` 已接入显式/隐式更新、证据门控、Review/Repair 和逐维可信度；不为每门课复制完整画像 |
 | Agent 轨迹 | `agents` router 已接入，复用 `agent_run_logs`，支持当前用户 trace 查询、Graph 工作流字段和安全摘要返回 |
 | 课程资源 | `resources` router 已接入，支持六类 v2 结构化资源、并行 Worker、真实审核、旧资源兼容和 PPTX 异步导出 |
@@ -206,7 +206,7 @@ Phase 7.2 的分层口径：
 | --- | --- |
 | OCR 和图片题目识别 | 图片只入库，不做识别；扫描件 PDF 不伪装 OCR |
 | 旧版 Office 解析 | `.doc`、`.ppt` 只入库，不做深度解析 |
-| 讯飞原生 Embeddingp/Embeddingq | 暂不接入，当前用 OpenAI-compatible embeddings；不可用时退回关键词检索 |
+| 多模态 Embedding/Rerank | 当前只处理文本资料，图片与视频向量不在本轮范围 |
 | 资料对比增强 | 已完成安全结果持久化、最近版本恢复和真实 Graph 轨迹；保持资料库独立工具，不提供完整原文对照页 |
 | 资源增强 | 六类 v2 资源、逐 Worker 模型增强、规则+模型审核、单次 Repair、交互渲染和 PPTX 队列已接入；资源版本编辑、个人全局资源仍未接入 |
 | Agent 编排 hardening | 九条学习主链路已真接管；学习档案导出明确保持普通 Service + RQ Worker |

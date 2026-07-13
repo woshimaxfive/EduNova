@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
@@ -54,13 +55,7 @@ class MaterialChunk(IdMixin, CreatedAtMixin, Base):
     __table_args__ = (
         UniqueConstraint("material_id", "chunk_index", name="uq_material_chunks_material_index"),
         Index("ix_material_chunks_material", "material_id"),
-        Index(
-            "ix_material_chunks_embedding",
-            "embedding",
-            postgresql_using="ivfflat",
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-            postgresql_with={"lists": 100},
-        ),
+        Index("ix_material_chunks_material_embedding_profile", "material_id", "embedding_profile_hash"),
     )
 
     material_id: Mapped[int] = mapped_column(
@@ -72,7 +67,12 @@ class MaterialChunk(IdMixin, CreatedAtMixin, Base):
     section_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(), nullable=True)
+    embedding_provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    embedding_dimension: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_profile_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    embedding_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     material: Mapped["Material"] = relationship(back_populates="chunks")

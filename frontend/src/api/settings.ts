@@ -22,12 +22,16 @@ export type ModelSettingsRequest = {
   base_url: string;
   api_key?: string;
   chat_model?: string;
+  embedding_provider?: ModelSettingsProvider;
+  embedding_base_url?: string;
+  embedding_api_key?: string;
   embedding_model?: string;
 };
 
 export type ModelConfigRequest = ModelSettingsRequest & {
   display_name: string;
   preset_id?: string | null;
+  embedding_preset_id?: string | null;
   make_default?: boolean;
   make_embedding_default?: boolean;
 };
@@ -35,6 +39,7 @@ export type ModelConfigRequest = ModelSettingsRequest & {
 export type ModelConfigUpdateRequest = Partial<ModelSettingsRequest> & {
   display_name?: string;
   preset_id?: string | null;
+  embedding_preset_id?: string | null;
   is_default?: boolean;
   make_default?: boolean;
 };
@@ -45,8 +50,12 @@ export type ModelSettingsSummary = {
   base_url: string | null;
   chat_model: string | null;
   embedding_model: string | null;
+  embedding_provider?: ModelSettingsProvider | null;
+  embedding_base_url?: string | null;
   has_api_key: boolean;
   api_key_masked: string | null;
+  has_embedding_api_key?: boolean;
+  embedding_api_key_masked?: string | null;
   can_use_model: boolean;
   can_use_embedding_model: boolean;
 };
@@ -55,6 +64,7 @@ export type ModelConfigSummary = ModelSettingsSummary & {
   id: number;
   display_name: string;
   preset_id: string | null;
+  embedding_preset_id?: string | null;
   is_default: boolean;
   is_embedding_default: boolean;
   last_test_ok: boolean | null;

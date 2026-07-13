@@ -59,6 +59,9 @@ type ModelConfigDraft = {
   base_url: string;
   api_key: string;
   chat_model: string;
+  embedding_preset_id: string;
+  embedding_base_url: string;
+  embedding_api_key: string;
   embedding_model: string;
 };
 
@@ -68,6 +71,9 @@ const EMPTY_CONFIG_DRAFT: ModelConfigDraft = {
   base_url: "https://spark-api-open.xf-yun.com/v1",
   api_key: "",
   chat_model: "lite",
+  embedding_preset_id: "qwen",
+  embedding_base_url: "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+  embedding_api_key: "",
   embedding_model: ""
 };
 
@@ -80,19 +86,29 @@ function draftFromConfig(config: ModelConfigSummary): ModelConfigDraft {
     base_url: config.base_url ?? "",
     api_key: "",
     chat_model: config.chat_model ?? "",
+    embedding_preset_id: inferProviderPresetId(
+      config.embedding_base_url ?? config.base_url,
+      config.embedding_preset_id ?? config.preset_id
+    ),
+    embedding_base_url: config.embedding_base_url ?? config.base_url ?? "",
+    embedding_api_key: "",
     embedding_model: config.embedding_model ?? ""
   };
 }
 
 function newDraftFromPreset(presetId = "spark"): ModelConfigDraft {
   const preset = getProviderPreset(presetId);
+  const embeddingPreset = getProviderPreset("qwen");
   return {
     display_name: preset.name.includes("讯飞") ? "星火 Lite" : `${preset.name} 配置`,
     preset_id: preset.id,
     base_url: preset.baseUrl,
     api_key: "",
     chat_model: preset.chatModel,
-    embedding_model: preset.embeddingModel ?? ""
+    embedding_preset_id: embeddingPreset.id,
+    embedding_base_url: embeddingPreset.baseUrl,
+    embedding_api_key: "",
+    embedding_model: ""
   };
 }
 
@@ -102,6 +118,9 @@ function draftsMatch(left: ModelConfigDraft, right: ModelConfigDraft) {
     && left.base_url === right.base_url
     && !left.api_key
     && left.chat_model === right.chat_model
+    && left.embedding_preset_id === right.embedding_preset_id
+    && left.embedding_base_url === right.embedding_base_url
+    && !left.embedding_api_key
     && left.embedding_model === right.embedding_model;
 }
 
@@ -187,14 +206,33 @@ export function SettingsPage() {
     return defaultChatConfig ?? defaultEmbeddingConfig ?? configs[0] ?? null;
   }, [configs, defaultChatConfig, defaultEmbeddingConfig, selectedConfigId]);
   const currentDraft = selectedConfigId === null && selectedConfig ? draftFromConfig(selectedConfig) : draft;
-  const selectedPreset = getProviderPreset(currentDraft.preset_id);
+  const selectedChatPreset = getProviderPreset(currentDraft.preset_id);
+  const selectedEmbeddingPreset = getProviderPreset(currentDraft.embedding_preset_id);
   const activeConfigId = typeof selectedConfigId === "number" ? selectedConfigId : selectedConfig?.id ?? null;
   const isCreating = selectedConfigId === "new" || !selectedConfig;
   const isDirty = isCreating || (selectedConfig ? !draftsMatch(currentDraft, draftFromConfig(selectedConfig)) : false);
+  const savedDraft = selectedConfig ? draftFromConfig(selectedConfig) : null;
+  const chatConnectionChanged = isCreating
+    || !savedDraft
+    || currentDraft.preset_id !== savedDraft.preset_id
+    || currentDraft.base_url !== savedDraft.base_url;
+  const embeddingConnectionChanged = isCreating
+    || !savedDraft
+    || currentDraft.embedding_preset_id !== savedDraft.embedding_preset_id
+    || currentDraft.embedding_base_url !== savedDraft.embedding_base_url;
+  const chatKeyReady = !currentDraft.chat_model.trim()
+    || selectedChatPreset.allowEmptyApiKey
+    || Boolean(currentDraft.api_key.trim())
+    || (!chatConnectionChanged && Boolean(selectedConfig?.has_api_key));
+  const embeddingKeyReady = !currentDraft.embedding_model.trim()
+    || selectedEmbeddingPreset.allowEmptyApiKey
+    || Boolean(currentDraft.embedding_api_key.trim())
+    || (!embeddingConnectionChanged && Boolean(selectedConfig?.has_embedding_api_key));
   const canSave = Boolean(
     currentDraft.display_name.trim()
-    && currentDraft.base_url.trim()
     && (currentDraft.chat_model.trim() || currentDraft.embedding_model.trim())
+    && (!currentDraft.chat_model.trim() || currentDraft.base_url.trim())
+    && (!currentDraft.embedding_model.trim() || currentDraft.embedding_base_url.trim())
   );
   const systemSummary = settingsList?.system_summary ?? null;
   const effectiveSource = defaultChatConfig?.display_name
@@ -331,15 +369,28 @@ export function SettingsPage() {
     setModelFeedback(null);
   }
 
-  function applyProviderPreset(presetId: string) {
+  function applyChatProviderPreset(presetId: string) {
     const preset = getProviderPreset(presetId);
     if (selectedConfigId === null && selectedConfig) setSelectedConfigId(selectedConfig.id);
     setDraft({
       ...currentDraft,
       preset_id: preset.id,
       base_url: preset.id === "custom" ? currentDraft.base_url : preset.baseUrl,
-      chat_model: preset.id === "custom" ? currentDraft.chat_model : preset.chatModel,
-      embedding_model: preset.id === "custom" ? currentDraft.embedding_model : (preset.embeddingModel ?? "")
+      chat_model: preset.id === "custom" ? currentDraft.chat_model : preset.chatModel
+    });
+    setModelFeedback(null);
+  }
+
+  function applyEmbeddingProviderPreset(presetId: string) {
+    const preset = getProviderPreset(presetId);
+    if (selectedConfigId === null && selectedConfig) setSelectedConfigId(selectedConfig.id);
+    setDraft({
+      ...currentDraft,
+      embedding_preset_id: preset.id,
+      embedding_base_url: preset.id === "custom" ? currentDraft.embedding_base_url : preset.baseUrl,
+      embedding_model: preset.id === "custom"
+        ? currentDraft.embedding_model
+        : (preset.embeddingModel ?? "")
     });
     setModelFeedback(null);
   }
@@ -357,19 +408,28 @@ export function SettingsPage() {
   }
 
   function saveModelConfiguration() {
-    if (!canSave) {
-      setModelFeedback("请先补全配置名称、Base URL，并至少填写回答模型或向量模型中的一项。");
+    if (!chatKeyReady || !embeddingKeyReady) {
+      setModelFeedback("新建或更换服务连接时，请填写对应服务的 API Key；本地免密预设除外。");
       return;
     }
-    const apiKey = currentDraft.api_key.trim();
+    if (!canSave) {
+      setModelFeedback("请填写配置名称和至少一种模型；已启用的回答或向量服务必须填写自己的 Base URL。");
+      return;
+    }
+    const chatApiKey = currentDraft.api_key.trim();
+    const embeddingApiKey = currentDraft.embedding_api_key.trim();
     const payload = {
       display_name: currentDraft.display_name.trim(),
       preset_id: currentDraft.preset_id,
       provider: "openai_compatible" as const,
       base_url: currentDraft.base_url.trim(),
       chat_model: currentDraft.chat_model.trim(),
+      embedding_preset_id: currentDraft.embedding_preset_id,
+      embedding_provider: "openai_compatible" as const,
+      embedding_base_url: currentDraft.embedding_base_url.trim(),
       embedding_model: currentDraft.embedding_model.trim(),
-      ...(apiKey ? { api_key: apiKey } : {})
+      ...(chatApiKey ? { api_key: chatApiKey } : {}),
+      ...(embeddingApiKey ? { embedding_api_key: embeddingApiKey } : {})
     };
     if (isCreating || activeConfigId === null) {
       createConfigMutation.mutate({
@@ -530,7 +590,10 @@ export function SettingsPage() {
                                 {config.is_embedding_default ? <small>向量</small> : null}
                               </span>
                             </span>
-                            <span>{config.chat_model || config.embedding_model || "尚未填写模型"}</span>
+                            <span>
+                              {config.chat_model ? `回答 ${config.chat_model}` : "回答未配置"}
+                              {config.embedding_model ? ` · 向量 ${config.embedding_model}` : " · 向量未配置"}
+                            </span>
                             <em className={configTestLabel(config).includes("失败") ? "failed" : ""}>{configTestLabel(config)}</em>
                           </button>
                         ))}
@@ -544,7 +607,10 @@ export function SettingsPage() {
                         {selectedConfigId === "new" ? (
                           <button type="button" className="active settings-config-draft">
                             <span className="settings-config-row-title"><strong>新建配置</strong><small>草稿</small></span>
-                            <span>{currentDraft.chat_model || currentDraft.embedding_model || "待填写模型"}</span>
+                            <span>
+                              {currentDraft.chat_model ? `回答 ${currentDraft.chat_model}` : "回答未配置"}
+                              {currentDraft.embedding_model ? ` · 向量 ${currentDraft.embedding_model}` : " · 向量未配置"}
+                            </span>
                             <em>保存后可测试</em>
                           </button>
                         ) : null}
@@ -567,66 +633,137 @@ export function SettingsPage() {
                           </span>
                           <h3>{currentDraft.display_name || "未命名配置"}</h3>
                         </div>
-                        {selectedConfig?.api_key_masked ? (
-                          <span className="settings-key-summary"><Key size={15} weight="duotone" />{selectedConfig.api_key_masked}</span>
+                        {selectedConfig?.api_key_masked || selectedConfig?.embedding_api_key_masked ? (
+                          <span className="settings-key-summary">
+                            <Key size={15} weight="duotone" />
+                            {currentDraft.chat_model
+                              ? (selectedConfig?.api_key_masked ? `回答 ${selectedConfig.api_key_masked}` : "回答无密钥")
+                              : null}
+                            {currentDraft.embedding_model ? (
+                              <>
+                                {currentDraft.chat_model ? <i aria-hidden="true">/</i> : null}
+                                {selectedConfig?.embedding_api_key_masked ? `向量 ${selectedConfig.embedding_api_key_masked}` : "向量无密钥"}
+                              </>
+                            ) : null}
+                          </span>
                         ) : null}
                       </header>
 
-                      <div className="settings-form-grid">
-                        <label>
+                      <div className="settings-config-name-row">
+                        <label className="settings-config-name-field">
                           <span>配置名称</span>
                           <input aria-label="配置名称" value={currentDraft.display_name} onChange={(event) => updateDraft("display_name", event.target.value)} />
                         </label>
-                        <label>
-                          <span>Provider 预设</span>
-                          <select aria-label="Provider 预设" value={currentDraft.preset_id} onChange={(event) => applyProviderPreset(event.target.value)}>
-                            {MODEL_PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
-                          </select>
-                        </label>
-                        <div className="settings-provider-context">
-                          <strong>{selectedPreset.name}</strong>
-                          <span>{selectedPreset.description}</span>
-                          {selectedPreset.modelsHint ? <small>{selectedPreset.modelsHint}</small> : null}
-                        </div>
-                        <label className="settings-form-span">
-                          <span>Base URL</span>
-                          <input aria-label="Base URL" value={currentDraft.base_url} onChange={(event) => updateDraft("base_url", event.target.value)} />
-                        </label>
-                        <label>
-                          <span>{selectedPreset.apiKeyLabel}</span>
-                          <input
-                            aria-label="API Key"
-                            type="password"
-                            autoComplete="off"
-                            value={currentDraft.api_key}
-                            placeholder={selectedConfig?.has_api_key ? "留空保留已保存密钥" : selectedPreset.apiKeyPlaceholder}
-                            onChange={(event) => updateDraft("api_key", event.target.value)}
-                          />
-                        </label>
-                        <label>
-                          <span>回答模型</span>
-                          <input
-                            aria-label="回答模型"
-                            value={currentDraft.chat_model}
-                            placeholder="仅作为向量配置时可留空"
-                            onChange={(event) => updateDraft("chat_model", event.target.value)}
-                          />
-                        </label>
+                        <p>一套配置可以组合不同服务商，例如星火负责回答、百炼负责向量检索。</p>
                       </div>
 
-                      <details className="settings-embedding-settings" open={Boolean(currentDraft.embedding_model)}>
-                        <summary>向量检索设置</summary>
-                        <label>
-                          <span>向量模型</span>
-                          <input
-                            aria-label="向量模型"
-                            value={currentDraft.embedding_model}
-                            placeholder="可留空，届时使用服务器配置或关键词 fallback"
-                            onChange={(event) => updateDraft("embedding_model", event.target.value)}
-                          />
-                        </label>
-                        <p>向量模型只用于资料语义召回。保存后可将本配置单独设为向量默认，不会改变回答模型。</p>
-                      </details>
+                      <div className="settings-service-groups">
+                        <section className="settings-service-group" aria-labelledby="chat-service-title">
+                          <header>
+                            <span aria-hidden="true"><Robot size={18} weight="duotone" /></span>
+                            <div>
+                              <h4 id="chat-service-title">回答服务</h4>
+                              <p>负责主页问答、课程辅导和各类 Agent 的内容生成。</p>
+                            </div>
+                          </header>
+                          <div className="settings-service-grid">
+                            <label>
+                              <span>回答服务商</span>
+                              <select aria-label="回答服务商" value={currentDraft.preset_id} onChange={(event) => applyChatProviderPreset(event.target.value)}>
+                                {MODEL_PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                              </select>
+                            </label>
+                            <label>
+                              <span>回答模型</span>
+                              <input
+                                aria-label="回答模型"
+                                value={currentDraft.chat_model}
+                                placeholder="不使用回答服务时可留空"
+                                onChange={(event) => updateDraft("chat_model", event.target.value)}
+                              />
+                            </label>
+                            <div className="settings-provider-context">
+                              <strong>{selectedChatPreset.name}</strong>
+                              <span>{selectedChatPreset.description}</span>
+                              {selectedChatPreset.modelsHint ? <small>{selectedChatPreset.modelsHint}</small> : null}
+                            </div>
+                            <label className="settings-form-span">
+                              <span>回答 Base URL</span>
+                              <input aria-label="回答 Base URL" value={currentDraft.base_url} onChange={(event) => updateDraft("base_url", event.target.value)} />
+                            </label>
+                            <label className="settings-form-span">
+                              <span>回答 {selectedChatPreset.apiKeyLabel}</span>
+                              <input
+                                aria-label="回答 API Key"
+                                type="password"
+                                autoComplete="off"
+                                value={currentDraft.api_key}
+                                placeholder={chatConnectionChanged
+                                  ? selectedChatPreset.apiKeyPlaceholder
+                                  : selectedConfig?.has_api_key
+                                    ? "留空保留已保存的回答密钥"
+                                    : selectedChatPreset.apiKeyPlaceholder}
+                                onChange={(event) => updateDraft("api_key", event.target.value)}
+                              />
+                            </label>
+                          </div>
+                        </section>
+
+                        <section className="settings-service-group" aria-labelledby="embedding-service-title">
+                          <header>
+                            <span aria-hidden="true"><Database size={18} weight="duotone" /></span>
+                            <div>
+                              <h4 id="embedding-service-title">向量服务</h4>
+                              <p>负责把资料转换成语义向量，提升 RAG 检索相关性；未配置时使用关键词检索。</p>
+                            </div>
+                          </header>
+                          <div className="settings-service-grid">
+                            <label>
+                              <span>向量服务商</span>
+                              <select aria-label="向量服务商" value={currentDraft.embedding_preset_id} onChange={(event) => applyEmbeddingProviderPreset(event.target.value)}>
+                            {MODEL_PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                              </select>
+                            </label>
+                            <label>
+                              <span>向量模型</span>
+                              <input
+                                aria-label="向量模型"
+                                value={currentDraft.embedding_model}
+                                placeholder="可留空，届时使用关键词检索"
+                                onChange={(event) => updateDraft("embedding_model", event.target.value)}
+                              />
+                            </label>
+                            <div className="settings-provider-context">
+                              <strong>{selectedEmbeddingPreset.name}</strong>
+                              <span>{selectedEmbeddingPreset.description}</span>
+                              {selectedEmbeddingPreset.modelsHint ? <small>{selectedEmbeddingPreset.modelsHint}</small> : null}
+                            </div>
+                            <label className="settings-form-span">
+                              <span>向量 Base URL</span>
+                              <input
+                                aria-label="向量 Base URL"
+                                value={currentDraft.embedding_base_url}
+                                onChange={(event) => updateDraft("embedding_base_url", event.target.value)}
+                              />
+                            </label>
+                            <label className="settings-form-span">
+                              <span>向量 {selectedEmbeddingPreset.apiKeyLabel}</span>
+                              <input
+                                aria-label="向量 API Key"
+                                type="password"
+                                autoComplete="off"
+                                value={currentDraft.embedding_api_key}
+                                placeholder={embeddingConnectionChanged
+                                  ? selectedEmbeddingPreset.apiKeyPlaceholder
+                                  : selectedConfig?.has_embedding_api_key
+                                    ? "留空保留已保存的向量密钥"
+                                    : selectedEmbeddingPreset.apiKeyPlaceholder}
+                                onChange={(event) => updateDraft("embedding_api_key", event.target.value)}
+                              />
+                            </label>
+                          </div>
+                        </section>
+                      </div>
 
                       {!isCreating ? (
                         <div className="settings-test-grid">

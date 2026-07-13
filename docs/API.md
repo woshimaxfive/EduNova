@@ -2085,7 +2085,7 @@ course_id=101
 
 ### GET `/settings/model`
 
-用途：获取当前模型设置摘要。Phase 6.2 后该接口作为兼容接口保留，读取当前用户默认模型配置；没有默认配置时回退 `.env` 中的系统模型配置；如果两者都不可用，返回 `source=none` 和 `can_use_model=false`。响应不会返回明文 API Key。前端 Provider 预设首位为讯飞星火 Spark，但后端协议仍统一保存为 `openai_compatible`。
+用途：获取当前有效模型设置摘要。该兼容接口分别解析回答默认和向量默认；某一用途没有个人默认时，只回退对应的 `.env` 系统配置。两种用途可以来自同一套组合配置、不同配置或不同服务器连接。响应不会返回明文 API Key。前端 Provider 预设首位为讯飞星火 Spark，但后端协议仍统一保存为 `openai_compatible`。
 
 响应：
 
@@ -2096,10 +2096,15 @@ course_id=101
     "provider": "openai_compatible",
     "base_url": "https://api.example.com/v1",
     "chat_model": "gpt-4.1-mini",
-    "embedding_model": null,
+    "embedding_provider": "openai_compatible",
+    "embedding_base_url": "https://embedding.example.com/v1",
+    "embedding_model": "example-embedding-model",
     "has_api_key": true,
     "api_key_masked": "sk-u...cret",
-    "can_use_model": true
+    "has_embedding_api_key": true,
+    "embedding_api_key_masked": "em-u...cret",
+    "can_use_model": true,
+    "can_use_embedding_model": true
   },
   "trace_id": "trace_settings_001"
 }
@@ -2107,7 +2112,7 @@ course_id=101
 
 ### PUT `/settings/model`
 
-用途：保存当前用户默认 OpenAI-compatible 模型设置。Phase 6.2 后该接口作为兼容接口保留：如果当前用户已有默认配置，则更新默认配置；如果没有个人配置，则创建一条默认配置。用户 API Key 使用 Fernet 加密后写入 `model_settings.api_key_ciphertext`；没有 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，保存非空 Key 返回 `CONFIGURATION_ERROR`。`api_key` 为空字符串或缺省时保留原密钥。`embedding_model` 当前可选；Phase 6.4 后若填写则用于 OpenAI-compatible `{base_url}/embeddings`，若缺省则自动使用显式本地 fallback。
+用途：保存当前用户默认 OpenAI-compatible 模型设置。该兼容接口支持回答与向量两组独立连接；如果没有填写 `embedding_base_url`、`embedding_provider` 和 `embedding_api_key`，旧客户端继续让向量用途复用回答连接。两组 Key 分别使用 Fernet 加密；连接未变化时，对应 Key 为空字符串或缺省会保留原密钥。向量模型缺省时使用关键词检索 fallback。
 
 请求：
 
@@ -2116,7 +2121,11 @@ course_id=101
   "provider": "openai_compatible",
   "base_url": "https://spark-api-open.xf-yun.com/v1",
   "api_key": "example-key",
-  "chat_model": "lite"
+  "chat_model": "lite",
+  "embedding_provider": "openai_compatible",
+  "embedding_base_url": "https://embedding.example.com/v1",
+  "embedding_api_key": "example-embedding-key",
+  "embedding_model": "example-embedding-model"
 }
 ```
 
@@ -2156,7 +2165,7 @@ course_id=101
 
 ### GET `/settings/model/configs`
 
-用途：读取当前用户所有模型配置和服务器兜底摘要。必须携带 JWT。每条用户配置互相隔离，Key 只返回脱敏值；`can_use_model` 表示回答能力，`can_use_embedding_model` 独立表示向量能力。
+用途：读取当前用户所有模型配置和服务器兜底摘要。必须携带 JWT。每条配置可包含回答和向量两组独立连接；两组 Key 都只返回脱敏值。`can_use_model` 表示回答能力，`can_use_embedding_model` 独立表示向量能力。
 
 响应：
 
@@ -2167,18 +2176,23 @@ course_id=101
       {
         "id": 1,
         "source": "user",
-        "display_name": "星火 Lite",
+        "display_name": "星火回答 + 通义向量",
         "preset_id": "spark",
         "provider": "openai_compatible",
         "base_url": "https://spark-api-open.xf-yun.com/v1",
         "chat_model": "lite",
-        "embedding_model": null,
+        "embedding_provider": "openai_compatible",
+        "embedding_preset_id": "qwen",
+        "embedding_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "embedding_model": "text-embedding-v4",
         "has_api_key": true,
         "api_key_masked": "sp-u...oken",
+        "has_embedding_api_key": true,
+        "embedding_api_key_masked": "qw-u...oken",
         "can_use_model": true,
-        "can_use_embedding_model": false,
+        "can_use_embedding_model": true,
         "is_default": true,
-        "is_embedding_default": false,
+        "is_embedding_default": true,
         "last_test_ok": true,
         "last_test_message": "模型连接成功。",
         "last_tested_at": "2026-07-13T10:00:00Z",
@@ -2216,21 +2230,25 @@ course_id=101
 
 ### POST `/settings/model/configs`
 
-用途：创建当前用户的一条模型配置。`display_name` 在同一用户内不能重复；回答模型与向量模型至少填写一项。`make_default=true` 只设置回答默认，`make_embedding_default=true` 只设置向量默认；同一配置也可以同时承担两种用途。
+用途：创建当前用户的一条模型配置方案。`display_name` 在同一用户内不能重复；回答模型与向量模型至少填写一项。回答和向量分别接受自己的 Provider、预设、Base URL、Key 和模型，因此同一方案可组合不同服务商。`make_default=true` 只设置回答默认，`make_embedding_default=true` 只设置向量默认。
 
 请求：
 
 ```json
 {
-  "display_name": "星火 Lite",
+  "display_name": "星火回答 + 通义向量",
   "preset_id": "spark",
   "provider": "openai_compatible",
   "base_url": "https://spark-api-open.xf-yun.com/v1",
   "api_key": "example-key",
   "chat_model": "lite",
-  "embedding_model": null,
+  "embedding_provider": "openai_compatible",
+  "embedding_preset_id": "qwen",
+  "embedding_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "embedding_api_key": "example-embedding-key",
+  "embedding_model": "text-embedding-v4",
   "make_default": true,
-  "make_embedding_default": false
+  "make_embedding_default": true
 }
 ```
 
@@ -2238,7 +2256,7 @@ course_id=101
 
 ### PATCH `/settings/model/configs/{config_id}`
 
-用途：更新当前用户自己的模型配置。只允许访问当前用户的配置；跨用户配置返回 404。`api_key` 为空字符串或缺省时保留原密钥。
+用途：更新当前用户自己的模型配置。只允许访问当前用户的配置；跨用户配置返回 404。连接未变化时，`api_key` 与 `embedding_api_key` 为空字符串或缺省会分别保留原密钥；Provider 或 Base URL 变化且没有新 Key 时清除该用途旧密钥，防止旧凭据被发送到新服务商。
 
 ### POST `/settings/model/configs/{config_id}/default`
 
@@ -2246,7 +2264,7 @@ course_id=101
 
 ### POST `/settings/model/configs/{config_id}/embedding-default`
 
-用途：把包含 `embedding_model` 的配置设为向量默认，并取消同用户其他向量默认项。资料与课程 RAG 只从该配置解析 Base URL、Key 和向量模型；不存在时独立回退服务器 `.env` 向量配置，不再跟随回答默认。
+用途：把包含 `embedding_model` 的配置设为向量默认，并取消同用户其他向量默认项。资料与课程 RAG 从该配置的 `embedding_*` 字段解析 Provider、Base URL、Key 和向量模型；旧共享连接记录由迁移兼容。不存在个人向量默认时独立回退服务器 `.env` 向量配置。
 
 ### POST `/settings/model/configs/{config_id}/test`
 
@@ -2259,7 +2277,7 @@ course_id=101
 模型 Provider 第一版按 OpenAI-compatible 协议实现：
 
 - 聊天回答：`{base_url}/chat/completions`。
-- 向量生成：`{base_url}/embeddings`。
+- 向量生成：`{embedding_base_url}/embeddings`；旧共享连接配置兼容使用 `{base_url}`。
 - 回答运行时优先使用当前用户回答默认配置。
 - Embedding 运行时优先使用当前用户向量默认配置。
 - 某一用途没有个人默认时，仅该用途回退服务器 `.env` 兜底配置。

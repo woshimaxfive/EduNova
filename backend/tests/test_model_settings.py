@@ -244,6 +244,32 @@ def test_model_settings_uses_system_configuration_without_leaking_key() -> None:
     assert runtime.source == "system"
 
 
+def test_system_embedding_connection_can_use_a_different_provider_endpoint() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    service = module.ModelSettingsService(
+        repository=FakeModelSettingsRepository(settings_by_user={}),
+        settings=make_settings(
+            system_embedding_provider="openai_compatible",
+            system_embedding_base_url="https://embedding.example.local/v1",
+            system_embedding_api_key="embedding-system-secret",
+            system_embedding_model="embedding-system-model",
+        ),
+        provider=FakeProvider(),
+    )
+
+    summary = as_dict(service.get_summary(user))
+    embedding_runtime = service.resolve_embedding_runtime_config(user)
+
+    assert summary["base_url"] == "https://model.example.local/v1"
+    assert summary["embedding_base_url"] == "https://embedding.example.local/v1"
+    assert summary["api_key_masked"] != summary["embedding_api_key_masked"]
+    assert "embedding-system-secret" not in str(summary)
+    assert embedding_runtime.base_url == "https://embedding.example.local/v1"
+    assert embedding_runtime.api_key == "embedding-system-secret"
+    assert embedding_runtime.embedding_model == "embedding-system-model"
+
+
 def test_save_user_model_settings_encrypts_key_and_user_config_wins() -> None:
     module = load_model_settings_module()
     user = make_user()
@@ -287,7 +313,8 @@ def test_save_user_model_settings_allows_embedding_model_to_be_optional() -> Non
     stored = repo.settings_by_user[user.id]
 
     assert stored.embedding_model is None
-    assert summary["embedding_model"] is None
+    assert summary["embedding_model"] == "system-embedding"
+    assert summary["embedding_base_url"] == "https://model.example.local/v1"
     assert summary["base_url"] == "https://spark-api-open.xf-yun.com/v1"
     assert summary["chat_model"] == "4.0Ultra"
 
@@ -466,6 +493,64 @@ def test_chat_and_embedding_defaults_can_use_different_configs() -> None:
     assert embedding_runtime.api_key == "qwen-secret"
 
 
+def test_one_config_can_combine_different_chat_and_embedding_providers() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    provider = FakeProvider()
+    service = module.ModelSettingsService(
+        repository=repo,
+        settings=make_settings(),
+        provider=provider,
+        execution_runtime=ImmediateExecutionRuntime(),
+    )
+
+    combined = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="星火回答 + 通义向量",
+            preset_id="spark",
+            provider="openai_compatible",
+            base_url="https://spark-api-open.xf-yun.com/v1",
+            api_key="spark-chat-secret",
+            chat_model="lite",
+            embedding_preset_id="qwen",
+            embedding_provider="openai_compatible",
+            embedding_base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            embedding_api_key="qwen-embedding-secret",
+            embedding_model="text-embedding-v4",
+            make_default=True,
+            make_embedding_default=True,
+        ),
+    ))
+
+    chat_runtime = service.resolve_runtime_config(user)
+    embedding_runtime = service.resolve_embedding_runtime_config(user)
+    stored = repo.settings_by_id[combined["id"]]
+    service.chat_completion(user, [{"role": "user", "content": "测试组合配置"}])
+    service.embedding_vectors(user, ["测试向量连接"])
+
+    assert combined["preset_id"] == "spark"
+    assert combined["embedding_preset_id"] == "qwen"
+    assert combined["base_url"] == "https://spark-api-open.xf-yun.com/v1"
+    assert combined["embedding_base_url"] == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    assert combined["api_key_masked"] != combined["embedding_api_key_masked"]
+    assert "spark-chat-secret" not in str(combined)
+    assert "qwen-embedding-secret" not in str(combined)
+    assert stored.api_key_ciphertext != stored.embedding_api_key_ciphertext
+    assert chat_runtime.base_url == "https://spark-api-open.xf-yun.com/v1"
+    assert chat_runtime.api_key == "spark-chat-secret"
+    assert chat_runtime.chat_model == "lite"
+    assert embedding_runtime.base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    assert embedding_runtime.api_key == "qwen-embedding-secret"
+    assert embedding_runtime.embedding_model == "text-embedding-v4"
+    assert provider.calls is not None
+    assert provider.calls[0]["config"].base_url == "https://spark-api-open.xf-yun.com/v1"
+    assert provider.calls[0]["config"].api_key == "spark-chat-secret"
+    assert provider.calls[1]["config"].base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    assert provider.calls[1]["config"].api_key == "qwen-embedding-secret"
+
+
 def test_setting_default_requires_matching_capability() -> None:
     module = load_model_settings_module()
     user = make_user()
@@ -502,6 +587,24 @@ def test_split_model_defaults_migration_preserves_existing_embedding_default() -
     assert "WHERE is_default = true" in migration_text
 
 
+def test_split_embedding_connection_migration_preserves_legacy_values() -> None:
+    migration_path = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "20260713_0019_split_embedding_connection.py"
+    )
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert 'revision = "20260713_0019"' in migration_text
+    assert 'down_revision = "20260713_0018"' in migration_text
+    assert "embedding_provider" in migration_text
+    assert "embedding_base_url" in migration_text
+    assert "embedding_api_key_ciphertext" in migration_text
+    assert "embedding_provider = provider" in migration_text
+    assert "embedding_api_key_ciphertext = api_key_ciphertext" in migration_text
+
+
 def test_update_config_preserves_key_and_cross_user_access_is_blocked() -> None:
     module = load_model_settings_module()
     user = make_user()
@@ -535,6 +638,83 @@ def test_update_config_preserves_key_and_cross_user_access_is_blocked() -> None:
     assert service.resolve_runtime_config(user).api_key == "deepseek-secret"
     with pytest.raises(module.ModelSettingsNotFoundError):
         service.update_config(other_user, created["id"], module.UpdateModelConfigRequest(chat_model="hijack"))
+
+
+def test_changing_provider_endpoint_without_new_key_drops_old_credentials() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=FakeProvider())
+    created = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="组合配置",
+            provider="openai_compatible",
+            base_url="https://chat-a.example.local/v1",
+            api_key="chat-a-secret",
+            chat_model="chat-a",
+            embedding_provider="openai_compatible",
+            embedding_base_url="https://embedding-a.example.local/v1",
+            embedding_api_key="embedding-a-secret",
+            embedding_model="embedding-a",
+            make_default=True,
+            make_embedding_default=True,
+        ),
+    ))
+
+    service.update_config(
+        user,
+        created["id"],
+        module.UpdateModelConfigRequest(
+            provider="openai_compatible",
+            base_url="https://chat-b.example.local/v1",
+            embedding_provider="openai_compatible",
+            embedding_base_url="https://embedding-b.example.local/v1",
+        ),
+    )
+    stored = repo.settings_by_id[created["id"]]
+
+    assert stored.api_key_ciphertext is None
+    assert stored.embedding_api_key_ciphertext is None
+    assert service._runtime_from_user_setting(stored).api_key is None
+    assert service._embedding_runtime_from_user_setting(stored).api_key is None
+
+
+def test_changing_only_embedding_endpoint_does_not_reuse_chat_key() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=FakeProvider())
+    created = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="独立向量连接",
+            provider="openai_compatible",
+            base_url="https://chat.example.local/v1",
+            api_key="chat-secret",
+            chat_model="chat-model",
+            embedding_provider="openai_compatible",
+            embedding_base_url="https://embedding-a.example.local/v1",
+            embedding_api_key="embedding-secret",
+            embedding_model="embedding-model",
+            make_default=True,
+            make_embedding_default=True,
+        ),
+    ))
+
+    service.update_config(
+        user,
+        created["id"],
+        module.UpdateModelConfigRequest(
+            embedding_provider="openai_compatible",
+            embedding_base_url="https://embedding-b.example.local/v1",
+        ),
+    )
+    stored = repo.settings_by_id[created["id"]]
+
+    assert service._runtime_from_user_setting(stored).api_key == "chat-secret"
+    assert stored.embedding_api_key_ciphertext is None
+    assert service._embedding_runtime_from_user_setting(stored).api_key is None
 
 
 def test_delete_default_config_promotes_latest_remaining_config() -> None:

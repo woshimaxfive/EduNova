@@ -668,7 +668,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - 认证测试覆盖 bcrypt 密码哈希、JWT 生成解析、注册、登录、重复邮箱、弱密码、错误密码、无 token `/auth/me`、退出和 `ai_intro` starter 课程图复制。
 - 首页总览测试覆盖无 token `/dashboard/summary` 返回 401、授权路由返回当前用户 summary、blank 用户空状态、ai_intro 用户课程和资料、真实进度/画像/主页历史/资源摘要，以及 summary 服务只请求当前用户数据。
 - Tutor 会话测试覆盖无 token `/tutor/sessions` 返回 401、创建 home session、课程 session 缺少 `course_id` 校验、多用户隔离、追加消息写入 user 和 assistant、主页 assistant 调用普通模型且不调用课程检索、未配置模型提示、模型失败不写入半截消息、详情按时间返回 messages、列表只返回当前用户当前 scope；Phase 5.3 起还覆盖课程会话发送命中问题后写入真实 `citation_json`、无命中写入空引用和资料不足提示。
-- 模型设置测试覆盖 `/settings/model` 无 token 401、服务器配置摘要不泄露明文 Key、用户配置加密保存、空 `api_key` 保留原密钥、缺少 `MODEL_SETTINGS_ENCRYPTION_KEY` 时拒绝保存用户 Key、连接测试 fake Provider 成功、Provider 超时/401/非 JSON/空内容稳定错误，以及课程会话模型回答、模型未配置和模型失败回滚；Phase 6.4 起额外覆盖 OpenAI-compatible embedding 请求、`dimensions` 重试、维度不匹配拒绝和配置解析。
+- 模型设置测试覆盖 `/settings/model` 无 token 401、服务器配置摘要不泄露明文 Key、用户配置加密保存、连接不变时空 Key 保留原密钥、服务商或地址变化时旧 Key 不得带入新连接、缺少 `MODEL_SETTINGS_ENCRYPTION_KEY` 时拒绝保存用户 Key、连接测试 fake Provider 成功、Provider 超时/401/非 JSON/空内容稳定错误，以及课程会话模型回答、模型未配置和模型失败回滚；Phase 6.4 起额外覆盖 OpenAI-compatible embedding 请求、`dimensions` 重试、维度不匹配拒绝和配置解析。
 - 课程生成测试覆盖无 token 访问课程接口返回 401、TXT/Markdown/PDF/DOCX/PPTX 已解析资料生成课程、Markdown 标题知识点、无标题 TXT 分段知识点、多用户资料隔离、拒绝未解析/失败/旧版 Office/图片资料、课程列表/详情/概览/知识点只返回当前用户课程；Phase 6.4 起覆盖建课后 best-effort 生成 chunks embedding，embedding 失败不导致建课失败。
 - Phase 0 到 Phase 3 补完测试覆盖学习闭环表 metadata、第三条迁移文件、frontend/nginx Compose 服务和学习路径路由。
 - 后端 ruff 检查。
@@ -684,7 +684,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 5.2 前端测试覆盖 `rag.ts` API 合同、课程空间发送问题调用 `/rag/search`、命中时显示真实引用来源和片段、无命中时显示资料不足、检索失败时保留输入。
 - Phase 5.3 前端测试覆盖课程页加载 `scope=course&course_id=...` 会话列表、首次发送创建课程会话再发送消息、连续发送复用当前课程会话、点击课程内历史恢复真实 messages 和引用、无依据回答显示资料不足、发送失败保留输入。
 - Phase 6.1 前端测试覆盖 `settings.ts` 类型化 API 合同、设置页服务器/个人/未配置状态渲染、讯飞星火 Spark 首位 Provider 预设、保存模型配置、连接测试成功/失败反馈、不显示固定假 Key、不在设置页显示深度思考/联网搜索、课程空间渲染后端返回的模型回答和真实引用、模型失败时保留输入。
-- Phase 6.2 及后续设置测试覆盖多套模型配置列表、创建配置、回答默认与向量默认独立切换、仅回答/仅向量配置、删除后的按能力接替、不同 Provider 的 Key 脱敏展示和指定配置连接测试；前端 API 合同测试覆盖创建、更新、两类默认、测试和删除函数。
+- Phase 6.2 及后续设置测试覆盖多套模型配置列表、创建配置、回答默认与向量默认独立切换、仅回答/仅向量配置、删除后的按能力接替、不同 Provider 的 Key 脱敏展示和指定配置连接测试；Alembic `0019` 后增加单套配置混合服务商回归，确认星火回答与通义向量分别使用自己的 Base URL、加密 Key 和模型，旧共享连接迁移后不回退。前端 API 合同测试覆盖两组连接字段、创建、更新、两类默认、测试和删除函数。
 - Phase 6.3 前端测试覆盖课程页首次发送先创建课程会话再调用 stream endpoint、连续追问不重复创建会话、token 分片逐步显示、done 后渲染持久化消息和真实引用、stream error 时保留输入、显示输入区局部错误且不生成全局提示条。
 - Phase 6.4 前端测试覆盖课程页引用区显示混合检索状态、本地 fallback 状态和关键词 fallback 状态；引用仍可展开，流式回答和历史恢复不回归。
 - Phase 6.5 及 2026-07-11 重做后的前端测试覆盖默认问答、无常驻知识画布/证据层/资源区、空会话推荐问题、逐回答引用与 trace 隔离、历史问题资源生成、课程内容默认知识点和返回问答后 session 不丢失。

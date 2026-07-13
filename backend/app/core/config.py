@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     system_model_base_url: str = "https://api.example.com/v1"
     system_model_api_key: str = "replace-with-your-own-key"
     system_chat_model: str = "example-chat-model"
+    system_embedding_provider: str = ""
+    system_embedding_base_url: str = ""
+    system_embedding_api_key: str = ""
     system_embedding_model: str = "example-embedding-model"
     model_settings_encryption_key: str = ""
     model_request_timeout_seconds: float = 20.0

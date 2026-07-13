@@ -488,6 +488,7 @@
 
 .settings-config-editor > header {
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 18px;
   padding-bottom: 15px;
   border-bottom: 1px solid var(--wide-workspace-divider);
@@ -514,6 +515,125 @@
   color: var(--text-muted);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: var(--font-caption);
+}
+
+.settings-key-summary i {
+  color: var(--wide-workspace-divider-strong);
+  font-style: normal;
+}
+
+.settings-config-name-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(280px, 1.3fr);
+  align-items: end;
+  gap: 18px;
+  padding-top: 18px;
+}
+
+.settings-config-name-field,
+.settings-service-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-config-name-field > span,
+.settings-service-grid label > span {
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+  font-weight: 750;
+}
+
+.settings-config-name-field input,
+.settings-service-grid input,
+.settings-service-grid select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--wide-workspace-divider);
+  border-radius: 5px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--wide-workspace-control);
+  outline: none;
+}
+
+.settings-config-name-field input:focus,
+.settings-service-grid input:focus,
+.settings-service-grid select:focus {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--wide-workspace-divider));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.settings-config-name-row > p {
+  max-width: 660px;
+  padding-bottom: 8px;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+  line-height: 1.55;
+}
+
+.settings-service-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.settings-service-group {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  border: 1px solid var(--wide-workspace-divider);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--wide-workspace-control) 62%, transparent);
+  overflow: hidden;
+}
+
+.settings-service-group > header {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-height: 76px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--wide-workspace-divider);
+  background: color-mix(in srgb, var(--wide-workspace-muted) 66%, transparent);
+}
+
+.settings-service-group > header > span {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: var(--accent-strong);
+}
+
+.settings-service-group > header div {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-service-group h4 {
+  color: var(--text-strong);
+  font-size: var(--font-control);
+}
+
+.settings-service-group > header p {
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+  line-height: 1.45;
+}
+
+.settings-service-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+.settings-service-grid .settings-provider-context {
+  min-height: 70px;
 }
 
 .settings-form-grid {
@@ -1000,7 +1120,12 @@
 @media (max-width: 1080px) {
   .settings-workspace-body { grid-template-columns: 190px minmax(0, 1fr); }
   .settings-model-layout { grid-template-columns: 210px minmax(0, 1fr); }
+  .settings-service-groups { grid-template-columns: 1fr; }
   .settings-panel { padding-inline: 20px; }
+}
+
+@media (max-width: 1550px) {
+  .settings-service-groups { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 900px) {
@@ -1078,6 +1203,8 @@
   .settings-new-button { min-width: 36px; padding-inline: 8px; font-size: 0; }
   .settings-new-button svg { width: 17px; height: 17px; }
   .settings-system-fallback > header { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .settings-config-name-row,
+  .settings-service-grid,
   .settings-form-grid,
   .settings-test-grid { grid-template-columns: 1fr; }
   .settings-provider-context { grid-template-columns: 1fr; }

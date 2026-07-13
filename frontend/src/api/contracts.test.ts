@@ -1736,12 +1736,16 @@ describe("frontend API contracts", () => {
               : {
                   source: "user",
                   provider: "openai_compatible",
-                  base_url: "https://api.deepseek.com/v1",
-                  chat_model: "deepseek-v4-pro",
-                  embedding_model: "bge-m3",
-                  has_api_key: true,
-                  api_key_masked: "sk-u...cret",
-                  can_use_model: true
+                   base_url: "https://api.deepseek.com/v1",
+                   chat_model: "deepseek-v4-pro",
+                   embedding_model: "bge-m3",
+                   embedding_provider: "openai_compatible",
+                   embedding_base_url: "https://embedding.example.com/v1",
+                   has_api_key: true,
+                   api_key_masked: "sk-u...cret",
+                   has_embedding_api_key: true,
+                   embedding_api_key_masked: "em-u...cret",
+                   can_use_model: true
                 },
           trace_id: "trace_settings_contract"
         },
@@ -1757,9 +1761,12 @@ describe("frontend API contracts", () => {
       const saved = await saveModelSettings({
         provider: "openai_compatible",
         base_url: "https://api.deepseek.com/v1",
-        api_key: "sk-user-secret",
-        chat_model: "deepseek-v4-pro",
-        embedding_model: "bge-m3"
+         api_key: "sk-user-secret",
+         chat_model: "deepseek-v4-pro",
+         embedding_provider: "openai_compatible",
+         embedding_base_url: "https://embedding.example.com/v1",
+         embedding_api_key: "embedding-secret",
+         embedding_model: "bge-m3"
       });
       const tested = await testModelSettings();
 
@@ -1775,9 +1782,12 @@ describe("frontend API contracts", () => {
           data: {
             provider: "openai_compatible",
             base_url: "https://api.deepseek.com/v1",
-            api_key: "sk-user-secret",
-            chat_model: "deepseek-v4-pro",
-            embedding_model: "bge-m3"
+             api_key: "sk-user-secret",
+             chat_model: "deepseek-v4-pro",
+             embedding_provider: "openai_compatible",
+             embedding_base_url: "https://embedding.example.com/v1",
+             embedding_api_key: "embedding-secret",
+             embedding_model: "bge-m3"
           }
         },
         {
@@ -1865,12 +1875,17 @@ describe("frontend API contracts", () => {
     try {
       await listModelConfigs();
       await createModelConfig({
-        display_name: "星火 Lite",
+        display_name: "星火回答 + 通义向量",
         preset_id: "spark",
         provider: "openai_compatible",
         base_url: "https://spark-api-open.xf-yun.com/v1",
         api_key: "spark-user-token",
         chat_model: "lite",
+        embedding_preset_id: "qwen",
+        embedding_provider: "openai_compatible",
+        embedding_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        embedding_api_key: "qwen-user-token",
+        embedding_model: "text-embedding-v4",
         make_default: true
       });
       await updateModelConfig(3, { chat_model: "4.0Ultra", api_key: "" });
@@ -1885,12 +1900,17 @@ describe("frontend API contracts", () => {
           url: SETTINGS_ENDPOINTS.configs,
           method: "post",
           data: {
-            display_name: "星火 Lite",
+            display_name: "星火回答 + 通义向量",
             preset_id: "spark",
             provider: "openai_compatible",
             base_url: "https://spark-api-open.xf-yun.com/v1",
             api_key: "spark-user-token",
             chat_model: "lite",
+            embedding_preset_id: "qwen",
+            embedding_provider: "openai_compatible",
+            embedding_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            embedding_api_key: "qwen-user-token",
+            embedding_model: "text-embedding-v4",
             make_default: true
           }
         },

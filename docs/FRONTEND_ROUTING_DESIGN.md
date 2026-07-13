@@ -507,7 +507,7 @@ Phase 5 以后：
 - Phase 12.1 已把 `ReportsPage` 接入真实 `/exports/learning-dossier`：选择课程后可同步导出 Markdown 学习档案，前端用返回的 Markdown 和安全文件名创建浏览器下载；导出失败只在报告页导出区域局部提示，不影响报告读取和生成。
 - Phase 6.3 已接真实 `/tutor/sessions/{session_id}/messages/stream`；`CourseSpacePage` 发送课程问题时先创建或复用课程会话，再用 `fetch` + `ReadableStream` 读取 SSE，token 到达时逐步渲染，`done` 后用后端持久化消息替换临时状态。
 - Phase 6.1 已接真实 `/settings/model` 和 `/settings/model/test`；Phase 6.2 已接真实 `/settings/model/configs`、`/settings/model/configs/{id}`、`/settings/model/configs/{id}/default` 和 `/settings/model/configs/{id}/test`；`SettingsPage` 会显示配置列表和当前编辑面板，支持创建、编辑、测试、设默认和删除用户自己的模型配置，并且不展示明文 Key。
-- Phase 6.2 的 Provider 预设不追求数量多，只保留讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务；OpenRouter 不再作为可见预设。回答模型是主字段，向量模型折叠在高级项中；Phase 6.4 起向量模型用于 OpenAI-compatible embedding，缺省时仍可依靠 `local-hash-1536` 跑通。
+- Phase 6.2 的 Provider 预设不追求数量多，只保留讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务；OpenRouter 不再作为可见预设。设置中心后续已将回答服务和向量服务并列为同一配置方案内的两组独立连接，各自填写预设、Base URL、Key 和模型；向量未配置时明确退回关键词检索，不把本地 hash 宣称为语义检索。
 - `FirstRunGuide` 已作为学习空间中的轻量引导占位，真实触发条件需要 Phase 4 根据画像和课程上下文接入。
 - `/app` 已重做为总 AI 对话主页，包含贴边可收起主页历史、侧栏账号入口、中心 AI 学习入口、输入区资料库按钮、文件上传入口、最近学习轻量列表、按需全部课程抽屉、发送后主页对话态和生成课程浮层；主页不再展示预设快捷问题。
 - `/app` 输入区资料状态只在选中资料后贴着 composer 显示“已选择 N 份资料”；联网搜索和深度思考只通过按钮高亮和 `aria-pressed` 表达，不显示中间状态条或“联网搜索已开”文案。

@@ -123,12 +123,15 @@ SYSTEM_MODEL_PROVIDER=openai_compatible
 SYSTEM_MODEL_BASE_URL=https://api.example.com/v1
 SYSTEM_MODEL_API_KEY=replace-with-your-own-key
 SYSTEM_CHAT_MODEL=example-chat-model
+SYSTEM_EMBEDDING_PROVIDER=openai_compatible
+SYSTEM_EMBEDDING_BASE_URL=https://embedding.example.com/v1
+SYSTEM_EMBEDDING_API_KEY=replace-with-your-embedding-key
 SYSTEM_EMBEDDING_MODEL=example-embedding-model
 MODEL_SETTINGS_ENCRYPTION_KEY=replace-with-fernet-key
 MODEL_REQUEST_TIMEOUT_SECONDS=20
 ```
 
-`SYSTEM_MODEL_*` 是服务器统一兜底配置，当前只保留一套。
+`SYSTEM_MODEL_*` 是服务器回答兜底配置。`SYSTEM_EMBEDDING_*` 是可选的向量兜底连接；向量 Base URL 为空时兼容复用回答连接，填写后使用独立 Provider、Base URL 和 Key。
 
 Docker Compose 会把仓库根目录的 `.env` 作为 backend 容器的可选运行时环境文件读取，用于注入 `SYSTEM_MODEL_*`、`MODEL_SETTINGS_ENCRYPTION_KEY` 等服务器配置。`.env` 已被 `.gitignore` 忽略，不能提交真实密钥。为了避免把密钥展开到终端日志，统一验证脚本只运行 `docker compose config --quiet`。
 
@@ -136,11 +139,12 @@ Docker Compose 会把仓库根目录的 `.env` 作为 backend 容器的可选运
 
 - 主页、课程回答和生成型 Graph 优先使用当前用户回答默认配置。
 - 资料与课程 RAG 的 Embedding 优先使用当前用户向量默认配置。
-- 两种用途可选择不同 Provider、Base URL 和 Key；某一用途没有个人默认时，只回退该用途的服务器配置。
+- 每套个人配置都能为回答和向量分别保存 Provider 预设、Base URL、Key 和模型；同一套方案可组合不同服务商。
+- 回答默认和向量默认仍可指向同一套或不同套配置；某一用途没有个人默认时，只回退该用途的服务器配置。
 - 用户 API Key 使用 Fernet 加密保存。
 - 接口只返回脱敏 Key，不返回明文。
 
-`SYSTEM_EMBEDDING_MODEL` 在没有个人向量默认时用于 OpenAI-compatible `{base_url}/embeddings`。
+`SYSTEM_EMBEDDING_MODEL` 在没有个人向量默认时用于 OpenAI-compatible `{SYSTEM_EMBEDDING_BASE_URL}/embeddings`；未填写独立向量地址时兼容使用 `SYSTEM_MODEL_BASE_URL`。
 为空或不可用时，课程知识库显式退回关键词检索，不把本地 hash 宣称为语义向量命中。
 
 `MODEL_SETTINGS_ENCRYPTION_KEY` 必须使用 Fernet key。

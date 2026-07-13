@@ -267,7 +267,7 @@ backend/app/
 | `backend/app/data/builtin_courses` | 内置课程包数据 |
 | `backend/app/services/course_seed.py` | 内置课程导入服务 |
 | `backend/app/services/tutor.py` | 主页/课程会话 API 边界和依赖装配；`HomeTutorGraphRunner` 接管主页上下文、路由、资料检索、联网、规划、回答、Review/Repair 和持久化，`CourseTutorGraphRunner` 接管严格课程 RAG 问答 |
-| `backend/app/services/model_settings.py` | 模型设置服务，负责用户多模型配置、系统兜底配置解析、Fernet 加密保存用户 Key、脱敏摘要、连接测试，以及回答默认和向量默认两套独立运行时优先级 |
+| `backend/app/services/model_settings.py` | 模型设置服务，负责用户多模型配置、单配置内回答/向量独立连接、系统兜底配置解析、两组 Key 的 Fernet 加密与脱敏、连接测试，以及回答默认和向量默认两套独立运行时优先级 |
 | `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计 |
 | `backend/app/services/embeddings.py` | Embedding 服务，负责 OpenAI-compatible `/embeddings` 调用编排、本地 `local-hash-1536` fallback、知识切片向量写入和 metadata 标记 |
 | `backend/app/services/course_answers.py` | 回答服务，负责主页学习 prompt、资料/网页来源摘要、深度回答指令、课程引用受控 prompt、非流式或流式模型 Provider 调用、未配置和模型失败处理 |
@@ -516,17 +516,15 @@ Provider 抽象目标能力：
 - `model_list`。
 - `health_check`。
 
-Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已实现 OpenAI-compatible streaming 解析，Provider 会在请求 `{base_url}/chat/completions` 时附带 `stream=true` 并解析 `data: {...}` 和 `[DONE]`。Phase 6.4 已实现 OpenAI-compatible embeddings：请求 `{base_url}/embeddings` 时携带 `input`、`model` 和 `dimensions=1536`，若服务不支持 `dimensions` 会重试一次不带该字段，返回向量长度不等于 1536 时拒绝写入。Phase 6.2 已把设置页从一人一套配置升级为“配置列表 + 当前编辑面板”。设置页支持：
+Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已实现 OpenAI-compatible streaming 解析，Provider 会在请求回答连接的 `{base_url}/chat/completions` 时附带 `stream=true` 并解析 `data: {...}` 和 `[DONE]`。Phase 6.4 已实现 OpenAI-compatible embeddings：请求向量连接的 `{embedding_base_url}/embeddings` 时携带 `input`、`model` 和 `dimensions=1536`，若服务不支持 `dimensions` 会重试一次不带该字段，返回向量长度不等于 1536 时拒绝写入。设置页支持：
 
 - 多套用户个人配置，互相隔离保存和测试。
 - Provider 预设，首位为讯飞星火 Spark，OpenRouter 不再作为可见预设。
-- Base URL。
-- API Key / APIPassword。
-- 回答模型。
-- Embedding 模型字段，折叠在高级项中；Phase 6.4 起用于课程知识库向量化，缺省时自动使用显式本地 fallback。
+- 同一配置方案内并列的回答服务和向量服务；两组分别填写 Provider 预设、Base URL、API Key / APIPassword 和模型。
+- 向量服务用于资料与课程知识库向量化；缺省时明确使用关键词检索 fallback。
 - 指定配置的连通性测试。
 - 回答模型与向量模型独立的一次性连通性测试；测试结果按配置安全持久化，未配置向量模型不会影响回答可用状态。
-- 回答默认与向量默认独立选择，同一配置也可以同时承担两种用途。
+- 回答默认与向量默认独立选择，同一配置可组合两个服务商，也可只承担一种用途。
 - 学生账号昵称通过 `PATCH /auth/me` 真实保存，并同步到侧栏账号入口；邮箱、角色和 starter mode 保持只读。
 - 学生可通过 `PATCH /auth/me/password` 验证当前密码后换密；JWT 携带 `auth_version`，换密后递增版本并使所有旧登录状态失效。
 - 隐私与数据边界作为只读说明展示，学习档案导出仍从报告页按课程生成。
@@ -537,7 +535,7 @@ Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已
 当前用户对应用途的默认配置 -> .env 中对应用途的 SYSTEM_MODEL_* -> 未配置提示
 ```
 
-用户 API Key 使用 `MODEL_SETTINGS_ENCRYPTION_KEY` 派生的 Fernet 加密后保存到 `model_settings.api_key_ciphertext`。每条用户配置单独保存密钥密文、回答/向量测试摘要和两类默认标记；`GET /settings/model/configs` 只返回配置摘要、脱敏 Key、服务器兜底摘要及回答/向量默认配置 id，不返回明文 Key。旧 `/settings/model` 和 `default_config_id` 继续兼容回答默认。设置页可让讯飞或 DeepSeek 负责回答、让通义等兼容服务独立负责 Embedding；两者不要求共用 Base URL 或 Key。讯飞原生 Embedding 接口因独立授权、签名鉴权和不同维度协议，仍放到后续专项。
+用户回答 Key 与向量 Key 使用 `MODEL_SETTINGS_ENCRYPTION_KEY` 派生的 Fernet 分别加密到 `api_key_ciphertext` 和 `embedding_api_key_ciphertext`。每条配置是一套可组合方案：回答和向量分别保存 Provider 预设、Base URL、Key、模型和测试摘要，因此同一方案可让讯飞负责回答、让通义等兼容服务负责 Embedding；两者不要求共用连接。回答默认与向量默认又可指向同一套或不同套方案。`GET /settings/model/configs` 只返回两组脱敏摘要、服务器兜底摘要及两类默认配置 id，不返回明文 Key。旧 `/settings/model`、`default_config_id` 和旧共享连接数据继续兼容。讯飞原生 Embedding 接口因独立授权、签名鉴权和不同维度协议，仍放到后续专项。
 
 Phase 18 后，个人配置只有在字段不完整时才沿用现有服务器配置兜底；已经对个人配置发起的请求发生超时、限流或服务故障时，只在同一配置内有限重试，不把学习内容自动发送给另一 Provider。普通调用与 Embedding 最多 3 次，流式调用只允许在首 token 前重试。Redis 暂不可用时限流与熔断 fail-open，但模型 HTTP 超时、Graph fallback 和安全审计边界继续生效。
 

@@ -31,7 +31,7 @@ Phase 5.2 到 Phase 6.4 只读取或复用现有数据表：
 - `knowledge_points`：提供知识点和章节上下文。
 - `knowledge_chunks`：提供可检索文本切片，并在 `embedding Vector(1536)` 保存 OpenAI-compatible 或本地 fallback 向量。
 - `chat_sessions`、`chat_messages`：保存课程会话消息和 assistant `citation_json`。
-- `model_settings`：保存用户自己的 OpenAI-compatible 模型配置和加密 Key；同一用户可分别选择回答默认与向量默认，课程回答和 Embedding 不要求共用 Provider、Base URL 或 Key。
+- `model_settings`：保存用户自己的 OpenAI-compatible 模型方案；每套方案内回答与向量分别保存 Provider 预设、Base URL、加密 Key 和模型，同一用户还可分别选择回答默认与向量默认。课程回答和 Embedding 不要求共用服务商或连接。
 
 本阶段不新增数据库迁移，继续复用既有 `knowledge_chunks.embedding Vector(1536)`。`metadata_json` 写入 `embedding_source`、`embedding_model`、`embedding_dimension`、`embedded_at`，用于识别本地 fallback、过期模型和后续重建。
 

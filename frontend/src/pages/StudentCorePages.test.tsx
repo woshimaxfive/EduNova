@@ -405,8 +405,9 @@ describe("student core pages", () => {
     expect(screen.getByText("系统设置")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "模型连接" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "模型设置" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Provider 预设" })).toBeInTheDocument();
-    expect(screen.getAllByText("讯飞星火 Spark")).toHaveLength(2);
+    expect(screen.getByRole("combobox", { name: "回答服务商" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "向量服务商" })).toBeInTheDocument();
+    expect(screen.getAllByText("讯飞星火 Spark")).toHaveLength(3);
     expect(screen.queryByText("深度思考")).not.toBeInTheDocument();
     expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存配置" })).toBeInTheDocument();

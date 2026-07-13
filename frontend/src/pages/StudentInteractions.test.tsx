@@ -1585,8 +1585,13 @@ describe("student interaction affordances", () => {
           base_url: "https://spark-api-open.xf-yun.com/v1",
           chat_model: "lite",
           embedding_model: null,
+          embedding_provider: null,
+          embedding_preset_id: null,
+          embedding_base_url: null,
           has_api_key: true,
           api_key_masked: "sp-u...oken",
+          has_embedding_api_key: false,
+          embedding_api_key_masked: null,
           can_use_model: true,
           can_use_embedding_model: false,
           is_default: true,
@@ -1604,8 +1609,13 @@ describe("student interaction affordances", () => {
           base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
           chat_model: null,
           embedding_model: "text-embedding-v4",
+          embedding_provider: "openai_compatible",
+          embedding_preset_id: "qwen",
+          embedding_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
           has_api_key: true,
           api_key_masked: "qw-u...oken",
+          has_embedding_api_key: true,
+          embedding_api_key_masked: "qw-u...oken",
           can_use_model: false,
           can_use_embedding_model: true,
           is_default: false,
@@ -1624,8 +1634,12 @@ describe("student interaction affordances", () => {
         base_url: "https://system-model.example.local/v1",
         chat_model: "system-chat",
         embedding_model: "system-embedding",
+        embedding_provider: "openai_compatible",
+        embedding_base_url: "https://system-embedding.example.local/v1",
         has_api_key: true,
         api_key_masked: "sk-s...cret",
+        has_embedding_api_key: true,
+        embedding_api_key_masked: "em-s...cret",
         can_use_model: true,
         can_use_embedding_model: true
       }
@@ -1667,6 +1681,9 @@ describe("student interaction affordances", () => {
           chat_model: string;
           embedding_model?: string;
           api_key?: string;
+          embedding_preset_id?: string;
+          embedding_base_url?: string;
+          embedding_api_key?: string;
         };
         const newConfig: ModelConfigSummary = {
           id: 2,
@@ -1677,8 +1694,13 @@ describe("student interaction affordances", () => {
           base_url: data.base_url,
           chat_model: data.chat_model,
           embedding_model: data.embedding_model ?? null,
+          embedding_provider: "openai_compatible",
+          embedding_preset_id: data.embedding_preset_id ?? null,
+          embedding_base_url: data.embedding_base_url ?? null,
           has_api_key: true,
           api_key_masked: "hy-u...oken",
+          has_embedding_api_key: Boolean(data.embedding_api_key),
+          embedding_api_key_masked: data.embedding_api_key ? "qw-u...oken" : null,
           can_use_model: true,
           can_use_embedding_model: Boolean(data.embedding_model),
           is_default: false,
@@ -1822,17 +1844,17 @@ describe("student interaction affordances", () => {
 
     expect(await screen.findByRole("button", { name: /星火 Lite/ })).toBeInTheDocument();
     expect(screen.getByText("回答默认")).toBeInTheDocument();
-    expect(screen.getByText("sp-u...oken")).toBeInTheDocument();
+    expect(screen.getByText(/回答 sp-u\.\.\.oken/)).toBeInTheDocument();
     expect(screen.queryByText("sk-••••••••")).not.toBeInTheDocument();
     expect(screen.queryByText("深度思考")).not.toBeInTheDocument();
     expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();
     expect(screen.queryByText("OpenRouter")).not.toBeInTheDocument();
     expect(screen.getByText("此配置只承担回答；向量检索继续使用服务器配置。")).toBeInTheDocument();
 
-    const providerPreset = screen.getByRole("combobox", { name: "Provider 预设" });
-    expect(within(providerPreset).getAllByRole("option")[0]).toHaveTextContent("讯飞星火 Spark");
-    expect(within(providerPreset).getByRole("option", { name: "百度千帆" })).toBeInTheDocument();
-    expect(within(providerPreset).getByRole("option", { name: "腾讯混元" })).toBeInTheDocument();
+    const chatProviderPreset = screen.getByRole("combobox", { name: "回答服务商" });
+    expect(within(chatProviderPreset).getAllByRole("option")[0]).toHaveTextContent("讯飞星火 Spark");
+    expect(within(chatProviderPreset).getByRole("option", { name: "百度千帆" })).toBeInTheDocument();
+    expect(within(chatProviderPreset).getByRole("option", { name: "腾讯混元" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /通义向量/ }));
     await user.click(screen.getByRole("button", { name: "设为向量默认" }));
@@ -1843,16 +1865,25 @@ describe("student interaction affordances", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("已设为默认向量配置。"));
 
     await user.click(screen.getByRole("button", { name: "新建配置" }));
-    await user.selectOptions(providerPreset, "tencent-hunyuan");
+    await user.selectOptions(screen.getByRole("combobox", { name: "回答服务商" }), "tencent-hunyuan");
+    await user.selectOptions(screen.getByRole("combobox", { name: "向量服务商" }), "qwen");
 
-    expect(screen.getByRole("textbox", { name: "Base URL" })).toHaveValue(
+    expect(screen.getByRole("textbox", { name: "回答 Base URL" })).toHaveValue(
       "https://api.hunyuan.cloud.tencent.com/v1"
     );
+    expect(screen.getByRole("textbox", { name: "向量 Base URL" })).toHaveValue(
+      "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    );
     expect(screen.getByRole("textbox", { name: "回答模型" })).toHaveValue("hunyuan-turbos-latest");
+    expect(screen.getByRole("textbox", { name: "向量模型" })).toHaveValue("text-embedding-v4");
+
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
+    expect(screen.getByText("新建或更换服务连接时，请填写对应服务的 API Key；本地免密预设除外。")).toBeInTheDocument();
 
     await user.clear(screen.getByRole("textbox", { name: "配置名称" }));
     await user.type(screen.getByRole("textbox", { name: "配置名称" }), "腾讯混元默认");
-    await user.type(screen.getByLabelText("API Key"), "hunyuan-user-secret");
+    await user.type(screen.getByLabelText("回答 API Key"), "hunyuan-user-secret");
+    await user.type(screen.getByLabelText("向量 API Key"), "qwen-embedding-secret");
     await user.click(screen.getByRole("button", { name: "保存配置" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: /腾讯混元默认/ })).toBeInTheDocument());
@@ -1869,7 +1900,11 @@ describe("student interaction affordances", () => {
         base_url: "https://api.hunyuan.cloud.tencent.com/v1",
         api_key: "hunyuan-user-secret",
         chat_model: "hunyuan-turbos-latest",
-        embedding_model: "",
+        embedding_preset_id: "qwen",
+        embedding_provider: "openai_compatible",
+        embedding_base_url: "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+        embedding_api_key: "qwen-embedding-secret",
+        embedding_model: "text-embedding-v4",
         make_default: false,
         make_embedding_default: false
       }

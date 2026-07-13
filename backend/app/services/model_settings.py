@@ -89,9 +89,20 @@ class SaveModelSettingsRequest(BaseModel):
     base_url: str = Field(min_length=1, max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
     chat_model: str | None = Field(default=None, max_length=120)
+    embedding_provider: Literal["openai_compatible"] | None = None
+    embedding_base_url: str | None = Field(default=None, max_length=500)
+    embedding_api_key: str | None = Field(default=None, max_length=500)
     embedding_model: str | None = Field(default=None, max_length=120)
 
-    @field_validator("base_url", "api_key", "chat_model", "embedding_model", mode="before")
+    @field_validator(
+        "base_url",
+        "api_key",
+        "chat_model",
+        "embedding_base_url",
+        "embedding_api_key",
+        "embedding_model",
+        mode="before",
+    )
     @classmethod
     def strip_text(cls, value: str | None) -> str | None:
         if value is None:
@@ -108,10 +119,11 @@ class SaveModelSettingsRequest(BaseModel):
 class SaveModelConfigRequest(SaveModelSettingsRequest):
     display_name: str = Field(min_length=1, max_length=120)
     preset_id: str | None = Field(default=None, max_length=80)
+    embedding_preset_id: str | None = Field(default=None, max_length=80)
     make_default: bool = False
     make_embedding_default: bool = False
 
-    @field_validator("display_name", "preset_id", mode="before")
+    @field_validator("display_name", "preset_id", "embedding_preset_id", mode="before")
     @classmethod
     def strip_config_text(cls, value: str | None) -> str | None:
         if value is None:
@@ -126,11 +138,26 @@ class UpdateModelConfigRequest(BaseModel):
     base_url: str | None = Field(default=None, min_length=1, max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
     chat_model: str | None = Field(default=None, max_length=120)
+    embedding_provider: Literal["openai_compatible"] | None = None
+    embedding_preset_id: str | None = Field(default=None, max_length=80)
+    embedding_base_url: str | None = Field(default=None, max_length=500)
+    embedding_api_key: str | None = Field(default=None, max_length=500)
     embedding_model: str | None = Field(default=None, max_length=120)
     make_default: bool | None = None
     make_embedding_default: bool | None = None
 
-    @field_validator("display_name", "preset_id", "base_url", "api_key", "chat_model", "embedding_model", mode="before")
+    @field_validator(
+        "display_name",
+        "preset_id",
+        "base_url",
+        "api_key",
+        "chat_model",
+        "embedding_preset_id",
+        "embedding_base_url",
+        "embedding_api_key",
+        "embedding_model",
+        mode="before",
+    )
     @classmethod
     def strip_text(cls, value: str | None) -> str | None:
         if value is None:
@@ -161,8 +188,12 @@ class ModelSettingsSummary(BaseModel):
     base_url: str | None
     chat_model: str | None
     embedding_model: str | None
+    embedding_provider: str | None = None
+    embedding_base_url: str | None = None
     has_api_key: bool
     api_key_masked: str | None
+    has_embedding_api_key: bool = False
+    embedding_api_key_masked: str | None = None
     can_use_model: bool
     can_use_embedding_model: bool
 
@@ -176,8 +207,13 @@ class ModelConfigSummary(BaseModel):
     base_url: str | None
     chat_model: str | None
     embedding_model: str | None
+    embedding_provider: str | None = None
+    embedding_preset_id: str | None = None
+    embedding_base_url: str | None = None
     has_api_key: bool
     api_key_masked: str | None
+    has_embedding_api_key: bool = False
+    embedding_api_key_masked: str | None = None
     can_use_model: bool
     can_use_embedding_model: bool
     is_default: bool
@@ -309,13 +345,11 @@ class ModelSettingsService:
         self.execution_runtime = execution_runtime or ModelExecutionRuntime(settings)
 
     def get_summary(self, user: User) -> ModelSettingsSummary:
-        user_setting = self.repository.get_default_for_user(user.id)
-        if user_setting is not None:
-            return self._summary_from_runtime(self._runtime_from_user_setting(user_setting), source="user")
-
-        system_runtime = self._runtime_from_system_settings()
-        if system_runtime.base_url or system_runtime.chat_model or system_runtime.embedding_model:
-            return self._summary_from_runtime(system_runtime, source="system")
+        chat_runtime = self.resolve_runtime_config(user)
+        embedding_runtime = self.resolve_embedding_runtime_config(user)
+        if chat_runtime.source != "none" or embedding_runtime.source != "none":
+            source = chat_runtime.source if chat_runtime.source != "none" else embedding_runtime.source
+            return self._summary_from_runtimes(chat_runtime, embedding_runtime, source=source)
         return self._empty_summary()
 
     def list_configs(self, user: User) -> ModelSettingsListResponse:
@@ -374,6 +408,24 @@ class ModelSettingsService:
 
     def update_config(self, user: User, config_id: int, payload: UpdateModelConfigRequest) -> ModelConfigSummary:
         setting = self._get_user_setting_or_raise(user, config_id)
+        chat_connection_changed = (
+            (
+                payload.provider is not None
+                and self._normalize_provider(payload.provider) != self._normalize_provider(setting.provider)
+            )
+            or (payload.base_url is not None and payload.base_url != setting.base_url)
+        )
+        embedding_connection_changed = (
+            (
+                payload.embedding_provider is not None
+                and self._normalize_provider(payload.embedding_provider)
+                != self._normalize_provider(setting.embedding_provider or setting.provider)
+            )
+            or (
+                payload.embedding_base_url is not None
+                and (payload.embedding_base_url or None) != setting.embedding_base_url
+            )
+        )
         self._clear_changed_connection_tests(setting, payload)
         if payload.display_name is not None and payload.display_name != setting.display_name:
             self._ensure_unique_display_name(user.id, payload.display_name, exclude_config_id=config_id)
@@ -386,10 +438,38 @@ class ModelSettingsService:
             setting.base_url = payload.base_url
         if payload.chat_model is not None:
             setting.chat_model = payload.chat_model or None
+        if payload.embedding_provider is not None:
+            setting.embedding_provider = self._normalize_provider(payload.embedding_provider)
+        if payload.embedding_preset_id is not None:
+            setting.embedding_preset_id = payload.embedding_preset_id or None
+        if payload.embedding_base_url is not None:
+            setting.embedding_base_url = payload.embedding_base_url or None
         if payload.embedding_model is not None:
             setting.embedding_model = payload.embedding_model or None
         if payload.api_key:
             setting.api_key_ciphertext = self._encrypt_api_key(payload.api_key)
+        elif chat_connection_changed:
+            setting.api_key_ciphertext = None
+        if payload.embedding_api_key:
+            setting.embedding_api_key_ciphertext = self._encrypt_api_key(payload.embedding_api_key)
+        elif embedding_connection_changed:
+            setting.embedding_api_key_ciphertext = None
+        if setting.embedding_model:
+            setting.embedding_provider = setting.embedding_provider or setting.provider
+            setting.embedding_preset_id = setting.embedding_preset_id or setting.preset_id
+            setting.embedding_base_url = setting.embedding_base_url or setting.base_url
+            connections_match = (
+                self._normalize_provider(setting.embedding_provider)
+                == self._normalize_provider(setting.provider)
+                and setting.embedding_base_url == setting.base_url
+            )
+            if setting.embedding_api_key_ciphertext is None and connections_match:
+                setting.embedding_api_key_ciphertext = setting.api_key_ciphertext
+        elif payload.embedding_model is not None:
+            setting.embedding_provider = None
+            setting.embedding_preset_id = None
+            setting.embedding_base_url = None
+            setting.embedding_api_key_ciphertext = None
         if payload.make_default:
             if not setting.chat_model:
                 raise ModelSettingsValidationError("该配置没有回答模型，不能设为回答默认。")
@@ -753,17 +833,24 @@ class ModelSettingsService:
         )
 
     def _embedding_runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
-        api_key = self._decrypt_api_key(setting.api_key_ciphertext)
+        uses_separate_connection = bool(setting.embedding_base_url or setting.embedding_provider)
+        provider = setting.embedding_provider or setting.provider
+        base_url = setting.embedding_base_url or setting.base_url
+        api_key = self._decrypt_api_key(
+            setting.embedding_api_key_ciphertext
+            if uses_separate_connection
+            else setting.api_key_ciphertext
+        )
         return RuntimeModelConfig(
             source="user",
-            provider=self._normalize_provider(setting.provider),
-            base_url=setting.base_url,
+            provider=self._normalize_provider(provider),
+            base_url=base_url,
             api_key=api_key,
-            chat_model=setting.chat_model,
+            chat_model=None,
             embedding_model=setting.embedding_model,
             can_use_model=self._can_use_embedding_model(
-                provider=setting.provider,
-                base_url=setting.base_url,
+                provider=provider,
+                base_url=base_url,
                 api_key=api_key,
                 embedding_model=setting.embedding_model,
             ),
@@ -771,17 +858,24 @@ class ModelSettingsService:
         )
 
     def _embedding_runtime_from_system_settings(self) -> RuntimeModelConfig:
-        api_key = self.settings.system_model_api_key.strip()
+        has_separate_connection = bool(self.settings.system_embedding_base_url.strip())
+        provider = self.settings.system_embedding_provider.strip() or self.settings.system_model_provider
+        base_url = self.settings.system_embedding_base_url.strip() or self.settings.system_model_base_url.strip()
+        api_key = (
+            self.settings.system_embedding_api_key.strip()
+            if has_separate_connection
+            else self.settings.system_model_api_key.strip()
+        )
         return RuntimeModelConfig(
             source="system",
-            provider=self._normalize_provider(self.settings.system_model_provider),
-            base_url=self.settings.system_model_base_url.strip() or None,
+            provider=self._normalize_provider(provider),
+            base_url=base_url or None,
             api_key=api_key or None,
-            chat_model=self.settings.system_chat_model.strip() or None,
+            chat_model=None,
             embedding_model=self.settings.system_embedding_model.strip() or None,
             can_use_model=self._can_use_embedding_model(
-                provider=self.settings.system_model_provider,
-                base_url=self.settings.system_model_base_url,
+                provider=provider,
+                base_url=base_url,
                 api_key=api_key,
                 embedding_model=self.settings.system_embedding_model,
             ),
@@ -790,6 +884,7 @@ class ModelSettingsService:
     def _config_summary(self, setting: ModelSetting) -> ModelConfigSummary:
         runtime = self._runtime_from_user_setting(setting)
         embedding_runtime = self._embedding_runtime_from_user_setting(setting)
+        has_embedding = bool(setting.embedding_model)
         return ModelConfigSummary(
             id=setting.id,
             display_name=setting.display_name,
@@ -798,8 +893,13 @@ class ModelSettingsService:
             base_url=runtime.base_url,
             chat_model=runtime.chat_model,
             embedding_model=runtime.embedding_model,
+            embedding_provider=embedding_runtime.provider if has_embedding else None,
+            embedding_preset_id=setting.embedding_preset_id if has_embedding else None,
+            embedding_base_url=embedding_runtime.base_url if has_embedding else None,
             has_api_key=bool(runtime.api_key),
             api_key_masked=self._mask_api_key(runtime.api_key),
+            has_embedding_api_key=has_embedding and bool(embedding_runtime.api_key),
+            embedding_api_key_masked=self._mask_api_key(embedding_runtime.api_key) if has_embedding else None,
             can_use_model=runtime.can_use_model,
             can_use_embedding_model=embedding_runtime.can_use_model,
             is_default=setting.is_default,
@@ -810,28 +910,33 @@ class ModelSettingsService:
             connection_tests=self._parse_connection_tests(setting.connection_test_json),
         )
 
-    def _summary_from_runtime(self, runtime: RuntimeModelConfig, source: Literal["user", "system"]) -> ModelSettingsSummary:
+    def _summary_from_runtimes(
+        self,
+        runtime: RuntimeModelConfig,
+        embedding_runtime: RuntimeModelConfig,
+        source: Literal["user", "system"],
+    ) -> ModelSettingsSummary:
         return ModelSettingsSummary(
             source=source,
             provider=runtime.provider,
             base_url=runtime.base_url,
             chat_model=runtime.chat_model,
-            embedding_model=runtime.embedding_model,
+            embedding_model=embedding_runtime.embedding_model,
+            embedding_provider=embedding_runtime.provider,
+            embedding_base_url=embedding_runtime.base_url,
             has_api_key=bool(runtime.api_key),
             api_key_masked=self._mask_api_key(runtime.api_key),
+            has_embedding_api_key=bool(embedding_runtime.api_key),
+            embedding_api_key_masked=self._mask_api_key(embedding_runtime.api_key),
             can_use_model=runtime.can_use_model,
-            can_use_embedding_model=self._can_use_embedding_model(
-                provider=runtime.provider,
-                base_url=runtime.base_url,
-                api_key=runtime.api_key,
-                embedding_model=runtime.embedding_model,
-            ),
+            can_use_embedding_model=embedding_runtime.can_use_model,
         )
 
     def _system_summary(self) -> ModelSettingsSummary:
         system_runtime = self._runtime_from_system_settings()
-        if system_runtime.base_url or system_runtime.chat_model or system_runtime.embedding_model:
-            return self._summary_from_runtime(system_runtime, source="system")
+        embedding_runtime = self._embedding_runtime_from_system_settings()
+        if system_runtime.base_url or system_runtime.chat_model or embedding_runtime.embedding_model:
+            return self._summary_from_runtimes(system_runtime, embedding_runtime, source="system")
         return self._empty_summary()
 
     @staticmethod
@@ -842,8 +947,12 @@ class ModelSettingsService:
             base_url=None,
             chat_model=None,
             embedding_model=None,
+            embedding_provider=None,
+            embedding_base_url=None,
             has_api_key=False,
             api_key_masked=None,
+            has_embedding_api_key=False,
+            embedding_api_key_masked=None,
             can_use_model=False,
             can_use_embedding_model=False,
         )
@@ -853,11 +962,34 @@ class ModelSettingsService:
         setting.base_url = payload.base_url
         setting.chat_model = payload.chat_model or None
         setting.embedding_model = payload.embedding_model or None
+        setting.embedding_provider = (
+            self._normalize_provider(payload.embedding_provider or payload.provider)
+            if setting.embedding_model
+            else None
+        )
+        setting.embedding_base_url = (payload.embedding_base_url or payload.base_url) if setting.embedding_model else None
         if isinstance(payload, SaveModelConfigRequest):
             setting.display_name = payload.display_name
             setting.preset_id = payload.preset_id or None
+            setting.embedding_preset_id = (
+                (payload.embedding_preset_id or payload.preset_id or None)
+                if setting.embedding_model else None
+            )
         if payload.api_key:
             setting.api_key_ciphertext = self._encrypt_api_key(payload.api_key)
+        if setting.embedding_model:
+            if payload.embedding_api_key:
+                setting.embedding_api_key_ciphertext = self._encrypt_api_key(payload.embedding_api_key)
+            elif not (payload.embedding_base_url or payload.embedding_provider):
+                setting.embedding_api_key_ciphertext = setting.api_key_ciphertext
+            elif (
+                not setting.embedding_api_key_ciphertext
+                and setting.embedding_provider == setting.provider
+                and setting.embedding_base_url == setting.base_url
+            ):
+                setting.embedding_api_key_ciphertext = setting.api_key_ciphertext
+        else:
+            setting.embedding_api_key_ciphertext = None
 
     def _clear_changed_connection_tests(
         self,
@@ -865,14 +997,30 @@ class ModelSettingsService:
         payload: SaveModelSettingsRequest | UpdateModelConfigRequest,
     ) -> None:
         current_key = self._decrypt_api_key(setting.api_key_ciphertext)
-        shared_changed = (
-            (payload.provider is not None and self._normalize_provider(payload.provider) != setting.provider)
+        current_embedding_key = self._decrypt_api_key(setting.embedding_api_key_ciphertext)
+        chat_changed = (
+            (
+                payload.provider is not None
+                and self._normalize_provider(payload.provider) != self._normalize_provider(setting.provider)
+            )
             or (payload.base_url is not None and payload.base_url != setting.base_url)
             or (bool(payload.api_key) and payload.api_key != current_key)
+            or (payload.chat_model is not None and payload.chat_model != setting.chat_model)
         )
-        chat_changed = shared_changed or (payload.chat_model is not None and payload.chat_model != setting.chat_model)
-        embedding_changed = shared_changed or (
-            payload.embedding_model is not None and (payload.embedding_model or None) != setting.embedding_model
+        embedding_changed = (
+            (
+                payload.embedding_provider is not None
+                and self._normalize_provider(payload.embedding_provider)
+                != self._normalize_provider(setting.embedding_provider or setting.provider)
+            )
+            or (
+                isinstance(payload, (SaveModelConfigRequest, UpdateModelConfigRequest))
+                and payload.embedding_preset_id is not None
+                and (payload.embedding_preset_id or None) != setting.embedding_preset_id
+            )
+            or (payload.embedding_base_url is not None and (payload.embedding_base_url or None) != setting.embedding_base_url)
+            or (bool(payload.embedding_api_key) and payload.embedding_api_key != current_embedding_key)
+            or (payload.embedding_model is not None and (payload.embedding_model or None) != setting.embedding_model)
         )
         tests = dict(setting.connection_test_json or {})
         if chat_changed:

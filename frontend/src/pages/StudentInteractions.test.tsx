@@ -796,6 +796,8 @@ describe("student interaction affordances", () => {
         motivation_interest: ""
       },
       confidence_score: 0,
+      dimension_confidence: {},
+      evidence_summary: { applied_count: 0, candidate_count: 0 },
       updated_reason: null,
       updated_at: null,
       next_question: "这门课你最想先解决什么问题？"
@@ -822,7 +824,16 @@ describe("student interaction affordances", () => {
           id: String(events.length + 1),
           dimension: "profile_chat",
           change_summary: isGoal ? "更新学习画像：学习目标" : "更新学习画像：薄弱点",
-          evidence_json: { source_type: "profile_chat", summary: "学生画像对话" },
+          evidence_json: {
+            source_type: "profile_chat",
+            summary: "学生画像对话",
+            updated_dimensions: [isGoal ? "learning_goal" : "weak_points"],
+            candidate_dimensions: []
+          },
+          source_type: "profile_chat",
+          status: "applied",
+          confidence_score: 0.68,
+          agent_trace_id: isGoal ? "trace_profile_goal" : "trace_profile_weakness",
           created_at: "2026-07-05T09:01:00Z"
         };
         profile = {
@@ -831,6 +842,14 @@ describe("student interaction affordances", () => {
           version: profile.version + 1,
           has_profile: true,
           confidence_score: 68,
+          dimension_confidence: {
+            ...profile.dimension_confidence,
+            [isGoal ? "learning_goal" : "weak_points"]: 68
+          },
+          evidence_summary: {
+            applied_count: events.length + 1,
+            candidate_count: 0
+          },
           updated_reason: event.change_summary,
           updated_at: "2026-07-05T09:01:00Z",
           profile_json: {
@@ -846,7 +865,8 @@ describe("student interaction affordances", () => {
             data: {
               reply: "已更新你的学习画像。",
               profile,
-              event
+              event,
+              agent_trace_id: event.agent_trace_id
             },
             trace_id: "trace_profile_chat"
           },
@@ -862,23 +882,22 @@ describe("student interaction affordances", () => {
 
     renderPage(<ProfilePage />);
 
-    expect(await screen.findByText("待补充")).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "动态学习画像工作台" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "更新目标" })).not.toBeInTheDocument();
 
-    await user.click(await screen.findByRole("button", { name: "更新目标" }));
-    await user.clear(screen.getByRole("textbox", { name: "学习目标" }));
-    await user.type(screen.getByRole("textbox", { name: "学习目标" }), "两周冲刺软件杯演示");
-    await user.click(screen.getByRole("button", { name: "保存目标" }));
+    await user.type(screen.getByRole("textbox", { name: "画像问题回答" }), "两周冲刺软件杯演示");
+    await user.click(screen.getByRole("button", { name: "更新画像" }));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(await screen.findByText("两周冲刺软件杯演示")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("更新学习画像：学习目标");
+    expect((await screen.findAllByText("两周冲刺软件杯演示")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("region", { name: "本次画像更新" })).toHaveTextContent("已应用学习目标");
 
     await user.type(screen.getByRole("textbox", { name: "画像问题回答" }), "最担心反向传播推导。");
     await user.click(screen.getByRole("button", { name: "更新画像" }));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(await screen.findByText("反向传播推导")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("更新学习画像：薄弱点");
+    expect((await screen.findAllByText("反向传播推导")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("region", { name: "本次画像更新" })).toHaveTextContent("已应用薄弱点");
     expect(calls.filter((call) => call.url === PROFILE_ENDPOINTS.chat)).toEqual([
       { url: PROFILE_ENDPOINTS.chat, method: "post", data: { message: "两周冲刺软件杯演示" } },
       { url: PROFILE_ENDPOINTS.chat, method: "post", data: { message: "最担心反向传播推导。" } }

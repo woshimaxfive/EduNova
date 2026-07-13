@@ -1,8 +1,8 @@
-import { BarChart, LineChart } from "echarts/charts";
-import { GridComponent, TooltipComponent } from "echarts/components";
+import { BarChart, LineChart, RadarChart } from "echarts/charts";
+import { GridComponent, RadarComponent, TooltipComponent } from "echarts/components";
 import { init, use as registerEChartsModules } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 
-registerEChartsModules([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+registerEChartsModules([BarChart, LineChart, RadarChart, GridComponent, RadarComponent, TooltipComponent, CanvasRenderer]);
 
 export { init };

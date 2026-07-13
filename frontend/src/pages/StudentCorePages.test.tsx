@@ -251,6 +251,17 @@ describe("student core pages", () => {
                 motivation_interest: "提升 AI 实践能力"
               },
               confidence_score: 72,
+              dimension_confidence: {
+                major_background: 72,
+                knowledge_foundation: 68,
+                learning_goal: 88,
+                cognitive_style: 63,
+                learning_preference: 70,
+                weak_points: 76,
+                learning_pace: 58,
+                motivation_interest: 66
+              },
+              evidence_summary: { applied_count: 5, candidate_count: 1 },
               updated_reason: "更新学习画像：学习目标、基础",
               updated_at: "2026-07-05T09:00:00Z",
               next_question: "这门课你最担心哪一章？"
@@ -272,7 +283,16 @@ describe("student core pages", () => {
                 id: "91",
                 dimension: "profile_chat",
                 change_summary: "更新学习画像：学习目标、基础",
-                evidence_json: { source_type: "profile_chat", summary: "学生画像对话" },
+                evidence_json: {
+                  source_type: "profile_chat",
+                  summary: "学生画像对话",
+                  updated_dimensions: ["learning_goal", "knowledge_foundation"],
+                  candidate_dimensions: []
+                },
+                source_type: "profile_chat",
+                status: "applied",
+                confidence_score: 0.82,
+                agent_trace_id: "trace_profile_91",
                 created_at: "2026-07-05T09:01:00Z"
               }
             ],
@@ -329,12 +349,15 @@ describe("student core pages", () => {
   it("renders the learning profile workspace from the real profile API", async () => {
     renderPage(<ProfilePage />);
 
-    expect(screen.getByRole("heading", { name: "学习画像" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "学习画像" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "画像证据" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "画像对话入口" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "动态学习画像工作台" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "八维学习画像" })).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: "画像动态" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "八维画像可信度雷达图" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "画像维度" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "画像问题回答" })).toBeInTheDocument();
     expect(await screen.findByText("期末前掌握神经网络")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "画像证据" })).toHaveTextContent("更新学习画像：学习目标、基础");
+    expect(screen.getByRole("main", { name: "画像动态" })).toHaveTextContent("更新学习画像：学习目标、基础");
+    expect(screen.queryByRole("button", { name: "更新目标" })).not.toBeInTheDocument();
   });
 
   it("renders practice as a focused three-state workspace", async () => {

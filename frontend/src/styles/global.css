@@ -1551,7 +1551,6 @@ a {
 }
 
 .panel-count,
-.profile-score,
 .masked-value,
 .settings-status {
   display: inline-flex;
@@ -1569,7 +1568,6 @@ a {
 }
 
 .library-side-stack,
-.profile-side-stack,
 .tutor-side-stack {
   display: grid;
   gap: 12px;
@@ -1627,8 +1625,7 @@ a {
 .feedback-status small,
 .settings-section p,
 .export-panel p,
-.report-brief p,
-.profile-dialog-entry p {
+.report-brief p {
   color: var(--text-muted);
   line-height: 1.6;
 }
@@ -1795,17 +1792,14 @@ a {
 }
 
 .settings-form-row label,
-.settings-inline-input,
-.profile-answer-box,
-.inline-edit-row {
+.settings-inline-input {
   display: grid;
   gap: 7px;
   min-width: 0;
 }
 
 .settings-form-row label span,
-.settings-inline-input span,
-.profile-answer-box span {
+.settings-inline-input span {
   color: var(--text-muted);
   font-size: 0.8rem;
   font-weight: 820;
@@ -1813,9 +1807,7 @@ a {
 
 .settings-form-row select,
 .settings-form-row input,
-.settings-inline-input input,
-.inline-edit-row input,
-.profile-answer-box textarea {
+.settings-inline-input input {
   width: 100%;
   min-width: 0;
   min-height: 40px;
@@ -1827,65 +1819,13 @@ a {
   outline: 0;
 }
 
-.profile-answer-box textarea {
-  min-height: 84px;
-  padding: 11px 12px;
-  resize: vertical;
-}
-
 .settings-form-row select:focus,
 .settings-form-row input:focus,
-.settings-inline-input input:focus,
-.inline-edit-row input:focus,
-.profile-answer-box textarea:focus {
+.settings-inline-input input:focus {
   border-color: rgba(8, 127, 115, 0.42);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-.profile-dimension-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 14px 0;
-}
-
-.profile-dimension {
-  min-height: 98px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.58);
-}
-
-.profile-dimension span {
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  font-weight: 800;
-}
-
-.profile-dimension strong {
-  display: block;
-  margin-top: 10px;
-  line-height: 1.45;
-}
-
-.profile-dimension.warning {
-  border-color: rgba(215, 90, 74, 0.24);
-  background: var(--coral-soft);
-}
-
-.profile-dialog-entry {
-  display: grid;
-  gap: 12px;
-}
-
-.inline-edit-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  margin-bottom: 10px;
-}
-
-.profile-prompt-strip,
 .evidence-tag {
   display: inline-flex;
   align-items: center;
@@ -2418,10 +2358,6 @@ a {
     width: 100%;
   }
 
-  .inline-edit-row {
-    grid-template-columns: 1fr;
-  }
-
   .settings-form-row {
     flex-direction: column;
     align-items: stretch;
@@ -2431,8 +2367,7 @@ a {
     min-width: 0;
   }
 
-  .first-run-options,
-  .profile-dimension-grid {
+  .first-run-options {
     grid-template-columns: 1fr;
   }
 
@@ -7596,30 +7531,6 @@ a {
   .agent-trace-disclosure-trigger {
     width: 100%;
   }
-}
-
-/* Phase 15: adaptive learning evidence and visualizations */
-.profile-dimension small {
-  display: block;
-  margin-top: 8px;
-  color: var(--text-muted);
-  font-size: 0.74rem;
-}
-
-.profile-side-stack .evidence-list li > span {
-  display: grid;
-  flex: 1;
-  gap: 4px;
-  min-width: 0;
-}
-
-.profile-side-stack .evidence-list small {
-  color: var(--text-muted);
-  font-size: 0.76rem;
-}
-
-.profile-side-stack .agent-trace-disclosure {
-  margin-top: 4px;
 }
 
 .learning-echart {

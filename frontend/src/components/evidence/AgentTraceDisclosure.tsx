@@ -8,9 +8,10 @@ import { AgentTimeline } from "./AgentTimeline";
 type AgentTraceDisclosureProps = {
   traceId: string | null | undefined;
   label: string;
+  staggered?: boolean;
 };
 
-export function AgentTraceDisclosure({ traceId, label }: AgentTraceDisclosureProps) {
+export function AgentTraceDisclosure({ traceId, label, staggered = false }: AgentTraceDisclosureProps) {
   const [open, setOpen] = useState(false);
   const traceQuery = useQuery({
     queryKey: ["agents", "trace", traceId],
@@ -43,7 +44,7 @@ export function AgentTraceDisclosure({ traceId, label }: AgentTraceDisclosurePro
         <div className="agent-trace-disclosure-content" role="region" aria-label={`${label}执行轨迹`}>
           {traceQuery.isPending ? <p className="empty-inline-note">正在读取协作轨迹。</p> : null}
           {traceQuery.isError ? <p className="form-error">协作轨迹读取失败，请稍后重试。</p> : null}
-          {events.length > 0 ? <AgentTimeline events={events} /> : null}
+          {events.length > 0 ? <AgentTimeline events={events} staggered={staggered} /> : null}
         </div>
       ) : null}
     </div>

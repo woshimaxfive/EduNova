@@ -1,16 +1,18 @@
 import { CheckCircle, Robot, WarningCircle } from "@phosphor-icons/react";
+import type { CSSProperties } from "react";
 
 import { type AgentTraceEvent } from "../../types/api";
 
 type AgentTimelineProps = {
   events: AgentTraceEvent[];
+  staggered?: boolean;
 };
 
-export function AgentTimeline({ events }: AgentTimelineProps) {
+export function AgentTimeline({ events, staggered = false }: AgentTimelineProps) {
   return (
-    <ol className="agent-timeline" aria-label="Agent 执行轨迹">
-      {events.map((event) => (
-        <li key={event.id} className={event.status}>
+    <ol className={staggered ? "agent-timeline agent-timeline-staggered" : "agent-timeline"} aria-label="Agent 执行轨迹">
+      {events.map((event, index) => (
+        <li key={event.id} className={event.status} style={staggered ? { "--trace-step-index": index } as CSSProperties : undefined}>
           <span className="timeline-icon" aria-hidden="true">
             {event.status === "warning" ? (
               <WarningCircle size={18} weight="duotone" />

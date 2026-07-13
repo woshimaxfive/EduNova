@@ -149,6 +149,7 @@ Phase 18 已新增统一 `ModelExecutionRuntime` 和 `model_call_runs`，九条 
 - [x] Phase 18：模型错误分类、同配置有限重试、Redis 用户/全局并发、熔断、首 token 后禁止重放和安全错误恢复落地。
 - [x] Phase 18：`model_call_runs`、Agent trace 模型调用摘要、九 Graph 离线质量回归和显式真实模型评测命令落地。
 - [x] 文档口径同步：统一为九条真实生产 Graph；学习档案导出保持普通异步服务。
+- [x] 动态学习画像工作台：自然语言画像更新、八维可信度雷达、候选/应用证据分离、事件级 ProfileGraph 回放和一次性状态动画落地。
 - [x] 大模型参与度补强：路径使用模型排序理由，练习使用题目增强与错因诊断，报告使用叙事增强；客观数字保持确定性规则，模型失败完整 fallback。
 - [x] 检索能力升级：主页资料级和课程级 RAG 都可使用 pgvector SQL cosine 候选；课程侧按 embedding 来源/模型隔离，本地 hash 不宣称语义命中。
 - [x] 多模态资源补强：已完成 Markmap 思维导图、Mermaid 动画图解、交互练习、Pyodide Python 和真实 PPTX；不宣称生成视频。

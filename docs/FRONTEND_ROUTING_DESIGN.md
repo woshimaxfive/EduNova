@@ -49,7 +49,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 | `/app/library` | LibraryPage | 资料库、课程资料、上传建课入口 |
 | `/app/path` | LearningPathPage | 双模式学习任务工作台；支持 `view=path|sprint`、任务状态/冲刺日期导航、生成与详情抽屉 |
 | `/app/studio` | StudioPage | 桌面成果工作台；支持 `course_id` 与可选 `resource_id` 恢复当前课程和成果 |
-| `/app/profile` | ProfilePage | 真实 8 维画像、逐维可信度、候选/已应用证据、画像对话和 ProfileGraph 轨迹 |
+| `/app/profile` | ProfilePage | 对话式动态画像工作台；八维可信度雷达、候选/已应用证据、自然语言更新和 ProfileGraph 回放 |
 | `/app/practice` | PracticePage | adaptive 课程练习、最近会话/草稿恢复、确定性批改和复习线索 |
 | `/app/reports` | ReportsPage | 宽屏实时学习仪表盘、最新报告快照、薄弱点行动、ReportGraph 和 Markdown/PDF/DOCX 异步导出 |
 | `/app/settings` | SettingsPage | 模型连接、个人设置、数据导出 |
@@ -363,7 +363,7 @@ Phase 3A 为了工程清晰，可以先有对应路由，但视觉上不做复�
 | CourseSpacePage | 课程对话空间、课程资料、课程内历史、引用和学习闭环入口 | 不替代总 AI 学习主页 |
 | LearningPathPage | 展示阶段任务、路径依据和下一步行动 | 不放到首页抢主视觉，不做复杂项目管理看板 |
 | StudioPage | 左侧成果库、中央资源画布、生成/详情覆盖抽屉 | 不做纵向长表单、横向卡片墙或常驻第三栏 |
-| ProfilePage | 从 `/profiles/me` 和 `/profiles/events` 读取真实画像与证据，通过 `/profiles/chat` 更新画像 | 不做复杂用户中心，不展示静态假画像 |
+| ProfilePage | 从 `/profiles/me` 和 `/profiles/events` 读取真实画像与证据，通过底部自然语言输入调用 `/profiles/chat`；可信度雷达只表达证据充分程度 | 不做逐字段画像表单，不展示静态假画像或虚假实时分析 |
 | PracticePage | 真实课程练习、确定性评分、错因诊断、弱点与已有路径回流、Graph 轨迹 | 不做完整考试系统，不让模型修改客观分数 |
 | ReportsPage | 实时掌握度、最近练习、最近 5 次趋势、报告快照、新鲜度、证据审核、ReportGraph 和 Markdown/PDF/DOCX 异步导出 | 不做运营报表、历史版本列表或自动报告，不做假导出 |
 | SettingsPage | 模型连接、个人资料、导出设置；Phase 6.2 已接入多模型配置列表、创建、测试、设默认和删除，Provider 预设收敛为国内常用和本地部署入口；账号昵称通过 `PATCH /auth/me` 真实保存，隐私与数据边界只做只读说明和报告页导出入口 | 不做复杂管理员后台，不放深度思考或联网搜索开关 |

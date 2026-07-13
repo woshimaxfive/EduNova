@@ -5,6 +5,7 @@ export const AUTH_ENDPOINTS = {
   register: "/auth/register",
   login: "/auth/login",
   me: "/auth/me",
+  password: "/auth/me/password",
   logout: "/auth/logout"
 } as const;
 
@@ -22,6 +23,11 @@ export type LoginRequest = {
 
 export type UpdateCurrentUserRequest = {
   display_name: string;
+};
+
+export type ChangePasswordRequest = {
+  current_password: string;
+  new_password: string;
 };
 
 export type LoginResponse = {
@@ -47,6 +53,11 @@ export async function getCurrentUser() {
 
 export async function updateCurrentUser(payload: UpdateCurrentUserRequest) {
   const response = await apiClient.patch<ApiEnvelope<ApiUser>>(AUTH_ENDPOINTS.me, payload);
+  return response.data;
+}
+
+export async function changePassword(payload: ChangePasswordRequest) {
+  const response = await apiClient.patch<ApiEnvelope<{ ok: true }>>(AUTH_ENDPOINTS.password, payload);
   return response.data;
 }
 

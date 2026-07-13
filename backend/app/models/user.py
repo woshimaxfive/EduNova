@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
+from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.base import Base
@@ -25,6 +25,7 @@ class User(IdMixin, TimestampMixin, Base):
         nullable=False,
         default="blank",
     )
+    auth_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     owned_courses: Mapped[list["Course"]] = relationship(
         back_populates="owner",

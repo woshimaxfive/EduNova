@@ -146,12 +146,12 @@ cd ..
 | --- | --- |
 | `/auth/register` | 注册成功、重复邮箱、弱密码 |
 | `/auth/login` | 登录成功、密码错误 |
-| `/auth/me` | 有 token 成功，无 token 失败 |
+| `/auth/me`、`/auth/me/password` | 有 token 成功、无 token 失败、昵称保存、当前密码校验、弱密码/相同密码拒绝、旧密码失效、新密码登录和旧 JWT 失效 |
 | `/dashboard/summary` | 无 token 401、blank 用户空状态、ai_intro 用户返回当前用户课程和资料、真实进度显示、主页历史和资源摘要、多用户隔离 |
 | `/materials/upload`、`/materials`、`/materials/{material_id}`、`/materials/{material_id}/progress`、`/courses/{course_id}/materials` | 无 token 401、当前用户隔离、TXT/Markdown 轻解析、PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT uploaded、图片仅入库且不 OCR、不支持扩展名、大小限制、未归属筛选、课程关联唯一性、进度状态稳定 |
 | `/courses/from-materials`、`/courses/*` | 无 token 401、用户隔离、五类已解析资料建课、v2 结构、来源覆盖、先修 ID 映射、环路拦截、embedding warning、事务回滚和旧课程兼容 |
 | `/rag/search` | 无 token 401、用户隔离、关键词命中、向量命中、混合排序、懒加载、fallback、无命中和新增分数字段 |
-| `/settings/model`、`/settings/model/test`、`/settings/model/configs` | 无 token 401、多配置隔离、默认配置、Key 加密、脱敏返回、连接测试、OpenAI-compatible embedding 和不泄露 Key |
+| `/settings/model`、`/settings/model/test`、`/settings/model/configs` | 无 token 401、多配置隔离、默认配置、Key 加密、脱敏返回、回答/向量独立测试、未配置向量不污染回答状态、测试摘要持久化、OpenAI-compatible embedding 和不泄露 Key |
 | `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、会话改名、软删除归档、删除后列表/详情隐藏、主页已选资料/联网/深思字段、同一 session 多轮上下文、上下文化 RAG/联网 query、无搜索 Key 不伪造来源、`home_tutor` trace、模型回答、SSE 流式、错误回滚和历史恢复 |
 | `/profiles/me`、`/profiles/chat`、`/profiles/events` | 无 token 401、稳定 8 维结构、显式更新、候选阈值、来源去重、自动应用、Review/Repair、逐维可信度、事件倒序、用户隔离和 metadata 脱敏 |
 | `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要、上下文计数 metadata 和 metadata 白名单 |
@@ -195,7 +195,7 @@ cd ..
 - `/app/courses/:courseId` 的真实课程问答、引用来源、追问输入和“开始提问”聚焦；旧 `/app/tutor` 只验证回到已登录主页。
 - 练习页的作答、批改反馈和薄弱点复习队列。
 - 报告页的掌握度地图、学习报告、异步导出任务、格式选择和下载反馈。
-- 设置页的模型设置、隐私与数据和账号设置边界。
+- 设置页三分区导航、URL 恢复、模型配置列表与编辑器、回答/向量独立测试、未保存禁测、删除确认、昵称、换密退出和隐私入口。
 - 课程内提问发送、课程内历史追加和 Enter/Shift+Enter 输入习惯。
 - 主页发送后新增并高亮左侧历史；空态不渲染预设快捷问题；回答下方来源/学习路径/课堂协作轨迹可展开。
 - 最近学习“全部课程”必须按需调用 `/courses`，支持搜索、失败重试、`Escape`/遮罩关闭和课程空间跳转，不得跳转未实现的 `/app/courses` 列表页。

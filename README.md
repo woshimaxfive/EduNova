@@ -36,6 +36,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - `/materials/compare` 已由 `MaterialComparisonGraph` 接管；每次对比保存不可变版本，可恢复最近结果、追溯真实资料分块和审核轨迹。资料对比是资料库内的独立辅助工具，不会隐式修改学习路径或练习。
 - AI 辅导直接在 `/app/courses/:courseId` 课程空间内完成；已移除无独立能力的中转页，旧 `/app/tutor` 地址会回到学习主页。
 - 多套个人模型配置、默认配置切换、服务器 `.env` 兜底。
+- 设置中心将回答模型与向量模型分开测试并持久保存安全结果；账号区支持修改昵称和密码，密码更新后所有旧 JWT 立即失效；隐私区只说明真实的数据边界和档案导出入口。
 - 模型调用采用当前配置有限重试，不在故障后自动转发到另一 Provider；失败时保留各 Graph 的确定性 fallback。
 - `model_call_runs` 只记录模型名、状态、尝试次数、耗时和安全错误分类，Agent trace 可查看聚合调用摘要，不保存 Prompt 或回答正文。
 - OpenAI-compatible Embeddings 与 pgvector SQL cosine 候选；未配置或 Provider 失败时退回关键词检索，`local-hash-1536` 不再标记为语义命中。

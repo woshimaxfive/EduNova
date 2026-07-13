@@ -526,4 +526,5 @@ class ModelSetting(IdMixin, TimestampMixin, Base):
     last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_test_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    connection_test_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     tool_flags_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)

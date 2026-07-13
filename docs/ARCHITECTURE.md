@@ -525,8 +525,10 @@ Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已
 - 回答模型。
 - Embedding 模型字段，折叠在高级项中；Phase 6.4 起用于课程知识库向量化，缺省时自动使用显式本地 fallback。
 - 指定配置的连通性测试。
+- 回答模型与向量模型独立的一次性连通性测试；测试结果按配置安全持久化，未配置向量模型不会影响回答可用状态。
 - 默认配置选择。
 - 学生账号昵称通过 `PATCH /auth/me` 真实保存，并同步到侧栏账号入口；邮箱、角色和 starter mode 保持只读。
+- 学生可通过 `PATCH /auth/me/password` 验证当前密码后换密；JWT 携带 `auth_version`，换密后递增版本并使所有旧登录状态失效。
 - 隐私与数据边界作为只读说明展示，学习档案导出仍从报告页按课程生成。
 
 配置解析优先级：
@@ -535,7 +537,7 @@ Phase 6.1 已实现 OpenAI-compatible Chat Completions 第一版，Phase 6.3 已
 当前用户默认有效配置 -> .env 的 SYSTEM_MODEL_* -> 未配置提示
 ```
 
-用户 API Key 使用 `MODEL_SETTINGS_ENCRYPTION_KEY` 派生的 Fernet 加密后保存到 `model_settings.api_key_ciphertext`。每条用户配置单独保存密钥密文、测试状态和默认标记；`GET /settings/model/configs` 只返回配置摘要、脱敏 Key、服务器兜底摘要和默认配置 id，不返回明文 Key。旧 `/settings/model` 仍作为兼容接口读取或更新当前默认配置。设置页 Provider 预设首位是讯飞星火 Spark，聊天实际走 OpenAI-compatible Chat Completions；embedding 实际走 OpenAI-compatible Embeddings。讯飞原生 Embeddingp/Embeddingq 因独立授权、签名鉴权和 2560 维输出，仍放到后续专项。
+用户 API Key 使用 `MODEL_SETTINGS_ENCRYPTION_KEY` 派生的 Fernet 加密后保存到 `model_settings.api_key_ciphertext`。每条用户配置单独保存密钥密文、回答/向量测试摘要和默认标记；`GET /settings/model/configs` 只返回配置摘要、脱敏 Key、服务器兜底摘要和默认配置 id，不返回明文 Key。旧 `/settings/model` 仍作为兼容接口读取或更新当前默认配置。设置页 Provider 预设首位是讯飞星火 Spark，聊天实际走 OpenAI-compatible Chat Completions；embedding 实际走 OpenAI-compatible Embeddings。讯飞原生 Embeddingp/Embeddingq 因独立授权、签名鉴权和 2560 维输出，仍放到后续专项。
 
 Phase 18 后，个人配置只有在字段不完整时才沿用现有服务器配置兜底；已经对个人配置发起的请求发生超时、限流或服务故障时，只在同一配置内有限重试，不把学习内容自动发送给另一 Provider。普通调用与 Embedding 最多 3 次，流式调用只允许在首 token 前重试。Redis 暂不可用时限流与熔断 fail-open，但模型 HTTP 超时、Graph fallback 和安全审计边界继续生效。
 

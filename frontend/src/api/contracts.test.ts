@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { AGENT_ENDPOINTS, getAgentTrace, mapAgentTraceStepToEvent } from "./agents";
-import { AUTH_ENDPOINTS, login } from "./auth";
+import { AUTH_ENDPOINTS, changePassword, login } from "./auth";
 import { apiClient } from "./client";
 import { COURSE_ENDPOINTS, getCourseLearningState, getMasteryMap, updateCourseWeaknessReviewItem } from "./courses";
 import { DASHBOARD_ENDPOINTS } from "./dashboard";
@@ -138,6 +138,7 @@ describe("frontend API contracts", () => {
     expect(SETTINGS_ENDPOINTS.config(7)).toBe("/settings/model/configs/7");
     expect(SETTINGS_ENDPOINTS.testConfig(7)).toBe("/settings/model/configs/7/test");
     expect(SETTINGS_ENDPOINTS.defaultConfig(7)).toBe("/settings/model/configs/7/default");
+    expect(AUTH_ENDPOINTS.password).toBe("/auth/me/password");
   });
 
   it("posts login requests through the shared API client", async () => {
@@ -190,6 +191,43 @@ describe("frontend API contracts", () => {
       ]);
       expect(response.data.access_token).toBe("jwt-token");
       expect(response.data.user.display_name).toBe("演示学生");
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
+  });
+
+  it("patches password changes through the protected auth endpoint", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const calls: Array<{ url?: string; method?: string; data?: unknown }> = [];
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({
+        url: config.url,
+        method: config.method,
+        data: typeof config.data === "string" ? JSON.parse(config.data) : config.data
+      });
+      return {
+        data: { data: { ok: true }, trace_id: "trace_password" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    try {
+      const response = await changePassword({
+        current_password: "Password123",
+        new_password: "NewPassword456"
+      });
+      expect(calls).toEqual([{
+        url: AUTH_ENDPOINTS.password,
+        method: "patch",
+        data: {
+          current_password: "Password123",
+          new_password: "NewPassword456"
+        }
+      }]);
+      expect(response.data.ok).toBe(true);
     } finally {
       apiClient.defaults.adapter = previousAdapter;
     }
@@ -1744,7 +1782,7 @@ describe("frontend API contracts", () => {
         {
           url: SETTINGS_ENDPOINTS.testModel,
           method: "post",
-          data: undefined
+          data: { operation: "chat" }
         }
       ]);
       expect(summary.data.source).toBe("user");
@@ -1851,7 +1889,7 @@ describe("frontend API contracts", () => {
         },
         { url: SETTINGS_ENDPOINTS.config(3), method: "patch", data: { chat_model: "4.0Ultra", api_key: "" } },
         { url: SETTINGS_ENDPOINTS.defaultConfig(3), method: "post", data: undefined },
-        { url: SETTINGS_ENDPOINTS.testConfig(3), method: "post", data: undefined },
+        { url: SETTINGS_ENDPOINTS.testConfig(3), method: "post", data: { operation: "chat" } },
         { url: SETTINGS_ENDPOINTS.config(3), method: "delete", data: undefined }
       ]);
     } finally {

@@ -128,6 +128,23 @@ class UpdateModelConfigRequest(BaseModel):
         return str(value).strip()
 
 
+ModelConnectionOperation = Literal["chat", "embedding"]
+
+
+class ModelConnectionTestRequest(BaseModel):
+    operation: ModelConnectionOperation = "chat"
+
+
+class ModelConnectionTestSnapshot(BaseModel):
+    operation: ModelConnectionOperation
+    ok: bool
+    model: str | None
+    message: str
+    code: str | None = None
+    retryable: bool = False
+    tested_at: datetime
+
+
 class ModelSettingsSummary(BaseModel):
     source: Literal["user", "system", "none"]
     provider: str
@@ -155,6 +172,7 @@ class ModelConfigSummary(BaseModel):
     last_test_ok: bool | None
     last_test_message: str | None
     last_tested_at: datetime | None
+    connection_tests: dict[str, ModelConnectionTestSnapshot] = Field(default_factory=dict)
 
 
 class ModelSettingsListResponse(BaseModel):
@@ -169,6 +187,11 @@ class ModelConnectionTestResponse(BaseModel):
     chat_model: str | None
     message: str
     config_id: int | None = None
+    operation: ModelConnectionOperation = "chat"
+    model: str | None = None
+    code: str | None = None
+    retryable: bool = False
+    tested_at: datetime
 
 
 @dataclass(frozen=True)
@@ -279,6 +302,7 @@ class ModelSettingsService:
             display_name="默认模型配置",
             is_default=True,
         )
+        self._clear_changed_connection_tests(setting, payload)
         self._apply_settings_payload(setting, payload)
         setting.is_default = True
         self.repository.unset_defaults_for_user(user.id, except_setting_id=setting.id)
@@ -303,6 +327,7 @@ class ModelSettingsService:
 
     def update_config(self, user: User, config_id: int, payload: UpdateModelConfigRequest) -> ModelConfigSummary:
         setting = self._get_user_setting_or_raise(user, config_id)
+        self._clear_changed_connection_tests(setting, payload)
         if payload.display_name is not None and payload.display_name != setting.display_name:
             self._ensure_unique_display_name(user.id, payload.display_name, exclude_config_id=config_id)
             setting.display_name = payload.display_name
@@ -462,66 +487,120 @@ class ModelSettingsService:
             raise ModelProviderError("模型服务返回了不匹配的向量维度。")
         return vectors
 
-    def test_connection(self, user: User) -> ModelConnectionTestResponse:
-        setting = self.repository.get_default_for_user(user.id)
-        if setting is not None:
-            return self.test_config_connection(user, setting.id)
+    def test_connection(
+        self,
+        user: User,
+        operation: ModelConnectionOperation = "chat",
+    ) -> ModelConnectionTestResponse:
+        runtime = (
+            self.resolve_embedding_runtime_config(user)
+            if operation == "embedding"
+            else self.resolve_runtime_config(user)
+        )
+        return self._test_runtime(runtime, user_id=user.id, operation=operation)
 
-        runtime = self.resolve_runtime_config(user)
-        if not runtime.can_use_model:
-            return ModelConnectionTestResponse(
-                ok=False,
-                source=runtime.source,
-                chat_model=runtime.chat_model,
-                message="当前未配置可用模型。",
-            )
-        return self._test_runtime(runtime, user_id=user.id)
-
-    def test_config_connection(self, user: User, config_id: int) -> ModelConnectionTestResponse:
+    def test_config_connection(
+        self,
+        user: User,
+        config_id: int,
+        operation: ModelConnectionOperation = "chat",
+    ) -> ModelConnectionTestResponse:
         setting = self._get_user_setting_or_raise(user, config_id)
-        runtime = self._runtime_from_user_setting(setting)
-        result = self._test_runtime(runtime, user_id=user.id)
-        setting.last_test_ok = result.ok
-        setting.last_test_message = result.message
-        setting.last_tested_at = datetime.now(UTC)
+        runtime = (
+            self._embedding_runtime_from_user_setting(setting)
+            if operation == "embedding"
+            else self._runtime_from_user_setting(setting)
+        )
+        result = self._test_runtime(runtime, user_id=user.id, operation=operation)
+        tests = dict(setting.connection_test_json or {})
+        tests[operation] = ModelConnectionTestSnapshot(
+            operation=operation,
+            ok=result.ok,
+            model=result.model,
+            message=result.message,
+            code=result.code,
+            retryable=result.retryable,
+            tested_at=result.tested_at,
+        ).model_dump(mode="json")
+        setting.connection_test_json = tests
+        if operation == "chat":
+            setting.last_test_ok = result.ok
+            setting.last_test_message = result.message
+            setting.last_tested_at = result.tested_at
         self._save_and_commit(setting)
         return result
 
-    def _test_runtime(self, runtime: RuntimeModelConfig, *, user_id: int) -> ModelConnectionTestResponse:
-        if not runtime.can_use_model:
+    def _test_runtime(
+        self,
+        runtime: RuntimeModelConfig,
+        *,
+        user_id: int,
+        operation: ModelConnectionOperation,
+    ) -> ModelConnectionTestResponse:
+        tested_at = datetime.now(UTC)
+        model = runtime.embedding_model if operation == "embedding" else runtime.chat_model
+        if not runtime.can_use_model or model is None:
+            label = "向量模型" if operation == "embedding" else "回答模型"
             return ModelConnectionTestResponse(
                 ok=False,
                 source=runtime.source,
                 chat_model=runtime.chat_model,
-                message="当前未配置可用模型。",
+                message=f"当前未配置可用{label}。",
                 config_id=runtime.config_id,
+                operation=operation,
+                model=model,
+                code="not_configured",
+                tested_at=tested_at,
             )
 
         try:
-            config = OpenAICompatibleConfig(
-                base_url=runtime.base_url or "",
-                api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
-                chat_model=runtime.chat_model or "",
-            )
             with model_execution_scope(ModelExecutionContext(purpose="connection_test")):
-                self.execution_runtime.execute(
-                    user_id=user_id,
-                    provider_source=runtime.source,
-                    model_config_id=runtime.config_id,
-                    model_name=runtime.chat_model or "unknown",
-                    operation="chat",
-                    call=lambda: self.provider.chat_completion(
-                        config=config,
-                        messages=[
-                            {"role": "system", "content": "你是 EduNova 的模型连通性检查器。"},
-                            {"role": "user", "content": "请只回复 ok。"},
-                        ],
+                if operation == "embedding":
+                    embedding_config = OpenAICompatibleEmbeddingConfig(
+                        base_url=runtime.base_url or "",
+                        api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+                        embedding_model=runtime.embedding_model or "",
+                    )
+                    self.execution_runtime.execute(
+                        user_id=user_id,
+                        provider_source=runtime.source,
+                        model_config_id=runtime.config_id,
+                        model_name=model,
+                        operation="embedding",
+                        call=lambda: self.provider.embed_texts(
+                            config=embedding_config,
+                            texts=["EduNova 向量连接测试"],
+                            timeout_seconds=self.settings.model_request_timeout_seconds,
+                            dimensions=1536,
+                        ),
                         timeout_seconds=self.settings.model_request_timeout_seconds,
-                    ),
-                    timeout_seconds=self.settings.model_request_timeout_seconds,
-                    max_attempts=1,
-                    bypass_circuit=True,
-                )
+                        max_attempts=1,
+                        bypass_circuit=True,
+                    )
+                else:
+                    chat_config = OpenAICompatibleConfig(
+                        base_url=runtime.base_url or "",
+                        api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+                        chat_model=runtime.chat_model or "",
+                    )
+                    self.execution_runtime.execute(
+                        user_id=user_id,
+                        provider_source=runtime.source,
+                        model_config_id=runtime.config_id,
+                        model_name=model,
+                        operation="chat",
+                        call=lambda: self.provider.chat_completion(
+                            config=chat_config,
+                            messages=[
+                                {"role": "system", "content": "你是 EduNova 的模型连通性检查器。"},
+                                {"role": "user", "content": "请只回复 ok。"},
+                            ],
+                            timeout_seconds=self.settings.model_request_timeout_seconds,
+                        ),
+                        timeout_seconds=self.settings.model_request_timeout_seconds,
+                        max_attempts=1,
+                        bypass_circuit=True,
+                    )
         except ModelProviderError as exc:
             return ModelConnectionTestResponse(
                 ok=False,
@@ -529,14 +608,34 @@ class ModelSettingsService:
                 chat_model=runtime.chat_model,
                 message=str(exc),
                 config_id=runtime.config_id,
+                operation=operation,
+                model=model,
+                code=exc.code,
+                retryable=exc.retryable,
+                tested_at=tested_at,
+            )
+        except Exception:
+            return ModelConnectionTestResponse(
+                ok=False,
+                source=runtime.source,
+                chat_model=runtime.chat_model,
+                message="连接测试失败，请稍后重试。",
+                config_id=runtime.config_id,
+                operation=operation,
+                model=model,
+                code="internal_error",
+                tested_at=tested_at,
             )
 
         return ModelConnectionTestResponse(
             ok=True,
             source=runtime.source,
             chat_model=runtime.chat_model,
-            message="模型连接成功。",
+            message="向量模型连接成功。" if operation == "embedding" else "模型连接成功。",
             config_id=runtime.config_id,
+            operation=operation,
+            model=model,
+            tested_at=tested_at,
         )
 
     def _runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
@@ -626,6 +725,7 @@ class ModelSettingsService:
             last_test_ok=setting.last_test_ok,
             last_test_message=setting.last_test_message,
             last_tested_at=setting.last_tested_at,
+            connection_tests=self._parse_connection_tests(setting.connection_test_json),
         )
 
     def _summary_from_runtime(self, runtime: RuntimeModelConfig, source: Literal["user", "system"]) -> ModelSettingsSummary:
@@ -669,6 +769,44 @@ class ModelSettingsService:
             setting.preset_id = payload.preset_id or None
         if payload.api_key:
             setting.api_key_ciphertext = self._encrypt_api_key(payload.api_key)
+
+    def _clear_changed_connection_tests(
+        self,
+        setting: ModelSetting,
+        payload: SaveModelSettingsRequest | UpdateModelConfigRequest,
+    ) -> None:
+        current_key = self._decrypt_api_key(setting.api_key_ciphertext)
+        shared_changed = (
+            (payload.provider is not None and self._normalize_provider(payload.provider) != setting.provider)
+            or (payload.base_url is not None and payload.base_url != setting.base_url)
+            or (bool(payload.api_key) and payload.api_key != current_key)
+        )
+        chat_changed = shared_changed or (payload.chat_model is not None and payload.chat_model != setting.chat_model)
+        embedding_changed = shared_changed or (
+            payload.embedding_model is not None and (payload.embedding_model or None) != setting.embedding_model
+        )
+        tests = dict(setting.connection_test_json or {})
+        if chat_changed:
+            tests.pop("chat", None)
+            setting.last_test_ok = None
+            setting.last_test_message = None
+            setting.last_tested_at = None
+        if embedding_changed:
+            tests.pop("embedding", None)
+        setting.connection_test_json = tests
+
+    @staticmethod
+    def _parse_connection_tests(raw_tests: dict | None) -> dict[str, ModelConnectionTestSnapshot]:
+        parsed: dict[str, ModelConnectionTestSnapshot] = {}
+        for operation in ("chat", "embedding"):
+            value = (raw_tests or {}).get(operation)
+            if not isinstance(value, dict):
+                continue
+            try:
+                parsed[operation] = ModelConnectionTestSnapshot.model_validate(value)
+            except ValueError:
+                continue
+        return parsed
 
     def _save_and_commit(self, setting: ModelSetting) -> None:
         try:

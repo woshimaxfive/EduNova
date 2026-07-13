@@ -1708,6 +1708,11 @@ describe("student interaction affordances", () => {
               ok: true,
               source: "user",
               chat_model: "hunyuan-turbos-latest",
+              operation: "chat",
+              model: "hunyuan-turbos-latest",
+              code: null,
+              retryable: false,
+              tested_at: "2026-07-13T09:30:00Z",
               message: "模型连接成功。",
               config_id: 2
             },
@@ -1771,7 +1776,6 @@ describe("student interaction affordances", () => {
     expect(await screen.findByRole("button", { name: /星火 Lite/ })).toBeInTheDocument();
     expect(screen.getByText("默认配置")).toBeInTheDocument();
     expect(screen.getByText("sp-u...oken")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "昵称" })).toHaveValue("设置学生");
     expect(screen.queryByText("sk-••••••••")).not.toBeInTheDocument();
     expect(screen.queryByText("深度思考")).not.toBeInTheDocument();
     expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();
@@ -1809,6 +1813,7 @@ describe("student interaction affordances", () => {
         base_url: "https://api.hunyuan.cloud.tencent.com/v1",
         api_key: "hunyuan-user-secret",
         chat_model: "hunyuan-turbos-latest",
+        embedding_model: "",
         make_default: false
       }
     });
@@ -1821,23 +1826,29 @@ describe("student interaction affordances", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("已设为默认模型配置。"));
 
-    await user.click(screen.getByRole("button", { name: "测试连接" }));
+    await user.click(screen.getByRole("button", { name: "测试回答模型" }));
 
     await waitFor(() => expect(calls).toContainEqual({
       method: "post",
-      url: SETTINGS_ENDPOINTS.testConfig(2)
+      url: SETTINGS_ENDPOINTS.testConfig(2),
+      payload: { operation: "chat" }
     }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("模型连接成功。"));
 
     await user.click(screen.getByRole("button", { name: "删除配置" }));
+    const deleteDialog = screen.getByRole("dialog", { name: "删除模型配置" });
+    expect(within(deleteDialog).getByText(/如果它是默认配置/)).toBeInTheDocument();
+    await user.click(within(deleteDialog).getByRole("button", { name: "确认删除" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: /腾讯混元默认/ })).not.toBeInTheDocument());
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("模型配置已删除。"));
 
+    await user.click(screen.getByRole("button", { name: /账号安全/ }));
+    expect(screen.getByRole("textbox", { name: "昵称" })).toHaveValue("设置学生");
     await user.clear(screen.getByRole("textbox", { name: "昵称" }));
     await user.type(screen.getByRole("textbox", { name: "昵称" }), "新设置学生");
-    await user.click(screen.getByRole("button", { name: "保存设置" }));
+    await user.click(screen.getByRole("button", { name: "保存昵称" }));
 
     await waitFor(() => expect(calls).toContainEqual({
       method: "patch",
@@ -1847,7 +1858,107 @@ describe("student interaction affordances", () => {
       }
     }));
     expect(useAuthStore.getState().user?.displayName).toBe("新设置学生");
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("账号设置已保存。"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("昵称已更新。"));
+  });
+
+  it("validates password changes and clears the current session after success", async () => {
+    const user = userEvent.setup();
+    const calls: Array<{ method: string; url: string; payload: unknown }> = [];
+
+    useAuthStore.getState().setSession({
+      token: "password-token",
+      user: {
+        id: 88,
+        email: "password@edunova.local",
+        displayName: "密码学生",
+        role: "student",
+        starterMode: "blank"
+      }
+    });
+
+    apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+      const payload = parsePayload(config.data);
+      calls.push({ method, url, payload });
+
+      if (url === SETTINGS_ENDPOINTS.configs && method === "get") {
+        return {
+          data: {
+            data: {
+              configs: [],
+              default_config_id: null,
+              system_summary: {
+                source: "system",
+                provider: "openai_compatible",
+                base_url: "https://system-model.example.local/v1",
+                chat_model: "system-chat",
+                embedding_model: null,
+                has_api_key: true,
+                api_key_masked: "sk-s...cret",
+                can_use_model: true
+              }
+            },
+            trace_id: "trace_settings_password"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === AUTH_ENDPOINTS.password && method === "patch") {
+        return {
+          data: { data: { ok: true }, trace_id: "trace_password_changed" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      return {
+        data: { data: {}, trace_id: "trace_default" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`${PATHS.settings}?section=account`]}>
+        <Routes>
+          <Route path={PATHS.settings} element={<SettingsPage />} />
+          <Route path={PATHS.login} element={<div>密码修改后登录页</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: "账号安全" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("当前密码"), "Password123");
+    await user.type(screen.getByLabelText("新密码"), "NewPassword456");
+    await user.type(screen.getByLabelText("确认新密码"), "Different789");
+    await user.click(screen.getByRole("button", { name: "更新密码并退出登录" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("两次输入的新密码不一致。");
+    expect(calls.some((call) => call.url === AUTH_ENDPOINTS.password)).toBe(false);
+
+    await user.clear(screen.getByLabelText("确认新密码"));
+    await user.type(screen.getByLabelText("确认新密码"), "NewPassword456");
+    await user.click(screen.getByRole("button", { name: "更新密码并退出登录" }));
+
+    await waitFor(() => expect(calls).toContainEqual({
+      method: "patch",
+      url: AUTH_ENDPOINTS.password,
+      payload: {
+        current_password: "Password123",
+        new_password: "NewPassword456"
+      }
+    }));
+    expect(await screen.findByText("密码修改后登录页")).toBeInTheDocument();
+    expect(useAuthStore.getState().token).toBeNull();
   });
 
   it("creates a real course from the library page and enters the new course", async () => {

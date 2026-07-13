@@ -12,6 +12,7 @@ from backend.app.services.model_settings import (
     ModelSettingsNotFoundError,
     ModelSettingsValidationError,
     ModelSettingsConfigurationError,
+    ModelConnectionTestRequest,
     ModelSettingsService,
     SaveModelConfigRequest,
     SaveModelSettingsRequest,
@@ -159,11 +160,16 @@ def set_default_model_config(
 @router.post("/model/configs/{config_id}/test")
 def test_model_config(
     config_id: int,
+    payload: ModelConnectionTestRequest | None = None,
     current_user: User = Depends(get_current_user),
     service: ModelSettingsService = Depends(get_model_settings_service),
 ) -> dict:
     try:
-        result = service.test_config_connection(current_user, config_id)
+        result = service.test_config_connection(
+            current_user,
+            config_id,
+            operation=payload.operation if payload is not None else "chat",
+        )
     except ModelSettingsNotFoundError as exc:
         raise ApiError(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -182,11 +188,15 @@ def test_model_config(
 
 @router.post("/model/test")
 def test_model_settings(
+    payload: ModelConnectionTestRequest | None = None,
     current_user: User = Depends(get_current_user),
     service: ModelSettingsService = Depends(get_model_settings_service),
 ) -> dict:
     try:
-        result = service.test_connection(current_user)
+        result = service.test_connection(
+            current_user,
+            operation=payload.operation if payload is not None else "chat",
+        )
     except ModelProviderError as exc:
         raise ApiError(
             status_code=status.HTTP_502_BAD_GATEWAY,

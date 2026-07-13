@@ -516,6 +516,80 @@ def test_connection_test_can_target_one_config_and_persist_safe_status() -> None
     assert provider.calls[0]["config"].chat_model == "lite"
 
 
+def test_connection_tests_persist_chat_and_embedding_independently() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    provider = FakeProvider(content="ok")
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(
+        repository=repo,
+        settings=make_settings(),
+        provider=provider,
+        execution_runtime=ImmediateExecutionRuntime(),
+    )
+    created = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="双模型配置",
+            preset_id="custom",
+            provider="openai_compatible",
+            base_url="https://models.example.local/v1",
+            api_key="safe-secret",
+            chat_model="chat-model",
+            embedding_model="embedding-model",
+            make_default=True,
+        ),
+    ))
+
+    chat_result = as_dict(service.test_config_connection(user, created["id"], operation="chat"))
+    embedding_result = as_dict(service.test_config_connection(user, created["id"], operation="embedding"))
+    stored = repo.settings_by_id[created["id"]]
+    summary = as_dict(service.list_configs(user))["configs"][0]
+
+    assert chat_result["operation"] == "chat"
+    assert chat_result["model"] == "chat-model"
+    assert embedding_result["operation"] == "embedding"
+    assert embedding_result["model"] == "embedding-model"
+    assert stored.connection_test_json["chat"]["ok"] is True
+    assert stored.connection_test_json["embedding"]["ok"] is True
+    assert summary["connection_tests"]["chat"]["model"] == "chat-model"
+    assert summary["connection_tests"]["embedding"]["model"] == "embedding-model"
+
+
+def test_embedding_not_configured_does_not_overwrite_chat_test_status() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(
+        repository=repo,
+        settings=make_settings(),
+        provider=FakeProvider(content="ok"),
+        execution_runtime=ImmediateExecutionRuntime(),
+    )
+    created = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="仅回答模型",
+            provider="openai_compatible",
+            base_url="https://models.example.local/v1",
+            api_key="safe-secret",
+            chat_model="chat-model",
+            make_default=True,
+        ),
+    ))
+
+    chat_result = as_dict(service.test_config_connection(user, created["id"], operation="chat"))
+    embedding_result = as_dict(service.test_config_connection(user, created["id"], operation="embedding"))
+    stored = repo.settings_by_id[created["id"]]
+
+    assert chat_result["ok"] is True
+    assert embedding_result["ok"] is False
+    assert embedding_result["code"] == "not_configured"
+    assert stored.last_test_ok is True
+    assert stored.connection_test_json["chat"]["ok"] is True
+    assert stored.connection_test_json["embedding"]["ok"] is False
+
+
 def test_model_settings_multi_config_migration_contract() -> None:
     migration_text = (
         __import__("pathlib")
@@ -759,6 +833,11 @@ def test_model_settings_routes_use_documented_envelopes() -> None:
         },
     )
     test_response = client.post("/api/v1/settings/model/test", headers={"Authorization": f"Bearer {token}"})
+    embedding_test_response = client.post(
+        "/api/v1/settings/model/test",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"operation": "embedding"},
+    )
     configs_response = client.get("/api/v1/settings/model/configs", headers={"Authorization": f"Bearer {token}"})
     create_response = client.post(
         "/api/v1/settings/model/configs",
@@ -799,6 +878,10 @@ def test_model_settings_routes_use_documented_envelopes() -> None:
     assert "sk-user-secret" not in str(put_response.json())
     assert test_response.status_code == 200
     assert test_response.json()["data"]["ok"] is True
+    assert test_response.json()["data"]["operation"] == "chat"
+    assert embedding_test_response.status_code == 200
+    assert embedding_test_response.json()["data"]["operation"] == "embedding"
+    assert embedding_test_response.json()["data"]["model"] == "user-embedding"
     assert configs_response.status_code == 200
     assert configs_response.json()["data"]["default_config_id"] is not None
     assert "sk-user-secret" not in str(configs_response.json())

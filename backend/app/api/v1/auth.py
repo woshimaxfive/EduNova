@@ -5,11 +5,12 @@ from fastapi import APIRouter, Depends, status
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_auth_service, get_current_user
 from backend.app.models import User
-from backend.app.schemas.auth import LoginRequest, RegisterRequest, UpdateCurrentUserRequest, user_to_api
+from backend.app.schemas.auth import ChangePasswordRequest, LoginRequest, RegisterRequest, UpdateCurrentUserRequest, user_to_api
 from backend.app.services.auth import (
     DuplicateEmailError,
     InvalidCredentialsError,
     InvalidDisplayNameError,
+    PasswordUnchangedError,
     WeakPasswordError,
 )
 
@@ -89,6 +90,30 @@ def update_me(
         ) from exc
 
     return api_response(user_to_api(user).model_dump())
+
+
+@router.patch("/me/password")
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    service=Depends(get_auth_service),
+) -> dict:
+    try:
+        service.change_password(current_user, payload.current_password, payload.new_password)
+    except InvalidCredentialsError as exc:
+        raise ApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_CURRENT_PASSWORD",
+            message=str(exc),
+        ) from exc
+    except (WeakPasswordError, PasswordUnchangedError) as exc:
+        raise ApiError(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            code="VALIDATION_ERROR",
+            message=str(exc),
+        ) from exc
+
+    return api_response({"ok": True})
 
 
 @router.post("/logout")

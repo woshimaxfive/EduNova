@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -11,6 +12,12 @@ from backend.app.core.config import Settings, get_settings
 
 class InvalidTokenError(Exception):
     """Raised when a JWT cannot be decoded into a valid user subject."""
+
+
+@dataclass(frozen=True)
+class AccessTokenClaims:
+    subject: str
+    auth_version: int
 
 
 def hash_password(password: str) -> str:
@@ -25,11 +32,17 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(subject: str, settings: Settings | None = None) -> str:
+def create_access_token(
+    subject: str,
+    settings: Settings | None = None,
+    *,
+    auth_version: int = 0,
+) -> str:
     active_settings = settings or get_settings()
     now = datetime.now(timezone.utc)
     payload = {
         "sub": subject,
+        "auth_version": max(0, auth_version),
         "iat": now,
         "exp": now + timedelta(minutes=active_settings.jwt_expire_minutes),
     }
@@ -40,7 +53,7 @@ def create_access_token(subject: str, settings: Settings | None = None) -> str:
     )
 
 
-def parse_access_token(token: str, settings: Settings | None = None) -> str:
+def parse_access_token_claims(token: str, settings: Settings | None = None) -> AccessTokenClaims:
     active_settings = settings or get_settings()
     try:
         payload = jwt.decode(
@@ -54,4 +67,11 @@ def parse_access_token(token: str, settings: Settings | None = None) -> str:
     subject = payload.get("sub")
     if not isinstance(subject, str) or not subject:
         raise InvalidTokenError("登录凭证缺少用户信息。")
-    return subject
+    raw_auth_version = payload.get("auth_version", 0)
+    if not isinstance(raw_auth_version, int) or raw_auth_version < 0:
+        raise InvalidTokenError("登录凭证版本无效。")
+    return AccessTokenClaims(subject=subject, auth_version=raw_auth_version)
+
+
+def parse_access_token(token: str, settings: Settings | None = None) -> str:
+    return parse_access_token_claims(token, settings=settings).subject

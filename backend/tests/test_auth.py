@@ -21,6 +21,8 @@ from backend.app.services.auth import (
     DuplicateEmailError,
     InvalidDisplayNameError,
     InvalidCredentialsError,
+    PasswordUnchangedError,
+    UserNotFoundError,
     WeakPasswordError,
 )
 
@@ -220,6 +222,46 @@ def test_update_display_name_trims_and_rejects_blank() -> None:
         service.update_display_name(user, "   ")
 
 
+def test_change_password_invalidates_existing_tokens_and_accepts_new_password() -> None:
+    repo = InMemoryAuthRepository()
+    service = make_service(repo)
+    user = service.register(
+        email="password@edunova.local",
+        password="Password123",
+        display_name="密码学生",
+        starter_mode="blank",
+    )
+    old_token = service.login(user.email, "Password123").access_token
+
+    service.change_password(user, "Password123", "NewPassword456")
+
+    assert user.auth_version == 1
+    assert verify_password("NewPassword456", user.hashed_password)
+    assert not verify_password("Password123", user.hashed_password)
+    with pytest.raises(UserNotFoundError, match="登录状态已失效"):
+        service.get_user_by_token(old_token)
+    with pytest.raises(InvalidCredentialsError):
+        service.login(user.email, "Password123")
+    assert service.get_user_by_token(service.login(user.email, "NewPassword456").access_token) is user
+
+
+def test_change_password_rejects_wrong_current_weak_and_unchanged_passwords() -> None:
+    service = make_service()
+    user = service.register(
+        email="password-rules@edunova.local",
+        password="Password123",
+        display_name="密码规则学生",
+        starter_mode="blank",
+    )
+
+    with pytest.raises(InvalidCredentialsError, match="当前密码不正确"):
+        service.change_password(user, "WrongPassword123", "NewPassword456")
+    with pytest.raises(WeakPasswordError):
+        service.change_password(user, "Password123", "weak")
+    with pytest.raises(PasswordUnchangedError):
+        service.change_password(user, "Password123", "Password123")
+
+
 def test_auth_routes_register_login_me_and_logout() -> None:
     repo = InMemoryAuthRepository()
     app = create_app()
@@ -282,9 +324,40 @@ def test_auth_routes_register_login_me_and_logout() -> None:
     assert updated_me_response.status_code == 200
     assert updated_me_response.json()["data"]["display_name"] == "新接口学生"
 
+    wrong_password_response = client.patch(
+        "/api/v1/auth/me/password",
+        json={"current_password": "WrongPassword123", "new_password": "NewPassword456"},
+        headers={"Authorization": f"Bearer {login_data['access_token']}"},
+    )
+
+    assert wrong_password_response.status_code == 400
+    assert wrong_password_response.json()["error"]["code"] == "INVALID_CURRENT_PASSWORD"
+
+    password_response = client.patch(
+        "/api/v1/auth/me/password",
+        json={"current_password": "Password123", "new_password": "NewPassword456"},
+        headers={"Authorization": f"Bearer {login_data['access_token']}"},
+    )
+
+    assert password_response.status_code == 200
+    assert password_response.json()["data"] == {"ok": True}
+
+    expired_token_response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {login_data['access_token']}"},
+    )
+    assert expired_token_response.status_code == 401
+
+    replacement_login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "api@edunova.local", "password": "NewPassword456"},
+    )
+    assert replacement_login_response.status_code == 200
+    replacement_token = replacement_login_response.json()["data"]["access_token"]
+
     logout_response = client.post(
         "/api/v1/auth/logout",
-        headers={"Authorization": f"Bearer {login_data['access_token']}"},
+        headers={"Authorization": f"Bearer {replacement_token}"},
     )
 
     assert logout_response.status_code == 200
@@ -310,3 +383,14 @@ def test_user_starter_mode_model_and_migration_contract() -> None:
 
     assert "starter_mode" in migration_text
     assert "server_default=\"blank\"" in migration_text
+
+    settings_migration_text = (
+        REPO_ROOT
+        / "backend"
+        / "migrations"
+        / "versions"
+        / "20260713_0017_complete_settings_center.py"
+    ).read_text(encoding="utf-8")
+
+    assert "auth_version" in settings_migration_text
+    assert "connection_test_json" in settings_migration_text

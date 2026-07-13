@@ -1,0 +1,1084 @@
+.settings-workspace {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-toolbar {
+  position: relative;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 66px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--wide-workspace-divider);
+  background: var(--wide-workspace-emphasis);
+  backdrop-filter: blur(18px);
+}
+
+.settings-toolbar-identity,
+.settings-toolbar-identity > span,
+.settings-effective-state,
+.settings-panel-heading,
+.settings-new-button,
+.settings-key-summary,
+.settings-config-editor > header,
+.settings-editor-actions,
+.settings-editor-actions > div,
+.settings-save-first-note,
+.settings-account-grid > section > header,
+.settings-privacy-list article,
+.settings-privacy-list article > span,
+.settings-privacy-list article > a {
+  display: flex;
+  align-items: center;
+}
+
+.settings-toolbar-identity {
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-toolbar-identity > span {
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--wide-workspace-divider));
+  border-radius: 6px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.settings-toolbar-identity > div,
+.settings-panel-heading > div,
+.settings-effective-state,
+.settings-config-editor > header > div,
+.settings-account-grid > section > header > div,
+.settings-privacy-list article > div {
+  display: grid;
+  min-width: 0;
+}
+
+.settings-toolbar-identity strong {
+  color: var(--text-strong);
+  font-size: 0.92rem;
+}
+
+.settings-toolbar-identity small,
+.settings-effective-state small,
+.settings-navigation-heading span,
+.settings-navigation button small,
+.settings-panel-heading span,
+.settings-panel-heading p,
+.settings-system-fallback small,
+.settings-config-list > header small,
+.settings-config-scroll button > span,
+.settings-config-scroll button > em,
+.settings-config-editor > header > div > span,
+.settings-provider-context span,
+.settings-provider-context small,
+.settings-embedding-settings p,
+.settings-connection-test p,
+.settings-connection-test footer span,
+.settings-account-grid > section > header span,
+.settings-password-form small,
+.settings-privacy-list p {
+  color: var(--text-muted);
+}
+
+.settings-toolbar-identity small {
+  font-size: 0.7rem;
+}
+
+.settings-effective-state {
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-effective-state > span,
+.settings-effective-state > strong,
+.settings-effective-state > small {
+  min-height: 28px;
+  padding: 5px 8px;
+  border-left: 1px solid var(--wide-workspace-divider);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.settings-effective-state > span {
+  border-left: 0;
+  color: var(--text-muted);
+}
+
+.settings-effective-state > strong {
+  color: var(--accent-strong);
+}
+
+.settings-workspace-body {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.settings-navigation {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--wide-workspace-divider);
+  padding: 18px 10px;
+  background: color-mix(in srgb, var(--wide-workspace-muted) 48%, transparent);
+}
+
+.settings-navigation-heading {
+  display: grid;
+  gap: 2px;
+  padding: 0 9px 13px;
+}
+
+.settings-navigation-heading span {
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.settings-navigation-heading strong {
+  color: var(--text-strong);
+  font-size: 0.82rem;
+}
+
+.settings-navigation button {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 54px;
+  border: 0;
+  border-radius: 5px;
+  padding: 7px 9px;
+  color: var(--text-muted);
+  text-align: left;
+  background: transparent;
+}
+
+.settings-navigation button > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-navigation button strong {
+  color: inherit;
+  font-size: 0.78rem;
+}
+
+.settings-navigation button small {
+  overflow: hidden;
+  font-size: 0.67rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-navigation button:hover {
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--wide-workspace-control) 72%, transparent);
+}
+
+.settings-navigation button[aria-current="page"] {
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+  box-shadow: inset 2px 0 var(--accent);
+}
+
+.settings-content {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.settings-panel {
+  display: block;
+  width: min(1120px, 100%);
+  min-width: 0;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 28px clamp(20px, 3vw, 38px) 40px;
+}
+
+.settings-inline-feedback {
+  width: 100%;
+}
+
+.settings-panel-heading {
+  justify-content: space-between;
+  gap: 28px;
+  padding: 0 0 22px;
+  border-bottom: 1px solid var(--wide-workspace-divider);
+}
+
+.settings-panel-heading > div {
+  gap: 4px;
+}
+
+.settings-panel-heading span {
+  font-size: 0.67rem;
+  font-weight: 850;
+}
+
+.settings-panel-heading h2,
+.settings-config-editor h3,
+.settings-panel-heading p,
+.settings-provider-context p,
+.settings-connection-test p,
+.settings-privacy-list p {
+  margin: 0;
+}
+
+.settings-panel-heading h2 {
+  color: var(--text-strong);
+  font-size: 1.32rem;
+  line-height: 1.25;
+}
+
+.settings-panel-heading p {
+  max-width: 64ch;
+  font-size: 0.76rem;
+  line-height: 1.65;
+}
+
+.settings-query-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  margin-top: 18px;
+  border: 1px solid var(--wide-workspace-divider);
+  border-radius: 6px;
+  padding: 0 12px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--wide-workspace-muted) 62%, transparent);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.settings-query-state.failed {
+  color: var(--coral);
+}
+
+.settings-query-state span {
+  flex: 1;
+}
+
+.settings-query-state button {
+  min-height: 30px;
+  border: 1px solid var(--wide-workspace-divider);
+  border-radius: 5px;
+  padding: 0 10px;
+  color: var(--text-strong);
+  background: var(--wide-workspace-control);
+  font: inherit;
+}
+
+.settings-new-button,
+.settings-connection-test button,
+.settings-editor-actions button,
+.settings-account-grid button,
+.settings-privacy-list article > a {
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  border: 1px solid var(--wide-workspace-divider);
+  border-radius: 5px;
+  padding: 0 11px;
+  color: var(--text);
+  background: var(--wide-workspace-control);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.settings-new-button:hover,
+.settings-connection-test button:hover:not(:disabled),
+.settings-editor-actions button:hover:not(:disabled),
+.settings-account-grid button:hover:not(:disabled),
+.settings-privacy-list article > a:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--wide-workspace-divider));
+  color: var(--accent-strong);
+}
+
+.settings-system-fallback {
+  margin-top: 18px;
+  border: 1px solid var(--wide-workspace-divider);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--wide-workspace-muted) 58%, transparent);
+}
+
+.settings-system-fallback > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--wide-workspace-divider);
+}
+
+.settings-system-fallback > header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.settings-system-fallback > header span {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+}
+
+.settings-system-fallback > header strong {
+  color: var(--text-strong);
+  font-size: 0.8rem;
+}
+
+.settings-model-layout {
+  display: grid;
+  grid-template-columns: 235px minmax(0, 1fr);
+  min-width: 0;
+  margin-top: 18px;
+  border: 1px solid var(--wide-workspace-divider);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--wide-workspace-control) 48%, transparent);
+  overflow: hidden;
+}
+
+.settings-config-list {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 560px;
+  border-right: 1px solid var(--wide-workspace-divider);
+  background: color-mix(in srgb, var(--wide-workspace-muted) 58%, transparent);
+}
+
+.settings-config-list > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--wide-workspace-divider);
+}
+
+.settings-config-list > header span {
+  color: var(--text-strong);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.settings-config-scroll {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.settings-config-scroll > button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-height: 84px;
+  border: 0;
+  border-bottom: 1px solid var(--wide-workspace-divider);
+  border-radius: 0;
+  padding: 12px;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+}
+
+.settings-config-scroll > button:hover {
+  background: color-mix(in srgb, var(--wide-workspace-control) 68%, transparent);
+}
+
+.settings-config-scroll > button.active {
+  background: color-mix(in srgb, var(--accent-soft) 62%, transparent);
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+.settings-config-row-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-config-row-title strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-config-row-title small {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+  font-size: 0.62rem;
+  font-weight: 850;
+}
+
+.settings-config-scroll button > span,
+.settings-config-scroll button > em {
+  overflow: hidden;
+  font-size: 0.66rem;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-config-scroll button > em.failed {
+  color: var(--coral);
+}
+
+.settings-config-empty {
+  place-content: center;
+  justify-items: center;
+  gap: 6px !important;
+  min-height: 160px !important;
+  text-align: center !important;
+}
+
+.settings-config-empty svg {
+  color: var(--accent-strong);
+}
+
+.settings-config-editor {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  padding: 20px;
+  background: transparent;
+}
+
+.settings-config-editor > header {
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--wide-workspace-divider);
+}
+
+.settings-config-editor > header > div {
+  gap: 2px;
+}
+
+.settings-config-editor h3 {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-config-editor > header > div > span {
+  font-size: 0.65rem;
+}
+
+.settings-key-summary {
+  gap: 5px;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.67rem;
+}
+
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding-top: 18px;
+}
+
+.settings-form-grid label,
+.settings-account-field,
+.settings-password-form label,
+.settings-embedding-settings label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-form-grid label > span,
+.settings-account-field > span,
+.settings-password-form label > span,
+.settings-embedding-settings label > span {
+  color: var(--text-muted);
+  font-size: 0.69rem;
+  font-weight: 750;
+}
+
+.settings-form-grid input,
+.settings-form-grid select,
+.settings-account-field input,
+.settings-password-form input,
+.settings-embedding-settings input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--wide-workspace-divider);
+  border-radius: 5px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--wide-workspace-control);
+  outline: none;
+}
+
+.settings-form-grid input:focus,
+.settings-form-grid select:focus,
+.settings-account-field input:focus,
+.settings-password-form input:focus,
+.settings-embedding-settings input:focus {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--wide-workspace-divider));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.settings-form-span,
+.settings-provider-context {
+  grid-column: 1 / -1;
+}
+
+.settings-provider-context {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 12px;
+  border-left: 2px solid var(--accent);
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+}
+
+.settings-provider-context strong {
+  color: var(--accent-strong);
+  font-size: 0.7rem;
+}
+
+.settings-provider-context span,
+.settings-provider-context small {
+  font-size: 0.67rem;
+}
+
+.settings-provider-context small {
+  grid-column: 2;
+}
+
+.settings-embedding-settings {
+  margin-top: 16px;
+  border-top: 1px solid var(--wide-workspace-divider);
+  border-bottom: 1px solid var(--wide-workspace-divider);
+  padding: 12px 0;
+}
+
+.settings-embedding-settings summary {
+  color: var(--text-strong);
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 850;
+}
+
+.settings-embedding-settings[open] summary {
+  margin-bottom: 12px;
+}
+
+.settings-embedding-settings p {
+  padding-top: 7px;
+  font-size: 0.67rem;
+  line-height: 1.55;
+}
+
+.settings-test-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+}
+
+.settings-config-editor > .settings-test-grid {
+  padding: 16px 0 0;
+}
+
+.settings-connection-test {
+  display: grid;
+  grid-template-rows: auto minmax(42px, auto) auto;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--wide-workspace-divider);
+  border-radius: 6px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--wide-workspace-control) 72%, transparent);
+}
+
+.settings-connection-test.success {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--wide-workspace-divider));
+}
+
+.settings-connection-test.failed {
+  border-color: color-mix(in srgb, var(--coral) 30%, var(--wide-workspace-divider));
+}
+
+.settings-connection-test > header {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-connection-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.settings-connection-test.success .settings-connection-icon { color: var(--accent-strong); }
+.settings-connection-test.failed .settings-connection-icon { color: var(--coral); }
+
+.settings-connection-test > header > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-connection-test > header strong {
+  color: var(--text-strong);
+  font-size: 0.73rem;
+}
+
+.settings-connection-test > header span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-connection-test p {
+  font-size: 0.67rem;
+  line-height: 1.5;
+}
+
+.settings-connection-test footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-connection-test footer span {
+  font-size: 0.62rem;
+}
+
+.settings-connection-test button {
+  min-height: 30px;
+  padding-inline: 8px;
+  font-size: 0.65rem;
+}
+
+.settings-save-first-note {
+  gap: 8px;
+  margin-top: 16px;
+  padding: 11px 12px;
+  color: var(--text-muted);
+  background: var(--wide-workspace-muted);
+  font-size: 0.7rem;
+}
+
+.settings-inline-feedback {
+  margin-top: 12px;
+}
+
+.settings-editor-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--wide-workspace-divider);
+}
+
+.settings-editor-actions > div {
+  flex: 1;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+}
+
+.settings-editor-actions > div svg {
+  color: var(--accent-strong);
+}
+
+.settings-editor-actions > div span:has(.ph-warning-circle) svg {
+  color: var(--coral);
+}
+
+.settings-editor-actions .primary-action,
+.settings-account-grid .primary-action {
+  border-color: var(--accent-strong);
+  color: white;
+  background: var(--accent-strong);
+}
+
+.settings-delete-button {
+  width: 36px;
+  padding: 0 !important;
+  color: var(--coral) !important;
+}
+
+.settings-account-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.settings-account-grid > section {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  border: 1px solid var(--wide-workspace-divider);
+  border-radius: 7px;
+  padding: 18px;
+  background: color-mix(in srgb, var(--wide-workspace-control) 52%, transparent);
+}
+
+.settings-account-grid > section > header {
+  gap: 9px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--wide-workspace-divider);
+}
+
+.settings-account-grid > section > header > svg {
+  color: var(--accent-strong);
+}
+
+.settings-account-grid > section > header > div {
+  gap: 2px;
+}
+
+.settings-account-grid > section > header strong {
+  color: var(--text-strong);
+  font-size: 0.79rem;
+}
+
+.settings-account-grid > section > header span {
+  font-size: 0.66rem;
+}
+
+.settings-account-meta {
+  display: grid;
+  margin: 0;
+  padding: 6px 0 12px;
+}
+
+.settings-account-meta > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 38px;
+  border-bottom: 1px solid color-mix(in srgb, var(--wide-workspace-divider) 72%, transparent);
+}
+
+.settings-account-meta dt,
+.settings-account-meta dd {
+  margin: 0;
+  font-size: 0.69rem;
+}
+
+.settings-account-meta dt { color: var(--text-muted); }
+.settings-account-meta dd { color: var(--text-strong); font-weight: 750; }
+
+.settings-account-field,
+.settings-password-form {
+  margin-top: 14px;
+}
+
+.settings-password-form {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-password-form small {
+  font-size: 0.65rem;
+}
+
+.settings-account-grid > section > button {
+  justify-self: end;
+  margin-top: 16px;
+}
+
+.settings-privacy-list {
+  display: grid;
+  margin-top: 12px;
+}
+
+.settings-privacy-list article {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 94px;
+  border-bottom: 1px solid var(--wide-workspace-divider);
+  padding: 18px 4px;
+}
+
+.settings-privacy-list article > svg {
+  color: var(--accent-strong);
+}
+
+.settings-privacy-list article > div {
+  gap: 4px;
+}
+
+.settings-privacy-list article strong {
+  color: var(--text-strong);
+  font-size: 0.78rem;
+}
+
+.settings-privacy-list p {
+  max-width: 72ch;
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+.settings-privacy-list article > span,
+.settings-privacy-list article > a {
+  align-self: center;
+  min-height: 30px;
+  font-size: 0.66rem;
+}
+
+.settings-privacy-list article > span {
+  color: var(--text-muted);
+}
+
+.settings-dialog-overlay {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  background: rgba(13, 25, 23, 0.28);
+  backdrop-filter: blur(3px);
+  animation: settings-overlay-in 160ms ease-out;
+}
+
+.settings-dialog {
+  position: fixed;
+  z-index: 81;
+  top: 50%;
+  left: 50%;
+  width: min(430px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0;
+  color: var(--text);
+  background: var(--surface-strong);
+  box-shadow: 0 24px 72px rgba(16, 30, 27, 0.18);
+  transform: translate(-50%, -50%);
+  animation: settings-dialog-in 180ms ease-out;
+}
+
+.settings-dialog > header {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 32px;
+  align-items: start;
+  gap: 10px;
+  padding: 18px;
+}
+
+.settings-dialog > header > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 10%, white);
+}
+
+.settings-dialog > header > div {
+  display: grid;
+  gap: 5px;
+}
+
+.settings-dialog h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 0.91rem;
+  font-weight: 850;
+}
+
+.settings-dialog p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+.settings-dialog-close {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.settings-dialog > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding: 12px 18px;
+  background: var(--wide-workspace-muted, #edf3f0);
+}
+
+.settings-dialog > footer button {
+  min-height: 36px;
+  border-radius: 5px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.settings-danger-button {
+  border: 1px solid var(--coral);
+  color: white;
+  background: var(--coral);
+}
+
+.settings-workspace button:disabled,
+.settings-dialog button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+@keyframes settings-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes settings-dialog-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+@media (max-width: 1080px) {
+  .settings-workspace-body { grid-template-columns: 190px minmax(0, 1fr); }
+  .settings-model-layout { grid-template-columns: 210px minmax(0, 1fr); }
+  .settings-panel { padding-inline: 20px; }
+}
+
+@media (max-width: 900px) {
+  .settings-workspace {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .settings-toolbar {
+    align-items: flex-start;
+  }
+
+  .settings-effective-state {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .settings-effective-state > span,
+  .settings-effective-state > strong,
+  .settings-effective-state > small {
+    min-height: 0;
+    border-left: 0;
+    padding: 1px 0;
+    text-align: right;
+  }
+
+  .settings-workspace-body {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-navigation {
+    position: sticky;
+    top: 0;
+    z-index: 9;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-right: 0;
+    border-bottom: 1px solid var(--wide-workspace-divider);
+    padding: 6px;
+    overflow-x: auto;
+  }
+
+  .settings-navigation-heading { display: none; }
+
+  .settings-navigation button {
+    grid-template-columns: auto minmax(0, 1fr);
+    min-width: 150px;
+    min-height: 48px;
+  }
+
+  .settings-navigation button[aria-current="page"] {
+    box-shadow: inset 0 -2px var(--accent);
+  }
+
+  .settings-content { overflow: visible; }
+  .settings-panel { min-height: 0; padding: 22px 16px 32px; }
+  .settings-model-layout { grid-template-columns: 1fr; }
+  .settings-config-list { min-height: 0; max-height: 270px; border-right: 0; border-bottom: 1px solid var(--wide-workspace-divider); }
+  .settings-config-editor { padding: 16px; }
+  .settings-account-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 620px) {
+  .settings-toolbar { min-height: 58px; padding: 8px 10px; }
+  .settings-toolbar-identity > span { width: 32px; height: 32px; }
+  .settings-toolbar-identity small,
+  .settings-effective-state > span,
+  .settings-effective-state > small { display: none; }
+  .settings-effective-state > strong { font-size: 0.66rem; }
+  .settings-navigation button { min-width: 128px; grid-template-columns: 22px minmax(0, 1fr); padding-inline: 7px; }
+  .settings-navigation button small { display: none; }
+  .settings-panel-heading { align-items: flex-start; gap: 12px; }
+  .settings-panel-heading p { font-size: 0.7rem; }
+  .settings-new-button { min-width: 36px; padding-inline: 8px; font-size: 0; }
+  .settings-new-button svg { width: 17px; height: 17px; }
+  .settings-system-fallback > header { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .settings-form-grid,
+  .settings-test-grid { grid-template-columns: 1fr; }
+  .settings-provider-context { grid-template-columns: 1fr; }
+  .settings-provider-context small { grid-column: auto; }
+  .settings-connection-test { grid-template-rows: auto auto auto; }
+  .settings-editor-actions { flex-wrap: wrap; }
+  .settings-editor-actions > div { flex-basis: 100%; }
+  .settings-editor-actions .primary-action { flex: 1; }
+  .settings-privacy-list article { grid-template-columns: 30px minmax(0, 1fr); }
+  .settings-privacy-list article > span,
+  .settings-privacy-list article > a { grid-column: 2; justify-self: start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-dialog-overlay,
+  .settings-dialog {
+    animation: none;
+  }
+}

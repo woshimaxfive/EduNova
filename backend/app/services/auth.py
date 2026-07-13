@@ -10,7 +10,7 @@ from backend.app.core.config import Settings, get_settings
 from backend.app.core.security import (
     create_access_token,
     hash_password,
-    parse_access_token,
+    parse_access_token_claims,
     verify_password,
 )
 from backend.app.data.builtin_courses.ai_intro import BUILTIN_AI_INTRO_COURSE
@@ -35,6 +35,10 @@ class UserNotFoundError(Exception):
 
 
 class InvalidDisplayNameError(Exception):
+    pass
+
+
+class PasswordUnchangedError(Exception):
     pass
 
 
@@ -185,20 +189,26 @@ class AuthService:
             raise InvalidCredentialsError("邮箱或密码不正确。")
 
         return LoginResult(
-            access_token=create_access_token(str(user.id), settings=self.settings),
+            access_token=create_access_token(
+                str(user.id),
+                settings=self.settings,
+                auth_version=int(user.auth_version or 0),
+            ),
             user=user,
         )
 
     def get_user_by_token(self, token: str) -> User:
-        subject = parse_access_token(token, settings=self.settings)
+        claims = parse_access_token_claims(token, settings=self.settings)
         try:
-            user_id = int(subject)
+            user_id = int(claims.subject)
         except ValueError as exc:
             raise UserNotFoundError("登录凭证中的用户不存在。") from exc
 
         user = self.repository.get_user_by_id(user_id)
         if user is None:
             raise UserNotFoundError("登录凭证中的用户不存在。")
+        if claims.auth_version != int(user.auth_version or 0):
+            raise UserNotFoundError("登录状态已失效，请重新登录。")
         return user
 
     def update_display_name(self, user: User, display_name: str) -> User:
@@ -217,6 +227,21 @@ class AuthService:
             raise
 
         return user
+
+    def change_password(self, user: User, current_password: str, new_password: str) -> None:
+        if not verify_password(current_password, user.hashed_password):
+            raise InvalidCredentialsError("当前密码不正确。")
+        if verify_password(new_password, user.hashed_password):
+            raise PasswordUnchangedError("新密码不能与当前密码相同。")
+        self._validate_password(new_password)
+
+        user.hashed_password = hash_password(new_password)
+        user.auth_version = int(user.auth_version or 0) + 1
+        try:
+            self.repository.commit()
+        except Exception:
+            self.repository.rollback()
+            raise
 
     def _copy_ai_intro_course(self, user: User) -> Course:
         existing = self.repository.get_course_for_user(

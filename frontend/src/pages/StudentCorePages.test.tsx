@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -398,19 +398,26 @@ describe("student core pages", () => {
     expect(screen.queryByText("引用覆盖：AI 导论内置讲义、期末复习题样例")).not.toBeInTheDocument();
   });
 
-  it("renders settings with model, privacy, and account boundaries", () => {
+  it("renders settings as a sectioned model, account, and privacy workspace", () => {
     renderPage(<SettingsPage />);
 
     expect(screen.getByRole("heading", { name: "设置" })).toHaveClass("visually-hidden");
-    expect(screen.getByRole("heading", { name: "模型与账号" })).toBeInTheDocument();
+    expect(screen.getByText("系统设置")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "模型连接" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "模型设置" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "隐私与数据" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "账号设置" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Provider 预设" })).toBeInTheDocument();
-    expect(screen.getByText("讯飞星火 Spark")).toBeInTheDocument();
+    expect(screen.getAllByText("讯飞星火 Spark")).toHaveLength(2);
     expect(screen.queryByText("深度思考")).not.toBeInTheDocument();
     expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存设置" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存配置" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /账号安全/ }));
+    expect(screen.getByRole("region", { name: "账号设置" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "更新密码并退出登录" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /数据隐私/ }));
+    expect(screen.getByRole("region", { name: "隐私与数据" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "模型设置" })).not.toBeInTheDocument();
   });
 
   it("keeps secondary routes inside the same shell with home history", async () => {

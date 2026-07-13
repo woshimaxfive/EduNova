@@ -14,6 +14,8 @@ export type ModelSettingsSource = "user" | "system" | "none";
 
 export type ModelSettingsProvider = "openai_compatible";
 
+export type ModelConnectionOperation = "chat" | "embedding";
+
 export type ModelSettingsRequest = {
   provider: ModelSettingsProvider;
   base_url: string;
@@ -54,6 +56,17 @@ export type ModelConfigSummary = ModelSettingsSummary & {
   last_test_ok: boolean | null;
   last_test_message: string | null;
   last_tested_at: string | null;
+  connection_tests?: Partial<Record<ModelConnectionOperation, ModelConnectionTestSnapshot>>;
+};
+
+export type ModelConnectionTestSnapshot = {
+  operation: ModelConnectionOperation;
+  ok: boolean;
+  model: string | null;
+  message: string;
+  code: string | null;
+  retryable: boolean;
+  tested_at: string;
 };
 
 export type ModelSettingsListResponse = {
@@ -68,6 +81,11 @@ export type ModelConnectionTestResponse = {
   chat_model: string | null;
   message: string;
   config_id?: number | null;
+  operation: ModelConnectionOperation;
+  model: string | null;
+  code: string | null;
+  retryable: boolean;
+  tested_at: string;
 };
 
 export async function getModelSettings() {
@@ -80,8 +98,8 @@ export async function saveModelSettings(payload: ModelSettingsRequest) {
   return response.data;
 }
 
-export async function testModelSettings() {
-  const response = await apiClient.post<ApiEnvelope<ModelConnectionTestResponse>>(SETTINGS_ENDPOINTS.testModel);
+export async function testModelSettings(operation: ModelConnectionOperation = "chat") {
+  const response = await apiClient.post<ApiEnvelope<ModelConnectionTestResponse>>(SETTINGS_ENDPOINTS.testModel, { operation });
   return response.data;
 }
 
@@ -110,7 +128,10 @@ export async function setDefaultModelConfig(configId: number) {
   return response.data;
 }
 
-export async function testModelConfig(configId: number) {
-  const response = await apiClient.post<ApiEnvelope<ModelConnectionTestResponse>>(SETTINGS_ENDPOINTS.testConfig(configId));
+export async function testModelConfig(configId: number, operation: ModelConnectionOperation = "chat") {
+  const response = await apiClient.post<ApiEnvelope<ModelConnectionTestResponse>>(
+    SETTINGS_ENDPOINTS.testConfig(configId),
+    { operation }
+  );
   return response.data;
 }

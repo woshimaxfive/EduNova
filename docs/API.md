@@ -265,6 +265,30 @@ Authorization: Bearer <token>
 - HTTP 422：昵称为空或超过长度限制。
 - `401 UNAUTHORIZED`：未登录或 token 失效。
 
+### PATCH `/auth/me/password`
+
+用途：修改当前账号密码。必须验证当前密码；新密码至少 8 位并同时包含字母和数字，且不能与当前密码相同。成功后用户的 `auth_version` 递增，当前令牌和其他设备上的旧 JWT 均立即失效，客户端需要使用新密码重新登录。无 `auth_version` 声明的历史令牌按版本 `0` 兼容。
+
+请求：
+
+```json
+{
+  "current_password": "Password123",
+  "new_password": "NewPassword456"
+}
+```
+
+成功响应：
+
+```json
+{
+  "data": { "ok": true },
+  "trace_id": "trace_password_001"
+}
+```
+
+当前密码错误返回 `400 INVALID_CURRENT_PASSWORD`；弱密码或与当前密码相同返回 `422 VALIDATION_ERROR`。接口不返回密码摘要，也不在日志中记录密码原文。
+
 ### POST `/auth/logout`
 
 用途：退出登录。第一版前端清理 token，后端返回成功。
@@ -2100,7 +2124,15 @@ course_id=101
 
 ### POST `/settings/model/test`
 
-用途：测试模型连通性。Phase 6.2 后该接口作为兼容接口保留，测试当前用户默认配置；没有默认配置时测试服务器兜底配置。后端发送极短 Chat Completions 测试请求，成功或失败都只返回摘要，不记录完整 Key、完整 prompt 或上传资料原文。
+用途：测试当前有效模型连通性。Phase 6.2 后该接口作为兼容接口保留，测试当前用户默认配置；没有默认配置时测试服务器兜底配置。请求体可省略，省略时仍按旧行为测试回答模型；`operation=embedding` 时执行一次独立向量探测。两种探测都不自动重试，也不跨 Provider 切换。
+
+可选请求：
+
+```json
+{ "operation": "chat" }
+```
+
+`operation` 可为 `chat` 或 `embedding`。未配置向量模型时返回安全的 `not_configured` 结果，不影响回答模型状态。
 
 响应：
 
@@ -2110,6 +2142,11 @@ course_id=101
     "ok": true,
     "source": "user",
     "chat_model": "gpt-4.1-mini",
+    "operation": "chat",
+    "model": "gpt-4.1-mini",
+    "code": null,
+    "retryable": false,
+    "tested_at": "2026-07-13T10:00:00Z",
     "message": "模型连接成功。",
     "config_id": 1
   },
@@ -2142,7 +2179,18 @@ course_id=101
         "is_default": true,
         "last_test_ok": true,
         "last_test_message": "模型连接成功。",
-        "last_tested_at": "2026-07-04T10:00:00Z"
+        "last_tested_at": "2026-07-13T10:00:00Z",
+        "connection_tests": {
+          "chat": {
+            "operation": "chat",
+            "ok": true,
+            "model": "lite",
+            "message": "模型连接成功。",
+            "code": null,
+            "retryable": false,
+            "tested_at": "2026-07-13T10:00:00Z"
+          }
+        }
       }
     ],
     "system_summary": {
@@ -2192,7 +2240,7 @@ course_id=101
 
 ### POST `/settings/model/configs/{config_id}/test`
 
-用途：测试指定模型配置，并把脱敏测试状态写入 `last_test_ok`、`last_test_message`、`last_tested_at`。测试失败也不记录明文 Key、完整 prompt 或课程资料原文。
+用途：测试指定模型配置。可选请求体与兼容测试接口相同；回答和向量结果分别写入 `connection_test_json.chat`、`connection_test_json.embedding`。旧 `last_test_*` 字段继续映射回答模型最近测试，向量测试不会覆盖回答状态。修改 Base URL、Key 或对应模型后，相关旧测试摘要会被清除。测试失败也不记录明文 Key、完整 prompt、向量或课程资料原文。
 
 ### DELETE `/settings/model/configs/{config_id}`
 

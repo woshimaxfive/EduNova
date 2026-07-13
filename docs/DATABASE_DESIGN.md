@@ -46,6 +46,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260711_0014_create_ai_jobs.py`：创建统一 AI 长任务表 `ai_jobs`，用于智能建课和资源生成的状态、进度、幂等、取消和重试。
 - `backend/migrations/versions/20260711_0015_create_model_call_runs.py`：创建隐私安全模型调用审计表 `model_call_runs`，不保存 Prompt、回答、资料原文或密钥。
 - `backend/migrations/versions/20260712_0016_add_chat_session_material_context.py`：为主页会话增加会话级参考资料 ID 数组，默认空数组。
+- `backend/migrations/versions/20260713_0017_complete_settings_center.py`：为模型配置增加回答/向量独立安全测试摘要，并为用户增加认证版本，支持换密后旧 JWT 失效。
 
 Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
@@ -102,6 +103,7 @@ erDiagram
 | `display_name` | varchar | 显示名称 |
 | `role` | varchar | `student` 或 `admin` |
 | `starter_mode` | varchar | 注册初始化方式，`blank` 或 `ai_intro` |
+| `auth_version` | integer | JWT 认证版本，修改密码后递增，非空默认 `0` |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -110,6 +112,7 @@ erDiagram
 - `email` 唯一。
 - 第一版默认 `role=student`。
 - 旧用户迁移默认 `starter_mode=blank`；新注册未传时由服务层按 `ai_intro` 处理。
+- 历史 JWT 缺少认证版本声明时按 `0` 兼容；密码修改后数据库版本递增，所有旧版本令牌失效。
 
 ### 4.2 `courses`
 
@@ -652,6 +655,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 | `last_test_ok` | boolean | 最近一次连接测试是否成功 |
 | `last_test_message` | text | 最近一次连接测试的脱敏结果摘要 |
 | `last_tested_at` | timestamptz | 最近一次连接测试时间 |
+| `connection_test_json` | jsonb | 回答/向量模型独立安全测试摘要，非空默认 `{}` |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -665,6 +669,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - 同一用户可保存多套配置；运行时只使用当前用户 `is_default=true` 的配置，默认不存在时回退服务器 `.env`。
 - 删除默认配置后，后端会把剩余配置中最近更新的一条设为默认。
 - 设置页 Provider 预设首位为讯飞星火 Spark；预设只负责填充 OpenAI-compatible 连接参数，不改变后端协议。
+- `connection_test_json` 只保存操作类型、模型名、成功状态、安全错误分类、是否可重试和测试时间；不保存 Prompt、回答、向量、密钥或 Provider 原始错误。旧 `last_test_*` 继续兼容回答模型最近测试。
 - `20260704_0006` 迁移为旧数据补 `display_name` 和 `is_default=true`，保证 Phase 6.1 的旧单配置继续可用。
 
 ### 4.20 `export_jobs`

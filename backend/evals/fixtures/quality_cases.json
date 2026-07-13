@@ -56,6 +56,17 @@
     "forbidden_terms": ["家庭住址", "api key"]
   },
   {
+    "id": "profile_explicit_chinese_extraction",
+    "workflow": "profile",
+    "question": "从自然语言中提取明确的学习画像信息",
+    "source_snippets": ["学生是计算机专业，希望掌握神经网络，喜欢图解和代码，反向传播推导比较薄弱，每天学习四十五分钟。"],
+    "candidate": "画像更新包含：计算机专业、掌握神经网络、图解、代码、反向传播推导、每天四十五分钟。",
+    "citation_ids": [],
+    "allowed_citation_ids": [],
+    "required_terms": ["图解", "代码", "反向传播推导", "四十五分钟"],
+    "forbidden_terms": ["系统提示词", "模型输入", "api key"]
+  },
+  {
     "id": "course_builder_source_guard",
     "workflow": "course_builder",
     "question": "根据两份资料组织课程",

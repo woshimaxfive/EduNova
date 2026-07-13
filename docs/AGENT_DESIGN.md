@@ -12,7 +12,7 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 
 | Graph | 生产职责 | 典型节点 |
 | --- | --- | --- |
-| `ProfileGraph` | 已真接管：显式画像回答和学习行为信号的抽取、证据门控、审核/修订、应用与事件持久化 | collect_context、extract、evidence_gate、review、repair、apply、persist_event |
+| `ProfileGraph` | 已真接管：显式画像回答和学习行为信号的抽取、证据门控、审核/修订、应用与事件持久化；Lite 输出经过白名单 Schema、容错 JSON 解析和单次结构修复 | collect_context、extract、evidence_gate、review、repair、apply、persist_event |
 | `CourseBuilderGraph` | 已真接管：资料读取、来源大纲、课程结构、知识点、切片、embedding、审核/修订和事务持久化 | read_materials、source_outline、structure_course、knowledge_points、chunk、embed、review、repair、persist |
 | `MaterialComparisonGraph` | 已真接管：范围校验、真实分块证据收集、规则对比、模型解释增强、审核/修订和不可变版本持久化 | validate_scope、collect_evidence、deterministic_compare、model_compare、review、repair、persist |
 | `HomeTutorGraph` | 已真接管：安全上下文、问题路由、选中资料检索、按需联网、深度规划、回答、审核/修订和消息持久化 | context、route、material_retriever、web_search、planner、answer、review、repair、persist |
@@ -26,6 +26,8 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 Phase 17 新增的 `AIJobRuntime` 也不是第十一条 Agent Graph。它只为 `CourseBuilderGraph` 和 `ResourceGenerationGraph` 提供后台排队、节点进度、心跳、取消、重试和刷新恢复。任务和 Graph 共用同一个 `agent_trace_id`；Graph trace 仍由真实节点执行产生，任务进度不替代 `agent_run_logs`。
 
 Phase 18 新增的 `ModelExecutionRuntime` 同样不是 Agent Graph。它位于模型配置与 OpenAI-compatible Provider 之间，为九条 Graph、主页/课程流式问答和 Embedding 提供统一错误分类、同配置重试、Redis 并发/熔断、取消检查和 `model_call_runs` 安全审计。模型失败后仍由各 Graph 的规则底稿接管，`rules_only` 不伪装成模型审核。
+
+`ProfileGraph.extract` 会向模型提供当前八维画像的安全摘要、逐维可信度和本次回答，要求输出 `updates/confidence/uncertain_dimensions`。纯 JSON、代码块 JSON 和正文内首个完整 JSON 均可解析；首次无效只调用一次格式修复。有效模型提案必须进入 ReviewAgent，不确定陈述只形成候选证据；失败后使用增强中文规则并记录 `rules_only`、解析状态和修复次数。
 
 ## 3. AgentState
 

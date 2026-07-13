@@ -36,7 +36,14 @@ const event = (overrides: Partial<ProfileEventResponse> = {}): ProfileEventRespo
   id: "91",
   dimension: "profile_chat",
   change_summary: "更新学习画像：学习目标",
-  evidence_json: { updated_dimensions: ["learning_goal"], candidate_dimensions: ["weak_points"] },
+  evidence_json: {
+    updated_dimensions: ["learning_goal"],
+    candidate_dimensions: ["weak_points"],
+    generation_mode: "model_enhanced",
+    parse_status: "repaired",
+    repair_count: 1,
+    review_mode: "model_and_rules"
+  },
   source_type: "profile_chat",
   status: "applied",
   confidence_score: 0.82,
@@ -58,6 +65,9 @@ describe("profileViewModel", () => {
     expect(view.candidateDimensions).toEqual(["weak_points"]);
     expect(view.status).toBe("mixed");
     expect(view.sourceLabel).toBe("主动回答");
+    expect(view.generationModeLabel).toBe("模型增强");
+    expect(view.parseStatus).toBe("repaired");
+    expect(view.repairCount).toBe(1);
   });
 
   it("supports legacy events without inventing evidence fields", () => {

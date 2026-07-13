@@ -23,6 +23,28 @@ from backend.app.services.model_settings import ModelSettingsService
 
 PROFILE_SIGNAL_WORDS = ("不懂", "不会", "困惑", "卡住", "薄弱", "最担心", "为什么", "怎么复习", "难")
 
+PROFILE_QUESTION_ORDER = (
+    "learning_goal",
+    "knowledge_foundation",
+    "weak_points",
+    "learning_preference",
+    "learning_pace",
+    "cognitive_style",
+    "major_background",
+    "motivation_interest",
+)
+
+PROFILE_QUESTIONS = {
+    "major_background": "你目前的专业方向或学习经历是什么？",
+    "knowledge_foundation": "关于当前课程，你已经学过哪些基础内容？",
+    "learning_goal": "这门课你最想先解决什么问题？",
+    "cognitive_style": "遇到新概念时，你通常怎样理解得最快？",
+    "learning_preference": "你更喜欢图解、案例、代码、视频还是练习？",
+    "weak_points": "最近哪一个知识点最容易卡住或出错？",
+    "learning_pace": "你通常每次或每周能安排多少学习时间？",
+    "motivation_interest": "是什么目标或兴趣让你想继续学这门课？",
+}
+
 
 class ProfileRepository(Protocol):
     def get_profile(self, user_id: int) -> StudentProfile | None:
@@ -240,6 +262,9 @@ class ProfileService:
                 r"([^，。；,;]*刚入门)",
                 r"([^，。；,;]*基础较稳)",
                 r"([^，。；,;]*基础一般)",
+                r"((?:已经|曾经)?学过[^，。；,;]{1,40})",
+                r"((?:已经)?(?:熟悉|了解|掌握)[^，。；,;]{1,40}(?:基础|知识|概念))",
+                r"(零基础)",
             ],
         )
         if knowledge_foundation and "数学基础一般" not in knowledge_foundation:
@@ -248,6 +273,7 @@ class ProfileService:
         learning_goal = self._find_first(
             message_text,
             [
+                r"(?:我的)?目标(?:是|改为|改成)([^，。；,;]{2,80})",
                 r"(?:想|希望|目标是)([^，。；,;]*掌握[^，。；,;]*)",
                 r"(?:想|希望|目标是)([^，。；,;]*复习[^，。；,;]*)",
             ],
@@ -255,15 +281,34 @@ class ProfileService:
         if learning_goal:
             updates["learning_goal"] = learning_goal
 
-        if "案例和图解" in message_text:
-            updates["learning_preference"] = "案例和图解"
-            updates["cognitive_style"] = "案例驱动"
-        elif "图解" in message_text:
-            updates["learning_preference"] = "图解"
-        elif "代码" in message_text:
-            updates["learning_preference"] = "代码"
+        preferences = sorted(
+            [
+                term
+                for term in ("图解", "案例", "代码", "视频", "练习")
+                if self._positive_preference(message_text, term)
+            ],
+            key=message_text.index,
+        )
+        if preferences:
+            updates["learning_preference"] = "、".join(preferences)
 
-        learning_pace = self._find_first(message_text, [r"(每天\s*\d+\s*分钟)"])
+        cognitive_styles: list[str] = []
+        if "案例" in preferences:
+            cognitive_styles.append("案例驱动")
+        if any(marker in message_text for marker in ("先看结构", "先看框架", "先看大纲", "整体框架")):
+            cognitive_styles.append("结构化理解")
+        if any(marker in message_text for marker in ("一步一步", "分步骤", "逐步推导")):
+            cognitive_styles.append("渐进推导")
+        if cognitive_styles:
+            updates["cognitive_style"] = "、".join(dict.fromkeys(cognitive_styles))
+
+        learning_pace = self._find_first(
+            message_text,
+            [
+                r"((?:每天|每日)[^，。；,;]{0,14}[0-9零一二两三四五六七八九十百半]+\s*(?:个)?\s*(?:分钟|小时))",
+                r"((?:每周|一周)[^，。；,;]{0,14}[0-9零一二两三四五六七八九十百半]+\s*次)",
+            ],
+        )
         if learning_pace:
             updates["learning_pace"] = re.sub(r"\s+", " ", learning_pace)
 
@@ -274,10 +319,18 @@ class ProfileService:
         if "提升" in message_text and "能力" in message_text:
             updates["motivation_interest"] = self._clip_sentence(message_text)
 
-        if not updates and len(message_text) <= 80:
-            updates["learning_goal"] = message_text.rstrip("。")
-
         return updates
+
+    @staticmethod
+    def _positive_preference(message_text: str, term: str) -> bool:
+        if term not in message_text:
+            return False
+        negative_patterns = (
+            rf"不(?:太)?喜欢[^，。；,;]{{0,8}}{re.escape(term)}",
+            rf"不想[^，。；,;]{{0,8}}{re.escape(term)}",
+            rf"不适合[^，。；,;]{{0,8}}{re.escape(term)}",
+        )
+        return not any(re.search(pattern, message_text) for pattern in negative_patterns)
 
     @staticmethod
     def _find_first(message_text: str, patterns: list[str]) -> str:
@@ -299,7 +352,55 @@ class ProfileService:
                 weak_points.append(weak_point)
         if "链式法则" in message_text and "链式法则" not in weak_points:
             weak_points.append("链式法则")
+        for segment in re.split(r"[，。；,;！!?？]", message_text):
+            normalized = segment.strip()
+            if not normalized or any(
+                marker in normalized
+                for marker in ("并不薄弱", "不是薄弱", "没有卡住", "没有困难", "不是不会", "并不难")
+            ):
+                continue
+            topic_match = re.search(
+                r"(?P<topic>[^，。；,;]{1,48}?)(?:比较|有点|很|特别)?(?:薄弱|不熟|容易错|没理解|比较难|很难|卡住)$",
+                normalized,
+            )
+            reverse_match = re.search(r"(?:不会|不熟|没理解)(?P<topic>[^，。；,;]{1,40})$", normalized)
+            match = topic_match or reverse_match
+            if match:
+                topic = re.sub(r"^(?:我(?:在|对|觉得)?|目前|最近|但是|但|而且|同时|也)", "", match.group("topic")).strip()
+                if topic and topic not in weak_points:
+                    weak_points.append(topic)
         return weak_points
+
+    @staticmethod
+    def _uncertain_profile_dimensions(message_text: str, updates: dict[str, Any]) -> list[str]:
+        uncertain: list[str] = []
+        markers = ("可能", "也许", "好像", "似乎", "不确定", "说不准")
+        for segment in re.split(r"[，。；,;！!?？]", message_text):
+            if not any(marker in segment for marker in markers):
+                continue
+            for key, value in updates.items():
+                values = value if isinstance(value, list) else re.split(r"[、/]", str(value))
+                if any(str(item).strip() and str(item).strip() in segment for item in values):
+                    uncertain.append(key)
+        return list(dict.fromkeys(uncertain))
+
+    @staticmethod
+    def _profile_dimension_hints(message_text: str) -> list[str]:
+        hints: list[str] = []
+        markers = {
+            "major_background": ("专业", "年级", "学生", "工作"),
+            "knowledge_foundation": ("基础", "学过", "熟悉", "了解", "零基础"),
+            "learning_goal": ("目标", "希望", "想掌握", "想学会", "复习"),
+            "cognitive_style": ("理解", "推导", "结构", "框架", "步骤"),
+            "learning_preference": ("喜欢", "图解", "案例", "代码", "视频", "练习"),
+            "weak_points": ("薄弱", "不熟", "不会", "卡住", "容易错", "没理解", "难"),
+            "learning_pace": ("每天", "每周", "分钟", "小时", "学习时间"),
+            "motivation_interest": ("兴趣", "动力", "为了", "提升", "项目"),
+        }
+        for key, values in markers.items():
+            if any(marker in message_text for marker in values):
+                hints.append(key)
+        return hints
 
     @staticmethod
     def _merge_profile_json(current: dict[str, Any] | None, updates: dict[str, Any]) -> dict[str, Any]:
@@ -365,15 +466,18 @@ class ProfileService:
     def _clip_sentence(message_text: str) -> str:
         return message_text.strip().rstrip("。")[:80]
 
-    def _next_question(self, profile: StudentProfile | None) -> str:
+    def _next_question(self, profile: StudentProfile | None, preferred_dimensions: list[str] | None = None) -> str:
         profile_json = normalize_profile_json(profile.profile_json if profile is not None else None)
-        if not profile_json["learning_goal"]:
-            return "这门课你最想先解决什么问题？"
-        if not profile_json["weak_points"]:
-            return "这门课你最担心哪一章？"
-        if not profile_json["learning_preference"]:
-            return "你更喜欢哪种学习方式？"
-        return "最近一次学习里，哪里最卡住？"
+        confidence = dict(getattr(profile, "dimension_confidence_json", None) or {}) if profile is not None else {}
+        preferred = [key for key in (preferred_dimensions or []) if key in PROFILE_QUESTIONS]
+        for key in preferred:
+            if not profile_json[key]:
+                return PROFILE_QUESTIONS[key]
+        missing = [key for key in PROFILE_QUESTION_ORDER if not profile_json[key]]
+        if missing:
+            return PROFILE_QUESTIONS[missing[0]]
+        lowest = min(PROFILE_QUESTION_ORDER, key=lambda key: float(confidence.get(key, 0)))
+        return PROFILE_QUESTIONS[lowest]
 
     def _current_time(self) -> datetime:
         current = self.now or datetime.now(UTC)

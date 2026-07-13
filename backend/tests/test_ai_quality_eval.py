@@ -14,6 +14,7 @@ def test_offline_quality_cases_cover_core_model_boundaries() -> None:
         "report",
         "material_comparison",
     }
+    assert len([case for case in cases if case["workflow"] == "profile"]) >= 2
     assert all(result["passed"] for result in run_offline())
 
 

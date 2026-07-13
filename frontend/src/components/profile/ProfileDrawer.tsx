@@ -132,6 +132,9 @@ export function ProfileDrawer({ mode, dimension, event, relatedEvents, onClose, 
             <dl className="profile-evidence-facts">
               <div><dt>证据状态</dt><dd>{eventView.statusLabel}</dd></div>
               <div><dt>事件置信度</dt><dd>{eventView.confidencePercent === null ? "未提供" : `${eventView.confidencePercent}%`}</dd></div>
+              <div><dt>画像提取</dt><dd>{eventView.generationModeLabel}</dd></div>
+              <div><dt>画像审核</dt><dd>{eventView.reviewMode === "model_and_rules" ? "模型与规则审核" : "规则复核"}</dd></div>
+              {eventView.repairCount > 0 ? <div><dt>结构修复</dt><dd>{eventView.repairCount} 次</dd></div> : null}
               <div><dt><ClockCounterClockwise size={14} aria-hidden="true" />记录时间</dt><dd>{formatEventTime(event.created_at)}</dd></div>
             </dl>
             <section className="profile-evidence-dimensions">

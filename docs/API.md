@@ -374,7 +374,7 @@ Authorization: Bearer <token>
 
 ## 6. Profile 接口
 
-状态：Phase 15 已由 `ProfileGraph` 接管。显式画像回答通过审核后立即更新；课程问答和练习产生的隐式信号使用独立 Graph trace，只有相同归一化结论至少来自 2 个独立来源且聚合置信度不低于 0.75 时才写入长期画像，否则保留候选事件。
+状态：Phase 15 已由 `ProfileGraph` 接管。显式画像回答经过结构化抽取与审核后更新；不确定表达保留为候选证据。课程问答和练习产生的隐式信号使用独立 Graph trace，只有相同归一化结论至少来自 2 个独立来源且聚合置信度不低于 0.75 时才写入长期画像，否则保留候选事件。
 
 ### GET `/profiles/me`
 
@@ -385,7 +385,7 @@ Authorization: Bearer <token>
 - 必须携带 JWT，只读取当前用户自己的画像。
 - 空画像也返回稳定 8 维结构，字符串字段为空字符串，`weak_points=[]`。
 - `version` 由当前画像关联的画像事件数量派生。
-- `next_question` 用于前端画像对话入口，不等同于强制问卷。
+- `next_question` 用于前端画像对话入口，不等同于强制问卷；优先追问本轮提及但未识别的维度，其次选择缺失或可信度最低的维度。
 - `profile_json` 是用户级画像。`knowledge_foundation`、`weak_points`、`learning_goal` 可以在后续展示和推荐中叠加课程级状态，但 `/profiles/me` 不返回每门课程一份画像。
 - `dimension_confidence` 返回 8 个维度各自的 0-100 可信度，`evidence_summary` 返回候选/已应用证据计数。
 
@@ -420,7 +420,7 @@ Authorization: Bearer <token>
 
 ### POST `/profiles/chat`
 
-用途：通过 `ProfileGraph` 对话更新学习画像。模型只可补充现有 8 个白名单字段；规则负责字段、长度、去重、敏感内容和可信度校验，模型不可用时使用明确的 `rules_only` 确定性抽取。
+用途：通过 `ProfileGraph` 对话更新学习画像。模型只可补充现有 8 个白名单字段；规则负责字段、类型、长度、去重、敏感内容和可信度校验。模型输出支持纯 JSON、JSON 代码块和正文中的完整 JSON 对象；首次结构无效时只修复一次，仍不可用则使用明确的 `rules_only` 中文规则抽取。
 
 请求：
 
@@ -442,13 +442,17 @@ Authorization: Bearer <token>
       "dimension": "profile_chat",
       "status": "applied",
       "source_type": "profile_chat",
-      "confidence_score": 72,
+      "confidence_score": 0.72,
       "agent_trace_id": "trace_profile_graph",
       "change_summary": "更新学习画像：学习目标、薄弱点",
       "evidence_json": {
         "source_type": "profile_chat",
-        "summary": "学生画像对话",
-        "updated_dimensions": ["learning_goal", "weak_points"]
+        "updated_dimensions": ["learning_goal", "weak_points"],
+        "candidate_dimensions": [],
+        "generation_mode": "model_enhanced",
+        "parse_status": "valid",
+        "repair_count": 0,
+        "review_mode": "model_and_rules"
       },
       "created_at": "2026-07-05T09:01:00Z"
     }
@@ -466,6 +470,7 @@ Authorization: Bearer <token>
 - 只返回当前用户画像事件，默认最近 20 条。
 - 课程问答产生的画像候选事件会使用 `dimension="weak_points"`。
 - 课程问答事件的 `evidence_json` 只保存 `source_type`、`course_id`、`session_id`、消息 ID、`trace_id` 和引用摘要；不保存完整用户问题、系统提示词、模型输入或资料原文。
+- 显式画像事件的 `evidence_json` 可增加 `generation_mode=model_enhanced|rules_only`、`parse_status`、`repair_count` 和 `review_mode`；这些字段只描述安全执行方式，不保存模型原始回答或用户完整输入。
 - 画像事件是证据流。带 `course_id` 的事件可以作为课程学习状态的候选来源，但不能直接视为已确认弱点或复习队列项。
 - 后续可增加 `course_id` 查询参数过滤某门课相关证据；当前实现仍返回当前用户最近画像事件。
 

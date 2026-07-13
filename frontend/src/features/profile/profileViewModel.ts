@@ -25,6 +25,11 @@ export type ProfileEventView = {
   status: "applied" | "candidate" | "mixed";
   statusLabel: string;
   confidencePercent: number | null;
+  generationMode: "model_enhanced" | "rules_only" | "unknown";
+  generationModeLabel: string;
+  parseStatus: string | null;
+  repairCount: number;
+  reviewMode: string | null;
 };
 
 export type ProfileUpdateReceipt = {
@@ -91,6 +96,11 @@ export function buildProfileEventView(event: ProfileEventResponse): ProfileEvent
     ? legacyDimensions(event)
     : [];
   const eventIsCandidate = event.status === "candidate";
+  const generationMode = event.evidence_json.generation_mode === "model_enhanced"
+    ? "model_enhanced"
+    : event.evidence_json.generation_mode === "rules_only"
+      ? "rules_only"
+      : "unknown";
   const resolvedApplied = eventIsCandidate ? [] : [...appliedDimensions, ...fallbackDimensions];
   const resolvedCandidate = eventIsCandidate ? [...candidateDimensions, ...fallbackDimensions] : candidateDimensions;
   const dimensions = Array.from(new Set([...resolvedApplied, ...resolvedCandidate]));
@@ -109,7 +119,18 @@ export function buildProfileEventView(event: ProfileEventResponse): ProfileEvent
     statusLabel: status === "mixed" ? "部分已应用" : status === "applied" ? "已应用" : "候选证据",
     confidencePercent: typeof event.confidence_score === "number"
       ? Math.round(Math.max(0, Math.min(1, event.confidence_score)) * 100)
-      : null
+      : null,
+    generationMode,
+    generationModeLabel: generationMode === "model_enhanced"
+      ? "模型增强"
+      : generationMode === "rules_only"
+        ? "规则提取"
+        : "历史记录",
+    parseStatus: typeof event.evidence_json.parse_status === "string" ? event.evidence_json.parse_status : null,
+    repairCount: typeof event.evidence_json.repair_count === "number"
+      ? Math.max(0, Math.round(event.evidence_json.repair_count))
+      : 0,
+    reviewMode: typeof event.evidence_json.review_mode === "string" ? event.evidence_json.review_mode : null
   };
 }
 

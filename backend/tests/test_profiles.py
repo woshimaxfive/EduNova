@@ -99,6 +99,18 @@ class TokenAuthRepository:
         return self.user if self.user.id == user_id else None
 
 
+@dataclass
+class FakeProfileModelService:
+    responses: list[str]
+    messages: list[list[dict[str, str]]] = field(default_factory=list)
+
+    def chat_completion(self, _user: User, messages: list[dict[str, str]]) -> str:
+        self.messages.append(messages)
+        if not self.responses:
+            raise RuntimeError("模型响应已用完")
+        return self.responses.pop(0)
+
+
 def make_user(user_id: int, display_name: str = "画像学生") -> User:
     return User(
         id=user_id,
@@ -176,7 +188,7 @@ def test_profile_chat_creates_profile_and_event_from_deterministic_extraction() 
     assert profile_json["major_background"] == "计算机专业大二学生"
     assert profile_json["knowledge_foundation"] == "机器学习刚入门"
     assert profile_json["learning_goal"] == "期末前掌握神经网络"
-    assert profile_json["learning_preference"] == "案例和图解"
+    assert profile_json["learning_preference"] == "案例、图解"
     assert profile_json["learning_pace"] == "每天 45 分钟"
     assert profile_json["weak_points"] == ["数学基础一般"]
     assert result["event"]["dimension"] == "profile_chat"
@@ -185,6 +197,212 @@ def test_profile_chat_creates_profile_and_event_from_deterministic_extraction() 
     assert result["profile"]["version"] == 1
     assert repo.events[0].profile_id == repo.profiles[user.id].id
     assert repo.committed is True
+
+
+def test_profile_rules_extract_natural_chinese_profile_signals() -> None:
+    module = load_profile_module()
+    user = make_user(1)
+    repo = FakeProfileRepository()
+    service = module.ProfileService(repo, now=NOW)
+
+    result = as_dict(
+        service.update_by_chat(
+            user,
+            "我是计算机专业学生，正在学习机器学习，希望系统掌握神经网络；我喜欢图解和代码例子，反向传播推导比较薄弱，每天可以学习四十五分钟。",
+        )
+    )
+
+    profile = result["profile"]["profile_json"]
+    assert profile["major_background"] == "计算机专业学生"
+    assert profile["learning_goal"] == "系统掌握神经网络"
+    assert profile["learning_preference"] == "图解、代码"
+    assert profile["weak_points"] == ["反向传播推导"]
+    assert profile["learning_pace"] == "每天可以学习四十五分钟"
+    assert result["event"]["evidence_json"]["generation_mode"] == "rules_only"
+    assert result["event"]["evidence_json"]["parse_status"] == "not_configured"
+
+
+def test_profile_model_accepts_explanatory_text_and_partial_valid_fields() -> None:
+    module = load_profile_module()
+    user = make_user(1)
+    repo = FakeProfileRepository()
+    model = FakeProfileModelService(
+        responses=[
+            "画像提取结果如下：\n```json\n"
+            '{"updates":{"knowledge_foundation":"具备 Python 基础","weak_points":["反向传播推导"],"unknown":"忽略"},'
+            '"confidence":{"knowledge_foundation":0.83,"weak_points":0.79},"uncertain_dimensions":[]}\n```',
+            '{"review_status":"passed","confidence":0.86,"risk_flags":[],"safety_summary":"画像字段与证据一致。"}',
+        ]
+    )
+    service = module.ProfileService(repo, now=NOW, model_service=model)
+
+    result = as_dict(service.update_by_chat(user, "我学过 Python，但反向传播推导比较薄弱。"))
+
+    assert result["profile"]["profile_json"]["knowledge_foundation"] == "学过 Python"
+    assert result["profile"]["dimension_confidence"]["knowledge_foundation"] == 83
+    assert result["profile"]["profile_json"]["weak_points"] == ["反向传播推导"]
+    evidence = result["event"]["evidence_json"]
+    assert evidence["generation_mode"] == "model_enhanced"
+    assert evidence["parse_status"] == "valid"
+    assert evidence["repair_count"] == 0
+    assert evidence["review_mode"] == "model_and_rules"
+    assert len(model.messages) == 2
+    assert "八个字段" in model.messages[0][0]["content"]
+    assert "当前画像安全摘要" in model.messages[0][1]["content"]
+
+
+def test_profile_model_cannot_replace_more_specific_rules_or_invent_unhinted_dimension() -> None:
+    module = load_profile_module()
+    user = make_user(1)
+    repo = FakeProfileRepository()
+    model = FakeProfileModelService(
+        responses=[
+            '{"updates":{"weak_points":["反向传播"],"motivation_interest":"系统掌握神经网络"},'
+            '"confidence":{"weak_points":0.86,"motivation_interest":1.0},"uncertain_dimensions":[]}',
+            '{"review_status":"passed","confidence":0.84,"risk_flags":[],"safety_summary":"画像字段与证据一致。"}',
+        ]
+    )
+    service = module.ProfileService(repo, now=NOW, model_service=model)
+
+    result = as_dict(
+        service.update_by_chat(
+            user,
+            "希望系统掌握神经网络，反向传播推导比较薄弱。",
+        )
+    )
+
+    profile = result["profile"]["profile_json"]
+    assert profile["weak_points"] == ["反向传播推导"]
+    assert profile["motivation_interest"] == ""
+    assert result["profile"]["dimension_confidence"]["weak_points"] == 86
+    assert "motivation_interest" not in result["event"]["evidence_json"]["updated_dimensions"]
+
+
+def test_profile_model_repairs_invalid_json_once() -> None:
+    module = load_profile_module()
+    user = make_user(1)
+    repo = FakeProfileRepository()
+    logs: list[Any] = []
+    model = FakeProfileModelService(
+        responses=[
+            "我认为学生更喜欢图解，但这里没有按 JSON 输出。",
+            '{"updates":{"learning_preference":"图解、代码"},"confidence":{"learning_preference":0.81},"uncertain_dimensions":[]}',
+            '{"review_status":"passed","confidence":0.82,"risk_flags":[],"safety_summary":"画像字段与证据一致。"}',
+        ]
+    )
+    service = module.ProfileService(repo, now=NOW, model_service=model, trace_recorder=make_trace_recorder(logs))
+
+    result = as_dict(service.update_by_chat(user, "我更喜欢图解和代码。"))
+
+    evidence = result["event"]["evidence_json"]
+    assert evidence["generation_mode"] == "model_enhanced"
+    assert evidence["parse_status"] == "repaired"
+    assert evidence["repair_count"] == 1
+    extract_log = next(log for log in logs if log.agent_name == "extract")
+    assert extract_log.metadata_json["extraction_mode"] == "model_enhanced"
+    assert extract_log.metadata_json["parse_status"] == "repaired"
+    assert extract_log.metadata_json["extracted_dimension_count"] == 1
+    assert "我更喜欢图解和代码" not in str(extract_log.metadata_json)
+
+
+def test_profile_model_invalid_twice_falls_back_without_fake_model_review() -> None:
+    module = load_profile_module()
+    user = make_user(1)
+    repo = FakeProfileRepository()
+    model = FakeProfileModelService(responses=["不是 JSON", "仍然不是 JSON"])
+    service = module.ProfileService(repo, now=NOW, model_service=model)
+
+    result = as_dict(service.update_by_chat(user, "反向传播推导比较薄弱，每天学习四十五分钟。"))
+
+    assert result["profile"]["profile_json"]["weak_points"] == ["反向传播推导"]
+    evidence = result["event"]["evidence_json"]
+    assert evidence["generation_mode"] == "rules_only"
+    assert evidence["parse_status"] == "fallback"
+    assert evidence["repair_count"] == 1
+    assert evidence["review_mode"] == "rules_only"
+    assert len(model.messages) == 2
+
+
+def test_uncertain_explicit_statement_stays_candidate() -> None:
+    module = load_profile_module()
+    user = make_user(1)
+    repo = FakeProfileRepository()
+    service = module.ProfileService(repo, now=NOW)
+
+    result = as_dict(service.update_by_chat(user, "我好像更喜欢视频学习，但还不确定。"))
+
+    assert result["profile"]["profile_json"]["learning_preference"] == ""
+    assert result["event"]["status"] == "candidate"
+    assert result["event"]["evidence_json"]["candidate_dimensions"] == ["learning_preference"]
+
+
+def test_profile_rules_do_not_invent_updates_from_negated_preferences_or_weaknesses() -> None:
+    module = load_profile_module()
+    user = make_user(1)
+    repo = FakeProfileRepository()
+    service = module.ProfileService(repo, now=NOW)
+
+    result = as_dict(service.update_by_chat(user, "我不喜欢视频，反向传播并不薄弱，也没有卡住。"))
+
+    assert result["profile"]["profile_json"]["learning_preference"] == ""
+    assert result["profile"]["profile_json"]["weak_points"] == []
+    assert result["event"]["status"] == "candidate"
+    assert result["event"]["evidence_json"]["updated_dimensions"] == []
+    assert result["event"]["evidence_json"]["candidate_dimensions"] == []
+
+
+def test_explicit_profile_statement_updates_existing_dimension() -> None:
+    module = load_profile_module()
+    user = make_user(1)
+    profile = StudentProfile(
+        id=7,
+        user_id=1,
+        profile_json={"learning_goal": "掌握机器学习"},
+        confidence_score=Decimal("72"),
+        dimension_confidence_json={"learning_goal": 72},
+    )
+    repo = FakeProfileRepository(profiles={1: profile})
+    service = module.ProfileService(repo, now=NOW)
+
+    result = as_dict(service.update_by_chat(user, "我的目标是完成深度学习项目。"))
+
+    assert result["profile"]["profile_json"]["learning_goal"] == "完成深度学习项目"
+    assert result["event"]["status"] == "applied"
+
+
+def test_profile_next_question_targets_missing_or_low_confidence_dimension() -> None:
+    module = load_profile_module()
+    user = make_user(1)
+    profile = StudentProfile(
+        id=7,
+        user_id=1,
+        profile_json={
+            "major_background": "计算机专业",
+            "knowledge_foundation": "具备 Python 基础",
+            "learning_goal": "掌握机器学习",
+            "cognitive_style": "结构化理解",
+            "learning_preference": "图解、代码",
+            "weak_points": ["反向传播"],
+            "learning_pace": "每天四十五分钟",
+            "motivation_interest": "完成 AI 项目",
+        },
+        confidence_score=Decimal("70"),
+        dimension_confidence_json={
+            "major_background": 82,
+            "knowledge_foundation": 78,
+            "learning_goal": 90,
+            "cognitive_style": 76,
+            "learning_preference": 84,
+            "weak_points": 42,
+            "learning_pace": 75,
+            "motivation_interest": 80,
+        },
+    )
+    service = module.ProfileService(FakeProfileRepository(profiles={1: profile}), now=NOW)
+
+    result = as_dict(service.get_my_profile(user))
+
+    assert result["next_question"] == "最近哪一个知识点最容易卡住或出错？"
 
 
 def test_profile_graph_records_real_nodes_and_dimension_confidence() -> None:

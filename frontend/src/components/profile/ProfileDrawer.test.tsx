@@ -16,7 +16,11 @@ const candidateEvent: ProfileEventResponse = {
   evidence_json: {
     source_type: "practice_assessment",
     updated_dimensions: [],
-    candidate_dimensions: ["weak_points"]
+    candidate_dimensions: ["weak_points"],
+    generation_mode: "rules_only",
+    parse_status: "fallback",
+    repair_count: 1,
+    review_mode: "rules_only"
   },
   source_type: "practice_assessment",
   status: "candidate",
@@ -101,6 +105,9 @@ describe("ProfileDrawer", () => {
     expect(dialog).toHaveTextContent("候选证据");
     expect(dialog).toHaveTextContent("本次没有直接写入长期画像");
     expect(dialog).toHaveTextContent("薄弱点");
+    expect(dialog).toHaveTextContent("规则提取");
+    expect(dialog).toHaveTextContent("规则复核");
+    expect(dialog).toHaveTextContent("结构修复1 次");
 
     await user.click(screen.getByRole("button", { name: "回放 ProfileGraph" }));
     expect(await screen.findByText("evidence_gate")).toBeInTheDocument();

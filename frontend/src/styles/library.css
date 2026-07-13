@@ -33,8 +33,18 @@
 }
 
 .library-toolbar-summary strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--text-strong);
   font-size: 0.92rem;
+}
+
+.library-toolbar-summary .library-toolbar-kicker {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+  font-size: 0.68rem;
+  font-weight: 850;
 }
 
 .library-toolbar-summary span {

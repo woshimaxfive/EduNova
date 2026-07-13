@@ -196,7 +196,7 @@ export function ReportsPage() {
 
   return (
     <>
-      <PageFrame title="学习报告" variant="wide-workspace">
+      <PageFrame title="学习报告" titleMode="sr-only" variant="wide-workspace">
         <section className="report-workspace" aria-label="学习报告数据工作台">
           <ReportWorkspaceToolbar
             courses={courses}

@@ -285,7 +285,7 @@ export function StudioPage() {
 
   return (
     <>
-      <PageFrame title="资源工坊" variant="wide-workspace">
+      <PageFrame title="资源工坊" titleMode="sr-only" variant="wide-workspace">
         <section className="studio-workspace" aria-label="资源成果工作台">
           <StudioWorkspaceToolbar
             courses={courses}

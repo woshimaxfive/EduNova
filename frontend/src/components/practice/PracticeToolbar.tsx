@@ -30,7 +30,7 @@ export function PracticeToolbar({
   return (
     <header className="practice-workspace-toolbar">
       <div className="practice-toolbar-context">
-        <span>{courseTitle || "选择课程"}</span>
+        <span>针对性练习 · {courseTitle || "选择课程"}</span>
         <strong>{pointTitle || "选择知识点开始练习"}</strong>
       </div>
       <div className="practice-toolbar-metrics" aria-label="练习进度">

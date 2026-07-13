@@ -310,8 +310,15 @@ export function SettingsPage() {
   }
 
   return (
-    <PageFrame title="设置">
+    <PageFrame title="设置" titleMode="sr-only">
       <div className="settings-workspace">
+        <header className="settings-workspace-header">
+          <span>设置</span>
+          <div>
+            <h2>模型与账号</h2>
+            <p>管理当前账号使用的模型连接和基础信息。</p>
+          </div>
+        </header>
         <section className="student-panel settings-section settings-model-section" role="region" aria-label="模型设置">
           <div className="settings-section-icon" aria-hidden="true">
             <GearSix size={22} weight="duotone" />

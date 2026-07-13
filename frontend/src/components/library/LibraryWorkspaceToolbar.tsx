@@ -27,7 +27,7 @@ export function LibraryWorkspaceToolbar(props: LibraryWorkspaceToolbarProps) {
   return (
     <header className="library-workspace-toolbar">
       <div className="library-toolbar-summary">
-        <strong>{props.materialCount} 份资料</strong>
+        <strong><span className="library-toolbar-kicker">资料库</span>{props.materialCount} 份资料</strong>
         <span>{props.parsedCount} 份已解析，可用于问答与建课</span>
       </div>
 

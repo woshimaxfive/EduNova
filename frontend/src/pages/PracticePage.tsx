@@ -316,7 +316,7 @@ export function PracticePage() {
 
   return (
     <>
-      <PageFrame title="练习" variant="wide-workspace">
+      <PageFrame title="练习" titleMode="sr-only" variant="wide-workspace">
         <div className="practice-focus-workspace">
         <PracticeToolbar
           courseTitle={selectedCourseTitle}

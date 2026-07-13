@@ -128,7 +128,7 @@ export function LearningPathPage() {
 
   return (
     <>
-      <PageFrame title="学习路径" variant="wide-workspace">
+      <PageFrame title="学习路径" titleMode="sr-only" variant="wide-workspace">
         <CourseReturnLink courseId={effectiveCourseId} />
         <div className="learning-path-workspace">
           <LearningPathToolbar

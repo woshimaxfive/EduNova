@@ -29,7 +29,7 @@ export function StudioWorkspaceToolbar({
   return (
     <header className="studio-workspace-toolbar" aria-label="资源工坊工具栏">
       <label className="studio-course-select">
-        <span>课程</span>
+        <span>资源工坊 · 课程</span>
         <select
           aria-label="资源课程"
           value={courseId ?? ""}

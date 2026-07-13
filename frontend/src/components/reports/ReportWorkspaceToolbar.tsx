@@ -64,7 +64,7 @@ export function ReportWorkspaceToolbar({
   return (
     <header className="report-workspace-toolbar">
       <label className="report-course-select">
-        <span>当前课程</span>
+        <span>学习报告 · 当前课程</span>
         <select aria-label="选择课程" value={courseId} onChange={(event) => onCourseChange(event.target.value)}>
           {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
         </select>

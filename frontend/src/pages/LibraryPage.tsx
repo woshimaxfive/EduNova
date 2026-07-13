@@ -353,7 +353,7 @@ export function LibraryPage() {
 
   return (
     <>
-      <PageFrame title="资料库" variant="wide-workspace">
+      <PageFrame title="资料库" titleMode="sr-only" variant="wide-workspace">
         <section className="library-workspace" aria-label="资料工作台">
           <input
             ref={uploadInputRef}

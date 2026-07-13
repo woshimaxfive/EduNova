@@ -327,7 +327,8 @@ describe("student core pages", () => {
     renderPage(<LibraryPage />);
 
     expect(screen.getByRole("region", { name: "历史对话" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "资料库" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "资料库" })).toHaveClass("visually-hidden");
+    expect(screen.getByText("资料库", { selector: ".library-toolbar-kicker" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "资料工作台" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "资料文件列表" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "搜索资料" })).toBeInTheDocument();
@@ -342,7 +343,8 @@ describe("student core pages", () => {
   it("renders studio as a generated-resource workspace", () => {
     renderPage(<StudioPage />);
 
-    expect(screen.getByRole("heading", { name: "资源工坊" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "资源工坊" })).toHaveClass("visually-hidden");
+    expect(screen.getByText("资源工坊 · 课程")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "资源成果工作台" })).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "成果库" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "成果画布" })).toBeInTheDocument();
@@ -375,7 +377,8 @@ describe("student core pages", () => {
   it("renders practice as a focused three-state workspace", async () => {
     renderPage(<PracticePage />);
 
-    expect(screen.getByRole("heading", { name: "练习" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "练习" })).toHaveClass("visually-hidden");
+    expect(screen.getByText(/^针对性练习 ·/)).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "先到资料库创建课程" })).toHaveAttribute("href", "/app/library");
     expect(screen.getByRole("button", { name: "练习设置" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "练习作答" })).not.toBeInTheDocument();
@@ -385,7 +388,8 @@ describe("student core pages", () => {
   it("renders reports as an explainable learning record", async () => {
     renderPage(<ReportsPage />);
 
-    expect(screen.getByRole("heading", { name: "学习报告" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "学习报告" })).toHaveClass("visually-hidden");
+    expect(screen.getByText("学习报告 · 当前课程")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "学习报告数据工作台" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "学习数据仪表盘" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "实时学习指标" })).toBeInTheDocument();
@@ -397,7 +401,8 @@ describe("student core pages", () => {
   it("renders settings with model, privacy, and account boundaries", () => {
     renderPage(<SettingsPage />);
 
-    expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "设置" })).toHaveClass("visually-hidden");
+    expect(screen.getByRole("heading", { name: "模型与账号" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "模型设置" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "隐私与数据" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "账号设置" })).toBeInTheDocument();

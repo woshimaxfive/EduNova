@@ -48,7 +48,7 @@ const EMPTY_PROFILE: StudentProfileResponse = {
   evidence_summary: {},
   updated_reason: null,
   updated_at: null,
-  next_question: "这门课你最想先解决什么问题？",
+  next_question: "接下来你最想学会、完成或解决什么？",
   next_question_dimension: "learning_goal"
 };
 

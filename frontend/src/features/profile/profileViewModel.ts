@@ -8,6 +8,8 @@ export type ProfileDimensionMeta = {
   shortLabel: string;
   description: string;
   guidance: string;
+  examples: string;
+  legacyLabels: string[];
 };
 
 export type ProfileDimensionView = ProfileDimensionMeta & {
@@ -40,14 +42,78 @@ export type ProfileUpdateReceipt = {
 };
 
 export const PROFILE_DIMENSIONS: ProfileDimensionMeta[] = [
-  { key: "major_background", label: "专业背景", shortLabel: "背景", description: "专业方向与已有学习经历", guidance: "描述你目前所学的方向、阶段或相关学习经历即可。" },
-  { key: "knowledge_foundation", label: "知识基础", shortLabel: "基础", description: "当前知识储备与先修能力", guidance: "说说你已经接触过的相关课程、概念或技能即可。" },
-  { key: "learning_goal", label: "学习目标", shortLabel: "目标", description: "希望达成的学习结果", guidance: "说明你现阶段最想掌握、完成或解决的内容即可。" },
-  { key: "cognitive_style", label: "认知风格", shortLabel: "认知", description: "理解、推理与组织知识的方式", guidance: "描述你理解、分析和整理新知识时的习惯即可。" },
-  { key: "learning_preference", label: "学习偏好", shortLabel: "偏好", description: "更适合的内容与练习形式", guidance: "说明什么样的内容呈现和练习方式更适合你即可。" },
-  { key: "weak_points", label: "薄弱点", shortLabel: "薄弱", description: "重复出现且有证据支持的困难", guidance: "指出目前最难理解、最容易出错或经常卡住的部分即可。" },
-  { key: "learning_pace", label: "学习节奏", shortLabel: "节奏", description: "任务密度与复习节奏偏好", guidance: "描述你通常能投入的学习时间和学习频率即可。" },
-  { key: "motivation_interest", label: "动机兴趣", shortLabel: "动机", description: "持续学习的兴趣与驱动力", guidance: "说说促使你学习的原因、期待或感兴趣的方向即可。" }
+  {
+    key: "major_background",
+    label: "学习背景",
+    shortLabel: "背景",
+    description: "你目前在学什么，以及接触过哪些相关内容",
+    guidance: "说说你目前所学的方向、阶段或相关经历。",
+    examples: "所学专业、当前阶段、自学经历或做过的相关项目。",
+    legacyLabels: ["专业背景"]
+  },
+  {
+    key: "knowledge_foundation",
+    label: "已有基础",
+    shortLabel: "基础",
+    description: "你已经掌握的知识、概念和工具",
+    guidance: "说说你已经会什么，以及目前熟悉到什么程度。",
+    examples: "学过的课程、掌握的工具、了解的概念，或者目前刚入门。",
+    legacyLabels: ["知识基础"]
+  },
+  {
+    key: "learning_goal",
+    label: "学习目标",
+    shortLabel: "目标",
+    description: "你接下来希望学会、完成或解决的事情",
+    guidance: "说说你现阶段最想达到什么结果。",
+    examples: "想掌握的知识、想完成的项目、职业或考试目标。",
+    legacyLabels: ["学习目标"]
+  },
+  {
+    key: "cognitive_style",
+    label: "理解习惯",
+    shortLabel: "理解",
+    description: "你通常怎样把陌生内容弄懂并整理清楚",
+    guidance: "说说面对新知识时，你通常会先做什么、怎样逐步理解。",
+    examples: "先看整体框架、逐步推导、通过类比理解，或者边做边总结。",
+    legacyLabels: ["认知风格"]
+  },
+  {
+    key: "learning_preference",
+    label: "学习方式",
+    shortLabel: "方式",
+    description: "你更愿意使用的内容和练习形式",
+    guidance: "说说什么样的讲解和练习方式更适合你。",
+    examples: "图解、案例、视频、代码实操、练习题或阅读讲解。",
+    legacyLabels: ["学习偏好"]
+  },
+  {
+    key: "weak_points",
+    label: "学习难点",
+    shortLabel: "难点",
+    description: "你目前难理解、容易出错或经常卡住的内容",
+    guidance: "说说哪些内容正在影响你的理解或做题。",
+    examples: "难理解的概念、不会应用的公式、经常做错的题型。",
+    legacyLabels: ["薄弱点"]
+  },
+  {
+    key: "learning_pace",
+    label: "学习节奏",
+    shortLabel: "节奏",
+    description: "你能投入的时间和习惯的学习频率",
+    guidance: "说说你通常能安排多少时间，以及喜欢怎样分配。",
+    examples: "每天学习多久、每周学习几次，或者集中学习还是少量多次。",
+    legacyLabels: ["学习节奏"]
+  },
+  {
+    key: "motivation_interest",
+    label: "学习动力",
+    shortLabel: "动力",
+    description: "你为什么想学，以及真正感兴趣的方向",
+    guidance: "说说促使你学习的原因、期待或感兴趣的方向。",
+    examples: "感兴趣的领域、未来想从事的工作、想解决的问题或希望作出的贡献。",
+    legacyLabels: ["动机兴趣", "学习动机"]
+  }
 ];
 
 const dimensionKeySet = new Set<ProfileDimensionKey>(PROFILE_DIMENSIONS.map((item) => item.key));
@@ -88,7 +154,11 @@ function safeDimensionList(value: unknown) {
 function legacyDimensions(event: ProfileEventResponse) {
   if (isProfileDimensionKey(event.dimension)) return [event.dimension];
   return PROFILE_DIMENSIONS
-    .filter((item) => event.change_summary.includes(item.label) || event.change_summary.includes(item.shortLabel))
+    .filter((item) => (
+      event.change_summary.includes(item.label)
+      || event.change_summary.includes(item.shortLabel)
+      || item.legacyLabels.some((label) => event.change_summary.includes(label))
+    ))
     .map((item) => item.key);
 }
 

@@ -35,14 +35,14 @@ PROFILE_QUESTION_ORDER = (
 )
 
 PROFILE_QUESTIONS = {
-    "major_background": "你目前的专业方向或学习经历是什么？",
-    "knowledge_foundation": "关于当前课程，你已经学过哪些基础内容？",
-    "learning_goal": "这门课你最想先解决什么问题？",
-    "cognitive_style": "遇到新概念时，你通常怎样理解得最快？",
-    "learning_preference": "什么样的内容呈现和练习方式更适合你？",
-    "weak_points": "最近哪一个知识点最容易卡住或出错？",
-    "learning_pace": "你通常每次或每周能安排多少学习时间？",
-    "motivation_interest": "是什么目标或兴趣让你想继续学这门课？",
+    "major_background": "你现在在学什么，或者有过哪些相关经历？",
+    "knowledge_foundation": "关于现在想学的内容，你已经会些什么？",
+    "learning_goal": "接下来你最想学会、完成或解决什么？",
+    "cognitive_style": "遇到新知识时，你通常怎样更容易弄懂？",
+    "learning_preference": "你更喜欢通过什么形式学习和练习？",
+    "weak_points": "目前哪些内容最容易让你卡住或出错？",
+    "learning_pace": "你通常能投入多少时间，喜欢怎样安排学习？",
+    "motivation_interest": "你为什么想学这些内容，对什么方向感兴趣？",
 }
 
 
@@ -278,6 +278,9 @@ class ProfileService:
                 r"(?:我的)?目标(?:是|改为|改成)([^，。；,;]{2,80})",
                 r"(?:想|希望|目标是)([^，。；,;]*掌握[^，。；,;]*)",
                 r"(?:想|希望|目标是)([^，。；,;]*复习[^，。；,;]*)",
+                r"(?:想|希望)(成为[^，。；,;]{2,80})",
+                r"(?:想|希望)(完成[^，。；,;]{2,80})",
+                r"(?:想|希望)(解决[^，。；,;]{2,80})",
             ],
         )
         if learning_goal:
@@ -318,7 +321,23 @@ class ProfileService:
         if weak_points:
             updates["weak_points"] = weak_points
 
-        if "提升" in message_text and "能力" in message_text:
+        motivation_markers = (
+            "感兴趣",
+            "热爱",
+            "动力",
+            "理想",
+            "职业",
+            "想成为",
+            "想进入",
+            "想从事",
+            "做贡献",
+            "贡献",
+            "帮助别人",
+            "解决真实问题",
+        )
+        if ("提升" in message_text and "能力" in message_text) or any(
+            marker in message_text for marker in motivation_markers
+        ):
             updates["motivation_interest"] = self._clip_sentence(message_text)
 
         return updates
@@ -392,12 +411,12 @@ class ProfileService:
         markers = {
             "major_background": ("专业", "年级", "学生", "工作"),
             "knowledge_foundation": ("基础", "学过", "熟悉", "了解", "零基础"),
-            "learning_goal": ("目标", "希望", "想掌握", "想学会", "复习"),
+            "learning_goal": ("目标", "希望", "想掌握", "想学会", "想成为", "想完成", "想解决", "复习"),
             "cognitive_style": ("理解", "推导", "结构", "框架", "步骤"),
             "learning_preference": ("喜欢", "图解", "案例", "代码", "视频", "练习"),
             "weak_points": ("薄弱", "不熟", "不会", "卡住", "容易错", "没理解", "难"),
             "learning_pace": ("每天", "每周", "分钟", "小时", "学习时间"),
-            "motivation_interest": ("兴趣", "动力", "为了", "提升", "项目"),
+            "motivation_interest": ("兴趣", "动力", "为了", "提升", "项目", "想成为", "职业", "理想", "贡献", "方向"),
         }
         for key, values in markers.items():
             if any(marker in message_text for marker in values):
@@ -421,14 +440,14 @@ class ProfileService:
     @staticmethod
     def _changed_labels(updates: dict[str, Any]) -> list[str]:
         labels = {
-            "major_background": "专业背景",
-            "knowledge_foundation": "知识基础",
+            "major_background": "学习背景",
+            "knowledge_foundation": "已有基础",
             "learning_goal": "学习目标",
-            "cognitive_style": "认知风格",
-            "learning_preference": "学习偏好",
-            "weak_points": "薄弱点",
+            "cognitive_style": "理解习惯",
+            "learning_preference": "学习方式",
+            "weak_points": "学习难点",
             "learning_pace": "学习节奏",
-            "motivation_interest": "学习动机",
+            "motivation_interest": "学习动力",
         }
         return [labels[key] for key in updates if key in labels]
 

@@ -897,7 +897,7 @@ describe("student interaction affordances", () => {
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect((await screen.findAllByText("反向传播推导")).length).toBeGreaterThan(0);
-    expect(screen.getByRole("region", { name: "本次画像更新" })).toHaveTextContent("已应用薄弱点");
+    expect(screen.getByRole("region", { name: "本次画像更新" })).toHaveTextContent("已应用学习难点");
     expect(calls.filter((call) => call.url === PROFILE_ENDPOINTS.chat)).toEqual([
       { url: PROFILE_ENDPOINTS.chat, method: "post", data: { message: "两周冲刺软件杯演示" } },
       { url: PROFILE_ENDPOINTS.chat, method: "post", data: { message: "最担心反向传播推导。" } }

@@ -359,8 +359,9 @@ describe("student core pages", () => {
     expect(screen.getByRole("navigation", { name: "画像维度" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "画像问题回答" })).toBeInTheDocument();
     expect(await screen.findByText("期末前掌握神经网络")).toBeInTheDocument();
-    expect(screen.getByText("建议补充 · 薄弱点")).toBeInTheDocument();
-    expect(screen.getByText("指出目前最难理解、最容易出错或经常卡住的部分即可。")).toBeInTheDocument();
+    expect(screen.getByText("建议补充 · 学习难点")).toBeInTheDocument();
+    expect(screen.getByText("说说哪些内容正在影响你的理解或做题。")).toBeInTheDocument();
+    expect(screen.getByText("可以说：难理解的概念、不会应用的公式、经常做错的题型。")).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "画像动态" })).toHaveTextContent("更新学习画像：学习目标、基础");
     expect(screen.queryByRole("button", { name: "更新目标" })).not.toBeInTheDocument();
   });

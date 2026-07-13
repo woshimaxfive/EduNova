@@ -53,12 +53,33 @@ const event = (overrides: Partial<ProfileEventResponse> = {}): ProfileEventRespo
 });
 
 describe("profileViewModel", () => {
-  it("provides concise guidance for every profile dimension", () => {
+  it("provides friendly labels, guidance and plain-text examples for every profile dimension", () => {
+    expect(PROFILE_DIMENSIONS.map((item) => item.label)).toEqual([
+      "学习背景",
+      "已有基础",
+      "学习目标",
+      "理解习惯",
+      "学习方式",
+      "学习难点",
+      "学习节奏",
+      "学习动力"
+    ]);
+    expect(PROFILE_DIMENSIONS.map((item) => item.shortLabel)).toEqual([
+      "背景",
+      "基础",
+      "目标",
+      "理解",
+      "方式",
+      "难点",
+      "节奏",
+      "动力"
+    ]);
     for (const dimension of PROFILE_DIMENSIONS) {
       expect(profileQuestionGuidance(dimension.key)).toMatchObject({
         key: dimension.key,
         label: dimension.label,
-        guidance: expect.stringMatching(/即可。$/)
+        guidance: expect.stringMatching(/。$/),
+        examples: expect.stringMatching(/。$/)
       });
     }
     expect(profileQuestionGuidance(undefined)).toBeNull();
@@ -93,6 +114,17 @@ describe("profileViewModel", () => {
     expect(buildProfileEventView(legacy).appliedDimensions).toEqual(["knowledge_foundation", "learning_goal"]);
     expect(buildProfileEventView(legacy).sourceLabel).toBe("课程问答");
     expect(profileEventsForDimension([legacy], "knowledge_foundation")).toHaveLength(1);
+
+    const legacyCognitiveStyle = event({
+      dimension: "profile_chat",
+      change_summary: "更新学习画像：认知风格、学习动机",
+      evidence_json: {},
+      status: "applied"
+    });
+    expect(buildProfileEventView(legacyCognitiveStyle).appliedDimensions).toEqual([
+      "cognitive_style",
+      "motivation_interest"
+    ]);
   });
 
   it("only marks real response differences as changed", () => {

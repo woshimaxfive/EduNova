@@ -31,6 +31,9 @@ export function ProfileComposer({ inputRef, value, nextQuestion, nextQuestionDim
           <small>建议补充{questionGuidance ? ` · ${questionGuidance.label}` : ""}</small>
           <strong>{nextQuestion}</strong>
           <em>{questionGuidance?.guidance ?? "用自己的话描述当前情况即可，不需要使用专业术语。"}</em>
+          <span className="profile-question-examples">
+            可以说：{questionGuidance?.examples ?? "当前目标、已有基础、学习困难或学习安排。"}
+          </span>
         </span>
       </div>
       <div className="profile-composer-box">

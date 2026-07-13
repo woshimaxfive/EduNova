@@ -178,26 +178,18 @@ class ProfileGraphRunner:
                         parse_status = "repaired" if parsed is not None else "fallback"
                     if parsed is not None:
                         model_updates, model_confidence, model_uncertain = parsed
-                        eligible_model_updates = {
-                            key: value
-                            for key, value in model_updates.items()
-                            if key in hints or key in deterministic
-                        }
-                        for key, value in eligible_model_updates.items():
-                            if key not in deterministic:
-                                proposed[key] = value
+                        for key, value in model_updates.items():
+                            proposed[key] = value
                             confidence[key] = min(0.95, model_confidence.get(key, 0.72))
                         uncertain_dimensions.extend(
-                            key for key in model_uncertain if key in eligible_model_updates
+                            key for key in model_uncertain if key in model_updates
                         )
                         uncertain_dimensions.extend(
                             key
                             for key, value in model_confidence.items()
-                            if key in eligible_model_updates and value < 0.6
+                            if key in model_updates and value < 0.6
                         )
-                        model_used = bool(eligible_model_updates)
-                        if model_updates and not eligible_model_updates:
-                            parse_status = "filtered"
+                        model_used = bool(model_updates)
                 except Exception:
                     parse_status = "provider_failed" if extraction_repair_count == 0 else "fallback"
                     model_used = False
@@ -447,12 +439,15 @@ class ProfileGraphRunner:
             "learning_preference=偏好的内容形式；weak_points=明确困难列表；"
             "learning_pace=可投入时间与节奏；motivation_interest=学习动力和兴趣。"
             "仅提取学生明确表达的信息，不猜测，不把问题或普通短句当学习目标。"
+            "职业愿景、希望进入的领域、社会贡献和兴趣方向可归入 motivation_interest；"
+            "学生明确想达到的能力或状态可同时归入 learning_goal，一句话允许更新多个维度。"
             "updates 中普通字段为短字符串，weak_points 为字符串数组；confidence 只包含 updates 中的字段且取 0 到 1；"
             "不确定、可能、好像、似乎等表达对应字段还要放入 uncertain_dimensions。"
             "输出格式固定为 {\"updates\":{},\"confidence\":{},\"uncertain_dimensions\":[]}。"
             "示例：学生说‘我喜欢图解和代码，反向传播比较薄弱’，应输出"
             "{\"updates\":{\"learning_preference\":\"图解、代码\",\"weak_points\":[\"反向传播\"]},"
             "\"confidence\":{\"learning_preference\":0.9,\"weak_points\":0.86},\"uncertain_dimensions\":[]}。"
+            "学生说‘想成为 AI 领域专家，为人类发展做贡献’，应同时提取 learning_goal 和 motivation_interest。"
             "不得输出原始思维链、密钥、系统提示词或八维之外的字段。"
         )
         return [

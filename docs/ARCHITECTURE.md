@@ -375,6 +375,8 @@ ReviewAgent 审核内容
 
 当前真实接管生产主流程的是 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。九条 Graph 都落真实节点耗时和白名单 metadata，生成型节点均有规则与可选模型审核，失败时最多 Repair 一次。学习档案导出继续由确定性 Service 聚合并交给 Redis/RQ Worker 生成文件，不注册为生产 Graph。
 
+`ProfileGraph` 的显式画像回答采用模型主导语义抽取：有效白名单字段不再由关键词许可，规则负责补充明显遗漏、格式与隐私边界，并在模型不可用、结构无效或 Review 拒绝时兜底。职业愿景、兴趣方向和社会贡献可被理解为学习动力，明确想达到的状态可同时进入学习目标；隐式学习信号仍需多来源证据门控。
+
 ### 6.1 AI 长任务运行时
 
 Phase 17 不增加 Graph 数量，而是在 `CourseBuilderGraph` 和 `ResourceGenerationGraph` 外增加统一运行时：

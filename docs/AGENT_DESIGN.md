@@ -27,7 +27,7 @@ Phase 17 新增的 `AIJobRuntime` 也不是第十一条 Agent Graph。它只为 
 
 Phase 18 新增的 `ModelExecutionRuntime` 同样不是 Agent Graph。它位于模型配置与 OpenAI-compatible Provider 之间，为九条 Graph、主页/课程流式问答和 Embedding 提供统一错误分类、同配置重试、Redis 并发/熔断、取消检查和 `model_call_runs` 安全审计。模型失败后仍由各 Graph 的规则底稿接管，`rules_only` 不伪装成模型审核。
 
-`ProfileGraph.extract` 会向模型提供当前八维画像的安全摘要、逐维可信度和本次回答，要求输出 `updates/confidence/uncertain_dimensions`。纯 JSON、代码块 JSON 和正文内首个完整 JSON 均可解析；首次无效只调用一次格式修复。有效模型提案必须进入 ReviewAgent，不确定陈述只形成候选证据；失败后使用增强中文规则并记录 `rules_only`、解析状态和修复次数。
+`ProfileGraph.extract` 会向模型提供当前八维画像的安全摘要、逐维可信度和本次回答，要求输出 `updates/confidence/uncertain_dimensions`。纯 JSON、代码块 JSON 和正文内首个完整 JSON 均可解析；首次无效只调用一次格式修复。有效模型字段不依赖人工关键词准入，同一维度由模型语义结果优先，规则只补充模型遗漏的高确定性字段；关键词提示仅用于识别可能遗漏的维度并选择下一问。有效模型提案必须进入 ReviewAgent，不确定陈述只形成候选证据；模型不可用、结构连续无效或审核拒绝后使用增强中文规则并记录 `rules_only`、解析状态和修复次数。
 
 ## 3. AgentState
 

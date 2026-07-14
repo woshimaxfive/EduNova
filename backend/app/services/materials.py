@@ -33,6 +33,8 @@ from backend.app.schemas.materials import (
 )
 from backend.app.services.material_parsers import DocumentParseError, DocumentParser
 from backend.app.services.material_retrieval import MaterialChunkingService
+from backend.app.services.storage import StorageAdapter, build_storage
+from backend.app.services.upload_security import MalwareScanner, UploadSecurityError, build_malware_scanner, validate_upload_type
 
 
 class MaterialValidationError(Exception):
@@ -233,6 +235,8 @@ class MaterialService:
         chunking_service: MaterialChunkingService | None = None,
         model_service: MaterialModelService | None = None,
         trace_recorder: AgentTraceRecorder | None = None,
+        storage: StorageAdapter | None = None,
+        malware_scanner: MalwareScanner | None = None,
     ) -> None:
         self.repository = repository
         self.settings = settings or get_settings()
@@ -240,6 +244,8 @@ class MaterialService:
         self.chunking_service = chunking_service or MaterialChunkingService()
         self.model_service = model_service
         self.trace_recorder = trace_recorder
+        self.storage = storage or build_storage(self.settings, kind="materials")
+        self.malware_scanner = malware_scanner or build_malware_scanner(self.settings)
 
     def upload_material(
         self,
@@ -253,12 +259,17 @@ class MaterialService:
         clean_name = self._validate_filename(filename)
         extension = self._extension(clean_name)
         self._validate_size(content)
+        try:
+            validate_upload_type(clean_name, content_type, content)
+            self.malware_scanner.scan(content)
+        except UploadSecurityError as exc:
+            raise MaterialValidationError(str(exc)) from exc
         course = self._require_course(user, course_id) if course_id is not None else None
         if defer_ingestion and extension in self.parsed_text_extensions:
             parse_status, extracted_text = "pending", None
         else:
             parse_status, extracted_text = self._extract_text(extension, content)
-        relative_path = self._store_file(user.id, clean_name, content)
+        relative_path = self._store_file(user.id, clean_name, content, content_type)
         agent_trace_id = make_trace_id()
         metadata = {
             "size_bytes": len(content),
@@ -915,14 +926,10 @@ class MaterialService:
             return "uploaded", None
         return "uploaded", None
 
-    def _store_file(self, user_id: int, filename: str, content: bytes) -> str:
+    def _store_file(self, user_id: int, filename: str, content: bytes, content_type: str) -> str:
         extension = self._extension(filename)
         relative_path = Path(f"user_{user_id}") / f"{uuid4().hex}{extension}"
-        storage_root = Path(self.settings.material_storage_dir)
-        target_path = storage_root / relative_path
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_bytes(content)
-        return relative_path.as_posix()
+        return self.storage.put_bytes(relative_path.as_posix(), content, content_type=content_type)
 
     def _build_upload_result(self, material: Material, course_id: int | None) -> MaterialUploadResult:
         item = self._build_list_item(material)

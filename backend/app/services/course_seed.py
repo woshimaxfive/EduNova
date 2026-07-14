@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -472,19 +471,14 @@ def install_builtin_data_structures_course(db: Session, user: User) -> CourseSee
 
 
 def _safe_delete_export_files(paths: list[str]) -> None:
-    root = Path(get_settings().export_dir).resolve()
+    from backend.app.services.storage import build_storage
+
+    storage = build_storage(get_settings(), kind="exports")
     for raw_path in paths:
-        path = Path(raw_path)
-        if not path.is_absolute():
-            path = (Path.cwd() / path).resolve()
-        else:
-            path = path.resolve()
         try:
-            path.relative_to(root)
-        except ValueError:
+            storage.delete(raw_path)
+        except (OSError, RuntimeError):
             continue
-        if path.is_file():
-            path.unlink()
 
 
 def sync_builtin_courses(db: Session) -> BuiltinCourseSyncResult:

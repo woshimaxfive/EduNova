@@ -266,7 +266,8 @@ def test_image_upload_is_saved_without_ocr(tmp_path: Path) -> None:
     repo = FakeMaterialRepository()
     user = make_user()
 
-    result = upload_bytes(make_service(repo, tmp_path), user, "board.png", b"png-bytes", "image/png")
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+    result = upload_bytes(make_service(repo, tmp_path), user, "board.png", png, "image/png")
 
     data = as_dict(result)
 
@@ -298,28 +299,25 @@ def test_pdf_docx_and_pptx_uploads_are_deep_parsed(
     assert expected_text in (repo.materials[0].extracted_text or "")
 
 
-def test_broken_deep_parse_file_is_saved_as_failed_without_raw_error(tmp_path: Path) -> None:
+def test_broken_deep_parse_file_is_rejected_before_storage(tmp_path: Path) -> None:
     repo = FakeMaterialRepository()
     user = make_user()
 
-    result = upload_bytes(make_service(repo, tmp_path), user, "broken.docx", b"not-a-zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    from backend.app.services.materials import MaterialValidationError
 
-    data = as_dict(result)
-
-    assert data["parse_status"] == "failed"
-    assert data["detail"] == "解析失败"
-    assert repo.materials[0].extracted_text is None
-    assert "not-a-zip" not in str(repo.materials[0].metadata_json)
+    with pytest.raises(MaterialValidationError):
+        upload_bytes(make_service(repo, tmp_path), user, "broken.docx", b"not-a-zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    assert repo.materials == []
 
 
-def test_legacy_office_files_are_not_marked_as_parsed(tmp_path: Path) -> None:
+def test_disguised_legacy_office_files_are_rejected(tmp_path: Path) -> None:
     repo = FakeMaterialRepository()
     user = make_user()
 
-    result = upload_bytes(make_service(repo, tmp_path), user, "old-slides.ppt", b"legacy", "application/vnd.ms-powerpoint")
+    from backend.app.services.materials import MaterialValidationError
 
-    assert as_dict(result)["parse_status"] == "uploaded"
-    assert repo.materials[0].extracted_text is None
+    with pytest.raises(MaterialValidationError):
+        upload_bytes(make_service(repo, tmp_path), user, "old-slides.ppt", b"legacy", "application/vnd.ms-powerpoint")
 
 
 def test_rejects_unsupported_extension_and_oversized_upload(tmp_path: Path) -> None:

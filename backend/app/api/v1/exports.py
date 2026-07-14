@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 from backend.app.api.contracts import TypedAPIRouter as APIRouter
 from backend.app.api.errors import ApiError, api_response
@@ -77,13 +79,13 @@ def download_export_job(
     job_id: int,
     current_user: User = Depends(get_current_user),
     service: ExportService = Depends(get_export_service),
-) -> FileResponse:
+) -> Response:
     try:
-        job = service.get_export_job_file(current_user, job_id)
+        job, content = service.read_export_job_file(current_user, job_id)
     except ExportNotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
-    return FileResponse(
-        path=str(job.file_path),
+    return Response(
+        content=content,
         media_type=job.content_type or "application/octet-stream",
-        filename=job.filename or "edunova-learning-dossier",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(job.filename or 'edunova-learning-dossier')}"},
     )

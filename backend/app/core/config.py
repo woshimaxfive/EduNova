@@ -63,6 +63,16 @@ class Settings(BaseSettings):
     code_verifier_timeout_seconds: float = 40.0
     otel_exporter_otlp_endpoint: str = ""
     otel_service_name: str = "edunova-api"
+    storage_backend: str = "local"
+    s3_endpoint_url: str = ""
+    s3_bucket: str = ""
+    s3_region: str = "us-east-1"
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
+    clamav_enabled: bool = False
+    clamav_host: str = "clamav"
+    clamav_port: int = 3310
+    clamav_timeout_seconds: float = 10.0
 
     @field_validator("system_embedding_dimension", mode="before")
     @classmethod
@@ -77,6 +87,14 @@ class Settings(BaseSettings):
         normalized = value.strip().lower()
         if normalized not in {"docling", "legacy"}:
             raise ValueError("EDUNOVA_DOCUMENT_PARSER must be docling or legacy")
+        return normalized
+
+    @field_validator("storage_backend")
+    @classmethod
+    def validate_storage_backend(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"local", "s3"}:
+            raise ValueError("STORAGE_BACKEND must be local or s3")
         return normalized
 
     model_config = SettingsConfigDict(

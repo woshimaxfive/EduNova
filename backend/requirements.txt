@@ -18,6 +18,8 @@ opentelemetry-instrumentation-fastapi==0.64b0
 opentelemetry-instrumentation-httpx==0.64b0
 opentelemetry-instrumentation-sqlalchemy==0.64b0
 opentelemetry-instrumentation-redis==0.64b0
+boto3==1.43.47
+puremagic==2.2.0
 cryptography
 langgraph
 pypdf

@@ -22,6 +22,7 @@ from backend.app.services.material_parsers import (
     ParsedDocument,
     create_document_structure_extractor,
 )
+from backend.app.services.storage import build_storage
 
 
 class MaterialIngestionError(RuntimeError):
@@ -120,10 +121,10 @@ class MaterialIngestionGraphRunner:
                 raise MaterialIngestionError("资料不存在或无权访问。")
             if state["extension"] not in {".pdf", ".docx", ".pptx", ".txt", ".md", ".markdown"}:
                 raise MaterialIngestionError("当前文件格式不支持精细解析。")
-            path = Path(self.settings.material_storage_dir) / material.storage_path
-            if not path.is_file():
+            storage = build_storage(self.settings, kind="materials")
+            if not storage.exists(material.storage_path):
                 raise MaterialIngestionError("资料原文件不存在，无法重新解析。")
-            content = path.read_bytes()
+            content = storage.read_bytes(material.storage_path)
             if not content:
                 raise MaterialIngestionError("资料原文件为空。")
             return {"content": content}

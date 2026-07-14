@@ -27,6 +27,7 @@ from backend.app.models import (
 )
 from backend.app.schemas.exports import ExportJobResponse, LearningDossierExport, LearningDossierSourceSummary
 from backend.app.schemas.reports import empty_report, iso_timestamp
+from backend.app.services.storage import StorageAdapter, build_storage
 
 
 class ExportNotFoundError(NotFoundDomainError):
@@ -216,11 +217,13 @@ class ExportService:
         settings: Settings | None = None,
         job_queue: ExportJobQueue | None = None,
         run_jobs_inline: bool = False,
+        storage: StorageAdapter | None = None,
     ) -> None:
         self.repository = repository
         self.settings = settings or get_settings()
         self.job_queue = job_queue
         self.run_jobs_inline = run_jobs_inline
+        self.storage = storage or build_storage(self.settings, kind="exports")
 
     def export_learning_dossier(self, user: User, course_id: int) -> LearningDossierExport:
         course = self.repository.get_course_for_user(user.id, course_id)
@@ -384,14 +387,12 @@ class ExportService:
             job.updated_at = datetime.now(UTC)
             self.repository.commit()
             rendered = self._render_export_job(job)
-            export_dir = Path(self.settings.export_dir)
-            export_dir.mkdir(parents=True, exist_ok=True)
-            file_path = export_dir / f"job-{job.id}-{rendered.filename}"
-            file_path.write_bytes(rendered.content)
+            file_key = f"job-{job.id}-{rendered.filename}"
+            stored_key = self.storage.put_bytes(file_key, rendered.content, content_type=rendered.content_type)
             job.status = "completed"
             job.filename = rendered.filename
             job.content_type = rendered.content_type
-            job.file_path = str(file_path)
+            job.file_path = stored_key
             job.error_message = None
             job.completed_at = datetime.now(UTC)
             job.updated_at = job.completed_at
@@ -423,6 +424,13 @@ class ExportService:
         if job.status != "completed" or not job.file_path:
             raise ExportNotFoundError("导出任务尚未完成。")
         return job
+
+    def read_export_job_file(self, user: User, job_id: int) -> tuple[ExportJob, bytes]:
+        job = self.get_export_job_file(user, job_id)
+        try:
+            return job, self.storage.read_bytes(str(job.file_path))
+        except (OSError, RuntimeError) as exc:
+            raise ExportNotFoundError("导出文件不存在或已过期。") from exc
 
     def _render_learning_dossier_job(self, job: ExportJob) -> RenderedExport:
         if job.course_id is None:

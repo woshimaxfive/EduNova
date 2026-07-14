@@ -467,7 +467,8 @@ def test_learning_dossier_export_jobs_generate_files(
     assert job["content_type"] == expected_content_type
     assert job["agent_trace_id"]
     assert job["error_message"] is None
-    saved_path = Path(repo.export_jobs[0].file_path)
+    saved_path = service.storage.local_path(str(repo.export_jobs[0].file_path))
+    assert saved_path is not None
     assert saved_path.exists()
     assert saved_path.read_bytes().startswith(magic)
     assert "系统提示词" not in saved_path.read_bytes().decode("utf-8", errors="ignore")
@@ -548,7 +549,8 @@ def test_resource_slide_export_job_generates_real_pptx_and_reuses_completed_job(
     assert first["export_type"] == "resource_artifact"
     assert first["resource_id"] == "9901"
     assert first["job_id"] == second["job_id"]
-    saved_path = Path(repo.export_jobs[0].file_path)
+    saved_path = service.storage.local_path(str(repo.export_jobs[0].file_path))
+    assert saved_path is not None
     assert saved_path.exists()
     assert saved_path.read_bytes().startswith(b"PK")
     presentation = Presentation(saved_path)

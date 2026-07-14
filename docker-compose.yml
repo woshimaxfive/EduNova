@@ -78,6 +78,17 @@ services:
       MODEL_CALL_LOG_RETENTION_DAYS: ${MODEL_CALL_LOG_RETENTION_DAYS:-30}
       CODE_VERIFIER_URL: http://code-verifier:8090
       CODE_VERIFIER_TIMEOUT_SECONDS: ${CODE_VERIFIER_TIMEOUT_SECONDS:-40}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      CLAMAV_ENABLED: ${CLAMAV_ENABLED:-false}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      CLAMAV_TIMEOUT_SECONDS: ${CLAMAV_TIMEOUT_SECONDS:-10}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -127,6 +138,13 @@ services:
       WEB_SEARCH_MAX_RESULTS: ${WEB_SEARCH_MAX_RESULTS:-5}
       EXPORT_DIR: ${EXPORT_DIR:-storage/exports}
       EXPORT_QUEUE_NAME: ${EXPORT_QUEUE_NAME:-edunova_exports}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     volumes:
       - export_data:/app/storage/exports
     command: ["sh", "-c", "rq worker $${EXPORT_QUEUE_NAME:-edunova_exports} --url $${REDIS_URL}"]
@@ -182,6 +200,13 @@ services:
       EDUNOVA_DOCUMENT_PARSER: ${EDUNOVA_DOCUMENT_PARSER:-docling}
       DOCLING_ARTIFACTS_PATH: /opt/docling/models
       DOCLING_DOCUMENT_TIMEOUT_SECONDS: ${DOCLING_DOCUMENT_TIMEOUT_SECONDS:-120}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     command: ["sh", "-c", "rq worker $${AI_JOB_QUEUE_NAME:-edunova_ai} --url $${REDIS_URL}"]
     volumes:
       - material_data:/app/var/uploads/materials
@@ -226,6 +251,19 @@ services:
       timeout: 5s
       retries: 8
 
+  clamav:
+    image: clamav/clamav:1.4
+    profiles: ["security"]
+    expose:
+      - "3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "3"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
   frontend:
     build:
       context: .
@@ -268,6 +306,7 @@ volumes:
   redis_data:
   export_data:
   material_data:
+  clamav_data:
 
 networks:
   verification_net:

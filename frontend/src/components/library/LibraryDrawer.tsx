@@ -1,5 +1,6 @@
 import { X } from "@phosphor-icons/react";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode } from "react";
+import { ModalFrame } from "../primitives/Dialog";
 
 type LibraryDrawerProps = {
   title: string;
@@ -16,28 +17,26 @@ export function LibraryDrawer({
   workspaceInteractive = false,
   onClose,
 }: LibraryDrawerProps) {
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
+  const drawer = (
+    <aside className="library-drawer" role={workspaceInteractive ? "region" : undefined} aria-label={title}>
+      <header className="library-drawer-header">
+        <h2>{title}</h2>
+        <button type="button" aria-label={`关闭${title}`} onClick={onClose}>
+          <X size={19} weight="bold" aria-hidden="true" />
+        </button>
+      </header>
+      <div className="library-drawer-scroll">{children}</div>
+      {footer ? <footer className="library-drawer-footer">{footer}</footer> : null}
+    </aside>
+  );
+
+  if (!workspaceInteractive) {
+    return <ModalFrame title={title} layerClassName="library-drawer-layer" testId="library-drawer-layer" onClose={onClose}>{drawer}</ModalFrame>;
+  }
 
   return (
-    <div className={`library-drawer-layer${workspaceInteractive ? " workspace-interactive" : ""}`} role="presentation" data-testid="library-drawer-layer" onMouseDown={(event) => {
-      if (!workspaceInteractive && event.target === event.currentTarget) onClose();
-    }}>
-      <aside className="library-drawer" role="dialog" aria-modal={workspaceInteractive ? undefined : "true"} aria-label={title}>
-        <header className="library-drawer-header">
-          <h2>{title}</h2>
-          <button type="button" aria-label={`关闭${title}`} onClick={onClose}>
-            <X size={19} weight="bold" aria-hidden="true" />
-          </button>
-        </header>
-        <div className="library-drawer-scroll">{children}</div>
-        {footer ? <footer className="library-drawer-footer">{footer}</footer> : null}
-      </aside>
+    <div className="library-drawer-layer workspace-interactive" data-testid="library-drawer-layer">
+      {drawer}
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { ArrowClockwise, X } from "@phosphor-icons/react";
-import { type KeyboardEvent } from "react";
 
 import { type AgentTraceEvent } from "../../types/api";
 import { type AiJob } from "../../api/aiJobs";
@@ -14,6 +13,7 @@ import { AgentTimeline } from "../evidence/AgentTimeline";
 import { AiJobProgress } from "../feedback/AiJobProgress";
 import { InlineFeedback } from "../feedback/InlineFeedback";
 import { resourceTypeMeta } from "./studioResourceMeta";
+import { ModalFrame } from "../primitives/Dialog";
 
 export type StudioDrawerMode = "generate" | "details" | null;
 export type StudioDetailTab = "quality" | "sources" | "trace";
@@ -73,21 +73,9 @@ export function StudioDrawer(props: StudioDrawerProps) {
   if (!props.mode) return null;
   const title = props.mode === "generate" ? "生成设置" : "成果详情";
 
-  function keepKeyboardInside(event: KeyboardEvent<HTMLElement>) {
-    if (event.key === "Escape") props.onClose();
-  }
-
   return (
-    <div className="studio-drawer-layer" role="presentation" data-testid="studio-drawer-layer" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) props.onClose();
-    }}>
-      <aside
-        className="studio-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onKeyDown={keepKeyboardInside}
-      >
+    <ModalFrame title={title} layerClassName="studio-drawer-layer" testId="studio-drawer-layer" onClose={props.onClose}>
+      <aside className="studio-drawer" aria-label={title}>
         <header className="studio-drawer-header">
           <h2>{title}</h2>
           <button type="button" aria-label={`关闭${title}`} onClick={props.onClose}>
@@ -97,7 +85,7 @@ export function StudioDrawer(props: StudioDrawerProps) {
 
         {props.mode === "generate" ? <GeneratePanel {...props} /> : <DetailsPanel {...props} />}
       </aside>
-    </div>
+    </ModalFrame>
   );
 }
 

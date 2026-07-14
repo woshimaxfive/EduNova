@@ -10,6 +10,7 @@ import { type CourseLoopSummary, type StudyStep } from "../../features/course-sp
 import { AgentTraceDisclosure } from "../evidence/AgentTraceDisclosure";
 import { InlineFeedback } from "../feedback/InlineFeedback";
 import { studyStepStatusLabels } from "./courseSpaceLabels";
+import { ModalFrame } from "../primitives/Dialog";
 
 type CourseProgressDrawerProps = {
   open: boolean;
@@ -49,10 +50,8 @@ export function CourseProgressDrawer({
   if (!open) return null;
 
   return (
-    <div className="course-drawer-layer" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <aside className="course-progress-drawer" role="dialog" aria-modal="true" aria-labelledby="course-progress-title">
+    <ModalFrame title="学习进度" layerClassName="course-drawer-layer" onClose={onClose}>
+      <aside className="course-progress-drawer" aria-labelledby="course-progress-title">
         <header className="course-drawer-header">
           <h2 id="course-progress-title">学习进度</h2>
           <div className="course-drawer-header-actions">
@@ -168,7 +167,7 @@ export function CourseProgressDrawer({
 
         <AgentTraceDisclosure traceId={traceId} label="查看 CourseBuilderGraph" />
       </aside>
-    </div>
+    </ModalFrame>
   );
 }
 

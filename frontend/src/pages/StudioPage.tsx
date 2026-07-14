@@ -180,18 +180,6 @@ export function StudioPage() {
   }, [initialCourseId, jobs, resourceJobId]);
 
   useEffect(() => {
-    function closeDrawer(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape") {
-        setDrawerMode(null);
-        setRegenerateDialogOpen(false);
-        setCompareDialogOpen(false);
-      }
-    }
-    window.addEventListener("keydown", closeDrawer);
-    return () => window.removeEventListener("keydown", closeDrawer);
-  }, []);
-
-  useEffect(() => {
     if (!resourceJob) return;
     if (resourceJob.status === "failed") {
       // Restore durable server job failure after navigation or refresh.

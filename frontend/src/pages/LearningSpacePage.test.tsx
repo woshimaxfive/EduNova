@@ -768,7 +768,7 @@ describe("LearningSpacePage", () => {
     await user.type(searchInput, "接口");
 
     expect(within(historyRail).queryByRole("searchbox", { name: "搜索历史关键词" })).not.toBeInTheDocument();
-    expect(within(historyRail).getByRole("button", { name: /接口里的主页历史/ })).toBeInTheDocument();
+    expect(within(historyRail).getByRole("button", { name: /接口里的主页历史/, hidden: true })).toBeInTheDocument();
     expect(within(searchDialog).getByRole("button", { name: /接口里的主页历史/ })).toBeInTheDocument();
   });
 

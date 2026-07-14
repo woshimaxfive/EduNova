@@ -5,6 +5,7 @@ import { type PracticeSessionDetail } from "../../api/practice";
 import { type GeneratedResource } from "../../api/resources";
 import { PATHS } from "../../app/routePaths";
 import { AgentTraceDisclosure } from "../evidence/AgentTraceDisclosure";
+import { ModalFrame } from "../primitives/Dialog";
 
 export type PracticeDrawerMode = "settings" | "results";
 
@@ -52,10 +53,8 @@ export function PracticeDrawer({
   const closure = session?.closure_update;
 
   return (
-    <div className="practice-drawer-layer" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <aside className="practice-drawer" role="dialog" aria-modal="true" aria-labelledby="practice-drawer-title">
+    <ModalFrame title={mode === "settings" ? "练习设置" : "学习结果"} layerClassName="practice-drawer-layer" onClose={onClose}>
+      <aside className="practice-drawer" aria-labelledby="practice-drawer-title">
         <header>
           <h2 id="practice-drawer-title">{mode === "settings" ? "练习设置" : "学习结果"}</h2>
           <button type="button" aria-label={`关闭${mode === "settings" ? "练习设置" : "学习结果"}`} onClick={onClose}>
@@ -141,6 +140,6 @@ export function PracticeDrawer({
           </div>
         )}
       </aside>
-    </div>
+    </ModalFrame>
   );
 }

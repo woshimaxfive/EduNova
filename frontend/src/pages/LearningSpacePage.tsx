@@ -33,6 +33,7 @@ import {
 } from "../api/tutor";
 import { InlineFeedback, type FeedbackTone } from "../components/feedback/InlineFeedback";
 import { AiJobProgress } from "../components/feedback/AiJobProgress";
+import { ModalFrame } from "../components/primitives/Dialog";
 import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
 import { HomeCourseDrawer } from "../components/home/HomeCourseDrawer";
 import { AppSidebar } from "../components/layout/AppSidebar";
@@ -1213,8 +1214,8 @@ function CourseGenerationDialog({
   const [courseTitle, setCourseTitle] = useState(initialCourseTitle || "我的资料课程");
 
   return (
-    <div className="course-dialog-backdrop">
-      <section className="course-dialog" role="dialog" aria-modal="true" aria-labelledby="course-dialog-title">
+    <ModalFrame title="从资料生成课程" layerClassName="course-dialog-backdrop" onClose={onClose} dismissible={!isCreatingCourse}>
+      <section className="course-dialog" aria-labelledby="course-dialog-title">
         <button className="course-dialog-close" type="button" aria-label="关闭生成课程" onClick={onClose}>
           <X size={18} aria-hidden="true" />
         </button>
@@ -1241,7 +1242,7 @@ function CourseGenerationDialog({
           {isCreatingCourse ? "生成中" : "生成课程"}
         </button>
       </section>
-    </div>
+    </ModalFrame>
   );
 }
 
@@ -1271,8 +1272,8 @@ function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMateria
   }, [materials, searchTerm]);
 
   return (
-    <div className="course-dialog-backdrop">
-      <section className="material-drawer" role="dialog" aria-modal="true" aria-labelledby="library-dialog-title">
+    <ModalFrame title="资料库" layerClassName="course-dialog-backdrop" onClose={onClose}>
+      <section className="material-drawer" aria-labelledby="library-dialog-title">
         <button className="course-dialog-close" type="button" aria-label="关闭资料库" onClick={onClose}>
           <X size={18} aria-hidden="true" />
         </button>
@@ -1308,7 +1309,7 @@ function MaterialLibraryDrawer({ materials, selectedMaterialIds, onToggleMateria
           </button>
         </div>
       </section>
-    </div>
+    </ModalFrame>
   );
 }
 

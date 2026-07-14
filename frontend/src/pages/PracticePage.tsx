@@ -20,6 +20,7 @@ import { PracticeQuestionCanvas } from "../components/practice/PracticeQuestionC
 import { PracticeQuestionRail } from "../components/practice/PracticeQuestionRail";
 import { PracticeResultSummary } from "../components/practice/PracticeResultSummary";
 import { PracticeToolbar } from "../components/practice/PracticeToolbar";
+import { ConfirmDialog } from "../components/primitives/Dialog";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import {
   buildPracticeNextAction,
@@ -74,17 +75,6 @@ export function PracticePage() {
     nextParams.delete("sprint_task_id");
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
-
-  useEffect(() => {
-    if (!drawerMode && !confirmIncomplete) return;
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      setDrawerMode(null);
-      setConfirmIncomplete(false);
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [confirmIncomplete, drawerMode]);
 
   const coursesQuery = useQuery({ queryKey: ["practice-courses"], queryFn: () => listCourses() });
   const courses = Array.isArray(coursesQuery.data?.data) ? coursesQuery.data.data : [];
@@ -437,8 +427,16 @@ export function PracticePage() {
         ) : null}
 
       {confirmIncomplete ? (
-          <div className="practice-confirm-layer" role="presentation">
-            <section role="dialog" aria-modal="true" aria-labelledby="practice-confirm-title">
+        <ConfirmDialog
+          open
+          title={`还有 ${unansweredQuestions.length} 题未作答`}
+          description="确认提交后，未答题会按未作答参与本次学习诊断。"
+          confirmLabel="仍然提交"
+          layerClassName="practice-confirm-layer"
+          onOpenChange={(open) => { if (!open) cancelIncompleteSubmit(); }}
+          onConfirm={() => submitMutation.mutate()}
+        >
+            <section aria-labelledby="practice-confirm-title">
               <WarningCircle size={28} weight="duotone" aria-hidden="true" />
               <h2 id="practice-confirm-title">还有 {unansweredQuestions.length} 题未作答</h2>
               <p>确认提交后，未答题会按未作答参与本次学习诊断。</p>
@@ -447,7 +445,7 @@ export function PracticePage() {
                 <button className="primary" type="button" onClick={() => submitMutation.mutate()}>仍然提交</button>
               </div>
             </section>
-          </div>
+        </ConfirmDialog>
       ) : null}
     </>
   );

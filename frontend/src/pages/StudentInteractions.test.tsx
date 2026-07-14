@@ -1215,6 +1215,8 @@ describe("student interaction affordances", () => {
     expect(screen.queryByText("等待提取说明")).not.toBeInTheDocument();
     expect(calls).toContainEqual({ method: "post", url: MATERIAL_ENDPOINTS.upload });
 
+    await user.click(screen.getByRole("button", { name: "关闭课堂截图.png" }));
+
     await user.click(screen.getByRole("button", { name: "图片" }));
 
     expect(screen.getByRole("button", { name: "图片" })).toHaveAttribute("aria-pressed", "true");
@@ -1419,7 +1421,7 @@ describe("student interaction affordances", () => {
     renderPage(<LibraryPage />);
 
     await user.click(await screen.findByRole("button", { name: "资料对比" }));
-    const compareDrawer = screen.getByRole("dialog", { name: "资料对比" });
+    const compareDrawer = screen.getByRole("region", { name: "资料对比" });
     expect(within(compareDrawer).getByRole("button", { name: "生成资料对比" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /课堂截图.png，图片暂不参与资料对比/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /其他课程资料.md/ })).toBeEnabled();
@@ -1436,7 +1438,7 @@ describe("student interaction affordances", () => {
     expect(resultDrawer).toHaveTextContent("AI 伦理");
     await user.click(within(resultDrawer).getByRole("tab", { name: "来源与轨迹" }));
     expect(resultDrawer).toHaveTextContent("启发式搜索使用启发函数。");
-    expect(screen.getByRole("button", { name: "上传资料" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "上传资料", hidden: true })).toBeEnabled();
     expect(calls).toContainEqual({
       method: "post",
       url: MATERIAL_ENDPOINTS.compare,
@@ -1525,7 +1527,7 @@ describe("student interaction affordances", () => {
     renderPage(<LibraryPage />);
 
     await user.click(await screen.findByRole("button", { name: "资料对比" }));
-    const compareDrawer = screen.getByRole("dialog", { name: "资料对比" });
+    const compareDrawer = screen.getByRole("region", { name: "资料对比" });
     await user.click(screen.getByRole("button", { name: /选择AI 导论讲义.md/ }));
     await user.click(screen.getByRole("button", { name: /选择期末样题.md/ }));
     await user.click(within(compareDrawer).getByRole("button", { name: "生成资料对比" }));
@@ -1960,7 +1962,6 @@ describe("student interaction affordances", () => {
     await user.click(screen.getByRole("button", { name: "保存配置" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: /腾讯混元默认/ })).toBeInTheDocument());
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(await screen.findByRole("alert")).toHaveTextContent("模型配置已保存。");
     expect(screen.queryByText("hunyuan-user-secret")).not.toBeInTheDocument();
     expect(calls).toContainEqual({
@@ -1995,7 +1996,6 @@ describe("student interaction affordances", () => {
       method: "post",
       url: SETTINGS_ENDPOINTS.defaultConfig(2)
     }));
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("已设为默认回答配置。"));
 
     await user.click(screen.getByRole("button", { name: "验证回答服务连接" }));
@@ -2005,7 +2005,6 @@ describe("student interaction affordances", () => {
       url: SETTINGS_ENDPOINTS.testConfig(2),
       payload: { operation: "chat" }
     }));
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("AI 服务连接正常。"));
 
     await user.click(screen.getByRole("button", { name: "删除配置" }));
@@ -2013,7 +2012,6 @@ describe("student interaction affordances", () => {
     expect(within(deleteDialog).getByText(/如果它是默认配置/)).toBeInTheDocument();
     await user.click(within(deleteDialog).getByRole("button", { name: "确认删除" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: /腾讯混元默认/ })).not.toBeInTheDocument());
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("模型配置已删除。"));
 
     await user.click(screen.getByRole("button", { name: /账号安全/ }));

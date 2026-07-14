@@ -1,5 +1,4 @@
 import { Brain, CheckCircle, ClockCounterClockwise, ShieldCheck, WarningCircle, X } from "@phosphor-icons/react";
-import { useEffect, useRef } from "react";
 
 import type { ProfileEventResponse } from "../../api/profiles";
 import {
@@ -8,6 +7,7 @@ import {
   type ProfileDimensionView
 } from "../../features/profile/profileViewModel";
 import { AgentTraceDisclosure } from "../evidence/AgentTraceDisclosure";
+import { ModalFrame } from "../primitives/Dialog";
 
 export type ProfileDrawerMode = "dimension" | "event" | null;
 
@@ -32,62 +32,13 @@ function formatEventTime(value: string) {
 }
 
 export function ProfileDrawer({ mode, dimension, event, relatedEvents, onClose, onOpenEvent }: ProfileDrawerProps) {
-  const drawerRef = useRef<HTMLElement>(null);
-  const onCloseRef = useRef(onClose);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!mode) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const drawer = drawerRef.current;
-    const selector = "button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
-    const focusable = () => Array.from(drawer?.querySelectorAll<HTMLElement>(selector) ?? [])
-      .filter((item) => !item.hasAttribute("hidden") && item.getAttribute("aria-hidden") !== "true");
-    (focusable()[0] ?? drawer)?.focus();
-
-    function handleKeyDown(keyEvent: KeyboardEvent) {
-      if (keyEvent.key === "Escape") {
-        keyEvent.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (keyEvent.key !== "Tab") return;
-      const items = focusable();
-      if (items.length === 0) {
-        keyEvent.preventDefault();
-        drawer?.focus();
-        return;
-      }
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (keyEvent.shiftKey && document.activeElement === first) {
-        keyEvent.preventDefault();
-        last.focus();
-      } else if (!keyEvent.shiftKey && document.activeElement === last) {
-        keyEvent.preventDefault();
-        first.focus();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      if (previousFocus?.isConnected) previousFocus.focus();
-    };
-  }, [mode]);
-
   if (!mode) return null;
   const eventView = event ? buildProfileEventView(event) : null;
   const title = mode === "dimension" ? dimension?.label ?? "维度详情" : "证据详情";
 
   return (
-    <div className="profile-drawer-layer" role="presentation" onMouseDown={(mouseEvent) => {
-      if (mouseEvent.target === mouseEvent.currentTarget) onClose();
-    }}>
-      <aside ref={drawerRef} className="profile-drawer" role="dialog" aria-modal="true" aria-labelledby="profile-drawer-title" tabIndex={-1}>
+    <ModalFrame title={title} layerClassName="profile-drawer-layer" onClose={onClose}>
+      <aside className="profile-drawer" aria-labelledby="profile-drawer-title">
         <header>
           <h2 id="profile-drawer-title">{title}</h2>
           <button type="button" aria-label={`关闭${title}`} onClick={onClose}><X size={19} weight="bold" aria-hidden="true" /></button>
@@ -155,6 +106,6 @@ export function ProfileDrawer({ mode, dimension, event, relatedEvents, onClose, 
           <div className="profile-drawer-empty"><Brain size={30} weight="duotone" /><p>当前没有可展示的画像详情。</p></div>
         )}
       </aside>
-    </div>
+    </ModalFrame>
   );
 }

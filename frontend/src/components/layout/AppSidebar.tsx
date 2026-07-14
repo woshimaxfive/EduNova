@@ -17,12 +17,13 @@ import {
   Trash,
   X
 } from "@phosphor-icons/react";
-import { type FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 
 import { PATHS } from "../../app/routePaths";
 import { useAuthStore } from "../../features/auth/authStore";
 import { useCompactWorkspaceViewport } from "./useResponsiveSidebarState";
+import { ModalFrame } from "../primitives/Dialog";
 
 export type SidebarConversation = {
   id: string;
@@ -52,15 +53,6 @@ type AppSidebarProps = {
   onRetryHistorySearch?: () => void;
   onLoadMoreHistorySearch?: () => void;
 };
-
-const modalFocusableSelector =
-  'a[href], button:not([disabled]):not([tabindex="-1"]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-function getModalFocusableElements(container: HTMLElement | null) {
-  return Array.from(container?.querySelectorAll<HTMLElement>(modalFocusableSelector) ?? []).filter(
-    (element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true"
-  );
-}
 
 export function AppSidebar({
   isCollapsed,
@@ -95,13 +87,9 @@ export function AppSidebar({
   const [editingTitle, setEditingTitle] = useState("");
   const [confirmingDeleteConversationId, setConfirmingDeleteConversationId] = useState<string | null>(null);
   const [busyConversationId, setBusyConversationId] = useState<string | null>(null);
-  const sidebarRef = useRef<HTMLElement | null>(null);
   const toggleButtonRef = useRef<HTMLButtonElement | null>(null);
-  const historySearchButtonRef = useRef<HTMLButtonElement | null>(null);
-  const historySearchDialogRef = useRef<HTMLElement | null>(null);
   const threadListRef = useRef<HTMLDivElement | null>(null);
   const pendingThreadListScrollTopRef = useRef<number | null>(null);
-  const historySearchInputRef = useRef<HTMLInputElement | null>(null);
   const editingTitleInputRef = useRef<HTMLInputElement | null>(null);
   const isCompactViewport = useCompactWorkspaceViewport();
   const isCompactSidebarOpen = !isCollapsed && isCompactViewport;
@@ -123,19 +111,12 @@ export function AppSidebar({
     if (isHistorySearchOpen) onHistorySearch?.(debouncedHistorySearchTerm);
   }, [debouncedHistorySearchTerm, isHistorySearchOpen, onHistorySearch]);
 
-  const restoreHistorySearchFocus = useCallback(() => {
-    window.requestAnimationFrame(() => {
-      const target = isCompactViewport ? toggleButtonRef.current : historySearchButtonRef.current;
-      target?.focus();
-    });
-  }, [isCompactViewport]);
-
   const closeHistorySearch = useCallback(() => {
     setHistorySearchTerm("");
     setIsHistorySearchOpen(false);
     onHistorySearch?.("");
-    restoreHistorySearchFocus();
-  }, [onHistorySearch, restoreHistorySearchFocus]);
+    window.requestAnimationFrame(() => toggleButtonRef.current?.focus());
+  }, [onHistorySearch]);
 
   useEffect(() => {
     if (editingConversationId !== null) {
@@ -154,102 +135,6 @@ export function AppSidebar({
     threadList.scrollTop = scrollTop;
     pendingThreadListScrollTopRef.current = null;
   }, [activeConversationId, conversations]);
-
-  useEffect(() => {
-    if (!isCompactSidebarOpen) {
-      return undefined;
-    }
-
-    const previousBodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    const handleDrawerKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.defaultPrevented) {
-        return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onToggleCollapsed();
-        window.requestAnimationFrame(() => toggleButtonRef.current?.focus());
-        return;
-      }
-
-      if (event.key !== "Tab") {
-        return;
-      }
-
-      const focusableElements = getModalFocusableElements(sidebarRef.current);
-      const firstElement = focusableElements[0];
-      const lastElement = focusableElements.at(-1);
-
-      if (!firstElement || !lastElement) {
-        return;
-      }
-
-      if (event.shiftKey && document.activeElement === firstElement) {
-        event.preventDefault();
-        lastElement.focus();
-      } else if (!event.shiftKey && document.activeElement === lastElement) {
-        event.preventDefault();
-        firstElement.focus();
-      }
-    };
-
-    document.addEventListener("keydown", handleDrawerKeyDown);
-    return () => {
-      document.body.style.overflow = previousBodyOverflow;
-      document.removeEventListener("keydown", handleDrawerKeyDown);
-    };
-  }, [isCompactSidebarOpen, onToggleCollapsed]);
-
-  useEffect(() => {
-    if (!isHistorySearchOpen) {
-      return undefined;
-    }
-
-    const previousBodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    historySearchInputRef.current?.focus();
-
-    const handleHistorySearchKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.defaultPrevented) {
-        return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeHistorySearch();
-        return;
-      }
-
-      if (event.key !== "Tab") {
-        return;
-      }
-
-      const focusableElements = getModalFocusableElements(historySearchDialogRef.current);
-      const firstElement = focusableElements[0];
-      const lastElement = focusableElements.at(-1);
-
-      if (!firstElement || !lastElement) {
-        return;
-      }
-
-      if (event.shiftKey && document.activeElement === firstElement) {
-        event.preventDefault();
-        lastElement.focus();
-      } else if (!event.shiftKey && document.activeElement === lastElement) {
-        event.preventDefault();
-        firstElement.focus();
-      }
-    };
-
-    document.addEventListener("keydown", handleHistorySearchKeyDown);
-    return () => {
-      document.body.style.overflow = previousBodyOverflow;
-      document.removeEventListener("keydown", handleHistorySearchKeyDown);
-    };
-  }, [closeHistorySearch, isHistorySearchOpen]);
 
   function logout() {
     clearSession();
@@ -370,20 +255,9 @@ export function AppSidebar({
 
   return (
     <>
-      {isCompactSidebarOpen ? (
-        <button
-          className="mobile-sidebar-backdrop"
-          type="button"
-          tabIndex={-1}
-          aria-label="关闭工作区导航"
-          onClick={dismissCompactSidebar}
-        />
-      ) : null}
+      <ResponsiveSidebarFrame open={isCompactSidebarOpen} onClose={dismissCompactSidebar} preventEscapeClose={editingConversationId !== null}>
       <section
-        ref={sidebarRef}
         className="home-history-rail"
-        role={isCompactSidebarOpen ? "dialog" : undefined}
-        aria-modal={isCompactSidebarOpen ? true : undefined}
         aria-label={isCompactSidebarOpen ? "工作区导航" : "历史对话"}
         data-collapsed={isCollapsed ? "true" : "false"}
       >
@@ -430,7 +304,6 @@ export function AppSidebar({
           <span>新建对话</span>
         </button>
         <button
-          ref={historySearchButtonRef}
           className={isHistorySearchOpen ? "history-search-button active" : "history-search-button"}
           type="button"
           aria-expanded={isHistorySearchOpen}
@@ -600,22 +473,13 @@ export function AppSidebar({
           </div>
         </div>
       </section>
+      </ResponsiveSidebarFrame>
 
       {isHistorySearchOpen ? (
-        <div
-          className="history-search-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              closeHistorySearch();
-            }
-          }}
-        >
+        <ModalFrame title="搜索历史" layerClassName="history-search-backdrop" onClose={closeHistorySearch}>
           <section
             id="history-search-dialog"
-            ref={historySearchDialogRef}
             className="history-search-dialog"
-            role="dialog"
-            aria-modal="true"
             aria-labelledby="history-search-title"
           >
             <div className="history-search-command">
@@ -625,7 +489,7 @@ export function AppSidebar({
               </label>
               <input
                 id="history-search-input"
-                ref={historySearchInputRef}
+                autoFocus
                 type="search"
                 aria-label="搜索历史关键词"
                 value={historySearchTerm}
@@ -673,8 +537,28 @@ export function AppSidebar({
               ) : null}
             </div>
           </section>
-        </div>
+        </ModalFrame>
       ) : null}
     </>
+  );
+}
+
+function ResponsiveSidebarFrame({
+  open,
+  onClose,
+  preventEscapeClose,
+  children
+}: {
+  open: boolean;
+  onClose: () => void;
+  preventEscapeClose: boolean;
+  children: ReactNode;
+}) {
+  if (!open) return children;
+  return (
+    <ModalFrame title="工作区导航" layerClassName="mobile-sidebar-backdrop" onClose={onClose} preventEscapeClose={preventEscapeClose}>
+      <button className="mobile-sidebar-dismiss" type="button" tabIndex={-1} aria-label="关闭工作区导航" onClick={onClose} />
+      {children}
+    </ModalFrame>
   );
 }

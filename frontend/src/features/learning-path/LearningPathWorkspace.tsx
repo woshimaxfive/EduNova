@@ -15,6 +15,7 @@ import { type ChangeEvent, type ReactNode } from "react";
 import type { CourseMasteryPoint, CourseMasteryStatus } from "../../api/courses";
 import type { LearningPathDetail, LearningPathTask, PathTaskStatus } from "../../api/paths";
 import { AgentTraceDisclosure } from "../../components/evidence/AgentTraceDisclosure";
+import { ModalFrame } from "../../components/primitives/Dialog";
 import { InlineFeedback } from "../../components/feedback/InlineFeedback";
 import { MasteryOverviewChart } from "../../components/visualization/LearningCharts";
 
@@ -276,8 +277,8 @@ export function LearningPathDrawer({
   const traceId = pathDetail?.agent_trace_id;
 
   return (
-    <div className="path-drawer-layer" role="presentation" data-testid="path-drawer-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <aside className="path-drawer" role="dialog" aria-modal="true" aria-label="路径详情">
+    <ModalFrame title="路径详情" layerClassName="path-drawer-layer" testId="path-drawer-layer" onClose={onClose}>
+      <aside className="path-drawer" aria-label="路径详情">
         <header className="path-drawer-header">
           <div><h2>路径详情</h2><small>{courseTitle}</small></div>
           <button type="button" aria-label="关闭" onClick={onClose}><X size={18} aria-hidden="true" /></button>
@@ -316,7 +317,7 @@ export function LearningPathDrawer({
           ) : null}
         </div>
       </aside>
-    </div>
+    </ModalFrame>
   );
 }
 

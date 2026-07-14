@@ -1,8 +1,9 @@
 import { ArrowsClockwise, MagicWand, SlidersHorizontal, X } from "@phosphor-icons/react";
-import { useState, type KeyboardEvent } from "react";
+import { useState } from "react";
 
 import { type GeneratedResource, type ResourceGenerationAction } from "../../api/resources";
 import { versionLabel } from "./studioResourceVersions";
+import { ModalFrame } from "../primitives/Dialog";
 
 type StudioRegenerateDialogProps = {
   resource: GeneratedResource;
@@ -13,16 +14,8 @@ type StudioRegenerateDialogProps = {
 
 export function StudioRegenerateDialog(props: StudioRegenerateDialogProps) {
   return (
-    <div className="studio-modal-layer" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !props.isSubmitting) props.onClose();
-    }}>
-      <section
-        className="studio-regenerate-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="重新生成资源"
-        onKeyDown={(event) => closeOnEscape(event, props.onClose, props.isSubmitting)}
-      >
+    <ModalFrame title="重新生成资源" layerClassName="studio-modal-layer" onClose={props.onClose} dismissible={!props.isSubmitting}>
+      <section className="studio-regenerate-dialog" aria-label="重新生成资源">
         <header>
           <div><h2>重新生成资源</h2><p>{props.resource.title}</p></div>
           <button type="button" aria-label="关闭重新生成" disabled={props.isSubmitting} onClick={props.onClose}>
@@ -41,7 +34,7 @@ export function StudioRegenerateDialog(props: StudioRegenerateDialogProps) {
           </button>
         </div>
       </section>
-    </div>
+    </ModalFrame>
   );
 }
 
@@ -59,16 +52,8 @@ export function StudioVersionCompareDialog(props: StudioVersionCompareDialogProp
   const right = props.versions.find((item) => item.id === rightId) ?? props.current;
 
   return (
-    <div className="studio-modal-layer studio-compare-layer" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) props.onClose();
-    }}>
-      <section
-        className="studio-compare-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="比较资源版本"
-        onKeyDown={(event) => closeOnEscape(event, props.onClose, false)}
-      >
+    <ModalFrame title="比较资源版本" layerClassName="studio-modal-layer studio-compare-layer" onClose={props.onClose}>
+      <section className="studio-compare-dialog" aria-label="比较资源版本">
         <header>
           <div><h2>比较版本</h2><p>{props.current.title}</p></div>
           <button type="button" aria-label="关闭版本比较" onClick={props.onClose}><X size={19} weight="bold" /></button>
@@ -83,7 +68,7 @@ export function StudioVersionCompareDialog(props: StudioVersionCompareDialogProp
           <VersionSummary resource={right} />
         </div>
       </section>
-    </div>
+    </ModalFrame>
   );
 }
 
@@ -157,8 +142,4 @@ function friendlyIntentValue(value: string | undefined) {
     create: "创造"
   };
   return labels[value] ?? value.replaceAll("_", " ");
-}
-
-function closeOnEscape(event: KeyboardEvent<HTMLElement>, onClose: () => void, disabled: boolean) {
-  if (event.key === "Escape" && !disabled) onClose();
 }

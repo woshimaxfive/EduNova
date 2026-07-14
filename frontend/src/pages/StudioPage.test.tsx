@@ -711,6 +711,6 @@ describe("StudioPage resource generation", () => {
 
     expect(await within(generateDrawer).findByRole("alert")).toHaveTextContent("资源生成失败，请稍后重试。");
     expect(within(generateDrawer).getByRole("textbox", { name: "生成目标" })).toHaveValue("保留我的生成目标");
-    expect(screen.getByRole("main", { name: "成果画布" })).toHaveTextContent("这门课还没有学习资源");
+    expect(screen.getByRole("main", { name: "成果画布", hidden: true })).toHaveTextContent("这门课还没有学习资源");
   });
 });

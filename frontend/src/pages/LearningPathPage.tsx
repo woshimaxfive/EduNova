@@ -73,15 +73,6 @@ export function LearningPathPage() {
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  useEffect(() => {
-    if (!detailsOpen) return;
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setDetailsOpen(false);
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [detailsOpen]);
-
   const generateMutation = useMutation({
     mutationFn: (courseId: number) => generatePath({ course_id: courseId }),
     onSuccess: (result, courseId) => {

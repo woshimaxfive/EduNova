@@ -28,6 +28,7 @@ import {
 import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { AiJobProgress } from "../components/feedback/AiJobProgress";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
+import { ModalFrame } from "../components/primitives/Dialog";
 import { LibraryDrawer } from "../components/library/LibraryDrawer";
 import { LibraryFileTable } from "../components/library/LibraryFileTable";
 import { isComparableMaterial } from "../components/library/libraryMaterialState";
@@ -876,8 +877,8 @@ type LibraryCourseDialogProps = {
 function LibraryCourseDialog(props: LibraryCourseDialogProps) {
   const selectedCount = props.selectedMaterialIds.length;
   return (
-    <div className="course-dialog-backdrop">
-      <section className="course-dialog library-course-dialog" role="dialog" aria-modal="true" aria-labelledby="library-course-dialog-title">
+    <ModalFrame title="从资料生成课程" layerClassName="course-dialog-backdrop" onClose={props.onClose} dismissible={!props.isCreatingCourse}>
+      <section className="course-dialog library-course-dialog" aria-labelledby="library-course-dialog-title">
         <button className="course-dialog-close" type="button" aria-label="关闭生成课程" onClick={props.onClose}><X size={18} aria-hidden="true" /></button>
         <div className="dialog-copy"><h2 id="library-course-dialog-title">从资料生成课程</h2><p>选择已解析资料，生成目录、知识点和复习任务。</p></div>
         <label className="dialog-field"><span>课程名称</span><input aria-label="课程名称" value={props.courseTitle} onChange={(event) => props.onCourseTitleChange(event.target.value)} /></label>
@@ -898,6 +899,6 @@ function LibraryCourseDialog(props: LibraryCourseDialogProps) {
           {props.isCreatingCourse ? "生成中" : "生成课程"}
         </button>
       </section>
-    </div>
+    </ModalFrame>
   );
 }

@@ -8,6 +8,7 @@ import { PATHS } from "../../app/routePaths";
 import { CourseKnowledgeGraph } from "./CourseKnowledgeGraph";
 import { InlineFeedback } from "../feedback/InlineFeedback";
 import { MarkdownMessage } from "../feedback/MarkdownMessage";
+import { ModalFrame } from "../primitives/Dialog";
 
 export type CourseContentMode = "overview" | "graph";
 
@@ -190,10 +191,8 @@ export function CourseContentView({
       </main>
 
       {assistantOpen ? (
-        <div className="course-content-assistant-layer" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) onCloseAssistant();
-        }}>
-          <aside className="course-content-assistant" role="dialog" aria-modal="true" aria-labelledby="course-content-assistant-title">
+        <ModalFrame title="AI 辅导" layerClassName="course-content-assistant-layer" onClose={onCloseAssistant}>
+          <aside className="course-content-assistant" aria-labelledby="course-content-assistant-title">
             <header>
               <h2 id="course-content-assistant-title">AI 辅导</h2>
               <button type="button" aria-label="关闭 AI 辅导" onClick={onCloseAssistant}>
@@ -222,7 +221,7 @@ export function CourseContentView({
               <InlineFeedback message={feedback} tone="warning" className="course-inline-feedback" />
             </div>
           </aside>
-        </div>
+        </ModalFrame>
       ) : null}
     </section>
   );

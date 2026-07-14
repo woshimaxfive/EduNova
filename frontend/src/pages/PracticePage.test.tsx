@@ -261,7 +261,7 @@ describe("PracticePage", () => {
     await user.click(screen.getByRole("button", { name: "开始针对性练习" }));
     const drawer = screen.getByRole("dialog", { name: "练习设置" });
     expect(drawer.closest(".practice-focus-workspace")).toBeNull();
-    expect(drawer.parentElement).toHaveClass("practice-drawer-layer");
+    expect(drawer).toHaveClass("practice-drawer-layer");
     expect(within(drawer).getByRole("button", { name: "5 题" })).toHaveAttribute("aria-pressed", "true");
     expect(within(drawer).getByRole("button", { name: /智能适配/ })).toHaveAttribute("aria-pressed", "true");
     await user.click(within(drawer).getByRole("button", { name: "开始针对性练习" }));
@@ -310,7 +310,7 @@ describe("PracticePage", () => {
 
     await user.click(await screen.findByRole("button", { name: /估计剩余代价/ }));
     await user.click(screen.getByRole("button", { name: "提交练习" }));
-    const confirm = screen.getByRole("dialog", { name: "还有 2 题未作答" });
+    const confirm = screen.getByRole("alertdialog", { name: "还有 2 题未作答" });
     await user.click(within(confirm).getByRole("button", { name: "返回未答题" }));
     expect(await screen.findByRole("heading", { name: "A* 评估函数包含哪些部分？" })).toBeInTheDocument();
 

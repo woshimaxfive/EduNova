@@ -1,9 +1,9 @@
 import { DownloadSimple, FileText, ShieldCheck, X } from "@phosphor-icons/react";
-import { useEffect, useRef } from "react";
 
 import type { ExportFormat } from "../../api/exports";
 import type { AssessmentReport } from "../../api/reports";
 import { AgentTraceDisclosure } from "../evidence/AgentTraceDisclosure";
+import { ModalFrame } from "../primitives/Dialog";
 
 export type ReportDrawerMode = "details" | "export" | null;
 export type ReportDetailTab = "summary" | "evidence" | "trace";
@@ -45,63 +45,14 @@ export function ReportDrawer({
   onExportFormatChange,
   onExport
 }: ReportDrawerProps) {
-  const drawerRef = useRef<HTMLElement>(null);
-  const onCloseRef = useRef(onClose);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!mode) return;
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const drawer = drawerRef.current;
-    const focusableSelector = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
-    const focusable = () => Array.from(drawer?.querySelectorAll<HTMLElement>(focusableSelector) ?? [])
-      .filter((element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
-    (focusable()[0] ?? drawer)?.focus();
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const items = focusable();
-      if (items.length === 0) {
-        event.preventDefault();
-        drawer?.focus();
-        return;
-      }
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
-    };
-  }, [mode]);
-
   if (!mode) return null;
   const ready = report?.status === "ready";
   const body = report?.report;
   const title = mode === "details" ? "报告详情" : "导出学习档案";
 
   return (
-    <div className="report-drawer-layer" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <aside ref={drawerRef} className="report-drawer" role="dialog" aria-modal="true" aria-labelledby="report-drawer-title" tabIndex={-1}>
+    <ModalFrame title={title} layerClassName="report-drawer-layer" onClose={onClose}>
+      <aside className="report-drawer" aria-labelledby="report-drawer-title">
         <header>
           <h2 id="report-drawer-title">{title}</h2>
           <button type="button" aria-label={`关闭${title}`} onClick={onClose}><X size={19} weight="bold" aria-hidden="true" /></button>
@@ -171,6 +122,6 @@ export function ReportDrawer({
           </>
         )}
       </aside>
-    </div>
+    </ModalFrame>
   );
 }

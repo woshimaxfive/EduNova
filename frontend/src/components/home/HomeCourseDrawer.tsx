@@ -1,10 +1,11 @@
 import { BookOpen, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { listCourses } from "../../api/courses";
 import { buildCoursePath } from "../../app/routePaths";
+import { ModalFrame } from "../primitives/Dialog";
 
 type HomeCourseDrawerProps = {
   onClose: () => void;
@@ -33,25 +34,9 @@ export function HomeCourseDrawer({ onClose }: HomeCourseDrawerProps) {
     );
   }, [courses, searchTerm]);
 
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
-
   return (
-    <div
-      className="home-course-drawer-layer"
-      role="presentation"
-      data-testid="home-course-drawer-layer"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <aside className="home-course-drawer" role="dialog" aria-modal="true" aria-labelledby="home-course-drawer-title">
+    <ModalFrame title="全部课程" layerClassName="home-course-drawer-layer" testId="home-course-drawer-layer" onClose={onClose}>
+      <aside className="home-course-drawer" aria-labelledby="home-course-drawer-title">
         <header className="home-course-drawer-header">
           <h2 id="home-course-drawer-title">全部课程</h2>
           <button type="button" aria-label="关闭全部课程" onClick={onClose}>
@@ -121,6 +106,6 @@ export function HomeCourseDrawer({ onClose }: HomeCourseDrawerProps) {
           ) : null}
         </div>
       </aside>
-    </div>
+    </ModalFrame>
   );
 }

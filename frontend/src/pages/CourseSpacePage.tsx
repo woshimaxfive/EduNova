@@ -474,17 +474,6 @@ export function CourseSpacePage() {
   const courseStudySteps = buildStudySteps(courseLoopInput);
 
   useEffect(() => {
-    function closeCourseDrawers(event: globalThis.KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      setIsProgressDrawerOpen(false);
-      setIsStudyAssistantOpen(false);
-    }
-
-    window.addEventListener("keydown", closeCourseDrawers);
-    return () => window.removeEventListener("keydown", closeCourseDrawers);
-  }, []);
-
-  useEffect(() => {
     if (courseMode !== "chat" || !hasDisplayedCourseMessages) return;
     const frame = window.requestAnimationFrame(() => {
       const requestedTarget = requestedCourseMessageId

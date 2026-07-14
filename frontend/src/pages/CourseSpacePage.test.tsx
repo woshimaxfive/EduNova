@@ -1196,7 +1196,7 @@ describe("CourseSpacePage course tutor sessions", () => {
       screen.getByText(/先确认问答或练习识别出的薄弱点/),
     ).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "A3 学习步骤" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "课程对话空间" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "课程对话空间", hidden: true })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "进入你的学习空间" })).not.toBeInTheDocument();
   });
 
@@ -1561,6 +1561,8 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     expect(await within(weaknessRegion).findByText("弱点状态更新失败，请稍后重试。")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "关闭学习进度" }));
+
     await user.type(screen.getByRole("textbox", { name: "课程问题输入" }), "为什么启发式搜索这么难？");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
@@ -1580,7 +1582,7 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     await user.click(await screen.findByRole("button", { name: /学习进度/ }));
     expect(await screen.findByText("课程学习状态读取失败，请稍后重试。")).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "AI 搜索复习", hidden: true })).toBeInTheDocument();
   });
 
   it("renders real agent trace steps in the thinking panel", async () => {

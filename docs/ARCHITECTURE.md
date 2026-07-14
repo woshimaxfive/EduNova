@@ -44,6 +44,8 @@ Nginx
           └── 外部大模型服务
 ```
 
+Docker Compose 为 PostgreSQL、Redis 和导出文件分别使用固定命名卷 `postgres_data`、`redis_data` 和 `export_data`。Redis 不依赖镜像自动创建的匿名 `/data` 卷，避免服务重建后遗留无归属的哈希卷。
+
 ## 3. 前端架构
 
 前端使用 React + TypeScript + Vite，定位为学生 AI 学习空间。具体设计基线见 [UI_UX_DESIGN.md](UI_UX_DESIGN.md)，入口与路由设计见 [FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)，课程空间双模式改造见 [COURSE_SPACE_DESIGN.md](COURSE_SPACE_DESIGN.md)。

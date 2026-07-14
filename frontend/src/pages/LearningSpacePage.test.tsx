@@ -614,7 +614,7 @@ function renderWithDashboardSummary(
     token: "dashboard-token",
     user: {
       id: 1,
-      email: "student@edunova.local",
+      account: "student",
       displayName: summary.profile_summary.display_name,
       role: "student",
       starterMode: summary.profile_summary.starter_mode
@@ -1484,7 +1484,7 @@ describe("LearningSpacePage", () => {
       token: "material-upload-token",
       user: {
         id: 1,
-        email: "student@edunova.local",
+        account: "student",
         displayName: "资料学生",
         role: "student",
         starterMode: "blank"

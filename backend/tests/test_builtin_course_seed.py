@@ -94,7 +94,7 @@ def test_all_builtin_python_labs_run_with_expected_output() -> None:
 def test_build_builtin_course_graph_maps_materials_points_chunks_and_prerequisites() -> None:
     user = User(
         id=7,
-        email="student@edunova.local",
+        account="student",
         hashed_password="not-used",
         display_name="学习者",
         role="student",
@@ -137,7 +137,7 @@ def test_source_attribution_only_contains_public_bibliography() -> None:
 def test_legacy_course_detection_uses_internal_marker_or_strict_structure_not_title_only() -> None:
     owner = User(
         id=8,
-        email="owner@edunova.local",
+        account="owner",
         hashed_password="not-used",
         display_name="课程作者",
         role="student",

@@ -93,9 +93,9 @@ describe("EduNova routes", () => {
   it("redirects unauthenticated app routes to the calm login entry", async () => {
     renderRoutes(["/app/studio"]);
 
-    expect(await screen.findByRole("heading", { name: "进入你的学习空间" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "登录 EduNova" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /演示学生/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "创建学生账号" })).toHaveAttribute("href", "/register");
+    expect(screen.getByRole("link", { name: "创建账号" })).toHaveAttribute("href", "/register");
   });
 
   it("redirects authenticated students away from public entry pages", async () => {
@@ -103,7 +103,7 @@ describe("EduNova routes", () => {
       token: "demo-token",
       user: {
         id: 1,
-        email: "demo@edunova.local",
+        account: "demo",
         displayName: "演示学生",
         role: "student"
       }
@@ -119,7 +119,7 @@ describe("EduNova routes", () => {
       token: "demo-token",
       user: {
         id: 1,
-        email: "demo@edunova.local",
+        account: "demo",
         displayName: "演示学生",
         role: "student"
       }
@@ -143,7 +143,7 @@ describe("EduNova routes", () => {
       token: "demo-token",
       user: {
         id: 1,
-        email: "demo@edunova.local",
+        account: "demo",
         displayName: "演示学生",
         role: "student"
       }
@@ -163,7 +163,7 @@ describe("EduNova routes", () => {
       token: "demo-token",
       user: {
         id: 1,
-        email: "demo@edunova.local",
+        account: "demo",
         displayName: "演示学生",
         role: "student"
       }
@@ -186,7 +186,7 @@ describe("EduNova routes", () => {
       token: "test-token",
       user: {
         id: 1,
-        email: "student@edunova.local",
+        account: "student",
         displayName: "测试学生",
         role: "student"
       }

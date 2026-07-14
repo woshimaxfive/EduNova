@@ -104,7 +104,7 @@ class FakeRepository:
 
 
 def make_user(user_id: int = 1) -> User:
-    return User(id=user_id, email=f"u{user_id}@example.com", hashed_password="x", display_name="学生", role="student", starter_mode="blank")
+    return User(id=user_id, account=f"u{user_id}", hashed_password="x", display_name="学生", role="student", starter_mode="blank")
 
 
 def make_material(material_id: int = 11, *, user_id: int = 1, status: str = "completed") -> Material:

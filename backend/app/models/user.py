@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class User(IdMixin, TimestampMixin, Base):
     __tablename__ = "users"
 
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    account: Mapped[str] = mapped_column(String(24), nullable=False, unique=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="student")

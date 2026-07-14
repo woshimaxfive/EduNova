@@ -4,7 +4,7 @@ export const AUTH_STORAGE_KEY = "edunova.auth";
 
 export type StudentUser = {
   id: number;
-  email: string;
+  account: string;
   displayName: string;
   role: "student" | "admin";
   starterMode?: "blank" | "data_structures";

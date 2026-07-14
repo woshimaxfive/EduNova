@@ -198,7 +198,7 @@ def make_material(
 def make_user(user_id: int) -> User:
     return User(
         id=user_id,
-        email=f"student-{user_id}@example.com",
+        account=f"student_{user_id}",
         hashed_password="not-used",
         display_name="测试学生",
         role="student",

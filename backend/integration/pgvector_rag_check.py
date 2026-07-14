@@ -17,14 +17,14 @@ def run_check() -> None:
     course_ids: list[int] = []
     try:
         owner = User(
-            email="pgvector-owner@edunova.local",
+            account="pgvector_owner",
             hashed_password="integration-only",
             display_name="pgvector owner",
             role="student",
             starter_mode="blank",
         )
         other_user = User(
-            email="pgvector-other@edunova.local",
+            account="pgvector_other",
             hashed_password="integration-only",
             display_name="pgvector other",
             role="student",

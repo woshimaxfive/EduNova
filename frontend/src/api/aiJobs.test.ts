@@ -18,7 +18,7 @@ describe("AI job API contracts", () => {
   beforeEach(() => {
     useAuthStore.getState().setSession({
       token: "job-token",
-      user: { id: 1, email: "student@example.com", displayName: "学生", role: "student" }
+      user: { id: 1, account: "student", displayName: "学生", role: "student" }
     });
   });
 

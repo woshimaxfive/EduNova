@@ -162,7 +162,7 @@ describe("frontend API contracts", () => {
             token_type: "bearer",
             user: {
               id: 1,
-              email: "demo@edunova.local",
+              account: "demo",
               display_name: "演示学生",
               role: "student"
             }
@@ -178,7 +178,7 @@ describe("frontend API contracts", () => {
 
     try {
       const response = await login({
-        email: "demo@edunova.local",
+        account: "demo",
         password: "Demo123456"
       });
 
@@ -187,7 +187,7 @@ describe("frontend API contracts", () => {
           url: AUTH_ENDPOINTS.login,
           method: "post",
           data: {
-            email: "demo@edunova.local",
+            account: "demo",
             password: "Demo123456"
           }
         }

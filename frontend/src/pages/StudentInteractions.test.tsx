@@ -270,7 +270,7 @@ describe("student interaction affordances", () => {
       token: "interaction-token",
       user: {
         id: 7,
-        email: "interaction@edunova.local",
+        account: "interaction",
         displayName: "交互学生",
         role: "student",
         starterMode: "blank"
@@ -1652,7 +1652,7 @@ describe("student interaction affordances", () => {
       token: "settings-token",
       user: {
         id: 77,
-        email: "settings@edunova.local",
+        account: "settings",
         displayName: "设置学生",
         role: "student",
         starterMode: "blank"
@@ -1819,7 +1819,7 @@ describe("student interaction affordances", () => {
           data: {
             data: {
               id: 77,
-              email: "settings@edunova.local",
+              account: "settings",
               display_name: (payload as { display_name: string }).display_name,
               role: "student",
               starter_mode: "blank"
@@ -1978,7 +1978,7 @@ describe("student interaction affordances", () => {
       token: "password-token",
       user: {
         id: 88,
-        email: "password@edunova.local",
+        account: "password",
         displayName: "密码学生",
         role: "student",
         starterMode: "blank"
@@ -2129,7 +2129,7 @@ describe("student interaction affordances", () => {
       token: "library-course-token",
       user: {
         id: 9,
-        email: "library@edunova.local",
+        account: "library",
         displayName: "资料库学生",
         role: "student",
         starterMode: "blank"

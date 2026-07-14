@@ -134,7 +134,7 @@ class FakePathRepository:
 def make_user(user_id: int = 1) -> User:
     return User(
         id=user_id,
-        email=f"user{user_id}@edunova.local",
+        account=f"user{user_id}",
         hashed_password="not-used",
         display_name=f"用户 {user_id}",
         role="student",

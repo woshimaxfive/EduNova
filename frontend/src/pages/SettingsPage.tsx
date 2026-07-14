@@ -1122,9 +1122,9 @@ export function SettingsPage() {
                   </header>
                   <div className="settings-account-grid">
                     <section>
-                      <header><UserCircle size={20} weight="duotone" /><div><strong>基本信息</strong><span>邮箱和账号身份不可在这里修改</span></div></header>
+                      <header><UserCircle size={20} weight="duotone" /><div><strong>基本信息</strong><span>登录账号创建后不可修改</span></div></header>
                       <dl className="settings-account-meta">
-                        <div><dt>邮箱</dt><dd>{authUser?.email ?? "当前登录账号"}</dd></div>
+                        <div><dt>账号</dt><dd>{authUser?.account ?? "当前登录账号"}</dd></div>
                         <div><dt>身份</dt><dd>{authUser?.role === "admin" ? "管理员" : "学生"}</dd></div>
                         <div><dt>初始方式</dt><dd>{starterModeLabel}</dd></div>
                       </dl>

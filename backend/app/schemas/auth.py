@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -12,25 +13,25 @@ StarterMode = Literal["blank", "data_structures"]
 
 class ApiUser(BaseModel):
     id: int
-    email: str
+    account: str
     display_name: str
     role: Literal["student", "admin"]
     starter_mode: StarterMode
 
 
 class RegisterRequest(BaseModel):
-    email: str = Field(min_length=3, max_length=255)
+    account: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=1, max_length=255)
     display_name: str = Field(min_length=1, max_length=100)
     starter_mode: StarterMode = "blank"
 
-    @field_validator("email")
+    @field_validator("account")
     @classmethod
-    def normalize_email(cls, value: str) -> str:
-        email = value.strip().lower()
-        if "@" not in email:
-            raise ValueError("请输入有效邮箱。")
-        return email
+    def normalize_account(cls, value: str) -> str:
+        account = value.strip().lower()
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_]{3,23}", account):
+            raise ValueError("账号需为 4 至 24 位字母、数字或下划线，并以字母或数字开头。")
+        return account
 
     @field_validator("display_name")
     @classmethod
@@ -56,19 +57,19 @@ class ChangePasswordRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: str = Field(min_length=3, max_length=255)
+    account: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=1, max_length=255)
 
-    @field_validator("email")
+    @field_validator("account")
     @classmethod
-    def normalize_email(cls, value: str) -> str:
+    def normalize_account(cls, value: str) -> str:
         return value.strip().lower()
 
 
 def user_to_api(user: User) -> ApiUser:
     return ApiUser(
         id=user.id,
-        email=user.email,
+        account=user.account,
         display_name=user.display_name,
         role=user.role,
         starter_mode=user.starter_mode,

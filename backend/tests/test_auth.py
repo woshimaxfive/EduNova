@@ -18,7 +18,7 @@ from backend.app.main import create_app
 from backend.app.models import Course, CourseMaterialLink, Material, User
 from backend.app.services.auth import (
     AuthService,
-    DuplicateEmailError,
+    DuplicateAccountError,
     InvalidDisplayNameError,
     InvalidCredentialsError,
     PasswordUnchangedError,
@@ -32,7 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 @dataclass
 class InMemoryAuthRepository:
-    users_by_email: dict[str, User] = field(default_factory=dict)
+    users_by_account: dict[str, User] = field(default_factory=dict)
     users_by_id: dict[int, User] = field(default_factory=dict)
     courses: list[Course] = field(default_factory=list)
     materials: list[Material] = field(default_factory=list)
@@ -42,8 +42,8 @@ class InMemoryAuthRepository:
     next_material_id: int = 1
     next_material_link_id: int = 1
 
-    def get_user_by_email(self, email: str) -> User | None:
-        return self.users_by_email.get(email)
+    def get_user_by_account(self, account: str) -> User | None:
+        return self.users_by_account.get(account)
 
     def get_user_by_id(self, user_id: int) -> User | None:
         return self.users_by_id.get(user_id)
@@ -61,7 +61,7 @@ class InMemoryAuthRepository:
     def add_user(self, user: User) -> None:
         user.id = self.next_user_id
         self.next_user_id += 1
-        self.users_by_email[user.email] = user
+        self.users_by_account[user.account] = user
         self.users_by_id[user.id] = user
 
     def add_course(self, course: Course) -> None:
@@ -129,13 +129,13 @@ def test_password_hashing_and_jwt_roundtrip() -> None:
 def test_register_blank_creates_user_without_starter_course() -> None:
     repo = InMemoryAuthRepository()
     user = make_service(repo).register(
-        email="Blank@EduNova.local",
+        account="Blank",
         password="Password123",
         display_name="空白学习者",
         starter_mode="blank",
     )
 
-    assert user.email == "blank@edunova.local"
+    assert user.account == "blank"
     assert user.display_name == "空白学习者"
     assert user.starter_mode == "blank"
     assert repo.courses == []
@@ -144,7 +144,7 @@ def test_register_blank_creates_user_without_starter_course() -> None:
 def test_register_data_structures_copies_internal_course_without_library_materials() -> None:
     repo = InMemoryAuthRepository()
     user = make_service(repo).register(
-        email="starter@edunova.local",
+        account="starter",
         password="Password123",
         display_name="示例学习者",
         starter_mode="data_structures",
@@ -170,18 +170,18 @@ def test_register_data_structures_copies_internal_course_without_library_materia
     assert repo.material_links == []
 
 
-def test_register_rejects_duplicate_email_and_weak_password() -> None:
+def test_register_rejects_duplicate_account_and_weak_password() -> None:
     service = make_service()
     service.register(
-        email="student@edunova.local",
+        account="student",
         password="Password123",
         display_name="学生",
         starter_mode="blank",
     )
 
-    with pytest.raises(DuplicateEmailError):
+    with pytest.raises(DuplicateAccountError):
         service.register(
-            email="STUDENT@edunova.local",
+            account="STUDENT",
             password="Password123",
             display_name="重复学生",
             starter_mode="blank",
@@ -189,7 +189,7 @@ def test_register_rejects_duplicate_email_and_weak_password() -> None:
 
     with pytest.raises(WeakPasswordError):
         service.register(
-            email="weak@edunova.local",
+            account="weak",
             password="short",
             display_name="弱密码",
             starter_mode="blank",
@@ -199,21 +199,21 @@ def test_register_rejects_duplicate_email_and_weak_password() -> None:
 def test_login_rejects_wrong_password() -> None:
     service = make_service()
     service.register(
-        email="student@edunova.local",
+        account="student",
         password="Password123",
         display_name="学生",
         starter_mode="blank",
     )
 
     with pytest.raises(InvalidCredentialsError):
-        service.login(email="student@edunova.local", password="WrongPassword123")
+        service.login(account="student", password="WrongPassword123")
 
 
 def test_update_display_name_trims_and_rejects_blank() -> None:
     repo = InMemoryAuthRepository()
     service = make_service(repo)
     user = service.register(
-        email="nickname@edunova.local",
+        account="nickname",
         password="Password123",
         display_name="旧昵称",
         starter_mode="blank",
@@ -232,12 +232,12 @@ def test_change_password_invalidates_existing_tokens_and_accepts_new_password() 
     repo = InMemoryAuthRepository()
     service = make_service(repo)
     user = service.register(
-        email="password@edunova.local",
+        account="password",
         password="Password123",
         display_name="密码学生",
         starter_mode="blank",
     )
-    old_token = service.login(user.email, "Password123").access_token
+    old_token = service.login(user.account, "Password123").access_token
 
     service.change_password(user, "Password123", "NewPassword456")
 
@@ -247,14 +247,14 @@ def test_change_password_invalidates_existing_tokens_and_accepts_new_password() 
     with pytest.raises(UserNotFoundError, match="登录状态已失效"):
         service.get_user_by_token(old_token)
     with pytest.raises(InvalidCredentialsError):
-        service.login(user.email, "Password123")
-    assert service.get_user_by_token(service.login(user.email, "NewPassword456").access_token) is user
+        service.login(user.account, "Password123")
+    assert service.get_user_by_token(service.login(user.account, "NewPassword456").access_token) is user
 
 
 def test_change_password_rejects_wrong_current_weak_and_unchanged_passwords() -> None:
     service = make_service()
     user = service.register(
-        email="password-rules@edunova.local",
+        account="password_rules",
         password="Password123",
         display_name="密码规则学生",
         starter_mode="blank",
@@ -277,7 +277,7 @@ def test_auth_routes_register_login_me_and_logout() -> None:
     register_response = client.post(
         "/api/v1/auth/register",
         json={
-            "email": "api@edunova.local",
+            "account": "api_user",
             "password": "Password123",
             "display_name": "接口学生",
             "starter_mode": "data_structures",
@@ -287,7 +287,7 @@ def test_auth_routes_register_login_me_and_logout() -> None:
     assert register_response.status_code == 200
     assert register_response.json()["data"] == {
         "id": 1,
-        "email": "api@edunova.local",
+        "account": "api_user",
         "display_name": "接口学生",
         "role": "student",
         "starter_mode": "data_structures",
@@ -296,7 +296,7 @@ def test_auth_routes_register_login_me_and_logout() -> None:
 
     login_response = client.post(
         "/api/v1/auth/login",
-        json={"email": "api@edunova.local", "password": "Password123"},
+        json={"account": "api_user", "password": "Password123"},
     )
 
     assert login_response.status_code == 200
@@ -311,7 +311,7 @@ def test_auth_routes_register_login_me_and_logout() -> None:
     )
 
     assert me_response.status_code == 200
-    assert me_response.json()["data"]["email"] == "api@edunova.local"
+    assert me_response.json()["data"]["account"] == "api_user"
 
     update_response = client.patch(
         "/api/v1/auth/me",
@@ -356,7 +356,7 @@ def test_auth_routes_register_login_me_and_logout() -> None:
 
     replacement_login_response = client.post(
         "/api/v1/auth/login",
-        json={"email": "api@edunova.local", "password": "NewPassword456"},
+        json={"account": "api_user", "password": "NewPassword456"},
     )
     assert replacement_login_response.status_code == 200
     replacement_token = replacement_login_response.json()["data"]["access_token"]

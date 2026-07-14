@@ -14,7 +14,7 @@ describe("authStore", () => {
       token: "demo-token",
       user: {
         id: 1,
-        email: "demo@edunova.local",
+        account: "demo",
         displayName: "演示学生",
         role: "student"
       }
@@ -31,14 +31,14 @@ describe("authStore", () => {
     expect(
       mapApiUserToStudentUser({
         id: 12,
-        email: "student@edunova.local",
+        account: "student",
         display_name: "真实学生",
         role: "student",
         starter_mode: "data_structures"
       })
     ).toEqual({
       id: 12,
-      email: "student@edunova.local",
+      account: "student",
       displayName: "真实学生",
       role: "student",
       starterMode: "data_structures"

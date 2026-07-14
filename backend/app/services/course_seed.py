@@ -23,7 +23,7 @@ from backend.app.models import (
 )
 
 
-SYSTEM_USER_EMAIL = "system@edunova.local"
+SYSTEM_ACCOUNT = "system"
 LEGACY_COURSE_SLUG = "ai-intro"
 BUILTIN_COURSE_SLUG = "data-structures-c-python"
 LEGACY_KNOWLEDGE_POINT_TITLES = {
@@ -305,7 +305,7 @@ def sync_builtin_courses(db: Session) -> BuiltinCourseSyncResult:
     affected_user_ids = {
         course.owner_id
         for course in legacy_courses
-        if course.owner_id is not None and (course.owner is None or course.owner.email != SYSTEM_USER_EMAIL)
+        if course.owner_id is not None and (course.owner is None or course.owner.account != SYSTEM_ACCOUNT)
     }
 
     export_paths: list[str] = []

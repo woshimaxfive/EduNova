@@ -27,7 +27,7 @@ async function createAndSubmitWrongPractice(page: Page) {
 test("rules-only Docker environment closes the learning loop with real traces", async ({ page }) => {
   await page.goto("/register");
   await page.getByLabel("昵称").fill("Phase 14 验收账号");
-  await page.getByLabel("邮箱").fill("phase14-e2e@edunova.local");
+  await page.getByLabel("账号").fill("phase14_e2e");
   await page.getByLabel("密码", { exact: true }).fill("Phase14Test2026");
   await page.getByLabel("确认密码").fill("Phase14Test2026");
   await expect(page.getByRole("radio", { name: /带一个示例课程开始/ })).toBeChecked();
@@ -79,7 +79,7 @@ test("rules-only Docker environment closes the learning loop with real traces", 
 test("material comparison remains an independent evidence tool", async ({ page }) => {
   await page.goto("/register");
   await page.getByLabel("昵称").fill("Phase 16 验收账号");
-  await page.getByLabel("邮箱").fill("phase16-e2e@edunova.local");
+  await page.getByLabel("账号").fill("phase16_e2e");
   await page.getByLabel("密码", { exact: true }).fill("Phase16Test2026");
   await page.getByLabel("确认密码").fill("Phase16Test2026");
   await page.getByRole("button", { name: "创建并进入" }).click();

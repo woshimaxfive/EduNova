@@ -7,7 +7,7 @@ from backend.app.api.v1.deps import get_auth_service, get_current_user
 from backend.app.models import User
 from backend.app.schemas.auth import ChangePasswordRequest, LoginRequest, RegisterRequest, UpdateCurrentUserRequest, user_to_api
 from backend.app.services.auth import (
-    DuplicateEmailError,
+    DuplicateAccountError,
     InvalidCredentialsError,
     InvalidDisplayNameError,
     PasswordUnchangedError,
@@ -25,16 +25,16 @@ def register(
 ) -> dict:
     try:
         user = service.register(
-            email=payload.email,
+            account=payload.account,
             password=payload.password,
             display_name=payload.display_name,
             starter_mode=payload.starter_mode,
         )
-    except DuplicateEmailError as exc:
+    except DuplicateAccountError as exc:
         raise ApiError(
             status_code=status.HTTP_409_CONFLICT,
             code="DUPLICATE_RESOURCE",
-            message="这个邮箱已经注册过了。",
+            message="这个账号已经被使用了。",
         ) from exc
     except WeakPasswordError as exc:
         raise ApiError(
@@ -52,12 +52,12 @@ def login(
     service=Depends(get_auth_service),
 ) -> dict:
     try:
-        result = service.login(payload.email, payload.password)
+        result = service.login(payload.account, payload.password)
     except InvalidCredentialsError as exc:
         raise ApiError(
             status_code=status.HTTP_401_UNAUTHORIZED,
             code="UNAUTHORIZED",
-            message="邮箱或密码不正确。",
+            message="账号或密码不正确。",
         ) from exc
 
     return api_response(

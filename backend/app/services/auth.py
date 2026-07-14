@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Protocol
 
 from sqlalchemy import select
@@ -21,7 +22,7 @@ from backend.app.services.course_seed import (
 )
 
 
-class DuplicateEmailError(Exception):
+class DuplicateAccountError(Exception):
     pass
 
 
@@ -46,7 +47,7 @@ class PasswordUnchangedError(Exception):
 
 
 class AuthRepository(Protocol):
-    def get_user_by_email(self, email: str) -> User | None:
+    def get_user_by_account(self, account: str) -> User | None:
         ...
 
     def get_user_by_id(self, user_id: int) -> User | None:
@@ -83,8 +84,8 @@ class SqlAlchemyAuthRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get_user_by_email(self, email: str) -> User | None:
-        return self.db.scalar(select(User).where(User.email == email))
+    def get_user_by_account(self, account: str) -> User | None:
+        return self.db.scalar(select(User).where(User.account == account))
 
     def get_user_by_id(self, user_id: int) -> User | None:
         return self.db.get(User, user_id)
@@ -139,22 +140,23 @@ class AuthService:
 
     def register(
         self,
-        email: str,
+        account: str,
         password: str,
         display_name: str,
         starter_mode: str = "blank",
     ) -> User:
-        normalized_email = email.strip().lower()
-        normalized_name = display_name.strip() or normalized_email.split("@", 1)[0]
+        normalized_account = account.strip().lower()
+        normalized_name = display_name.strip() or normalized_account
         mode = starter_mode or "blank"
 
         self._validate_starter_mode(mode)
+        self._validate_account(normalized_account)
         self._validate_password(password)
-        if self.repository.get_user_by_email(normalized_email) is not None:
-            raise DuplicateEmailError("邮箱已注册。")
+        if self.repository.get_user_by_account(normalized_account) is not None:
+            raise DuplicateAccountError("账号已被使用。")
 
         user = User(
-            email=normalized_email,
+            account=normalized_account,
             hashed_password=hash_password(password),
             display_name=normalized_name,
             role="student",
@@ -174,10 +176,10 @@ class AuthService:
 
         return user
 
-    def login(self, email: str, password: str) -> LoginResult:
-        user = self.repository.get_user_by_email(email.strip().lower())
+    def login(self, account: str, password: str) -> LoginResult:
+        user = self.repository.get_user_by_account(account.strip().lower())
         if user is None or not verify_password(password, user.hashed_password):
-            raise InvalidCredentialsError("邮箱或密码不正确。")
+            raise InvalidCredentialsError("账号或密码不正确。")
 
         return LoginResult(
             access_token=create_access_token(
@@ -250,6 +252,11 @@ class AuthService:
         finalize_builtin_course_graph(course)
         self.repository.flush()
         return course
+
+    @staticmethod
+    def _validate_account(account: str) -> None:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_]{3,23}", account):
+            raise ValueError("账号需为 4 至 24 位字母、数字或下划线，并以字母或数字开头。")
 
     @staticmethod
     def _validate_starter_mode(mode: str) -> None:

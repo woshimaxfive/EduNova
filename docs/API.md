@@ -151,7 +151,7 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "email": "student@example.com",
+  "account": "student_01",
   "password": "Password123",
   "display_name": "小新",
   "starter_mode": "data_structures"
@@ -173,7 +173,7 @@ Authorization: Bearer <token>
 {
   "data": {
     "id": 1,
-    "email": "student@example.com",
+    "account": "student_01",
     "display_name": "小新",
     "role": "student",
     "starter_mode": "data_structures"
@@ -190,7 +190,7 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "email": "student@example.com",
+  "account": "student_01",
   "password": "Password123"
 }
 ```
@@ -204,7 +204,7 @@ Authorization: Bearer <token>
     "token_type": "bearer",
     "user": {
       "id": 1,
-      "email": "student@example.com",
+      "account": "student_01",
       "display_name": "小新",
       "role": "student",
       "starter_mode": "data_structures"
@@ -224,7 +224,7 @@ Authorization: Bearer <token>
 {
   "data": {
     "id": 1,
-    "email": "student@example.com",
+    "account": "student_01",
     "display_name": "小新",
     "role": "student",
     "starter_mode": "data_structures"
@@ -235,7 +235,7 @@ Authorization: Bearer <token>
 
 ### PATCH `/auth/me`
 
-用途：更新当前学生账号的基础资料。当前只允许修改昵称，不修改邮箱、密码、角色或 starter mode。更新后前端会刷新本地登录态和侧栏账号名。
+用途：更新当前学生账号的基础资料。当前只允许修改昵称，不修改登录账号、密码、角色或 starter mode。更新后前端会刷新本地登录态和侧栏昵称。
 
 请求：
 
@@ -251,7 +251,7 @@ Authorization: Bearer <token>
 {
   "data": {
     "id": 1,
-    "email": "student@example.com",
+    "account": "student_01",
     "display_name": "小新",
     "role": "student",
     "starter_mode": "data_structures"

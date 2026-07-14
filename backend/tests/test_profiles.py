@@ -114,7 +114,7 @@ class FakeProfileModelService:
 def make_user(user_id: int, display_name: str = "画像学生") -> User:
     return User(
         id=user_id,
-        email=f"profile{user_id}@edunova.local",
+        account=f"profile{user_id}",
         hashed_password="not-used",
         display_name=display_name,
         role="student",

@@ -48,6 +48,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260711_0015_create_model_call_runs.py`：创建隐私安全模型调用审计表 `model_call_runs`，不保存 Prompt、回答、资料原文或密钥。
 - `backend/migrations/versions/20260712_0016_add_chat_session_material_context.py`：为主页会话增加会话级参考资料 ID 数组，默认空数组。
 - `backend/migrations/versions/20260713_0017_complete_settings_center.py`：为模型配置增加回答/向量独立安全测试摘要，并为用户增加认证版本，支持换密后旧 JWT 失效。
+- `backend/migrations/versions/20260714_0022_replace_email_with_account.py`：将邮箱登录迁移为不区分大小写的独立账号登录；旧邮箱仅用于生成唯一账号，迁移完成后删除邮箱字段。
 - `backend/migrations/versions/20260713_0018_split_model_defaults.py`：为模型配置增加独立向量默认标记；旧回答默认中已配置向量模型的记录自动继承向量默认。
 - `backend/migrations/versions/20260713_0019_split_embedding_connection.py`：为同一模型配置增加向量专用 Provider 预设、Base URL 和加密 Key；旧非空向量配置从共享连接兼容复制。
 - `backend/migrations/versions/20260713_0020_dynamic_embedding_and_rerank.py`：把课程/资料向量列升级为动态维度，增加向量配置指纹字段，并为模型配置增加讯飞向量凭证与独立重排序连接。
@@ -102,7 +103,7 @@ erDiagram
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | bigint | 主键 |
-| `email` | varchar | 邮箱，唯一 |
+| `account` | varchar(24) | 登录账号，唯一、统一小写、创建后不可修改 |
 | `hashed_password` | varchar | 加密密码 |
 | `display_name` | varchar | 显示名称 |
 | `role` | varchar | `student` 或 `admin` |
@@ -113,7 +114,7 @@ erDiagram
 
 约束：
 
-- `email` 唯一。
+- `account` 唯一，长度 4–24 位，以字母或数字开头，仅允许小写英文字母、数字和下划线。
 - 第一版默认 `role=student`。
 - 旧用户迁移默认 `starter_mode=blank`；新注册未传时服务层保持 `blank`。
 - 历史 JWT 缺少认证版本声明时按 `0` 兼容；密码修改后数据库版本递增，所有旧版本令牌失效。
@@ -827,7 +828,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 
 第一版必须创建的索引：
 
-- `users.email` 唯一索引。
+- `users.account` 唯一索引。
 - `course_enrollments(user_id, course_id)` 唯一索引。
 - `courses.owner_id`。
 - `courses.agent_trace_id`。
@@ -946,6 +947,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 29. 新生成资源、路径和报告在既有 JSON metadata 中保存 `profile_applied_version` 与 `course_context_hash`；旧数据缺失时按 `legacy` 兼容，画像版本落后时按 `stale` 提示用户主动更新。
 30. Phase 19 不新增迁移。题目引用、生成模式和质量摘要继续保存在 `practice_answers.question_json`；报告不可变统计与审核摘要继续保存在 `assessment_reports.report_json`；资源 v3 质量与代码验证摘要继续保存在 `generated_resources.content_json`。代码正文和运行输出不写入独立验证日志。
 31. Phase 20 使用迁移 `20260714_0021` 为 `generated_resources` 增加版本族、来源版本、版本序号和生成动作。教学意图、个性化说明和差异质量继续保存在 v3 `content_json`，不复制完整画像或原始模型输入。
+32. 账号体系使用迁移 `20260714_0022` 将 `users.email` 替换为 `users.account`。升级旧库时从邮箱前缀生成规范化且不冲突的账号；空库直接使用新结构。账号统一小写，昵称继续独立保存。
 
 当前已验证：
 

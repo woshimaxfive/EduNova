@@ -1,6 +1,6 @@
 export type ApiUser = {
   id: number;
-  email: string;
+  account: string;
   display_name: string;
   role: "student" | "admin";
   starter_mode: "blank" | "data_structures";

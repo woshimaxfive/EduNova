@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type InternalAxiosRequestConfig } from "axios";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AUTH_ENDPOINTS } from "../api/auth";
@@ -29,12 +29,12 @@ describe("auth entry pages", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("heading", { name: "进入你的学习空间" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "创建学生账号" })).toHaveAttribute("href", "/register");
+    expect(screen.getByRole("heading", { name: "登录 EduNova" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "创建账号" })).toHaveAttribute("href", "/register");
     expect(screen.queryByRole("button", { name: /演示学生/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "邮箱" })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "账号" })).toHaveValue("");
     expect(screen.getByLabelText("密码")).toHaveValue("");
-    expect(screen.queryByDisplayValue("demo@edunova.local")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("demo_student")).not.toBeInTheDocument();
   });
 
   it("logs in through the backend auth API and stores the returned session", async () => {
@@ -55,7 +55,7 @@ describe("auth entry pages", () => {
             token_type: "bearer",
             user: {
               id: 7,
-              email: "student@edunova.local",
+              account: "student_01",
               display_name: "真实学生",
               role: "student",
               starter_mode: "data_structures"
@@ -76,7 +76,7 @@ describe("auth entry pages", () => {
       </MemoryRouter>
     );
 
-    await user.type(screen.getByRole("textbox", { name: "邮箱" }), "student@edunova.local");
+    await user.type(screen.getByRole("textbox", { name: "账号" }), "Student_01");
     await user.type(screen.getByLabelText("密码"), "Password123");
     await user.click(screen.getByRole("button", { name: "登录" }));
 
@@ -85,7 +85,7 @@ describe("auth entry pages", () => {
         url: AUTH_ENDPOINTS.login,
         method: "post",
         data: {
-          email: "student@edunova.local",
+          account: "student_01",
           password: "Password123"
         }
       }
@@ -94,7 +94,7 @@ describe("auth entry pages", () => {
       token: "jwt-token",
       user: {
         id: 7,
-        email: "student@edunova.local",
+        account: "student_01",
         displayName: "真实学生",
         starterMode: "data_structures"
       },
@@ -112,7 +112,7 @@ describe("auth entry pages", () => {
           data: {
             error: {
               code: "UNAUTHORIZED",
-              message: "邮箱或密码不正确"
+              message: "账号或密码不正确"
             }
           }
         }
@@ -124,11 +124,11 @@ describe("auth entry pages", () => {
       </MemoryRouter>
     );
 
-    await user.type(screen.getByRole("textbox", { name: "邮箱" }), "student@edunova.local");
+    await user.type(screen.getByRole("textbox", { name: "账号" }), "student_01");
     await user.type(screen.getByLabelText("密码"), "WrongPassword123");
     await user.click(screen.getByRole("button", { name: "登录" }));
 
-    expect(await screen.findByText("邮箱或密码不正确")).toBeInTheDocument();
+    expect(await screen.findByText("账号或密码不正确")).toBeInTheDocument();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 
@@ -148,7 +148,7 @@ describe("auth entry pages", () => {
           data: {
             data: {
               id: 11,
-              email: "blank@edunova.local",
+              account: "blank_01",
               display_name: "空白学习者",
               role: "student",
               starter_mode: "blank"
@@ -169,7 +169,7 @@ describe("auth entry pages", () => {
             token_type: "bearer",
             user: {
               id: 11,
-              email: "blank@edunova.local",
+              account: "blank_01",
               display_name: "空白学习者",
               role: "student",
               starter_mode: "blank"
@@ -190,10 +190,10 @@ describe("auth entry pages", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("heading", { name: "准备你的学习空间" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "创建 EduNova 账号" })).toBeInTheDocument();
 
     const blankMode = screen.getByRole("radio", { name: /空白开始/ });
-    const dataStructuresMode = screen.getByRole("radio", { name: /从数据结构与算法开始/ });
+    const dataStructuresMode = screen.getByRole("radio", { name: /数据结构与算法/ });
 
     expect(blankMode).toHaveAttribute("value", "blank");
     expect(dataStructuresMode).toHaveAttribute("value", "data_structures");
@@ -201,7 +201,7 @@ describe("auth entry pages", () => {
 
     await user.clear(screen.getByRole("textbox", { name: "昵称" }));
     await user.type(screen.getByRole("textbox", { name: "昵称" }), "空白学习者");
-    await user.type(screen.getByRole("textbox", { name: "邮箱" }), "blank@edunova.local");
+    await user.type(screen.getByRole("textbox", { name: "账号" }), "Blank_01");
     await user.type(screen.getByLabelText("密码"), "Demo123456");
     await user.type(screen.getByLabelText("确认密码"), "Demo123456");
     await user.click(screen.getByRole("button", { name: "创建并进入" }));
@@ -212,7 +212,7 @@ describe("auth entry pages", () => {
         method: "post",
         data: {
           display_name: "空白学习者",
-          email: "blank@edunova.local",
+          account: "blank_01",
           password: "Demo123456",
           starter_mode: "blank"
         }
@@ -221,7 +221,7 @@ describe("auth entry pages", () => {
         url: AUTH_ENDPOINTS.login,
         method: "post",
         data: {
-          email: "blank@edunova.local",
+          account: "blank_01",
           password: "Demo123456"
         }
       }
@@ -229,8 +229,55 @@ describe("auth entry pages", () => {
     expect(useAuthStore.getState().token).toBe("new-jwt-token");
     expect(useAuthStore.getState().user).toMatchObject({
       displayName: "空白学习者",
-      email: "blank@edunova.local",
+      account: "blank_01",
       starterMode: "blank"
     });
+  });
+
+  it("returns to login when account creation succeeds but automatic login fails", async () => {
+    const user = userEvent.setup();
+    let callCount = 0;
+
+    apiClient.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+      callCount += 1;
+      if (config.url === AUTH_ENDPOINTS.register) {
+        return {
+          data: {
+            data: {
+              id: 12,
+              account: "created_01",
+              display_name: "已创建学生",
+              role: "student",
+              starter_mode: "blank"
+            },
+            trace_id: "trace_register_only"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+      return Promise.reject(new Error("temporary login failure"));
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/register"]}>
+        <Routes>
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/login" element={<LoginPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.type(screen.getByRole("textbox", { name: "账号" }), "Created_01");
+    await user.type(screen.getByRole("textbox", { name: "昵称" }), "已创建学生");
+    await user.type(screen.getByLabelText("密码"), "Password123");
+    await user.type(screen.getByLabelText("确认密码"), "Password123");
+    await user.click(screen.getByRole("button", { name: "创建并进入" }));
+
+    expect(await screen.findByRole("heading", { name: "登录 EduNova" })).toBeInTheDocument();
+    expect(screen.getByText("账号已创建，请重新登录。")).toBeInTheDocument();
+    expect(callCount).toBe(2);
   });
 });

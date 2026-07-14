@@ -37,8 +37,8 @@ def test_core_models_are_registered_for_alembic() -> None:
 def test_users_table_contract() -> None:
     table = User.__table__
 
-    assert table.c.email.unique is True
-    assert table.c.email.nullable is False
+    assert table.c.account.unique is True
+    assert table.c.account.nullable is False
     assert table.c.hashed_password.nullable is False
     assert table.c.role.default.arg == "student"
     assert table.c.starter_mode.default.arg == "blank"

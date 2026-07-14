@@ -10,14 +10,14 @@ export const AUTH_ENDPOINTS = {
 } as const;
 
 export type RegisterRequest = {
-  email: string;
+  account: string;
   password: string;
   display_name: string;
   starter_mode?: "blank" | "data_structures";
 };
 
 export type LoginRequest = {
-  email: string;
+  account: string;
   password: string;
 };
 

@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 1440
     material_storage_dir: str = "var/uploads/materials"
     material_max_upload_mb: int = 25
+    edunova_document_parser: str = "docling"
+    docling_artifacts_path: str = "var/models/docling"
+    docling_document_timeout_seconds: float = 120.0
     system_model_provider: str = "openai_compatible"
     system_model_base_url: str = "https://api.example.com/v1"
     system_model_api_key: str = "replace-with-your-own-key"
@@ -65,6 +68,14 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @field_validator("edunova_document_parser")
+    @classmethod
+    def validate_document_parser(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"docling", "legacy"}:
+            raise ValueError("EDUNOVA_DOCUMENT_PARSER must be docling or legacy")
+        return normalized
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -308,6 +308,11 @@ class AiJobService:
             raise AiJobValidationError("当前文件格式不支持精细解析。")
         if material.ingestion_status == "confirmed" and not force:
             raise AiJobConflictError("资料目录已经确认；如需重建，请明确选择重新解析。")
+        previous_state = {
+            "parse_status": material.parse_status,
+            "ingestion_status": material.ingestion_status,
+            "detail": str((material.metadata_json or {}).get("detail") or ""),
+        }
         material.ingestion_status = "queued"
         material.parse_status = "pending"
         material.metadata_json = {**(material.metadata_json or {}), "detail": "精细解析已排队"}
@@ -316,7 +321,11 @@ class AiJobService:
             user,
             workflow="material_ingestion",
             course_id=None,
-            request_json={"material_id": material_id, "force": bool(force)},
+            request_json={
+                "material_id": material_id,
+                "force": bool(force),
+                "previous_material_state": previous_state,
+            },
             idempotency_key=idempotency_key,
         )
 
@@ -700,23 +709,38 @@ class AiJobService:
         material = self.repository.db.get(Material, material_id)
         if material is None or material.user_id != job.user_id:
             return
-        material.ingestion_status = "failed"
-        material.parse_status = "failed"
+        previous_state = request.get("previous_material_state")
+        preserve_confirmed = (
+            isinstance(previous_state, dict)
+            and previous_state.get("ingestion_status") == "confirmed"
+            and previous_state.get("parse_status") == "completed"
+        )
+        material.ingestion_status = "confirmed" if preserve_confirmed else "failed"
+        material.parse_status = "completed" if preserve_confirmed else "failed"
         diagnostic = getattr(exc, "quality", None)
-        material.quality_json = {
-            **(diagnostic if isinstance(diagnostic, dict) else (material.quality_json or {})),
-            "passed": False,
+        failure = {
             "error_code": self._safe_error_code(exc),
-            "warnings": list(dict.fromkeys([
-                *(
-                    diagnostic.get("warnings", [])
-                    if isinstance(diagnostic, dict) and isinstance(diagnostic.get("warnings"), list)
-                    else []
-                ),
-                "精细解析未通过，原文件已保留。",
-            ])),
+            "risk_flags": diagnostic.get("risk_flags", []) if isinstance(diagnostic, dict) else [],
         }
-        material.metadata_json = {**(material.metadata_json or {}), "detail": "精细解析失败"}
+        if not preserve_confirmed:
+            material.quality_json = {
+                **(diagnostic if isinstance(diagnostic, dict) else (material.quality_json or {})),
+                "passed": False,
+                "error_code": failure["error_code"],
+                "warnings": list(dict.fromkeys([
+                    *(
+                        diagnostic.get("warnings", [])
+                        if isinstance(diagnostic, dict) and isinstance(diagnostic.get("warnings"), list)
+                        else []
+                    ),
+                    "精细解析未通过，原文件已保留。",
+                ])),
+            }
+        material.metadata_json = {
+            **(material.metadata_json or {}),
+            "detail": previous_state.get("detail") or "目录已确认，可生成课程" if preserve_confirmed else "精细解析失败",
+            "last_ingestion_failure": failure,
+        }
         self.repository.commit()
 
     def _run_course_builder(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:

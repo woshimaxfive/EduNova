@@ -166,6 +166,28 @@ def test_invalid_material_and_resource_ownership_are_rejected() -> None:
         service.create_resource_generation_job(user, course_id=21, knowledge_point_id=None, resource_types=["doc"], learning_goal="", difficulty="medium", idempotency_key="resource")
 
 
+def test_forced_material_reparse_keeps_previous_confirmed_state_in_job() -> None:
+    user = make_user()
+    material = make_material()
+    material.metadata_json = {"detail": "目录已确认，可生成课程"}
+    repository = FakeRepository(users=[user], materials=[material])
+
+    result = make_service(repository, FakeQueue()).create_material_ingestion_job(
+        user,
+        material_id=material.id,
+        force=True,
+        idempotency_key="reparse-confirmed-material",
+    )
+
+    assert result.request["previous_material_state"] == {
+        "parse_status": "completed",
+        "ingestion_status": "confirmed",
+        "detail": "目录已确认，可生成课程",
+    }
+    assert material.parse_status == "pending"
+    assert material.ingestion_status == "queued"
+
+
 def test_resource_version_job_persists_action_and_source_for_retry() -> None:
     user = make_user()
     source = GeneratedResource(

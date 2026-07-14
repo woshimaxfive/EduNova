@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from io import BytesIO
+from pathlib import Path
 import re
+from typing import Any, Protocol
 from zipfile import BadZipFile, ZipFile
 from xml.etree import ElementTree
 
@@ -37,8 +39,12 @@ class ParsedDocument:
         return "\n\n".join(block.text for block in self.blocks if block.text.strip()).strip()
 
 
+class DocumentStructureExtractor(Protocol):
+    def parse_document(self, extension: str, content: bytes) -> ParsedDocument: ...
+
+
 class DocumentParser:
-    """Extract ordered, page-aware blocks without inventing document structure."""
+    """Legacy extractor retained as an explicit rollback path."""
 
     parser_version = "ingestion-v1"
     office_text_namespaces = {
@@ -178,3 +184,158 @@ class DocumentParser:
     def _clean_block_text(value: str) -> str:
         lines = [re.sub(r"[\t  ]+", " ", line).strip() for line in value.replace("\r", "\n").splitlines()]
         return "\n".join(line for line in lines if line).strip()
+
+
+class DoclingDocumentExtractor:
+    """Adapt Docling output to EduNova's stable, page-aware document contract."""
+
+    supported_extensions = {".pdf", ".docx", ".pptx"}
+
+    def __init__(
+        self,
+        *,
+        artifacts_path: str | Path,
+        timeout_seconds: float = 120.0,
+        converter: Any | None = None,
+    ) -> None:
+        self.artifacts_path = Path(artifacts_path)
+        self.timeout_seconds = timeout_seconds
+        self._converter = converter
+
+    def parse_document(self, extension: str, content: bytes) -> ParsedDocument:
+        if extension not in self.supported_extensions:
+            raise DocumentParseError("unsupported docling parser")
+        if not content:
+            raise DocumentParseError("document is empty")
+        if extension == ".pdf" and self._converter is None and not self.artifacts_path.is_dir():
+            raise DocumentParseError("docling model artifacts are unavailable")
+        try:
+            converter = self._converter or self._build_converter()
+            result = converter.convert(self._document_stream(extension, content), raises_on_error=True)
+            document = result.document
+            parsed = self._adapt_document(document)
+        except DocumentParseError:
+            raise
+        except Exception as exc:
+            raise DocumentParseError("docling parse failed") from exc
+        if not parsed.blocks:
+            raise DocumentParseError("docling returned no extractable content")
+        return parsed
+
+    def _build_converter(self) -> Any:
+        try:
+            from docling.datamodel.base_models import InputFormat
+            from docling.datamodel.pipeline_options import PdfPipelineOptions
+            from docling.document_converter import DocumentConverter, PdfFormatOption
+        except ImportError as exc:
+            raise DocumentParseError("docling is not installed in this worker") from exc
+
+        pdf_options = PdfPipelineOptions(
+            artifacts_path=self.artifacts_path,
+            document_timeout=self.timeout_seconds,
+            do_ocr=False,
+            do_table_structure=True,
+            enable_remote_services=False,
+            allow_external_plugins=False,
+        )
+        self._converter = DocumentConverter(
+            allowed_formats=[InputFormat.PDF, InputFormat.DOCX, InputFormat.PPTX],
+            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pdf_options)},
+        )
+        return self._converter
+
+    @staticmethod
+    def _document_stream(extension: str, content: bytes) -> Any:
+        try:
+            from docling.datamodel.base_models import DocumentStream
+        except ImportError as exc:
+            raise DocumentParseError("docling is not installed in this worker") from exc
+        return DocumentStream(name=f"material{extension}", stream=BytesIO(content))
+
+    @classmethod
+    def _adapt_document(cls, document: Any) -> ParsedDocument:
+        blocks: list[ParsedBlock] = []
+        page_blocks: dict[int, list[ParsedBlock]] = {}
+        for item, _level in document.iterate_items():
+            text = cls._item_text(item, document)
+            if not text:
+                continue
+            label = str(getattr(item, "label", "")).lower()
+            item_level = getattr(item, "level", None)
+            is_heading = "title" in label or "section_header" in label
+            heading_level = int(item_level) if is_heading and isinstance(item_level, int) and 1 <= item_level <= 6 else (1 if is_heading else None)
+            page_number = cls._page_number(item)
+            block = ParsedBlock(
+                text=text,
+                page_number=page_number,
+                kind="heading" if is_heading else ("table" if "table" in label else "paragraph"),
+                heading_level=heading_level,
+            )
+            blocks.append(block)
+            if page_number is not None:
+                page_blocks.setdefault(page_number, []).append(block)
+
+        pages = [
+            ParsedPage(number, "\n\n".join(block.text for block in items), items)
+            for number, items in sorted(page_blocks.items())
+        ]
+        try:
+            from docling import __version__ as docling_version
+        except ImportError:
+            docling_version = "unknown"
+        return ParsedDocument(pages=pages, blocks=blocks, parser=f"docling:{docling_version}")
+
+    @classmethod
+    def _item_text(cls, item: Any, document: Any) -> str:
+        text = getattr(item, "text", None)
+        if isinstance(text, str):
+            return DocumentParser._clean_block_text(text)
+        export = getattr(item, "export_to_markdown", None)
+        if callable(export):
+            try:
+                value = export(document)
+            except TypeError:
+                value = export()
+            if isinstance(value, str):
+                return DocumentParser._clean_block_text(value)
+        return ""
+
+    @staticmethod
+    def _page_number(item: Any) -> int | None:
+        provenance = getattr(item, "prov", None) or []
+        for entry in provenance:
+            value = getattr(entry, "page_no", None)
+            if isinstance(value, int):
+                return max(1, value)
+        return None
+
+
+class RoutingDocumentStructureExtractor:
+    """Route plain text to the stable parser and rich documents to the selected backend."""
+
+    def __init__(self, rich_document_extractor: DocumentStructureExtractor) -> None:
+        self.rich_document_extractor = rich_document_extractor
+        self.plain_text_extractor = DocumentParser()
+
+    def parse_document(self, extension: str, content: bytes) -> ParsedDocument:
+        if extension in {".txt", ".md", ".markdown"}:
+            return self.plain_text_extractor.parse_document(extension, content)
+        return self.rich_document_extractor.parse_document(extension, content)
+
+
+def create_document_structure_extractor(
+    *,
+    parser_name: str,
+    artifacts_path: str | Path,
+    timeout_seconds: float,
+) -> DocumentStructureExtractor:
+    if parser_name == "legacy":
+        return DocumentParser()
+    if parser_name == "docling":
+        return RoutingDocumentStructureExtractor(
+            DoclingDocumentExtractor(
+                artifacts_path=artifacts_path,
+                timeout_seconds=timeout_seconds,
+            )
+        )
+    raise ValueError(f"unsupported document parser: {parser_name}")

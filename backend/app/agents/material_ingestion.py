@@ -16,7 +16,12 @@ from backend.app.agents.learning_review import parse_json_object, safe_text
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.core.config import Settings, get_settings
 from backend.app.models import Material, MaterialChunk, User
-from backend.app.services.material_parsers import DocumentParseError, DocumentParser, ParsedDocument
+from backend.app.services.material_parsers import (
+    DocumentParseError,
+    DocumentStructureExtractor,
+    ParsedDocument,
+    create_document_structure_extractor,
+)
 
 
 class MaterialIngestionError(RuntimeError):
@@ -44,7 +49,7 @@ class MaterialIngestionState(TypedDict, total=False):
 
 class MaterialIngestionGraphRunner:
     workflow = "material_ingestion"
-    parser_version = "material-ingestion-v1"
+    parser_version = "material-ingestion-v2"
     node_progress = {
         "validate": (6, "资料已校验"),
         "extract_pages": (20, "已提取正文与页码"),
@@ -61,13 +66,17 @@ class MaterialIngestionGraphRunner:
         db: Session,
         *,
         settings: Settings | None = None,
-        parser: DocumentParser | None = None,
+        parser: DocumentStructureExtractor | None = None,
         model_service: Any | None = None,
         trace_recorder: AgentTraceRecorder | None = None,
     ) -> None:
         self.db = db
         self.settings = settings or get_settings()
-        self.parser = parser or DocumentParser()
+        self.parser = parser or create_document_structure_extractor(
+            parser_name=self.settings.edunova_document_parser,
+            artifacts_path=self.settings.docling_artifacts_path,
+            timeout_seconds=self.settings.docling_document_timeout_seconds,
+        )
         self.model_service = model_service
         self.trace_recorder = trace_recorder or AgentTraceRecorder()
         self.graph = self._build_graph()
@@ -386,7 +395,7 @@ class MaterialIngestionGraphRunner:
                         "source_filename": material.filename,
                         "section_id": item["section_id"],
                         "chapter_title": section["path"][0] if section["path"] else section["title"],
-                        "parser_version": self.parser_version,
+                        "parser_version": self._effective_parser_version(state),
                     },
                 ))
             public_sections = [
@@ -396,7 +405,7 @@ class MaterialIngestionGraphRunner:
             material.extracted_text = "\n\n".join(item["content"] for item in state["chunks"])
             material.parse_status = "completed"
             material.ingestion_status = "awaiting_confirmation"
-            material.parser_version = self.parser_version
+            material.parser_version = self._effective_parser_version(state)
             material.content_hash = sha256(state["content"]).hexdigest()
             material.outline_version = max(1, int(material.outline_version or 0) + 1)
             material.outline_json = {"sections": public_sections, "confirmed": False}
@@ -421,6 +430,9 @@ class MaterialIngestionGraphRunner:
             }}
 
         return self._node(state, "persist", 8, work)
+
+    def _effective_parser_version(self, state: MaterialIngestionState) -> str:
+        return f"{self.parser_version}:{state['document'].parser}"[:50]
 
     def _node(self, state: MaterialIngestionState, name: str, index: int, work):
         started = perf_counter()

@@ -10,6 +10,7 @@ from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.core.config import Settings
 from backend.app.models import Material, MaterialChunk, User
 from backend.app.services.material_parsers import ParsedBlock, ParsedDocument, ParsedPage
+from backend.app.services.material_parsers import DoclingDocumentExtractor
 
 
 @dataclass
@@ -129,3 +130,47 @@ def test_outline_detection_rejects_body_references_and_repairs_safe_ocr_typos() 
     assert runner._section_chapter_number("0.08, 0.14, 0.23") == "0"
     assert runner._normalize_heading("8.2.1 直接插人排序") == "8.2.1 直接插入排序"
     assert runner._normalize_heading("1.4.3 算法的时问复杂度") == "1.4.3 算法的时间复杂度"
+
+
+class FakeProvenance:
+    page_no = 2
+
+
+class FakeDoclingItem:
+    def __init__(self, text: str, label: str, level: int | None = None, *, with_page: bool = True) -> None:
+        self.text = text
+        self.label = label
+        self.level = level
+        self.prov = [FakeProvenance()] if with_page else []
+
+
+class FakeDoclingDocument:
+    def iterate_items(self):
+        yield FakeDoclingItem("第二章 树", "section_header", 2), 1
+        yield FakeDoclingItem("二叉树每个结点最多有两个孩子。", "text"), 2
+
+
+class FakeDoclingResult:
+    document = FakeDoclingDocument()
+
+
+class FakeDoclingConverter:
+    def convert(self, _source, *, raises_on_error: bool):
+        assert raises_on_error is True
+        return FakeDoclingResult()
+
+
+def test_docling_adapter_preserves_heading_and_page_contract() -> None:
+    extractor = DoclingDocumentExtractor(
+        artifacts_path="unused-in-injected-test",
+        converter=FakeDoclingConverter(),
+    )
+    extractor._document_stream = lambda _extension, _content: object()  # type: ignore[method-assign]
+
+    result = extractor.parse_document(".pdf", b"fixture")
+
+    assert result.blocks[0] == ParsedBlock("第二章 树", 2, "heading", 2)
+    assert result.blocks[1].page_number == 2
+    assert result.pages[0].page_number == 2
+    assert "二叉树" in result.pages[0].text
+    assert result.parser.startswith("docling:")

@@ -1066,6 +1066,10 @@ describe("student interaction affordances", () => {
         category: "document",
         extension: "DOCX",
         parse_status: "completed",
+        ingestion_status: "confirmed",
+        outline_version: 1,
+        outline_confirmed: true,
+        quality_summary: { passed: true },
         course_ids: ["101"]
       },
       {
@@ -1078,6 +1082,10 @@ describe("student interaction affordances", () => {
         category: "document",
         extension: "MD",
         parse_status: "completed",
+        ingestion_status: "confirmed",
+        outline_version: 1,
+        outline_confirmed: true,
+        quality_summary: { passed: true },
         course_ids: []
       }
     ];
@@ -1156,6 +1164,36 @@ describe("student interaction affordances", () => {
         };
       }
 
+      if (url === MATERIAL_ENDPOINTS.outline(301) && method === "get") {
+        return {
+          data: {
+            data: {
+              material_id: "301",
+              filename: "AI 导论讲义.docx",
+              ingestion_status: "confirmed",
+              parser_version: "ingestion-v1",
+              version: 1,
+              confirmed: true,
+              quality: { passed: true, page_count: 6, section_count: 2, chunk_count: 2 },
+              warnings: [],
+              sections: [
+                { id: "section-1", title: "监督学习", level: 1, path: ["监督学习"], start_page: 2, end_page: 4, confidence: 0.96, included: true, chunk_indexes: [0] },
+                { id: "section-2", title: "模型评估", level: 1, path: ["模型评估"], start_page: 5, end_page: 6, confidence: 0.94, included: true, chunk_indexes: [1] }
+              ],
+              chunks: [
+                { id: "chunk-0", chunk_index: 0, section_id: "section-1", section_path: ["监督学习"], start_page: 2, end_page: 4, chunk_type: "body", content: "监督学习使用标注样本。", quality: {} },
+                { id: "chunk-1", chunk_index: 1, section_id: "section-2", section_path: ["模型评估"], start_page: 5, end_page: 6, chunk_type: "body", content: "使用验证集评估模型。", quality: {} }
+              ]
+            },
+            trace_id: "trace_material_outline"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
       return {
         data: { data: {}, trace_id: "trace_default" },
         status: 200,
@@ -1180,7 +1218,7 @@ describe("student interaction affordances", () => {
     await user.click(screen.getByRole("button", { name: "图片" }));
 
     expect(screen.getByRole("button", { name: "图片" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /课堂截图.png/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看课堂截图.png" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /AI 导论讲义/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "全部" }));
@@ -1189,8 +1227,8 @@ describe("student interaction affordances", () => {
     const detailDrawer = screen.getByRole("dialog", { name: /AI 导论讲义/ });
     expect(detailDrawer).toBeInTheDocument();
     expect(await within(detailDrawer).findByText("监督学习通过标注样本学习输入与输出之间的关系。")).toBeInTheDocument();
-    await user.click(within(detailDrawer).getByRole("tab", { name: "章节" }));
-    expect(within(detailDrawer).getByText("模型评估")).toBeInTheDocument();
+    await user.click(within(detailDrawer).getByRole("tab", { name: "目录" }));
+    expect(within(detailDrawer).getByRole("textbox", { name: "模型评估章节名称" })).toHaveValue("模型评估");
     await user.click(within(detailDrawer).getByRole("button", { name: "生成课程" }));
 
     const courseDialog = screen.getByRole("dialog", { name: "从资料生成课程" });
@@ -1216,6 +1254,10 @@ describe("student interaction affordances", () => {
         category: "document",
         extension: "MD",
         parse_status: "completed",
+        ingestion_status: "confirmed",
+        outline_version: 1,
+        outline_confirmed: true,
+        quality_summary: { passed: true },
         course_ids: ["101"]
       },
       {
@@ -1228,6 +1270,10 @@ describe("student interaction affordances", () => {
         category: "document",
         extension: "MD",
         parse_status: "completed",
+        ingestion_status: "confirmed",
+        outline_version: 1,
+        outline_confirmed: true,
+        quality_summary: { passed: true },
         course_ids: ["101"]
       },
       {
@@ -1252,6 +1298,10 @@ describe("student interaction affordances", () => {
         category: "document",
         extension: "MD",
         parse_status: "completed",
+        ingestion_status: "confirmed",
+        outline_version: 1,
+        outline_confirmed: true,
+        quality_summary: { passed: true },
         course_ids: ["202"]
       }
     ];
@@ -1407,6 +1457,10 @@ describe("student interaction affordances", () => {
         category: "document",
         extension: "MD",
         parse_status: "completed",
+        ingestion_status: "confirmed",
+        outline_version: 1,
+        outline_confirmed: true,
+        quality_summary: { passed: true },
         course_ids: ["101"]
       },
       {
@@ -1419,6 +1473,10 @@ describe("student interaction affordances", () => {
         category: "document",
         extension: "MD",
         parse_status: "completed",
+        ingestion_status: "confirmed",
+        outline_version: 1,
+        outline_confirmed: true,
+        quality_summary: { passed: true },
         course_ids: ["101"]
       }
     ];
@@ -1529,6 +1587,10 @@ describe("student interaction affordances", () => {
         category: "document",
         extension: "MD",
         parse_status: "completed",
+        ingestion_status: "confirmed",
+        outline_version: 1,
+        outline_confirmed: true,
+        quality_summary: { passed: true },
         course_ids: []
       }
     ];
@@ -2085,6 +2147,10 @@ describe("student interaction affordances", () => {
         category: "document",
         extension: "MD",
         parse_status: "completed",
+        ingestion_status: "confirmed",
+        outline_version: 1,
+        outline_confirmed: true,
+        quality_summary: { passed: true },
         course_ids: []
       }
     ];

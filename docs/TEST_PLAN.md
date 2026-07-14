@@ -52,6 +52,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 | 对话式画像 | ProfileGraph 8 维提案、证据门控、审核/修订、逐维可信度和事件记录 |
 | 课程系统 | 数据结构与算法内置课程、56 个知识点、184 个切片、16 个实验、32 条检索基准、课程列表和课程详情 |
 | 上传建课 | PDF、PPTX、DOCX、Markdown、TXT 解析，CourseBuilderGraph 来源覆盖、先修 DAG、审核与事务生成 |
+| 精细资料解析 | MaterialIngestionGraph 页码与层级保真、章节内切片、质量门禁、目录版本编辑与确认 |
 | RAG 检索 | 切片、向量化、检索、引用来源展示 |
 | 多智能体 | Agent 流程、trace_id、agent_run_logs、失败记录 |
 | 资源生成 | 讲解、Markmap 思维导图、交互练习、Pyodide 代码实操、真实 PPTX、动画图解 |
@@ -149,8 +150,9 @@ cd ..
 | `/auth/login` | 登录成功、密码错误 |
 | `/auth/me`、`/auth/me/password` | 有 token 成功、无 token 失败、昵称保存、当前密码校验、弱密码/相同密码拒绝、旧密码失效、新密码登录和旧 JWT 失效 |
 | `/dashboard/summary` | 无 token 401、blank 用户空状态、data_structures 用户返回当前用户课程但资料库为空、真实进度显示、主页历史和资源摘要、多用户隔离 |
-| `/materials/upload`、`/materials`、`/materials/{material_id}`、`/materials/{material_id}/progress`、`/courses/{course_id}/materials` | 无 token 401、当前用户隔离、TXT/Markdown 轻解析、PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT uploaded、图片仅入库且不 OCR、不支持扩展名、大小限制、未归属筛选、课程关联唯一性、进度状态稳定 |
-| `/courses/from-materials`、`/courses/*` | 无 token 401、用户隔离、五类已解析资料建课、v2 结构、来源覆盖、先修 ID 映射、环路拦截、embedding warning、事务回滚和旧课程兼容 |
+| `/materials/upload`、`/materials`、`/materials/{material_id}`、`/materials/{material_id}/progress`、`/materials/{material_id}/ingestion-jobs` | 无 token 401、当前用户隔离、异步任务、页码与标题层级、损坏文件 failed、旧版 Office/图片边界、大小限制、取消、重试和进度恢复 |
+| `/materials/{material_id}/outline`、`/outline/confirm` | 目录读取、章节映射、改名、包含/排除、合并、拆分、版本冲突、质量失败禁止确认和用户隔离 |
+| `/courses/from-materials`、`/courses/*` | 无 token 401、用户隔离、只接受已确认资料、多资料一致性、章节并行 Worker、最多 120 知识点、覆盖率、证据绑定、先修 ID 映射、环路拦截、embedding warning、事务回滚和旧课程兼容 |
 | `/rag/search` | 无 token 401、用户隔离、关键词命中、向量命中、混合排序、懒加载、fallback、无命中和新增分数字段 |
 | `/settings/model`、`/settings/model/test`、`/settings/model/configs` | 无 token 401、多配置隔离、回答/向量独立默认、跨 Provider 运行时解析、旧默认迁移、Key 加密、脱敏返回、独立测试、未配置向量不污染回答状态、测试摘要持久化和不泄露 Key |
 | `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、会话改名、软删除归档、删除后列表/详情隐藏、主页已选资料/联网/深思字段、同一 session 多轮上下文、上下文化 RAG/联网 query、无搜索 Key 不伪造来源、`home_tutor` trace、模型回答、SSE 流式、错误回滚和历史恢复 |
@@ -680,6 +682,8 @@ Phase 1A 起，仓库提供统一验证脚本：
 - RAG 搜索测试覆盖无 token 401、当前用户课程命中引用、多用户隔离、空 query 和非法 `top_k` 校验、无命中稳定空结果、Markdown 标题/TXT 内容/中文关键词命中，以及 `/rag/search` envelope；Phase 6.4 起覆盖关键词命中、向量命中、混合排序、缺失向量懒加载、本地 fallback 状态、外部 embedding 失败回退和新分数字段稳定返回。
 - 前端认证联调测试覆盖账号登录成功写入 token、登录失败提示、密码显隐、确认密码、注册 `blank/data_structures` 请求体、默认 blank、注册后自动登录、后端用户字段映射，以及登录页不出现 demo 账号；视觉契约同时断言中性产品预览存在，旧巨大宣传口号和装饰学习闭环文案不再渲染。
 - 上传建课工作流状态测试，覆盖 chunking、failed 和必要短状态信号。
+- Phase 21 测试覆盖 `MaterialIngestionGraph` 固定节点顺序、PDF 页码、DOCX 标题样式、PPTX 幻灯片编号、Markdown 标题层级、页眉页脚清理、章节内 300 至 900 字切片、1200 字硬上限和质量失败零确认。
+- Phase 21 建课测试覆盖目录确认门禁、章节 `Send` Worker、主题一致性、50 至 65 知识点教材目标、每知识点真实引用、85% 主体覆盖、标题质量、先修 DAG 和低质量零课程落库。
 - 学习空间页面测试，覆盖 AI 对话主页、贴边历史侧栏、侧栏收起、侧栏账号入口、历史搜索居中浮层、发送后主页对话态、底部学习输入区、发送成功不显示持久“已生成回答”状态条、Enter 发送、Shift+Enter 换行、AI 学习入口、资料库入口、语义化最近学习列表、按需全部课程抽屉、最近课程链接、生成课程浮层、主页不渲染预设快捷问题，以及首页不再渲染资料库右栏和知识学习画布；Phase 4.2 起还覆盖 `/app` 调用 `/dashboard/summary`，用接口课程、接口资料和接口主页历史渲染页面，并确认 blank summary 不出现静态 starter 课程、资料和历史；Phase 4.3 起还覆盖首次发送创建 session、连续发送复用 session、点击历史加载后端 messages、刷新后仍可从 summary 看到主页历史、发送失败不新增全局提示条但显示输入区局部错误且输入不丢失；Phase 4.4 起还覆盖主页上传调用 `/materials/upload`、上传成功刷新 summary、资料库浮层显示真实资料。
 - Phase 5.1 前端测试覆盖主页资料库浮层调用 `/courses/from-materials` 后跳转新课程、资料库页调用同一建课接口、API 错误时保留选择，以及课程空间通过 `/courses/{course_id}` 和 `/knowledge-points` 渲染真实标题、资料数和知识点。
 - Phase 5.2 前端测试覆盖 `rag.ts` API 合同、课程空间发送问题调用 `/rag/search`、命中时显示真实引用来源和片段、无命中时显示资料不足、检索失败时保留输入。
@@ -718,7 +722,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 12.2 文档验收覆盖 `docs/AGENT_DESIGN.md`、`docs/DEVELOPMENT_GUIDE.md`、`docs/OPEN_SOURCE_NOTICE.md`、`docs/DEFENSE_QA.md`、`docs/DEVELOPMENT_REPORT.md`、`docs/TEST_REPORT.md`、`docs/USER_GUIDE.md`、`docs/AI_CODING_USAGE.md`、`LICENSE` 和 `docs/evidence/PHASE_12_2_ACCEPTANCE.md`；新增文档必须与当前实现一致，不把未实现的 PDF/Word、OCR、深度解析、独立 demo reset 或完整 E2E 写成已完成。
 - Phase 13.1 后端测试覆盖学习产物 nullable `agent_trace_id` 迁移、trace 索引、`/agents/traces/{trace_id}` 扩展响应、资源生成真实节点顺序、ReviewAgent 风险标记、资源持久化 trace、课程问答 SSE metadata、路径/练习/报告/导出 trace 兼容字段和 metadata 脱敏。
 - Phase 13.1 前端测试覆盖课程空间展示真实课堂协作轨迹、资源工坊展示 `ResourceGenerationGraph`、路径/练习/报告页显示轻量 trace 入口、报告空态不误报失败，以及新增 `agent_trace_id` API 合同。
-- Phase 13.2 后端测试覆盖 PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT 和图片 uploaded、不支持 OCR、已解析资料建课、主页联网/深思/资料参数、无搜索 Key 不伪造来源、`home_tutor` trace、`export_jobs` 创建/状态流转/Markdown/PDF/DOCX 下载/失败分支和用户隔离。
+- Phase 13.2 历史回归继续覆盖基础文档抽取、损坏文件、旧版 Office/图片边界、主页工具和异步导出；Phase 21 进一步要求资料通过精细解析、目录确认和质量门后才可建课。
 - HomeTutorGraph hardening 后端测试覆盖资料稳定分块、Markdown 章节、普通文档 800/120 窗口、既有资料惰性补齐、用户隔离、选中资料限制、关键词/pgvector 混合排序和级联迁移合同；覆盖九节点顺序、条件规划、Prompt 回显、真实 Review、无效 Review warning、单次 Repair、第二次失败降级、流式 replace、模型失败不写半截消息和 trace metadata 脱敏。
 - 主页历史与资料记忆测试覆盖 `0016` 默认空数组、30 条分页与稳定排序、标题/消息正文搜索、120 字片段、软删除和用户隔离；覆盖资料确认、清空、最多 10 项、跨用户/未解析拒绝、课程会话拒绝、失效资料 warning，以及非流式/SSE 省略资料字段时沿用会话范围。
 - Phase 14 后端测试覆盖 PathPlanning、Assessment、Report 三条真实 Graph 的节点顺序、耗时、模型调用、`rules_only` fallback、单次 Repair、独立 trace 和 metadata 脱敏；断言模型不能修改客观分数、掌握数量或趋势。
@@ -777,7 +781,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 12.2 浏览器验收需要优先使用 `agent-browser` 覆盖桌面和 390px 主链路抽查：注册示例课程、资料库、课程空间问答、资源工坊、学习路径、练习、报告和 Markdown 导出可见；验收结果写入 `docs/evidence/PHASE_12_2_ACCEPTANCE.md`，非阻断问题进入 Phase 13 backlog。
 - Phase 13.1 浏览器验收需要优先使用 `agent-browser` 覆盖 Docker 入口 `http://127.0.0.1:8080` 桌面和 390px：课程空间课堂协作轨迹、资源工坊 Graph 轨迹、路径/练习/报告 trace 入口可见，页面不展示组件说明式假轨迹且无水平溢出。
 - Docker Compose 配置校验。
-- 当前未接入 OCR、旧版 Office、扫描件解析、真实视频/文生图、服务端代码沙箱、个人全局资源和资源正文手工编辑。六类结构化资源、不可覆盖版本族、Markmap/Mermaid/Pyodide、真实 PPTX 以及九条学习 Graph 已进入验证范围；动画图解必须明确标为交互场景，不能作为视频生成能力宣传。
+- 当前未接入 OCR、旧版 Office、扫描件解析、真实视频/文生图、个人全局资源和资源正文手工编辑。六类结构化资源、不可覆盖版本族、Markmap/Mermaid/Pyodide、真实 PPTX 以及十条生产 Graph 已进入验证范围；动画图解必须明确标为交互场景，不能作为视频生成能力宣传。
 
 统一验证脚本是日常轻量门禁，不会自动启动 Docker 容器。
 
@@ -871,7 +875,7 @@ docker compose down
 - 取消在节点和持久化前生效；失败或取消不得产生半成品课程/资源，资料惰性切片可保留。
 - 手动重试创建新任务并关联来源，最多 3 次，且重新校验资料、课程和知识点归属。
 - Graph 与 job 共用 trace；建课 9 节点和资源公共节点/六 Worker 记录真实进度。资源部分失败仍完成，全部失败才失败。
-- 同步 `/courses/from-materials`、`/resources/generate`、文件导出 Worker 和九条生产 Graph 合同保持通过。
+- 同步 `/courses/from-materials`、`/resources/generate`、文件导出 Worker 和十条生产 Graph 合同保持通过。
 
 ### 17.2 前端与浏览器
 
@@ -888,7 +892,7 @@ docker compose down
 - Runtime 测试覆盖 `0.5s -> 1.5s` 同配置重试、认证错误不重试、无效响应只重试一次、用户/全局并发、熔断与半开探测。
 - 流式测试覆盖首 token 前重试、首 token 后禁止重放、断流不保存半截消息和输入保留。
 - `model_call_runs` 测试覆盖独立持久化、trace/用户隔离、30 天清理和 Prompt、回答、资料、密钥脱敏。
-- `python -m backend.evals.run --mode offline` 使用九条 Graph 固定中文案例验证引用白名单、敏感输出、必要结构和确定性数字；标准测试不访问网络。
+- `python -m backend.evals.run --mode offline` 使用九条学习 Graph 固定中文案例验证引用白名单、敏感输出、必要结构和确定性数字；MaterialIngestionGraph 使用无版权多格式夹具独立验证，标准测试不访问网络。
 - `scripts/run_ai_eval.ps1` 只有在 `EDUNOVA_EVAL_ALLOW_NETWORK=1` 且显式提供评测 Base URL/模型后才调用真实模型，报告写入忽略目录 `output/ai-eval`。
 - Docker 验证迁移、Redis 并发/熔断状态、AIJob 取消与重试；`agent-browser` 验证主页、课程空间、任务面板和轨迹摘要在桌面与 390px 下可恢复。
 
@@ -898,7 +902,7 @@ docker compose down
 - 覆盖模型省略置信度、规则显式/隐式基准、来源与审核系数、独立来源奖励、候选不计分、矛盾修改和可信度下降。
 - 两个独立隐式来源且提案聚合置信度至少 0.60 才可形成已应用判断；未达门槛必须保留候选事件，应用后低于 70% 的维度仍不得控制下游难度或任务状态。
 - 课程 A 的弱点不得进入课程 B；课程目标优先当前路径目标，兼容 `profile_overlay` 与 `learner_context` 必须来自同一实时上下文。
-- 九条 Graph trace 断言 `profile_applied_version`、可信维度数量、完整度和上下文使用状态，同时禁止画像原文、完整作答和模型输入进入 metadata。
+- 九条画像联动学习 Graph trace 断言 `profile_applied_version`、可信维度数量、完整度和上下文使用状态；MaterialIngestionGraph 单独断言解析器版本、页数、章节数和安全质量摘要，所有 trace 均禁止原文和模型输入进入 metadata。
 - 画像应用变化后资源、路径、报告为 `stale`，候选事件不触发；旧成果为 `legacy`，重新生成或更新后恢复 `current`。
 - 前端验证双指标、课程画像摘要、三类成果新鲜度提示和画像更新后的课程闭环缓存失效。
 

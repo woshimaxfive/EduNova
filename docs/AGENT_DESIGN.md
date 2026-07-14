@@ -4,7 +4,7 @@
 
 ## 1. 定位
 
-EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多智能体”概念本身。当前版本有九条 **LangGraph 生产级编排**：`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。
+EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多智能体”概念本身。当前版本有十条 **LangGraph 生产级编排**：`MaterialIngestionGraph`、`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。
 
 本轮不把认证、模型设置、Dashboard 总览等非学习能力包装成 Agent。
 
@@ -21,11 +21,11 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 | `PathPlanningGraph` | 已真接管：画像与证据收集、确定性排序、模型排序理由、审核/修订、事务持久化 | profile、collect_evidence、deterministic_rank、model_plan、review、repair、persist |
 | `AssessmentGraph` | 已真接管：资料证据型题目蓝图、模型增强、确定性题目门禁和评分、逐题错因诊断、弱点同步和路径回流 | context/question_plan/generate_questions/review/repair/persist；load/deterministic_score/diagnose_errors/sync_weaknesses/review/repair/persist/path_replan |
 | `ReportGraph` | 已真接管：最近练习、掌握度、弱点、路径和资源聚合，不可变统计、叙事增强、审核/修订和持久化 | collect_practice、collect_mastery、aggregate_evidence、generate_narrative、review、repair、persist |
-`Service` 仍然是 API 边界和依赖装配层。九条主链路的核心流程已经委托给对应 Graph runner。学习档案导出是确定性 Service + Redis/RQ Worker，不注册为 `ExportDossierGraph`，也不把异步任务包装成 Agent。
+`Service` 仍然是 API 边界和依赖装配层。十条主链路的核心流程已经委托给对应 Graph runner。学习档案导出是确定性 Service + Redis/RQ Worker，不注册为 `ExportDossierGraph`，也不把异步任务包装成 Agent。
 
 Phase 17 新增的 `AIJobRuntime` 也不是第十一条 Agent Graph。它只为 `CourseBuilderGraph` 和 `ResourceGenerationGraph` 提供后台排队、节点进度、心跳、取消、重试和刷新恢复。任务和 Graph 共用同一个 `agent_trace_id`；Graph trace 仍由真实节点执行产生，任务进度不替代 `agent_run_logs`。
 
-Phase 18 新增的 `ModelExecutionRuntime` 同样不是 Agent Graph。它位于模型配置与 OpenAI-compatible Provider 之间，为九条 Graph、主页/课程流式问答和 Embedding 提供统一错误分类、同配置重试、Redis 并发/熔断、取消检查和 `model_call_runs` 安全审计。模型失败后仍由各 Graph 的规则底稿接管，`rules_only` 不伪装成模型审核。
+Phase 18 新增的 `ModelExecutionRuntime` 同样不是 Agent Graph。它位于模型配置与 Provider 之间，为生产 Graph、主页/课程流式问答和 Embedding 提供统一错误分类、同配置重试、Redis 并发/熔断、取消检查和 `model_call_runs` 安全审计。模型失败后仍由各 Graph 的规则底稿接管，`rules_only` 不伪装成模型审核。
 
 `ProfileGraph.extract` 会向模型提供当前八维画像的安全摘要、逐维可信度和本次回答，要求输出 `updates/confidence/uncertain_dimensions`。纯 JSON、代码块 JSON 和正文内首个完整 JSON 均可解析；首次无效只调用一次格式修复。有效模型字段不依赖人工关键词准入，同一维度由模型语义结果优先，规则只补充模型遗漏的高确定性字段；关键词提示仅用于识别可能遗漏的维度并选择下一问。有效模型提案必须进入 ReviewAgent，不确定陈述只形成候选证据；模型不可用、结构连续无效或审核拒绝后使用增强中文规则并记录 `rules_only`、解析状态和修复次数。
 
@@ -146,7 +146,7 @@ EduNova 不是把所有逻辑都交给大模型，而是把学生学习链路拆
 ## 9. 后续打磨
 
 - 继续验证资料对比、持续学习路径和针对性练习的跨页面恢复与失败分支。
-- 扩展隔离 Docker E2E，把九条 Graph 的跨页面回流持续纳入验收。
+- 扩展隔离 Docker E2E，把十条 Graph 的跨页面回流持续纳入验收。
 - 在不泄露原始输入的前提下继续丰富 AgentTimeline 的白名单 metadata。
 
 ## 10. 可信画像上下文
@@ -154,5 +154,26 @@ EduNova 不是把所有逻辑都交给大模型，而是把学生学习链路拆
 - 系统只保存一份用户级长期画像。`CourseLearnerContext` 是请求时派生的安全视图，组合可信总画像维度与当前课程掌握度、弱点、路径、练习、资源和报告。
 - 画像维度按证据可信度分层：至少 70% 可直接个性化，50-69% 仅作弱提示，低于 50% 或候选状态不进入下游上下文。
 - ProfileGraph 的逐维分数由抽取置信度、来源系数、审核系数和独立来源奖励组成；候选不计入画像轮廓，明确修改后仅使用支持当前值的证据重算，因此分数可以下降。
-- 九条生产 Graph 统一记录 `profile_applied_version`、可信维度数、完整度和课程上下文版本。trace 只披露计数和版本，不披露画像原文。
+- 除资料解析外的九条学习 Graph 统一记录 `profile_applied_version`、可信维度数、完整度和课程上下文版本。资料解析不读取学生画像。trace 只披露计数和版本，不披露画像原文。
 - 新资源、路径和报告保存画像应用版本与课程上下文 hash；画像变化只产生 `stale` 提示，不自动重跑 Graph。
+
+## 11. MaterialIngestionGraph 与 CourseBuilderGraph
+
+`MaterialIngestionGraph` 是用户资料进入 RAG 和建课前的独立质量门，节点固定为：
+
+```text
+validate -> extract_pages -> normalize_layout -> detect_outline
+-> model_refine -> chunk -> quality_gate -> persist
+```
+
+规则负责页码、标题、章节边界、重复页眉页脚、异常字符和质量阈值；模型只修正歧义标题与层级，不接收整本教材。解析成功后只进入待确认状态，用户确认目录版本后才能作为生产证据。
+
+`CourseBuilderGraph` 节点固定为：
+
+```text
+validate_confirmed_materials -> coherence_gate -> load_outlines
+-> chapter_plan -> concept_workers -> aggregate -> prerequisite_graph
+-> evidence_bind -> review -> repair -> persist
+```
+
+`concept_workers` 通过 LangGraph `Send` 按章节并行，每个 Worker 只读取本章节切片。模型负责语义归纳与教学结构，规则负责来源覆盖、知识点密度、标题质量、引用存在性、先修 DAG 和事务门禁。任何知识点没有真实切片证据时，整门课程不得持久化。

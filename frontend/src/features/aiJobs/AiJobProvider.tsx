@@ -52,6 +52,20 @@ export function AiJobProvider({ children }: PropsWithChildren) {
               void invalidateCourseLearningLoop(queryClient, courseId);
             }
           }
+          if (
+            snapshot.status === "completed"
+            && snapshot.workflow === "material_ingestion"
+            && !invalidatedTerminalJobIds.current.has(snapshot.job_id)
+          ) {
+            invalidatedTerminalJobIds.current.add(snapshot.job_id);
+            const materialId = Number(snapshot.request.material_id);
+            void Promise.all([
+              queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
+              queryClient.invalidateQueries({ queryKey: ["materials", "detail", materialId] }),
+              queryClient.invalidateQueries({ queryKey: ["materials", "outline", materialId] }),
+              queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
+            ]);
+          }
         }
       },
       controller.signal

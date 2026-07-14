@@ -19,7 +19,12 @@ PROFILE_GRAPH = WorkflowSpec(
 COURSE_BUILDER_GRAPH = WorkflowSpec(
     name="course_builder",
     artifact_type="course",
-    steps=("read_materials", "source_outline", "structure_course", "knowledge_points", "chunk", "embed", "review", "repair", "persist"),
+    steps=("validate_confirmed_materials", "coherence_gate", "load_outlines", "chapter_plan", "concept_workers", "aggregate", "prerequisite_graph", "evidence_bind", "review", "repair", "persist"),
+)
+MATERIAL_INGESTION_GRAPH = WorkflowSpec(
+    name="material_ingestion",
+    artifact_type="material",
+    steps=("validate", "extract_pages", "normalize_layout", "detect_outline", "model_refine", "chunk", "quality_gate", "persist"),
 )
 MATERIAL_COMPARISON_GRAPH = WorkflowSpec(
     name="material_comparison",
@@ -72,6 +77,7 @@ WORKFLOW_SPECS = {
     spec.name: spec
     for spec in (
         PROFILE_GRAPH,
+        MATERIAL_INGESTION_GRAPH,
         COURSE_BUILDER_GRAPH,
         MATERIAL_COMPARISON_GRAPH,
         HOME_TUTOR_GRAPH,

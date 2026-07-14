@@ -3,12 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
+import re
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.agents.runtime import AgentTraceRecorder
+from backend.app.agents.course_builder import CourseBuilderGraphRunner
 from backend.app.api.v1.deps import get_auth_service
 from backend.app.api.v1.courses import get_course_service
 from backend.app.core.config import Settings
@@ -25,6 +27,7 @@ from backend.app.models import (
     LearningPath,
     LearningTask,
     Material,
+    MaterialChunk,
     ProfileEvent,
     PracticeAnswer,
     StudentProfile,
@@ -33,6 +36,7 @@ from backend.app.models import (
 )
 from backend.app.services.auth import AuthService
 from backend.app.services.courses import CourseNotFoundError, CourseService
+from backend.app.services.material_retrieval import MaterialChunkingService
 
 
 @dataclass
@@ -70,6 +74,30 @@ class FakeCourseRepository:
     def get_materials_for_user(self, user_id: int, material_ids: list[int]) -> list[Material]:
         material_id_set = set(material_ids)
         return [material for material in self.materials if material.user_id == user_id and material.id in material_id_set]
+
+    def list_material_chunks(self, material_ids: list[int]) -> list[MaterialChunk]:
+        chunks: list[MaterialChunk] = []
+        for material in self.materials:
+            if material.id not in material_ids or not material.extracted_text:
+                continue
+            paths: dict[str, list[str]] = {}
+            stack: list[str] = []
+            if material.filename.endswith((".md", ".markdown")):
+                for line in material.extracted_text.splitlines():
+                    match = re.match(r"^(#{1,6})\s+(.+)$", line.strip())
+                    if not match:
+                        continue
+                    level = len(match.group(1))
+                    title = match.group(2).strip()
+                    stack = stack[: level - 1]
+                    stack.append(title)
+                    paths[title] = list(stack)
+            built = MaterialChunkingService().build_chunks(material)
+            for chunk in built:
+                chunk.section_path_json = paths.get(chunk.section_title or "", [chunk.section_title or "正文"])
+                chunk.quality_json = {"included": True}
+            chunks.extend(built)
+        return chunks
 
     def add_course_graph(
         self,
@@ -253,7 +281,10 @@ def make_material(
         content_type="text/markdown" if filename.endswith(".md") else "text/plain",
         storage_path=f"user_{user_id}/{filename}",
         parse_status=parse_status,
+        ingestion_status="confirmed" if parse_status == "completed" and extracted_text else "failed",
         extracted_text=extracted_text,
+        outline_json={"confirmed": bool(parse_status == "completed" and extracted_text)},
+        quality_json={"passed": bool(parse_status == "completed" and extracted_text)},
         metadata_json={"size_label": "1 KB", "extension": filename.rsplit(".", 1)[-1].upper()},
     )
 
@@ -532,19 +563,21 @@ def test_course_builder_graph_records_nodes_structure_and_prerequisites() -> Non
     result = as_dict(service.create_course_from_materials(make_user(), [1], "AI 搜索复习"))
 
     assert [log.agent_name for log in logs] == [
-        "read_materials",
-        "source_outline",
-        "structure_course",
-        "knowledge_points",
-        "chunk",
-        "embed",
+        "validate_confirmed_materials",
+        "coherence_gate",
+        "load_outlines",
+        "chapter_plan",
+        "concept_workers",
+        "aggregate",
+        "prerequisite_graph",
+        "evidence_bind",
         "review",
         "persist",
     ]
     assert result["course"]["agent_trace_id"] == logs[0].trace_id
-    assert repo.courses[0].structure_json["schema_version"] == 2
+    assert repo.courses[0].structure_json["schema_version"] == 3
     assert repo.courses[0].structure_json["source_coverage"] == {
-        "source_unit_count": 2,
+        "source_chunk_count": 2,
         "mapped_source_count": 2,
     }
     assert result["knowledge_points"][1]["prerequisite_ids"] == [result["knowledge_points"][0]["id"]]
@@ -594,16 +627,52 @@ def test_markdown_headings_generate_chapters_and_knowledge_points() -> None:
     assert "A*" in repo.knowledge_chunks[1].content
 
 
-def test_long_markdown_section_keeps_multiple_chunks_under_one_knowledge_point() -> None:
+def test_long_markdown_section_keeps_all_chunks_across_adaptive_knowledge_points() -> None:
     repo = FakeCourseRepository(
         materials=[make_material(1, 1, "long.md", "# 长章节\n" + "神经网络训练需要理解梯度与优化。" * 160)]
     )
 
     result = as_dict(make_service(repo).create_course_from_materials(make_user(), [1], "长章节课程"))
 
-    assert [point["title"] for point in result["knowledge_points"]] == ["长章节"]
+    assert len(result["knowledge_points"]) > 1
+    assert result["knowledge_points"][0]["title"] == "长章节"
     assert len(repo.knowledge_chunks) > 1
-    assert {chunk.knowledge_point_id for chunk in repo.knowledge_chunks} == {int(result["knowledge_points"][0]["id"])}
+    assert len({chunk.knowledge_point_id for chunk in repo.knowledge_chunks}) == len(result["knowledge_points"])
+
+
+def test_course_builder_rejects_sentence_like_ocr_titles_and_repairs_common_noise() -> None:
+    runner = CourseBuilderGraphRunner.__new__(CourseBuilderGraphRunner)
+    chunks = [
+        MaterialChunk(
+            material_id=1,
+            chunk_index=index,
+            content=content,
+            page_number=index,
+            end_page_number=index,
+            section_title=title,
+            section_path_json=["第8章 排序", title],
+            quality_json={"included": True},
+        )
+        for index, (title, content) in enumerate(
+            [
+                ("8.1 插人排序", "直接插入排序逐步扩大有序区间。"),
+                ("8.15 (f)和图 8.15 (g) 所示。至此排序完毕。", "排序过程说明。"),
+                ("8.6 归井排序", "归并排序合并相邻有序序列。"),
+            ],
+            start=1,
+        )
+    ]
+
+    points = runner._deterministic_chapter_points(
+        {"title": "第8章 排序", "target_count": 3},
+        chunks,
+    )
+
+    titles = [point["title"] for point in points]
+    assert "8.1 插入排序" in titles
+    assert "8.6 归并排序" in titles
+    assert all("所示" not in title and "至此" not in title for title in titles)
+    assert all(runner._is_knowledge_title(title) for title in titles)
 
 
 def test_create_course_best_effort_generates_chunk_embeddings() -> None:
@@ -657,10 +726,10 @@ def test_rejects_other_user_or_unparsed_materials() -> None:
     with pytest.raises(CourseGenerationError, match="资料不存在或无权访问"):
         service.create_course_from_materials(user, [1], "非法资料")
 
-    with pytest.raises(CourseGenerationError, match="当前仅支持已解析资料生成课程"):
+    with pytest.raises(CourseGenerationError, match="精细解析并确认目录"):
         service.create_course_from_materials(user, [2], "PDF 课程")
 
-    with pytest.raises(CourseGenerationError, match="当前仅支持已解析资料生成课程"):
+    with pytest.raises(CourseGenerationError, match="精细解析并确认目录"):
         service.create_course_from_materials(user, [3], "空资料")
 
     with pytest.raises(CourseGenerationError, match="至少选择一份资料"):

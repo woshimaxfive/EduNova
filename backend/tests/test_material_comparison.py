@@ -138,6 +138,7 @@ def material(material_id: int, user_id: int, filename: str, text: str | None = N
         content_type="text/markdown",
         storage_path=f"user_{user_id}/{filename}",
         parse_status="completed" if text is not None else "uploaded",
+        ingestion_status="confirmed" if text is not None else "legacy",
         extracted_text=text,
         metadata_json={"size_label": "1 KB", "extension": "MD"},
     )
@@ -283,6 +284,32 @@ def test_compare_materials_uses_text_fallback_when_course_chunks_are_missing(tmp
 
     assert result["summary"]["comparable_material_count"] == 2
     assert any(point["title"] == "启发式搜索" for point in result["repeated_concepts"])
+
+
+def test_compare_materials_does_not_use_unconfirmed_text_fallback(tmp_path: Path) -> None:
+    from backend.app.services.materials import MaterialValidationError
+
+    first = material(1, 1, "复习提纲.md", "搜索算法\n启发式搜索\nA*")
+    second = material(2, 1, "期末题.md", "启发式搜索\nA*")
+    second.ingestion_status = "awaiting_confirmation"
+    repo = FakeMaterialComparisonRepository(
+        materials=[first, second],
+        courses=[Course(id=101, owner_id=1, title="人工智能导论", source_type="uploaded")],
+        links=[
+            CourseMaterialLink(id=11, course_id=101, material_id=1, added_by_user_id=1, usage_type="course_source"),
+            CourseMaterialLink(id=12, course_id=101, material_id=2, added_by_user_id=1, usage_type="course_source"),
+        ],
+        knowledge_points=[KnowledgePoint(id=31, course_id=101, title="启发式搜索", summary=None, chapter=None, order_index=1)],
+    )
+
+    try:
+        MaterialService(repository=repo, settings=make_settings(tmp_path)).compare_materials(
+            make_user(), course_id=101, material_ids=[1, 2]
+        )
+    except Exception as exc:
+        assert isinstance(exc, MaterialValidationError)
+    else:
+        raise AssertionError("未确认资料不应进入资料对比 fallback")
 
 
 def test_comparison_groups_aliases_before_matching_titles_or_knowledge_point_ids(tmp_path: Path) -> None:

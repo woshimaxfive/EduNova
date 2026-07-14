@@ -246,7 +246,11 @@ class MaterialRetrievalService:
 
         materials = self.repository.list_materials(user.id, unique_ids)
         searchable_materials = [
-            item for item in materials if item.parse_status == "completed" and str(item.extracted_text or "").strip()
+            item
+            for item in materials
+            if item.parse_status == "completed"
+            and item.ingestion_status == "confirmed"
+            and str(item.extracted_text or "").strip()
         ]
         searchable_ids = [item.id for item in searchable_materials if item.id is not None]
         chunks = self.repository.list_chunks(searchable_ids)

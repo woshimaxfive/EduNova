@@ -12,7 +12,7 @@
 
 当前最新完成到 **Phase 20 个性化产物规划与版本体系**，并已完成《数据结构与算法》内置课程升级。
 
-Phase 计划的历史过程继续保留在 `docs/superpowers`。Phase 13 已完成主页问答、课程问答和资源生成的真实 Graph 编排，Phase 14 已让路径、练习评估和报告进入真实 LangGraph，Phase 15 已让画像和资料建课进入生产 Graph，Phase 16 曾实现资料对比和独立期末冲刺；当前产品已收敛为九条生产 Graph 和一条个性化学习路径。
+Phase 计划的历史过程继续保留在 `docs/superpowers`。Phase 13 已完成主页问答、课程问答和资源生成的真实 Graph 编排，Phase 14 已让路径、练习评估和报告进入真实 LangGraph，Phase 15 已让画像和资料建课进入生产 Graph，Phase 16 曾实现资料对比和独立期末冲刺，Phase 21 新增资料精细解析 Graph；当前产品为十条生产 Graph 和一条个性化学习路径。
 
 Phase 16 使用 Alembic `20260711_0013` 新增不可变 `material_comparison_runs`。`MaterialComparisonGraph` 从真实资料/课程分块生成规则底稿，模型只增强解释与排序。资料对比当前保持为资料库独立辅助工具，不自动修改路径、资源或练习。
 
@@ -104,7 +104,7 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 - Phase 7.2 已明确用户级画像和课程级学习状态的边界：用户级画像只有一份，课程级目标、薄弱点、掌握度、复习队列和学习路径按课程聚合。
 - Phase 7.3 已把课程问答弱点候选事件同步为课程级 `weakness_review_queue` 待确认复习项，并在课程空间展示真实“待复习弱点”摘要。
 - Phase 7.4 已为课程级弱点复习项补齐确认、开始、完成和软忽略状态流转，课程空间可以直接操作真实队列项。
-- 当前 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph` 已真接管九条生产主链路；学习档案导出继续使用确定性 Service + Redis/RQ Worker。
+- 当前 `MaterialIngestionGraph`、`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph` 已真接管十条生产主链路；学习档案导出继续使用确定性 Service + Redis/RQ Worker。
 - `/resources` 可基于当前用户课程生成讲解、思维导图、练习、代码实操、PPT 和动画图解。六个 Worker 分别执行模型增强并保留确定性 fallback，ReviewAgent 结合结构规则和模型审核，失败资源最多修订一次；旧 Markdown 资源继续兼容读取。
 - Phase 9 已挂载 `/paths`，可为当前用户课程生成 active 个性化学习路径、更新任务状态；`/app/path` 是单一宽屏任务工作台，只表达学习顺序、当前任务和完成状态，掌握度、依据和轨迹按需进入右侧抽屉。
 - Phase 9 已实现 `/courses/{course_id}/mastery-map`，并让 `/courses/{course_id}/learning-state` 返回真实路径摘要、掌握度摘要、弱点推荐资源和下次复习时间。
@@ -113,7 +113,7 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 - Phase 12.1 已挂载 `/exports/learning-dossier`，可同步导出当前用户课程级 Markdown 学习档案；Phase 13.2 已挂载 `/exports/learning-dossier/jobs`、`/exports/{job_id}` 和 `/exports/{job_id}/download`，可通过 Redis/RQ worker 异步生成 Markdown/PDF/DOCX 学习档案，并在 `/app/reports` 选择格式下载。
 - Phase 12.2 已补齐交付基线文档、开源说明、MIT 许可证、用户指南、答辩问答、测试报告和验收证据索引。
 
-当前九条主链路已经由真实 Graph runner 编排并落 `agent_run_logs`：动态画像、智能建课、主页问答、课程问答、资源生成、个性化学习路径、练习评估、学习报告和资料对比。学习档案导出、认证、设置、Dashboard 等能力保持普通服务。
+当前十条主链路已经由真实 Graph runner 编排并落 `agent_run_logs`：资料精细解析、动态画像、智能建课、主页问答、课程问答、资源生成、个性化学习路径、练习评估、学习报告和资料对比。学习档案导出、认证、设置、Dashboard 等能力保持普通服务。
 
 当前仍然不是完整商业产品。课程级持续路径、错题诊断与回流、掌握度、学习报告、资料对比版本、资料解析、学习档案导出和隔离 Docker E2E 已接入；OCR、旧版 Office、扫描件解析和更广的端到端异常恢复仍在后续阶段。
 
@@ -221,7 +221,7 @@ Phase 7.2 的分层口径：
 | 多模态 Embedding/Rerank | 当前只处理文本资料，图片与视频向量不在本轮范围 |
 | 资料对比增强 | 已完成安全结果持久化、最近版本恢复和真实 Graph 轨迹；保持资料库独立工具，不提供完整原文对照页 |
 | 资源增强 | 六类 v3 资源、逐 Worker 类型化生成、教学意图、三层质量门禁、代码验证、版本切换/比较/回退和 PPTX 队列已接入；个人全局资源仍未接入 |
-| Agent 编排 hardening | 九条学习主链路已真接管；学习档案导出明确保持普通 Service + RQ Worker |
+| Agent 编排 hardening | 十条生产主链路已真接管；学习档案导出明确保持普通 Service + RQ Worker |
 | 弱点复习增强 | Phase 14 已接入错题精确证据、诊断去重更新、已有路径重排；队列项编辑仍未接入 |
 | 学习路径 | Phase 9 已接入真实路径生成、当前路径读取、任务状态更新和课程页摘要 |
 | 掌握度图 | Phase 10 已接入练习评估修正；仍是规则计算，不单独持久化 |
@@ -268,18 +268,19 @@ Phase 7.2 的分层口径：
 | Phase 18 | 已完成 | `ModelExecutionRuntime`、同配置重试、Redis 并发/熔断、模型调用安全审计、Trace 聚合和九 Graph 离线质量评测 |
 | Phase 19 | 已完成 | 资源 v3 质量门禁、隔离代码验证、证据型练习、逐题诊断、掌握度空值、报告数字一致性、概念归并和话题切换 |
 | Phase 20 | 已完成 | 六类 ArtifactIntent、真实性/个性化/差异门禁、不可覆盖版本族、换教法/优化版本和版本比较 |
+| Phase 21 | 已完成 | MaterialIngestionGraph、页码与章节保真、目录版本确认、章节并行 CourseBuilderGraph、解析与建课质量门禁 |
 
 ### 画像可信度与课程上下文联动（2026-07-13）
 
 - 画像顶部指标已拆为八维等权的“画像完整度”和仅统计已有判断的“证据可信度”；兼容字段 `confidence_score` 映射为证据可信度。
 - ProfileGraph 按模型/规则抽取分数、来源类型、审核方式和独立来源奖励计算逐维证据分数；候选不计分，明确修改或矛盾证据允许可信度下降，不再使用固定 `72%`。
 - 新增实时派生 `CourseLearnerContext`，保留一份用户总画像，并把当前课程掌握度、弱点、路径、练习、资源和报告组合为课程上下文；没有 `course_profiles` 表。
-- 九条生产 Graph 统一读取可信画像上下文。可信度至少 70 的维度可直接用于个性化，50-69 仅作为弱提示，低于 50 或候选状态不进入下游上下文。
+- 除资料解析外的九条学习 Graph 统一读取可信画像上下文。可信度至少 70 的维度可直接用于个性化，50-69 仅作为弱提示，低于 50 或候选状态不进入下游上下文。
 - 新资源、路径和报告记录画像应用版本与课程上下文 hash；画像应用版本变化后旧成果显示“画像已变化，可更新”，不会自动调用模型或覆盖成果。
 
 ## 下一步建议
 
-Phase 20 已完成资源个性化规划与不可覆盖版本体系。后续应继续用固定 A*、神经网络资料验证不同画像的事实一致性、六类互补和替代版本差异；只有同一质量集证明某个 Worker 受模型能力限制时，才评估更强模型。OCR、旧版 Office 和扫描件仍作为独立范围。
+Phase 21 已完成“上传资料 -> 精细解析与目录确认 -> 智能建课”两道质量门。后续优先继续用无版权合成资料扩展解析边界测试，并用本地教材做显式质量验收；只有固定质量集证明某个节点受模型能力限制时，才评估更强模型。OCR、旧版 Office 和扫描件仍作为独立范围。
 
 原因：
 
@@ -295,7 +296,7 @@ Phase 20 已完成资源个性化规划与不可覆盖版本体系。后续应�
 
 可选并行方向：
 
-- 继续扩展九条 Graph 的隔离 E2E、异常恢复和移动端验收。
+- 继续扩展十条 Graph 的隔离 E2E、异常恢复和移动端验收。
 - 导出文件版式、剩余 Graph、课程空间移动体验和验收中发现问题的 P0/P1 修复。
 
 后续继续保持代码、测试、工程文档和浏览器验收同步；不把 OCR、旧版 Office 或交付材料混入同一轮产品开发。

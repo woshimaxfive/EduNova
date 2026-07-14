@@ -26,6 +26,10 @@ from backend.app.schemas.materials import (
     MaterialProgress,
     MaterialSectionSummary,
     MaterialUploadResult,
+    MaterialOutlineResponse,
+    MaterialOutlineSection,
+    MaterialOutlineChunk,
+    UpdateMaterialOutlineRequest,
 )
 from backend.app.services.material_parsers import DocumentParseError, DocumentParser
 from backend.app.services.material_retrieval import MaterialChunkingService
@@ -244,12 +248,16 @@ class MaterialService:
         content_type: str,
         content: bytes,
         course_id: int | None = None,
+        defer_ingestion: bool = False,
     ) -> MaterialUploadResult:
         clean_name = self._validate_filename(filename)
         extension = self._extension(clean_name)
         self._validate_size(content)
         course = self._require_course(user, course_id) if course_id is not None else None
-        parse_status, extracted_text = self._extract_text(extension, content)
+        if defer_ingestion and extension in self.parsed_text_extensions:
+            parse_status, extracted_text = "pending", None
+        else:
+            parse_status, extracted_text = self._extract_text(extension, content)
         relative_path = self._store_file(user.id, clean_name, content)
         agent_trace_id = make_trace_id()
         metadata = {
@@ -268,11 +276,15 @@ class MaterialService:
             agent_trace_id=agent_trace_id,
             extracted_text=extracted_text,
             metadata_json=metadata,
+            ingestion_status="pending" if defer_ingestion and extension in self.parsed_text_extensions else "legacy",
+            outline_version=0,
+            outline_json={},
+            quality_json={},
         )
 
         try:
             self.repository.add_material(material)
-            chunks = self.chunking_service.build_chunks(material)
+            chunks = [] if defer_ingestion else self.chunking_service.build_chunks(material)
             if chunks:
                 add_material_chunks = getattr(self.repository, "add_material_chunks", None)
                 if callable(add_material_chunks):
@@ -321,7 +333,148 @@ class MaterialService:
                 for link, course in linked_courses
             ],
             agent_trace_id=material.agent_trace_id,
+            parser_version=material.parser_version,
         )
+
+    def get_outline(self, user: User, material_id: int) -> MaterialOutlineResponse:
+        material = self._require_material(user, material_id)
+        outline = dict(material.outline_json or {})
+        sections = [item for item in outline.get("sections", []) if isinstance(item, dict)]
+        chunks = self.repository.list_material_chunks(user.id, material.id)
+        section_by_id = {str(item.get("id")): item for item in sections}
+        return MaterialOutlineResponse(
+            material_id=str(material.id),
+            filename=material.filename,
+            ingestion_status=material.ingestion_status,
+            parser_version=material.parser_version,
+            version=int(material.outline_version or 0),
+            confirmed=bool(outline.get("confirmed")),
+            quality=dict(material.quality_json or {}),
+            warnings=[str(item) for item in (material.quality_json or {}).get("warnings", [])],
+            sections=[MaterialOutlineSection(**item) for item in sections],
+            chunks=[
+                MaterialOutlineChunk(
+                    id=f"chunk-{chunk.chunk_index + 1}",
+                    chunk_index=chunk.chunk_index,
+                    section_id=str((chunk.metadata_json or {}).get("section_id") or ""),
+                    section_path=list(chunk.section_path_json or []),
+                    start_page=chunk.page_number,
+                    end_page=chunk.end_page_number,
+                    chunk_type=chunk.chunk_type,
+                    content=chunk.content,
+                    quality=dict(chunk.quality_json or {}),
+                )
+                for chunk in chunks
+                if str((chunk.metadata_json or {}).get("section_id") or "") in section_by_id
+            ],
+        )
+
+    def update_outline(self, user: User, material_id: int, request: UpdateMaterialOutlineRequest) -> MaterialOutlineResponse:
+        material = self._require_material(user, material_id)
+        if material.ingestion_status not in {"awaiting_confirmation", "confirmed"}:
+            raise MaterialValidationError("资料尚未完成精细解析。")
+        if int(material.outline_version or 0) != request.version:
+            raise MaterialValidationError("目录已被其他操作更新，请刷新后重试。")
+        outline = dict(material.outline_json or {})
+        sections = [dict(item) for item in outline.get("sections", []) if isinstance(item, dict)]
+        chunks = self.repository.list_material_chunks(user.id, material.id)
+        by_id = {str(item.get("id")): item for item in sections}
+        for operation in request.operations:
+            if operation.type == "rename":
+                section = by_id.get(str(operation.section_id or ""))
+                title = " ".join(str(operation.title or "").split())[:255]
+                if section is None or not title:
+                    raise MaterialValidationError("需要指定有效章节和新标题。")
+                section["title"] = title
+            elif operation.type == "include":
+                section = by_id.get(str(operation.section_id or ""))
+                if section is None or operation.included is None:
+                    raise MaterialValidationError("需要指定有效章节和包含状态。")
+                section["included"] = bool(operation.included)
+            elif operation.type == "merge":
+                selected = [by_id.get(item) for item in operation.section_ids]
+                selected = [item for item in selected if item is not None]
+                indexes = sorted(sections.index(item) for item in selected)
+                if len(indexes) < 2 or indexes != list(range(indexes[0], indexes[-1] + 1)):
+                    raise MaterialValidationError("只能合并相邻章节。")
+                target = sections[indexes[0]]
+                merged_ids = {str(item["id"]) for item in selected}
+                target["title"] = " ".join(str(operation.title or target["title"]).split())[:255]
+                target["end_page"] = max((item.get("end_page") or 0 for item in selected), default=target.get("end_page")) or None
+                target["chunk_indexes"] = sorted({index for item in selected for index in item.get("chunk_indexes", [])})
+                sections = [item for item in sections if str(item["id"]) not in merged_ids or item is target]
+                for chunk in chunks:
+                    if str((chunk.metadata_json or {}).get("section_id")) in merged_ids:
+                        chunk.metadata_json = {**(chunk.metadata_json or {}), "section_id": target["id"]}
+                        chunk.section_title = target["title"]
+            elif operation.type == "split":
+                section = by_id.get(str(operation.section_id or ""))
+                title = " ".join(str(operation.title or "").split())[:255]
+                split_index = operation.chunk_index
+                indexes = list(section.get("chunk_indexes", [])) if section else []
+                if section is None or not title or split_index not in indexes or indexes.index(split_index) == 0:
+                    raise MaterialValidationError("请在章节内部的有效切片边界拆分。")
+                position = indexes.index(split_index)
+                new_id = f"section-{max([self._safe_int(str(item.get('id', '')).split('-')[-1]) or 0 for item in sections] + [0]) + 1}"
+                new_indexes = indexes[position:]
+                section["chunk_indexes"] = indexes[:position]
+                new_section = {
+                    **section,
+                    "id": new_id,
+                    "title": title,
+                    "path": [*list(section.get("path", []))[:-1], title],
+                    "start_page": next((chunk.page_number for chunk in chunks if chunk.chunk_index == split_index), section.get("start_page")),
+                    "chunk_indexes": new_indexes,
+                    "confidence": 1.0,
+                }
+                sections.insert(sections.index(section) + 1, new_section)
+                for chunk in chunks:
+                    if chunk.chunk_index in new_indexes:
+                        chunk.metadata_json = {**(chunk.metadata_json or {}), "section_id": new_id}
+                        chunk.section_title = title
+            else:
+                raise MaterialValidationError("不支持的目录编辑操作。")
+            by_id = {str(item.get("id")): item for item in sections}
+        self._rebuild_outline_paths(sections, chunks)
+        material.outline_version = int(material.outline_version or 0) + 1
+        material.outline_json = {"sections": sections, "confirmed": False}
+        material.ingestion_status = "awaiting_confirmation"
+        self.repository.commit()
+        self.repository.refresh(material)
+        return self.get_outline(user, material_id)
+
+    def confirm_outline(self, user: User, material_id: int, version: int) -> MaterialOutlineResponse:
+        material = self._require_material(user, material_id)
+        if int(material.outline_version or 0) != version:
+            raise MaterialValidationError("目录版本已变化，请刷新后重新确认。")
+        if not bool((material.quality_json or {}).get("passed")):
+            raise MaterialValidationError("资料解析质量未通过，不能用于建课。")
+        sections = [item for item in (material.outline_json or {}).get("sections", []) if isinstance(item, dict)]
+        if not any(bool(item.get("included", True)) and item.get("chunk_indexes") for item in sections):
+            raise MaterialValidationError("至少保留一个包含正文的章节。")
+        included_ids = {str(item.get("id")) for item in sections if bool(item.get("included", True))}
+        for chunk in self.repository.list_material_chunks(user.id, material.id):
+            section_id = str((chunk.metadata_json or {}).get("section_id") or "")
+            chunk.quality_json = {**(chunk.quality_json or {}), "included": section_id in included_ids}
+        material.outline_json = {"sections": sections, "confirmed": True, "confirmed_at": datetime.now(UTC).isoformat()}
+        material.ingestion_status = "confirmed"
+        material.metadata_json = {**(material.metadata_json or {}), "detail": "目录已确认，可生成课程"}
+        self.repository.commit()
+        self.repository.refresh(material)
+        return self.get_outline(user, material_id)
+
+    @staticmethod
+    def _rebuild_outline_paths(sections: list[dict], chunks: list[MaterialChunk]) -> None:
+        stack: list[str] = []
+        for section in sections:
+            level = max(1, min(6, int(section.get("level") or 1)))
+            stack = stack[: level - 1]
+            stack.append(str(section.get("title") or "未命名章节"))
+            section["path"] = list(stack)
+            for chunk in chunks:
+                if str((chunk.metadata_json or {}).get("section_id")) == str(section.get("id")):
+                    chunk.section_path_json = list(stack)
+                    chunk.section_title = section["title"]
 
     @staticmethod
     def _build_section_summaries(chunks: list[MaterialChunk]) -> list[MaterialSectionSummary]:
@@ -345,8 +498,19 @@ class MaterialService:
 
     def get_progress(self, user: User, material_id: int) -> MaterialProgress:
         material = self._require_material(user, material_id)
+        ingestion_labels = {
+            "pending": (5, "等待精细解析"),
+            "running": (45, "正在精细解析资料结构"),
+            "awaiting_confirmation": (90, "解析完成，等待确认目录"),
+            "confirmed": (100, "目录已确认，可生成课程"),
+            "failed": (0, "精细解析未通过"),
+            "legacy": (100 if material.parse_status == "completed" else 10, "旧版解析，可按需重新解析"),
+        }
+        if material.ingestion_status in ingestion_labels:
+            progress, message = ingestion_labels[material.ingestion_status]
+            return MaterialProgress(status=material.ingestion_status, progress_percent=progress, message=message)
         if material.parse_status == "completed":
-            return MaterialProgress(status="completed", progress_percent=100, message="轻解析已完成")
+            return MaterialProgress(status="completed", progress_percent=100, message="资料解析已完成")
         if material.parse_status == "failed":
             return MaterialProgress(status="failed", progress_percent=0, message="解析失败")
         return MaterialProgress(status=material.parse_status, progress_percent=10, message=self._detail_for_status(material.parse_status, self._extension(material.filename)))
@@ -548,7 +712,12 @@ class MaterialService:
         for material in materials:
             if material.id in material_ids_with_chunks:
                 continue
-            if material.parse_status != "completed" or not material.extracted_text or self._extension(material.filename) not in self.parsed_text_extensions:
+            if (
+                material.parse_status != "completed"
+                or material.ingestion_status != "confirmed"
+                or not material.extracted_text
+                or self._extension(material.filename) not in self.parsed_text_extensions
+            ):
                 continue
             evidence.extend(self._fallback_text_evidence(material, knowledge_points))
 
@@ -769,6 +938,8 @@ class MaterialService:
             modified=item.modified,
             size=item.size,
             parse_status=material.parse_status,
+            ingestion_status=material.ingestion_status,
+            quality_summary=dict(material.quality_json or {}),
         )
 
     def _build_list_item(self, material: Material) -> MaterialListItem:
@@ -785,6 +956,10 @@ class MaterialService:
             category="image" if extension in self.image_extensions else "document",
             extension=extension.lstrip(".").upper() or "FILE",
             parse_status=material.parse_status,
+            ingestion_status=material.ingestion_status,
+            outline_version=int(material.outline_version or 0),
+            outline_confirmed=bool((material.outline_json or {}).get("confirmed")),
+            quality_summary=dict(material.quality_json or {}),
             course_ids=course_ids,
         )
 
@@ -802,6 +977,8 @@ class MaterialService:
             "pending": "等待解析",
             "parsing": "解析中",
             "failed": "解析失败",
+            "awaiting_confirmation": "解析完成，等待确认目录",
+            "confirmed": "目录已确认，可生成课程",
         }
         return labels.get(parse_status, parse_status)
 

@@ -6,7 +6,7 @@
 
 本文档记录 EduNova 的本地开发、Docker Compose 和部署准备方式。
 
-当前部署范围覆盖九条生产 Graph、AI 任务运行时和动态检索：
+当前部署范围覆盖十条生产 Graph、AI 任务运行时和动态检索：
 
 - 工程骨架和 Docker Compose。
 - 数据库迁移和内置课程包导入。
@@ -222,7 +222,7 @@ http://127.0.0.1:8080/api/health
 docker compose down
 ```
 
-Compose 使用三个固定命名卷：`postgres_data` 保存数据库，`redis_data` 保存 RQ 队列与运行时状态，`export_data` 保存导出文件。固定 Redis 卷可以避免容器重建时不断产生长哈希匿名卷。普通 `docker compose down` 会保留数据；只有明确需要从零重置本地环境时才执行 `docker compose down -v`，该命令会不可恢复地删除三个卷。
+Compose 使用四个固定命名卷：`postgres_data` 保存数据库，`redis_data` 保存 RQ 队列与运行时状态，`export_data` 保存导出文件，`material_data` 让 backend 与 `ai-worker` 共享用户原文件。固定卷可以避免容器重建时不断产生长哈希匿名卷。普通 `docker compose down` 会保留数据；只有明确需要从零重置本地环境时才执行 `docker compose down -v`，该命令会不可恢复地删除四个卷。
 
 ## 5. 服务说明
 
@@ -231,7 +231,7 @@ Compose 使用三个固定命名卷：`postgres_data` 保存数据库，`redis_d
 | `postgres` | `pgvector/pgvector:pg16` | `5432` | PostgreSQL + pgvector |
 | `redis` | `redis:7-alpine` | `6379` | 缓存、进度和 RQ 队列，使用固定 `redis_data` 卷 |
 | `backend` | `docker/backend.Dockerfile` | `8000` | FastAPI 后端 |
-| `ai-worker` | `docker/backend.Dockerfile` | 无 | 建课、资源和向量重建 RQ Worker |
+| `ai-worker` | `docker/backend.Dockerfile` | `material_data` | 资料解析、建课、资源和向量重建 RQ Worker |
 | `export-worker` | `docker/backend.Dockerfile` | 无 | 学习档案与 PPTX 导出 RQ Worker |
 | `code-verifier` | `docker/code-verifier.Dockerfile` | 仅内部 `8090` | 生成 Python 代码的隔离验证服务 |
 | `frontend` | `docker/frontend.Dockerfile` | 内部 `80` | Vite 生产构建后的静态前端，只供 Nginx 访问 |

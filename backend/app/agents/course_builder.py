@@ -3,18 +3,21 @@ from __future__ import annotations
 from collections import defaultdict
 from decimal import Decimal
 from math import ceil
+import operator
 from pathlib import Path
+import re
 from time import perf_counter
-from typing import Any, Callable, TypedDict
+from typing import Annotated, Any, Callable, TypedDict
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
 
 from backend.app.agents.learning_review import contains_sensitive_text, parse_json_object, review_contract, safe_text
 from backend.app.api.errors import make_trace_id
 from backend.app.models import Course, CourseEnrollment, CourseMaterialLink, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, User
 from backend.app.schemas.courses import CreateCourseFromMaterialsResult
-from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
+from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 
 
 class CourseBuilderState(TypedDict, total=False):
@@ -26,16 +29,17 @@ class CourseBuilderState(TypedDict, total=False):
     materials: list[Material]
     source_chunks: list[MaterialChunk]
     learner_context: Any
-    source_units: list[dict[str, Any]]
-    deterministic_structure: dict[str, Any]
+    chapters: list[dict[str, Any]]
+    worker_chapter: dict[str, Any]
+    worker_results: Annotated[list[dict[str, Any]], operator.add]
     structure: dict[str, Any]
-    generation_mode: str
     review_mode: str
     review_result: dict[str, Any]
     needs_repair: bool
     repair_count: int
     knowledge_points: list[KnowledgePoint]
     knowledge_chunks: list[KnowledgeChunk]
+    quality: dict[str, Any]
     warnings: list[str]
     result: CreateCourseFromMaterialsResult
     job_context: Any
@@ -43,15 +47,18 @@ class CourseBuilderState(TypedDict, total=False):
 
 class CourseBuilderGraphRunner:
     workflow = "course_builder"
+    prompt_version = "course-builder-v3"
     job_progress = {
-        "read_materials": (8, "已读取资料"),
-        "source_outline": (18, "已整理来源提纲"),
-        "structure_course": (32, "已生成课程结构"),
-        "knowledge_points": (44, "已生成知识点"),
-        "chunk": (56, "已生成课程切片"),
-        "embed": (68, "已处理语义向量"),
-        "review": (80, "已审核课程结构"),
-        "repair": (90, "已修订课程结构"),
+        "validate_confirmed_materials": (7, "已校验确认资料"),
+        "coherence_gate": (14, "已检查资料主题一致性"),
+        "load_outlines": (24, "已读取确认目录"),
+        "chapter_plan": (34, "已规划章节分析"),
+        "concept_workers": (54, "已分析章节知识点"),
+        "aggregate": (62, "已聚合课程结构"),
+        "prerequisite_graph": (70, "已建立先修关系"),
+        "evidence_bind": (78, "已绑定真实证据"),
+        "review": (88, "已审核课程质量"),
+        "repair": (94, "已修订课程结构"),
         "persist": (100, "课程已创建"),
     }
 
@@ -78,6 +85,7 @@ class CourseBuilderGraphRunner:
             "material_ids": unique_ids,
             "requested_title": course_title.strip(),
             "warnings": [],
+            "worker_results": [],
             "repair_count": 0,
             "job_context": job_context,
         }
@@ -86,487 +94,644 @@ class CourseBuilderGraphRunner:
 
     def _build_graph(self):
         graph = StateGraph(CourseBuilderState)
-        graph.add_node("read_materials", self._read_materials_node)
-        graph.add_node("source_outline", self._source_outline_node)
-        graph.add_node("structure_course", self._structure_course_node)
-        graph.add_node("knowledge_points", self._knowledge_points_node)
-        graph.add_node("chunk", self._chunk_node)
-        graph.add_node("embed", self._embed_node)
-        graph.add_node("review", self._review_node)
-        graph.add_node("repair", self._repair_node)
-        graph.add_node("persist", self._persist_node)
-        graph.add_edge(START, "read_materials")
-        graph.add_edge("read_materials", "source_outline")
-        graph.add_edge("source_outline", "structure_course")
-        graph.add_edge("structure_course", "knowledge_points")
-        graph.add_edge("knowledge_points", "chunk")
-        graph.add_edge("chunk", "embed")
-        graph.add_edge("embed", "review")
+        graph.add_node("validate_confirmed_materials", self._validate_confirmed_materials)
+        graph.add_node("coherence_gate", self._coherence_gate)
+        graph.add_node("load_outlines", self._load_outlines)
+        graph.add_node("chapter_plan", self._chapter_plan)
+        graph.add_node("concept_workers", self._concept_worker)
+        graph.add_node("aggregate", self._aggregate)
+        graph.add_node("prerequisite_graph", self._prerequisite_graph)
+        graph.add_node("evidence_bind", self._evidence_bind)
+        graph.add_node("review", self._review)
+        graph.add_node("repair", self._repair)
+        graph.add_node("persist", self._persist)
+        graph.add_edge(START, "validate_confirmed_materials")
+        graph.add_edge("validate_confirmed_materials", "coherence_gate")
+        graph.add_edge("coherence_gate", "load_outlines")
+        graph.add_edge("load_outlines", "chapter_plan")
+        graph.add_conditional_edges("chapter_plan", self._dispatch_chapters, ["concept_workers"])
+        graph.add_edge("concept_workers", "aggregate")
+        graph.add_edge("aggregate", "prerequisite_graph")
+        graph.add_edge("prerequisite_graph", "evidence_bind")
+        graph.add_edge("evidence_bind", "review")
         graph.add_conditional_edges("review", lambda state: "repair" if state.get("needs_repair") else "persist", {"repair": "repair", "persist": "persist"})
         graph.add_edge("repair", "persist")
         graph.add_edge("persist", END)
         return graph.compile()
 
-    def _read_materials_node(self, state: CourseBuilderState) -> dict[str, Any]:
+    def _validate_confirmed_materials(self, state: CourseBuilderState) -> dict[str, Any]:
         def work():
-            materials = self.service._ordered_materials(int(state["user_id"]), list(state["material_ids"]))
-            self.service._validate_materials(materials, list(state["material_ids"]))
-            list_chunks = getattr(self.service.repository, "list_material_chunks", None)
-            chunks = list_chunks(list(state["material_ids"])) if callable(list_chunks) else []
-            existing_ids = {chunk.material_id for chunk in chunks}
-            generated: list[MaterialChunk] = []
-            for material in materials:
-                if material.id not in existing_ids:
-                    generated.extend(self.service.chunking_service.build_chunks(material))
-            if generated:
-                add_chunks = getattr(self.service.repository, "add_material_chunks", None)
-                if callable(add_chunks):
-                    add_chunks(generated)
-                    self.service.repository.commit()
-                    chunks = list_chunks(list(state["material_ids"])) if callable(list_chunks) else generated
-                else:
-                    chunks = generated
-            if not chunks:
-                raise self.service.generation_error("当前资料没有可用于建课的有效内容。")
+            materials = self.service._ordered_materials(state["user_id"], state["material_ids"])
+            self.service._validate_materials(materials, state["material_ids"])
+            invalid = [material.filename for material in materials if material.ingestion_status != "confirmed" or not (material.quality_json or {}).get("passed")]
+            if invalid:
+                raise self.service.generation_error("以下资料尚未确认目录或解析质量未通过：" + "、".join(invalid[:5]))
+            chunks = list(self.service.repository.list_material_chunks(state["material_ids"]))
+            included = [chunk for chunk in chunks if (chunk.quality_json or {}).get("included", True)]
+            if not included:
+                raise self.service.generation_error("确认目录中没有可用于建课的正文切片。")
             context_service = context_service_from_repository(self.service.repository)
-            learner_context = context_service.global_context(int(state["user_id"])) if context_service is not None else None
-            return (
-                {"materials": materials, "source_chunks": chunks, "learner_context": learner_context},
-                f"已读取 {len(materials)} 份资料和 {len(chunks)} 个来源分块。",
-                "completed",
-                {
-                    "material_count": len(materials),
-                    "candidate_count": len(chunks),
-                    **(learner_context.trace_metadata() if learner_context is not None else {"profile_context_used": False}),
-                },
-            )
+            learner_context = context_service.global_context(state["user_id"]) if context_service is not None else None
+            return {"materials": materials, "source_chunks": included, "learner_context": learner_context}, {
+                "material_count": len(materials), "candidate_count": len(included)
+            }
+        return self._run_node(state, "validate_confirmed_materials", 1, work)
 
-        return self._run_node(state, "read_materials", 1, "读取当前用户选中的已解析资料", work)
-
-    def _source_outline_node(self, state: CourseBuilderState) -> dict[str, Any]:
+    def _coherence_gate(self, state: CourseBuilderState) -> dict[str, Any]:
         def work():
-            materials = {material.id: material for material in state["materials"]}
-            chunks = list(state["source_chunks"])
-            section_groups: list[list[MaterialChunk]] = []
-            current: list[MaterialChunk] = []
-            current_group: tuple[int, str] | None = None
-            for chunk in chunks:
-                group = (chunk.material_id, str(chunk.section_title or ""))
-                if current and group != current_group:
-                    section_groups.append(current)
-                    current = []
-                current.append(chunk)
-                current_group = group
-            if current:
-                section_groups.append(current)
-            group_bucket_size = max(1, ceil(len(section_groups) / 30))
-            grouped = [
-                [chunk for section in section_groups[index:index + group_bucket_size] for chunk in section]
-                for index in range(0, len(section_groups), group_bucket_size)
-            ]
-            units: list[dict[str, Any]] = []
-            for index, group_chunks in enumerate(grouped[:30], start=1):
-                first = group_chunks[0]
-                material = materials[first.material_id]
-                section_titles = list(dict.fromkeys(safe_text(chunk.section_title, limit=100) for chunk in group_chunks if safe_text(chunk.section_title, limit=100)))
-                title = section_titles[0] if len(section_titles) == 1 else (
-                    f"{section_titles[0]}等 {len(section_titles)} 节" if section_titles else f"{Path(material.filename).stem} 第 {index} 部分"
-                )
-                units.append(
-                    {
-                        "key": f"source-{index}",
-                        "title": title,
-                        "material_id": first.material_id,
-                        "source_filename": material.filename,
-                        "chapter": safe_text((first.metadata_json or {}).get("chapter_title"), limit=100) or material.filename,
-                        "chunk_indexes": [chunk.chunk_index for chunk in group_chunks],
-                        "excerpt": safe_text(" ".join(chunk.content for chunk in group_chunks), limit=500),
-                    }
-                )
-            return {"source_units": units}, f"已形成 {len(units)} 个可审计来源单元。", "completed", {"candidate_count": len(units)}
+            materials = state["materials"]
+            if len(materials) <= 1:
+                return {}, {"material_count": len(materials), "coherence_status": "single_material"}
+            token_sets: list[set[str]] = []
+            chunks_by_material: dict[int, list[MaterialChunk]] = defaultdict(list)
+            for chunk in state["source_chunks"]:
+                chunks_by_material[chunk.material_id].append(chunk)
+            for material in materials:
+                sample = material.filename + " " + " ".join(chunk.section_title or "" for chunk in chunks_by_material[material.id][:80])
+                token_sets.append(self._terms(sample))
+            similarities = []
+            for left in range(len(token_sets)):
+                for right in range(left + 1, len(token_sets)):
+                    union = token_sets[left] | token_sets[right]
+                    similarities.append(len(token_sets[left] & token_sets[right]) / max(1, len(union)))
+            minimum = min(similarities, default=1.0)
+            if minimum < 0.025:
+                raise self.service.generation_error("所选资料主题差异较大，建议拆成不同课程后分别生成。")
+            return {}, {"material_count": len(materials), "coherence_score": round(minimum, 4)}
+        return self._run_node(state, "coherence_gate", 2, work)
 
-        return self._run_node(state, "source_outline", 2, "把资料分块整理成安全来源提纲", work)
-
-    def _structure_course_node(self, state: CourseBuilderState) -> dict[str, Any]:
+    def _load_outlines(self, state: CourseBuilderState) -> dict[str, Any]:
         def work():
-            deterministic = self._deterministic_structure(state)
-            enhanced = self._model_structure(state, deterministic, repair=False)
-            structure = enhanced or deterministic
-            mode = "model_enhanced" if enhanced else "deterministic_source"
-            return {"deterministic_structure": deterministic, "structure": structure, "generation_mode": mode}, (
-                "模型已在真实来源范围内完成教学结构重组。" if enhanced else "模型不可用或结构无效，保留确定性课程结构。"
-            ), "completed" if enhanced else "warning", {"model_used": bool(enhanced), "generation_mode": mode}
+            material_by_id = {material.id: material for material in state["materials"]}
+            groups: dict[tuple[int, str], list[MaterialChunk]] = defaultdict(list)
+            for chunk in state["source_chunks"]:
+                path = list(chunk.section_path_json or [])
+                chapter = path[0] if path else (chunk.section_title or Path(material_by_id[chunk.material_id].filename).stem)
+                groups[(chunk.material_id, chapter)].append(chunk)
+            chapters = []
+            for index, ((material_id, title), chunks) in enumerate(groups.items(), start=1):
+                chapters.append({
+                    "key": f"chapter-{index}",
+                    "title": title[:255],
+                    "material_id": material_id,
+                    "source_filename": material_by_id[material_id].filename,
+                    "chunk_indexes": [chunk.chunk_index for chunk in chunks],
+                    "character_count": sum(len(chunk.content) for chunk in chunks),
+                })
+            if not chapters:
+                raise self.service.generation_error("确认目录中没有有效章节。")
+            return {"chapters": chapters}, {"chapter_count": len(chapters), "candidate_count": len(state["source_chunks"])}
+        return self._run_node(state, "load_outlines", 3, work)
 
-        return self._run_node(state, "structure_course", 3, "生成课程目标、章节和知识点结构", work)
-
-    def _knowledge_points_node(self, state: CourseBuilderState) -> dict[str, Any]:
+    def _chapter_plan(self, state: CourseBuilderState) -> dict[str, Any]:
         def work():
-            points: list[KnowledgePoint] = []
-            for index, spec in enumerate(state["structure"].get("knowledge_points", [])):
-                point = KnowledgePoint(
-                    course_id=0,
-                    title=safe_text(spec.get("title"), limit=255),
-                    summary=safe_text(spec.get("summary"), limit=1000),
-                    chapter=safe_text(spec.get("chapter"), limit=255) or None,
-                    order_index=index,
-                    difficulty=str(spec.get("difficulty") or "medium"),
-                    prerequisites_json=list(spec.get("prerequisite_keys") or []),
-                )
-                setattr(point, "builder_key", str(spec.get("key") or f"kp-{index + 1}"))
-                points.append(point)
-            return {"knowledge_points": points}, f"已生成 {len(points)} 个知识点实体。", "completed", {"candidate_count": len(points)}
+            chapters = list(state["chapters"])
+            total_chars = sum(item["character_count"] for item in chapters)
+            for chapter in chapters:
+                proportional = round(56 * chapter["character_count"] / max(1, total_chars))
+                chapter["target_count"] = max(2, min(18, proportional))
+            target_total = min(120, max(len(chapters) * 2, sum(item["target_count"] for item in chapters)))
+            return {"chapters": chapters}, {"chapter_count": len(chapters), "target_knowledge_point_count": target_total}
+        return self._run_node(state, "chapter_plan", 4, work)
 
-        return self._run_node(state, "knowledge_points", 4, "把审核前课程结构转换为知识点实体", work)
+    @staticmethod
+    def _dispatch_chapters(state: CourseBuilderState):
+        return [
+            Send("concept_workers", {
+                "trace_id": state["trace_id"],
+                "user": state["user"],
+                "user_id": state["user_id"],
+                "worker_chapter": chapter,
+                "source_chunks": state["source_chunks"],
+                "learner_context": state.get("learner_context"),
+                "job_context": state.get("job_context"),
+                "worker_results": [],
+            })
+            for chapter in state["chapters"]
+        ]
 
-    def _chunk_node(self, state: CourseBuilderState) -> dict[str, Any]:
+    def _concept_worker(self, state: CourseBuilderState) -> dict[str, Any]:
+        started = perf_counter()
+        chapter = state["worker_chapter"]
+        chunks = [chunk for chunk in state["source_chunks"] if chunk.material_id == chapter["material_id"] and chunk.chunk_index in chapter["chunk_indexes"]]
+        deterministic = self._deterministic_chapter_points(chapter, chunks)
+        enhanced = self._model_chapter_points(state, chapter, chunks, deterministic)
+        points = enhanced or deterministic
+        self._record(state, "concept_workers", 5, "completed", {
+            "chapter_title": chapter["title"], "candidate_count": len(points), "model_used": bool(enhanced)
+        }, started)
+        return {"worker_results": [{"chapter": chapter, "points": points, "generation_mode": "model_enhanced" if enhanced else "deterministic_source"}]}
+
+    def _aggregate(self, state: CourseBuilderState) -> dict[str, Any]:
         def work():
-            chunk_by_ref = {(chunk.material_id, chunk.chunk_index): chunk for chunk in state["source_chunks"]}
-            chunks: list[KnowledgeChunk] = []
-            for point_index, spec in enumerate(state["structure"].get("knowledge_points", [])):
-                for source_key in spec.get("source_keys", []):
-                    unit = next((item for item in state["source_units"] if item["key"] == source_key), None)
-                    if unit is None:
-                        continue
-                    for chunk_index in unit["chunk_indexes"]:
-                        source = chunk_by_ref.get((unit["material_id"], chunk_index))
-                        if source is None:
-                            continue
-                        chunks.append(
-                            KnowledgeChunk(
-                                course_id=0,
-                                material_id=None,  # type: ignore[arg-type]
-                                knowledge_point_id=None,
-                                content=source.content,
-                                page_number=source.page_number,
-                                section_title=source.section_title or spec.get("title"),
-                                embedding=None,
-                                metadata_json={
-                                    "source_material_id": source.material_id,
-                                    "source_chunk_index": source.chunk_index,
-                                    "source_filename": unit["source_filename"],
-                                    "knowledge_point_order": point_index,
-                                    "knowledge_point_key": spec.get("key"),
-                                },
-                            )
-                        )
-            return {"knowledge_chunks": chunks}, f"已为知识点绑定 {len(chunks)} 个真实来源分块。", "completed", {"candidate_count": len(chunks)}
+            points: list[dict[str, Any]] = []
+            modes: list[str] = []
+            for result in state.get("worker_results", []):
+                modes.append(result["generation_mode"])
+                for point in result["points"]:
+                    point = dict(point)
+                    point["key"] = f"kp-{len(points) + 1}"
+                    points.append(point)
+            if not points or len(points) > 120:
+                raise self.service.generation_error("课程知识点数量不合理，未创建课程。")
+            structure = {
+                "title": state.get("requested_title") or Path(state["materials"][0].filename).stem,
+                "subject": "智能资料课程",
+                "description": f"基于 {len(state['materials'])} 份已确认资料生成的结构化课程",
+                "learning_objectives": [f"理解并应用 {point['title']}" for point in points[:12]],
+                "knowledge_points": points,
+                "generation_mode": "model_enhanced" if "model_enhanced" in modes else "deterministic_source",
+            }
+            return {"structure": structure}, {"candidate_count": len(points), "generation_mode": structure["generation_mode"]}
+        return self._run_node(state, "aggregate", 6, work)
 
-        return self._run_node(state, "chunk", 5, "建立课程分块与知识点来源映射", work)
-
-    def _embed_node(self, state: CourseBuilderState) -> dict[str, Any]:
+    def _prerequisite_graph(self, state: CourseBuilderState) -> dict[str, Any]:
         def work():
-            chunks = list(state.get("knowledge_chunks", []))
-            warning = None
-            if self.service.embedding_service is not None and chunks:
-                try:
-                    self.service._best_effort_embed_chunks(state["user"], chunks)
-                except Exception:
-                    warning = "外部 embedding 不可用，课程将使用关键词检索。"
-            warnings = [*state.get("warnings", [])]
-            if warning:
-                warnings.append(warning)
-            embedded_count = sum(1 for chunk in chunks if chunk.embedding is not None)
-            return {"knowledge_chunks": chunks, "warnings": warnings}, (
-                f"已生成 {embedded_count} 个真实向量。" if embedded_count else (warning or "当前未配置外部 embedding，保留关键词检索。")
-            ), "completed" if embedded_count else "warning", {"embedding_status": "external" if embedded_count else "local_fallback", "candidate_count": embedded_count}
+            points = state["structure"]["knowledge_points"]
+            previous_by_chapter: dict[str, str] = {}
+            previous_chapter_tail: str | None = None
+            current_chapter = None
+            for point in points:
+                chapter = point["chapter"]
+                prerequisites: list[str] = []
+                if chapter in previous_by_chapter:
+                    prerequisites.append(previous_by_chapter[chapter])
+                elif previous_chapter_tail and chapter != current_chapter:
+                    prerequisites.append(previous_chapter_tail)
+                point["prerequisite_keys"] = prerequisites
+                previous_by_chapter[chapter] = point["key"]
+                if current_chapter != chapter:
+                    current_chapter = chapter
+                previous_chapter_tail = point["key"]
+            return {"structure": state["structure"]}, {"candidate_count": len(points), "prerequisite_edge_count": sum(len(p["prerequisite_keys"]) for p in points)}
+        return self._run_node(state, "prerequisite_graph", 7, work)
 
-        return self._run_node(state, "embed", 6, "为课程分块生成外部语义向量", work)
-
-    def _review_node(self, state: CourseBuilderState) -> dict[str, Any]:
+    def _evidence_bind(self, state: CourseBuilderState) -> dict[str, Any]:
         def work():
-            risks = self._structure_risks(state["structure"], state["source_units"])
-            model_review = None
-            if state.get("generation_mode") == "model_enhanced" and self.service.model_service is not None:
-                try:
-                    raw = self.service.model_service.chat_completion(
-                        state["user"],
-                        [
-                            {"role": "system", "content": "你是 CourseBuilderGraph ReviewAgent。只输出 JSON，不得添加来源。"},
-                            {
-                                "role": "user",
-                                "content": (
-                                    f"审核知识点数={len(state['structure'].get('knowledge_points', []))}，"
-                                    f"来源数={len(state['source_units'])}。"
-                                    "返回 {\"review_status\":\"passed|revise\",\"confidence\":0.0,"
-                                    "\"risk_flags\":[],\"safety_summary\":\"\"}。"
-                                ),
-                            },
-                        ],
-                    )
-                    model_review = review_contract(parse_json_object(raw), default_summary="课程结构、来源和安全审核完成。")
-                except Exception:
-                    model_review = None
+            points, knowledge_chunks = self._build_bound_entities(state)
+            return {"knowledge_points": points, "knowledge_chunks": knowledge_chunks}, {"candidate_count": len(points), "evidence_count": len(knowledge_chunks)}
+        return self._run_node(state, "evidence_bind", 8, work)
+
+    def _review(self, state: CourseBuilderState) -> dict[str, Any]:
+        def work():
+            quality, risks = self._quality(state)
+            model_review = self._model_review(state, quality)
             if model_review and model_review["review_status"] == "revise":
                 risks.extend(str(item) for item in model_review["risk_flags"])
             risks = list(dict.fromkeys(risks))
-            if risks:
-                review = {"review_status": "revise", "confidence": model_review["confidence"] if model_review else 0.42, "risk_flags": risks, "safety_summary": model_review["safety_summary"] if model_review else "课程结构需要修订。"}
-                return {"review_result": review, "review_mode": "model_and_rules" if model_review else "rules_only", "needs_repair": True}, review["safety_summary"], "warning", review
-            review = model_review or {"review_status": "warning", "confidence": 0.66, "risk_flags": [], "safety_summary": "模型审核不可用，已完成来源覆盖、先修图和隐私规则审核。"}
-            return {"review_result": review, "review_mode": "model_and_rules" if model_review else "rules_only", "needs_repair": False}, review["safety_summary"], "completed" if model_review else "warning", review
-
-        return self._run_node(state, "review", 7, "审核来源覆盖、先修关系和安全边界", work)
-
-    def _repair_node(self, state: CourseBuilderState) -> dict[str, Any]:
-        def work():
-            repaired = self._model_structure(state, state["structure"], repair=True)
-            if repaired is None or self._structure_risks(repaired, state["source_units"]):
-                repaired = state["deterministic_structure"]
-                mode = "deterministic_source"
-            else:
-                mode = "model_enhanced"
-            points, chunks = self._entities_from_structure(repaired, state)
-            if self.service.embedding_service is not None and chunks:
-                self.service._best_effort_embed_chunks(state["user"], chunks)
-            review = {"review_status": "passed", "confidence": 0.72 if mode == "model_enhanced" else 0.66, "risk_flags": [], "safety_summary": "已完成一次修订并通过确定性来源与先修图校验。"}
-            return {"structure": repaired, "knowledge_points": points, "knowledge_chunks": chunks, "generation_mode": mode, "review_result": review, "repair_count": 1}, review["safety_summary"], "completed", {**review, "repair_count": 1}
-
-        return self._run_node(state, "repair", 8, "按审核结果修订一次课程结构", work)
-
-    def _persist_node(self, state: CourseBuilderState) -> dict[str, Any]:
-        started = perf_counter()
-        self._job_before(state, "persist")
-        materials = state["materials"]
-        structure = dict(state["structure"])
-        title = str(state.get("requested_title") or structure.get("title") or Path(materials[0].filename).stem).strip()[:255]
-        course = Course(
-            owner_id=int(state["user_id"]),
-            title=title,
-            description=safe_text(structure.get("description"), limit=1000) or f"由 {len(materials)} 份资料生成",
-            subject=safe_text(structure.get("subject"), limit=120) or "自动生成课程",
-            source_type="uploaded",
-            visibility="private",
-            status="ready",
-            agent_trace_id=state["trace_id"],
-            structure_json={},
-        )
-        enrollment = CourseEnrollment(user_id=int(state["user_id"]), course_id=0, role="learner", progress_percent=Decimal("0"))
-        course_materials = [self.service._build_course_material(state["user"], material) for material in materials]
-        for material in course_materials:
-            material.agent_trace_id = state["trace_id"]
-        links = [CourseMaterialLink(course_id=0, material_id=material.id, added_by_user_id=int(state["user_id"]), usage_type="course_source") for material in materials]
-        try:
-            created = self.service.repository.add_course_graph(course, enrollment, course_materials, links, state["knowledge_points"], state["knowledge_chunks"])
-            key_to_id = {str(getattr(point, "builder_key", f"kp-{index + 1}")): str(point.id) for index, point in enumerate(state["knowledge_points"])}
-            chapters: dict[str, list[str]] = defaultdict(list)
-            for point in state["knowledge_points"]:
-                chapters[str(point.chapter or "课程内容")].append(str(point.id))
-            used_sources = {key for point in structure.get("knowledge_points", []) for key in point.get("source_keys", [])}
-            course.structure_json = {
-                "schema_version": 2,
-                "learning_objectives": list(structure.get("learning_objectives", []))[:12],
-                "chapters": [{"title": chapter, "knowledge_point_ids": ids} for chapter, ids in chapters.items()],
-                "supplemental_refs": [
-                    {"source_key": unit["key"], "title": unit["title"], "material_id": str(unit["material_id"])}
-                    for unit in state["source_units"]
-                    if unit["key"] not in used_sources
-                ],
-                "generation_mode": state.get("generation_mode", "deterministic_source"),
-                "review_mode": state.get("review_mode", "rules_only"),
-                "review_result": state.get("review_result", {}),
-                "source_coverage": {"source_unit_count": len(state["source_units"]), "mapped_source_count": len(used_sources)},
-                "knowledge_key_map": key_to_id,
-                "warnings": list(state.get("warnings", [])),
-                "profile_applied_version": (
-                    state["learner_context"].profile_applied_version if state.get("learner_context") is not None else 0
-                ),
+            review = model_review or {
+                "review_status": "passed" if not risks else "revise",
+                "confidence": 0.78 if not risks else 0.35,
+                "risk_flags": risks,
+                "safety_summary": "已完成来源覆盖、重复率、先修图和内容安全审核。",
             }
-            self.service.repository.commit()
-            self.service.repository.refresh(created)
-        except Exception as exc:
-            self.service.repository.rollback()
-            self._record(state, "persist", 9, "failed", "事务性持久化课程结构", "课程持久化失败，未保留半成品课程。", {"error_code": exc.__class__.__name__}, started)
-            self._job_after(state, "persist", status="failed", label="课程创建失败", progress_percent=95)
-            raise
-        result = CreateCourseFromMaterialsResult(
-            course=self.service._build_summary(created, len(course_materials), len(state["knowledge_points"]), len(state["knowledge_chunks"])),
-            knowledge_points=[self.service._build_knowledge_point(point) for point in state["knowledge_points"]],
-        )
-        self._record(state, "persist", 9, "completed", "事务性持久化课程结构", "课程、知识点、来源分块和先修关系已持久化。", {"artifact_id": str(created.id), "candidate_count": len(state["knowledge_points"])}, started)
-        self._job_after(state, "persist")
-        return {"result": result}
+            if risks:
+                review = {**review, "review_status": "revise", "risk_flags": risks}
+            return {"quality": quality, "review_result": review, "review_mode": "model_and_rules" if model_review else "rules_only", "needs_repair": bool(risks)}, {**quality, **review}
+        return self._run_node(state, "review", 9, work)
+
+    def _repair(self, state: CourseBuilderState) -> dict[str, Any]:
+        def work():
+            structure = self._deterministic_structure(state)
+            state["structure"] = structure
+            quality, risks = self._quality(state)
+            if risks:
+                raise self.service.generation_error("课程质量审核未通过，未保存低质量课程：" + "、".join(risks))
+            points, knowledge_chunks = self._build_bound_entities(state)
+            review = {"review_status": "passed", "confidence": 0.76, "risk_flags": [], "safety_summary": "已完成一次结构修订并通过全部确定性质量门。"}
+            return {
+                "structure": structure,
+                "knowledge_points": points,
+                "knowledge_chunks": knowledge_chunks,
+                "quality": quality,
+                "review_result": review,
+                "repair_count": 1,
+                "needs_repair": False,
+            }, {**quality, **review, "repair_count": 1}
+        return self._run_node(state, "repair", 10, work)
 
     def _deterministic_structure(self, state: CourseBuilderState) -> dict[str, Any]:
         points: list[dict[str, Any]] = []
-        for index, unit in enumerate(state["source_units"], start=1):
-            key = f"kp-{index}"
-            points.append(
-                {
-                    "key": key,
-                    "title": unit["title"],
-                    "chapter": unit.get("chapter") or unit["source_filename"],
-                    "summary": unit["excerpt"],
-                    "difficulty": "easy" if index == 1 else "medium" if index < len(state["source_units"]) else "hard",
-                    "prerequisite_keys": [f"kp-{index - 1}"] if index > 1 else [],
-                    "source_keys": [unit["key"]],
-                }
-            )
+        previous_by_chapter: dict[str, str] = {}
+        previous_chapter_tail: str | None = None
+        current_chapter: str | None = None
+        for chapter in state["chapters"]:
+            chunks = [
+                chunk
+                for chunk in state["source_chunks"]
+                if chunk.material_id == chapter["material_id"] and chunk.chunk_index in chapter["chunk_indexes"]
+            ]
+            for point in self._deterministic_chapter_points(chapter, chunks):
+                point = dict(point)
+                point["key"] = f"kp-{len(points) + 1}"
+                prerequisites: list[str] = []
+                if point["chapter"] in previous_by_chapter:
+                    prerequisites.append(previous_by_chapter[point["chapter"]])
+                elif previous_chapter_tail and point["chapter"] != current_chapter:
+                    prerequisites.append(previous_chapter_tail)
+                point["prerequisite_keys"] = prerequisites
+                previous_by_chapter[point["chapter"]] = point["key"]
+                current_chapter = point["chapter"]
+                previous_chapter_tail = point["key"]
+                points.append(point)
         return {
             "title": state.get("requested_title") or Path(state["materials"][0].filename).stem,
-            "subject": "自动生成课程",
-            "description": f"由 {len(state['materials'])} 份资料生成的结构化课程",
-            "learning_objectives": [f"理解并应用 {point['title']}" for point in points[:8]],
-            "knowledge_points": points,
+            "subject": "智能资料课程",
+            "description": f"基于 {len(state['materials'])} 份已确认资料生成的结构化课程",
+            "learning_objectives": [f"理解并应用 {point['title']}" for point in points[:12]],
+            "knowledge_points": points[:120],
+            "generation_mode": "deterministic_source",
         }
 
-    def _model_structure(self, state: CourseBuilderState, fallback: dict[str, Any], *, repair: bool) -> dict[str, Any] | None:
+    def _build_bound_entities(self, state: CourseBuilderState) -> tuple[list[KnowledgePoint], list[KnowledgeChunk]]:
+        points: list[KnowledgePoint] = []
+        knowledge_chunks: list[KnowledgeChunk] = []
+        chunk_by_ref = {(chunk.material_id, chunk.chunk_index): chunk for chunk in state["source_chunks"]}
+        filename_by_material = {material.id: material.filename for material in state["materials"]}
+        for index, spec in enumerate(state["structure"]["knowledge_points"]):
+            point = KnowledgePoint(
+                course_id=0,
+                title=spec["title"],
+                summary=spec["summary"],
+                chapter=spec["chapter"],
+                order_index=index,
+                difficulty=spec["difficulty"],
+                prerequisites_json=spec["prerequisite_keys"],
+            )
+            setattr(point, "builder_key", spec["key"])
+            points.append(point)
+            for ref in spec["source_refs"]:
+                source = chunk_by_ref.get((ref["material_id"], ref["chunk_index"]))
+                if source is None:
+                    continue
+                knowledge_chunks.append(KnowledgeChunk(
+                    course_id=0,
+                    material_id=None,  # type: ignore[arg-type]
+                    knowledge_point_id=None,
+                    content=source.content,
+                    page_number=source.page_number,
+                    section_title=source.section_title or spec["title"],
+                    embedding=None,
+                    metadata_json={
+                        "source_material_id": source.material_id,
+                        "source_chunk_index": source.chunk_index,
+                        "source_filename": filename_by_material.get(source.material_id, "课程资料"),
+                        "knowledge_point_order": index,
+                        "knowledge_point_key": spec["key"],
+                        "end_page_number": source.end_page_number,
+                        "section_path": list(source.section_path_json or []),
+                    },
+                ))
+        if self.service.embedding_service is not None and knowledge_chunks:
+            try:
+                self.service._best_effort_embed_chunks(state["user"], knowledge_chunks)
+            except Exception:
+                state["warnings"].append("外部向量服务不可用，课程仍可使用关键词检索。")
+        return points, knowledge_chunks
+
+    def _persist(self, state: CourseBuilderState) -> dict[str, Any]:
+        started = perf_counter()
+        self._job_before(state, "persist")
+        quality = state["quality"]
+        if not quality.get("passed"):
+            raise self.service.generation_error("课程质量未通过，禁止持久化。")
+        materials = state["materials"]
+        structure = state["structure"]
+        title = str(state.get("requested_title") or structure.get("title") or Path(materials[0].filename).stem).strip()[:255]
+        course = Course(owner_id=state["user_id"], title=title, description=structure["description"], subject=structure["subject"], source_type="uploaded", visibility="private", status="ready", agent_trace_id=state["trace_id"], structure_json={})
+        enrollment = CourseEnrollment(user_id=state["user_id"], course_id=0, role="learner", progress_percent=Decimal("0"))
+        course_materials = [self.service._build_course_material(state["user"], material) for material in materials]
+        for item in course_materials:
+            item.agent_trace_id = state["trace_id"]
+        links = [CourseMaterialLink(course_id=0, material_id=material.id, added_by_user_id=state["user_id"], usage_type="course_source") for material in materials]
+        try:
+            created = self.service.repository.add_course_graph(course, enrollment, course_materials, links, state["knowledge_points"], state["knowledge_chunks"])
+            chapters: dict[str, list[str]] = defaultdict(list)
+            for point in state["knowledge_points"]:
+                chapters[str(point.chapter or "课程内容")].append(str(point.id))
+            context = state.get("learner_context")
+            course.structure_json = {
+                "schema_version": 3,
+                "learning_objectives": structure["learning_objectives"],
+                "chapters": [{"title": chapter, "knowledge_point_ids": ids} for chapter, ids in chapters.items()],
+                "generation_mode": structure["generation_mode"],
+                "review_mode": state.get("review_mode", "rules_only"),
+                "review_result": state["review_result"],
+                "quality": quality,
+                "source_coverage": {"source_chunk_count": len(state["source_chunks"]), "mapped_source_count": quality["mapped_source_count"]},
+                "prompt_version": self.prompt_version,
+                "warnings": list(dict.fromkeys(state.get("warnings", []))),
+                "profile_applied_version": context.profile_applied_version if context is not None else 0,
+            }
+            self.service.repository.commit()
+            self.service.repository.refresh(created)
+        except Exception:
+            self.service.repository.rollback()
+            self._job_after(state, "persist", status="failed", progress_percent=96, label="课程创建失败")
+            raise
+        result = CreateCourseFromMaterialsResult(course=self.service._build_summary(created, len(course_materials), len(state["knowledge_points"]), len(state["knowledge_chunks"])), knowledge_points=[self.service._build_knowledge_point(point) for point in state["knowledge_points"]])
+        self._record(state, "persist", 11, "completed", {"artifact_id": str(created.id), **quality}, started)
+        self._job_after(state, "persist")
+        return {"result": result}
+
+    def _deterministic_chapter_points(self, chapter: dict[str, Any], chunks: list[MaterialChunk]) -> list[dict[str, Any]]:
+        target = max(1, min(len(chunks), int(chapter.get("target_count") or 1)))
+        section_groups: list[dict[str, Any]] = []
+        group_by_section: dict[str, dict[str, Any]] = {}
+        for position, chunk in enumerate(chunks):
+            section_id = str((chunk.metadata_json or {}).get("section_id") or f"section-{chunk.chunk_index}")
+            group = group_by_section.get(section_id)
+            if group is None:
+                group = {
+                    "id": section_id,
+                    "title": self._clean_title(chunk.section_title or ""),
+                    "path": list(chunk.section_path_json or []),
+                    "position": position,
+                    "chunks": [],
+                }
+                group_by_section[section_id] = group
+                section_groups.append(group)
+            group["chunks"].append(chunk)
+
+        while len(section_groups) < target:
+            splittable = max(section_groups, key=lambda item: len(item["chunks"]), default=None)
+            if splittable is None or len(splittable["chunks"]) <= 1:
+                break
+            split_at = ceil(len(splittable["chunks"]) / 2)
+            tail = {
+                **splittable,
+                "id": f"{splittable['id']}-split-{len(section_groups) + 1}",
+                "position": splittable["position"] + split_at,
+                "chunks": splittable["chunks"][split_at:],
+            }
+            splittable["chunks"] = splittable["chunks"][:split_at]
+            section_groups.append(tail)
+            section_groups.sort(key=lambda item: item["position"])
+
+        if len(section_groups) <= target:
+            selected = list(section_groups)
+        else:
+            selected = sorted(
+                sorted(section_groups, key=self._section_priority, reverse=True)[:target],
+                key=lambda item: item["position"],
+            )
+
+        assigned: dict[str, list[MaterialChunk]] = {item["id"]: list(item["chunks"]) for item in selected}
+        selected_ids = set(assigned)
+        for group in section_groups:
+            if group["id"] in selected_ids:
+                continue
+            nearest = min(selected, key=lambda item: abs(int(item["position"]) - int(group["position"])))
+            assigned[nearest["id"]].extend(group["chunks"])
+
+        points: list[dict[str, Any]] = []
+        used_titles: set[str] = set()
+        for selected_group in selected:
+            group = sorted(assigned[selected_group["id"]], key=lambda item: item.chunk_index)
+            candidates: list[str] = []
+            for chunk in group:
+                candidates.extend(reversed([str(item).strip() for item in list(chunk.section_path_json or []) if str(item).strip()]))
+                if str(chunk.section_title or "").strip():
+                    candidates.append(str(chunk.section_title).strip())
+            if selected_group["title"]:
+                candidates.insert(0, selected_group["title"])
+            chapter_title = self._clean_title(chapter["title"])
+            titles = [self._clean_title(item) for item in candidates]
+            titles = [item for item in titles if self._is_knowledge_title(item)]
+            title = None
+            if len(group) == 1:
+                title = next((item for item in titles if self._normalize(item) not in used_titles), None)
+            if not title:
+                title = next(
+                    (
+                        item
+                        for item in titles
+                        if self._normalize(item) != self._normalize(chapter_title)
+                        and self._normalize(item) not in used_titles
+                    ),
+                    None,
+                )
+            if not title and not points and self._is_knowledge_title(chapter_title):
+                title = chapter_title
+            if not title:
+                title = self._title_from_content(group[0].content, len(points) + 1)
+            title = self._clean_title(title)
+            normalized_title = self._normalize(title)
+            if not self._is_knowledge_title(title) or not normalized_title or normalized_title in used_titles:
+                repeated_base = next(
+                    (item for item in titles if self._normalize(item) != self._normalize(chapter_title)),
+                    chapter_title,
+                )
+                title = f"{repeated_base[:28]}：专题 {len(points) + 1}"
+                normalized_title = self._normalize(title)
+            used_titles.add(normalized_title)
+            points.append({
+                "title": title[:120],
+                "chapter": chapter["title"],
+                "summary": safe_text(" ".join(chunk.content for chunk in group), limit=600),
+                "difficulty": "easy" if len(points) < max(1, target // 3) else "medium" if len(points) < max(2, target * 2 // 3) else "hard",
+                "source_refs": [{"material_id": chunk.material_id, "chunk_index": chunk.chunk_index} for chunk in group],
+            })
+        return points
+
+    @classmethod
+    def _section_priority(cls, section: dict[str, Any]) -> tuple[float, int]:
+        title = cls._clean_title(section.get("title"))
+        content_size = sum(len(chunk.content) for chunk in section.get("chunks", []))
+        score = min(3.0, content_size / 1200)
+        if cls._is_knowledge_title(title):
+            score += 2.0
+        if len(section.get("path") or []) >= 3:
+            score += 2.0
+        if re.search(
+            r"(?:算法|排序|查找|搜索|遍历|存储|实现|操作|性质|复杂度|匹配|矩阵|广义表|链表|栈|队列|树|图|散列|路径|拓扑|关键|递归|编码|归并|基数|堆|AVL|B\+?)",
+            title,
+            flags=re.IGNORECASE,
+        ):
+            score += 4.0
+        if re.search(r"(?:案例引入|案例分析|类型定义|基本概念)$", title):
+            score -= 2.5
+        return score, -int(section.get("position") or 0)
+
+    def _model_chapter_points(self, state: CourseBuilderState, chapter: dict[str, Any], chunks: list[MaterialChunk], fallback: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
         if self.service.model_service is None:
             return None
-        source_lines = [f"{unit['key']} | {unit['title']} | {unit['excerpt'][:260]}" for unit in state["source_units"]]
-        learner_context = state.get("learner_context")
-        personalization = {
-            "learning_goal": learner_context.advisory_value("learning_goal") if learner_context is not None else "",
-            "knowledge_foundation": learner_context.trusted_value("knowledge_foundation") if learner_context is not None else "",
-            "cognitive_style": learner_context.advisory_value("cognitive_style") if learner_context is not None else "",
-            "learning_preference": learner_context.advisory_value("learning_preference") if learner_context is not None else "",
+        source_map = {f"m{chunk.material_id}-c{chunk.chunk_index}": chunk for chunk in chunks}
+        evidence = "\n".join(f"{key} | {chunk.section_title or chapter['title']} | {safe_text(chunk.content, limit=320)}" for key, chunk in list(source_map.items())[:80])
+        context = state.get("learner_context")
+        profile_hint = {
+            "learning_goal": context.advisory_value("learning_goal") if context is not None else "",
+            "knowledge_foundation": context.trusted_value("knowledge_foundation") if context is not None else "",
         }
         try:
-            raw = self.service.model_service.chat_completion(
-                state["user"],
-                [
-                    {
-                        "role": "system",
-                        "content": (
-                            "你是 CourseBuilderGraph 的课程结构 Agent。只输出 JSON。"
-                            "可以合并、拆分和重排来源，但 source_keys 只能使用提供的 key，先修关系必须无环。"
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            ("根据审核风险修订一次。\n" if repair else "生成适合学生学习的课程结构。\n")
-                            + "来源单元：\n"
-                            + "\n".join(source_lines)
-                            + f"\n可信画像提示={personalization}。中等可信内容只能调整表达，不得删改来源事实。"
-                            + "\n返回 title、subject、description、learning_objectives、knowledge_points；"
-                            + "每个知识点包含 key、title、chapter、summary、difficulty、prerequisite_keys、source_keys。"
-                        ),
-                    },
-                ],
-            )
+            raw = self.service.model_service.chat_completion(state["user"], [
+                {"role": "system", "content": "你是 CourseBuilderGraph 的章节概念 Agent。只输出 JSON；不得创建证据中不存在的概念、公式或算法。"},
+                {"role": "user", "content": f"章节={chapter['title']}，目标知识点数约 {chapter['target_count']}。可信画像提示={profile_hint}。\n证据：\n{evidence}\n返回 points 数组，每项含 title、summary、difficulty、source_keys。"},
+            ])
         except Exception:
             return None
-        return self._sanitize_structure(parse_json_object(raw), state["source_units"], fallback)
-
-    def _sanitize_structure(self, value: Any, source_units: list[dict[str, Any]], fallback: dict[str, Any]) -> dict[str, Any] | None:
-        if not isinstance(value, dict) or not isinstance(value.get("knowledge_points"), list):
+        parsed = parse_json_object(raw)
+        raw_points = parsed.get("points") if isinstance(parsed, dict) else None
+        if not isinstance(raw_points, list):
             return None
-        valid_sources = {unit["key"] for unit in source_units}
-        points: list[dict[str, Any]] = []
-        keys: set[str] = set()
-        for index, raw in enumerate(value["knowledge_points"][:30], start=1):
-            if not isinstance(raw, dict):
+        points = []
+        used_refs: set[tuple[int, int]] = set()
+        for item in raw_points[: min(24, max(2, chapter["target_count"] * 2))]:
+            if not isinstance(item, dict):
                 continue
-            key = safe_text(raw.get("key"), limit=40) or f"kp-{index}"
-            if key in keys:
-                key = f"kp-{index}"
-            title = safe_text(raw.get("title"), limit=120)
-            source_keys = [str(item) for item in raw.get("source_keys", []) if str(item) in valid_sources]
-            if not title or not source_keys:
+            refs = []
+            for key in item.get("source_keys", []):
+                chunk = source_map.get(str(key))
+                if chunk is not None:
+                    refs.append({"material_id": chunk.material_id, "chunk_index": chunk.chunk_index})
+                    used_refs.add((chunk.material_id, chunk.chunk_index))
+            title = safe_text(item.get("title"), limit=120)
+            if not title or not refs:
                 continue
-            difficulty = str(raw.get("difficulty") or "medium")
-            points.append({
-                "key": key,
-                "title": title,
-                "chapter": safe_text(raw.get("chapter"), limit=120) or "课程内容",
-                "summary": safe_text(raw.get("summary"), limit=800),
-                "difficulty": difficulty if difficulty in {"easy", "medium", "hard"} else "medium",
-                "prerequisite_keys": [safe_text(item, limit=40) for item in raw.get("prerequisite_keys", []) if safe_text(item, limit=40)],
-                "source_keys": list(dict.fromkeys(source_keys)),
-            })
-            keys.add(key)
+            difficulty = str(item.get("difficulty") or "medium")
+            points.append({"title": title, "chapter": chapter["title"], "summary": safe_text(item.get("summary"), limit=600), "difficulty": difficulty if difficulty in {"easy", "medium", "hard"} else "medium", "source_refs": refs})
         if not points:
             return None
-        return {
-            "title": safe_text(value.get("title"), limit=255) or fallback["title"],
-            "subject": safe_text(value.get("subject"), limit=120) or fallback["subject"],
-            "description": safe_text(value.get("description"), limit=1000) or fallback["description"],
-            "learning_objectives": [safe_text(item, limit=200) for item in value.get("learning_objectives", []) if safe_text(item, limit=200)][:12],
-            "knowledge_points": points,
-        }
+        remaining = [chunk for chunk in chunks if (chunk.material_id, chunk.chunk_index) not in used_refs]
+        for index, chunk in enumerate(remaining):
+            points[index % len(points)]["source_refs"].append({"material_id": chunk.material_id, "chunk_index": chunk.chunk_index})
+        return points
 
-    def _structure_risks(self, structure: dict[str, Any], source_units: list[dict[str, Any]]) -> list[str]:
-        points = structure.get("knowledge_points") if isinstance(structure, dict) else None
-        if not isinstance(points, list) or not points or len(points) > 30:
-            return ["invalid_point_count"]
-        valid_sources = {unit["key"] for unit in source_units}
-        keys = {str(point.get("key")) for point in points if isinstance(point, dict)}
-        titles: set[str] = set()
-        graph: dict[str, list[str]] = {}
-        risks: list[str] = []
-        for point in points:
-            title = self._normalized(point.get("title"))
-            if not title or title in titles:
-                risks.append("duplicate_or_empty_title")
-            titles.add(title)
-            if contains_sensitive_text(point):
-                risks.append("sensitive_output")
-            source_keys = set(point.get("source_keys") or [])
-            if not source_keys or not source_keys.issubset(valid_sources):
-                risks.append("invalid_source_ref")
-            prerequisites = [str(item) for item in point.get("prerequisite_keys") or []]
-            if any(item not in keys for item in prerequisites):
-                risks.append("invalid_prerequisite_ref")
-            graph[str(point.get("key"))] = prerequisites
+    def _model_review(self, state: CourseBuilderState, quality: dict[str, Any]) -> dict[str, Any] | None:
+        if self.service.model_service is None:
+            return None
+        candidate = [{"title": point["title"], "chapter": point["chapter"], "summary": point["summary"], "evidence_count": len(point["source_refs"])} for point in state["structure"]["knowledge_points"]]
+        evidence = [safe_text(chunk.content, limit=100) for chunk in state["source_chunks"][:60]]
+        try:
+            raw = self.service.model_service.chat_completion(state["user"], [
+                {"role": "system", "content": "你是 CourseBuilderGraph ReviewAgent。审核完整候选与证据，只输出 JSON，不得新增事实。"},
+                {"role": "user", "content": f"质量指标={quality}\n完整候选={candidate}\n证据短摘录={evidence}\n返回 review_status、confidence、risk_flags、safety_summary。"},
+            ])
+        except Exception:
+            return None
+        return review_contract(parse_json_object(raw), default_summary="课程内容、证据和结构审核完成。")
+
+    def _quality(self, state: CourseBuilderState) -> tuple[dict[str, Any], list[str]]:
+        specs = state["structure"]["knowledge_points"]
+        source_refs = {(chunk.material_id, chunk.chunk_index) for chunk in state["source_chunks"]}
+        mapped = {(ref["material_id"], ref["chunk_index"]) for point in specs for ref in point.get("source_refs", [])}
+        coverage = len(mapped & source_refs) / max(1, len(source_refs))
+        titles = [self._normalize(point.get("title")) for point in specs]
+        duplicate_rate = 1 - len(set(titles)) / max(1, len(titles))
+        source_chapters = {str(chapter["title"]) for chapter in state["chapters"]}
+        covered_chapters = {str(point.get("chapter")) for point in specs}
+        risks = []
+        if not specs or len(specs) > 120:
+            risks.append("invalid_point_count")
+        if coverage < 0.85:
+            risks.append("low_source_coverage")
+        if duplicate_rate > 0:
+            risks.append("duplicate_titles")
+        if not source_chapters.issubset(covered_chapters):
+            risks.append("uncovered_chapter")
+        if any(not point.get("source_refs") for point in specs):
+            risks.append("missing_evidence")
+        if any(contains_sensitive_text(point) for point in specs):
+            risks.append("sensitive_output")
+        if any(not self._is_knowledge_title(str(point.get("title") or "")) for point in specs):
+            risks.append("invalid_knowledge_point_title")
+        graph = {point["key"]: list(point.get("prerequisite_keys", [])) for point in specs}
         if self._has_cycle(graph):
             risks.append("prerequisite_cycle")
-        return list(dict.fromkeys(risks))
+        quality = {
+            "passed": not risks,
+            "knowledge_point_count": len(specs),
+            "chapter_count": len(source_chapters),
+            "source_chunk_count": len(source_refs),
+            "mapped_source_count": len(mapped & source_refs),
+            "source_coverage_rate": round(coverage, 4),
+            "evidence_completeness": round(sum(1 for point in specs if point.get("source_refs")) / max(1, len(specs)), 4),
+            "duplicate_title_rate": round(duplicate_rate, 4),
+            "knowledge_point_density": round(len(specs) / max(1, len(source_chapters)), 2),
+            "risk_flags": risks,
+            "prompt_version": self.prompt_version,
+        }
+        return quality, risks
 
     @staticmethod
     def _has_cycle(graph: dict[str, list[str]]) -> bool:
         visiting: set[str] = set()
         visited: set[str] = set()
-
         def visit(node: str) -> bool:
             if node in visiting:
                 return True
             if node in visited:
                 return False
             visiting.add(node)
-            if any(visit(parent) for parent in graph.get(node, [])):
+            if any(parent in graph and visit(parent) for parent in graph.get(node, [])):
                 return True
             visiting.remove(node)
             visited.add(node)
             return False
-
         return any(visit(node) for node in graph)
 
-    def _entities_from_structure(self, structure: dict[str, Any], state: CourseBuilderState) -> tuple[list[KnowledgePoint], list[KnowledgeChunk]]:
-        points: list[KnowledgePoint] = []
-        for index, spec in enumerate(structure.get("knowledge_points", [])):
-            point = KnowledgePoint(course_id=0, title=spec["title"], summary=spec.get("summary"), chapter=spec.get("chapter"), order_index=index, difficulty=spec.get("difficulty"), prerequisites_json=list(spec.get("prerequisite_keys") or []))
-            setattr(point, "builder_key", spec["key"])
-            points.append(point)
-        chunk_by_ref = {(chunk.material_id, chunk.chunk_index): chunk for chunk in state["source_chunks"]}
-        chunks: list[KnowledgeChunk] = []
-        for point_index, spec in enumerate(structure.get("knowledge_points", [])):
-            for source_key in spec.get("source_keys", []):
-                unit = next((item for item in state["source_units"] if item["key"] == source_key), None)
-                if unit is None:
-                    continue
-                for chunk_index in unit["chunk_indexes"]:
-                    source = chunk_by_ref.get((unit["material_id"], chunk_index))
-                    if source is not None:
-                        chunks.append(KnowledgeChunk(course_id=0, material_id=None, knowledge_point_id=None, content=source.content, page_number=source.page_number, section_title=source.section_title or spec["title"], embedding=None, metadata_json={"source_material_id": source.material_id, "source_chunk_index": source.chunk_index, "source_filename": unit["source_filename"], "knowledge_point_order": point_index, "knowledge_point_key": spec["key"]}))  # type: ignore[arg-type]
-        return points, chunks
+    @staticmethod
+    def _terms(value: str) -> set[str]:
+        lowered = value.casefold()
+        return {token for token in [*re.findall(r"[a-z][a-z0-9+*#-]{1,}", lowered), *re.findall(r"[一-鿿]{2,6}", lowered)] if len(token) >= 2}
 
     @staticmethod
-    def _normalized(value: Any) -> str:
-        return " ".join(str(value or "").split()).lower()
+    def _normalize(value: Any) -> str:
+        return "".join(str(value or "").casefold().split())
 
-    def _run_node(self, state: CourseBuilderState, name: str, index: int, input_summary: str, work: Callable):
+    @classmethod
+    def _title_from_content(cls, content: str, index: int) -> str:
+        first = safe_text(content.split("。", 1)[0], limit=42).strip("：:，,；;。")
+        first = cls._clean_title(first)
+        return first if cls._is_knowledge_title(first) else f"核心概念 {index}"
+
+    @staticmethod
+    def _clean_title(value: Any) -> str:
+        title = " ".join(str(value or "").replace("　", " ").split()).strip("：:，,；;。")
+        replacements = {
+            "时问": "时间",
+            "空问": "空间",
+            "橾式": "模式",
+            "插人": "插入",
+            "归井": "归并",
+            "二又树": "二叉树",
+            "算祛": "算法",
+            "定义和特权": "定义和特点",
+        }
+        for source, target in replacements.items():
+            title = title.replace(source, target)
+        title = re.sub(r"(?:\s*[.·_-]+|[一—-]{2,})$", "", title).strip()
+        return title[:120]
+
+    @staticmethod
+    def _is_knowledge_title(value: str) -> bool:
+        title = value.strip()
+        if not 2 <= len(title) <= 42:
+            return False
+        if len(re.findall(r"[，,；;。！？!?]", title)) > 0:
+            return False
+        if re.match(r"^(?:图|表|例|式)\s*[\d.]+", title, flags=re.IGNORECASE):
+            return False
+        if re.search(r"(?:所示|参见|见图|见表|小节中|都属于|这种情况|至此|如下所述|上式|下式|前面已经|由此可见)", title):
+            return False
+        if re.search(r"(?:^|\s)[(（]?[a-z][)）](?:\s|和|、|$)", title, flags=re.IGNORECASE):
+            return False
+        if re.search(r"[={}\\/<>]", title) or re.search(r"\b(?:cout|printf|gethead|return|while|for)\b", title, flags=re.IGNORECASE):
+            return False
+        return bool(re.search(r"[A-Za-z0-9一-鿿]", title))
+
+    def _run_node(self, state: CourseBuilderState, name: str, index: int, work: Callable):
         started = perf_counter()
         self._job_before(state, name)
         try:
             with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name=name)):
-                result, output_summary, status, metadata = work()
+                result, metadata = work()
         except Exception as exc:
-            self._record(state, name, index, "failed", input_summary, "节点执行失败，已记录安全错误摘要。", {"error_code": exc.__class__.__name__}, started)
-            progress, _ = self.job_progress[name]
-            self._job_after(state, name, status="failed", label="节点执行失败", progress_percent=max(0, progress - 1))
+            self._record(state, name, index, "failed", {"error_code": exc.__class__.__name__}, started)
+            self._job_after(state, name, status="failed", progress_percent=max(0, self.job_progress[name][0] - 1), label="节点执行失败")
             raise
-        self._record(state, name, index, status, input_summary, output_summary, metadata, started)
-        self._job_after(state, name, status=status)
+        self._record(state, name, index, "completed", metadata, started)
+        self._job_after(state, name)
         return result
 
     @staticmethod
@@ -575,45 +740,19 @@ class CourseBuilderGraphRunner:
         if context is not None:
             context.before_node(name)
 
-    def _job_after(
-        self,
-        state: CourseBuilderState,
-        name: str,
-        *,
-        status: str = "completed",
-        label: str | None = None,
-        progress_percent: int | None = None,
-    ) -> None:
+    def _job_after(self, state: CourseBuilderState, name: str, *, status: str = "completed", progress_percent: int | None = None, label: str | None = None) -> None:
         context = state.get("job_context")
         if context is None:
             return
-        default_progress, default_label = self.job_progress[name]
-        try:
-            context.after_node(
-                name=name,
-                label=label or default_label,
-                progress_percent=default_progress if progress_percent is None else progress_percent,
-                status=status,
-            )
-        except Exception:
-            return
+        progress, default_label = self.job_progress[name]
+        context.after_node(name=name, label=label or default_label, progress_percent=progress if progress_percent is None else progress_percent, status=status)
 
-    def _record(self, state: CourseBuilderState, name: str, index: int, status: str, input_summary: str, output_summary: str, metadata: dict[str, Any], started: float) -> None:
-        recorder = self.service.trace_recorder
-        if recorder is None:
+    def _record(self, state: CourseBuilderState, name: str, index: int, status: str, metadata: dict[str, Any], started: float) -> None:
+        if self.service.trace_recorder is None:
             return
-        recorder.record(
-            trace_id=state["trace_id"],
-            user_id=int(state["user_id"]),
-            course_id=None,
-            agent_name=name,
-            step_index=index,
-            status=status,
-            input_summary=input_summary,
-            output_summary=output_summary,
-            duration_ms=max(0, int((perf_counter() - started) * 1000)),
-            workflow=self.workflow,
-            artifact_type="course",
-            artifact_id=metadata.get("artifact_id"),
-            metadata=metadata,
+        self.service.trace_recorder.record(
+            trace_id=state["trace_id"], user_id=state["user_id"], course_id=None, agent_name=name, step_index=index,
+            status=status, input_summary="处理已确认资料与课程候选。", output_summary="节点已完成。" if status == "completed" else "节点失败，未保留半成品课程。",
+            duration_ms=max(0, int((perf_counter() - started) * 1000)), workflow=self.workflow, artifact_type="course",
+            artifact_id=metadata.get("artifact_id"), metadata=metadata,
         )

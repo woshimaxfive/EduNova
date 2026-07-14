@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
 
@@ -18,7 +19,7 @@ from backend.app.schemas.ai_jobs import AiJobListResponse, AiJobResponse, ai_job
 ACTIVE_STATUSES = {"queued", "running", "cancelling"}
 TERMINAL_STATUSES = {"cancelled", "completed", "failed"}
 RETRYABLE_STATUSES = {"cancelled", "failed"}
-WORKFLOWS = {"course_builder", "resource_generation", "embedding_reindex"}
+WORKFLOWS = {"course_builder", "resource_generation", "embedding_reindex", "material_ingestion"}
 
 
 class AiJobNotFoundError(Exception):
@@ -281,13 +282,41 @@ class AiJobService:
         materials = self.repository.get_materials_for_user(user.id, normalized_ids)
         if len(materials) != len(normalized_ids):
             raise AiJobNotFoundError("资料不存在或无权访问。")
-        if any(material.parse_status != "completed" for material in materials):
-            raise AiJobValidationError("只能使用已解析资料生成课程。")
+        if any(material.parse_status != "completed" or material.ingestion_status != "confirmed" for material in materials):
+            raise AiJobConflictError("请先完成资料精细解析并确认目录，再生成课程。")
         return self._create(
             user,
             workflow="course_builder",
             course_id=None,
             request_json={"material_ids": normalized_ids, "course_title": " ".join(course_title.split())[:255]},
+            idempotency_key=idempotency_key,
+        )
+
+    def create_material_ingestion_job(
+        self,
+        user: User,
+        *,
+        material_id: int,
+        force: bool = False,
+        idempotency_key: str | None,
+    ) -> AiJobResponse:
+        materials = self.repository.get_materials_for_user(user.id, [material_id])
+        if len(materials) != 1:
+            raise AiJobNotFoundError("资料不存在或无权访问。")
+        material = materials[0]
+        if Path(material.filename).suffix.lower() not in {".pdf", ".docx", ".pptx", ".txt", ".md", ".markdown"}:
+            raise AiJobValidationError("当前文件格式不支持精细解析。")
+        if material.ingestion_status == "confirmed" and not force:
+            raise AiJobConflictError("资料目录已经确认；如需重建，请明确选择重新解析。")
+        material.ingestion_status = "queued"
+        material.parse_status = "pending"
+        material.metadata_json = {**(material.metadata_json or {}), "detail": "精细解析已排队"}
+        self.repository.commit()
+        return self._create(
+            user,
+            workflow="material_ingestion",
+            course_id=None,
+            request_json={"material_id": material_id, "force": bool(force)},
             idempotency_key=idempotency_key,
         )
 
@@ -515,13 +544,27 @@ class AiJobService:
                 retry_of_job_id=original.id,
                 attempt_count=next_attempt,
             )
+        if original.workflow == "material_ingestion":
+            material_id = int(request.get("material_id") or 0)
+            materials = self.repository.get_materials_for_user(user.id, [material_id])
+            if len(materials) != 1:
+                raise AiJobNotFoundError("资料不存在或无权访问。")
+            return self._create(
+                user,
+                workflow="material_ingestion",
+                course_id=None,
+                request_json=request,
+                idempotency_key=f"retry-{original.id}-{uuid4().hex}",
+                retry_of_job_id=original.id,
+                attempt_count=next_attempt,
+            )
         if original.workflow == "course_builder":
             material_ids = [int(item) for item in request.get("material_ids", [])]
             materials = self.repository.get_materials_for_user(user.id, material_ids)
             if len(materials) != len(material_ids):
                 raise AiJobNotFoundError("资料不存在或无权访问。")
-            if any(material.parse_status != "completed" for material in materials):
-                raise AiJobValidationError("只能使用已解析资料重新生成课程。")
+            if any(material.parse_status != "completed" or material.ingestion_status != "confirmed" for material in materials):
+                raise AiJobConflictError("请先完成资料精细解析并确认目录，再重新生成课程。")
             return self._create(
                 user,
                 workflow=original.workflow,
@@ -582,6 +625,8 @@ class AiJobService:
                 result = self._run_resource_generation(user, job, context)
             elif job.workflow == "embedding_reindex":
                 result = self._run_embedding_reindex(user, job, context)
+            elif job.workflow == "material_ingestion":
+                result = self._run_material_ingestion(user, job, context)
             else:
                 raise AiJobValidationError("不支持的 AI 任务类型。")
             refreshed = self.repository.get_job(job_id, for_update=True) or job
@@ -615,9 +660,64 @@ class AiJobService:
             return ai_job_to_api(cancelled, max_retries=self.max_retries)
         except Exception as exc:
             self.repository.rollback()
+            if job.workflow == "material_ingestion":
+                self._mark_material_ingestion_failed(job, exc)
             failed = self.repository.get_job(job_id, for_update=True) or job
             self._mark_failed(failed, self._safe_error_code(exc), self._safe_error_message(exc))
             return ai_job_to_api(failed, max_retries=self.max_retries)
+
+    def _run_material_ingestion(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:
+        from backend.app.agents.material_ingestion import MaterialIngestionGraphRunner
+        from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
+        from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
+
+        request = dict(job.request_json or {})
+        material_id = int(request.get("material_id") or 0)
+        materials = self.repository.get_materials_for_user(user.id, [material_id])
+        if len(materials) != 1:
+            raise AiJobNotFoundError("资料不存在或无权访问。")
+        material = materials[0]
+        material.ingestion_status = "running"
+        material.metadata_json = {**(material.metadata_json or {}), "detail": "正在精细解析"}
+        self.repository.commit()
+        model_service = ModelSettingsService(
+            repository=SqlAlchemyModelSettingsRepository(self.repository.db),
+            settings=self.settings,
+            provider=OpenAICompatibleChatProvider(),
+        )
+        return MaterialIngestionGraphRunner(
+            self.repository.db,
+            settings=self.settings,
+            model_service=model_service,
+            trace_recorder=AgentTraceRecorder(),
+        ).run(user=user, material=material, trace_id=job.agent_trace_id, job_context=context)
+
+    def _mark_material_ingestion_failed(self, job: AiJob, exc: Exception) -> None:
+        request = dict(job.request_json or {})
+        material_id = int(request.get("material_id") or 0)
+        if material_id <= 0:
+            return
+        material = self.repository.db.get(Material, material_id)
+        if material is None or material.user_id != job.user_id:
+            return
+        material.ingestion_status = "failed"
+        material.parse_status = "failed"
+        diagnostic = getattr(exc, "quality", None)
+        material.quality_json = {
+            **(diagnostic if isinstance(diagnostic, dict) else (material.quality_json or {})),
+            "passed": False,
+            "error_code": self._safe_error_code(exc),
+            "warnings": list(dict.fromkeys([
+                *(
+                    diagnostic.get("warnings", [])
+                    if isinstance(diagnostic, dict) and isinstance(diagnostic.get("warnings"), list)
+                    else []
+                ),
+                "精细解析未通过，原文件已保留。",
+            ])),
+        }
+        material.metadata_json = {**(material.metadata_json or {}), "detail": "精细解析失败"}
+        self.repository.commit()
 
     def _run_course_builder(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:
         from backend.app.agents.course_builder import CourseBuilderGraphRunner

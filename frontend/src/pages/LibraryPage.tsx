@@ -4,18 +4,25 @@ import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } f
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { buildCoursePath, PATHS } from "../app/routePaths";
-import { createCourseBuilderJob, createIdempotencyKey, type AiJob } from "../api/aiJobs";
+import { createCourseBuilderJob, createIdempotencyKey, getAiJob, type AiJob } from "../api/aiJobs";
 import { listCourses, type ApiCourseSummary } from "../api/courses";
 import { getApiErrorMessage } from "../api/errors";
 import {
   compareMaterials,
+  confirmMaterialOutline,
+  createMaterialIngestionJob,
   getLatestMaterialComparison,
   getMaterial,
+  getMaterialOutline,
   listMaterials,
   type MaterialComparisonPoint,
   type MaterialComparisonResult,
   type MaterialDetail,
   type MaterialListItem,
+  type MaterialOutline,
+  type MaterialOutlineOperation,
+  type MaterialOutlineSection,
+  updateMaterialOutline,
   uploadMaterial
 } from "../api/materials";
 import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
@@ -30,7 +37,7 @@ import { PageFrame } from "./PageFrame";
 import "../styles/library.css";
 
 type DrawerMode = "detail" | "compare" | null;
-type DetailTab = "overview" | "sections" | "courses";
+type DetailTab = "overview" | "outline" | "chunks" | "courses";
 type CompareTab = "common" | "exam" | "differences" | "sources";
 type CompareView = "setup" | "result" | "recent";
 
@@ -47,6 +54,19 @@ function asArray<T>(value: unknown): T[] {
 function asMaterialComparison(value: unknown): MaterialComparisonResult | null {
   if (!value || typeof value !== "object" || !("summary" in value) || !("citations" in value)) return null;
   return value as MaterialComparisonResult;
+}
+
+function asMaterialOutline(value: unknown): MaterialOutline | null {
+  if (!value || typeof value !== "object") return null;
+  const outline = value as Partial<MaterialOutline>;
+  if (typeof outline.version !== "number" || !Array.isArray(outline.sections) || !Array.isArray(outline.chunks)) return null;
+  return {
+    ...outline,
+    quality: outline.quality ?? {},
+    warnings: outline.warnings ?? [],
+    sections: outline.sections,
+    chunks: outline.chunks
+  } as MaterialOutline;
 }
 
 function stripExtension(title: string) {
@@ -116,6 +136,8 @@ export function LibraryPage() {
   const [courseJobId, setCourseJobId] = useState<string | null>(null);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
   const [libraryFeedback, setLibraryFeedback] = useState<string | null>(null);
+  const [outlineFeedback, setOutlineFeedback] = useState<string | null>(null);
+  const [isUpdatingOutline, setIsUpdatingOutline] = useState(false);
   const [courseDialogFeedback, setCourseDialogFeedback] = useState<string | null>(null);
   const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
   const courseJob = getJob(courseJobId);
@@ -135,6 +157,13 @@ export function LibraryPage() {
     staleTime: 30_000
   });
   const materialDetail = materialDetailQuery.data?.data ?? null;
+  const materialOutlineQuery = useQuery({
+    queryKey: ["materials", "outline", selectedMaterialId],
+    queryFn: () => getMaterialOutline(selectedMaterialId ?? 0),
+    enabled: drawerMode === "detail" && selectedMaterialId !== null && Boolean(materialDetail) && materialDetail?.ingestion_status !== "legacy",
+    staleTime: 10_000
+  });
+  const materialOutline = asMaterialOutline(materialOutlineQuery.data?.data);
 
   const selectedCompareMaterials = useMemo(
     () => compareMaterialIds.map((id) => files.find((file) => file.id === id)).filter((material): material is MaterialListItem => Boolean(material)),
@@ -266,17 +295,82 @@ export function LibraryPage() {
     if (!file) return;
     setIsUploadingMaterial(true);
     try {
-      await uploadMaterial({ file });
+      const response = await uploadMaterial({ file });
+      const uploaded = response.data;
+      if (uploaded.ingestion_job_id) {
+        trackJob(await getAiJob(uploaded.ingestion_job_id));
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
       ]);
-      setLibraryFeedback(null);
-    } catch {
-      setLibraryFeedback("资料上传失败，请稍后再试。");
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.set("material_id", String(uploaded.material_id));
+        return next;
+      }, { replace: true });
+      setDrawerMode("detail");
+      setDetailTab("overview");
+      setLibraryFeedback(uploaded.ingestion_job_id ? "资料已上传，正在后台识别页码、目录和正文切片。" : null);
+    } catch (error) {
+      setLibraryFeedback(getApiErrorMessage(error, "资料上传失败，请稍后再试。"));
     } finally {
       setIsUploadingMaterial(false);
       event.target.value = "";
+    }
+  }
+
+  async function applyOutlineOperations(operations: MaterialOutlineOperation[]) {
+    if (!selectedMaterialId || !materialOutline || isUpdatingOutline) return;
+    setIsUpdatingOutline(true);
+    setOutlineFeedback(null);
+    try {
+      const result = await updateMaterialOutline(selectedMaterialId, materialOutline.version, operations);
+      queryClient.setQueryData(["materials", "outline", selectedMaterialId], result);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["materials", "detail", selectedMaterialId] }),
+        queryClient.invalidateQueries({ queryKey: ["materials", "list"] })
+      ]);
+    } catch (error) {
+      setOutlineFeedback(getApiErrorMessage(error, "目录调整失败，请刷新后重试。"));
+    } finally {
+      setIsUpdatingOutline(false);
+    }
+  }
+
+  async function handleConfirmOutline() {
+    if (!selectedMaterialId || !materialOutline || isUpdatingOutline) return;
+    setIsUpdatingOutline(true);
+    setOutlineFeedback(null);
+    try {
+      const result = await confirmMaterialOutline(selectedMaterialId, materialOutline.version);
+      queryClient.setQueryData(["materials", "outline", selectedMaterialId], result);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["materials", "detail", selectedMaterialId] }),
+        queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
+      ]);
+      setOutlineFeedback("目录已确认，这份资料现在可以用于问答、对比和智能建课。");
+    } catch (error) {
+      setOutlineFeedback(getApiErrorMessage(error, "目录确认失败，请检查解析质量后重试。"));
+    } finally {
+      setIsUpdatingOutline(false);
+    }
+  }
+
+  async function handleReingestMaterial() {
+    if (!selectedMaterialId || isUpdatingOutline) return;
+    setIsUpdatingOutline(true);
+    setOutlineFeedback(null);
+    try {
+      const job = await createMaterialIngestionJob(selectedMaterialId, true, createIdempotencyKey("material-ingestion"));
+      trackJob(job);
+      setOutlineFeedback("已开始重新解析，任务会在离开页面后继续运行。");
+      await queryClient.invalidateQueries({ queryKey: ["materials", "list"] });
+    } catch (error) {
+      setOutlineFeedback(getApiErrorMessage(error, "重新解析任务创建失败，请稍后重试。"));
+    } finally {
+      setIsUpdatingOutline(false);
     }
   }
 
@@ -340,8 +434,9 @@ export function LibraryPage() {
     }
   }
 
-  const detailCanUse = Boolean(selectedMaterial && selectedMaterial.category === "document" && selectedMaterial.parse_status === "completed");
-  const parsedCount = files.filter((file) => file.parse_status === "completed").length;
+  const detailState = materialDetail ?? selectedMaterial;
+  const detailCanUse = Boolean(detailState && detailState.category === "document" && detailState.ingestion_status === "confirmed");
+  const parsedCount = files.filter((file) => file.ingestion_status === "confirmed").length;
   const compareFooter = compareView === "setup" ? (
     <>
       <p>{compareMaterialIds.length} 份资料 · {effectiveCompareCourseId ? courseTitles.get(effectiveCompareCourseId) : "等待共同课程"}</p>
@@ -402,17 +497,25 @@ export function LibraryPage() {
         <LibraryDrawer
           title={selectedMaterial?.title ?? "资料详情"}
           onClose={closeDrawer}
-          footer={selectedMaterial ? (
+          footer={detailState ? (
             <div className="library-detail-actions">
-              <button className="soft-button" type="button" disabled={!detailCanUse} onClick={() => navigate(PATHS.app, { state: { selectedMaterialIds: [selectedMaterial.id] } })}>
+              {detailState.ingestion_status === "legacy" || detailState.ingestion_status === "failed" ? (
+                <button className="soft-button" type="button" disabled={isUpdatingOutline} onClick={() => void handleReingestMaterial()}>重新精细解析</button>
+              ) : null}
+              {materialOutline && !materialOutline.confirmed ? (
+                <button className="primary-action" type="button" disabled={isUpdatingOutline || !materialOutline.quality.passed} onClick={() => void handleConfirmOutline()}>
+                  {isUpdatingOutline ? "保存中" : "确认目录"}
+                </button>
+              ) : null}
+              <button className="soft-button" type="button" disabled={!detailCanUse} onClick={() => navigate(PATHS.app, { state: { selectedMaterialIds: [detailState.id] } })}>
                 <ChatCircleText size={16} aria-hidden="true" />
                 <span>带到主页提问</span>
               </button>
-              <button className="soft-button" type="button" disabled={!detailCanUse} onClick={() => openCourseDialog([selectedMaterial.id])}>
+              <button className="soft-button" type="button" disabled={!detailCanUse} onClick={() => openCourseDialog([detailState.id])}>
                 <Sparkle size={16} aria-hidden="true" />
                 <span>生成课程</span>
               </button>
-              <button className="primary-action" type="button" disabled={!isComparableMaterial(selectedMaterial)} onClick={() => startCompare([selectedMaterial.id])}>
+              <button className="soft-button" type="button" disabled={!isComparableMaterial(detailState)} onClick={() => startCompare([detailState.id])}>
                 加入对比
               </button>
             </div>
@@ -421,10 +524,15 @@ export function LibraryPage() {
           <MaterialDetailPanel
             material={materialDetail}
             fallbackMaterial={selectedMaterial}
+            outline={materialOutline}
             tab={detailTab}
             isLoading={materialDetailQuery.isLoading}
             isError={materialDetailQuery.isError}
+            isOutlineLoading={materialOutlineQuery.isLoading}
+            isUpdatingOutline={isUpdatingOutline}
+            outlineFeedback={outlineFeedback}
             onTabChange={setDetailTab}
+            onApplyOutline={(operations) => void applyOutlineOperations(operations)}
             onOpenCourse={(courseId) => navigate(buildCoursePath(courseId))}
           />
         </LibraryDrawer>
@@ -480,20 +588,27 @@ export function LibraryPage() {
 function MaterialDetailPanel(props: {
   material: MaterialDetail | null;
   fallbackMaterial: MaterialListItem | null;
+  outline: MaterialOutline | null;
   tab: DetailTab;
   isLoading: boolean;
   isError: boolean;
+  isOutlineLoading: boolean;
+  isUpdatingOutline: boolean;
+  outlineFeedback: string | null;
   onTabChange: (tab: DetailTab) => void;
+  onApplyOutline: (operations: MaterialOutlineOperation[]) => void;
   onOpenCourse: (courseId: string) => void;
 }) {
   const tabs: Array<{ id: DetailTab; label: string }> = [
     { id: "overview", label: "概览" },
-    { id: "sections", label: "章节" },
+    { id: "outline", label: "目录" },
+    { id: "chunks", label: "切片" },
     { id: "courses", label: "关联课程" }
   ];
   if (props.isLoading) return <p className="library-drawer-state">正在读取资料详情。</p>;
   if (props.isError || !props.material) return <InlineFeedback message="资料详情读取失败，请稍后重试。" tone="warning" />;
   const material = props.material;
+  const quality = material.quality_summary ?? {};
   return (
     <>
       <div className="library-drawer-tabs" role="tablist" aria-label="资料详情分类">
@@ -502,11 +617,15 @@ function MaterialDetailPanel(props: {
       {props.tab === "overview" ? (
         <section className="library-detail-overview" role="tabpanel" aria-label="资料概览">
           <div className="library-detail-metrics">
-            <div><span>状态</span><strong>{props.fallbackMaterial?.detail ?? material.detail}</strong></div>
-            <div><span>格式</span><strong>{material.extension}</strong></div>
-            <div><span>分块</span><strong>{material.chunk_count ?? 0}</strong></div>
-            <div><span>页数</span><strong>{material.page_count ?? "—"}</strong></div>
+            <div><span>结构状态</span><strong>{material.outline_confirmed ? "目录已确认" : material.ingestion_status === "awaiting_confirmation" ? "等待确认" : props.fallbackMaterial?.detail ?? material.detail}</strong></div>
+            <div><span>解析质量</span><strong>{quality.passed ? "通过" : material.ingestion_status === "legacy" ? "旧版待重建" : "未通过或处理中"}</strong></div>
+            <div><span>章节</span><strong>{quality.section_count ?? material.section_count ?? 0}</strong></div>
+            <div><span>切片</span><strong>{quality.chunk_count ?? material.chunk_count ?? 0}</strong></div>
+            <div><span>页数</span><strong>{quality.page_count ?? material.page_count ?? "—"}</strong></div>
+            <div><span>可读页面</span><strong>{typeof quality.readable_page_ratio === "number" ? `${Math.round(quality.readable_page_ratio * 100)}%` : "—"}</strong></div>
           </div>
+          {(quality.warnings ?? []).map((warning) => <InlineFeedback key={warning} message={warning} tone="warning" />)}
+          {(quality.risk_flags ?? []).length > 0 ? <InlineFeedback message={`质量门禁未通过：${quality.risk_flags?.join("、")}`} tone="warning" /> : null}
           <section className="library-preview-block">
             <h3>内容短预览</h3>
             <p>{material.extracted_text_preview || "当前资料没有可展示的文本预览。"}</p>
@@ -514,18 +633,38 @@ function MaterialDetailPanel(props: {
           {material.agent_trace_id ? <AgentTraceDisclosure traceId={material.agent_trace_id} label="查看资料处理轨迹" /> : null}
         </section>
       ) : null}
-      {props.tab === "sections" ? (
-        <section className="library-section-list" role="tabpanel" aria-label="资料章节">
-          {(material.sections ?? []).length === 0 ? <p className="library-drawer-state">当前资料没有章节摘要。</p> : null}
-          {(material.sections ?? []).map((section, index) => (
-            <article key={`${section.section_title}-${section.page_number ?? "none"}-${index}`}>
-              <div><strong>{section.section_title}</strong><span>{section.page_number ? `第 ${section.page_number} 页` : "未标注页码"}</span></div>
-              <p>{section.preview || "该章节暂无短预览。"}</p>
-              <small>{section.chunk_count} 个资料分块</small>
-            </article>
-          ))}
-          {(material.section_count ?? 0) > (material.sections ?? []).length ? <p className="library-section-more">仅展示前 20 个章节，共 {material.section_count} 个。</p> : null}
+      {props.tab === "outline" ? (
+        <section className="library-outline-editor" role="tabpanel" aria-label="资料目录">
+          {props.isOutlineLoading ? <p className="library-drawer-state">正在读取目录结构。</p> : null}
+          {!props.isOutlineLoading && !props.outline ? <p className="library-drawer-state">这份资料尚未生成精细目录，可先执行重新解析。</p> : null}
+          <InlineFeedback message={props.outlineFeedback} tone={props.outline?.confirmed ? "success" : "warning"} />
+          {props.outline ? (
+            <>
+              <div className="library-outline-summary">
+                <span>版本 {props.outline.version}</span>
+                <span>{props.outline.sections.filter((section) => section.included).length} 个章节纳入课程</span>
+                <span>{props.outline.confirmed ? "已确认" : "修改后需要重新确认"}</span>
+              </div>
+              {props.outline.sections.map((section, index) => (
+                <OutlineSectionEditor
+                  key={`${props.outline?.material_id}-${props.outline?.version}-${section.id}`}
+                  section={section}
+                  previousSection={props.outline?.sections[index - 1] ?? null}
+                  disabled={props.isUpdatingOutline}
+                  onApply={props.onApplyOutline}
+                />
+              ))}
+            </>
+          ) : null}
         </section>
+      ) : null}
+      {props.tab === "chunks" ? (
+        <MaterialChunkInspector
+          outline={props.outline}
+          isLoading={props.isOutlineLoading}
+          disabled={props.isUpdatingOutline}
+          onApply={props.onApplyOutline}
+        />
       ) : null}
       {props.tab === "courses" ? (
         <section className="library-linked-courses" role="tabpanel" aria-label="关联课程">
@@ -539,6 +678,85 @@ function MaterialDetailPanel(props: {
         </section>
       ) : null}
     </>
+  );
+}
+
+function OutlineSectionEditor({ section, previousSection, disabled, onApply }: {
+  section: MaterialOutlineSection;
+  previousSection: MaterialOutlineSection | null;
+  disabled: boolean;
+  onApply: (operations: MaterialOutlineOperation[]) => void;
+}) {
+  const [title, setTitle] = useState(section.title);
+  const pageLabel = section.start_page
+    ? `第 ${section.start_page}${section.end_page && section.end_page !== section.start_page ? `–${section.end_page}` : ""} 页`
+    : "未标注页码";
+  return (
+    <article className={section.included ? "library-outline-row" : "library-outline-row excluded"}>
+      <label className="library-outline-toggle">
+        <input
+          type="checkbox"
+          checked={section.included}
+          disabled={disabled}
+          onChange={(event) => onApply([{ type: "include", section_id: section.id, included: event.target.checked }])}
+        />
+        <span>{section.included ? "纳入" : "排除"}</span>
+      </label>
+      <div className="library-outline-main" style={{ paddingInlineStart: `${Math.min(5, Math.max(0, section.level - 1)) * 14}px` }}>
+        <input aria-label={`${section.title}章节名称`} value={title} disabled={disabled} onChange={(event) => setTitle(event.target.value)} />
+        <small>{pageLabel} · {section.chunk_indexes.length} 个切片 · 识别可信度 {Math.round(section.confidence * 100)}%</small>
+      </div>
+      <div className="library-outline-actions">
+        <button type="button" disabled={disabled || title.trim() === section.title || !title.trim()} onClick={() => onApply([{ type: "rename", section_id: section.id, title: title.trim() }])}>保存名称</button>
+        {previousSection ? (
+          <button type="button" disabled={disabled} onClick={() => onApply([{ type: "merge", section_ids: [previousSection.id, section.id], title: previousSection.title }])}>并入上一节</button>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function MaterialChunkInspector({ outline, isLoading, disabled, onApply }: {
+  outline: MaterialOutline | null;
+  isLoading: boolean;
+  disabled: boolean;
+  onApply: (operations: MaterialOutlineOperation[]) => void;
+}) {
+  const [splitChunkId, setSplitChunkId] = useState<string | null>(null);
+  const [splitTitle, setSplitTitle] = useState("");
+  if (isLoading) return <p className="library-drawer-state">正在读取正文切片。</p>;
+  if (!outline) return <p className="library-drawer-state">完成精细解析后可检查真实切片。</p>;
+  return (
+    <section className="library-chunk-inspector" role="tabpanel" aria-label="资料切片">
+      {outline.chunks.length === 0 ? <p className="library-drawer-state">当前目录没有正文切片。</p> : null}
+      {outline.chunks.map((chunk) => {
+        const section = outline.sections.find((item) => item.id === chunk.section_id);
+        const firstChunk = section?.chunk_indexes[0] === chunk.chunk_index;
+        const pageLabel = chunk.start_page
+          ? `第 ${chunk.start_page}${chunk.end_page && chunk.end_page !== chunk.start_page ? `–${chunk.end_page}` : ""} 页`
+          : "未标注页码";
+        return (
+          <article key={chunk.id}>
+            <header><strong>{chunk.section_path.join(" / ") || section?.title || "正文"}</strong><span>{pageLabel} · 切片 {chunk.chunk_index + 1}</span></header>
+            <p>{chunk.content}</p>
+            {!firstChunk ? (
+              splitChunkId === chunk.id ? (
+                <div className="library-chunk-split">
+                  <input aria-label="新章节名称" placeholder="输入拆分后的新章节名称" value={splitTitle} onChange={(event) => setSplitTitle(event.target.value)} />
+                  <button type="button" disabled={disabled || !splitTitle.trim()} onClick={() => {
+                    if (!section) return;
+                    onApply([{ type: "split", section_id: section.id, chunk_index: chunk.chunk_index, title: splitTitle.trim() }]);
+                    setSplitChunkId(null);
+                    setSplitTitle("");
+                  }}>确认拆分</button>
+                  <button type="button" onClick={() => setSplitChunkId(null)}>取消</button>
+                </div>
+              ) : <button className="library-chunk-split-trigger" type="button" disabled={disabled} onClick={() => setSplitChunkId(chunk.id)}>从此处拆分章节</button>
+            ) : null}
+          </article>
+        );
+      })}
+    </section>
   );
 }
 
@@ -666,10 +884,10 @@ function LibraryCourseDialog(props: LibraryCourseDialogProps) {
         <div className="library-course-materials">
           {props.materials.length === 0 ? <p className="library-table-state">还没有可生成课程的资料。</p> : null}
           {props.materials.map((material) => {
-            const available = material.category === "document" && material.parse_status === "completed";
+            const available = material.category === "document" && material.ingestion_status === "confirmed";
             return (
               <button className={props.selectedMaterialIds.includes(material.id) ? "active" : ""} key={material.id} type="button" disabled={!available} aria-pressed={props.selectedMaterialIds.includes(material.id)} onClick={() => props.onToggleMaterial(material.id)}>
-                <span>{material.extension}</span><strong>{material.title}</strong><small>{available ? material.detail : "需要已解析文档"}</small>
+                <span>{material.extension}</span><strong>{material.title}</strong><small>{available ? material.detail : "需要先完成精细解析并确认目录"}</small>
               </button>
             );
           })}

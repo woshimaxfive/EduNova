@@ -662,7 +662,7 @@ Authorization: Bearer <token>
 
 ### POST `/materials/upload`
 
-用途：上传资料到当前登录用户的个人资料库。Phase 4.4 已实现，必须携带 JWT。资料可以暂不属于任何课程，也可以在上传时通过 `course_id` 加入当前用户自己的课程；后续可作为主页对话参考、加入已有课程或用于生成新课程。
+用途：上传资料到当前登录用户的个人资料库。Phase 21 起支持深度解析的文件会创建 `material_ingestion` 后台任务；上传响应只表示原文件已安全入库，不表示目录和切片已经确认。
 
 请求类型：`multipart/form-data`
 
@@ -673,8 +673,7 @@ Authorization: Bearer <token>
 
 支持类型：
 
-- TXT、Markdown：轻解析为 `completed`，保存原文到 `extracted_text`。
-- PDF、DOCX、PPTX：抽取可读文本并写入 `extracted_text`，成功后 `parse_status=completed`，可用于资料建课、资料对比和课程 RAG 切片。
+- TXT、Markdown、PDF、DOCX、PPTX：原文件入库后创建 `MaterialIngestionGraph` 任务，成功后进入 `awaiting_confirmation`，用户确认目录后进入 `confirmed`。
 - DOC、PPT：旧版 Office 格式仅入库为 `uploaded`，提示旧版格式暂不支持深度解析。
 - PNG、JPG、JPEG、WEBP：仅入库为 `uploaded`，提示“仅入库，暂不做 OCR”。
 - 损坏或无法读取的 PDF/DOCX/PPTX 标记为 `failed`，错误信息只返回脱敏提示，不暴露底层异常或文件路径。
@@ -693,7 +692,9 @@ Authorization: Bearer <token>
     "detail": "已解析",
     "modified": "刚刚",
     "size": "2 KB",
-    "parse_status": "completed"
+    "parse_status": "uploaded",
+    "ingestion_job_id": "job_20260714_001",
+    "ingestion_status": "pending"
   },
   "trace_id": "trace_20260701_006"
 }
@@ -752,7 +753,7 @@ Authorization: Bearer <token>
 }
 ```
 
-详情只返回当前用户可见的安全摘要。`sections` 最多返回 20 个章节，每个预览不超过 180 字；`section_count` 可用于判断是否还有未展示章节。接口不返回完整资料正文、存储路径、向量、原始 metadata 或模型输入。
+详情只返回当前用户可见的安全摘要，并增加 `ingestion_status`、`parser_version`、`outline_version`、`quality_summary` 与 `parsed_at`。`sections` 最多返回 20 个章节，每个预览不超过 180 字；完整目录和切片检查通过下方 outline 接口读取。接口不返回存储路径、向量、原始 metadata 或模型输入。
 
 ### GET `/materials`
 
@@ -812,7 +813,7 @@ Authorization: Bearer <token>
 
 ### GET `/materials/{material_id}/progress`
 
-用途：查看资料解析进度。Phase 4.4 只返回资料入库/轻解析状态，不返回真实建课进度。
+用途：查看资料解析进度。Phase 21 返回资料入库、后台解析、待确认、已确认或失败状态；建课进度继续由独立 AI Job 查询。
 
 响应：
 
@@ -821,15 +822,52 @@ Authorization: Bearer <token>
   "data": {
     "status": "completed",
     "progress_percent": 100,
-    "message": "资料已完成轻解析"
+    "message": "解析完成，等待确认目录"
   },
   "trace_id": "trace_20260701_010"
 }
 ```
 
+### POST `/materials/{material_id}/ingestion-jobs`
+
+用途：为当前用户自己的资料创建重新解析或重试任务。成功返回 HTTP 202 和现有 `AiJobResponse`，`workflow=material_ingestion`。运行中的同一资料任务由幂等键复用；任务支持取消、失败重试和刷新恢复。
+
+只有 TXT、Markdown、PDF、DOCX 和 PPTX 可进入深度解析。旧版 DOC/PPT、图片和扫描件不会伪装为可解析资料。
+
+### GET `/materials/{material_id}/outline`
+
+用途：读取当前资料的目录版本、章节树、章节到切片映射和安全质量报告。响应中的切片正文只用于当前用户检查自己的资料，带有章节路径、起止页、类型、内容哈希和质量提示；不返回向量、存储路径或模型原始输出。
+
+主要字段：
+
+```json
+{
+  "material_id": 1,
+  "version": 3,
+  "status": "awaiting_confirmation",
+  "confirmed": false,
+  "quality": {
+    "status": "passed",
+    "readable_page_ratio": 0.98,
+    "duplicate_chunk_ratio": 0.02,
+    "warnings": []
+  },
+  "sections": [],
+  "chunks": []
+}
+```
+
+### PATCH `/materials/{material_id}/outline`
+
+用途：按目录版本执行结构编辑。请求必须携带当前 `version`，支持 `rename`、`include`、`exclude`、`merge` 和 `split`；版本不一致返回 409，防止覆盖其他已保存编辑。成功后目录版本递增，资料重新进入待确认状态。
+
+### POST `/materials/{material_id}/outline/confirm`
+
+用途：确认当前目录版本。只有解析质量通过、至少包含一个有效章节且切片满足页码和章节边界要求时才可确认。确认后资料进入 `confirmed`，主页资料问答、资料对比和智能建课才会读取该结构。
+
 ### POST `/courses/from-materials`
 
-用途：根据资料库中的一个或多个资料生成课程。Phase 15 由 `CourseBuilderGraph` 接管，必须携带 JWT。支持当前用户个人资料库里已解析的 TXT、Markdown、PDF、DOCX 和 PPTX；未解析、解析失败、旧版 DOC/PPT、图片或扫描件会返回 400。
+用途：根据资料库中的一个或多个资料生成课程。Phase 21 的 `CourseBuilderGraph` 只接受当前用户已确认且解析质量通过的 TXT、Markdown、PDF、DOCX 和 PPTX。待确认资料返回 409；解析失败、legacy、旧版 Office、图片或扫描件不会进入建课。
 
 请求：
 
@@ -875,8 +913,10 @@ Authorization: Bearer <token>
 生成规则：
 
 - 用户填写课程名时始终优先使用；未填写才使用模型建议或文件名 fallback。
-- Markdown 按标题形成来源大纲，其他文档按段落与稳定窗口切分；每个知识点必须关联真实资料分块，未纳入主结构的来源写入补充来源。
-- 确定性底稿可由模型合并、拆分和重排，规则审核知识点数量、重复标题、来源覆盖、先修引用、环路、难度和隐私边界，最多修订一次。
+- Graph 节点为 `validate_confirmed_materials -> coherence_gate -> load_outlines -> chapter_plan -> concept_workers -> aggregate -> prerequisite_graph -> evidence_bind -> review -> repair -> persist`。
+- `concept_workers` 使用 LangGraph `Send` 按章节并行，每个 Worker 只读取本章节真实切片；知识点数量根据章节与正文规模自适应，硬上限 120。
+- 多资料先执行主题一致性门禁。规则审核章节覆盖、主体切片覆盖率、知识点密度、重复标题、真实引用、先修环路、难度和隐私边界，最多修订一次。
+- 每个知识点至少绑定一个真实切片，所有纳入课程的章节都有知识点覆盖，主体切片覆盖率至少 85%；未通过门禁时课程零落库。
 - 后端会创建 `Course`、`CourseEnrollment`、兼容旧链路的 `CourseMaterial`、`CourseMaterialLink`、`KnowledgePoint` 和 `KnowledgeChunk`。
 - 课程生成会 best-effort 为新 `KnowledgeChunk` 写入当前默认配置的真实外部 embedding；实际维度与配置指纹一并保存，失败只记录 warning 并回退关键词检索。
 - `knowledge_chunks.metadata_json` 会记录 `embedding_source`、`embedding_model`、`embedding_dimension`、`embedded_at`，便于识别基础检索状态、过期模型和后续重建。
@@ -1246,7 +1286,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 ## 11. Agent Trace 接口
 
-状态：九条学习主链路已进入真实 LangGraph：画像、资料建课、资料对比、主页问答、课程问答、资源生成、路径、练习评估和报告。学习档案导出继续使用普通 Service + RQ Worker。
+状态：十条生产主链路已进入真实 LangGraph：资料精细解析、画像、资料建课、资料对比、主页问答、课程问答、资源生成、路径、练习评估和报告。学习档案导出继续使用普通 Service + RQ Worker。
 
 ### GET `/agents/traces/{trace_id}`
 

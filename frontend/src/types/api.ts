@@ -37,6 +37,7 @@ export type MaterialSource = {
 };
 
 export type MaterialProgressStatus =
+  | "pending"
   | "uploaded"
   | "parsing"
   | "building_course"

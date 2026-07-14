@@ -361,6 +361,7 @@ class SqlAlchemyTutorSessionRepository:
                     Material.user_id == user_id,
                     Material.id.in_(unique_ids),
                     Material.parse_status == "completed",
+                    Material.ingestion_status == "confirmed",
                 )
             )
         )
@@ -609,7 +610,7 @@ class TutorSessionService:
         materials = self.repository.list_home_materials_for_user(user.id, normalized)
         available_ids = {material.id for material in materials}
         if any(material_id not in available_ids for material_id in normalized):
-            raise InvalidMaterialContextError("部分参考资料不存在、未解析或无权访问。")
+            raise InvalidMaterialContextError("部分参考资料不存在、尚未确认解析结构或无权访问。")
         return normalized
 
     @staticmethod

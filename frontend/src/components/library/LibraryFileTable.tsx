@@ -15,6 +15,12 @@ type LibraryFileTableProps = {
 };
 
 function statusLabel(material: MaterialListItem) {
+  if (material.ingestion_status === "confirmed") return "目录已确认";
+  if (material.ingestion_status === "awaiting_confirmation") return "待确认目录";
+  if (material.ingestion_status === "pending") return "等待精细解析";
+  if (material.ingestion_status === "running") return "精细解析中";
+  if (material.ingestion_status === "failed") return "精细解析失败";
+  if ((material.ingestion_status === "legacy" || !material.ingestion_status) && material.parse_status === "completed") return "旧版解析";
   if (material.parse_status === "completed") return "已解析";
   if (material.parse_status === "failed") return "解析失败";
   if (material.category === "image" || material.parse_status === "uploaded") return "已入库";
@@ -68,8 +74,8 @@ export function LibraryFileTable(props: LibraryFileTableProps) {
                 <small>{material.extension}{materialUnavailableReason(material) && props.compareMode ? ` · ${materialUnavailableReason(material)}` : ""}</small>
               </span>
             </button>
-            <span className={`library-status-label status-${material.parse_status}`}>
-              {material.parse_status === "failed" ? <WarningCircle size={14} aria-hidden="true" /> : null}
+            <span className={`library-status-label status-${material.ingestion_status ?? material.parse_status}`}>
+              {material.ingestion_status === "failed" || material.parse_status === "failed" ? <WarningCircle size={14} aria-hidden="true" /> : null}
               {statusLabel(material)}
             </span>
             <span className="library-course-cell" title={courseNames.join("、")}>

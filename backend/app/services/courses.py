@@ -632,10 +632,12 @@ class CourseService:
         for material in materials:
             if (
                 material.parse_status != "completed"
+                or material.ingestion_status != "confirmed"
+                or not (material.quality_json or {}).get("passed")
                 or not material.extracted_text
                 or self._extension(material.filename) not in self.text_extensions
             ):
-                raise CourseGenerationError("当前仅支持已解析资料生成课程。")
+                raise CourseGenerationError("请先完成资料精细解析并确认目录，再生成课程。")
 
     def _parse_sections(self, materials: list[Material]) -> list[ParsedSection]:
         sections: list[ParsedSection] = []

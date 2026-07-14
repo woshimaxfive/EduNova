@@ -10,11 +10,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.api.v1.deps import get_auth_service
-from backend.app.api.v1.materials import get_material_service
+from backend.app.api.v1.materials import get_material_job_service, get_material_service
 from backend.app.core.config import Settings
 from backend.app.core.security import create_access_token
 from backend.app.main import create_app
 from backend.app.models import Course, CourseMaterialLink, Material, MaterialChunk, User
+from backend.app.schemas.materials import MaterialOutlineOperation, UpdateMaterialOutlineRequest
 from backend.app.services.auth import AuthService
 from backend.app.services.materials import MaterialService
 
@@ -25,6 +26,11 @@ class TokenAuthRepository:
 
     def get_user_by_id(self, user_id: int) -> User | None:
         return self.user if self.user.id == user_id else None
+
+
+class FakeMaterialJobService:
+    def create_material_ingestion_job(self, *_args, **_kwargs):
+        return type("Job", (), {"job_id": "901", "status": "queued"})()
 
 
 @dataclass
@@ -349,9 +355,9 @@ def test_list_detail_progress_and_user_isolation(tmp_path: Path) -> None:
     assert "storage_path" not in detail
     assert "metadata_json" not in detail
     assert progress == {
-        "status": "completed",
+        "status": "legacy",
         "progress_percent": 100,
-        "message": "轻解析已完成",
+        "message": "旧版解析，可按需重新解析",
     }
 
     from backend.app.services.materials import MaterialNotFoundError
@@ -378,6 +384,102 @@ def test_material_detail_summarizes_sections_pages_and_owned_courses(tmp_path: P
     assert detail["section_count"] == len(repo.chunks)
     assert detail["page_count"] == len(repo.chunks)
     assert detail["linked_courses"] == [{"id": "101", "title": "机器学习", "usage_type": "reference"}]
+
+
+def test_outline_edits_are_versioned_and_confirmation_controls_included_chunks(tmp_path: Path) -> None:
+    material = Material(
+        id=1,
+        user_id=1,
+        filename="notes.md",
+        storage_path="user_1/notes.md",
+        content_type="text/markdown",
+        parse_status="completed",
+        ingestion_status="awaiting_confirmation",
+        outline_version=1,
+        outline_json={
+            "confirmed": False,
+            "sections": [
+                {"id": "section-1", "title": "第一章", "level": 1, "path": ["第一章"], "start_page": 1, "end_page": 2, "confidence": 0.9, "included": True, "chunk_indexes": [0, 1]},
+                {"id": "section-2", "title": "附录", "level": 1, "path": ["附录"], "start_page": 3, "end_page": 3, "confidence": 0.9, "included": True, "chunk_indexes": [2]},
+            ],
+        },
+        quality_json={"passed": True, "warnings": []},
+        metadata_json={},
+    )
+    chunks = [
+        MaterialChunk(
+            id=index + 1,
+            material_id=1,
+            chunk_index=index,
+            section_title="第一章" if index < 2 else "附录",
+            page_number=index + 1,
+            end_page_number=index + 1,
+            section_path_json=["第一章" if index < 2 else "附录"],
+            chunk_type="body",
+            content=f"正文 {index}",
+            metadata_json={"section_id": "section-1" if index < 2 else "section-2"},
+            quality_json={},
+        )
+        for index in range(3)
+    ]
+    repo = FakeMaterialRepository(materials=[material], chunks=chunks, next_material_id=2)
+    service = make_service(repo, tmp_path)
+
+    updated = service.update_outline(
+        make_user(),
+        1,
+        UpdateMaterialOutlineRequest(
+            version=1,
+            operations=[
+                MaterialOutlineOperation(type="rename", section_id="section-1", title="第一章 线性表"),
+                MaterialOutlineOperation(type="include", section_id="section-2", included=False),
+                MaterialOutlineOperation(type="split", section_id="section-1", chunk_index=1, title="链表"),
+            ],
+        ),
+    )
+
+    assert updated.version == 2
+    assert updated.confirmed is False
+    assert [section.title for section in updated.sections] == ["第一章 线性表", "链表", "附录"]
+    assert chunks[1].section_title == "链表"
+
+    merged = service.update_outline(
+        make_user(),
+        1,
+        UpdateMaterialOutlineRequest(
+            version=2,
+            operations=[
+                MaterialOutlineOperation(
+                    type="merge",
+                    section_ids=["section-1", "section-3"],
+                    title="第一章 线性表与链表",
+                )
+            ],
+        ),
+    )
+
+    assert merged.version == 3
+    assert [section.title for section in merged.sections] == ["第一章 线性表与链表", "附录"]
+
+    confirmed = service.confirm_outline(make_user(), 1, version=3)
+
+    assert confirmed.confirmed is True
+    assert material.ingestion_status == "confirmed"
+    assert chunks[0].quality_json["included"] is True
+    assert chunks[1].quality_json["included"] is True
+    assert chunks[2].quality_json["included"] is False
+
+    from backend.app.services.materials import MaterialValidationError
+
+    with pytest.raises(MaterialValidationError, match="刷新"):
+        service.update_outline(
+            make_user(),
+            1,
+            UpdateMaterialOutlineRequest(
+                version=1,
+                operations=[MaterialOutlineOperation(type="rename", section_id="section-1", title="过期修改")],
+            ),
+        )
 
 
 def test_course_upload_and_attach_materials_create_unique_links(tmp_path: Path) -> None:
@@ -408,6 +510,7 @@ def test_material_upload_route_accepts_multipart_and_returns_envelope(tmp_path: 
         settings=settings,
     )
     app.dependency_overrides[get_material_service] = lambda: MaterialService(repository=repo, settings=settings)
+    app.dependency_overrides[get_material_job_service] = lambda: FakeMaterialJobService()
     client = TestClient(app)
     token = create_access_token(str(user.id), settings=settings)
 
@@ -419,4 +522,6 @@ def test_material_upload_route_accepts_multipart_and_returns_envelope(tmp_path: 
 
     assert response.status_code == 200
     assert response.json()["data"]["filename"] == "route-notes.txt"
-    assert response.json()["data"]["parse_status"] == "completed"
+    assert response.json()["data"]["parse_status"] == "pending"
+    assert response.json()["data"]["ingestion_job_id"] == "901"
+    assert response.json()["data"]["ingestion_status"] == "pending"

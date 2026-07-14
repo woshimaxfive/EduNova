@@ -192,7 +192,7 @@ Phase 16 的 `MaterialComparisonGraph` 继续复用 `materials`、`course_materi
 
 ### 4.4.1 `materials`
 
-用途：保存用户上传到个人资料库的原始资料和解析结果。Phase 13.2 后，`.txt`、`.md`、`.pdf`、`.docx`、`.pptx` 可解析为 `completed`；损坏 PDF/DOCX/PPTX 标记为 `failed`；旧版 `.doc`、`.ppt` 和图片先保存为 `uploaded`，图片和扫描件不做 OCR。
+用途：保存用户上传到个人资料库的原始资料和解析状态。Phase 21 后，`.txt`、`.md`、`.pdf`、`.docx`、`.pptx` 通过 `MaterialIngestionGraph` 生成版本化目录和章节切片；质量通过后进入待确认，用户确认后才能用于生产检索和建课。旧版 `.doc`、`.ppt`、图片和扫描件不做深度解析。
 
 字段：
 
@@ -207,6 +207,13 @@ Phase 16 的 `MaterialComparisonGraph` 继续复用 `materials`、`course_materi
 | `extracted_text` | text | 提取文本 |
 | `metadata_json` | jsonb | 页码、标题、字数等元数据 |
 | `agent_trace_id` | varchar | 上传解析或资料 Graph 轨迹，可为空 |
+| `ingestion_status` | varchar | `pending/running/awaiting_confirmation/confirmed/failed/legacy` |
+| `parser_version` | varchar | 当前解析器协议版本 |
+| `content_hash` | varchar | 原文件内容安全哈希 |
+| `outline_version` | integer | 当前目录结构版本 |
+| `outline_json` | jsonb | 章节树、包含状态和版本化编辑结果 |
+| `quality_json` | jsonb | 可读率、异常字符、重复率、页码与 warning 摘要 |
+| `parsed_at` | timestamptz | 最近一次深度解析完成时间，可空 |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -217,7 +224,7 @@ Phase 16 的 `MaterialComparisonGraph` 继续复用 `materials`、`course_materi
 
 ### 4.4.2 `material_chunks`
 
-用途：保存个人资料库资料的稳定检索切片，供主页资料问答在建课前直接使用。Markdown 按标题分节；其他已解析文档按段落和 800 字窗口、120 字重叠切分。新资料解析完成后同步写入；既有资料首次被选中时惰性补齐。
+用途：保存已确认资料的章节保真检索切片，供主页资料问答、资料对比和智能建课共同使用。切片只在章节内部组合，目标 300 至 900 字、硬上限 1200 字，不跨章节重叠。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -226,7 +233,12 @@ Phase 16 的 `MaterialComparisonGraph` 继续复用 `materials`、`course_materi
 | `chunk_index` | integer | 资料内稳定顺序 |
 | `section_title` | varchar | Markdown 标题或解析章节，可空 |
 | `page_number` | integer | 来源页码，可空 |
+| `end_page_number` | integer | 结束页码，可空 |
+| `section_path_json` | jsonb | 从顶层章节到当前小节的路径 |
+| `chunk_type` | varchar | 正文、标题、表格或其他安全类型 |
 | `content` | text | 检索正文 |
+| `content_hash` | varchar | 切片正文哈希，用于去重和版本校验 |
+| `quality_json` | jsonb | 页码、长度、异常字符和重复诊断摘要 |
 | `embedding` | vector | 当前配置生成的动态维度外部向量，可空 |
 | `embedding_provider` | varchar | 向量 Provider，可空；旧向量为空 |
 | `embedding_model` | varchar | 向量模型，可空 |
@@ -242,6 +254,7 @@ Phase 16 的 `MaterialComparisonGraph` 继续复用 `materials`、`course_materi
 - `material_id` 外键指向 `materials.id`，`ON DELETE CASCADE`。
 - `ix_material_chunks_material(material_id)` 支持选中资料范围检索。
 - `ix_material_chunks_material_embedding_profile(material_id, embedding_profile_hash)` 支持当前配置精确检索。
+- `ix_material_chunks_material_section(material_id, section_title, page_number)` 支持资料检查器和章节范围读取。
 - 查询先按当前用户资料所有权、本次 `selected_material_ids`、Provider、模型、维度和配置指纹限定候选，再融合关键词、cosine 与可选重排序；不返回完整资料原文。
 
 ### 4.4.3 `course_material_links`
@@ -939,6 +952,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 21. Phase 13.1 后，课程、资料、资源、路径、练习和报告等学习产物可通过 nullable `agent_trace_id` 反查对应 Graph；字段为空时仍保持旧数据兼容。
 22. Phase 13.2 后，`export_jobs` 可记录 Markdown/PDF/DOCX 异步导出任务状态、文件路径、脱敏失败摘要和 `agent_trace_id`；下载接口必须按 `user_id` 隔离。
 23. HomeTutorGraph 升级后，已解析资料生成稳定 `material_chunks`；既有资料可惰性补齐，检索只能读取当前用户本次选中的资料，删除资料必须级联删除切片。
+24. Alembic `0023` 为资料与切片增加解析状态、目录版本、章节路径、起止页、内容哈希和质量摘要；待确认、失败和 legacy 资料不能进入生产建课。
 24. Phase 14 后，`practice_sessions.assessment_json` 保存可刷新恢复的闭环摘要；弱点通过来源引用精确绑定错题，但不保存原始模型输入。
 25. Phase 15 后，画像隐式信号必须通过独立来源与置信度门控；课程结构保存来源覆盖和真实知识点先修 ID；练习草稿只能写当前用户未完成会话。
 26. 持续路径收敛后，练习只触发已有普通路径的 `PathPlanningGraph` 重排；`assessment_json` 中历史冲刺键可继续存在，但响应和生产流程不再消费。

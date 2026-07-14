@@ -17,7 +17,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { buildCoursePath, PATHS } from "../app/routePaths";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
-import { createCourseBuilderJob, createIdempotencyKey, type AiJob } from "../api/aiJobs";
+import { createCourseBuilderJob, createIdempotencyKey, getAiJob, type AiJob } from "../api/aiJobs";
 import { getDashboardSummary } from "../api/dashboard";
 import { getApiErrorMessage } from "../api/errors";
 import { listMaterials, uploadMaterial } from "../api/materials";
@@ -49,6 +49,7 @@ type LibraryMaterial = {
   detail: string;
   modified: string;
   size: string;
+  ingestion_status?: "legacy" | "pending" | "running" | "awaiting_confirmation" | "confirmed" | "failed";
 };
 
 type HomeMessage = {
@@ -294,9 +295,12 @@ export function LearningSpacePage() {
     setIsUploadingMaterial(true);
 
     try {
-      await uploadMaterial({ file });
+      const response = await uploadMaterial({ file });
+      if (response.data.ingestion_job_id) {
+        trackJob(await getAiJob(response.data.ingestion_job_id));
+      }
       await queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
-      setComposerFeedback(null);
+      setComposerFeedback({ message: "资料已上传，正在后台识别目录和正文切片。完成后可到资料库检查并确认。", tone: "success" });
       event.target.value = "";
     } catch (error) {
       void error;
@@ -1326,6 +1330,7 @@ function MaterialFileList({ materials, selectedMaterialIds, onToggleMaterial, em
       {materials.length === 0 ? <p className="material-file-empty">{emptyText}</p> : null}
       {materials.map((material) => {
         const isSelected = selectedMaterialIds.includes(material.id);
+        const unavailable = Boolean(material.ingestion_status && material.ingestion_status !== "confirmed");
 
         return (
           <button
@@ -1333,12 +1338,13 @@ function MaterialFileList({ materials, selectedMaterialIds, onToggleMaterial, em
             key={material.id}
             type="button"
             aria-pressed={isSelected}
+            disabled={unavailable}
             onClick={() => onToggleMaterial(material.id)}
           >
             <span className="material-file-type">{material.type}</span>
             <span className="material-file-main">
               <strong>{material.title}</strong>
-              <small>{material.detail}</small>
+              <small>{unavailable ? "请先到资料库检查并确认目录" : material.detail}</small>
             </span>
             <span className="material-file-meta">{material.modified}</span>
             <span className="material-file-meta">{material.size}</span>

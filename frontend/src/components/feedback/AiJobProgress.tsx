@@ -14,7 +14,8 @@ type Props = {
 const workflowLabels = {
   course_builder: "智能建课",
   resource_generation: "资源生成",
-  embedding_reindex: "向量索引重建"
+  embedding_reindex: "向量索引重建",
+  material_ingestion: "资料解析"
 } as const;
 
 export function AiJobProgress({ job, compact = false, onCancel, onRetry }: Props) {

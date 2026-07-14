@@ -394,7 +394,10 @@ class RagService:
 
         for term in terms:
             if term and term in haystack:
-                score += 1.0 if len(term) <= 2 else 2.0
+                if term.isascii() and len(term) >= 3:
+                    score += 4.0
+                else:
+                    score += 1.0 if len(term) <= 2 else 2.0
 
         if cls._ordered_chinese_query_matches(query, haystack):
             score += 1.5

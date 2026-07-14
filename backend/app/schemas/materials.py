@@ -22,6 +22,9 @@ class MaterialUploadResult(BaseModel):
     modified: str
     size: str
     parse_status: str
+    ingestion_job_id: str | None = None
+    ingestion_status: str = "legacy"
+    quality_summary: dict = Field(default_factory=dict)
 
 
 class MaterialListItem(BaseModel):
@@ -34,6 +37,10 @@ class MaterialListItem(BaseModel):
     category: str
     extension: str
     parse_status: str
+    ingestion_status: str = "legacy"
+    outline_version: int = 0
+    outline_confirmed: bool = False
+    quality_summary: dict = Field(default_factory=dict)
     course_ids: list[str]
 
 
@@ -60,6 +67,70 @@ class MaterialDetail(MaterialListItem):
     sections: list[MaterialSectionSummary] = Field(default_factory=list)
     linked_courses: list[MaterialLinkedCourse] = Field(default_factory=list)
     agent_trace_id: str | None = None
+    ingestion_status: str = "legacy"
+    parser_version: str | None = None
+    outline_version: int = 0
+    outline_confirmed: bool = False
+    quality_summary: dict = Field(default_factory=dict)
+
+
+class MaterialOutlineSection(BaseModel):
+    id: str
+    title: str
+    level: int = Field(ge=1, le=6)
+    path: list[str] = Field(default_factory=list)
+    start_page: int | None = None
+    end_page: int | None = None
+    confidence: float = Field(ge=0, le=1)
+    included: bool = True
+    chunk_indexes: list[int] = Field(default_factory=list)
+
+
+class MaterialOutlineChunk(BaseModel):
+    id: str
+    chunk_index: int
+    section_id: str
+    section_path: list[str] = Field(default_factory=list)
+    start_page: int | None = None
+    end_page: int | None = None
+    chunk_type: str = "body"
+    content: str
+    quality: dict = Field(default_factory=dict)
+
+
+class MaterialOutlineResponse(BaseModel):
+    material_id: str
+    filename: str
+    ingestion_status: str
+    parser_version: str | None = None
+    version: int
+    confirmed: bool
+    quality: dict = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    sections: list[MaterialOutlineSection] = Field(default_factory=list)
+    chunks: list[MaterialOutlineChunk] = Field(default_factory=list)
+
+
+class MaterialOutlineOperation(BaseModel):
+    type: str
+    section_id: str | None = None
+    section_ids: list[str] = Field(default_factory=list)
+    title: str | None = None
+    included: bool | None = None
+    chunk_index: int | None = None
+
+
+class UpdateMaterialOutlineRequest(BaseModel):
+    version: int = Field(ge=0)
+    operations: list[MaterialOutlineOperation] = Field(min_length=1, max_length=50)
+
+
+class ConfirmMaterialOutlineRequest(BaseModel):
+    version: int = Field(ge=1)
+
+
+class MaterialIngestionJobRequest(BaseModel):
+    force: bool = False
 
 
 class MaterialProgress(BaseModel):

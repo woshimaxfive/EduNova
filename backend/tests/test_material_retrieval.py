@@ -190,7 +190,10 @@ def make_material(
         content_type="text/markdown",
         storage_path=f"user_{user_id}/{material_id}.md",
         parse_status="completed",
+        ingestion_status="confirmed",
         extracted_text=text,
+        outline_json={"confirmed": True},
+        quality_json={"passed": True},
         metadata_json={},
     )
 

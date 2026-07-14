@@ -11,9 +11,9 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前已完成 **Phase 20 个性化产物规划与版本体系**。九条学习主链路继续由真实 LangGraph 编排；资源生成会先形成逐类型 `ArtifactIntent`，再由六个 Worker 按互补职责生成。真实性、个性化和差异性均进入持久化前门禁，重新生成会保留旧版本并明确区分“换一种教法”和“优化当前版本”。
+当前已完成 **Phase 21 资料精细解析与高质量智能建课**。十条生产主链路由真实 LangGraph 编排；资料先经过章节保真的解析、质量门禁和用户目录确认，再进入章节并行智能建课。
 
-当前九条真实生产 Graph 为 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
+当前十条真实生产 Graph 为 `MaterialIngestionGraph`、`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
 
 已经具备的主链路：
 
@@ -252,3 +252,9 @@ docker compose exec -T backend python -m backend.app.cli sync-builtin-courses
 ```
 
 Docker 后端会在迁移完成后自动执行该同步。课程包包含 9 份仅在课程内部可见的系统来源、56 个知识点、184 个切片和 16 个 Python 实验；不会在个人资料库创建衍生文件。课程正文和实验均为重新组织的原创表达，仓库不包含参考教材 PDF、扫描页、插图或教材代码。课程包另有逐知识点教学指引、32 条关键词 RAG 基准和 16 组可执行边界验证，详见 `docs/BUILTIN_COURSE_QUALITY.md`。
+
+## 资料解析与智能建课
+
+用户上传的 TXT、Markdown、PDF、DOCX 和 PPTX 会进入后台 `MaterialIngestionGraph`，依次完成页面提取、版面清理、目录识别、章节内切片、质量门禁和持久化。资料库始终只展示原文件；目录候选、页码、切片和解析诊断仅作为系统内部数据。
+
+解析成功后资料进入“待确认”状态。用户可以在资料详情中检查目录、页码与真实切片，排除无关章节、改名、合并或拆分边界，再确认结构。只有目录已确认且质量通过的资料才能进入 `CourseBuilderGraph`。建课按章节并行分析，知识点必须绑定真实切片，并通过章节覆盖、证据完整、标题去重和先修无环等门禁后才会落库。

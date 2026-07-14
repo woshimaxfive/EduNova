@@ -11,7 +11,6 @@ from backend.app.services.ai_jobs import (
     AiJobConflictError,
     AiJobNotFoundError,
     AiJobService,
-    AiJobValidationError,
 )
 
 
@@ -108,7 +107,19 @@ def make_user(user_id: int = 1) -> User:
 
 
 def make_material(material_id: int = 11, *, user_id: int = 1, status: str = "completed") -> Material:
-    return Material(id=material_id, user_id=user_id, filename="人工智能.md", storage_path="safe/path", content_type="text/markdown", parse_status=status, extracted_text="课程内容", metadata_json={})
+    return Material(
+        id=material_id,
+        user_id=user_id,
+        filename="人工智能.md",
+        storage_path="safe/path",
+        content_type="text/markdown",
+        parse_status=status,
+        ingestion_status="confirmed" if status == "completed" else "failed",
+        extracted_text="课程内容",
+        outline_json={"confirmed": status == "completed", "sections": []},
+        quality_json={"passed": status == "completed"},
+        metadata_json={},
+    )
 
 
 def make_course(course_id: int = 21, *, owner_id: int = 1) -> Course:
@@ -149,7 +160,7 @@ def test_invalid_material_and_resource_ownership_are_rejected() -> None:
     repository = FakeRepository(users=[user], materials=[make_material(status="failed")], courses=[make_course(owner_id=2)])
     service = make_service(repository, FakeQueue())
 
-    with pytest.raises(AiJobValidationError, match="已解析"):
+    with pytest.raises(AiJobConflictError, match="精细解析"):
         service.create_course_builder_job(user, material_ids=[11], course_title="", idempotency_key="course")
     with pytest.raises(AiJobNotFoundError, match="课程"):
         service.create_resource_generation_job(user, course_id=21, knowledge_point_id=None, resource_types=["doc"], learning_goal="", difficulty="medium", idempotency_key="resource")

@@ -183,3 +183,10 @@ def test_phase_one_compose_declares_frontend_and_nginx_services() -> None:
     assert "nginx:" in compose_text
     assert (REPO_ROOT / "docker" / "frontend.Dockerfile").exists()
     assert (REPO_ROOT / "docker" / "nginx.conf").exists()
+
+
+def test_compose_shares_uploaded_materials_with_ai_worker() -> None:
+    compose_text = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert compose_text.count("material_data:/app/var/uploads/materials") == 2
+    assert "  material_data:" in compose_text

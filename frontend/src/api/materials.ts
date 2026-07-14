@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import { type AiJob } from "./aiJobs";
 import { type ApiEnvelope, type MaterialProgressStatus } from "../types/api";
 
 export const MATERIAL_ENDPOINTS = {
@@ -9,6 +10,9 @@ export const MATERIAL_ENDPOINTS = {
   compare: "/materials/compare",
   latestComparison: "/materials/comparisons/latest",
   comparisonDetail: (comparisonId: number) => `/materials/comparisons/${comparisonId}`,
+  ingestionJobs: (materialId: number) => `/materials/${materialId}/ingestion-jobs`,
+  outline: (materialId: number) => `/materials/${materialId}/outline`,
+  confirmOutline: (materialId: number) => `/materials/${materialId}/outline/confirm`,
   attachToCourse: (courseId: number) => `/courses/${courseId}/materials`
 } as const;
 
@@ -29,6 +33,26 @@ export type UploadMaterialResult = {
   modified: string;
   size: string;
   parse_status: MaterialProgressStatus;
+  ingestion_job_id?: string | null;
+  ingestion_status: MaterialIngestionStatus;
+  quality_summary?: MaterialQualitySummary;
+};
+
+export type MaterialIngestionStatus = "legacy" | "pending" | "running" | "awaiting_confirmation" | "confirmed" | "failed";
+
+export type MaterialQualitySummary = {
+  passed?: boolean;
+  page_count?: number;
+  readable_page_count?: number;
+  readable_page_ratio?: number;
+  section_count?: number;
+  included_section_count?: number;
+  chunk_count?: number;
+  abnormal_character_ratio?: number;
+  duplicate_chunk_ratio?: number;
+  risk_flags?: string[];
+  warnings?: string[];
+  error_code?: string;
 };
 
 export type MaterialListItem = {
@@ -41,6 +65,10 @@ export type MaterialListItem = {
   category: "document" | "image";
   extension: string;
   parse_status: MaterialProgressStatus;
+  ingestion_status?: MaterialIngestionStatus;
+  outline_version?: number;
+  outline_confirmed?: boolean;
+  quality_summary?: MaterialQualitySummary;
   course_ids: string[];
 };
 
@@ -54,6 +82,53 @@ export type MaterialDetail = MaterialListItem & {
   sections?: MaterialSectionSummary[];
   linked_courses?: MaterialLinkedCourse[];
   agent_trace_id?: string | null;
+  parser_version?: string | null;
+};
+
+export type MaterialOutlineSection = {
+  id: string;
+  title: string;
+  level: number;
+  path: string[];
+  start_page: number | null;
+  end_page: number | null;
+  confidence: number;
+  included: boolean;
+  chunk_indexes: number[];
+};
+
+export type MaterialOutlineChunk = {
+  id: string;
+  chunk_index: number;
+  section_id: string;
+  section_path: string[];
+  start_page: number | null;
+  end_page: number | null;
+  chunk_type: string;
+  content: string;
+  quality: Record<string, unknown>;
+};
+
+export type MaterialOutline = {
+  material_id: string;
+  filename: string;
+  ingestion_status: MaterialIngestionStatus;
+  parser_version: string | null;
+  version: number;
+  confirmed: boolean;
+  quality: MaterialQualitySummary;
+  warnings: string[];
+  sections: MaterialOutlineSection[];
+  chunks: MaterialOutlineChunk[];
+};
+
+export type MaterialOutlineOperation = {
+  type: "rename" | "include" | "exclude" | "merge" | "split";
+  section_id?: string;
+  section_ids?: string[];
+  title?: string;
+  included?: boolean;
+  chunk_index?: number;
 };
 
 export type MaterialSectionSummary = {
@@ -171,6 +246,28 @@ export async function getMaterial(materialId: number) {
 
 export async function getMaterialProgress(materialId: number) {
   const response = await apiClient.get<ApiEnvelope<MaterialProgress>>(MATERIAL_ENDPOINTS.progress(materialId));
+  return response.data;
+}
+
+export async function createMaterialIngestionJob(materialId: number, force = false, idempotencyKey?: string) {
+  const response = await apiClient.post<ApiEnvelope<AiJob>>(MATERIAL_ENDPOINTS.ingestionJobs(materialId), { force }, {
+    headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined
+  });
+  return response.data.data;
+}
+
+export async function getMaterialOutline(materialId: number) {
+  const response = await apiClient.get<ApiEnvelope<MaterialOutline>>(MATERIAL_ENDPOINTS.outline(materialId));
+  return response.data;
+}
+
+export async function updateMaterialOutline(materialId: number, version: number, operations: MaterialOutlineOperation[]) {
+  const response = await apiClient.patch<ApiEnvelope<MaterialOutline>>(MATERIAL_ENDPOINTS.outline(materialId), { version, operations });
+  return response.data;
+}
+
+export async function confirmMaterialOutline(materialId: number, version: number) {
+  const response = await apiClient.post<ApiEnvelope<MaterialOutline>>(MATERIAL_ENDPOINTS.confirmOutline(materialId), { version });
   return response.data;
 }
 

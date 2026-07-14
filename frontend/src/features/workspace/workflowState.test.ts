@@ -7,6 +7,7 @@ describe("workspace workflow state", () => {
     const stages = buildMaterialLifecycle("chunking", 60);
 
     expect(WORKFLOW_STAGE_ORDER).toEqual([
+      "pending",
       "uploaded",
       "parsing",
       "building_course",
@@ -19,15 +20,27 @@ describe("workspace workflow state", () => {
       "completed",
       "completed",
       "completed",
+      "completed",
       "active",
       "queued",
       "queued",
       "queued"
     ]);
-    expect(stages[3]).toMatchObject({
+    expect(stages[4]).toMatchObject({
       id: "chunking",
       label: "切分知识片段",
       progressPercent: 60
+    });
+  });
+
+  it("shows queued material ingestion as the first active stage", () => {
+    const stages = buildMaterialLifecycle("pending", 0);
+
+    expect(stages[0]).toMatchObject({
+      id: "pending",
+      label: "等待处理",
+      status: "active",
+      progressPercent: 15
     });
   });
 

@@ -221,6 +221,18 @@ def test_rag_search_returns_current_user_citations_sorted_by_score() -> None:
     assert result.results[0].score >= result.results[1].score
 
 
+def test_keyword_scoring_prioritizes_english_algorithm_names_over_generic_question_words() -> None:
+    repository = make_repository()
+    algorithm = repository.chunks[0]
+    algorithm.content = "Dijkstra 算法通过松弛边计算单源最短路径，不能直接处理负权边。"
+    generic = repository.chunks[1]
+    generic.content = "为什么这个问题不能使用一般处理方式，需要继续分析。"
+    query = "Dijkstra 为什么不能处理负权边"
+    terms = RagService._query_terms(query)
+
+    assert RagService._score_chunk(algorithm, query, terms) > RagService._score_chunk(generic, query, terms)
+
+
 def test_rag_search_uses_external_embedding_sql_candidates_and_returns_metadata() -> None:
     repo = make_repository()
     embedding_service = FakeEmbeddingService(

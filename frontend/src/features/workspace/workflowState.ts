@@ -11,6 +11,7 @@ type WorkflowDefinition = {
 };
 
 export const WORKFLOW_STAGE_ORDER = [
+  "pending",
   "uploaded",
   "parsing",
   "building_course",
@@ -21,6 +22,11 @@ export const WORKFLOW_STAGE_ORDER = [
 ] as const satisfies ReadonlyArray<Exclude<MaterialProgressStatus, "failed">>;
 
 const workflowDefinitions: WorkflowDefinition[] = [
+  {
+    id: "pending",
+    label: "等待处理",
+    message: "资料任务已创建，正在等待处理"
+  },
   {
     id: "uploaded",
     label: "资料入库",
@@ -134,7 +140,7 @@ export function buildMaterialLifecycle(
       return {
         ...definition,
         status: "active",
-        progressPercent: currentStatus === "uploaded" ? Math.max(15, safeProgress) : safeProgress
+        progressPercent: currentStatus === "pending" || currentStatus === "uploaded" ? Math.max(15, safeProgress) : safeProgress
       };
     }
 

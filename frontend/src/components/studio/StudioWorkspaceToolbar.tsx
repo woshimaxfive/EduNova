@@ -1,4 +1,4 @@
-import { Info, Sparkle } from "@phosphor-icons/react";
+import { ArrowClockwise, Info, Sparkle } from "@phosphor-icons/react";
 
 import { type ApiCourseSummary } from "../../api/courses";
 import { type GeneratedResource } from "../../api/resources";
@@ -13,6 +13,7 @@ type StudioWorkspaceToolbarProps = {
   onCourseChange: (courseId: number | null) => void;
   onOpenGenerate: () => void;
   onOpenDetails: () => void;
+  onRegenerate: () => void;
 };
 
 export function StudioWorkspaceToolbar({
@@ -23,7 +24,8 @@ export function StudioWorkspaceToolbar({
   isGenerating,
   onCourseChange,
   onOpenGenerate,
-  onOpenDetails
+  onOpenDetails,
+  onRegenerate
 }: StudioWorkspaceToolbarProps) {
   const selectedType = selectedResource ? resourceTypeMeta[selectedResource.resource_type].label : null;
   return (
@@ -48,6 +50,10 @@ export function StudioWorkspaceToolbar({
       </div>
 
       <div className="studio-toolbar-actions">
+        <button className="soft-button" type="button" disabled={!selectedResource || isGenerating} onClick={onRegenerate}>
+          <ArrowClockwise size={17} weight="duotone" aria-hidden="true" />
+          <span>重新生成</span>
+        </button>
         <button className="soft-button" type="button" disabled={!selectedResource} onClick={onOpenDetails}>
           <Info size={17} weight="duotone" aria-hidden="true" />
           <span>成果详情</span>

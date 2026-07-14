@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from backend.app.core.config import Settings
-from backend.app.models import AiJob, Course, KnowledgePoint, Material, User
+from backend.app.models import AiJob, Course, GeneratedResource, KnowledgePoint, Material, User
 from backend.app.services.ai_jobs import (
     AiJobConflictError,
     AiJobNotFoundError,
@@ -47,6 +47,7 @@ class FakeRepository:
     materials: list[Material] = field(default_factory=list)
     courses: list[Course] = field(default_factory=list)
     points: list[KnowledgePoint] = field(default_factory=list)
+    resources: list[GeneratedResource] = field(default_factory=list)
     jobs: list[AiJob] = field(default_factory=list)
     next_id: int = 1
 
@@ -80,6 +81,9 @@ class FakeRepository:
 
     def get_knowledge_point(self, course_id: int, point_id: int) -> KnowledgePoint | None:
         return next((item for item in self.points if item.course_id == course_id and item.id == point_id), None)
+
+    def get_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None:
+        return next((item for item in self.resources if item.user_id == user_id and item.id == resource_id), None)
 
     def add(self, job: AiJob) -> AiJob:
         job.id = self.next_id
@@ -149,6 +153,52 @@ def test_invalid_material_and_resource_ownership_are_rejected() -> None:
         service.create_course_builder_job(user, material_ids=[11], course_title="", idempotency_key="course")
     with pytest.raises(AiJobNotFoundError, match="课程"):
         service.create_resource_generation_job(user, course_id=21, knowledge_point_id=None, resource_types=["doc"], learning_goal="", difficulty="medium", idempotency_key="resource")
+
+
+def test_resource_version_job_persists_action_and_source_for_retry() -> None:
+    user = make_user()
+    source = GeneratedResource(
+        id=31,
+        user_id=1,
+        course_id=21,
+        knowledge_point_id=41,
+        resource_type="doc",
+        title="A* 讲解",
+        content_json={
+            "intent": {"learning_goal": "理解 A* 搜索"},
+            "metadata": {"difficulty": "hard"},
+        },
+        citation_json=[],
+        status="completed",
+    )
+    repository = FakeRepository(
+        users=[user],
+        courses=[make_course()],
+        points=[KnowledgePoint(id=41, course_id=21, title="A*", chapter="搜索", order_index=1)],
+        resources=[source],
+    )
+    service = make_service(repository, FakeQueue(fail_enqueue=True))
+
+    created = service.create_resource_generation_job(
+        user,
+        course_id=21,
+        knowledge_point_id=41,
+        resource_types=["doc"],
+        learning_goal="将被来源意图覆盖",
+        difficulty="easy",
+        generation_action="alternative",
+        source_resource_id=31,
+        idempotency_key="alternative-resource",
+    )
+
+    assert created.request["generation_action"] == "alternative"
+    assert created.request["source_resource_id"] == 31
+    assert created.request["learning_goal"] == "理解 A* 搜索"
+    assert created.request["difficulty"] == "hard"
+
+    service.queue = FakeQueue()
+    retried = service.retry_job(user, int(created.job_id))
+    assert retried.request == created.request
 
 
 def test_queued_job_can_be_cancelled_without_running() -> None:

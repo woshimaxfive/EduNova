@@ -418,7 +418,7 @@ AssessmentGraph 规则评分
 - SlideWorker：结构化 PPT 页面与真实 PPTX 源数据。
 - AnimationWorker：可播放的 Mermaid 教学场景，不伪装成视频。
 
-资源内容采用 `schema_version=3`，以 `artifact.kind` 区分 `document`、`mindmap`、`quiz`、`code_lab`、`slide_deck`、`animation`，并保存引用绑定、质量门禁、Prompt 版本和 Markdown fallback。模型直接生成类型化 artifact；无有效结构差异时不得标记 `model_enhanced`。前端 `ResourceRenderer` 继续兼容 v1/v2，并按类型加载 Markmap、Mermaid、CodeMirror/Pyodide 等渲染器。
+资源内容采用 `schema_version=3`，以 `artifact.kind` 区分 `document`、`mindmap`、`quiz`、`code_lab`、`slide_deck`、`animation`，并保存引用绑定、质量门禁、Prompt 版本和 Markdown fallback。Phase 20 的 planner 在 Worker 前生成逐类型 `ArtifactIntent`，明确教学策略、认知层级、案例方向、证据和学习结果；ReviewAgent 同时读取意图、候选内容和历史摘要。模型直接生成类型化 artifact；无有效结构差异时不得标记 `model_enhanced`。前端 `ResourceRenderer` 继续兼容 v1/v2。
 
 代码资源在持久化前调用内部 `code-verifier`。该服务位于独立 internal Docker 网络，采用非 root、只读根文件系统、无外网、能力移除和 CPU/内存/PID 限制；每次请求创建独立 Pyodide Worker，执行安全 AST 门禁、5 秒超时、20KB 输出限制和预期输出精确比对。服务不可用或结果不符时，代码 Worker 失败且不保存资源。
 
@@ -648,3 +648,10 @@ flowchart LR
 - `ReportGraph` 将五类确定性统计作为不可变字段，模型叙事出现额外数字或混淆统计时触发修订；修订稿需再次经过模型与规则审核。
 - 掌握度和路径状态彻底分离。知识点没有有效学习证据时返回未评估，课程平均值只计算 `score != null` 的知识点。
 - 资料对比先按概念别名归并 A*、启发式搜索、反向传播等同义内容；会话检索在明显换题时停止拼接旧问题。
+
+## 16. Phase 20 个性化产物与版本
+
+- `ResourceGenerationGraph` 保持原节点边界，但 `planner` 产出六类互补 `ArtifactIntent`；可信画像不足时显式记录 `context_limited`。
+- 质量门禁分为真实性、个性化、多样性、教学可用性和类型正确性。替代版本相对来源必须至少改变两项教学策略维度，优化版本必须保持原意图。多样性先使用本地文本与结构指纹；存在可用向量配置时，通过统一 `EmbeddingService` 增加语义相似度门禁，失败时保留明确降级状态而不阻断本地校验。
+- `generated_resources` 使用版本族、来源版本和递增版本号保存不可覆盖历史。版本分配在事务中锁定版本族；失败任务不会创建空版本或覆盖来源。
+- 资源工坊按版本族展示最新成果，允许切换、比较、回到旧版本，并从任意版本发起“换一种教法”或“优化当前版本”。

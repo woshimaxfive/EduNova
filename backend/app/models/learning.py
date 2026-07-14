@@ -143,6 +143,9 @@ class GeneratedResource(IdMixin, TimestampMixin, Base):
         Index("ix_generated_resources_user_course", "user_id", "course_id"),
         Index("ix_generated_resources_status", "status"),
         Index("ix_generated_resources_agent_trace_id", "agent_trace_id"),
+        Index("ix_generated_resources_user_version_family", "user_id", "version_family_id", "version_number"),
+        Index("ix_generated_resources_revision_of", "revision_of_resource_id"),
+        UniqueConstraint("version_family_id", "version_number", name="uq_generated_resources_version_family_number"),
     )
 
     user_id: Mapped[int] = mapped_column(
@@ -168,6 +171,14 @@ class GeneratedResource(IdMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
     review_status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
     confidence_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    version_family_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    revision_of_resource_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("generated_resources.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    version_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    generation_action: Mapped[str] = mapped_column(String(20), nullable=False, default="new")
 
 
 class ResourceQualityScore(IdMixin, CreatedAtMixin, Base):

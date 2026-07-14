@@ -14,6 +14,7 @@ export const RESOURCE_ENDPOINTS = {
 
 export type ResourceType = "doc" | "mindmap" | "quiz" | "code" | "slide" | "animation";
 export type ResourceDifficulty = "easy" | "medium" | "hard";
+export type ResourceGenerationAction = "new" | "alternative" | "refine";
 export type ResourceReviewStatus = "passed" | "low_evidence" | "pending" | "failed" | string;
 export type ResourceGenerationMode = "model_enhanced" | "deterministic_source" | "low_evidence_fallback" | string;
 
@@ -23,6 +24,8 @@ export type GenerateResourcesRequest = {
   resource_types: ResourceType[];
   learning_goal?: string;
   difficulty?: ResourceDifficulty;
+  generation_action?: ResourceGenerationAction;
+  source_resource_id?: number | null;
 };
 
 export type GeneratedResourceCitation = {
@@ -140,6 +143,48 @@ export type GeneratedResourceContent = {
       code?: string;
       output_length?: number;
     } | null;
+    dimensions?: Record<string, {
+      status?: "passed" | "failed" | string;
+      score?: number;
+      rationale?: string;
+    }>;
+  };
+  intent?: {
+    resource_type?: ResourceType;
+    topic?: string;
+    learning_goal?: string;
+    learning_need?: string;
+    resource_role?: string;
+    teaching_strategy?: string;
+    cognitive_level?: string;
+    example_direction?: string;
+    interaction_structure?: string;
+    evidence_refs?: number[];
+    success_criteria?: string[];
+    learner_factors?: string[];
+    difference_requirements?: string[];
+    personalization_status?: "personalized" | "context_limited" | string;
+    generation_action?: ResourceGenerationAction;
+  };
+  personalization_summary?: {
+    status?: "personalized" | "context_limited" | string;
+    learning_problem?: string;
+    teaching_reason?: string;
+    difference?: string;
+    factors?: string[];
+  };
+  diversity?: {
+    status?: "passed" | "failed" | string;
+    score?: number;
+    duplicate_sentence_ratio?: number;
+    source_similarity?: number;
+    semantic_similarity?: number | null;
+    semantic_status?: string;
+    changed_intent_dimensions?: number;
+    comparison_count?: number;
+    batch_duplicate_sentence_ratio?: number;
+    batch_comparison_count?: number;
+    risk_flags?: string[];
   };
   metadata?: {
     agent_trace_id?: string;
@@ -152,6 +197,9 @@ export type GeneratedResourceContent = {
     repair_count?: number;
     profile_applied_version?: number;
     course_context_hash?: string;
+    generation_action?: ResourceGenerationAction;
+    generation_batch_id?: string;
+    source_resource_id?: number | null;
   };
   [key: string]: unknown;
 };
@@ -168,6 +216,13 @@ export type GeneratedResource = {
   review_status: ResourceReviewStatus;
   confidence_score: number | null;
   agent_trace_id: string | null;
+  version_family_id?: string | null;
+  revision_of_resource_id?: string | null;
+  version_number?: number | null;
+  generation_action?: ResourceGenerationAction;
+  intent_summary?: GeneratedResourceContent["intent"] | null;
+  personalization_summary?: GeneratedResourceContent["personalization_summary"] | null;
+  quality_dimensions?: NonNullable<GeneratedResourceContent["quality"]>["dimensions"] | null;
   personalization?: PersonalizationFreshness | null;
   created_at: string;
   updated_at: string;

@@ -440,7 +440,7 @@ Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `r
 
 用途：保存 AI 生成学习资源。
 
-该表现在保存六类课程资源：`doc`、`mindmap`、`quiz`、`code`、`slide`、`animation`。Phase 19 新产物使用 `content_json.schema_version=3` 和 `artifact.kind` 保存类型化内容、引用绑定、质量门禁、Prompt 版本和代码验证摘要，同时保留 Markdown fallback；历史 v1/v2 资源不批量迁移。资源分层仍为 `course_id != null` 表示课程资源，`course_id == null` 预留个人全局资源。`agent_trace_id` 同时写入独立字段和安全 metadata。
+该表现在保存六类课程资源：`doc`、`mindmap`、`quiz`、`code`、`slide`、`animation`。Phase 19 新产物使用 `content_json.schema_version=3`，Phase 20 在同一协议中扩展教学意图、个性化说明、差异检测和多维质量结果。Alembic `20260714_0021` 增加不可覆盖的版本族；历史 v1/v2 和无版本字段的旧资源不批量改写。资源分层仍为 `course_id != null` 表示课程资源，`course_id == null` 预留个人全局资源。
 
 服务层必须保证：
 
@@ -451,6 +451,8 @@ Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `r
 - `content_json.metadata.generation_mode` 区分模型增强和确定性来源，`review_mode` 区分模型加规则审核与纯规则审核，`repair_count` 只允许 0 或 1。
 - 模型未配置或调用失败时可以写入确定性可用稿；只要课程依据和资源必备结构足够，`review_status` 仍可为 `passed`。
 - `review_status="low_evidence"` 只表示课程依据不足或只能生成低依据稿，不等同于模型未调用或模型失败。
+- 新建资源独立形成版本族并写入版本 `1`；替代或优化版本继承来源版本族、递增版本号并记录直接来源。版本号分配锁定整个版本族，避免并发生成重复版本。
+- 历史版本永久保留。新版本审核失败时不得创建空版本，也不得覆盖或归档来源版本。
 
 字段：
 
@@ -468,6 +470,10 @@ Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `r
 | `review_status` | varchar | 审核状态 |
 | `confidence_score` | numeric | 可信度 |
 | `agent_trace_id` | varchar | ResourceGenerationGraph 轨迹，可为空 |
+| `version_family_id` | varchar(36) | 版本族 ID；legacy 资源可为空 |
+| `revision_of_resource_id` | bigint | 直接来源版本，自引用外键，删除来源时置空 |
+| `version_number` | integer | 版本族内递增序号；legacy 资源可为空 |
+| `generation_action` | varchar(20) | `new`、`alternative` 或 `refine`，默认 `new` |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -475,7 +481,7 @@ Phase 9 开始实际复用本表保存课程级路径任务。任务来源按 `r
 
 用途：保存资源质量评分。
 
-Phase 8.2 生成资源时同步写入质量分。Phase 8.2.1 后，质量分由规则评分生成：`source_match` 看引用数量和章节覆盖，`profile_fit` 看画像目标、基础和薄弱点是否被使用，`fact_confidence` 看课程依据和模型增强状态，`difficulty_fit` 看请求难度是否进入资源内容，`completeness` 看各资源类型必备结构是否齐全。评分说明只保存可展示的安全摘要，不保存模型提示词、完整资料原文或用户隐私原文。
+Phase 8.2 生成资源时同步写入质量分。基础五项为 `source_match`、`profile_fit`、`fact_confidence`、`difficulty_fit`、`completeness`；Phase 20 增加 `authenticity`、`personalization`、`diversity`、`pedagogical_utility` 和 `type_correctness`。评分说明只保存可展示的安全摘要，不保存模型提示词、完整资料原文或用户隐私原文。
 
 字段：
 
@@ -938,6 +944,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 28. 课程画像不是持久化实体。`CourseLearnerContext` 在请求时组合总画像、当前课程掌握度、弱点、路径、练习、资源和报告，不新增 `course_profiles` 表，也不复制完整画像。
 29. 新生成资源、路径和报告在既有 JSON metadata 中保存 `profile_applied_version` 与 `course_context_hash`；旧数据缺失时按 `legacy` 兼容，画像版本落后时按 `stale` 提示用户主动更新。
 30. Phase 19 不新增迁移。题目引用、生成模式和质量摘要继续保存在 `practice_answers.question_json`；报告不可变统计与审核摘要继续保存在 `assessment_reports.report_json`；资源 v3 质量与代码验证摘要继续保存在 `generated_resources.content_json`。代码正文和运行输出不写入独立验证日志。
+31. Phase 20 使用迁移 `20260714_0021` 为 `generated_resources` 增加版本族、来源版本、版本序号和生成动作。教学意图、个性化说明和差异质量继续保存在 v3 `content_json`，不复制完整画像或原始模型输入。
 
 当前已验证：
 

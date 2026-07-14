@@ -1,4 +1,4 @@
-import { ArrowClockwise, FolderOpen, Sparkle } from "@phosphor-icons/react";
+import { ArrowClockwise, ArrowsLeftRight, FolderOpen, Sparkle } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 
 import { type GeneratedResource } from "../../api/resources";
@@ -6,6 +6,7 @@ import { PATHS } from "../../app/routePaths";
 import { InlineFeedback } from "../feedback/InlineFeedback";
 import { ResourceRenderer } from "../resources/ResourceRenderer";
 import { generationModeLabel, isLowEvidenceResource, resourceTypeMeta } from "./studioResourceMeta";
+import { versionLabel } from "./studioResourceVersions";
 
 type StudioArtifactCanvasProps = {
   resource: GeneratedResource | null;
@@ -16,6 +17,10 @@ type StudioArtifactCanvasProps = {
   isError: boolean;
   onCreate: () => void;
   onRetry: () => void;
+  versions: GeneratedResource[];
+  onSelectVersion: (resourceId: string) => void;
+  onCompareVersions: () => void;
+  onRegenerate: () => void;
 };
 
 export function StudioArtifactCanvas({
@@ -26,7 +31,11 @@ export function StudioArtifactCanvas({
   isLoading,
   isError,
   onCreate,
-  onRetry
+  onRetry,
+  versions,
+  onSelectVersion,
+  onCompareVersions,
+  onRegenerate
 }: StudioArtifactCanvasProps) {
   if (isLoading && !resource) {
     return (
@@ -78,6 +87,24 @@ export function StudioArtifactCanvas({
             <h2>{resource.title}</h2>
             <p>{label} · {generationModeLabel(resource)}</p>
           </div>
+          <div className="studio-version-actions">
+            <label>
+              <span className="visually-hidden">资源版本</span>
+              <select aria-label="资源版本" value={resource.id} onChange={(event) => onSelectVersion(event.target.value)}>
+                {versions.map((version) => (
+                  <option key={version.id} value={version.id}>
+                    {versionLabel(version)} · {version.generation_action === "alternative" ? "换一种教法" : version.generation_action === "refine" ? "优化版本" : "初始生成"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="soft-button" type="button" disabled={versions.length < 2} onClick={onCompareVersions}>
+              <ArrowsLeftRight size={16} /><span>比较</span>
+            </button>
+            <button className="soft-button" type="button" onClick={onRegenerate}>
+              <ArrowClockwise size={16} /><span>重新生成</span>
+            </button>
+          </div>
         </header>
         {isLowEvidenceResource(resource) ? (
           <InlineFeedback
@@ -92,6 +119,13 @@ export function StudioArtifactCanvas({
             tone="warning"
             className="studio-artifact-warning"
           />
+        ) : null}
+        {resource.personalization_summary ?? resource.content_json.personalization_summary ? (
+          <section className="studio-personalization-note" aria-label="个性化生成依据">
+            <strong>为什么为你这样生成</strong>
+            <p>{(resource.personalization_summary ?? resource.content_json.personalization_summary)?.teaching_reason}</p>
+            <span>{(resource.personalization_summary ?? resource.content_json.personalization_summary)?.difference}</span>
+          </section>
         ) : null}
         <div className="studio-artifact-content">
           <ResourceRenderer resource={resource} />

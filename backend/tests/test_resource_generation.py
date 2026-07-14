@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -27,6 +28,8 @@ from backend.app.providers.openai_compatible import ModelProviderError
 from backend.app.services.auth import AuthService
 from backend.app.services.model_settings import ModelNotConfiguredError
 from backend.app.services.code_verifier import CodeVerificationResult
+from backend.app.services.resource_intent import intent_difference_count
+from backend.app.services.resources import ResourceNotFoundError, ResourceValidationError
 
 
 NOW = datetime(2026, 7, 5, 14, 0, tzinfo=UTC)
@@ -119,11 +122,31 @@ class FakeResourceRepository:
             resources = [resource for resource in resources if resource.resource_type == resource_type]
         return sorted(resources, key=lambda resource: (resource.updated_at, resource.id), reverse=True)
 
-    def get_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None:
+    def get_resource_for_user(
+        self,
+        user_id: int,
+        resource_id: int,
+        *,
+        for_update: bool = False,
+    ) -> GeneratedResource | None:
+        _ = for_update
         return next(
             (resource for resource in self.resources if resource.user_id == user_id and resource.id == resource_id),
             None,
         )
+
+    def max_version_number(self, version_family_id: str) -> int:
+        return max(
+            (
+                int(resource.version_number or 0)
+                for resource in self.resources
+                if resource.version_family_id == version_family_id
+            ),
+            default=0,
+        )
+
+    def lock_version_family(self, version_family_id: str) -> None:
+        _ = version_family_id
 
     def list_quality_scores(self, resource_id: int) -> list[ResourceQualityScore]:
         return sorted([score for score in self.quality_scores if score.resource_id == resource_id], key=lambda item: item.id)
@@ -192,6 +215,29 @@ class FakeModelSettingsService:
             },
             ensure_ascii=False,
         )
+
+
+@dataclass
+class FakeSemanticModelSettingsService(FakeModelSettingsService):
+    def resolve_embedding_runtime_config(self, _user: User) -> SimpleNamespace:
+        return SimpleNamespace(
+            can_use_model=True,
+            embedding_model="semantic-stub",
+            dimensions=3,
+            provider="stub",
+            profile_hash="semantic-profile",
+        )
+
+    def embedding_vectors(
+        self,
+        _user: User,
+        texts: list[str],
+        dimensions: int | None = None,
+        *,
+        input_type: str = "document",
+    ) -> list[list[float]]:
+        _ = dimensions, input_type
+        return [[1.0, 0.0, 0.0] if index == 0 else [0.98, 0.02, 0.0] for index, _text in enumerate(texts)]
 
 
 def typed_artifact(resource_type: str, *, repaired: bool = False) -> dict[str, Any]:
@@ -376,6 +422,20 @@ def resource_by_type(resources: list[GeneratedResource], resource_type: str) -> 
     return next(resource for resource in resources if resource.resource_type == resource_type)
 
 
+def test_semantic_similarity_uses_configured_embedding_service() -> None:
+    service = make_service(make_repo(), FakeSemanticModelSettingsService())
+
+    similarity, status = service._semantic_similarity(
+        make_user(),
+        {"artifact": typed_artifact("doc")},
+        [{"artifact": typed_artifact("doc", repaired=True)}],
+    )
+
+    assert status == "completed"
+    assert similarity is not None
+    assert similarity > 0.99
+
+
 def assert_usable_resource_content(resources: list[GeneratedResource]) -> None:
     content_by_type = {resource.resource_type: resource.content_json["markdown"] for resource in resources}
     assert "f(n)=g(n)+h(n)" in content_by_type["doc"]
@@ -465,7 +525,7 @@ def test_generate_six_resource_types_persists_v3_artifacts_quality_scores_and_pa
     assert result["agent_trace_id"].startswith("trace_")
     assert [resource["resource_type"] for resource in result["resources"]] == ["doc", "mindmap", "quiz", "code", "slide", "animation"]
     assert len(repo.resources) == 6
-    assert len(repo.quality_scores) == 30
+    assert len(repo.quality_scores) == 60
     assert [log.agent_name for log in repo.agent_logs[:4]] == ["profile", "retrieve", "diagnosis", "planner"]
     worker_logs = [log for log in repo.agent_logs if log.step_index == 5]
     assert {log.agent_name for log in worker_logs} == {
@@ -502,6 +562,87 @@ def test_generate_six_resource_types_persists_v3_artifacts_quality_scores_and_pa
     assert "不得使用 numpy" in code_prompt
     assert_usable_resource_content(repo.resources)
     assert repo.committed is True
+
+
+def test_alternative_and_refine_keep_history_in_one_version_family() -> None:
+    repo = make_repo()
+    service = make_service(repo, FakeModelSettingsService(mode="success"))
+    source_result = as_dict(
+        service.generate_resources(
+            make_user(),
+            course_id=101,
+            knowledge_point_id=501,
+            resource_types=["doc"],
+            learning_goal="理解启发式搜索",
+            difficulty="medium",
+        )
+    )
+    source_id = int(source_result["resources"][0]["id"])
+
+    alternative_result = as_dict(
+        service.generate_resources(
+            make_user(),
+            course_id=101,
+            knowledge_point_id=501,
+            resource_types=["doc"],
+            generation_action="alternative",
+            source_resource_id=source_id,
+        )
+    )
+    alternative_id = int(alternative_result["resources"][0]["id"])
+    refine_result = as_dict(
+        service.generate_resources(
+            make_user(),
+            course_id=101,
+            knowledge_point_id=501,
+            resource_types=["doc"],
+            generation_action="refine",
+            source_resource_id=alternative_id,
+        )
+    )
+
+    source, alternative, refined = repo.resources
+    assert source.version_family_id
+    assert {source.version_family_id, alternative.version_family_id, refined.version_family_id} == {source.version_family_id}
+    assert [source.version_number, alternative.version_number, refined.version_number] == [1, 2, 3]
+    assert [source.generation_action, alternative.generation_action, refined.generation_action] == ["new", "alternative", "refine"]
+    assert alternative.revision_of_resource_id == source.id
+    assert refined.revision_of_resource_id == alternative.id
+    assert alternative.content_json["intent"]["generation_action"] == "alternative"
+    assert intent_difference_count(alternative.content_json["intent"], source.content_json["intent"]) >= 2
+    assert intent_difference_count(refined.content_json["intent"], alternative.content_json["intent"]) == 0
+    assert int(refine_result["resources"][0]["version_number"]) == 3
+
+
+def test_regeneration_rejects_cross_user_or_mismatched_resource_type() -> None:
+    repo = make_repo()
+    service = make_service(repo)
+    source = service.generate_resources(
+        make_user(),
+        course_id=101,
+        knowledge_point_id=501,
+        resource_types=["doc"],
+    ).resources[0]
+
+    with pytest.raises(ResourceValidationError):
+        service.generate_resources(
+            make_user(),
+            course_id=101,
+            knowledge_point_id=501,
+            resource_types=["quiz"],
+            generation_action="alternative",
+            source_resource_id=int(source.id),
+        )
+
+    with pytest.raises(ResourceNotFoundError):
+        service.generate_resources(
+            make_user(2),
+            course_id=202,
+            knowledge_point_id=601,
+            resource_types=["doc"],
+            generation_action="refine",
+            source_resource_id=int(source.id),
+        )
 
 
 def test_generate_uses_usable_deterministic_source_when_model_is_unavailable() -> None:
@@ -770,6 +911,11 @@ def test_resource_list_detail_and_quality_are_user_scoped_and_filterable() -> No
         "fact_confidence",
         "difficulty_fit",
         "completeness",
+        "authenticity",
+        "personalization",
+        "diversity",
+        "pedagogical_utility",
+        "type_correctness",
     }
 
     from backend.app.services.resources import ResourceNotFoundError
@@ -854,5 +1000,5 @@ def test_resource_routes_generate_list_detail_and_quality_with_envelopes() -> No
     assert detail_response.status_code == 200
     assert detail_response.json()["data"]["id"] == str(repo.resources[0].id)
     assert quality_response.status_code == 200
-    assert len(quality_response.json()["data"]) == 5
+    assert len(quality_response.json()["data"]) == 10
     assert missing_response.status_code == 404

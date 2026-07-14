@@ -72,6 +72,8 @@ def generate_resources(
             resource_types=payload.resource_types,
             learning_goal=payload.learning_goal,
             difficulty=payload.difficulty,
+            generation_action=payload.generation_action,
+            source_resource_id=payload.source_resource_id,
         )
     except ResourceNotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
@@ -98,6 +100,8 @@ def create_resource_generation_job(
             resource_types=list(payload.resource_types),
             learning_goal=payload.learning_goal,
             difficulty=payload.difficulty,
+            generation_action=payload.generation_action,
+            source_resource_id=payload.source_resource_id,
             idempotency_key=idempotency_key,
         )
     except Exception as exc:

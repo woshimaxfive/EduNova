@@ -9,7 +9,9 @@ import { getKnowledgePoints, listCourses } from "../api/courses";
 import {
   getResourceQuality,
   listResources,
+  type GeneratedResource,
   type ResourceDifficulty,
+  type ResourceGenerationAction,
   type ResourceType
 } from "../api/resources";
 import { InlineFeedback, type FeedbackTone } from "../components/feedback/InlineFeedback";
@@ -21,6 +23,8 @@ import {
 } from "../components/studio/StudioDrawer";
 import { StudioResourceLibrary } from "../components/studio/StudioResourceLibrary";
 import { StudioWorkspaceToolbar } from "../components/studio/StudioWorkspaceToolbar";
+import { StudioRegenerateDialog, StudioVersionCompareDialog } from "../components/studio/StudioVersionDialogs";
+import { groupResourceVersions } from "../components/studio/studioResourceVersions";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import { PageFrame } from "./PageFrame";
@@ -50,6 +54,8 @@ export function StudioPage() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackTone, setFeedbackTone] = useState<FeedbackTone>("info");
   const [resourceJobId, setResourceJobId] = useState<string | null>(null);
+  const [regenerateDialogOpen, setRegenerateDialogOpen] = useState(false);
+  const [compareDialogOpen, setCompareDialogOpen] = useState(false);
   const handledCompletedJobIds = useRef(new Set<string>());
   const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
   const resourceJob = getJob(resourceJobId);
@@ -104,14 +110,20 @@ export function StudioPage() {
     () => resources.find((resource) => resource.id === selectedResourceId) ?? resources[0] ?? null,
     [resources, selectedResourceId]
   );
-  const filteredResources = useMemo(() => {
+  const resourceFamilies = useMemo(() => groupResourceVersions(resources), [resources]);
+  const selectedFamily = useMemo(
+    () => resourceFamilies.find((family) => family.versions.some((resource) => resource.id === selectedResource?.id)) ?? null,
+    [resourceFamilies, selectedResource?.id]
+  );
+  const selectedVersions = selectedFamily?.versions ?? (selectedResource ? [selectedResource] : []);
+  const filteredFamilies = useMemo(() => {
     const keyword = librarySearch.trim().toLocaleLowerCase("zh-CN");
-    return resources.filter((resource) => {
-      const matchesType = resourceTypeFilter === "all" || resource.resource_type === resourceTypeFilter;
-      const matchesSearch = !keyword || resource.title.toLocaleLowerCase("zh-CN").includes(keyword);
+    return resourceFamilies.filter((family) => {
+      const matchesType = resourceTypeFilter === "all" || family.latest.resource_type === resourceTypeFilter;
+      const matchesSearch = !keyword || family.versions.some((resource) => resource.title.toLocaleLowerCase("zh-CN").includes(keyword));
       return matchesType && matchesSearch;
     });
-  }, [librarySearch, resourceTypeFilter, resources]);
+  }, [librarySearch, resourceFamilies, resourceTypeFilter]);
 
   const selectedResourceKnowledgePointTitle = selectedResource?.knowledge_point_id
     ? knowledgePoints.find((point) => point.id === selectedResource.knowledge_point_id)?.title ?? "课程知识点"
@@ -159,13 +171,21 @@ export function StudioPage() {
     if (Array.isArray(request.resource_types)) setSelectedResourceTypes(request.resource_types as ResourceType[]);
     if (typeof request.learning_goal === "string") setLearningGoal(request.learning_goal);
     if (["easy", "medium", "hard"].includes(String(request.difficulty))) setDifficulty(request.difficulty as ResourceDifficulty);
+    if (Number.isFinite(Number(request.source_resource_id))) setSelectedResourceId(String(request.source_resource_id));
     setResourceJobId(restored.job_id);
-    if (restored.status === "failed") setDrawerMode("generate");
+    if (restored.status === "failed") {
+      if (request.generation_action === "alternative" || request.generation_action === "refine") setRegenerateDialogOpen(true);
+      else setDrawerMode("generate");
+    }
   }, [initialCourseId, jobs, resourceJobId]);
 
   useEffect(() => {
     function closeDrawer(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape") setDrawerMode(null);
+      if (event.key === "Escape") {
+        setDrawerMode(null);
+        setRegenerateDialogOpen(false);
+        setCompareDialogOpen(false);
+      }
     }
     window.addEventListener("keydown", closeDrawer);
     return () => window.removeEventListener("keydown", closeDrawer);
@@ -178,7 +198,14 @@ export function StudioPage() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setFeedbackTone("warning");
       setFeedback(resourceJob.error_message ?? "资源生成失败，请稍后重试。");
-      setDrawerMode("generate");
+      if (resourceJob.request.generation_action === "alternative" || resourceJob.request.generation_action === "refine") {
+        if (Number.isFinite(Number(resourceJob.request.source_resource_id))) {
+          setSelectedResourceId(String(resourceJob.request.source_resource_id));
+        }
+        setRegenerateDialogOpen(true);
+      } else {
+        setDrawerMode("generate");
+      }
       return;
     }
     if (resourceJob.status !== "completed" || handledCompletedJobIds.current.has(resourceJob.job_id)) return;
@@ -207,15 +234,19 @@ export function StudioPage() {
   }, [effectiveCourseId, queryClient, resourceJob, resourcesQuery, searchParams, setSearchParams]);
 
   const generateMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: ({ action, source }: { action: ResourceGenerationAction; source?: GeneratedResource }) => {
       if (effectiveCourseId === null) throw new Error("missing course");
+      const sourceIntent = source?.intent_summary ?? source?.content_json.intent;
+      const sourceDifficulty = source?.content_json.metadata?.difficulty;
       return createResourceGenerationJob(
         {
           course_id: effectiveCourseId,
-          knowledge_point_id: effectiveKnowledgePointId,
-          resource_types: selectedResourceTypes,
-          learning_goal: learningGoal,
-          difficulty
+          knowledge_point_id: source?.knowledge_point_id ? Number(source.knowledge_point_id) : effectiveKnowledgePointId,
+          resource_types: source ? [source.resource_type] : selectedResourceTypes,
+          learning_goal: source ? sourceIntent?.learning_goal ?? learningGoal : learningGoal,
+          difficulty: sourceDifficulty ?? difficulty,
+          generation_action: action,
+          source_resource_id: source ? Number(source.id) : null
         },
         createIdempotencyKey("studio-resource")
       );
@@ -224,11 +255,13 @@ export function StudioPage() {
       setFeedback(null);
       setResourceJobId(job.job_id);
       trackJob(job);
+      setRegenerateDialogOpen(false);
     },
-    onError: () => {
+    onError: (_error, variables) => {
       setFeedbackTone("warning");
       setFeedback("资源生成失败，请稍后重试。");
-      setDrawerMode("generate");
+      if (variables.action === "new") setDrawerMode("generate");
+      else setRegenerateDialogOpen(true);
     }
   });
 
@@ -266,7 +299,12 @@ export function StudioPage() {
 
   function handleGenerate() {
     if (effectiveCourseId === null || generateMutation.isPending || isGenerating || selectedResourceTypes.length === 0) return;
-    generateMutation.mutate();
+    generateMutation.mutate({ action: "new" });
+  }
+
+  function handleRegenerate(action: Exclude<ResourceGenerationAction, "new">) {
+    if (!selectedResource || generateMutation.isPending || isGenerating) return;
+    generateMutation.mutate({ action, source: selectedResource });
   }
 
   async function handleRetryJob() {
@@ -290,12 +328,13 @@ export function StudioPage() {
           <StudioWorkspaceToolbar
             courses={courses}
             courseId={effectiveCourseId}
-            resourceCount={resources.length}
+            resourceCount={resourceFamilies.length}
             selectedResource={selectedResource}
             isGenerating={isGenerating}
             onCourseChange={handleCourseChange}
             onOpenGenerate={() => setDrawerMode("generate")}
             onOpenDetails={() => setDrawerMode("details")}
+            onRegenerate={() => setRegenerateDialogOpen(true)}
           />
 
           {showCompactJob ? (
@@ -313,7 +352,7 @@ export function StudioPage() {
           <div className="studio-workspace-body">
             <StudioResourceLibrary
               hasCourse={effectiveCourseId !== null}
-              resources={filteredResources}
+              families={filteredFamilies}
               selectedResourceId={selectedResource?.id ?? null}
               search={librarySearch}
               typeFilter={resourceTypeFilter}
@@ -334,6 +373,10 @@ export function StudioPage() {
                 void coursesQuery.refetch();
                 void resourcesQuery.refetch();
               }}
+              versions={selectedVersions}
+              onSelectVersion={selectResource}
+              onCompareVersions={() => setCompareDialogOpen(true)}
+              onRegenerate={() => setRegenerateDialogOpen(true)}
             />
           </div>
         </section>
@@ -370,6 +413,24 @@ export function StudioPage() {
         onCancelJob={() => resourceJob ? void cancelJob(resourceJob.job_id) : undefined}
         onRetryJob={() => void handleRetryJob()}
       />
+
+      {regenerateDialogOpen && selectedResource ? (
+        <StudioRegenerateDialog
+          resource={selectedResource}
+          isSubmitting={generateMutation.isPending || isGenerating}
+          onClose={() => setRegenerateDialogOpen(false)}
+          onChoose={handleRegenerate}
+        />
+      ) : null}
+
+      {compareDialogOpen && selectedResource && selectedVersions.length > 1 ? (
+        <StudioVersionCompareDialog
+          key={`${selectedResource.id}-${selectedVersions.map((resource) => resource.id).join("-")}`}
+          current={selectedResource}
+          versions={selectedVersions}
+          onClose={() => setCompareDialogOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

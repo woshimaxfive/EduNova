@@ -1,6 +1,6 @@
 # EduNova Agent 设计说明
 
-更新时间：2026-07-11
+更新时间：2026-07-14
 
 ## 1. 定位
 
@@ -17,7 +17,7 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 | `MaterialComparisonGraph` | 已真接管：范围校验、真实分块证据收集、概念别名归并、规则对比、模型解释增强、审核/修订和不可变版本持久化 | validate_scope、collect_evidence、deterministic_compare、model_compare、review、repair、persist |
 | `HomeTutorGraph` | 已真接管：安全上下文、问题路由、选中资料检索、按需联网、深度规划、回答、审核/修订和消息持久化 | context、route、material_retriever、web_search、planner、answer、review、repair、persist |
 | `CourseTutorGraph` | 已真接管：画像/上下文读取、课程检索、导师回答、弱点候选、审核、下一步动作、消息持久化 | profile、retriever、tutor、weakness、review、next_action |
-| `ResourceGenerationGraph` | 已真接管：画像、检索、诊断、规划、六 Worker 并行生成 v3 artifact、完整内容审核、结构/内容修订、代码运行验证和持久化 | profile、retrieve、diagnosis、planner、resource_worker、aggregate、review、repair、persist |
+| `ResourceGenerationGraph` | 已真接管：画像、检索、诊断、逐类型教学意图规划、六 Worker 并行生成 v3 artifact、真实性/个性化/差异审核、结构/内容修订、代码运行验证和版本化持久化 | profile、retrieve、diagnosis、planner、resource_worker、aggregate、review、repair、persist |
 | `PathPlanningGraph` | 已真接管：画像与证据收集、确定性排序、模型排序理由、审核/修订、事务持久化 | profile、collect_evidence、deterministic_rank、model_plan、review、repair、persist |
 | `AssessmentGraph` | 已真接管：资料证据型题目蓝图、模型增强、确定性题目门禁和评分、逐题错因诊断、弱点同步和路径回流 | context/question_plan/generate_questions/review/repair/persist；load/deterministic_score/diagnose_errors/sync_weaknesses/review/repair/persist/path_replan |
 | `ReportGraph` | 已真接管：最近练习、掌握度、弱点、路径和资源聚合，不可变统计、叙事增强、审核/修订和持久化 | collect_practice、collect_mastery、aggregate_evidence、generate_narrative、review、repair、persist |
@@ -93,6 +93,7 @@ repair_count
 - 输入摘要和输出摘要。
 - 引用的知识点、章节、来源标题、页码和短摘录。
 - 质量分、审核状态、生成模式、错误类型、风险标记和 warning 数量。
+- 资源教学意图数量、生成动作、历史摘要数量、差异风险、版本号和版本族安全标识；不记录完整画像或历史成果正文。
 - 会话上下文只记录安全计数和模式：`context_message_count`、`context_summary_used`、`retrieval_query_mode`，不记录历史消息原文。
 
 禁止记录：
@@ -116,7 +117,7 @@ EduNova 的第一版坚持确定性可用稿优先：
 - 主页回答要求 `<final_answer>` 输出边界；规则和模型 ReviewAgent 共同识别 Prompt 回显、跑题、Markdown 结构、引用错配、假网页来源和敏感输出。审核不通过最多执行一次 `repair`，第二次仍失败使用清晰降级回答。
 - 模型 Review JSON 无效或 Provider 暂不可用时，Review 节点记录 `warning`，不得伪装为 `passed`。
 - 生成型 Graph 必须经过 ReviewAgent 节点，输出审核状态、置信度、风险标记和安全摘要。
-- 资源 Graph 的每个类型由独立 Worker 调用模型并输出类型化 artifact。讲解、导图、PPT 只有通过证据门禁才允许规则降级；练习、代码和动画未通过门禁直接失败。代码必须经过内部 Pyodide 验证，服务不可用时不得保存。
+- 资源 Graph 的 planner 先为每类资源制定 `ArtifactIntent`，六个独立 Worker 再按互补职责输出类型化 artifact。ReviewAgent 读取意图、证据短摘录、完整候选内容和历史摘要，检查真实性、个性化与差异。讲解、导图、PPT 只有通过证据门禁才允许规则降级；练习、代码和动画未通过门禁直接失败。代码必须经过内部 Pyodide 验证，服务不可用时不得保存。
 - `AssessmentGraph` 的客观答案和分数不可被模型覆盖；模型只增强题面、干扰项、解析和逐题错因。题目 ReviewAgent 读取完整题目与安全证据，错因 ReviewAgent 读取题干、正确答案、学生答案、分数和诊断；规则修订不伪装成模型审核通过。
 - `PathPlanningGraph` 不自动创建用户从未建立的路径；用户主动建立路径后，系统根据画像目标、弱点、掌握度和课程结构给出有序任务。路径不生成日期或期限；练习重排保留已完成任务和未受影响的当前任务，审核成功后才归档旧 active 路径。
 - `ReportGraph` 分别锁定练习会话数、已作答题数、正确题数、已评估知识点数、已完成任务数和趋势；模型只生成总结和建议。叙事出现额外数字或统计混淆时触发一次修订，修订稿再次经过完整审核。
@@ -127,7 +128,7 @@ EduNova 的第一版坚持确定性可用稿优先：
 - 课程空间顶部用 A3 个性化学习闭环摘要和固定步骤流解释画像、检索、辅导、弱点、资源、路径、评估、报告的协作关系；这是面向用户的过程证据，不是原始思维链。
 - 课程回答展示层和生成层都必须过滤 `学生问题`、`课程引用`、`匹配度`、资料片段等模型输入字段；引用证据只进入来源面板，不作为回答正文泄露。
 - 主页会话和课程空间会话默认使用同一 `session_id` 内最近 12 条消息作为多轮上下文；更早历史只生成确定性安全摘要。课程 RAG、主页资料上下文和联网搜索会用最近用户问题 + 当前问题做上下文化查询，前端只展示“已参考最近 N 条会话”等安全提示。
-- 资源工坊和课程空间共用结构化资源渲染器，展示 Markmap、交互练习、浏览器 Python、PPT、动画图解和 `ResourceGenerationGraph` 全链路；旧 Markdown/Mermaid 资源继续降级可读。
+- 资源工坊和课程空间共用结构化资源渲染器，展示 Markmap、交互练习、浏览器 Python、PPT、动画图解和 `ResourceGenerationGraph` 全链路；资源工坊额外按版本族提供切换、比较、换教法和优化版本，并展示安全的“为什么为你这样生成”。旧 Markdown/Mermaid 资源继续降级可读。
 - 学习路径、练习和报告页面通过共享 `AgentTraceDisclosure` 展开真实 PathPlanning、Assessment、Report 节点轨迹；局部轨迹失败不阻断主流程。
 - 主页发送后通过 SSE 展示安全 Graph 状态、真实来源、Markdown token 和可选 Review 替换；`done` 后用持久化消息校准。深度思考只展示规划和处理摘要，不展示原始思维链。
 - 所有 trace 读取失败都只影响局部轨迹区，不阻断学习主流程。

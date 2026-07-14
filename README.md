@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前已完成 **Phase 19 AI 产物质量内核与学习指标纠偏**。九条学习主链路继续由真实 LangGraph 编排；资源、练习和报告改为证据驱动的结构化生成与完整内容审核，代码资源必须通过内部隔离运行验证，未评估知识点不再被伪装为低分或参与课程平均掌握度。
+当前已完成 **Phase 20 个性化产物规划与版本体系**。九条学习主链路继续由真实 LangGraph 编排；资源生成会先形成逐类型 `ArtifactIntent`，再由六个 Worker 按互补职责生成。真实性、个性化和差异性均进入持久化前门禁，重新生成会保留旧版本并明确区分“换一种教法”和“优化当前版本”。
 
 当前九条真实生产 Graph 为 `ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
 
@@ -28,7 +28,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - `/courses/{course_id}/learning-state` 已实现课程级学习状态第一刀，可把课程问答弱点候选事件同步为 `pending` 待确认复习项，并在课程空间展示待复习弱点摘要。
 - 课程级弱点复习项已支持确认、开始、完成和软忽略状态流转；软忽略项不在主列表展示，但继续参与去重。
 - `/agents/traces/{trace_id}` 已实现当前用户 Agent 轨迹查询，响应包含 `workflow`、`artifact_type`、`artifact_id` 和白名单 metadata；课程空间“课堂协作轨迹”读取真实 trace 或真实空状态。
-- `/resources/generate` 保留同步兼容；新入口 `/resources/generation-jobs` 通过 `AIJobRuntime` 和独立 `edunova_ai` 队列执行六类 v3 结构化资源。六个 Worker 直接生成类型化 artifact，ReviewAgent 读取安全证据和完整候选内容；讲解、导图、PPT 可保留通过门禁的证据型降级稿，练习、代码和动画未通过门禁时不会持久化。
+- `/resources/generate` 保留同步兼容；新入口 `/resources/generation-jobs` 通过 `AIJobRuntime` 和独立 `edunova_ai` 队列执行六类 v3 结构化资源。Planner 为每类资源制定教学策略、认知层级、案例方向、证据和学习结果，六个 Worker 按互补职责生成；ReviewAgent 同时审核意图、证据、完整内容和历史差异。课程资源支持版本族、版本切换、比较、换教法和优化当前版本，任何失败都不会覆盖旧成果。
 - `/paths/generate`、`/paths/current` 和 `/paths/tasks/{task_id}` 已实现课程级个性化学习路径生成、当前路径读取和任务状态更新；路径只表达学习顺序、当前任务和完成状态，不设置日期或期限。`PathPlanningGraph` 会综合画像、确认弱点、练习诊断、掌握度、资源和旧路径进度，练习回流只重排已有路径并保留已完成任务。
 - `/courses/{course_id}/mastery-map` 只使用有效练习作答和课程弱点等明确证据；未评估知识点返回 `score=null`，不参与课程平均值。路径任务只表达学习进度，不再制造掌握度分数。
 - `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已由 `AssessmentGraph` 编排证据型题目和逐题诊断，支持 `adaptive` 难度；题目引用、生成模式、Prompt 版本和质量摘要可追溯，客观分数始终由规则决定。
@@ -51,7 +51,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 - OCR、图片题目识别、旧版 Office 和扫描件解析。
 - OCR、图片题目识别之外的多模态向量检索。
-- 个人全局资源生成入口和资源版本化编辑；课程级结构化资源生成已进入后台 AI 任务，个人全局资源仍未接入。
+- 个人全局资源生成入口；课程级结构化资源已支持后台任务与不可覆盖的历史版本，个人全局资源仍未接入。
 - 学习档案导出的 Agent 化；当前确定性 Service + RQ 已满足业务需要，不列为默认开发目标。
 
 详细状态见 [docs/STATUS.md](docs/STATUS.md)，后续任务看 [docs/PROJECT_BOARD.md](docs/PROJECT_BOARD.md)。

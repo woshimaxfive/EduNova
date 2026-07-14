@@ -765,7 +765,9 @@ describe("student interaction affordances", () => {
             knowledge_point_id: 401,
             resource_types: ["doc", "quiz"],
             learning_goal: "",
-            difficulty: "medium"
+            difficulty: "medium",
+            generation_action: "new",
+            source_resource_id: null
           }
         })
       );

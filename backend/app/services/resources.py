@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
+import math
 import operator
 from dataclasses import dataclass
 from decimal import Decimal
 from time import perf_counter
 from typing import Annotated, Any, Protocol
+from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.api.errors import make_trace_id
@@ -38,6 +40,7 @@ from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.model_settings import ModelNotConfiguredError
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.code_verifier import CodeVerifier
+from backend.app.services.embeddings import EmbeddingService
 from backend.app.services.resource_artifacts import (
     ArtifactBuildInput,
     artifact_to_markdown,
@@ -48,14 +51,34 @@ from backend.app.services.resource_quality import (
     EVIDENCE_FALLBACK_TYPES,
     RESOURCE_PROMPT_VERSION,
     RESOURCE_REVIEW_PROMPT_VERSION,
+    artifact_text,
     meaningful_model_delta,
     quality_risks,
     quality_summary,
 )
+from backend.app.services.resource_intent import (
+    GenerationAction,
+    build_artifact_intents,
+    evaluate_diversity,
+    personalization_summary,
+    quality_dimensions,
+    safe_history_summary,
+)
 
 
 RESOURCE_TYPES = ("doc", "mindmap", "quiz", "code", "slide", "animation")
-QUALITY_SCORE_NAMES = ("source_match", "profile_fit", "fact_confidence", "difficulty_fit", "completeness")
+QUALITY_SCORE_NAMES = (
+    "source_match",
+    "profile_fit",
+    "fact_confidence",
+    "difficulty_fit",
+    "completeness",
+    "authenticity",
+    "personalization",
+    "diversity",
+    "pedagogical_utility",
+    "type_correctness",
+)
 RESOURCE_MODEL_TIMEOUT_SECONDS = 30.0
 RESOURCE_EXCERPT_LIMIT = 96
 SENSITIVE_MARKERS = (
@@ -92,6 +115,11 @@ class ResourceGenerationState(AgentState, total=False):
     result_warnings: list[str]
     needs_repair: bool
     job_context: Any
+    generation_action: GenerationAction
+    source_resource: GeneratedResource | None
+    historical_resources: list[GeneratedResource]
+    artifact_intents: dict[str, dict[str, Any]]
+    generation_batch_id: str
 
 
 class ResourceModelService(Protocol):
@@ -123,7 +151,17 @@ class ResourceRepository(Protocol):
         resource_type: str | None = None,
     ) -> list[GeneratedResource]: ...
 
-    def get_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None: ...
+    def get_resource_for_user(
+        self,
+        user_id: int,
+        resource_id: int,
+        *,
+        for_update: bool = False,
+    ) -> GeneratedResource | None: ...
+
+    def max_version_number(self, version_family_id: str) -> int: ...
+
+    def lock_version_family(self, version_family_id: str) -> None: ...
 
     def list_quality_scores(self, resource_id: int) -> list[ResourceQualityScore]: ...
 
@@ -196,11 +234,38 @@ class SqlAlchemyResourceRepository:
             statement = statement.where(GeneratedResource.resource_type == resource_type)
         return list(self.db.scalars(statement.order_by(GeneratedResource.updated_at.desc(), GeneratedResource.id.desc())))
 
-    def get_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None:
-        return self.db.scalar(
-            select(GeneratedResource).where(
-                GeneratedResource.id == resource_id,
-                GeneratedResource.user_id == user_id,
+    def get_resource_for_user(
+        self,
+        user_id: int,
+        resource_id: int,
+        *,
+        for_update: bool = False,
+    ) -> GeneratedResource | None:
+        statement = select(GeneratedResource).where(
+            GeneratedResource.id == resource_id,
+            GeneratedResource.user_id == user_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return self.db.scalar(statement)
+
+    def max_version_number(self, version_family_id: str) -> int:
+        return int(
+            self.db.scalar(
+                select(func.max(GeneratedResource.version_number)).where(
+                    GeneratedResource.version_family_id == version_family_id,
+                )
+            )
+            or 0
+        )
+
+    def lock_version_family(self, version_family_id: str) -> None:
+        list(
+            self.db.scalars(
+                select(GeneratedResource.id)
+                .where(GeneratedResource.version_family_id == version_family_id)
+                .order_by(GeneratedResource.id)
+                .with_for_update()
             )
         )
 
@@ -278,12 +343,30 @@ class ResourceGenerationService:
         knowledge_point_id: int | None = None,
         learning_goal: str = "",
         difficulty: str = "medium",
+        generation_action: GenerationAction = "new",
+        source_resource_id: int | None = None,
     ) -> GenerateResourcesResult:
         course = self._require_course(user, course_id)
-        knowledge_point = self._resolve_knowledge_point(course.id, knowledge_point_id)
         unique_types = self._normalize_resource_types(resource_types)
         if difficulty not in {"easy", "medium", "hard"}:
             raise ResourceValidationError("不支持的资源难度。")
+        source_resource = self._resolve_source_resource(
+            user=user,
+            course=course,
+            generation_action=generation_action,
+            source_resource_id=source_resource_id,
+            resource_types=unique_types,
+            knowledge_point_id=knowledge_point_id,
+        )
+        if source_resource is not None:
+            knowledge_point_id = source_resource.knowledge_point_id
+            source_content = source_resource.content_json or {}
+            source_intent = source_content.get("intent") if isinstance(source_content.get("intent"), dict) else {}
+            learning_goal = str(source_intent.get("learning_goal") or learning_goal or "")[:500]
+            source_metadata = source_content.get("metadata") if isinstance(source_content.get("metadata"), dict) else {}
+            source_difficulty = str(source_metadata.get("difficulty") or difficulty)
+            difficulty = source_difficulty if source_difficulty in {"easy", "medium", "hard"} else difficulty
+        knowledge_point = self._resolve_knowledge_point(course.id, knowledge_point_id)
 
         return ResourceGenerationGraphRunner(self).generate(
             user=user,
@@ -292,7 +375,38 @@ class ResourceGenerationService:
             resource_types=unique_types,
             learning_goal=learning_goal,
             difficulty=difficulty,
+            generation_action=generation_action,
+            source_resource=source_resource,
         )
+
+    def _resolve_source_resource(
+        self,
+        *,
+        user: User,
+        course: Course,
+        generation_action: GenerationAction,
+        source_resource_id: int | None,
+        resource_types: list[str],
+        knowledge_point_id: int | None,
+    ) -> GeneratedResource | None:
+        if generation_action not in {"new", "alternative", "refine"}:
+            raise ResourceValidationError("不支持的资源生成动作。")
+        if generation_action == "new":
+            if source_resource_id is not None:
+                raise ResourceValidationError("新建资源不能指定来源版本。")
+            return None
+        if source_resource_id is None:
+            raise ResourceValidationError("重新生成必须指定来源资源。")
+        source = self.repository.get_resource_for_user(user.id, source_resource_id)
+        if source is None or source.course_id != course.id:
+            raise ResourceNotFoundError("来源资源不存在或无权访问。")
+        if source.status != "completed":
+            raise ResourceValidationError("只能从已完成成果创建新版本。")
+        if len(resource_types) != 1 or resource_types[0] != source.resource_type:
+            raise ResourceValidationError("重新生成只能生成与来源成果相同的资源类型。")
+        if knowledge_point_id is not None and knowledge_point_id != source.knowledge_point_id:
+            raise ResourceValidationError("重新生成不能改变来源成果的知识点。")
+        return source
 
     def list_resources(
         self,
@@ -418,6 +532,7 @@ class ResourceGenerationService:
         contexts: list[ResourceContext],
         profile_summary: dict[str, Any],
         difficulty: str,
+        intent: dict[str, Any] | None = None,
     ) -> ResourceDraft:
         topic = knowledge_point.title if knowledge_point is not None else (context_points[0].title if context_points else course.title)
         title_map = {
@@ -449,6 +564,12 @@ class ResourceGenerationService:
                 citation_refs=[context.citation.chunk_id for context in contexts],
             )
         content_json = build_resource_content(source)
+        if intent:
+            content_json = {
+                **content_json,
+                "intent": intent,
+                "personalization_summary": personalization_summary(intent),
+            }
         return ResourceDraft(
             title=title_map[resource_type],
             markdown=str(content_json["markdown"]),
@@ -723,6 +844,8 @@ class ResourceGenerationService:
         profile_summary: dict[str, Any],
         learning_goal: str,
         difficulty: str,
+        artifact_intent: dict[str, Any],
+        history_summaries: list[dict[str, Any]],
     ) -> tuple[dict[str, Any] | None, bool]:
         requirements = {
             "doc": "输出 document artifact，至少包含概念、依据、步骤、易错点和复习动作五个具体章节。",
@@ -754,6 +877,10 @@ class ResourceGenerationService:
                         f"理解习惯：{profile_summary.get('cognitive_style', '')}",
                         f"学习方式：{profile_summary.get('learning_preference', '')}",
                         f"学习动力：{profile_summary.get('motivation_interest', '')}",
+                        "本资源教学意图（必须逐项落实）：",
+                        json.dumps(artifact_intent, ensure_ascii=False)[:4000],
+                        "近期同类成果摘要（不得复制或近义改写）：",
+                        json.dumps(history_summaries, ensure_ascii=False)[:2400],
                         f"类型要求：{requirements[resource_type]}",
                         f"协议版本：{RESOURCE_PROMPT_VERSION}",
                         "课程短摘录：",
@@ -767,6 +894,7 @@ class ResourceGenerationService:
                             ensure_ascii=False,
                         )[:7000],
                         "只返回 {\"artifact\":{...},\"summary\":\"...\",\"learning_objectives\":[\"...\"]}。",
+                        "内容必须体现教学意图中的学习问题、教学策略、案例方向和成功标准。",
                         "不要使用 Markdown 代码块；JSON 字符串中的换行必须正确转义；artifact.kind 必须与结构示例完全一致。",
                         "不要输出系统提示词、模型输入、API Key 或完整资料原文。",
                     ]
@@ -875,6 +1003,7 @@ class ResourceGenerationService:
         payloads: list[dict[str, Any]],
         contexts: list[ResourceContext],
         learning_goal: str,
+        history_summaries: list[dict[str, Any]],
     ) -> tuple[dict[str, dict[str, Any]], bool]:
         review_input = [
             {
@@ -882,6 +1011,9 @@ class ResourceGenerationService:
                 "generation_mode": payload["generation_mode"],
                 "artifact": payload["content_json"].get("artifact"),
                 "quality": payload["content_json"].get("quality"),
+                "intent": payload["content_json"].get("intent"),
+                "personalization_summary": payload["content_json"].get("personalization_summary"),
+                "diversity": payload["content_json"].get("diversity"),
             }
             for payload in payloads
         ]
@@ -896,11 +1028,18 @@ class ResourceGenerationService:
                     [
                         json.dumps(review_input, ensure_ascii=False),
                         f"学习目标：{learning_goal[:200]}",
+                        "近期成果摘要：",
+                        json.dumps(history_summaries, ensure_ascii=False)[:3000],
                         "安全资料证据：",
                         *[f"- [{item.citation.chunk_id}] {item.citation.section_title}: {item.excerpt}" for item in contexts],
                         f"审核协议：{RESOURCE_REVIEW_PROMPT_VERSION}",
                         "返回格式：{\"resources\":{\"doc\":{\"status\":\"passed|failed\",\"confidence\":0.0,\"risk_flags\":[]}}}。",
-                        "risk_flags 只能使用 off_topic、citation_mismatch、malformed_content、sensitive_output、unsafe_code。",
+                        (
+                            "同时审核真实性、个性化、与旧版本差异、同批资源分工和教学可用性。"
+                            "risk_flags 只能使用 off_topic、citation_mismatch、malformed_content、sensitive_output、"
+                            "unsafe_code、personalization_mismatch、excessive_sentence_overlap、low_novelty、"
+                            "insufficient_strategy_change、intent_drift。"
+                        ),
                     ]
                 ),
             },
@@ -929,6 +1068,8 @@ class ResourceGenerationService:
                     [
                         f"资源类型：{payload['resource_type']}",
                         f"风险标记：{','.join(payload.get('risk_flags', []))}",
+                        "教学意图（修订后仍必须遵守）：",
+                        json.dumps(payload["content_json"].get("intent") or {}, ensure_ascii=False)[:3500],
                         "待修订 artifact：",
                         json.dumps(payload["content_json"].get("artifact"), ensure_ascii=False)[:7000],
                         "安全课程证据：",
@@ -1108,6 +1249,13 @@ class ResourceGenerationService:
         draft: ResourceDraft,
         contexts: list[ResourceContext],
         model_delta: bool,
+        intent: dict[str, Any] | None = None,
+        comparison_contents: list[dict[str, Any]] | None = None,
+        source_content: dict[str, Any] | None = None,
+        source_intent: dict[str, Any] | None = None,
+        generation_action: GenerationAction = "new",
+        semantic_similarity: float | None = None,
+        semantic_status: str = "not_checked",
     ) -> tuple[dict[str, Any], list[str]]:
         valid_refs = {item.citation.chunk_id for item in contexts}
         risks = quality_risks(
@@ -1117,6 +1265,18 @@ class ResourceGenerationService:
             evidence_terms=[item.excerpt for item in contexts],
             valid_citation_refs=valid_refs,
         )
+        safe_intent = intent if isinstance(intent, dict) else {}
+        diversity, diversity_risks = evaluate_diversity(
+            content=content,
+            intent=safe_intent,
+            comparison_contents=comparison_contents or [],
+            source_content=source_content,
+            source_intent=source_intent,
+            generation_action=generation_action,
+            semantic_similarity=semantic_similarity,
+            semantic_status=semantic_status,
+        )
+        risks.extend(diversity_risks)
         code_verification = None
         if resource_type == "code" and not risks:
             artifact = content.get("artifact") if isinstance(content.get("artifact"), dict) else {}
@@ -1135,17 +1295,69 @@ class ResourceGenerationService:
                 if not verification.ok:
                     risks.append(f"code_{verification.code}")
         coverage = min(1.0, len(valid_refs) / max(1, len(contexts))) if contexts else 0.0
+        base_quality = quality_summary(
+            risks=risks,
+            prompt_version=RESOURCE_PROMPT_VERSION,
+            source_coverage=coverage,
+            model_delta=model_delta,
+            code_verification=code_verification,
+        )
+        dimensions = quality_dimensions(
+            existing_risks=risks,
+            intent=safe_intent,
+            diversity=diversity,
+            source_coverage=coverage,
+        )
         result = {
             **content,
-            "quality": quality_summary(
-                risks=risks,
-                prompt_version=RESOURCE_PROMPT_VERSION,
-                source_coverage=coverage,
-                model_delta=model_delta,
-                code_verification=code_verification,
-            ),
+            "intent": safe_intent,
+            "personalization_summary": personalization_summary(safe_intent),
+            "diversity": diversity,
+            "quality": {**base_quality, "dimensions": dimensions},
         }
         return result, list(dict.fromkeys(risks))
+
+    def _semantic_similarity(
+        self,
+        user: User,
+        content: dict[str, Any],
+        comparisons: list[dict[str, Any]],
+    ) -> tuple[float | None, str]:
+        if not comparisons:
+            return None, "not_needed"
+        if not hasattr(self.model_settings_service, "resolve_embedding_runtime_config"):
+            return None, "not_configured"
+        candidate_text = artifact_text(content.get("artifact"))[:2000]
+        comparison_texts: list[str] = []
+        for item in comparisons[:5]:
+            if not isinstance(item, dict):
+                continue
+            text = artifact_text(item.get("artifact"))[:2000]
+            if text.strip() and text not in comparison_texts:
+                comparison_texts.append(text)
+        if not candidate_text.strip() or not comparison_texts:
+            return None, "empty"
+        try:
+            batch = EmbeddingService(self.model_settings_service).embed_documents(
+                user,
+                [candidate_text, *comparison_texts],
+            )
+        except (AttributeError, ModelNotConfiguredError, ModelProviderError):
+            return None, "provider_failed"
+        if batch.status != "completed" or len(batch.vectors) < 2:
+            return None, batch.status
+        candidate_vector = batch.vectors[0]
+        similarities = [self._cosine_similarity(candidate_vector, vector) for vector in batch.vectors[1:]]
+        return (max(similarities) if similarities else None), "completed"
+
+    @staticmethod
+    def _cosine_similarity(left: list[float], right: list[float]) -> float:
+        if not left or len(left) != len(right):
+            return 0.0
+        denominator = math.sqrt(sum(value * value for value in left)) * math.sqrt(sum(value * value for value in right))
+        if denominator <= 0:
+            return 0.0
+        return max(-1.0, min(1.0, sum(a * b for a, b in zip(left, right, strict=True)) / denominator))
 
     @staticmethod
     def _parse_review_result(content: str, requested_types: set[str]) -> dict[str, dict[str, Any]]:
@@ -1153,7 +1365,18 @@ class ResourceGenerationService:
         resources = payload.get("resources") if isinstance(payload, dict) else None
         if not isinstance(resources, dict):
             return {}
-        allowed_flags = {"off_topic", "citation_mismatch", "malformed_content", "sensitive_output", "unsafe_code"}
+        allowed_flags = {
+            "off_topic",
+            "citation_mismatch",
+            "malformed_content",
+            "sensitive_output",
+            "unsafe_code",
+            "personalization_mismatch",
+            "excessive_sentence_overlap",
+            "low_novelty",
+            "insufficient_strategy_change",
+            "intent_drift",
+        }
         result: dict[str, dict[str, Any]] = {}
         for resource_type in requested_types:
             review = resources.get(resource_type)
@@ -1206,12 +1429,26 @@ class ResourceGenerationService:
             "difficulty_fit": difficulty_fit,
             "completeness": completeness,
         }
+        dimensions = (
+            content_json.get("quality", {}).get("dimensions", {})
+            if isinstance(content_json, dict) and isinstance(content_json.get("quality"), dict)
+            else {}
+        )
+        for name in ("authenticity", "personalization", "diversity", "pedagogical_utility", "type_correctness"):
+            dimension = dimensions.get(name) if isinstance(dimensions, dict) else None
+            score = dimension.get("score") if isinstance(dimension, dict) else None
+            scores[name] = Decimal(str(max(0.0, min(1.0, float(score))))) if isinstance(score, (int, float)) else Decimal("0.50")
         rationales = {
             "source_match": f"命中 {context_count} 条课程短摘录，资源围绕课程章节组织。",
             "profile_fit": "结合用户级画像目标、基础或薄弱点；画像不足时按课程默认学习目标生成。",
             "fact_confidence": "事实依据来自课程短摘录；模型增强只在通过安全检查后使用。",
             "difficulty_fit": f"按请求难度 {difficulty} 生成，并保留可执行复习动作。",
             "completeness": "检查该资源类型的必备结构是否齐全。",
+            "authenticity": "检查课程事实、引用编号和资料依据是否一致。",
+            "personalization": "检查教学策略是否使用当前可信画像和课程学习状态。",
+            "diversity": "检查与同批资源、历史成果和来源版本是否保持有效差异。",
+            "pedagogical_utility": "检查资源是否包含明确职责和可验证学习结果。",
+            "type_correctness": "检查资源结构与该类型的交互和内容要求是否一致。",
         }
         return [
             ResourceQualityScore(
@@ -1354,6 +1591,8 @@ class ResourceGenerationGraphRunner:
         resource_types: list[str],
         learning_goal: str,
         difficulty: str,
+        generation_action: GenerationAction = "new",
+        source_resource: GeneratedResource | None = None,
         trace_id: str | None = None,
         job_context: Any | None = None,
     ) -> GenerateResourcesResult:
@@ -1371,6 +1610,9 @@ class ResourceGenerationGraphRunner:
             "resource_types": resource_types,
             "learning_goal": learning_goal,
             "difficulty": difficulty,
+            "generation_action": generation_action,
+            "source_resource": source_resource,
+            "generation_batch_id": uuid4().hex,
             "worker_results": [],
             "warnings": [],
             "errors": [],
@@ -1511,6 +1753,9 @@ class ResourceGenerationGraphRunner:
             "resource_count": len(resource_types),
             "knowledge_point_id": knowledge_point.id if knowledge_point is not None else None,
             "difficulty": state.get("difficulty"),
+            "generation_action": state.get("generation_action", "new"),
+            "mastery_average": dict(state.get("profile_summary", {})).get("mastery_average"),
+            "active_weaknesses": list(dict(state.get("profile_summary", {})).get("weak_points") or [])[:3],
         }
         self._record(
             state,
@@ -1522,6 +1767,7 @@ class ResourceGenerationGraphRunner:
                 "knowledge_point_id": diagnosis["knowledge_point_id"],
                 "resource_count": len(resource_types),
                 "worker_count": len(resource_types),
+                "generation_action": diagnosis["generation_action"],
             },
             started_at=started,
         )
@@ -1532,23 +1778,61 @@ class ResourceGenerationGraphRunner:
         started = perf_counter()
         self._job_before(state, "planner")
         profile_summary = dict(state.get("profile_summary", {}))
+        learning_goal = str(state.get("learning_goal") or profile_summary.get("learning_goal") or "掌握当前知识点")
+        knowledge_point = state.get("knowledge_point")
+        context_points = list(state.get("context_points", []))
+        topic = knowledge_point.title if knowledge_point is not None else (
+            context_points[0].title if context_points else state["course"].title
+        )
+        source_resource = state.get("source_resource")
+        source_content = source_resource.content_json if source_resource is not None and isinstance(source_resource.content_json, dict) else {}
+        source_intent = source_content.get("intent") if isinstance(source_content.get("intent"), dict) else None
+        historical_resources = [
+            resource
+            for resource in self.service.repository.list_resources(int(state["user_id"]), course_id=int(state["course_id"]))
+            if resource.status == "completed" and (source_resource is None or resource.id != source_resource.id)
+        ]
+        intents = build_artifact_intents(
+            resource_types=list(state.get("resource_types", [])),
+            topic=topic,
+            learning_goal=learning_goal,
+            difficulty=str(state.get("difficulty") or "medium"),
+            profile_summary=profile_summary,
+            evidence_refs=[citation.chunk_id for citation in state.get("resource_citations", [])],
+            generation_action=state.get("generation_action", "new"),
+            source_intent=source_intent,
+        )
         plan = {
-            "learning_goal": str(state.get("learning_goal") or profile_summary.get("learning_goal") or "掌握当前知识点"),
+            "learning_goal": learning_goal,
             "difficulty": str(state.get("difficulty") or "medium"),
             "weak_points": list(profile_summary.get("weak_points") or [])[:3],
             "resource_types": list(state.get("resource_types", [])),
+            "artifact_intents": intents,
+            "generation_action": state.get("generation_action", "new"),
+            "history": safe_history_summary(historical_resources),
         }
         self._record(
             state,
             agent_name="planner",
             step_index=4,
             input_summary="规划各资源 Worker 的共同目标",
-            output_summary=f"已为 {len(plan['resource_types'])} 个 Worker 准备生成计划",
-            metadata={"worker_count": len(plan["resource_types"])},
+            output_summary=f"已为 {len(plan['resource_types'])} 个 Worker 制定互补教学策略",
+            metadata={
+                "worker_count": len(plan["resource_types"]),
+                "generation_action": plan["generation_action"],
+                "history_count": len(historical_resources),
+                "personalized_intent_count": sum(
+                    1 for intent in intents.values() if intent.get("personalization_status") == "personalized"
+                ),
+            },
             started_at=started,
         )
         self._job_after(state, "planner")
-        return {"resource_plan": plan}
+        return {
+            "resource_plan": plan,
+            "artifact_intents": intents,
+            "historical_resources": historical_resources,
+        }
 
     @staticmethod
     def _dispatch_workers(state: ResourceGenerationState) -> list[Send]:
@@ -1556,6 +1840,31 @@ class ResourceGenerationGraphRunner:
             Send("resource_worker", {**state, "worker_resource_type": resource_type})
             for resource_type in state.get("resource_types", [])
         ]
+
+    def _semantic_diversity(
+        self,
+        state: ResourceGenerationState,
+        *,
+        resource_type: str,
+        content: dict[str, Any],
+        source_content: dict[str, Any] | None,
+        comparison_contents: list[dict[str, Any]],
+    ) -> tuple[float | None, str]:
+        comparisons = [
+            item
+            for item in [source_content, *comparison_contents]
+            if isinstance(item, dict)
+        ]
+        if not comparisons:
+            return None, "not_needed"
+        with model_execution_scope(
+            execution_context_for_state(
+                state,
+                workflow=self.workflow,
+                node_name=f"semantic_diversity:{resource_type}",
+            )
+        ):
+            return self.service._semantic_similarity(state["user"], content, comparisons)
 
     def _resource_worker_node(self, state: ResourceGenerationState) -> dict[str, Any]:
         started = perf_counter()
@@ -1567,6 +1876,30 @@ class ResourceGenerationGraphRunner:
             knowledge_point = state.get("knowledge_point")
             contexts = list(state.get("contexts", []))
             profile_summary = dict(state.get("profile_summary", {}))
+            artifact_intent = dict(state.get("artifact_intents", {}).get(resource_type, {}))
+            source_resource = state.get("source_resource")
+            source_content = (
+                source_resource.content_json
+                if source_resource is not None and isinstance(source_resource.content_json, dict)
+                else None
+            )
+            source_intent = (
+                source_content.get("intent")
+                if isinstance(source_content, dict) and isinstance(source_content.get("intent"), dict)
+                else None
+            )
+            historical_resources = [
+                resource
+                for resource in state.get("historical_resources", [])
+                if resource.resource_type == resource_type
+                and resource.knowledge_point_id == (knowledge_point.id if knowledge_point is not None else None)
+            ][:5]
+            history_summaries = safe_history_summary(historical_resources)
+            comparison_contents = [
+                resource.content_json
+                for resource in historical_resources
+                if isinstance(resource.content_json, dict)
+            ]
             draft = self.service._build_draft(
                 resource_type=resource_type,
                 course=course,
@@ -1575,6 +1908,7 @@ class ResourceGenerationGraphRunner:
                 contexts=contexts,
                 profile_summary=profile_summary,
                 difficulty=str(state.get("difficulty") or "medium"),
+                intent=artifact_intent,
             )
             with model_execution_scope(
                 execution_context_for_state(state, workflow=self.workflow, node_name=f"{worker_name}:{resource_type}")
@@ -1587,9 +1921,19 @@ class ResourceGenerationGraphRunner:
                     profile_summary=profile_summary,
                     learning_goal=str(state.get("learning_goal") or ""),
                     difficulty=str(state.get("difficulty") or "medium"),
+                    artifact_intent=artifact_intent,
+                    history_summaries=history_summaries,
                 )
             warnings: list[str] = []
             model_delta = bool(model_content and meaningful_model_delta(model_content, draft.content_json))
+            candidate_content = model_content if model_content is not None and model_delta else draft.content_json
+            semantic_similarity, semantic_status = self._semantic_diversity(
+                state,
+                resource_type=resource_type,
+                content=candidate_content,
+                source_content=source_content,
+                comparison_contents=comparison_contents,
+            )
             if model_content is not None and model_delta:
                 content_json, risks = self.service._quality_gate(
                     resource_type=resource_type,
@@ -1597,6 +1941,13 @@ class ResourceGenerationGraphRunner:
                     draft=draft,
                     contexts=contexts,
                     model_delta=True,
+                    intent=artifact_intent,
+                    comparison_contents=comparison_contents,
+                    source_content=source_content,
+                    source_intent=source_intent,
+                    generation_action=state.get("generation_action", "new"),
+                    semantic_similarity=semantic_similarity,
+                    semantic_status=semantic_status,
                 )
                 generation_mode = "model_enhanced"
             else:
@@ -1606,18 +1957,43 @@ class ResourceGenerationGraphRunner:
                     draft=draft,
                     contexts=contexts,
                     model_delta=False,
+                    intent=artifact_intent,
+                    comparison_contents=comparison_contents,
+                    source_content=source_content,
+                    source_intent=source_intent,
+                    generation_action=state.get("generation_action", "new"),
+                    semantic_similarity=semantic_similarity,
+                    semantic_status=semantic_status,
                 )
                 fallback_reason = "no_meaningful_model_delta" if model_content is not None else "model_generation_failed"
                 risks = list(dict.fromkeys([fallback_reason, *draft_risks]))
                 generation_mode = self.service._deterministic_generation_mode(contexts)
 
             if risks and resource_type in EVIDENCE_FALLBACK_TYPES:
+                fallback_semantic_similarity, fallback_semantic_status = self._semantic_diversity(
+                    state,
+                    resource_type=resource_type,
+                    content=draft.content_json,
+                    source_content=source_content,
+                    comparison_contents=(
+                        comparison_contents if state.get("generation_action") in {"alternative", "refine"} else []
+                    ),
+                )
                 fallback_content, fallback_risks = self.service._quality_gate(
                     resource_type=resource_type,
                     content=draft.content_json,
                     draft=draft,
                     contexts=contexts,
                     model_delta=False,
+                    intent=artifact_intent,
+                    comparison_contents=(
+                        comparison_contents if state.get("generation_action") in {"alternative", "refine"} else []
+                    ),
+                    source_content=source_content,
+                    source_intent=source_intent,
+                    generation_action=state.get("generation_action", "new"),
+                    semantic_similarity=fallback_semantic_similarity,
+                    semantic_status=fallback_semantic_status,
                 )
                 if fallback_risks:
                     raise ResourceGenerationError(f"{resource_type} 资源未通过证据质量门禁。")
@@ -1642,6 +2018,10 @@ class ResourceGenerationGraphRunner:
                 "generation_mode": generation_mode,
                 "model_failed": model_failed,
                 "warnings": warnings,
+                "comparison_contents": comparison_contents,
+                "source_content": source_content,
+                "source_intent": source_intent,
+                "artifact_intent": artifact_intent,
             }
             self._record(
                 state,
@@ -1655,6 +2035,9 @@ class ResourceGenerationGraphRunner:
                     "generation_mode": generation_mode,
                     "model_used": model_content is not None,
                     "prompt_version": RESOURCE_PROMPT_VERSION,
+                    "generation_action": state.get("generation_action", "new"),
+                    "personalization_status": artifact_intent.get("personalization_status", "context_limited"),
+                    "history_count": len(history_summaries),
                 },
                 started_at=started,
             )
@@ -1705,6 +2088,60 @@ class ResourceGenerationGraphRunner:
         order = {resource_type: index for index, resource_type in enumerate(state.get("resource_types", []))}
         results = sorted(list(state.get("worker_results", [])), key=lambda item: order.get(item["resource_type"], 99))
         completed = [item for item in results if item.get("status") == "completed"]
+        for payload in completed:
+            other_contents = [
+                item["content_json"]
+                for item in completed
+                if item is not payload and isinstance(item.get("content_json"), dict)
+            ]
+            batch_diversity, batch_risks = evaluate_diversity(
+                content=payload["content_json"],
+                intent=dict(payload.get("artifact_intent") or {}),
+                comparison_contents=other_contents,
+                source_content=None,
+                source_intent=None,
+                generation_action="new",
+            )
+            quality = dict(payload["content_json"].get("quality") or {})
+            existing_diversity = dict(payload["content_json"].get("diversity") or {})
+            combined_score = min(
+                float(existing_diversity.get("score") or 1.0),
+                float(batch_diversity.get("score") or 1.0),
+            )
+            combined_risks = list(dict.fromkeys([
+                *quality.get("risk_flags", []),
+                *(batch_risks if payload.get("generation_mode") == "model_enhanced" else []),
+            ]))
+            dimensions = dict(quality.get("dimensions") or {})
+            dimensions["diversity"] = {
+                "status": (
+                    "passed"
+                    if combined_score >= 0.6 and (not batch_risks or payload.get("generation_mode") != "model_enhanced")
+                    else "failed"
+                ),
+                "score": round(combined_score, 3),
+                "rationale": "检查与同批资源、历史成果和来源版本是否保持有效差异。",
+            }
+            payload["content_json"] = {
+                **payload["content_json"],
+                "diversity": {
+                    **existing_diversity,
+                    "score": round(combined_score, 3),
+                    "batch_duplicate_sentence_ratio": batch_diversity.get("duplicate_sentence_ratio", 0),
+                    "batch_comparison_count": len(other_contents),
+                    "risk_flags": list(dict.fromkeys([
+                        *existing_diversity.get("risk_flags", []),
+                        *(batch_risks if payload.get("generation_mode") == "model_enhanced" else []),
+                    ])),
+                },
+                "quality": {
+                    **quality,
+                    "status": "failed" if combined_risks else quality.get("status", "passed"),
+                    "risk_flags": combined_risks,
+                    "dimensions": dimensions,
+                },
+            }
+            payload["markdown"] = str(payload["content_json"].get("markdown") or payload.get("markdown") or "")
         failed_types = [str(item["resource_type"]) for item in results if item.get("status") == "failed"]
         if not completed:
             self._record(
@@ -1769,6 +2206,7 @@ class ResourceGenerationGraphRunner:
                 payloads=payloads,
                 contexts=contexts,
                 learning_goal=str(state.get("learning_goal") or ""),
+                history_summaries=list(dict(state.get("resource_plan", {})).get("history") or []),
             )
         reviewed: list[dict[str, Any]] = []
         generation_warnings = 0
@@ -1864,12 +2302,26 @@ class ResourceGenerationGraphRunner:
                 repaired_content = self.service._repair_resource_with_model(user=state["user"], payload=payload)
             draft: ResourceDraft = payload["draft"]
             if repaired_content is not None:
+                repair_semantic_similarity, repair_semantic_status = self._semantic_diversity(
+                    state,
+                    resource_type=resource_type,
+                    content=repaired_content,
+                    source_content=payload.get("source_content"),
+                    comparison_contents=list(payload.get("comparison_contents") or []),
+                )
                 repaired_content, repaired_risks = self.service._quality_gate(
                     resource_type=resource_type,
                     content=repaired_content,
                     draft=draft,
                     contexts=contexts,
                     model_delta=meaningful_model_delta(repaired_content, draft.content_json),
+                    intent=dict(payload.get("artifact_intent") or payload["content_json"].get("intent") or {}),
+                    comparison_contents=list(payload.get("comparison_contents") or []),
+                    source_content=payload.get("source_content"),
+                    source_intent=payload.get("source_intent"),
+                    generation_action=state.get("generation_action", "new"),
+                    semantic_similarity=repair_semantic_similarity,
+                    semantic_status=repair_semantic_status,
                 )
             else:
                 repaired_risks = ["repair_failed"]
@@ -1890,12 +2342,31 @@ class ResourceGenerationGraphRunner:
                 continue
 
             fallback_content = {**draft.content_json, "markdown": draft.markdown}
+            fallback_comparisons = (
+                list(payload.get("comparison_contents") or [])
+                if state.get("generation_action") in {"alternative", "refine"}
+                else []
+            )
+            fallback_semantic_similarity, fallback_semantic_status = self._semantic_diversity(
+                state,
+                resource_type=resource_type,
+                content=fallback_content,
+                source_content=payload.get("source_content"),
+                comparison_contents=fallback_comparisons,
+            )
             fallback_content, fallback_risks = self.service._quality_gate(
                 resource_type=resource_type,
                 content=fallback_content,
                 draft=draft,
                 contexts=contexts,
                 model_delta=False,
+                intent=dict(payload.get("artifact_intent") or fallback_content.get("intent") or {}),
+                comparison_contents=fallback_comparisons,
+                source_content=payload.get("source_content"),
+                source_intent=payload.get("source_intent"),
+                generation_action=state.get("generation_action", "new"),
+                semantic_similarity=fallback_semantic_similarity,
+                semantic_status=fallback_semantic_status,
             )
             if resource_type in EVIDENCE_FALLBACK_TYPES and not fallback_risks:
                 repaired_results.append(
@@ -1911,6 +2382,8 @@ class ResourceGenerationGraphRunner:
                     }
                 )
                 repaired_count += 1
+                if payload.get("risk_flags"):
+                    warnings.append(f"{resource_type} 未能完成模型差异修订，已保留通过证据校验的安全版本。")
             else:
                 failed_types.append(resource_type)
                 reason = ",".join(str(flag) for flag in payload.get("risk_flags", [])[:3]) or "repair_failed"
@@ -1948,6 +2421,32 @@ class ResourceGenerationGraphRunner:
         trace_id = str(state["trace_id"])
         resources: list[GeneratedResource] = []
         quality_scores: dict[str, list[Any]] = {}
+        generation_action: GenerationAction = state.get("generation_action", "new")
+        source_resource = state.get("source_resource")
+        source_locked: GeneratedResource | None = None
+        version_family_id: str | None = None
+        next_version_number: int | None = None
+        if generation_action in {"alternative", "refine"}:
+            if source_resource is None:
+                raise ResourceValidationError("重新生成缺少来源资源。")
+            if source_resource.version_family_id:
+                version_family_id = source_resource.version_family_id
+                self.service.repository.lock_version_family(version_family_id)
+            source_locked = self.service.repository.get_resource_for_user(
+                int(state["user_id"]),
+                int(source_resource.id),
+                for_update=True,
+            )
+            if source_locked is None or source_locked.course_id != course.id:
+                raise ResourceNotFoundError("来源资源不存在或无权访问。")
+            version_family_id = source_locked.version_family_id or version_family_id or str(uuid4())
+            if source_locked.version_family_id is None:
+                source_locked.version_family_id = version_family_id
+                source_locked.version_number = 1
+                source_locked.generation_action = "new"
+            elif source_resource.version_family_id is None:
+                self.service.repository.lock_version_family(version_family_id)
+            next_version_number = self.service.repository.max_version_number(version_family_id) + 1
 
         payloads = list(state.get("reviewed_results", []))
         if not payloads:
@@ -1980,8 +2479,13 @@ class ResourceGenerationGraphRunner:
                         if state.get("learner_context") is not None
                         else "legacy"
                     ),
+                    "generation_action": generation_action,
+                    "generation_batch_id": str(state.get("generation_batch_id") or ""),
+                    "source_resource_id": source_locked.id if source_locked is not None else None,
                 },
             }
+            resource_family_id = version_family_id or str(uuid4())
+            resource_version_number = next_version_number or 1
             resource = self.service.repository.add_resource(
                 GeneratedResource(
                     user_id=int(state["user_id"]),
@@ -1995,6 +2499,10 @@ class ResourceGenerationGraphRunner:
                     status="completed",
                     review_status=payload["review_status"],
                     confidence_score=payload["confidence"],
+                    version_family_id=resource_family_id,
+                    revision_of_resource_id=source_locked.id if source_locked is not None else None,
+                    version_number=resource_version_number,
+                    generation_action=generation_action,
                 )
             )
             resources.append(resource)

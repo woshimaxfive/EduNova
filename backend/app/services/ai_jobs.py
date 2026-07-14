@@ -11,7 +11,7 @@ from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import make_trace_id
 from backend.app.core.config import Settings, get_settings
 from backend.app.db.session import SessionLocal
-from backend.app.models import AiJob, Course, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, ModelSetting, User
+from backend.app.models import AiJob, Course, GeneratedResource, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, ModelSetting, User
 from backend.app.schemas.ai_jobs import AiJobListResponse, AiJobResponse, ai_job_to_api, iso_timestamp
 
 
@@ -155,6 +155,14 @@ class SqlAlchemyAiJobRepository:
             )
         )
 
+    def get_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None:
+        return self.db.scalar(
+            select(GeneratedResource).where(
+                GeneratedResource.id == resource_id,
+                GeneratedResource.user_id == user_id,
+            )
+        )
+
     def add(self, job: AiJob) -> AiJob:
         self.db.add(job)
         self.db.flush()
@@ -292,7 +300,9 @@ class AiJobService:
         resource_types: list[str],
         learning_goal: str,
         difficulty: str,
-        idempotency_key: str | None,
+        generation_action: str = "new",
+        source_resource_id: int | None = None,
+        idempotency_key: str | None = None,
     ) -> AiJobResponse:
         if self.repository.get_course_for_user(user.id, course_id) is None:
             raise AiJobNotFoundError("课程不存在或无权访问。")
@@ -303,6 +313,32 @@ class AiJobService:
             raise AiJobValidationError("至少选择一种资源类型。")
         if difficulty not in {"easy", "medium", "hard"}:
             raise AiJobValidationError("不支持的资源难度。")
+        if generation_action not in {"new", "alternative", "refine"}:
+            raise AiJobValidationError("不支持的资源生成动作。")
+        source_resource = None
+        if generation_action == "new":
+            if source_resource_id is not None:
+                raise AiJobValidationError("新建资源不能指定来源版本。")
+        else:
+            if source_resource_id is None:
+                raise AiJobValidationError("重新生成必须指定来源资源。")
+            source_resource = self.repository.get_resource_for_user(user.id, source_resource_id)
+            if source_resource is None or source_resource.course_id != course_id:
+                raise AiJobNotFoundError("来源资源不存在或无权访问。")
+            if source_resource.status != "completed":
+                raise AiJobValidationError("只能从已完成成果创建新版本。")
+            if len(unique_types) != 1 or unique_types[0] != source_resource.resource_type:
+                raise AiJobValidationError("重新生成只能生成与来源成果相同的资源类型。")
+            if knowledge_point_id is not None and knowledge_point_id != source_resource.knowledge_point_id:
+                raise AiJobValidationError("重新生成不能改变来源成果的知识点。")
+            knowledge_point_id = source_resource.knowledge_point_id
+            source_content = source_resource.content_json if isinstance(source_resource.content_json, dict) else {}
+            source_intent = source_content.get("intent") if isinstance(source_content.get("intent"), dict) else {}
+            learning_goal = str(source_intent.get("learning_goal") or learning_goal or "")[:500]
+            source_metadata = source_content.get("metadata") if isinstance(source_content.get("metadata"), dict) else {}
+            source_difficulty = str(source_metadata.get("difficulty") or difficulty)
+            if source_difficulty in {"easy", "medium", "hard"}:
+                difficulty = source_difficulty
         return self._create(
             user,
             workflow="resource_generation",
@@ -313,6 +349,8 @@ class AiJobService:
                 "resource_types": unique_types,
                 "learning_goal": " ".join(learning_goal.split())[:500],
                 "difficulty": difficulty,
+                "generation_action": generation_action,
+                "source_resource_id": source_resource_id,
             },
             idempotency_key=idempotency_key,
         )
@@ -499,6 +537,15 @@ class AiJobService:
         knowledge_point_id = request.get("knowledge_point_id")
         if knowledge_point_id is not None and self.repository.get_knowledge_point(course_id, int(knowledge_point_id)) is None:
             raise AiJobNotFoundError("知识点不存在或不属于当前课程。")
+        if str(request.get("generation_action") or "new") in {"alternative", "refine"}:
+            source_resource_id = request.get("source_resource_id")
+            source_resource = (
+                self.repository.get_resource_for_user(user.id, int(source_resource_id))
+                if source_resource_id is not None
+                else None
+            )
+            if source_resource is None or source_resource.course_id != course_id:
+                raise AiJobNotFoundError("来源资源不存在或无权访问。")
         return self._create(
             user,
             workflow=original.workflow,
@@ -625,6 +672,13 @@ class AiJobService:
         request = dict(job.request_json or {})
         course = service._require_course(user, int(request["course_id"]))
         knowledge_point = service._resolve_knowledge_point(course.id, request.get("knowledge_point_id"))
+        source_resource = (
+            service.repository.get_resource_for_user(user.id, int(request["source_resource_id"]))
+            if request.get("source_resource_id") is not None
+            else None
+        )
+        if str(request.get("generation_action") or "new") in {"alternative", "refine"} and source_resource is None:
+            raise AiJobNotFoundError("来源资源不存在或无权访问。")
         result = ResourceGenerationGraphRunner(service).generate(
             user=user,
             course=course,
@@ -632,6 +686,8 @@ class AiJobService:
             resource_types=[str(item) for item in request.get("resource_types", [])],
             learning_goal=str(request.get("learning_goal") or ""),
             difficulty=str(request.get("difficulty") or "medium"),
+            generation_action=str(request.get("generation_action") or "new"),
+            source_resource=source_resource,
             trace_id=job.agent_trace_id,
             job_context=context,
         )

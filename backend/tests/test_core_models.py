@@ -10,6 +10,7 @@ from backend.app.models import (
     CourseEnrollment,
     CourseMaterial,
     CourseMaterialLink,
+    GeneratedResource,
     KnowledgeChunk,
     KnowledgePoint,
     Material,
@@ -156,3 +157,26 @@ def test_material_library_migration_copies_legacy_course_materials() -> None:
     assert "uq_course_material_links_course_material" in migration_text
     assert "INSERT INTO materials" in migration_text
     assert "INSERT INTO course_material_links" in migration_text
+
+
+def test_generated_resource_version_model_and_migration_are_additive() -> None:
+    columns = GeneratedResource.__table__.columns
+    assert {"version_family_id", "revision_of_resource_id", "version_number", "generation_action"}.issubset(columns.keys())
+    assert columns["version_family_id"].nullable is True
+    assert columns["revision_of_resource_id"].nullable is True
+    assert columns["version_number"].nullable is True
+    assert columns["generation_action"].nullable is False
+
+    migration_path = (
+        REPO_ROOT
+        / "backend"
+        / "migrations"
+        / "versions"
+        / "20260714_0021_resource_versions.py"
+    )
+    migration_text = migration_path.read_text(encoding="utf-8")
+    assert 'revision = "20260714_0021"' in migration_text
+    assert 'down_revision = "20260713_0020"' in migration_text
+    assert 'server_default="new"' in migration_text
+    assert 'ondelete="SET NULL"' in migration_text
+    assert "uq_generated_resources_version_family_number" in migration_text

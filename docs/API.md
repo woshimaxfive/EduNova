@@ -1055,6 +1055,8 @@ Authorization: Bearer <token>
 - 只能生成和读取当前用户自己的课程、知识点、资源和质量分；非本人资源或课程返回 404。
 - `resource_type` 支持 `doc`、`mindmap`、`quiz`、`code`、`slide`、`animation`。
 - `ResourceGenerationGraph` 使用 LangGraph `Send` 为每个请求类型并行派发独立 Worker。每个 Worker 直接生成 v3 类型化 artifact；ReviewAgent 读取安全资料摘录、学习目标和完整候选内容，失败资源最多执行一次结构修复和一次内容修订。
+- `planner` 为每个 Worker 生成结构化 `ArtifactIntent`，包含教学策略、认知层级、案例方向、资源职责、真实证据和可验证学习结果。可信画像不足时必须标记 `context_limited`。
+- 资源按 `version_family_id + version_number` 形成不可覆盖的版本族。`alternative` 必须相对来源版本至少改变教学策略、案例、认知层级、交互结构中的两项；`refine` 必须保持原教学意图。`content_json.diversity` 始终记录本地文字与结构差异；配置可用向量模型时还会记录 `semantic_similarity/semantic_status`，向量服务不可用时安全降级且不伪造语义校验结果。
 - `content_json.schema_version=3` 必须包含 `format=rich`、`artifact.kind`、Markdown fallback、引用绑定、`quality` 和 Prompt 版本。`generation_mode=model_enhanced` 仅在模型结果相对底稿存在有效差异并通过门禁时使用。
 - 讲解、导图和 PPT 可保存通过规则门禁的证据型降级稿；练习、代码和动画不合格时进入 `failed_resource_types` 且不持久化。代码还必须通过内部 Pyodide 运行验证，验证服务不可用时不得保存未经运行的代码。
 - 响应、资源内容、质量分和 Agent trace 只保存安全摘要、引用标题和白名单 metadata，不返回系统提示词、完整模型输入、API Key、完整课程资料原文或完整用户画像原文。
@@ -1073,7 +1075,9 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
   "knowledge_point_id": 8,
   "resource_types": ["doc", "mindmap", "quiz", "code", "slide", "animation"],
   "learning_goal": "理解反向传播",
-  "difficulty": "adaptive"
+  "difficulty": "medium",
+  "generation_action": "new",
+  "source_resource_id": null
 }
 ```
 
@@ -1084,6 +1088,8 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 - `resource_types` 必须为 1 到 6 个，服务端会去重。
 - `learning_goal` 可选，最长 500 字，只用于本次生成，不作为完整用户资料保存到日志。
 - `difficulty` 默认为 `medium`，可选 `easy`、`medium`、`hard`。
+- `generation_action` 默认为 `new`，可选 `new`、`alternative`、`refine`。
+- `source_resource_id` 在 `alternative/refine` 时必填，在 `new` 时必须为空；来源资源必须属于当前用户、当前课程且与请求资源类型一致。
 
 响应：
 
@@ -1123,9 +1129,27 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
           "quality": {
             "status": "passed",
             "source_coverage": 1.0,
-            "topic_relevant": true,
-            "prompt_echo_detected": false,
+            "dimensions": {
+              "authenticity": {"status": "passed", "score": 1.0},
+              "personalization": {"status": "passed", "score": 0.86},
+              "diversity": {"status": "passed", "score": 0.91},
+              "pedagogical_utility": {"status": "passed", "score": 0.88},
+              "type_correctness": {"status": "passed", "score": 1.0}
+            },
             "code_verification": null
+          },
+          "intent": {
+            "teaching_strategy": "derivation_first",
+            "cognitive_level": "analyze",
+            "resource_role": "解释核心概念、依据与推导过程",
+            "evidence_refs": [501],
+            "generation_action": "new"
+          },
+          "personalization_summary": {
+            "status": "personalized",
+            "learning_problem": "优先解决梯度推导困难",
+            "teaching_reason": "结合当前薄弱点采用逐步推导",
+            "difference": "本资源专注概念解释与推导"
           }
         },
         "citation_json": [
@@ -1141,6 +1165,10 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
         "review_status": "passed",
         "confidence_score": 0.82,
         "agent_trace_id": "trace_20260705_resource_001",
+        "version_family_id": "7cb08790-2d5f-4f5c-a10d-d13d42fe3eb4",
+        "revision_of_resource_id": null,
+        "version_number": 1,
+        "generation_action": "new",
         "created_at": "2026-07-05T14:00:00Z",
         "updated_at": "2026-07-05T14:00:00Z"
       }
@@ -1215,7 +1243,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 ### GET `/resources/{resource_id}/quality`
 
-用途：获取当前用户自己的资源质量评分。评分项包括 `source_match`、`profile_fit`、`fact_confidence`、`difficulty_fit` 和 `completeness`。
+用途：获取当前用户自己的资源质量评分。评分项包括旧的来源、画像、事实、难度和完整度，以及 Phase 20 新增的 `authenticity`、`personalization`、`diversity`、`pedagogical_utility` 和 `type_correctness`。
 
 ### POST `/resources/{resource_id}/exports`
 
@@ -2354,7 +2382,7 @@ OpenRouter 不再作为可见预设。
 
 ### POST `/resources/generation-jobs`
 
-用途：异步运行 `ResourceGenerationGraph`。请求体与同步资源生成接口相同，必须携带 `Idempotency-Key`；成功返回 HTTP 202。单个 Worker 失败但仍有成功资源时任务为 `completed`，失败类型写入结果；全部失败才为 `failed`。
+用途：异步运行 `ResourceGenerationGraph`。请求体与同步资源生成接口相同，包含可选版本动作与来源资源，必须携带 `Idempotency-Key`；成功返回 HTTP 202。任务请求摘要会保存 `generation_action/source_resource_id` 以支持刷新与安全重试。单个 Worker 失败但仍有成功资源时任务为 `completed`，失败类型写入结果；全部失败才为 `failed`。
 
 ### GET `/ai-jobs?status=active&limit=20`
 

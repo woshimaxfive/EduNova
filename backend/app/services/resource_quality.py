@@ -8,8 +8,8 @@ from typing import Any, Iterable
 from backend.app.services.resource_artifacts import validate_resource_content
 
 
-RESOURCE_PROMPT_VERSION = "resource-v3.1"
-RESOURCE_REVIEW_PROMPT_VERSION = "resource-review-v3.1"
+RESOURCE_PROMPT_VERSION = "resource-v4.0"
+RESOURCE_REVIEW_PROMPT_VERSION = "resource-review-v4.0"
 STRICT_MODEL_TYPES = {"quiz", "code", "animation"}
 EVIDENCE_FALLBACK_TYPES = {"doc", "mindmap", "slide"}
 TRIVIAL_DISTRACTORS = {

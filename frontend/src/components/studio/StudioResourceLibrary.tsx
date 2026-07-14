@@ -1,11 +1,12 @@
 import { MagnifyingGlass } from "@phosphor-icons/react";
 
-import { type GeneratedResource, type ResourceType } from "../../api/resources";
+import { type ResourceType } from "../../api/resources";
 import { formatResourceDate, generationModeLabel, isLowEvidenceResource, resourceTypeMeta } from "./studioResourceMeta";
+import { type StudioResourceFamily } from "./studioResourceVersions";
 
 type StudioResourceLibraryProps = {
   hasCourse: boolean;
-  resources: GeneratedResource[];
+  families: StudioResourceFamily[];
   selectedResourceId: string | null;
   search: string;
   typeFilter: "all" | ResourceType;
@@ -17,7 +18,7 @@ type StudioResourceLibraryProps = {
 
 export function StudioResourceLibrary({
   hasCourse,
-  resources,
+  families,
   selectedResourceId,
   search,
   typeFilter,
@@ -31,7 +32,7 @@ export function StudioResourceLibrary({
       <header>
         <div>
           <h2>成果库</h2>
-          <span>{resources.length} 项</span>
+          <span>{families.length} 组</span>
         </div>
         <label className="studio-resource-search">
           <MagnifyingGlass size={16} aria-hidden="true" />
@@ -63,15 +64,16 @@ export function StudioResourceLibrary({
           <div className="studio-library-skeleton" aria-label="正在读取成果">
             <span /><span /><span />
           </div>
-        ) : resources.length > 0 ? (
-          resources.map((resource) => {
+        ) : families.length > 0 ? (
+          families.map((family) => {
+            const resource = family.latest;
             const { Icon, label } = resourceTypeMeta[resource.resource_type];
-            const selected = resource.id === selectedResourceId;
+            const selected = family.versions.some((version) => version.id === selectedResourceId);
             return (
               <button
                 className={`studio-resource-row${selected ? " active" : ""}${isLowEvidenceResource(resource) ? " low-evidence" : ""}`}
                 type="button"
-                key={resource.id}
+                key={family.key}
                 aria-label={`打开成果 ${resource.title}`}
                 aria-pressed={selected}
                 onClick={() => onSelectResource(resource.id)}
@@ -79,7 +81,7 @@ export function StudioResourceLibrary({
                 <span className="studio-resource-row-icon"><Icon size={18} weight="duotone" /></span>
                 <span className="studio-resource-row-copy">
                   <strong>{resource.title}</strong>
-                  <small>{label} · {formatResourceDate(resource.created_at)}</small>
+                  <small>{label} · {formatResourceDate(resource.created_at)}{family.versions.length > 1 ? ` · ${family.versions.length} 个版本` : ""}</small>
                 </span>
                 <em>{generationModeLabel(resource)}</em>
               </button>

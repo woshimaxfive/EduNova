@@ -252,7 +252,9 @@ describe("StudioPage resource generation", () => {
             knowledge_point_id: 401,
             resource_types: ["doc", "mindmap", "quiz", "code", "slide", "animation"],
             learning_goal: "期末前掌握搜索题",
-            difficulty: "medium"
+            difficulty: "medium",
+            generation_action: "new",
+            source_resource_id: null
           }
         })
       );
@@ -309,6 +311,110 @@ describe("StudioPage resource generation", () => {
     expect(screen.getByRole("link", { name: "进入资料库" })).toHaveAttribute("href", PATHS.library);
     expect(screen.getByRole("complementary", { name: "成果库" })).toHaveTextContent("选择课程后查看成果");
     expect(screen.queryByText("监督学习个性化讲解")).not.toBeInTheDocument();
+  });
+
+  it("switches, compares and regenerates durable resource versions", async () => {
+    const user = userEvent.setup();
+    const calls: Array<{ url: string; method: string; payload: unknown }> = [];
+    const v1 = makeResource({
+      id: "901",
+      version_family_id: "family-a-star",
+      version_number: 1,
+      generation_action: "new",
+      intent_summary: {
+        resource_type: "doc",
+        learning_goal: "理解 A* 搜索",
+        teaching_strategy: "evidence_to_concept",
+        cognitive_level: "understand",
+        example_direction: "课程真实情境",
+        interaction_structure: "概念-证据-推导-自检"
+      },
+      personalization_summary: {
+        status: "personalized",
+        learning_problem: "理解启发函数",
+        teaching_reason: "从课程证据建立概念",
+        difference: "初始版本"
+      }
+    });
+    const v2 = makeResource({
+      id: "902",
+      version_family_id: "family-a-star",
+      revision_of_resource_id: "901",
+      version_number: 2,
+      generation_action: "alternative",
+      created_at: "2026-07-06T14:00:00Z",
+      updated_at: "2026-07-06T14:00:00Z",
+      content_json: {
+        markdown: "# A* 情境讲解\n\n从路线规划案例理解启发函数。",
+        metadata: { generation_mode: "model_enhanced", difficulty: "medium" }
+      },
+      intent_summary: {
+        resource_type: "doc",
+        learning_goal: "理解 A* 搜索",
+        teaching_strategy: "worked_example_first",
+        cognitive_level: "apply",
+        example_direction: "跨场景迁移应用",
+        interaction_structure: "问题-示例-反例-复盘"
+      },
+      personalization_summary: {
+        status: "personalized",
+        learning_problem: "把评价函数用于新问题",
+        teaching_reason: "先用完整案例建立直觉",
+        difference: "相对上一版更换了案例和认知层级"
+      }
+    });
+
+    apiClient.defaults.adapter = async (config) => {
+      const url = config.url ?? "";
+      const method = (config.method ?? "get").toLowerCase();
+      calls.push({ url, method, payload: parsePayload(config.data) });
+      if (url === COURSE_ENDPOINTS.list) {
+        return { data: { data: [{ id: "808", title: "AI 搜索", status: "ready" }] }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === COURSE_ENDPOINTS.knowledgePoints(808)) {
+        return { data: { data: [{ id: "401", title: "启发式搜索", order_index: 1 }] }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === RESOURCE_ENDPOINTS.list) {
+        return { data: { data: [v2, v1], page: 1, page_size: 2, total: 2 }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === RESOURCE_ENDPOINTS.generationJobs && method === "post") {
+        return {
+          data: { data: makeCompletedAiJob({ result: { course_id: "808", resource_ids: [] } }) },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+      return { data: { data: [] }, status: 200, statusText: "OK", headers: {}, config };
+    };
+
+    renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808&resource_id=902`);
+
+    expect(await screen.findByRole("combobox", { name: "资源版本" })).toHaveValue("902");
+    expect(screen.getByRole("complementary", { name: "成果库" })).toHaveTextContent("2 个版本");
+    expect(screen.getByLabelText("个性化生成依据")).toHaveTextContent("先用完整案例建立直觉");
+    await user.selectOptions(screen.getByRole("combobox", { name: "资源版本" }), "901");
+    await waitFor(() => expect(screen.getByTestId("studio-location")).toHaveTextContent("resource_id=901"));
+    await user.click(screen.getByRole("button", { name: "比较" }));
+    expect(screen.getByRole("dialog", { name: "比较资源版本" })).toHaveTextContent("从证据建立概念");
+    await user.click(screen.getByRole("button", { name: "关闭版本比较" }));
+    await user.click(within(screen.getByRole("banner", { name: "资源工坊工具栏" })).getByRole("button", { name: "重新生成" }));
+    const dialog = screen.getByRole("dialog", { name: "重新生成资源" });
+    await user.click(within(dialog).getByRole("button", { name: /换一种教法/ }));
+
+    await waitFor(() => {
+      expect(calls).toContainEqual(expect.objectContaining({
+        url: RESOURCE_ENDPOINTS.generationJobs,
+        method: "post",
+        payload: expect.objectContaining({
+          generation_action: "alternative",
+          source_resource_id: 901,
+          resource_types: ["doc"],
+          learning_goal: "理解 A* 搜索"
+        })
+      }));
+    });
   });
 
   it("opens generated resources and shows the selected full content with quality scores", async () => {

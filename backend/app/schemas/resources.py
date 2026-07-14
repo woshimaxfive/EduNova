@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.app.models import GeneratedResource, ResourceQualityScore
 from backend.app.schemas.personalization import PersonalizationFreshnessResponse
@@ -12,6 +12,7 @@ from backend.app.schemas.personalization import PersonalizationFreshnessResponse
 
 ResourceType = Literal["doc", "mindmap", "quiz", "code", "slide", "animation"]
 ResourceDifficulty = Literal["easy", "medium", "hard"]
+ResourceGenerationAction = Literal["new", "alternative", "refine"]
 
 
 class GenerateResourcesRequest(BaseModel):
@@ -20,11 +21,21 @@ class GenerateResourcesRequest(BaseModel):
     resource_types: list[ResourceType] = Field(min_length=1)
     learning_goal: str = Field(default="", max_length=500)
     difficulty: ResourceDifficulty = "medium"
+    generation_action: ResourceGenerationAction = "new"
+    source_resource_id: int | None = None
 
     @field_validator("learning_goal")
     @classmethod
     def normalize_learning_goal(cls, value: str) -> str:
         return " ".join(value.split())[:500]
+
+    @model_validator(mode="after")
+    def validate_generation_action(self) -> GenerateResourcesRequest:
+        if self.generation_action == "new" and self.source_resource_id is not None:
+            raise ValueError("新建资源不能指定来源版本。")
+        if self.generation_action in {"alternative", "refine"} and self.source_resource_id is None:
+            raise ValueError("重新生成必须指定来源资源。")
+        return self
 
 
 class GeneratedResourceResponse(BaseModel):
@@ -39,6 +50,13 @@ class GeneratedResourceResponse(BaseModel):
     review_status: str
     confidence_score: float | None
     agent_trace_id: str | None
+    version_family_id: str | None = None
+    revision_of_resource_id: str | None = None
+    version_number: int | None = None
+    generation_action: ResourceGenerationAction = "new"
+    intent_summary: dict[str, Any] | None = None
+    personalization_summary: dict[str, Any] | None = None
+    quality_dimensions: dict[str, Any] | None = None
     personalization: PersonalizationFreshnessResponse | None = None
     created_at: str
     updated_at: str
@@ -92,6 +110,12 @@ def generated_resource_to_api(
     if isinstance(metadata, dict):
         raw_trace_id = metadata.get("agent_trace_id")
         agent_trace_id = str(agent_trace_id or raw_trace_id) if agent_trace_id or raw_trace_id else None
+    intent = content_json.get("intent") if isinstance(content_json.get("intent"), dict) else None
+    personalization_summary = content_json.get("personalization_summary")
+    if not isinstance(personalization_summary, dict):
+        personalization_summary = None
+    quality = content_json.get("quality") if isinstance(content_json.get("quality"), dict) else {}
+    quality_dimensions = quality.get("dimensions") if isinstance(quality.get("dimensions"), dict) else None
     return GeneratedResourceResponse(
         id=str(resource.id),
         course_id=str(resource.course_id) if resource.course_id is not None else None,
@@ -104,6 +128,13 @@ def generated_resource_to_api(
         review_status=resource.review_status,
         confidence_score=decimal_to_float(resource.confidence_score),
         agent_trace_id=agent_trace_id,
+        version_family_id=resource.version_family_id,
+        revision_of_resource_id=str(resource.revision_of_resource_id) if resource.revision_of_resource_id is not None else None,
+        version_number=resource.version_number,
+        generation_action=resource.generation_action if resource.generation_action in {"new", "alternative", "refine"} else "new",
+        intent_summary=intent,
+        personalization_summary=personalization_summary,
+        quality_dimensions=quality_dimensions,
         personalization=personalization,
         created_at=iso_timestamp(resource.created_at),
         updated_at=iso_timestamp(resource.updated_at),

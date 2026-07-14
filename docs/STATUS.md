@@ -4,7 +4,7 @@
 
 ## 状态摘要
 
-当前最新完成到 **Phase 19 AI 产物质量内核与学习指标纠偏**。
+当前最新完成到 **Phase 20 个性化产物规划与版本体系**。
 
 Phase 计划的历史过程继续保留在 `docs/superpowers`。Phase 13 已完成主页问答、课程问答和资源生成的真实 Graph 编排，Phase 14 已让路径、练习评估和报告进入真实 LangGraph，Phase 15 已让画像和资料建课进入生产 Graph，Phase 16 曾实现资料对比和独立期末冲刺；当前产品已收敛为九条生产 Graph 和一条个性化学习路径。
 
@@ -15,6 +15,8 @@ Phase 17 使用 Alembic `20260711_0014` 新增 `ai_jobs`。`CourseBuilderGraph` 
 Phase 18 使用 Alembic `20260711_0015` 新增隐私安全的 `model_call_runs`。九条 Graph、主页/课程流式问答和 Embedding 共用 `ModelExecutionRuntime`：只在当前配置内对瞬时故障有限重试，Redis 统一限制用户/全局并发并维护熔断状态；首 token 后的流中断不自动重放，也不持久化半截回答。离线 AI 质量回归集覆盖九条 Graph 的引用、敏感输出、结构和确定性数字边界，不依赖真实 API Key。
 
 Phase 19 未新增数据库迁移。六类新资源升级为 v3 类型化 artifact 和完整内容门禁；代码资源必须由内部 `code-verifier` 实际运行并匹配预期输出。AssessmentGraph 使用真实课程切片形成题目蓝图和逐题诊断，ReportGraph 分离并锁定五类统计。掌握度只计算有效证据，未评估知识点返回 `score=null`，路径任务不再制造分数。资料对比增加概念别名归并，会话检索在明显换题时停止拼接旧问题。
+
+Phase 20 使用 Alembic `20260714_0021` 为课程资源增加版本族、来源版本、版本号和生成动作。`ResourceGenerationGraph.planner` 会为六类资源分别制定 `ArtifactIntent`，质量门禁新增真实性、个性化、差异性、教学可用性和类型正确性。资源工坊按版本族展示最新成果，支持历史版本切换、比较、“换一种教法”和“优化当前版本”；生成失败不覆盖旧成果。
 
 2026-07-12 已补齐主页完整历史与会话资料记忆：Alembic `20260712_0016` 为 `chat_sessions` 增加 `selected_material_ids`；侧栏首批读取 30 条主页会话并支持继续加载，服务端搜索覆盖标题和消息正文。会话资料确认后持久化，刷新、跨页选择和历史恢复均读取同一范围；主页建课选料保持独立，不反向污染对话资料。课程会话和旧列表接口保持兼容。
 
@@ -187,7 +189,7 @@ Phase 13 前端视觉硬化后，桌面端继续保留 264px / 68px 的展开与
 
 当前后端已挂载的业务 router 是 `auth`、`dashboard`、`courses`、`materials`、`profiles`、`rag`、`settings`、`tutor`、`agents`、`ai_jobs`、`resources`、`paths`、`practice`、`reports` 和 `exports`。`demo` 仍只是前端 API 常量与后续接口设计，不属于当前已实现后端能力。
 
-资源分层口径保持不变：`course_id != null` 是课程资源，`course_id == null` 预留个人全局资源。新资源使用 `content_json.schema_version=3` 和 `artifact.kind` 保存类型化产物、质量门禁、引用绑定、Prompt 版本和代码验证摘要，同时保留 Markdown fallback；旧 v1/v2 资源不批量改写。`generation_mode` 区分模型增强与确定性来源，`review_mode` 区分 `model_and_rules` 和 `rules_only`，不能把规则 fallback 伪装成模型审核。资源、质量分和 trace 均不保存系统提示词、完整模型输入、密钥、完整资料或完整画像原文。
+资源分层口径保持不变：`course_id != null` 是课程资源，`course_id == null` 预留个人全局资源。新资源使用 `content_json.schema_version=3` 和 `artifact.kind` 保存类型化产物、教学意图、个性化说明、差异门禁、引用绑定、Prompt 版本和代码验证摘要，同时保留 Markdown fallback；旧 v1/v2 资源不批量改写。`generation_mode` 区分模型增强与确定性来源，`review_mode` 区分 `model_and_rules` 和 `rules_only`，不能把规则 fallback 伪装成模型审核。
 
 课程问答在 Phase 7.1 后会把明确困惑/薄弱信号沉淀为画像候选事件，但只保存课程、会话、消息、`trace_id` 和引用摘要，不保存完整用户问题、系统提示词、模型输入或资料原文。Phase 7.3 的 `/courses/{course_id}/learning-state` 会把当前课程的这些候选事件按知识点或安全标题同步为 `pending` 待确认复习项，不把候选事件直接宣称为已诊断弱点。Phase 7.4 后，学生可以把队列项确认为 `confirmed`、开始为 `reviewing`、完成为 `completed`，也可以软忽略为 `dismissed`；`dismissed` 不在主列表展示，但继续参与去重。
 
@@ -210,7 +212,7 @@ Phase 7.2 的分层口径：
 | 旧版 Office 解析 | `.doc`、`.ppt` 只入库，不做深度解析 |
 | 多模态 Embedding/Rerank | 当前只处理文本资料，图片与视频向量不在本轮范围 |
 | 资料对比增强 | 已完成安全结果持久化、最近版本恢复和真实 Graph 轨迹；保持资料库独立工具，不提供完整原文对照页 |
-| 资源增强 | 六类 v3 资源、逐 Worker 类型化生成、完整内容门禁、代码验证、单次 Repair、交互渲染和 PPTX 队列已接入；资源版本编辑、个人全局资源仍未接入 |
+| 资源增强 | 六类 v3 资源、逐 Worker 类型化生成、教学意图、三层质量门禁、代码验证、版本切换/比较/回退和 PPTX 队列已接入；个人全局资源仍未接入 |
 | Agent 编排 hardening | 九条学习主链路已真接管；学习档案导出明确保持普通 Service + RQ Worker |
 | 弱点复习增强 | Phase 14 已接入错题精确证据、诊断去重更新、已有路径重排；队列项编辑仍未接入 |
 | 学习路径 | Phase 9 已接入真实路径生成、当前路径读取、任务状态更新和课程页摘要 |
@@ -257,6 +259,7 @@ Phase 7.2 的分层口径：
 | Phase 17 | 已完成 | `AIJobRuntime`、`ai_jobs`、独立 AI Worker、建课/资源后台任务、节点进度、恢复、取消、重试和全局任务托盘 |
 | Phase 18 | 已完成 | `ModelExecutionRuntime`、同配置重试、Redis 并发/熔断、模型调用安全审计、Trace 聚合和九 Graph 离线质量评测 |
 | Phase 19 | 已完成 | 资源 v3 质量门禁、隔离代码验证、证据型练习、逐题诊断、掌握度空值、报告数字一致性、概念归并和话题切换 |
+| Phase 20 | 已完成 | 六类 ArtifactIntent、真实性/个性化/差异门禁、不可覆盖版本族、换教法/优化版本和版本比较 |
 
 ### 画像可信度与课程上下文联动（2026-07-13）
 
@@ -268,7 +271,7 @@ Phase 7.2 的分层口径：
 
 ## 下一步建议
 
-Phase 19 已完成产物质量内核和学习指标纠偏。后续应优先用固定 A*、神经网络资料继续做真实模型质量对比与产品打磨；只有同一质量集证明某个 Worker 受模型能力限制时，才评估更强模型。OCR、旧版 Office 和扫描件仍作为独立范围。
+Phase 20 已完成资源个性化规划与不可覆盖版本体系。后续应继续用固定 A*、神经网络资料验证不同画像的事实一致性、六类互补和替代版本差异；只有同一质量集证明某个 Worker 受模型能力限制时，才评估更强模型。OCR、旧版 Office 和扫描件仍作为独立范围。
 
 原因：
 

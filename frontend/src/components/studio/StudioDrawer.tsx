@@ -29,7 +29,12 @@ const qualityLabels: Record<string, string> = {
   profile_fit: "画像贴合",
   fact_confidence: "事实置信",
   difficulty_fit: "难度贴合",
-  completeness: "完整度"
+  completeness: "完整度",
+  authenticity: "真实性",
+  personalization: "个性化",
+  diversity: "差异性",
+  pedagogical_utility: "教学可用性",
+  type_correctness: "类型正确性"
 };
 
 type StudioDrawerProps = {

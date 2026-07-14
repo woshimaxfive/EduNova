@@ -86,8 +86,29 @@ EduNova 的产品差异来自学习闭环，不来自重复实现通用基础设
 6. 公开部署的文件存储使用可替换的 Storage Adapter，至少保留本地和 S3-compatible 两种实现；上传安全优先复用 MIME 检测和恶意文件扫描工具。
 7. HTTP、SQL、Redis 和 Worker 的通用可观测性优先使用 OpenTelemetry；Agent trace 只保留 EduNova 特有的学习协作证据。
 8. AI 质量与安全回归可引入成熟评测和红队工具，但固定课程基准、客观数字一致性和引用真实性门禁继续由项目测试维护。
+9. LangChain 只作为生态适配层按需引入：可使用 `@tool`、`ToolNode`、Document Loader 目录和 `BaseRetriever` 适配器；不得用 LangChain Agent、Memory 或默认 VectorStore 重写现有 LangGraph、会话上下文、课程级用户隔离、配置指纹、混合召回和重排序逻辑。
+10. LangChain 的 Document Loader 只用于发现和统一接口；PDF、DOCX、PPTX 的生产解析优先直接接入 Docling，避免为一层薄包装引入不必要依赖。
+11. LiteLLM 仅作为 OpenAI-compatible 回答模型的候选适配层；讯飞原生 Embedding、重排序、个人配置优先级、禁止跨 Provider 自动转发、取消检查和安全审计继续由 EduNova 控制。
+12. 结构化输出优先顺序为 Provider 原生 Schema、Pydantic 校验、一次受控修复、确定性 fallback。Instructor 只有通过 Spark X2-Flash 和现有 OpenAI-compatible Provider 的真实兼容性试验后才能接入。
+13. 前端鉴权 SSE 统一评估 `sse-starlette` 与成熟客户端解析器；前端传输类型统一评估 `openapi-typescript`，但 Axios 拦截器、React Query Key、缓存失效和页面 ViewModel 保持项目所有。
+14. 通用运行观测使用 OpenTelemetry；如引入 Langfuse，只允许自托管或明确受控的数据边界，并默认脱敏 Prompt、回答、资料、画像、作答和密钥。
 
-### 6.3 必须保留的产品核心
+### 6.3 已确认的迁移优先级
+
+后续基础设施打磨按收益和风险依次推进，不能在没有基准测试时一次性大换血：
+
+1. Docling 接管通用文档结构提取，保留 MaterialIngestionGraph 的目录确认、质量门禁、切片和证据逻辑。
+2. 将全部手写弹窗和覆盖抽屉收口到 Radix Dialog，统一 Portal、焦点锁定、Escape 和焦点恢复。
+3. 将服务端和前端手写 SSE 编解码替换为规范实现，保持现有事件协议和断线恢复语义。
+4. 从 FastAPI OpenAPI 生成前端传输类型，逐模块替换手写重复合同，不直接生成业务 ViewModel。
+5. 收口各 Graph 中重复的 JSON 提取和修复逻辑，先做 Provider 兼容性试验，再决定是否引入 Instructor。
+6. 为 HTTP、SQLAlchemy、Redis 和 RQ Worker 接入 OpenTelemetry；Agent trace 继续承担学生可见的学习协作证据。
+7. 公开部署前补 Storage Adapter、MIME 检测与 ClamAV 上传扫描；本地开发保持可关闭。
+8. 使用 Promptfoo/Ragas 补充通用 AI 评测，但不得替代 EduNova 的固定课程检索基准、数字一致性、客观评分和引用真实性测试。
+
+每项迁移必须先建立当前实现基准，使用真实或脱敏项目夹具做最小试验，分阶段提交，并证明质量、兼容性或维护成本至少有一项明确改善。
+
+### 6.4 必须保留的产品核心
 
 下列能力属于 EduNova 的核心产品逻辑，可以使用第三方库作为底座，但不能直接交给通用 AI 平台整包替换：
 

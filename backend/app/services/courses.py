@@ -54,17 +54,18 @@ from backend.app.schemas.profiles import normalize_profile_json
 from backend.app.services.material_retrieval import MaterialChunkingService
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.model_settings import ModelSettingsService
+from backend.app.core.errors import NotFoundDomainError, ValidationDomainError
 
 
-class CourseGenerationError(Exception):
+class CourseGenerationError(ValidationDomainError):
     pass
 
 
-class CourseNotFoundError(Exception):
+class CourseNotFoundError(NotFoundDomainError):
     pass
 
 
-class CourseWeaknessStateTransitionError(Exception):
+class CourseWeaknessStateTransitionError(ValidationDomainError):
     pass
 
 

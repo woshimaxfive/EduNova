@@ -7,8 +7,10 @@ from uuid import uuid4
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from backend.app.core.errors import DomainError
 
-class ApiError(Exception):
+
+class ApiError(DomainError):
     def __init__(
         self,
         status_code: int,
@@ -16,10 +18,9 @@ class ApiError(Exception):
         message: str,
         details: dict[str, Any] | None = None,
     ) -> None:
+        super().__init__(message, details=details)
         self.status_code = status_code
         self.code = code
-        self.message = message
-        self.details = details or {}
 
 
 def make_trace_id() -> str:
@@ -33,7 +34,7 @@ def api_response(data: Any) -> dict[str, Any]:
     }
 
 
-async def api_error_handler(_request: Request, exc: ApiError) -> JSONResponse:
+async def api_error_handler(_request: Request, exc: DomainError) -> JSONResponse:
     status_phrase = HTTPStatus(exc.status_code).phrase
     return JSONResponse(
         status_code=exc.status_code,

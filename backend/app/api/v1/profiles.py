@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import Depends, Query
 
+from backend.app.api.contracts import TypedAPIRouter as APIRouter
 from backend.app.api.errors import api_response
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.core.config import get_settings

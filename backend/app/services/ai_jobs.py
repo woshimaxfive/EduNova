@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import make_trace_id
 from backend.app.core.config import Settings, get_settings
+from backend.app.core.errors import ConflictDomainError, NotFoundDomainError, ValidationDomainError
 from backend.app.db.session import SessionLocal
 from backend.app.models import AiJob, Course, GeneratedResource, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, ModelSetting, User
 from backend.app.schemas.ai_jobs import AiJobListResponse, AiJobResponse, ai_job_to_api, iso_timestamp
@@ -22,15 +23,15 @@ RETRYABLE_STATUSES = {"cancelled", "failed"}
 WORKFLOWS = {"course_builder", "resource_generation", "embedding_reindex", "material_ingestion"}
 
 
-class AiJobNotFoundError(Exception):
+class AiJobNotFoundError(NotFoundDomainError):
     pass
 
 
-class AiJobValidationError(Exception):
+class AiJobValidationError(ValidationDomainError):
     pass
 
 
-class AiJobConflictError(Exception):
+class AiJobConflictError(ConflictDomainError):
     pass
 
 

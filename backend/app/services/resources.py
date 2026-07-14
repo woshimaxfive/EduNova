@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.errors import make_trace_id
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.agents.schemas import AgentState
+from backend.app.core.errors import NotFoundDomainError, ValidationDomainError
 from backend.app.models import (
     AgentRunLog,
     Course,
@@ -94,15 +95,15 @@ SENSITIVE_MARKERS = (
 )
 
 
-class ResourceNotFoundError(Exception):
+class ResourceNotFoundError(NotFoundDomainError):
     pass
 
 
-class ResourceValidationError(ValueError):
+class ResourceValidationError(ValidationDomainError):
     pass
 
 
-class ResourceGenerationError(RuntimeError):
+class ResourceGenerationError(ValidationDomainError):
     pass
 
 

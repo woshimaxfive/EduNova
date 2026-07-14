@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import Depends, Query, status
 from sse_starlette import EventSourceResponse
 
+from backend.app.api.contracts import TypedAPIRouter as APIRouter
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.sse import event_source_response, sse_event

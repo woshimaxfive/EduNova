@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.errors import make_trace_id
 from backend.app.core.config import Settings, get_settings
+from backend.app.core.errors import NotFoundDomainError, ValidationDomainError
 from backend.app.models import (
     AssessmentReport,
     Course,
@@ -28,11 +29,11 @@ from backend.app.schemas.exports import ExportJobResponse, LearningDossierExport
 from backend.app.schemas.reports import empty_report, iso_timestamp
 
 
-class ExportNotFoundError(Exception):
+class ExportNotFoundError(NotFoundDomainError):
     pass
 
 
-class ExportValidationError(Exception):
+class ExportValidationError(ValidationDomainError):
     pass
 
 

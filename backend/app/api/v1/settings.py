@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, status
+from fastapi import Depends, Header, status
 
+from backend.app.api.contracts import TypedAPIRouter as APIRouter
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
 from backend.app.core.config import get_settings
@@ -20,13 +21,7 @@ from backend.app.services.model_settings import (
     SqlAlchemyModelSettingsRepository,
     UpdateModelConfigRequest,
 )
-from backend.app.services.ai_jobs import (
-    AiJobConflictError,
-    AiJobService,
-    AiJobValidationError,
-    RqAiJobQueue,
-    SqlAlchemyAiJobRepository,
-)
+from backend.app.services.ai_jobs import AiJobService, RqAiJobQueue, SqlAlchemyAiJobRepository
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -290,14 +285,9 @@ def create_embedding_reindex_job(
     current_user: User = Depends(get_current_user),
     service: AiJobService = Depends(get_settings_ai_job_service),
 ) -> dict:
-    try:
-        job = service.create_embedding_reindex_job(
-            current_user,
-            config_id=payload.config_id,
-            idempotency_key=idempotency_key,
-        )
-    except AiJobValidationError as exc:
-        raise ApiError(status.HTTP_400_BAD_REQUEST, "VALIDATION_ERROR", str(exc)) from exc
-    except AiJobConflictError as exc:
-        raise ApiError(status.HTTP_409_CONFLICT, "CONFLICT", str(exc)) from exc
+    job = service.create_embedding_reindex_job(
+        current_user,
+        config_id=payload.config_id,
+        idempotency_key=idempotency_key,
+    )
     return api_response(job.model_dump(mode="json"))

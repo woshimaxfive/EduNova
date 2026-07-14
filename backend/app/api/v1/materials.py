@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, Header, Query, UploadFile, status
+from fastapi import Depends, File, Form, Header, Query, UploadFile, status
 
+from backend.app.api.contracts import TypedAPIRouter as APIRouter
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
@@ -16,14 +17,7 @@ from backend.app.schemas.materials import (
     MaterialIngestionJobRequest,
     UpdateMaterialOutlineRequest,
 )
-from backend.app.services.ai_jobs import (
-    AiJobConflictError,
-    AiJobNotFoundError,
-    AiJobService,
-    AiJobValidationError,
-    RqAiJobQueue,
-    SqlAlchemyAiJobRepository,
-)
+from backend.app.services.ai_jobs import AiJobService, RqAiJobQueue, SqlAlchemyAiJobRepository
 from backend.app.services.materials import (
     CourseNotFoundError,
     MaterialNotFoundError,
@@ -55,16 +49,6 @@ def get_material_job_service(db=Depends(get_db_session)) -> AiJobService:
     return AiJobService(SqlAlchemyAiJobRepository(db), settings=settings, queue=RqAiJobQueue(settings))
 
 
-def raise_material_job_error(exc: Exception) -> None:
-    if isinstance(exc, AiJobNotFoundError):
-        raise ApiError(status_code=404, code="NOT_FOUND", message=str(exc)) from exc
-    if isinstance(exc, AiJobValidationError):
-        raise ApiError(status_code=400, code="VALIDATION_ERROR", message=str(exc)) from exc
-    if isinstance(exc, AiJobConflictError):
-        raise ApiError(status_code=409, code="CONFLICT", message=str(exc)) from exc
-    raise exc
-
-
 @router.post("/materials/upload")
 async def upload_material(
     file: UploadFile = File(...),
@@ -94,9 +78,6 @@ async def upload_material(
         raise ApiError(status_code=status.HTTP_400_BAD_REQUEST, code="VALIDATION_ERROR", message=str(exc)) from exc
     except CourseNotFoundError as exc:
         raise ApiError(status_code=status.HTTP_404_NOT_FOUND, code="NOT_FOUND", message=str(exc)) from exc
-    except Exception as exc:
-        raise_material_job_error(exc)
-
     return api_response(result.model_dump())
 
 
@@ -108,16 +89,12 @@ def create_material_ingestion_job(
     current_user: User = Depends(get_current_user),
     service: AiJobService = Depends(get_material_job_service),
 ) -> dict:
-    try:
-        result = service.create_material_ingestion_job(
-            current_user,
-            material_id=material_id,
-            force=payload.force,
-            idempotency_key=idempotency_key,
-        )
-    except Exception as exc:
-        raise_material_job_error(exc)
-        raise
+    result = service.create_material_ingestion_job(
+        current_user,
+        material_id=material_id,
+        force=payload.force,
+        idempotency_key=idempotency_key,
+    )
     return api_response(result.model_dump(mode="json"))
 
 

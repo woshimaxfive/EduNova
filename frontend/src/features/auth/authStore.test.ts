@@ -22,9 +22,23 @@ describe("authStore", () => {
 
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
     expect(JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) ?? "{}")).toMatchObject({
-      token: "demo-token",
-      user: { displayName: "演示学生" }
+      version: 1,
+      state: {
+        token: "demo-token",
+        user: { displayName: "演示学生" }
+      }
     });
+  });
+
+  it("hydrates the legacy unversioned auth session", async () => {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
+      token: "legacy-token",
+      user: { id: 2, account: "legacy", displayName: "旧用户", role: "student" }
+    }));
+
+    await useAuthStore.persist.rehydrate();
+
+    expect(useAuthStore.getState()).toMatchObject({ token: "legacy-token", isAuthenticated: true });
   });
 
   it("maps backend auth users into the frontend session shape", () => {

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import Depends, status
 
+from backend.app.api.contracts import TypedAPIRouter as APIRouter
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
 from backend.app.core.config import get_settings

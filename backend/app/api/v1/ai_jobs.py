@@ -1,23 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import Depends, Query, Request
 from sse_starlette import EventSourceResponse
 
-from backend.app.api.errors import ApiError, api_response
+from backend.app.api.contracts import TypedAPIRouter as APIRouter
+from backend.app.api.errors import api_response
 from backend.app.api.sse import event_source_response, sse_event
 from backend.app.api.v1.deps import get_current_user
 from backend.app.core.config import get_settings
 from backend.app.db.session import SessionLocal, get_db_session
 from backend.app.models import User
-from backend.app.services.ai_jobs import (
-    AiJobConflictError,
-    AiJobNotFoundError,
-    AiJobService,
-    AiJobValidationError,
-    RqAiJobQueue,
-    SqlAlchemyAiJobRepository,
-)
+from backend.app.services.ai_jobs import AiJobNotFoundError, AiJobService, RqAiJobQueue, SqlAlchemyAiJobRepository
 
 
 router = APIRouter(prefix="/ai-jobs", tags=["ai-jobs"])
@@ -30,16 +24,6 @@ def get_ai_job_service(db=Depends(get_db_session)) -> AiJobService:
         settings=settings,
         queue=RqAiJobQueue(settings),
     )
-
-
-def raise_ai_job_error(exc: Exception) -> None:
-    if isinstance(exc, AiJobNotFoundError):
-        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
-    if isinstance(exc, AiJobValidationError):
-        raise ApiError(400, "VALIDATION_ERROR", str(exc)) from exc
-    if isinstance(exc, AiJobConflictError):
-        raise ApiError(409, "CONFLICT", str(exc)) from exc
-    raise exc
 
 
 @router.get("")
@@ -58,11 +42,7 @@ def get_ai_job(
     current_user: User = Depends(get_current_user),
     service: AiJobService = Depends(get_ai_job_service),
 ) -> dict:
-    try:
-        return api_response(service.get_job(current_user, job_id).model_dump(mode="json"))
-    except Exception as exc:
-        raise_ai_job_error(exc)
-        raise
+    return api_response(service.get_job(current_user, job_id).model_dump(mode="json"))
 
 
 @router.post("/{job_id}/cancel")
@@ -71,11 +51,7 @@ def cancel_ai_job(
     current_user: User = Depends(get_current_user),
     service: AiJobService = Depends(get_ai_job_service),
 ) -> dict:
-    try:
-        return api_response(service.cancel_job(current_user, job_id).model_dump(mode="json"))
-    except Exception as exc:
-        raise_ai_job_error(exc)
-        raise
+    return api_response(service.cancel_job(current_user, job_id).model_dump(mode="json"))
 
 
 @router.post("/{job_id}/retry", status_code=202)
@@ -84,11 +60,7 @@ def retry_ai_job(
     current_user: User = Depends(get_current_user),
     service: AiJobService = Depends(get_ai_job_service),
 ) -> dict:
-    try:
-        return api_response(service.retry_job(current_user, job_id).model_dump(mode="json"))
-    except Exception as exc:
-        raise_ai_job_error(exc)
-        raise
+    return api_response(service.retry_job(current_user, job_id).model_dump(mode="json"))
 
 
 @router.get("/{job_id}/events")
@@ -98,11 +70,7 @@ async def stream_ai_job_events(
     current_user: User = Depends(get_current_user),
     service: AiJobService = Depends(get_ai_job_service),
 ) -> EventSourceResponse:
-    try:
-        service.get_job(current_user, job_id)
-    except Exception as exc:
-        raise_ai_job_error(exc)
-        raise
+    service.get_job(current_user, job_id)
 
     user_id = int(current_user.id)
 

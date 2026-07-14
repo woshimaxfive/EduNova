@@ -158,8 +158,8 @@ def test_register_data_structures_copies_internal_course_without_library_materia
     assert len(course.materials) == 9
     assert all(material.user is user for material in course.materials)
     assert all(material.storage_path.startswith("builtin://") for material in course.materials)
-    assert len(course.knowledge_points) == 54
-    assert len(course.knowledge_chunks) == 178
+    assert len(course.knowledge_points) == 56
+    assert len(course.knowledge_chunks) == 184
     assert all(chunk.course is course for chunk in course.knowledge_chunks)
     assert all(
         prerequisite_id in {point.id for point in course.knowledge_points}

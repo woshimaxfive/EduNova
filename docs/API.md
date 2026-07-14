@@ -161,7 +161,7 @@ Authorization: Bearer <token>
 `starter_mode` 用于决定新账号首次进入学习空间时是否安装内置课程：
 
 - `blank`：空白开始，不自动创建内置课程、资料或主页历史。
-- `data_structures`：安装“数据结构与算法”课程、课程内部来源、54 个知识点和 178 个知识切片。
+- `data_structures`：安装“数据结构与算法”课程、课程内部来源、56 个知识点和 184 个知识切片。
 
 如果前端没有传入，后端默认按 `blank` 处理。内置课程来源只保存在 `course_materials`，不会创建个人资料库 `materials`，也不能复用其他用户资料。
 

@@ -47,7 +47,11 @@ def _complexity_summary(point: dict[str, Any]) -> str:
     return "本知识点以结构、接口或语义辨析为主，不单独给出渐进复杂度；具体操作成本应结合后续算法过程分析。"
 
 
-def _enrich_point(point: dict[str, Any], pseudocode: str | None) -> dict[str, Any]:
+def _enrich_point(
+    point: dict[str, Any],
+    pseudocode: str | None,
+    guidance: dict[str, str],
+) -> dict[str, Any]:
     process = dict(point["process"])
     if pseudocode:
         process["content"] = (
@@ -56,15 +60,9 @@ def _enrich_point(point: dict[str, Any], pseudocode: str | None) -> dict[str, An
     return {
         **point,
         "process": process,
-        "learning_objective": (
-            f"能够解释“{point['title']}”的核心作用，按“{process['title']}”完成推演，"
-            f"并识别“{point['pitfall']['title']}”所描述的风险。"
-        ),
+        "learning_objective": guidance["learning_objective"],
         "complexity": _complexity_summary({**point, "process": process}),
-        "check_question": (
-            f"“{point['title']}”解决什么问题？请说明“{process['title']}”的关键步骤，"
-            f"并解释如何避免“{point['pitfall']['title']}”。"
-        ),
+        "check_question": guidance["check_question"],
     }
 
 
@@ -141,6 +139,7 @@ def _validate_package(package: dict[str, Any]) -> None:
     points = package["knowledge_points"]
     labs = package["labs"]
     materials = package["materials"]
+    quality = package["quality_benchmarks"]
 
     actual = {
         "materials": len(materials),
@@ -160,6 +159,13 @@ def _validate_package(package: dict[str, Any]) -> None:
     if len(keys) != len(set(keys)):
         raise BuiltinCoursePackageError("知识点 key 必须唯一。")
     point_keys = set(keys)
+    guidance_keys = set(quality["point_guidance"])
+    if guidance_keys != point_keys:
+        missing = sorted(point_keys - guidance_keys)
+        extra = sorted(guidance_keys - point_keys)
+        raise BuiltinCoursePackageError(
+            f"知识点教学指引不完整：missing={missing}, extra={extra}"
+        )
     material_keys = {material["key"] for material in materials}
     if len(material_keys) != len(materials):
         raise BuiltinCoursePackageError("内部资料 key 必须唯一。")
@@ -186,7 +192,7 @@ def _validate_package(package: dict[str, Any]) -> None:
             seen_texts.add(normalized)
         if not point["learning_objective"].strip() or not point["complexity"].strip():
             raise BuiltinCoursePackageError(f"知识点缺少学习目标或复杂度说明：{point['key']}")
-        if not point["check_question"].strip().endswith("。"):
+        if not point["check_question"].strip().endswith(("。", "？", "?")):
             raise BuiltinCoursePackageError(f"知识点检查问题格式无效：{point['key']}")
 
     visiting: set[str] = set()
@@ -214,10 +220,19 @@ def _validate_package(package: dict[str, Any]) -> None:
         lab_ids.add(lab["id"])
         try:
             compile(lab["code"], f"<{lab['id']}>", "exec")
+            compile(lab["verification_code"], f"<{lab['id']}-verification>", "exec")
         except SyntaxError as exc:
             raise BuiltinCoursePackageError(f"实验代码无法编译：{lab['id']}") from exc
         if not lab["expected_output"].strip() or len(lab["edge_case"].strip()) < 8:
             raise BuiltinCoursePackageError(f"实验缺少预期输出或边界检查：{lab['id']}")
+
+    for case in quality["retrieval_cases"]:
+        if case["expected_point_key"] not in point_keys:
+            raise BuiltinCoursePackageError(
+                f"检索基准引用了不存在的知识点：{case['expected_point_key']}"
+            )
+        if not case["query"].strip() or not case["required_terms"]:
+            raise BuiltinCoursePackageError("检索基准缺少问题或关键事实。")
 
 
 @lru_cache(maxsize=1)
@@ -225,19 +240,30 @@ def load_builtin_data_structures_course() -> dict[str, Any]:
     manifest = _read_json("manifest.json")
     pseudocode_payload = _read_json(manifest["pseudocode_file"])
     pseudocode_by_point = dict(pseudocode_payload["snippets"])
+    quality = _read_json(manifest["quality_file"])
+    point_guidance = dict(quality["point_guidance"])
     raw_chapters = [_read_json(path) for path in manifest["chapter_files"]]
     chapters = [
         {
             **chapter,
             "knowledge_points": [
-                _enrich_point(point, pseudocode_by_point.get(point["key"]))
+                _enrich_point(
+                    point,
+                    pseudocode_by_point.get(point["key"]),
+                    point_guidance[point["key"]],
+                )
                 for point in chapter["knowledge_points"]
             ],
         }
         for chapter in raw_chapters
     ]
     lab_payload = _read_json(manifest["lab_file"])
-    labs = list(lab_payload["labs"])
+    lab_verification_payload = _read_json(manifest["lab_verification_file"])
+    lab_verification = dict(lab_verification_payload["verification"])
+    labs = [
+        {**lab, "verification_code": lab_verification[lab["id"]]}
+        for lab in lab_payload["labs"]
+    ]
 
     points: list[dict[str, Any]] = []
     materials: list[dict[str, Any]] = []
@@ -267,6 +293,7 @@ def load_builtin_data_structures_course() -> dict[str, Any]:
         "knowledge_points": points,
         "labs": labs,
         "materials": materials,
+        "quality_benchmarks": quality,
     }
     _validate_package(package)
     return package

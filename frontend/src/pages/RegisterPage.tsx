@@ -102,7 +102,7 @@ export function RegisterPage() {
             <label className={starterMode === "data_structures" ? "auth-starter-option active" : "auth-starter-option"}>
               <input type="radio" name="starterMode" value="data_structures" checked={starterMode === "data_structures"} onChange={() => setStarterMode("data_structures")} />
               <BookOpen size={20} weight="duotone" aria-hidden="true" />
-              <span><strong>数据结构与算法</strong><small>54 个知识点 · 16 个实验</small></span>
+              <span><strong>数据结构与算法</strong><small>56 个知识点 · 16 个实验</small></span>
             </label>
           </div>
         </fieldset>

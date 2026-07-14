@@ -86,7 +86,7 @@
       "title": "实验 10：哈夫曼编码长度",
       "knowledge_point_key": "huffman-coding",
       "objective": "使用最小堆反复合并权值最小的两棵树，并计算所得编码的带权路径长度。",
-      "code": "import heapq\n\ndef weighted_path_length(weights):\n    heap = list(weights)\n    heapq.heapify(heap)\n    total = 0\n    while len(heap) > 1:\n        left = heapq.heappop(heap)\n        right = heapq.heappop(heap)\n        merged = left + right\n        total += merged\n        heapq.heappush(heap, merged)\n    return total\n\nprint(weighted_path_length([5, 9, 12, 13, 16, 45]))\n",
+      "code": "import heapq\n\ndef weighted_path_length(weights):\n    if any(weight < 0 for weight in weights):\n        raise ValueError('weights must be non-negative')\n    heap = list(weights)\n    heapq.heapify(heap)\n    total = 0\n    while len(heap) > 1:\n        left = heapq.heappop(heap)\n        right = heapq.heappop(heap)\n        merged = left + right\n        total += merged\n        heapq.heappush(heap, merged)\n    return total\n\nprint(weighted_path_length([5, 9, 12, 13, 16, 45]))\n",
       "expected_output": "224",
       "edge_case": "检查单个权值、两个相同权值和包含零权值的约定，输入权值不得为负数。"
     },
@@ -95,7 +95,7 @@
       "title": "实验 11：广度优先遍历与最短边数",
       "knowledge_point_key": "breadth-first-search",
       "objective": "在无权图中按层访问顶点，同时记录距离和前驱，恢复起点到目标的最短边数路径。",
-      "code": "from collections import deque\n\ndef bfs(graph, start):\n    queue = deque([start])\n    distance = {start: 0}\n    order = []\n    while queue:\n        node = queue.popleft()\n        order.append(node)\n        for neighbor in graph[node]:\n            if neighbor not in distance:\n                distance[neighbor] = distance[node] + 1\n                queue.append(neighbor)\n    return order, distance\n\ngraph = {'A': ['B', 'C'], 'B': ['D'], 'C': ['D', 'E'], 'D': [], 'E': []}\norder, distance = bfs(graph, 'A')\nprint(' '.join(order))\nprint(distance['E'])\n",
+      "code": "from collections import deque\n\ndef bfs(graph, start):\n    if start not in graph:\n        raise KeyError('start vertex not found')\n    queue = deque([start])\n    distance = {start: 0}\n    order = []\n    while queue:\n        node = queue.popleft()\n        order.append(node)\n        for neighbor in graph[node]:\n            if neighbor not in graph:\n                raise KeyError('neighbor vertex not found')\n            if neighbor not in distance:\n                distance[neighbor] = distance[node] + 1\n                queue.append(neighbor)\n    return order, distance\n\ngraph = {'A': ['B', 'C'], 'B': ['D'], 'C': ['D', 'E'], 'D': [], 'E': []}\norder, distance = bfs(graph, 'A')\nprint(' '.join(order))\nprint(distance['E'])\n",
       "expected_output": "A B C D E\n2",
       "edge_case": "检查含环图、非连通顶点和起点不存在的输入，顶点必须在入队时记录为已发现。"
     },
@@ -104,7 +104,7 @@
       "title": "实验 12：Dijkstra 最短路径",
       "knowledge_point_key": "shortest-paths",
       "objective": "使用优先队列选取当前距离最小的顶点，并通过松弛更新非负权图的单源距离。",
-      "code": "import heapq\n\ndef dijkstra(graph, start):\n    distance = {node: float('inf') for node in graph}\n    distance[start] = 0\n    heap = [(0, start)]\n    while heap:\n        current, node = heapq.heappop(heap)\n        if current != distance[node]:\n            continue\n        for neighbor, weight in graph[node]:\n            candidate = current + weight\n            if candidate < distance[neighbor]:\n                distance[neighbor] = candidate\n                heapq.heappush(heap, (candidate, neighbor))\n    return distance\n\ngraph = {'A': [('B', 4), ('C', 1)], 'B': [('D', 1)], 'C': [('B', 2), ('D', 5)], 'D': []}\nprint(dijkstra(graph, 'A'))\n",
+      "code": "import heapq\n\ndef dijkstra(graph, start):\n    if start not in graph:\n        raise KeyError('start vertex not found')\n    for edges in graph.values():\n        for neighbor, weight in edges:\n            if neighbor not in graph:\n                raise KeyError('neighbor vertex not found')\n            if weight < 0:\n                raise ValueError('Dijkstra requires non-negative weights')\n    distance = {node: float('inf') for node in graph}\n    distance[start] = 0\n    heap = [(0, start)]\n    while heap:\n        current, node = heapq.heappop(heap)\n        if current != distance[node]:\n            continue\n        for neighbor, weight in graph[node]:\n            candidate = current + weight\n            if candidate < distance[neighbor]:\n                distance[neighbor] = candidate\n                heapq.heappush(heap, (candidate, neighbor))\n    return distance\n\ngraph = {'A': [('B', 4), ('C', 1)], 'B': [('D', 1)], 'C': [('B', 2), ('D', 5)], 'D': []}\nprint(dijkstra(graph, 'A'))\n",
       "expected_output": "{'A': 0, 'B': 3, 'C': 1, 'D': 4}",
       "edge_case": "检查不可达顶点仍为无穷，并在调用前拒绝负权边，避免误用 Dijkstra。"
     },

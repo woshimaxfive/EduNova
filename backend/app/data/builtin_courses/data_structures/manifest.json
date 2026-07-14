@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "slug": "data-structures-c-python",
-  "version": "2026.07.14",
+  "version": "2026.07.14.2",
   "title": "数据结构与算法",
   "description": "面向大学本科生的数据结构核心课程。理论沿用 C 语言课程语境，配套 Python 可运行实验，覆盖抽象数据类型、线性结构、树、图、查找与排序。",
   "subject": "计算机科学",
@@ -22,13 +22,15 @@
   ],
   "pseudocode_file": "theory-pseudocode.json",
   "lab_file": "labs/python-labs.json",
+  "lab_verification_file": "labs/python-lab-verification.json",
+  "quality_file": "quality-benchmarks.json",
   "expected_counts": {
     "materials": 9,
     "chapters": 8,
-    "knowledge_points": 54,
-    "concept_chunks": 162,
+    "knowledge_points": 56,
+    "concept_chunks": 168,
     "labs": 16,
-    "chunks": 178
+    "chunks": 184
   },
   "bibliography": [
     {

@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "point_guidance": {
+    "data-structure-scope": {"learning_objective": "能从实际问题中识别数据元素、元素关系和需要支持的操作，并说明为什么数据组织方式会影响算法设计。", "check_question": "学生表、文件目录和城市道路分别适合抽象成哪类结构？请指出其中的数据元素、关系和至少一种操作。"},
+    "logical-structures": {"learning_objective": "能依据元素之间的关系区分集合、线性、树和图四类逻辑结构，而不受具体存储方式干扰。", "check_question": "为什么逻辑结构不能根据数组或指针来判断？请分别给出一对一、一对多和多对多关系的例子。"},
+    "storage-representation": {"learning_objective": "能比较顺序存储和链式存储表示关系的方式，并根据访问、插入和空间需求选择方案。", "check_question": "频繁按下标读取和频繁在中间插入分别更偏向哪种存储结构？选择时还要考虑哪些代价？"},
+    "abstract-data-type": {"learning_objective": "能用数据对象、数据关系和操作契约描述抽象数据类型，并区分接口语义与具体实现。", "check_question": "请为栈写出 Push、Pop、Top 的前置条件和结果，并说明这些契约为什么不应暴露数组或链表。"},
+    "complexity-analysis": {"learning_objective": "能确定问题规模与基本操作，推导常见循环的时间和辅助空间复杂度，并区分最好、最坏和平均情况。", "check_question": "一个外层执行 n 次、内层执行 i 次的嵌套循环共有多少次基本操作？为什么只写 O(n²) 仍需说明输入前提？"},
+
+    "linear-list-adt": {"learning_objective": "能解释线性表的一对一次序关系，并用初始化、查找、插入、删除等接口描述其抽象行为。", "check_question": "在线性表长度为 n 时，合法插入位置和合法删除位置各有多少个？两者为什么不同？"},
+    "sequential-list": {"learning_objective": "能根据首地址、元素大小和下标计算顺序表元素位置，并分析随机访问与容量限制。", "check_question": "顺序表为何能 O(1) 按下标访问，却不能保证 O(1) 在表头插入？"},
+    "sequential-list-update": {"learning_objective": "能正确安排顺序表插入时的逆序搬移和删除时的正序覆盖，并处理位置与容量边界。", "check_question": "为什么插入必须从表尾向插入点搬移，而删除必须从删除点向表尾覆盖？反过来会发生什么？"},
+    "singly-linked-list": {"learning_objective": "能画出带头结点单链表的结点与指针关系，并区分头指针、头结点和首元结点。", "check_question": "空的带头结点单链表中哪些指针存在？引入头结点怎样统一表头插入和空表处理？"},
+    "linked-list-update": {"learning_objective": "能在不丢失后继链段的前提下完成单链表插入、删除、头插和尾插，并分析定位成本。", "check_question": "在结点 p 后插入 s 时，两个指针赋值必须按什么顺序执行？若顺序相反会丢失哪段链表？"},
+    "circular-doubly-lists": {"learning_objective": "能维护循环链表的闭环不变式和双向链表的前后对称链接，理解其适用场景。", "check_question": "在双向链表中删除结点 p 时需要修改哪些相邻链接？怎样检查删除后前驱和后继仍相互一致？"},
+    "list-selection-applications": {"learning_objective": "能依据访问模式、数据规模和更新频率选择顺序表或链表，并用线性归并解决有序表合并。", "check_question": "合并两个长度为 m、n 的有序链表为何能做到 O(m+n)？怎样避免结果链表形成环？"},
+
+    "stack-adt": {"learning_objective": "能用后进先出规则解释栈顶操作，并判断一个问题是否只依赖最近尚未处理的状态。", "check_question": "为什么栈只允许在同一端插入和删除？括号匹配中的栈顶具体代表什么？"},
+    "stack-implementations": {"learning_objective": "能实现顺序栈和链栈的判空、入栈与出栈，并比较容量、溢出和分配成本。", "check_question": "顺序栈和链栈分别在什么情况下会失败？它们的 top 指针或栈顶指针各表示什么？"},
+    "recursion-stack": {"learning_objective": "能识别递归出口、规模缩减和调用栈帧，并估算递归深度带来的空间成本。", "check_question": "一个递归算法即使每层工作为 O(1)，为什么仍可能耗尽空间？请结合递归深度说明。"},
+    "stack-applications": {"learning_objective": "能使用栈完成括号匹配、表达式求值或状态回退，并说明每次压栈和出栈的语义。", "check_question": "扫描表达式遇到右括号时应检查哪两个条件？为什么只比较括号总数不能判断匹配正确？"},
+    "queue-adt": {"learning_objective": "能用先进先出规则描述队头删除和队尾插入，并识别按到达顺序处理的应用。", "check_question": "队列的 front 和 rear 分别承担什么职责？层次遍历为什么不能用普通栈替代？"},
+    "circular-queue": {"learning_objective": "能使用取模运算实现循环队列，并采用空一格或计数方案区分队空与队满。", "check_question": "采用空一格方案时，队空、队满和有效长度分别怎样计算？容量为 m 的数组最多保存多少个元素？"},
+    "linked-queue-applications": {"learning_objective": "能维护链队列的队头、队尾和空队状态，并用队列组织层次扩展或服务请求。", "check_question": "链队列删除最后一个数据结点后为什么必须同时重置队尾指针？"},
+
+    "string-adt-storage": {"learning_objective": "能区分串与普通线性表的操作粒度，并比较定长顺序串、堆串和块链串。", "check_question": "串的主要操作为什么通常以子串而不是单个字符为对象？不同存储方式分别适合什么场景？"},
+    "bf-matching": {"learning_objective": "能推演 BF 模式匹配的起始位置移动和字符比较过程，并分析最坏比较次数。", "check_question": "主串和模式串在哪种输入下会让 BF 产生大量重复比较？最坏时间复杂度如何得到？"},
+    "kmp-matching": {"learning_objective": "能根据模式自身的相等前后缀构造前缀函数，并在失配时保持主串位置不回退。", "check_question": "模式 ababaca 在某位置失配时，KMP 为什么能跳过部分比较？跳转信息来自主串还是模式串？"},
+    "multidimensional-arrays": {"learning_objective": "能根据行优先或列优先规则推导多维数组地址公式，并识别维界和元素大小的作用。", "check_question": "二维数组 A[m][n] 按行优先存储时，A[i][j] 相对首地址偏移多少个元素？"},
+    "matrix-compression": {"learning_objective": "能利用对称、三角、带状或稀疏特征压缩矩阵，并在压缩下标与原坐标之间转换。", "check_question": "稀疏矩阵三元组转置时，为何要统计转置后各行的非零元数量和起始位置？"},
+    "generalized-lists": {"learning_objective": "能区分广义表的原子与子表，计算长度和深度，并理解递归定义带来的共享与遍历问题。", "check_question": "广义表 (a,(b,c),()) 的长度和深度分别怎样判断？空表和只含空表的表是否相同？"},
+
+    "tree-terminology": {"learning_objective": "能准确使用根、父子、兄弟、度、层次、高度、叶子和森林描述树结构。", "check_question": "结点的度、树的度、结点深度和树高分别度量什么？请说明常见层次约定。"},
+    "binary-tree-properties": {"learning_objective": "能推导二叉树各层最大结点数、叶子与二度结点关系，并区分满二叉树和完全二叉树。", "check_question": "为什么任意非空二叉树都有 n0=n2+1？完全二叉树的顺序编号又带来什么性质？"},
+    "binary-tree-storage": {"learning_objective": "能根据完全性和稀疏程度选择顺序或链式存储，并由下标计算双亲和孩子。", "check_question": "什么形状的二叉树使用顺序存储会浪费大量空间？零基数组中结点 i 的左右孩子下标是什么？"},
+    "binary-tree-traversal": {"learning_objective": "能推演先序、中序、后序和层序遍历，并使用递归、栈或队列保存待处理状态。", "check_question": "给定先序和中序序列为什么通常能唯一确定二叉树？只有先序和后序为何不一定可以？"},
+    "tree-traversal-applications": {"learning_objective": "能把遍历框架用于求高度、统计结点、复制、表达式求值和由序列重建二叉树。", "check_question": "求二叉树高度时后序递归在每个结点需要汇总哪些子问题结果？空树的高度约定会怎样影响公式？"},
+    "threaded-binary-tree": {"learning_objective": "能利用空孩子指针保存前驱或后继，并通过标志位区分孩子链接与线索。", "check_question": "中序线索二叉树怎样找到一个结点的中序后继？为什么必须检查标志位？"},
+    "tree-forest-conversion": {"learning_objective": "能使用左孩子右兄弟规则在树、森林与二叉树之间转换，并保持原有层次和兄弟次序。", "check_question": "树转换成二叉树后，左指针和右指针分别表示什么关系？森林中的下一棵树如何连接？"},
+    "huffman-coding": {"learning_objective": "能用贪心合并构造哈夫曼树，计算带权路径长度，并生成无前缀冲突的编码。", "check_question": "为什么每次合并最小的两个权值能得到最小带权路径长度？哈夫曼编码为何能立即译码？"},
+
+    "graph-terminology": {"learning_objective": "能区分有向图、无向图、网、路径、连通、强连通、度和子图等基本概念。", "check_question": "有向图中的入度与出度之和和边数有什么关系？连通与强连通的条件有何不同？"},
+    "graph-storage": {"learning_objective": "能在邻接矩阵和邻接表之间选择，并分析顶点数、边数和遍历邻接点的成本。", "check_question": "稀疏图为何通常选邻接表？若要 O(1) 判断任意两点是否有边，哪种表示更直接？"},
+    "depth-first-search": {"learning_objective": "能使用递归或显式栈完成深度优先搜索，并处理环和非连通分量。", "check_question": "DFS 应在什么时候标记顶点已访问？若在递归返回时才标记，含环图可能发生什么？"},
+    "breadth-first-search": {"learning_objective": "能使用队列按层执行广度优先搜索，并在无权图中计算最短边数和前驱。", "check_question": "BFS 为什么应在入队时标记已发现？它能保证的是无权图的哪一种最短路径？"},
+    "minimum-spanning-tree": {"learning_objective": "能说明最小生成树的连通无环约束，并比较 Prim 与 Kruskal 的选边视角和适用图。", "check_question": "最小生成树有多少条边？Prim 和 Kruskal 怎样避免加入一条会形成环的边？"},
+    "shortest-paths": {"learning_objective": "能根据权值条件选择 Dijkstra 或 Floyd，执行松弛并解释不可达、负边和负环限制。", "check_question": "Dijkstra 为什么不能处理负权边？Floyd 如何利用中间点递推，并怎样检测负环？"},
+    "topological-sort": {"learning_objective": "能对 AOV 网执行拓扑排序，用输出顶点数判断环，并理解拓扑序不唯一。", "check_question": "入度法拓扑排序中何时把顶点加入队列？若最终输出少于全部顶点说明什么？"},
+    "critical-path": {"learning_objective": "能在 AOE 网中计算事件和活动的最早、最迟时间，识别关键活动与工程工期。", "check_question": "关键活动的时间余量为什么为零？若存在多条关键路径，缩短一个活动是否一定缩短总工期？"},
+
+    "searching-metrics": {"learning_objective": "能区分静态和动态查找表、主关键字和次关键字，并计算成功与失败平均查找长度。", "check_question": "平均查找长度需要哪些概率和比较次数？为什么成功 ASL 与失败 ASL 应分开计算？"},
+    "sequential-block-search": {"learning_objective": "能实现顺序查找、哨兵优化和分块查找，并分析块大小与索引成本的折中。", "check_question": "分块查找要求块间和块内分别满足什么有序条件？块数过多或过少会带来什么影响？"},
+    "binary-search": {"learning_objective": "能在统一的区间不变式下实现普通和边界折半查找，并判断其适用存储结构。", "check_question": "用半开区间查找第一个等于目标的位置时，命中后为什么仍要收缩右边界？"},
+    "binary-search-tree": {"learning_objective": "能完成二叉排序树查找、插入和三类删除，并解释树高对性能的决定作用。", "check_question": "删除同时具有左右孩子的结点时，为何可用中序前驱或后继替换？后续还要删除哪个结点？"},
+    "balanced-binary-tree": {"learning_objective": "能根据 AVL 平衡因子识别 LL、LR、RR、RL 失衡，并在保持搜索次序的前提下完成旋转。", "check_question": "新键插入失衡结点左孩子的右子树时属于哪种失衡？需要按什么顺序执行两次旋转？"},
+    "multiway-search-trees": {"learning_objective": "能解释 B 树和 B+ 树如何通过多路分支降低外存访问，并推演结点分裂与关键字提升。", "check_question": "B 树与 B+ 树的数据记录通常分别存在哪里？为什么 B+ 树更适合范围查询？"},
+    "hash-tables": {"learning_objective": "能选择散列函数，计算负载因子，并实现开放定址或链地址冲突处理及正确删除。", "check_question": "开放定址表删除元素时为何不能直接置空？负载因子升高会怎样影响查找成本？"},
+
+    "sorting-foundations": {"learning_objective": "能从时间、空间、稳定性、移动次数、初始次序和存储层级评价排序算法。", "check_question": "稳定排序保留的是什么次序？为什么两个同为 O(n log n) 的算法仍可能适合不同场景？"},
+    "insertion-shell-sort": {"learning_objective": "能实现直接插入和希尔分组插入，分析近乎有序输入、移动次数和稳定性差异。", "check_question": "折半插入减少了哪类操作却没有降低总体最坏复杂度？希尔排序为什么通常不稳定？"},
+    "bubble-sort": {"learning_objective": "能维护冒泡排序的已排序边界，使用交换标志提前结束，并判断其稳定性。", "check_question": "一趟冒泡后哪个元素被放到最终位置？什么条件能证明后续各趟都不再需要执行？"},
+    "quick-sort": {"learning_objective": "能选择并维护一种分区不变式，分析枢轴、重复元素和递归深度对快速排序的影响。", "check_question": "已排序输入配合端点枢轴为什么会退化？三路划分怎样改善大量重复关键字的情况？"},
+    "selection-heap-sort": {"learning_objective": "能比较简单选择与堆排序，完成建堆、堆顶交换和下滤，并正确维护堆边界。", "check_question": "自底向上建堆为什么是 O(n) 而不是 O(n log n)？升序堆排序应建立大根堆还是小根堆？"},
+    "merge-sort": {"learning_objective": "能使用双指针稳定合并相邻有序段，推导归并排序的时间和辅助空间成本。", "check_question": "合并时遇到相等关键字为什么应先取左段元素？数组归并排序的额外空间主要用在哪里？"},
+    "radix-sort-selection": {"learning_objective": "能执行稳定的按位分配与收集，并依据数据分布、稳定性和资源约束选择排序算法。", "check_question": "最低位优先基数排序为何要求每一趟都稳定？负数或变长关键字需要先解决什么编码问题？"},
+    "external-sorting": {"learning_objective": "能描述外部排序的初始归并段、多路归并和缓冲区流程，并以 I/O 次数评价方案。", "check_question": "增加归并路数怎样影响归并趟数和缓冲区？置换选择与败者树分别优化外部排序的哪个阶段？"}
+  },
+  "retrieval_cases": [
+    {"query": "逻辑结构和存储结构有什么区别", "expected_point_key": "storage-representation", "required_terms": ["逻辑", "存储"]},
+    {"query": "抽象数据类型为什么不暴露实现", "expected_point_key": "abstract-data-type", "required_terms": ["接口", "实现"]},
+    {"query": "怎样分析嵌套循环时间复杂度", "expected_point_key": "complexity-analysis", "required_terms": ["问题规模", "基本操作"]},
+    {"query": "集合线性树和图如何区分", "expected_point_key": "logical-structures", "required_terms": ["一对一", "多对多"]},
+
+    {"query": "顺序表插入为什么从后往前移动", "expected_point_key": "sequential-list-update", "required_terms": ["逆序", "覆盖"]},
+    {"query": "头结点和头指针有什么区别", "expected_point_key": "singly-linked-list", "required_terms": ["头结点", "头指针"]},
+    {"query": "双向链表删除要修改哪些指针", "expected_point_key": "circular-doubly-lists", "required_terms": ["前驱", "后继"]},
+    {"query": "合并两个有序链表的复杂度", "expected_point_key": "list-selection-applications", "required_terms": ["O(m+n)", "有序"]},
+
+    {"query": "递归为什么需要基例并缩小规模", "expected_point_key": "recursion-stack", "required_terms": ["基例", "栈"]},
+    {"query": "循环队列如何区分队空和队满", "expected_point_key": "circular-queue", "required_terms": ["空一格", "取模"]},
+    {"query": "括号匹配为什么使用栈", "expected_point_key": "stack-applications", "required_terms": ["左括号", "栈顶"]},
+    {"query": "链队列删除最后一个元素要做什么", "expected_point_key": "linked-queue-applications", "required_terms": ["队尾", "空队"]},
+
+    {"query": "KMP失配后为什么主串不回退", "expected_point_key": "kmp-matching", "required_terms": ["前后缀", "主串"]},
+    {"query": "二维数组按行优先怎样计算地址", "expected_point_key": "multidimensional-arrays", "required_terms": ["行优先", "偏移"]},
+    {"query": "稀疏矩阵快速转置为什么统计每列", "expected_point_key": "matrix-compression", "required_terms": ["非零", "起始位置"]},
+    {"query": "广义表长度和深度怎么计算", "expected_point_key": "generalized-lists", "required_terms": ["长度", "深度"]},
+
+    {"query": "完全二叉树和满二叉树有什么区别", "expected_point_key": "binary-tree-properties", "required_terms": ["完全二叉树", "满二叉树"]},
+    {"query": "先序中序如何重建二叉树", "expected_point_key": "tree-traversal-applications", "required_terms": ["先序", "中序"]},
+    {"query": "线索二叉树怎样找中序后继", "expected_point_key": "threaded-binary-tree", "required_terms": ["线索", "后继"]},
+    {"query": "哈夫曼树为什么每次合并最小权值", "expected_point_key": "huffman-coding", "required_terms": ["带权路径长度", "最小"]},
+
+    {"query": "DFS在什么时候标记已访问", "expected_point_key": "depth-first-search", "required_terms": ["已访问", "环"]},
+    {"query": "BFS为什么能求无权图最短路径", "expected_point_key": "breadth-first-search", "required_terms": ["按层", "最短"]},
+    {"query": "Dijkstra为什么不能处理负权边", "expected_point_key": "shortest-paths", "required_terms": ["负权", "松弛"]},
+    {"query": "关键路径的时间余量为什么为零", "expected_point_key": "critical-path", "required_terms": ["时间余量", "关键活动"]},
+
+    {"query": "折半查找第一个重复元素", "expected_point_key": "binary-search", "required_terms": ["边界", "半开区间"]},
+    {"query": "AVL的LR失衡怎样旋转", "expected_point_key": "balanced-binary-tree", "required_terms": ["LR", "双旋"]},
+    {"query": "B树和B加树记录存放位置有什么区别", "expected_point_key": "multiway-search-trees", "required_terms": ["叶子", "范围"]},
+    {"query": "开放定址散列表删除为什么要墓碑", "expected_point_key": "hash-tables", "required_terms": ["删除标记", "探测"]},
+
+    {"query": "快速排序大量重复元素怎么优化", "expected_point_key": "quick-sort", "required_terms": ["三路", "重复"]},
+    {"query": "归并排序为什么稳定", "expected_point_key": "merge-sort", "required_terms": ["相等", "左"]},
+    {"query": "堆排序建堆和下滤过程", "expected_point_key": "selection-heap-sort", "required_terms": ["建堆", "下滤"]},
+    {"query": "外部排序怎样减少磁盘读写", "expected_point_key": "external-sorting", "required_terms": ["归并段", "I/O"]}
+  ]
+}

@@ -3,3 +3,4 @@ httpx
 pytest
 pytest-asyncio
 ruff
+pip-audit==2.10.1

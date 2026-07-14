@@ -280,8 +280,10 @@ class DoclingDocumentExtractor:
             for number, items in sorted(page_blocks.items())
         ]
         try:
-            from docling import __version__ as docling_version
-        except ImportError:
+            from importlib.metadata import version
+
+            docling_version = version("docling-slim")
+        except (ImportError, ModuleNotFoundError):
             docling_version = "unknown"
         return ParsedDocument(pages=pages, blocks=blocks, parser=f"docling:{docling_version}")
 

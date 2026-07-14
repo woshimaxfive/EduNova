@@ -2496,3 +2496,10 @@ OpenRouter 不再作为可见预设。
 6. 错误响应结构统一。
 7. API Key 不以明文返回或写入日志。
 8. AI 长任务和规则 fallback 能返回可恢复的安全状态。
+
+## 21. Phase 22 API 合同
+
+- 除 SSE 和文件下载外，所有 JSON 业务接口都声明精确 Pydantic `response_model`，并统一使用 `ApiEnvelope[T]`、分页合同或明确的领域响应模型。
+- 错误继续使用 `ApiErrorEnvelope`，保留现有 HTTP 状态码、业务错误码、中文消息和 `trace_id`；`DomainError` 由全局异常处理器映射，路由不重复转换同类异常。
+- `backend/openapi.json` 是前端传输类型的输入，`frontend/src/types/openapi.generated.ts` 由 `openapi-typescript` 生成。生成物不替代 Axios 拦截器、Query Key、缓存失效或页面 ViewModel。
+- SSE 事件名和 JSON 数据结构保持现有合同；规范编码和分包解析不改变取消、完成、错误与轮询恢复语义。

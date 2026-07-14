@@ -10,7 +10,7 @@
 
 ## 状态摘要
 
-当前最新完成到 **Phase 20 个性化产物规划与版本体系**，并已完成《数据结构与算法》内置课程升级。
+当前最新完成到 **Phase 22 通用基础设施迁移**，并已完成《数据结构与算法》内置课程升级。
 
 Phase 计划的历史过程继续保留在 `docs/superpowers`。Phase 13 已完成主页问答、课程问答和资源生成的真实 Graph 编排，Phase 14 已让路径、练习评估和报告进入真实 LangGraph，Phase 15 已让画像和资料建课进入生产 Graph，Phase 16 曾实现资料对比和独立期末冲刺，Phase 21 新增资料精细解析 Graph；当前产品为十条生产 Graph 和一条个性化学习路径。
 
@@ -192,7 +192,7 @@ Phase 13 前端视觉硬化后，桌面端继续保留 264px / 68px 的展开与
 | 练习评估 | `practice` router 已接入，复用 `practice_sessions`、`practice_answers` 和 `weakness_review_queue`，支持确定性出题、批改和弱点反哺 |
 | 学习报告 | `reports` router 已接入，复用 `assessment_reports`，支持课程最新报告读取和报告生成 |
 | 文件导出 | `export_jobs` + Redis/RQ 支持 Markdown/PDF/DOCX 学习档案和资源 PPTX 异步文件导出与下载 |
-| Docker | Compose 七服务可按默认端口启动，包含 PostgreSQL、Redis、backend、export-worker、ai-worker、frontend、nginx；AI 与文件导出使用独立 RQ 队列 |
+| Docker | Compose 八服务可按默认端口启动，包含 PostgreSQL、Redis、backend、export-worker、ai-worker、code-verifier、frontend、nginx；AI 与文件导出使用独立 RQ 队列 |
 | 安全 | 用户数据隔离、Key 加密、脱敏返回和上传目录忽略已接入 |
 
 当前后端已挂载的业务 router 是 `auth`、`dashboard`、`courses`、`materials`、`profiles`、`rag`、`settings`、`tutor`、`agents`、`ai_jobs`、`resources`、`paths`、`practice`、`reports` 和 `exports`。`demo` 仍只是前端 API 常量与后续接口设计，不属于当前已实现后端能力。
@@ -269,6 +269,7 @@ Phase 7.2 的分层口径：
 | Phase 19 | 已完成 | 资源 v3 质量门禁、隔离代码验证、证据型练习、逐题诊断、掌握度空值、报告数字一致性、概念归并和话题切换 |
 | Phase 20 | 已完成 | 六类 ArtifactIntent、真实性/个性化/差异门禁、不可覆盖版本族、换教法/优化版本和版本比较 |
 | Phase 21 | 已完成 | MaterialIngestionGraph、页码与章节保真、目录版本确认、章节并行 CourseBuilderGraph、解析与建课质量门禁 |
+| Phase 22 | 已完成 | Docling、Radix、规范 SSE、精确 OpenAPI、官方模型 SDK、OpenTelemetry、可替换存储、上传安全与供应链门禁 |
 
 ### 画像可信度与课程上下文联动（2026-07-13）
 
@@ -280,7 +281,7 @@ Phase 7.2 的分层口径：
 
 ## 下一步建议
 
-Phase 21 已完成“上传资料 -> 精细解析与目录确认 -> 智能建课”两道质量门。后续优先继续用无版权合成资料扩展解析边界测试，并用本地教材做显式质量验收；只有固定质量集证明某个节点受模型能力限制时，才评估更强模型。OCR、旧版 Office 和扫描件仍作为独立范围。
+Phase 22 已完成通用基础设施的渐进迁移。后续优先继续用无版权合成资料扩展解析边界测试，并用本地教材做显式质量验收；只有固定质量集证明某个节点受模型能力限制时，才评估更强模型。OCR、旧版 Office 和扫描件仍作为独立范围。
 
 原因：
 
@@ -300,3 +301,14 @@ Phase 21 已完成“上传资料 -> 精细解析与目录确认 -> 智能建课
 - 导出文件版式、剩余 Graph、课程空间移动体验和验收中发现问题的 P0/P1 修复。
 
 后续继续保持代码、测试、工程文档和浏览器验收同步；不把 OCR、旧版 Office 或交付材料混入同一轮产品开发。
+
+## Phase 22 通用基础设施迁移
+
+- Docling 通过项目适配层接管 PDF、DOCX、PPTX 通用结构提取，旧解析器可用 `EDUNOVA_DOCUMENT_PARSER=legacy` 显式回滚；目录确认、质量门禁、切片、页码、证据绑定和建课流程保持不变。
+- 模态交互与 Toast 收口到 Radix，应用 SSE 使用 `sse-starlette` 与 `eventsource-parser`；事件名、数据合同和恢复语义保持兼容。
+- JSON API 具备精确 Pydantic 响应模型并生成前端传输类型；领域异常统一映射，Zustand 持久化兼容旧登录数据。
+- OpenAI-compatible 协议交给官方 SDK，结构化输出统一为严格解析、一次修复、Schema 校验和确定性降级。
+- OpenTelemetry、可替换存储、文件类型校验与可选 ClamAV 已接入；默认离线/no-op，不记录学习隐私原文。
+- Promptfoo 与 Ragas 只补充评测，固定课程、数字一致性、客观评分、引用真实性和隐私回归仍是硬门禁。
+- 无版权 Docling 基准已在离线 AI Worker 镜像中通过：PDF 保留 2 页/4 块，DOCX 与 PPTX 均提取 4 块并识别 2 个标题；镜像记录解析器版本 `docling:2.113.0`，不输出夹具正文。
+- 完整 Compose 八服务已验证健康；backend、export-worker、ai-worker 与 frontend 均以非 root 用户运行，上传和导出命名卷实际写入通过。

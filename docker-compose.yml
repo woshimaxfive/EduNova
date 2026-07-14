@@ -36,6 +36,10 @@ services:
       context: .
       dockerfile: docker/backend.Dockerfile
       target: backend
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
     env_file:
       - path: .env
         required: false
@@ -121,6 +125,10 @@ services:
       context: .
       dockerfile: docker/backend.Dockerfile
       target: backend
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
     env_file:
       - path: .env
         required: false
@@ -161,6 +169,14 @@ services:
       context: .
       dockerfile: docker/backend.Dockerfile
       target: ai-worker
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        HF_ENDPOINT: ${HF_ENDPOINT:-https://huggingface.co}
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
+        TORCH_VERSION: ${TORCH_VERSION:-2.13.0+cpu}
+        TORCHVISION_VERSION: ${TORCHVISION_VERSION:-0.28.0+cpu}
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
     env_file:
       - path: .env
         required: false
@@ -227,6 +243,8 @@ services:
     build:
       context: .
       dockerfile: docker/code-verifier.Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     environment:
       PORT: 8090
       CODE_RUN_TIMEOUT_MS: 5000
@@ -268,13 +286,15 @@ services:
     build:
       context: .
       dockerfile: docker/frontend.Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     expose:
-      - "80"
+      - "8080"
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1",
+          "wget -qO- http://127.0.0.1:8080/ >/dev/null 2>&1 || exit 1",
         ]
       interval: 10s
       timeout: 5s

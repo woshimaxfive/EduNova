@@ -1,0 +1,11 @@
+{
+  "name": "edunova-promptfoo-evals",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "eval": "node --env-file=promptfoo.env node_modules/promptfoo/dist/src/main.js eval -c promptfooconfig.yaml --no-cache --no-progress-bar --no-share --no-write"
+  },
+  "devDependencies": {
+    "promptfoo": "0.121.18"
+  }
+}

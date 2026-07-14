@@ -222,14 +222,14 @@ frontend/src/
 - `/dashboard/summary` 首页总览读取当前登录用户的真实数据；`blank` 用户保持空课程，`data_structures` 用户显示自己的内置课程，但主页资料摘要仍只统计个人上传原文件。
 - Phase 4.3 已完成受保护的 `/tutor/sessions` 主页会话与消息持久化；当前 `/app` 首次发送会创建 home session，连续追问复用当前 session，主页 assistant 调用当前用户默认模型生成普通回答。完整主页历史由 `/tutor/sessions/history` 分页查询并做服务端正文搜索，`/dashboard/summary` 只保留首页轻量最近数据。当前会话通过内部 `session_id` 恢复，详情响应同时恢复会话级 `selected_material_ids`。
 - Phase 4.4 已完成受保护的 `/materials` 真实资料库闭环；当前 `/app` 上传资料会写入个人资料库并刷新 `/dashboard/summary`，`/app/library` 从 `/materials` 读取当前用户资料，支持文档/图片筛选、搜索、详情反馈和上传刷新。
-- Phase 13.2 已完成 PDF/DOCX/PPTX 文本解析；当前 `/app` 和 `/app/library` 可用已解析 TXT/Markdown/PDF/DOCX/PPTX 资料生成课程，并跳转 `/app/courses/:courseId`。旧版 DOC/PPT、图片和扫描件不伪装解析完成。
+- Phase 22 起 PDF/DOCX/PPTX 由 `DocumentStructureExtractor` 适配 Docling，继续输出 EduNova 的页、块和目录合同；TXT/Markdown 保留轻量解析。旧版 DOC/PPT、图片和扫描件不伪装解析完成。
 - Phase 5.2 已完成受保护的 `/rag/search` 课程知识库检索；Phase 6.4 后检索会优先融合关键词分数和向量分数，并把真实资料、章节、切片引用和检索状态保存到 assistant 消息。
 - Phase 5.3 已完成课程空间 `scope=course` 会话持久化；课程侧栏历史来自 `/tutor/sessions?scope=course&course_id=...`，点击历史会恢复真实 messages 和 `citation_json`。
 - 当前主页 assistant 由 `HomeTutorGraph` 接管并使用流式输出。主页允许模型通用知识，已选资料通过独立 `material_chunks` 做资料级混合检索，联网结果作为可追溯证据；未配置搜索 Key 时 warning 只进入来源/轨迹区，不伪造网页来源。课程空间继续使用严格课程 RAG，两者不混用证据边界。
 - 主页资料范围属于 `chat_sessions`，只有用户确认后保存；发送请求省略资料字段时复用会话范围。生成课程使用独立选料状态，AI Job 恢复只恢复建课请求摘要，不覆盖主页会话资料。
 - 当前 `/app/courses/:courseId` 的课程标题、知识点、课程历史、课程消息和课程引用来自真实接口。
 - 命中引用且模型可用时，课程 assistant 内容来自 OpenAI-compatible 模型回答。
-- 课程页优先使用 `fetch` + `ReadableStream` 消费 SSE。
+- 课程页保留支持 Authorization、POST body 和 AbortSignal 的 Fetch，由 `eventsource-parser` 处理 SSE 分包、UTF-8 边界和多行数据。
 - Phase 6.4 起课程引用来自混合检索，缺少外部 embedding 配置时显式显示本地 fallback。
 - Phase 6.5 起课程页默认不再常驻知识画布、资源区、证据层、横向知识点条或主区重复历史；来源、生成资源、学习路径和课堂协作轨迹收敛到回答下方，知识点入口和引用可进入学习模式。
 - 资源、学习路径和 Agent 轨迹已经接入真实接口；后续重点是体验和验收打磨。
@@ -650,3 +650,13 @@ flowchart LR
 - 质量门禁分为真实性、个性化、多样性、教学可用性和类型正确性。替代版本相对来源必须至少改变两项教学策略维度，优化版本必须保持原意图。多样性先使用本地文本与结构指纹；存在可用向量配置时，通过统一 `EmbeddingService` 增加语义相似度门禁，失败时保留明确降级状态而不阻断本地校验。
 - `generated_resources` 使用版本族、来源版本和递增版本号保存不可覆盖历史。版本分配在事务中锁定版本族；失败任务不会创建空版本或覆盖来源。
 - 资源工坊按版本族展示最新成果，允许切换、比较、回到旧版本，并从任意版本发起“换一种教法”或“优化当前版本”。
+
+## 17. Phase 22 通用基础设施边界
+
+- `DocumentStructureExtractor` 隔离 Docling 与 EduNova 合同。Docling 只提供 PDF、DOCX、PPTX 结构提取；Graph 继续负责规范化、目录确认、质量门禁、章节切片、证据和建课审核。
+- Radix 提供模态、焦点和 Toast 原语；页面继续拥有 URL 状态、业务回调与视觉布局。
+- 浏览器应用 SSE 由 `sse-starlette` 和 `eventsource-parser` 承载，Provider SSE 则由官方 OpenAI SDK 处理，三层不共享自研字符串解析器。
+- Pydantic 响应合同是 OpenAPI 唯一来源，生成类型只覆盖传输层；Axios、React Query 和 ViewModel 仍由前端维护。
+- OpenTelemetry 只记录 HTTP、SQL、Redis、队列和任务边界的安全元数据；学生可见 Agent trace 继续保存 EduNova 特有的协作证据。
+- `StorageAdapter` 隔离 Local 与 S3-compatible 实现，数据库继续保存字符串对象键并兼容旧本地路径。
+- LangChain、LlamaIndex、Haystack、Dify 与 RAGFlow 未进入当前生产链路。`docs/superpowers` 中的 LangChain 方案是历史规划，不代表当前依赖或架构。

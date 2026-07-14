@@ -112,3 +112,7 @@ model = spark-x
 - 每个 `material_chunk` 保存章节路径、起止页、内容哈希、解析器版本和质量摘要。资料重新解析或目录编辑后通过目录版本区分结构。
 - 主页资料问答、资料对比和智能建课共用已确认切片；待确认、失败和 legacy 资料不进入生产检索。
 - 课程建成后，`knowledge_chunks` 继续绑定来源 `material_chunk`。关键词、向量、RRF 与可选 Rerank 的召回策略不变，但引用页码和章节来自已确认结构。
+
+## 10. Phase 22 解析与检索边界
+
+Docling 只替换 PDF、DOCX、PPTX 的通用结构提取，仍输出 EduNova 的 `ParsedDocument / ParsedPage / ParsedBlock`。目录确认、章节内切片、质量门禁、配置指纹、课程与用户隔离、混合召回、重排序和证据引用均不交给第三方框架。LangChain Loader 目录只作为生态参考，本阶段没有引入 LangChain、LlamaIndex 或 Haystack 生产依赖。

@@ -31,12 +31,12 @@ EduNova 坚持“基础不牢，地动山摇”的开发原则。
 
 | 项目 | 状态 |
 | --- | --- |
-| 最新完成阶段 | Phase 20 |
+| 最新完成阶段 | Phase 22 |
 | 当前主链路 | 精细资料解析、动态画像、智能建课、主页/课程问答、资源、持续路径、练习评估、报告和资料对比已由十条真实 LangGraph 接管 |
-| 当前主要缺口 | OCR、旧版 Office、扫描件解析，以及用户上传资料自动建课质量尚未达到手工内置课标准 |
-| 下一步建议 | 以数据结构内置课作为质量标杆，评估用户资料建课的章节完整性、知识点粒度、先修关系与切片质量 |
+| 当前主要缺口 | OCR、旧版 Office、扫描件解析，以及 Docling 真实教材质量基准仍需持续扩充 |
+| 下一步建议 | 以无版权夹具和本地脱敏教材持续记录 Docling 质量、性能与失败分类，不扩张产品范围 |
 
-Phase 13.2 已完成基础资料解析、主页工具和异步导出增强；Phase 14 已完成路径、评估、报告三条真实 Graph；Phase 15 已完成 ProfileGraph、CourseBuilderGraph、个性化策略、练习恢复和 React Flow/ECharts 可视化；Phase 16 完成过资料对比与冲刺，当前冲刺已退役；Phase 21 新增 MaterialIngestionGraph，当前为十条生产 Graph。后续继续做真实证据、移动体验和异常恢复。
+Phase 13.2 已完成基础资料解析、主页工具和异步导出增强；Phase 14 已完成路径、评估、报告三条真实 Graph；Phase 15 已完成 ProfileGraph、CourseBuilderGraph、个性化策略、练习恢复和 React Flow/ECharts 可视化；Phase 16 完成过资料对比与冲刺，当前冲刺已退役；Phase 21 新增 MaterialIngestionGraph，当前为十条生产 Graph；Phase 22 已将通用基础设施迁移到成熟工具并保留领域边界。后续继续做真实证据、移动体验和异常恢复。
 
 Phase 17 已新增统一 `AIJobRuntime`，智能建课和资源生成进入独立后台队列；四个前端入口共用持久化进度、SSE/轮询恢复、取消和重试。
 
@@ -285,3 +285,13 @@ Phase 20 已把资源个性化从 Prompt 附加字段升级为逐类型 `Artifac
 - [x] 未确认或质量未通过的资料不能建课。
 - [x] `CourseBuilderGraph` 按章节并行分析，知识点上限提高到 120，并执行覆盖率、证据、重复标题和先修 DAG 门禁。
 - [x] 本机教材显式验收识别 274 页、8 个核心章节并生成 55 个知识点；教材和解析正文未进入仓库。
+
+## 11. Phase 22 通用基础设施迁移
+
+- [x] Docling 适配层接管 PDF、DOCX、PPTX，并保留 legacy 显式回滚和原有数据合同。
+- [x] Dialog、Drawer、确认框和 Toast 统一使用 Radix 基础组件。
+- [x] 应用 SSE 使用规范服务端和客户端解析器，保留现有协议与恢复语义。
+- [x] 全部 JSON 业务接口声明精确响应模型并生成前端传输类型。
+- [x] 官方 OpenAI SDK、统一结构化输出、OpenTelemetry 与 HTTPX 已收口。
+- [x] Local/S3-compatible 存储、文件类型检查和可选 ClamAV 已接入。
+- [x] 离线评测、供应链审计、许可证清单和文档同步纳入交付门禁。

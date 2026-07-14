@@ -234,7 +234,7 @@ Compose 使用四个固定命名卷：`postgres_data` 保存数据库，`redis_d
 | `ai-worker` | `docker/backend.Dockerfile` | `material_data` | 资料解析、建课、资源和向量重建 RQ Worker |
 | `export-worker` | `docker/backend.Dockerfile` | 无 | 学习档案与 PPTX 导出 RQ Worker |
 | `code-verifier` | `docker/code-verifier.Dockerfile` | 仅内部 `8090` | 生成 Python 代码的隔离验证服务 |
-| `frontend` | `docker/frontend.Dockerfile` | 内部 `80` | Vite 生产构建后的静态前端，只供 Nginx 访问 |
+| `frontend` | `docker/frontend.Dockerfile` | 内部 `8080` | Vite 生产构建后的静态前端，由非 root Nginx 托管，只供统一入口访问 |
 | `nginx` | `nginx:1.27-alpine` | `8080` | 统一入口，`/api/` 转发后端，其余转发前端 |
 
 如果本机端口已被占用，可以在 `.env` 中改为其他宿主机端口：
@@ -394,5 +394,31 @@ Phase 14 提供独立验收脚本：
 
 - 扩展 E2E 失败分支和更细粒度部署验收截图。
 - 公网部署、TLS、反向代理和生产环境变量建议。
-- 对象存储、日志轮转、备份恢复和监控建议。
+- 日志轮转、备份恢复和生产监控建议。
 - OCR、旧版 Office 解析、扫描件解析和生产级 worker 监控接入后的部署说明。
+
+## 11. Phase 22 基础设施配置
+
+- AI Worker 镜像固定安装 `docling-slim` 并预装模型制品；运行时关闭远程插件和 OCR。无法提供离线制品时可设置 `EDUNOVA_DOCUMENT_PARSER=legacy` 显式回滚，不能静默双解析。
+- `STORAGE_BACKEND=local` 是本地默认；公开部署可配置 S3-compatible endpoint、bucket、region 和独立访问凭据。数据库不需要随存储切换迁移。
+- ClamAV 本地默认关闭。公开部署使用 `docker compose --profile security up -d` 启动固定版本 sidecar，并设置 `CLAMAV_ENABLED=true`；启用后病毒或扫描服务不可用都会拒绝入库。
+- OTLP 未配置时 OpenTelemetry 为 no-op；配置 Collector endpoint 后才导出通用运行 span，且不发送业务正文或认证信息。
+- Promptfoo 默认离线，Ragas 联网评测需显式设置 `EDUNOVA_EVAL_ALLOW_NETWORK=1`；生产容器不需要安装网络评测依赖。
+- Docling 镜像验收可运行 `docker compose run --rm ai-worker python -m backend.evals.docling_benchmark`；本地教材通过只读挂载显式提供，输出只保留脱敏聚合指标。
+- backend、export-worker 与 ai-worker 使用固定 UID/GID 10001 的 `edunova` 用户；前端静态服务使用 `nginx-unprivileged` 的 UID 101。命名卷初始化时继承镜像内可写目录权限，升级既有外部卷前应先核对属主。
+
+大陆网络首次构建较慢时，可只在构建阶段配置镜像源，不改变运行时 Provider 或模型请求地址：
+
+```powershell
+$env:PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
+$env:HF_ENDPOINT = "https://huggingface.co"
+$env:NPM_REGISTRY = "https://registry.npmmirror.com"
+$env:DEBIAN_MIRROR = "https://mirrors.tuna.tsinghua.edu.cn/debian"
+$env:DEBIAN_SECURITY_MIRROR = "https://mirrors.tuna.tsinghua.edu.cn/debian-security"
+$env:TORCH_INDEX_URL = "https://mirrors.nju.edu.cn/pytorch/whl/cpu"
+docker compose build
+```
+
+这些配置均为可选 Build Args；不设置时回到 Debian、PyPI、Hugging Face 和 npm 官方源。发布构建需要同时保留固定版本、依赖审计和许可证门禁，不能因为使用镜像源而跳过供应链检查。
+
+AI Worker 默认从 PyTorch 官方 CPU index 安装固定 `torch`/`torchvision` CPU wheel；网络受限时可显式切换到已验证的高校镜像。不要改回 PyPI 默认 Linux wheel，否则会额外引入 CUDA、cuDNN、NCCL 等当前不使用的 GPU 运行库，并显著放大镜像。

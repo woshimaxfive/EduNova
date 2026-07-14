@@ -498,7 +498,7 @@ Phase 5 以后：
 - `/app/path` 只展示当前课程的一条个性化学习路径；`view`、`comparison_id` 和 `sprint_plan_id` 属于已退役参数，打开旧地址时会清理这些参数并保留 `course_id`。
 - `/app/library` 会恢复最近一次已保存资料对比并展示真实 `MaterialComparisonGraph` 轨迹。资料对比保持独立，对比和 Graph 失败只在局部提示，不影响上传、资料列表、生成课程或学习路径。
 - Phase 12.1 已把 `ReportsPage` 接入真实 `/exports/learning-dossier`：选择课程后可同步导出 Markdown 学习档案，前端用返回的 Markdown 和安全文件名创建浏览器下载；导出失败只在报告页导出区域局部提示，不影响报告读取和生成。
-- Phase 6.3 已接真实 `/tutor/sessions/{session_id}/messages/stream`；`CourseSpacePage` 发送课程问题时先创建或复用课程会话，再用 `fetch` + `ReadableStream` 读取 SSE，token 到达时逐步渲染，`done` 后用后端持久化消息替换临时状态。
+- Phase 6.3 已接真实 `/tutor/sessions/{session_id}/messages/stream`；`CourseSpacePage` 发送课程问题时先创建或复用课程会话。Phase 22 起由 Fetch 发起带鉴权的请求，并用 `eventsource-parser` 解析 SSE；token 到达时逐步渲染，`done` 后用后端持久化消息替换临时状态。
 - Phase 6.1 已接真实 `/settings/model` 和 `/settings/model/test`；Phase 6.2 已接真实 `/settings/model/configs`、`/settings/model/configs/{id}`、`/settings/model/configs/{id}/default` 和 `/settings/model/configs/{id}/test`；`SettingsPage` 会显示配置列表和当前编辑面板，支持创建、编辑、测试、设默认和删除用户自己的模型配置，并且不展示明文 Key。
 - Phase 6.2 的 Provider 预设不追求数量多，只保留讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务；OpenRouter 不再作为可见预设。设置中心后续已将回答服务和向量服务并列为同一配置方案内的两组独立连接，各自填写预设、Base URL、Key 和模型；向量未配置时明确退回关键词检索，不把本地 hash 宣称为语义检索。
 - 旧 `FirstRunGuide` 展示组件已删除；新用户直接通过主页、资料库和课程空间的真实空态进入上传资料、选择内置课程或开始提问，不再额外叠加一层功能介绍。
@@ -597,3 +597,9 @@ Phase 5 以后：
 - 目录 Tab 支持改名、包含或排除、合并、拆分与版本冲突反馈；确认后资料状态变为可建课。
 - 生成课程入口只允许选择 `confirmed` 且质量通过的资料。待确认资料提供进入检查器的行动，失败资料提供重新解析，legacy 资料提供主动升级。
 - 建课仍使用 `/courses/from-materials/jobs`，完成后进入课程空间；任务结果显示来源覆盖率、知识点密度、证据完整度和审核模式。
+
+## 21. Phase 22 通用交互与传输边界
+
+- 真正模态的 Dialog、Drawer、AlertDialog 和 Toast 使用项目 Radix 包装层，非模态资料检查区域继续保留普通页面语义。
+- 前端 SSE 继续使用可携带 Authorization、POST body 和 AbortSignal 的 Fetch，但分包、多行数据和 UTF-8 边界由 `eventsource-parser` 处理，不再由页面直接读取并拼接 `ReadableStream` 字符串。
+- OpenAPI 生成物只描述传输合同；Query Key、缓存失效、路由状态和页面 ViewModel 保持项目所有。

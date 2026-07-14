@@ -959,3 +959,18 @@ docker compose down
 - 受保护应用侧栏按“资料库、资源工坊、学习画像”顺序展示核心入口；`/app/profile` 不再以底部“个人资料”入口出现。
 - 设置、退出登录和当前账号摘要继续位于侧栏底部；昵称修改和密码修改能力不得因导航调整而丢失。
 - 桌面与 390px 覆盖式侧栏均验证学习画像跳转、当前路由高亮和导航后自动收起。
+
+## 24. Phase 22 通用基础设施迁移验收
+
+- Docling 使用程序化无版权 PDF、DOCX、PPTX 夹具验证页码、标题层级、失败分类与 legacy 回滚；本地教材只记录聚合质量指标和脱敏失败类型，不提交正文。
+- OpenAPI 要求每个 JSON 业务接口都有明确响应 Schema，生成传输类型不得为对应接口留下无边界的顶层 `additionalProperties: true`。
+- Provider 覆盖非流式、流式、Embedding、Thinking 参数、429、超时、首 token 后中断和 SDK 重试关闭；结构化输出覆盖严格 JSON、一次修复、Schema 失败与确定性 fallback。
+- UI 在桌面与 390px 真实浏览器检查 Tab 焦点、Escape、关闭后焦点恢复、Toast 播报和移动侧栏。
+- 存储覆盖 Local、模拟 S3、旧路径兼容与路径越界；上传覆盖 MIME 伪装、OOXML 容器及 ClamAV 正常、病毒和不可用分支。
+- OpenTelemetry 验证未配置时 no-op，并禁止 Prompt、回答、资料、画像、作答、JWT、密钥和 SQL 参数进入 span。
+- Promptfoo 默认离线运行；Ragas 模型裁判只有 `EDUNOVA_EVAL_ALLOW_NETWORK=1` 才启用，且都不能替代现有硬门禁。
+- 交付运行编码、后端、离线评测、Ruff、Alembic、前端 lint/test/build、OpenAPI 漂移、Compose、Docker E2E、供应链和浏览器检查。
+
+真实 Docling 基准在 AI Worker 镜像内运行 `python -m backend.evals.docling_benchmark`；可用 `--local-document <path>` 增加用户明确提供的本地教材。脚本只输出聚合指标，不输出标题或正文。
+
+2026-07-15 的无版权夹具基线为：PDF 2 页/4 块，DOCX 4 块/2 个标题，PPTX 2 页/4 块/2 个标题，三者均报告 `docling:2.113.0`。耗时仅作为同机趋势指标，不设跨机器硬阈值。

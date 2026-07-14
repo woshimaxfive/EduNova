@@ -86,6 +86,7 @@ EduNova 第一版是多用户系统，所有课程、资料、画像、资源、
 ```powershell
 .\scripts\verify_encoding.ps1
 .\scripts\test.ps1
+.\scripts\supply_chain.ps1
 docker compose config --quiet
 git diff --check
 git status --short --branch
@@ -97,3 +98,9 @@ git status --short --branch
 - `var/uploads`、`storage`、`output`、`node_modules`、`dist` 未被提交。
 - 文档不包含真实账号、密钥或私有资料。
 - 浏览器验收记录使用临时账号和示例课程。
+
+## 8. Phase 22 第三方组件说明
+
+Docling、Radix、sse-starlette、eventsource-parser、openapi-typescript、OpenAI Python SDK、json-repair、OpenTelemetry、boto3、puremagic、Promptfoo、Ragas、ClamAV、Trivy 与 nginx-unprivileged 只承载通用基础设施。EduNova 保留学习闭环、目录与质量门禁、证据绑定、用户隔离和确定性评分。
+
+直接依赖及本地安装包声明许可证由 `docs/DEPENDENCY_LICENSES.md` 生成；发布镜像还必须复核传递依赖和镜像内许可证文件。ClamAV sidecar 与应用镜像分离部署，发布或再分发前需单独核对其 GPL 条款及镜像包含内容。

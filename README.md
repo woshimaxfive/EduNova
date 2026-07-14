@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前已完成 **Phase 21 资料精细解析与高质量智能建课**。十条生产主链路由真实 LangGraph 编排；资料先经过章节保真的解析、质量门禁和用户目录确认，再进入章节并行智能建课。
+当前已完成 **Phase 22 通用基础设施迁移**。十条生产主链路仍由真实 LangGraph 编排；文档解析、模态交互、SSE、API 合同、OpenAI-compatible 协议、观测、存储和上传安全改由成熟工具承载，EduNova 的学习闭环、质量门禁、证据和用户隔离语义保持不变。
 
 当前十条真实生产 Graph 为 `MaterialIngestionGraph`、`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
 
@@ -20,7 +20,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - 真实注册、登录、退出和受保护路由。
 - 主页真实总览、分页历史搜索、会话级参考资料记忆、主页消息持久化和通用模型回答。
 - 当前用户个人资料库上传、列表、详情和进度查询。
-- 已解析 TXT/Markdown/PDF/DOCX/PPTX 资料通过 `CourseBuilderGraph` 生成带来源覆盖、学习目标、先修关系和安全审核的课程结构；`.doc`、`.ppt`、图片和扫描件不伪装解析。
+- TXT/Markdown 保留轻量解析，PDF/DOCX/PPTX 默认由 Docling 适配层输出既有结构合同，再通过 `CourseBuilderGraph` 生成带来源覆盖、学习目标、先修关系和安全审核的课程结构；`.doc`、`.ppt`、图片和扫描件不伪装解析。
 - 课程知识点、知识切片、课程内历史和引用持久化。
 - 课程空间真实模型 RAG 回答、SSE 流式输出、刷新恢复和双模式前端。
 - `ProfileGraph` 管理真实 8 维学习画像、逐维可信度和证据事件；显式回答立即更新，隐式学习信号满足双来源与置信度门槛后才进入长期画像。

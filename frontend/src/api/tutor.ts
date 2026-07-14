@@ -1,6 +1,7 @@
 import { apiClient } from "./client";
 import { PATHS } from "../app/routePaths";
 import { useAuthStore } from "../features/auth/authStore";
+import { consumeSseResponse, type ParsedSseEvent } from "./sse";
 import { type ApiEnvelope } from "../types/api";
 import { type RagSearchResultItem } from "./rag";
 
@@ -226,16 +227,13 @@ export async function streamTutorMessage(
     throw new Error("当前浏览器不支持流式回答。");
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder("utf-8");
-  let buffer = "";
   const streamState: {
     finalDetail: TutorSessionDetail | null;
     terminalEvent: "done" | "error" | null;
   } = { finalDetail: null, terminalEvent: null };
 
-  const dispatchEvent = (event: { event: string; data: unknown } | null) => {
-    if (event === null || streamState.terminalEvent !== null) {
+  const dispatchEvent = (event: ParsedSseEvent) => {
+    if (streamState.terminalEvent !== null) {
       return;
     }
     if (event.event === "metadata") {
@@ -261,43 +259,13 @@ export async function streamTutorMessage(
     }
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split(/\r?\n\r?\n/);
-    buffer = parts.pop() ?? "";
-    for (const part of parts) {
-      dispatchEvent(parseSseEvent(part));
-    }
-  }
-
-  buffer += decoder.decode();
-  if (buffer.trim()) {
-    dispatchEvent(parseSseEvent(buffer));
-  }
+  await consumeSseResponse(response, (event) => {
+    dispatchEvent(event);
+    return streamState.terminalEvent === null ? undefined : false;
+  });
 
   if (streamState.finalDetail === null) {
     throw new Error("模型暂不可用，请检查设置或稍后重试。");
   }
   return streamState.finalDetail;
-}
-
-function parseSseEvent(raw: string): { event: string; data: unknown } | null {
-  const lines = raw.split(/\r?\n/);
-  const eventLine = lines.find((line) => line.startsWith("event:"));
-  const dataLines = lines.filter((line) => line.startsWith("data:"));
-  if (dataLines.length === 0) {
-    return null;
-  }
-
-  const event = eventLine?.replace("event:", "").trim() || "message";
-  const rawData = dataLines.map((line) => line.replace("data:", "").trimStart()).join("\n");
-  try {
-    return { event, data: JSON.parse(rawData) };
-  } catch {
-    return null;
-  }
 }

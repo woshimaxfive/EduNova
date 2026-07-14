@@ -1,4 +1,5 @@
 fastapi
+sse-starlette==3.4.5
 uvicorn[standard]
 alembic
 pydantic-settings

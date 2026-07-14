@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import { useAuthStore } from "../features/auth/authStore";
+import { consumeSseResponse } from "./sse";
 import { type ApiEnvelope } from "../types/api";
 import { type CreateCourseFromMaterialsRequest } from "./courses";
 import { type GenerateResourcesRequest } from "./resources";
@@ -107,26 +108,9 @@ export async function streamAiJob(
   if (!response.ok || !response.body) {
     throw new Error("任务进度连接失败");
   }
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done });
-    const blocks = buffer.split("\n\n");
-    buffer = blocks.pop() ?? "";
-    for (const block of blocks) {
-      const eventLine = block.split("\n").find((line) => line.startsWith("event:"));
-      const dataLines = block.split("\n").filter((line) => line.startsWith("data:"));
-      if (!eventLine || dataLines.length === 0) continue;
-      const event = eventLine.slice(6).trim() as AiJobEventName;
-      const data = dataLines.map((line) => line.slice(5).trimStart()).join("\n");
-      onEvent(event, JSON.parse(data) as AiJob);
-      if (event === "done" || event === "error" || event === "cancelled") {
-        await reader.cancel();
-        return;
-      }
-    }
-    if (done) break;
-  }
+  await consumeSseResponse(response, ({ event, data }) => {
+    const eventName = event as AiJobEventName;
+    onEvent(eventName, data as AiJob);
+    return eventName === "done" || eventName === "error" || eventName === "cancelled" ? false : undefined;
+  });
 }

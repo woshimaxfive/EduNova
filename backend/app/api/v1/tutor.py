@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 
 from fastapi import APIRouter, Depends, Query, status
-from fastapi.responses import StreamingResponse
+from sse_starlette import EventSourceResponse
 
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import ApiError, api_response
+from backend.app.api.sse import event_source_response, sse_event
 from backend.app.api.v1.deps import get_current_user
 from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
@@ -257,7 +257,7 @@ def stream_message(
     payload: SendTutorMessageRequest,
     current_user: User = Depends(get_current_user),
     service: TutorSessionService = Depends(get_tutor_session_service),
-) -> StreamingResponse:
+) -> EventSourceResponse:
     try:
         events = service.stream_message(
             user=current_user,
@@ -292,11 +292,6 @@ def stream_message(
         for event in events:
             event_name = str(event.get("event") or "message")
             data = event.get("data", {})
-            yield f"event: {event_name}\n"
-            yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+            yield sse_event(event_name, data)
 
-    return StreamingResponse(
-        encode_events(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return event_source_response(encode_events())

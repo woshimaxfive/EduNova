@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
-
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import StreamingResponse
+from sse_starlette import EventSourceResponse
 
 from backend.app.api.errors import ApiError, api_response
+from backend.app.api.sse import event_source_response, sse_event
 from backend.app.api.v1.deps import get_current_user
 from backend.app.core.config import get_settings
 from backend.app.db.session import SessionLocal, get_db_session
@@ -98,7 +97,7 @@ async def stream_ai_job_events(
     request: Request,
     current_user: User = Depends(get_current_user),
     service: AiJobService = Depends(get_ai_job_service),
-) -> StreamingResponse:
+) -> EventSourceResponse:
     try:
         service.get_job(current_user, job_id)
     except Exception as exc:
@@ -109,7 +108,6 @@ async def stream_ai_job_events(
 
     async def events():
         previous_payload = ""
-        heartbeat_ticks = 0
         while not await request.is_disconnected():
             with SessionLocal() as db:
                 stream_service = AiJobService(
@@ -124,27 +122,20 @@ async def stream_ai_job_events(
                     job = stream_service.get_job(stream_user, job_id)
                 except AiJobNotFoundError:
                     return
-            payload = json.dumps(job.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
+            data = job.model_dump(mode="json")
+            payload = job.model_dump_json()
             if payload != previous_payload:
-                yield f"event: snapshot\ndata: {payload}\n\n"
+                yield sse_event("snapshot", data)
                 previous_payload = payload
             if job.status == "completed":
-                yield f"event: done\ndata: {payload}\n\n"
+                yield sse_event("done", data)
                 return
             if job.status == "failed":
-                yield f"event: error\ndata: {payload}\n\n"
+                yield sse_event("error", data)
                 return
             if job.status == "cancelled":
-                yield f"event: cancelled\ndata: {payload}\n\n"
+                yield sse_event("cancelled", data)
                 return
-            heartbeat_ticks += 1
-            if heartbeat_ticks >= 15:
-                heartbeat_ticks = 0
-                yield ": heartbeat\n\n"
             await asyncio.sleep(1)
 
-    return StreamingResponse(
-        events(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return event_source_response(events())

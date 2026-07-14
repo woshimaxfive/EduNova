@@ -65,6 +65,7 @@ from backend.app.services.resource_intent import (
     quality_dimensions,
     safe_history_summary,
 )
+from backend.app.services.structured_output import parse_json_object
 
 
 RESOURCE_TYPES = ("doc", "mindmap", "quiz", "code", "slide", "animation")
@@ -1165,82 +1166,7 @@ class ResourceGenerationService:
 
     @staticmethod
     def _parse_json_object(content: str) -> dict[str, Any] | None:
-        text = str(content or "").strip()
-        if text.startswith("```"):
-            text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        parsed = ResourceGenerationService._loads_json_object(text)
-        if parsed is not None:
-            return parsed
-        start = text.find("{")
-        if start < 0:
-            return None
-        depth = 0
-        in_string = False
-        escaped = False
-        for index, char in enumerate(text[start:], start=start):
-            if in_string:
-                if escaped:
-                    escaped = False
-                elif char == "\\":
-                    escaped = True
-                elif char == '"':
-                    in_string = False
-                continue
-            if char == '"':
-                in_string = True
-            elif char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0:
-                    return ResourceGenerationService._loads_json_object(text[start:index + 1])
-        return None
-
-    @staticmethod
-    def _loads_json_object(text: str) -> dict[str, Any] | None:
-        for candidate in (text, ResourceGenerationService._repair_json_strings(text)):
-            try:
-                payload = json.loads(candidate)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(payload, dict):
-                return payload
-        return None
-
-    @staticmethod
-    def _repair_json_strings(text: str) -> str:
-        repaired: list[str] = []
-        in_string = False
-        index = 0
-        valid_escapes = {'"', "\\", "/", "b", "f", "n", "r", "t", "u"}
-        while index < len(text):
-            char = text[index]
-            if not in_string:
-                repaired.append(char)
-                if char == '"':
-                    in_string = True
-                index += 1
-                continue
-            if char == '"':
-                repaired.append(char)
-                in_string = False
-            elif char == "\\":
-                next_char = text[index + 1] if index + 1 < len(text) else ""
-                if next_char in valid_escapes:
-                    repaired.extend(("\\", next_char))
-                    index += 2
-                    continue
-                repaired.append("\\\\")
-            elif char == "\n":
-                repaired.append("\\n")
-            elif char == "\r":
-                repaired.append("\\r")
-            elif char == "\t":
-                repaired.append("\\t")
-            else:
-                repaired.append(char)
-            index += 1
-        return "".join(repaired)
+        return parse_json_object(content)
 
     def _quality_gate(
         self,

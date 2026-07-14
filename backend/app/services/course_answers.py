@@ -8,6 +8,7 @@ from typing import Any, Iterator
 from backend.app.api.errors import make_trace_id
 from backend.app.models import User
 from backend.app.providers.openai_compatible import ModelProviderError
+from backend.app.services.structured_output import parse_json_object
 from backend.app.services.model_settings import (
     MODEL_NOT_CONFIGURED_MESSAGE,
     ModelNotConfiguredError,
@@ -553,19 +554,7 @@ class CourseAnswerService:
 
     @staticmethod
     def _extract_json_object(content: str) -> dict[str, Any] | None:
-        cleaned = content.strip()
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-            cleaned = re.sub(r"\s*```$", "", cleaned)
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start < 0 or end <= start:
-            return None
-        try:
-            data = json.loads(cleaned[start : end + 1])
-        except (TypeError, ValueError, json.JSONDecodeError):
-            return None
-        return data if isinstance(data, dict) else None
+        return parse_json_object(content)
 
     @staticmethod
     def _safe_short_text(value: Any, limit: int) -> str:

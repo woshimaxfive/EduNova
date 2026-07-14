@@ -10,6 +10,8 @@ bcrypt
 PyJWT
 python-multipart
 httpx
+openai==2.45.0
+json-repair==0.61.4
 cryptography
 langgraph
 pypdf

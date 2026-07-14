@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-import json
 from typing import Any
+
+from backend.app.services.structured_output import parse_json_object
+
+__all__ = ["parse_json_object"]
 
 
 SENSITIVE_MARKERS = (
@@ -14,21 +17,6 @@ SENSITIVE_MARKERS = (
     "资料原文",
     "source text",
 )
-
-
-def parse_json_object(value: str) -> dict[str, Any] | None:
-    cleaned = value.strip()
-    if cleaned.startswith("```json"):
-        cleaned = cleaned[7:]
-    elif cleaned.startswith("```"):
-        cleaned = cleaned[3:]
-    if cleaned.endswith("```"):
-        cleaned = cleaned[:-3]
-    try:
-        parsed = json.loads(cleaned.strip())
-    except (TypeError, ValueError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
 
 
 def safe_text(value: object, *, limit: int = 240) -> str:

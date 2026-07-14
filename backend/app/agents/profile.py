@@ -625,40 +625,7 @@ class ProfileGraphRunner:
 
     @staticmethod
     def _parse_json_candidate(raw: str) -> dict[str, Any] | None:
-        direct = parse_json_object(raw)
-        if direct is not None:
-            return direct
-        for start, character in enumerate(raw):
-            if character != "{":
-                continue
-            depth = 0
-            in_string = False
-            escaped = False
-            for index in range(start, len(raw)):
-                current = raw[index]
-                if in_string:
-                    if escaped:
-                        escaped = False
-                    elif current == "\\":
-                        escaped = True
-                    elif current == '"':
-                        in_string = False
-                    continue
-                if current == '"':
-                    in_string = True
-                elif current == "{":
-                    depth += 1
-                elif current == "}":
-                    depth -= 1
-                    if depth == 0:
-                        try:
-                            parsed = json.loads(raw[start:index + 1])
-                        except (TypeError, ValueError):
-                            break
-                        if isinstance(parsed, dict):
-                            return parsed
-                        break
-        return None
+        return parse_json_object(raw)
 
     @staticmethod
     def _sanitize_updates(value: Any) -> dict[str, Any]:

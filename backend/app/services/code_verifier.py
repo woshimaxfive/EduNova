@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Protocol
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+
+import httpx
 
 
 @dataclass(frozen=True)
@@ -27,24 +26,29 @@ class CodeVerifier(Protocol):
 
 
 class HttpCodeVerifier:
-    def __init__(self, base_url: str, *, timeout_seconds: float = 40.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        timeout_seconds: float = 40.0,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self.transport = transport
 
     def verify(self, code: str, expected_output: str) -> CodeVerificationResult:
         if not self.base_url:
             return CodeVerificationResult(False, "runtime_unavailable", "代码验证服务未配置。")
-        body = json.dumps({"code": code, "expectedOutput": expected_output}, ensure_ascii=False).encode("utf-8")
-        request = Request(
-            f"{self.base_url}/verify",
-            data=body,
-            headers={"content-type": "application/json; charset=utf-8"},
-            method="POST",
-        )
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, ValueError):
+            with httpx.Client(timeout=self.timeout_seconds, transport=self.transport) as client:
+                response = client.post(
+                    f"{self.base_url}/verify",
+                    json={"code": code, "expectedOutput": expected_output},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError):
             return CodeVerificationResult(False, "runtime_unavailable", "代码验证服务暂不可用。")
         if not isinstance(payload, dict):
             return CodeVerificationResult(False, "invalid_response", "代码验证服务响应无效。")

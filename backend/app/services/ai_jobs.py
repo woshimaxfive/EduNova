@@ -12,6 +12,7 @@ from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import make_trace_id
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.errors import ConflictDomainError, NotFoundDomainError, ValidationDomainError
+from backend.app.core.observability import get_tracer
 from backend.app.db.session import SessionLocal
 from backend.app.models import AiJob, Course, GeneratedResource, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, ModelSetting, User
 from backend.app.schemas.ai_jobs import AiJobListResponse, AiJobResponse, ai_job_to_api, iso_timestamp
@@ -60,14 +61,18 @@ class RqAiJobQueue:
         queue_job_id = f"ai-job-{job_id}"
         connection = Redis.from_url(self.settings.redis_url)
         queue = Queue(self.settings.ai_job_queue_name, connection=connection)
-        queue.enqueue(
-            run_ai_job,
-            job_id,
-            job_id=queue_job_id,
-            job_timeout=self.settings.ai_job_timeout_seconds,
-            result_ttl=86400,
-            failure_ttl=86400,
-        )
+        with get_tracer(__name__).start_as_current_span(
+            "edunova.ai_job.enqueue",
+            attributes={"edunova.job.id": job_id, "messaging.destination.name": self.settings.ai_job_queue_name},
+        ):
+            queue.enqueue(
+                run_ai_job,
+                job_id,
+                job_id=queue_job_id,
+                job_timeout=self.settings.ai_job_timeout_seconds,
+                result_ttl=86400,
+                failure_ttl=86400,
+            )
         return queue_job_id
 
     def cancel(self, queue_job_id: str) -> None:

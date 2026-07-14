@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     ai_job_max_active_per_user: int = 2
     code_verifier_url: str = ""
     code_verifier_timeout_seconds: float = 40.0
+    otel_exporter_otlp_endpoint: str = ""
+    otel_service_name: str = "edunova-api"
 
     @field_validator("system_embedding_dimension", mode="before")
     @classmethod

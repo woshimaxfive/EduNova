@@ -12,6 +12,12 @@ python-multipart
 httpx
 openai==2.45.0
 json-repair==0.61.4
+opentelemetry-sdk==1.43.0
+opentelemetry-exporter-otlp-proto-http==1.43.0
+opentelemetry-instrumentation-fastapi==0.64b0
+opentelemetry-instrumentation-httpx==0.64b0
+opentelemetry-instrumentation-sqlalchemy==0.64b0
+opentelemetry-instrumentation-redis==0.64b0
 cryptography
 langgraph
 pypdf

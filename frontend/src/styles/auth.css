@@ -364,6 +364,11 @@
   padding-right: 52px;
 }
 
+.auth-password-control input::-ms-reveal,
+.auth-password-control input::-ms-clear {
+  display: none;
+}
+
 .auth-password-toggle {
   position: absolute;
   top: 50%;

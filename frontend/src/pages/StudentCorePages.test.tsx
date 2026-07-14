@@ -432,7 +432,8 @@ describe("student core pages", () => {
     const historyRail = screen.getByRole("region", { name: "历史对话" });
 
     expect(within(historyRail).getByRole("link", { name: "资料库" })).toHaveAttribute("href", "/app/library");
-    expect(within(historyRail).getByRole("link", { name: "个人资料" })).toHaveAttribute("href", "/app/profile");
+    expect(within(historyRail).getByRole("link", { name: "学习画像" })).toHaveAttribute("href", "/app/profile");
+    expect(within(historyRail).queryByRole("link", { name: "个人资料" })).not.toBeInTheDocument();
     expect(within(historyRail).getByRole("link", { name: "设置" })).toHaveAttribute("href", "/app/settings");
     expect(within(historyRail).getByRole("link", { name: "设置" })).toHaveAttribute("aria-current", "page");
     expect(within(historyRail).queryByRole("button", { name: /神经网络反向传播怎么复习/ })).not.toBeInTheDocument();

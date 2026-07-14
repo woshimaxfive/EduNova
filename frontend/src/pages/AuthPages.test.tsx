@@ -37,6 +37,7 @@ describe("auth entry pages", () => {
     expect(screen.queryByRole("button", { name: /演示学生/ })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "账号" })).toHaveValue("");
     expect(screen.getByLabelText("密码")).toHaveValue("");
+    expect(screen.getAllByRole("button", { name: "显示密码" })).toHaveLength(1);
     expect(screen.queryByDisplayValue("demo_student")).not.toBeInTheDocument();
   });
 

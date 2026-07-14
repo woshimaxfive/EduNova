@@ -746,7 +746,8 @@ describe("LearningSpacePage", () => {
     expect(within(historyRail).queryByRole("link", { name: /学习空间/ })).not.toBeInTheDocument();
     expect(within(historyRail).getByRole("link", { name: "资料库" })).toHaveAttribute("href", "/app/library");
     expect(within(historyRail).getByRole("link", { name: "资源工坊" })).toHaveAttribute("href", "/app/studio");
-    expect(within(historyRail).getByRole("link", { name: "个人资料" })).toHaveAttribute("href", "/app/profile");
+    expect(within(historyRail).getByRole("link", { name: "学习画像" })).toHaveAttribute("href", "/app/profile");
+    expect(within(historyRail).queryByRole("link", { name: "个人资料" })).not.toBeInTheDocument();
     expect(within(historyRail).getByRole("link", { name: "设置" })).toHaveAttribute("href", "/app/settings");
     expect(within(historyRail).getByRole("button", { name: "退出登录" })).toBeInTheDocument();
   });

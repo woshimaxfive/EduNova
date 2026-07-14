@@ -1,4 +1,5 @@
 import {
+  Brain,
   BookOpen,
   CaretLeft,
   CaretRight,
@@ -14,7 +15,6 @@ import {
   Sparkle,
   Student,
   Trash,
-  UserCircle,
   X
 } from "@phosphor-icons/react";
 import { type FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -419,6 +419,10 @@ export function AppSidebar({
             <Sparkle size={18} weight="duotone" aria-hidden="true" />
             <span>资源工坊</span>
           </NavLink>
+          <NavLink to={PATHS.profile} className={sidebarLinkClassName} onClick={closeCompactSidebar}>
+            <Brain size={18} weight="duotone" aria-hidden="true" />
+            <span>学习画像</span>
+          </NavLink>
         </nav>
 
         <button className="new-chat-button" type="button" onClick={handleNewChat}>
@@ -582,10 +586,6 @@ export function AppSidebar({
           ) : null}
         </div>
         <div className="home-account-section" aria-label="账号入口">
-          <NavLink className={accountLinkClassName} to={PATHS.profile} onClick={closeCompactSidebar}>
-            <UserCircle size={18} weight="duotone" aria-hidden="true" />
-            <span>个人资料</span>
-          </NavLink>
           <NavLink className={accountLinkClassName} to={PATHS.settings} onClick={closeCompactSidebar}>
             <GearSix size={18} weight="duotone" aria-hidden="true" />
             <span>设置</span>

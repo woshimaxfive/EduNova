@@ -57,10 +57,7 @@ export function PracticeDrawer({
     }}>
       <aside className="practice-drawer" role="dialog" aria-modal="true" aria-labelledby="practice-drawer-title">
         <header>
-          <div>
-            <span>{mode === "settings" ? "开始前可调整" : "练习已回流"}</span>
-            <h2 id="practice-drawer-title">{mode === "settings" ? "练习设置" : "学习结果"}</h2>
-          </div>
+          <h2 id="practice-drawer-title">{mode === "settings" ? "练习设置" : "学习结果"}</h2>
           <button type="button" aria-label={`关闭${mode === "settings" ? "练习设置" : "学习结果"}`} onClick={onClose}>
             <X size={19} weight="bold" aria-hidden="true" />
           </button>

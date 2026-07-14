@@ -188,10 +188,7 @@ export function PathTaskCanvas({
   return (
     <section className="path-task-canvas" aria-label="个性化路径任务">
       <header className="path-canvas-heading">
-        <div>
-          <span>{pathDetail.path.goal || "按当前学习状态持续推进"}</span>
-          <h2>{filter === "all" ? "学习任务" : taskStatusLabel(filter as PathTaskStatus)}</h2>
-        </div>
+        <h2>{filter === "all" ? "学习任务" : taskStatusLabel(filter as PathTaskStatus)}</h2>
         <small>{pathDetail.message}</small>
       </header>
       {pathDetail.path.plan_json.trigger === "assessment" ? (
@@ -282,7 +279,7 @@ export function LearningPathDrawer({
     <div className="path-drawer-layer" role="presentation" data-testid="path-drawer-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <aside className="path-drawer" role="dialog" aria-modal="true" aria-label="路径详情">
         <header className="path-drawer-header">
-          <div><span>路径详情</span><h2>个性化学习路径</h2><small>{courseTitle}</small></div>
+          <div><h2>路径详情</h2><small>{courseTitle}</small></div>
           <button type="button" aria-label="关闭" onClick={onClose}><X size={18} aria-hidden="true" /></button>
         </header>
 
@@ -300,7 +297,7 @@ export function LearningPathDrawer({
           {detailTab === "evidence" ? (
             <div className="path-detail-panel" role="tabpanel">
               <div className="path-plan-metadata">
-                <span>{pathDetail?.path ? "个性化学习路径已生成" : "暂无学习路径"}</span>
+                <span>{pathDetail?.path?.goal || "暂无学习路径"}</span>
                 {pathDetail?.path ? (
                   <strong>
                     {String(pathDetail.path.plan_json.generation_mode ?? "deterministic_source") === "model_enhanced" ? "模型增强" : "规则底稿"}

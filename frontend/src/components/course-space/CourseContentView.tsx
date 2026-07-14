@@ -195,10 +195,7 @@ export function CourseContentView({
         }}>
           <aside className="course-content-assistant" role="dialog" aria-modal="true" aria-labelledby="course-content-assistant-title">
             <header>
-              <div>
-                <span>当前课程上下文</span>
-                <h2 id="course-content-assistant-title">AI 辅导</h2>
-              </div>
+              <h2 id="course-content-assistant-title">AI 辅导</h2>
               <button type="button" aria-label="关闭 AI 辅导" onClick={onCloseAssistant}>
                 <X size={19} weight="bold" aria-hidden="true" />
               </button>

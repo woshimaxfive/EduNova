@@ -76,8 +76,6 @@
 .settings-effective-state small,
 .settings-navigation-heading span,
 .settings-navigation button small,
-.settings-panel-heading span,
-.settings-panel-heading p,
 .settings-system-fallback small,
 .settings-config-list > header small,
 .settings-config-scroll button > span,
@@ -244,14 +242,8 @@
   gap: 4px;
 }
 
-.settings-panel-heading span {
-  font-size: var(--font-caption);
-  font-weight: 850;
-}
-
 .settings-panel-heading h2,
 .settings-config-editor h3,
-.settings-panel-heading p,
 .settings-provider-context p,
 .settings-connection-test p,
 .settings-privacy-list p {
@@ -262,12 +254,6 @@
   color: var(--text-strong);
   font-size: 1.32rem;
   line-height: 1.25;
-}
-
-.settings-panel-heading p {
-  max-width: 64ch;
-  font-size: var(--font-control);
-  line-height: 1.65;
 }
 
 .settings-query-state {
@@ -1219,7 +1205,6 @@
   .settings-navigation button { min-width: 128px; grid-template-columns: 22px minmax(0, 1fr); padding-inline: 7px; }
   .settings-navigation button small { display: none; }
   .settings-panel-heading { align-items: flex-start; gap: 12px; }
-  .settings-panel-heading p { font-size: var(--font-meta); }
   .settings-new-button { min-width: 36px; padding-inline: 8px; font-size: 0; }
   .settings-new-button svg { width: 17px; height: 17px; }
   .settings-system-fallback > summary { align-items: flex-start; flex-direction: column; gap: 5px; }

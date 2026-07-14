@@ -228,26 +228,11 @@
 
 .path-canvas-heading {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 28px;
   padding-bottom: 18px;
   border-bottom: 1px solid var(--wide-workspace-divider);
-}
-
-.path-canvas-heading > div {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
-
-.path-canvas-heading span {
-  overflow: hidden;
-  color: var(--accent-strong);
-  font-size: var(--font-meta);
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .path-canvas-heading h2 {
@@ -497,12 +482,6 @@
   display: grid;
   gap: 3px;
   min-width: 0;
-}
-
-.path-drawer-header span {
-  color: var(--accent-strong);
-  font-size: var(--font-caption);
-  font-weight: 800;
 }
 
 .path-drawer-header h2 {

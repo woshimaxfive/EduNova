@@ -53,10 +53,7 @@ export function HomeCourseDrawer({ onClose }: HomeCourseDrawerProps) {
     >
       <aside className="home-course-drawer" role="dialog" aria-modal="true" aria-labelledby="home-course-drawer-title">
         <header className="home-course-drawer-header">
-          <div>
-            <span>学习空间</span>
-            <h2 id="home-course-drawer-title">全部课程</h2>
-          </div>
+          <h2 id="home-course-drawer-title">全部课程</h2>
           <button type="button" aria-label="关闭全部课程" onClick={onClose}>
             <X size={19} weight="bold" aria-hidden="true" />
           </button>

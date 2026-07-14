@@ -256,7 +256,8 @@ describe("PracticePage", () => {
     const calls = installAdapter();
     renderWithProviders();
 
-    expect(await screen.findByRole("heading", { name: "启发式搜索" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "开始针对性练习" })).toBeInTheDocument();
+    expect(screen.getByText("启发式搜索")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "开始针对性练习" }));
     const drawer = screen.getByRole("dialog", { name: "练习设置" });
     expect(drawer.closest(".practice-focus-workspace")).toBeNull();

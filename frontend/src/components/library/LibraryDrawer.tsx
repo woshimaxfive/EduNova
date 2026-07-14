@@ -3,7 +3,6 @@ import { type ReactNode, useEffect } from "react";
 
 type LibraryDrawerProps = {
   title: string;
-  eyebrow: string;
   children: ReactNode;
   footer?: ReactNode;
   workspaceInteractive?: boolean;
@@ -12,7 +11,6 @@ type LibraryDrawerProps = {
 
 export function LibraryDrawer({
   title,
-  eyebrow,
   children,
   footer,
   workspaceInteractive = false,
@@ -32,10 +30,7 @@ export function LibraryDrawer({
     }}>
       <aside className="library-drawer" role="dialog" aria-modal={workspaceInteractive ? undefined : "true"} aria-label={title}>
         <header className="library-drawer-header">
-          <div>
-            <span>{eyebrow}</span>
-            <h2>{title}</h2>
-          </div>
+          <h2>{title}</h2>
           <button type="button" aria-label={`关闭${title}`} onClick={onClose}>
             <X size={19} weight="bold" aria-hidden="true" />
           </button>

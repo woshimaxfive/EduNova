@@ -103,7 +103,7 @@ export function ReportDrawer({
     }}>
       <aside ref={drawerRef} className="report-drawer" role="dialog" aria-modal="true" aria-labelledby="report-drawer-title" tabIndex={-1}>
         <header>
-          <div><span>学习报告</span><h2 id="report-drawer-title">{title}</h2></div>
+          <h2 id="report-drawer-title">{title}</h2>
           <button type="button" aria-label={`关闭${title}`} onClick={onClose}><X size={19} weight="bold" aria-hidden="true" /></button>
         </header>
 

@@ -54,10 +54,7 @@ export function CourseProgressDrawer({
     }}>
       <aside className="course-progress-drawer" role="dialog" aria-modal="true" aria-labelledby="course-progress-title">
         <header className="course-drawer-header">
-          <div>
-            <span>个性化学习闭环</span>
-            <h2 id="course-progress-title">学习进度</h2>
-          </div>
+          <h2 id="course-progress-title">学习进度</h2>
           <div className="course-drawer-header-actions">
             <button
               type="button"

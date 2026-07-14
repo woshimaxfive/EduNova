@@ -388,12 +388,6 @@
   margin-top: 10px;
 }
 
-.course-question-suggestions > span {
-  margin-bottom: 3px;
-  color: var(--text-muted);
-  font-size: var(--font-control);
-}
-
 .course-question-suggestions button {
   display: flex;
   justify-content: flex-start;
@@ -536,12 +530,6 @@
   backdrop-filter: blur(14px);
 }
 
-.course-drawer-header > div,
-.course-content-assistant > header > div {
-  display: grid;
-  gap: 3px;
-}
-
 .course-drawer-header .course-drawer-header-actions {
   display: flex;
   align-items: center;
@@ -577,13 +565,6 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-.course-drawer-header span,
-.course-content-assistant > header span {
-  color: var(--accent-strong);
-  font-size: var(--font-meta);
-  font-weight: 760;
 }
 
 .course-drawer-header h2,

@@ -1007,11 +1007,8 @@ export function CourseSpacePage() {
                     </section>
                   ) : (
                     <article className="course-answer course-start-panel" role="region" aria-label="课程提问引导">
-                      <p className="course-answer-label">{courseSummary.subject}</p>
-                      <h2>从这门课开始学习</h2>
-                      <p>{courseSummary.description || "提出一个问题，我会先检索课程资料，再给出带来源的回答和下一步建议。"}</p>
+                      <h2>可以从这些问题开始</h2>
                       <div className="course-question-suggestions" aria-label="推荐问题">
-                        <span>推荐问题</span>
                         {courseStarterQuestions.map((question) => (
                           <button type="button" key={question} onClick={() => setCoursePrompt(question)}>
                             {question}

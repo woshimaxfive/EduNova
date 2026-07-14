@@ -403,7 +403,8 @@ describe("student core pages", () => {
 
     expect(screen.getByRole("heading", { name: "设置" })).toHaveClass("visually-hidden");
     expect(screen.getByText("系统设置")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "连接配置" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "模型连接" })).toBeInTheDocument();
+    expect(screen.queryByText("连接配置")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "模型设置" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "回答服务商" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "向量服务商" })).toBeInTheDocument();

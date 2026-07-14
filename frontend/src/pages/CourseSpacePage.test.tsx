@@ -1173,7 +1173,8 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(await screen.findByRole("heading", { name: "AI 搜索复习" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "待复习弱点" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "课程提问引导" })).toBeInTheDocument();
-    expect(screen.getByText("推荐问题")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "可以从这些问题开始" })).toBeInTheDocument();
+    expect(screen.queryByText("从这门课开始学习")).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "知识学习画布" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "证据与 Agent 轨迹" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "资源生成区" })).not.toBeInTheDocument();

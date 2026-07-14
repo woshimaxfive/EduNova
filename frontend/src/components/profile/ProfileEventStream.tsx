@@ -72,7 +72,6 @@ export function ProfileEventStream({
         {selectedDimension ? (
           <>
             <div>
-              <span>{selectedDimension.description}</span>
               <h2>{selectedDimension.label}</h2>
               <p>{selectedDimension.value}</p>
             </div>
@@ -82,9 +81,7 @@ export function ProfileEventStream({
           </>
         ) : (
           <div>
-            <span>随学习证据持续更新</span>
-            <h2>画像动态</h2>
-            <p>来自主动回答、课程问答与练习诊断的安全更新记录。</p>
+            <h2>更新记录</h2>
           </div>
         )}
       </header>

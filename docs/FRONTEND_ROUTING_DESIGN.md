@@ -426,7 +426,6 @@ frontend/src/pages/LearningSpacePage.tsx
 frontend/src/pages/LearningPathPage.tsx
 frontend/src/features/auth/authStore.ts
 frontend/src/features/auth/authApi.ts
-frontend/src/features/onboarding/FirstRunGuide.tsx
 ```
 
 ## 13. 测试验收
@@ -502,7 +501,7 @@ Phase 5 以后：
 - Phase 6.3 已接真实 `/tutor/sessions/{session_id}/messages/stream`；`CourseSpacePage` 发送课程问题时先创建或复用课程会话，再用 `fetch` + `ReadableStream` 读取 SSE，token 到达时逐步渲染，`done` 后用后端持久化消息替换临时状态。
 - Phase 6.1 已接真实 `/settings/model` 和 `/settings/model/test`；Phase 6.2 已接真实 `/settings/model/configs`、`/settings/model/configs/{id}`、`/settings/model/configs/{id}/default` 和 `/settings/model/configs/{id}/test`；`SettingsPage` 会显示配置列表和当前编辑面板，支持创建、编辑、测试、设默认和删除用户自己的模型配置，并且不展示明文 Key。
 - Phase 6.2 的 Provider 预设不追求数量多，只保留讯飞星火、DeepSeek、通义千问、Kimi、智谱、百度千帆、腾讯混元、硅基流动、本地 Ollama、本地 LM Studio 和自定义兼容服务；OpenRouter 不再作为可见预设。设置中心后续已将回答服务和向量服务并列为同一配置方案内的两组独立连接，各自填写预设、Base URL、Key 和模型；向量未配置时明确退回关键词检索，不把本地 hash 宣称为语义检索。
-- `FirstRunGuide` 已作为学习空间中的轻量引导占位，真实触发条件需要 Phase 4 根据画像和课程上下文接入。
+- 旧 `FirstRunGuide` 展示组件已删除；新用户直接通过主页、资料库和课程空间的真实空态进入上传资料、选择内置课程或开始提问，不再额外叠加一层功能介绍。
 - `/app` 已重做为总 AI 对话主页，包含贴边可收起主页历史、侧栏账号入口、中心 AI 学习入口、输入区资料库按钮、文件上传入口、最近学习轻量列表、按需全部课程抽屉、发送后主页对话态和生成课程浮层；主页不再展示预设快捷问题。
 - `/app` 输入区资料状态只在选中资料后贴着 composer 显示“已选择 N 份资料”；联网搜索和深度思考只通过按钮高亮和 `aria-pressed` 表达，不显示中间状态条或“联网搜索已开”文案。
 - P3.9 已把 `/app/library`、`/app/courses/:courseId`、资源工坊、画像、练习、报告和设置统一到同一套贴边工作区外壳，不再保留旧顶部导航；辅导能力直接位于课程空间。

@@ -24,7 +24,7 @@ export function StudioRegenerateDialog(props: StudioRegenerateDialogProps) {
         onKeyDown={(event) => closeOnEscape(event, props.onClose, props.isSubmitting)}
       >
         <header>
-          <div><span>重新生成</span><h2>{props.resource.title}</h2></div>
+          <div><h2>重新生成资源</h2><p>{props.resource.title}</p></div>
           <button type="button" aria-label="关闭重新生成" disabled={props.isSubmitting} onClick={props.onClose}>
             <X size={19} weight="bold" />
           </button>
@@ -70,7 +70,7 @@ export function StudioVersionCompareDialog(props: StudioVersionCompareDialogProp
         onKeyDown={(event) => closeOnEscape(event, props.onClose, false)}
       >
         <header>
-          <div><span>版本比较</span><h2>{props.current.title}</h2></div>
+          <div><h2>比较版本</h2><p>{props.current.title}</p></div>
           <button type="button" aria-label="关闭版本比较" onClick={props.onClose}><X size={19} weight="bold" /></button>
         </header>
         <div className="studio-compare-selectors">

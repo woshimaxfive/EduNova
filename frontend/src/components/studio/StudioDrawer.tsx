@@ -89,10 +89,7 @@ export function StudioDrawer(props: StudioDrawerProps) {
         onKeyDown={keepKeyboardInside}
       >
         <header className="studio-drawer-header">
-          <div>
-            <span>资源工坊</span>
-            <h2>{title}</h2>
-          </div>
+          <h2>{title}</h2>
           <button type="button" aria-label={`关闭${title}`} onClick={props.onClose}>
             <X size={19} weight="bold" aria-hidden="true" />
           </button>

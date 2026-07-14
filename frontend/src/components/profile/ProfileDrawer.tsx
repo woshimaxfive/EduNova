@@ -89,7 +89,7 @@ export function ProfileDrawer({ mode, dimension, event, relatedEvents, onClose, 
     }}>
       <aside ref={drawerRef} className="profile-drawer" role="dialog" aria-modal="true" aria-labelledby="profile-drawer-title" tabIndex={-1}>
         <header>
-          <div><span>动态学习画像</span><h2 id="profile-drawer-title">{title}</h2></div>
+          <h2 id="profile-drawer-title">{title}</h2>
           <button type="button" aria-label={`关闭${title}`} onClick={onClose}><X size={19} weight="bold" aria-hidden="true" /></button>
         </header>
 

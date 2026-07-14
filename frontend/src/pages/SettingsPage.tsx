@@ -636,9 +636,7 @@ export function SettingsPage() {
                 <section className="settings-panel" role="region" aria-label="模型设置">
                   <header className="settings-panel-heading">
                     <div>
-                      <span>AI 服务</span>
-                      <h2>连接配置</h2>
-                      <p>组合回答、向量和重排序服务。只配置回答也能正常使用，检索能力可按需补充。</p>
+                      <h2>模型连接</h2>
                     </div>
                     <button type="button" className="settings-new-button" onClick={createNewConfig}>
                       <Plus size={16} weight="bold" aria-hidden="true" />
@@ -1115,9 +1113,7 @@ export function SettingsPage() {
                 <section className="settings-panel settings-account-panel" role="region" aria-label="账号设置">
                   <header className="settings-panel-heading">
                     <div>
-                      <span>个人与登录</span>
                       <h2>账号安全</h2>
-                      <p>昵称用于学习空间展示；密码修改后，所有已登录设备都需要重新登录。</p>
                     </div>
                   </header>
                   <div className="settings-account-grid">
@@ -1159,9 +1155,7 @@ export function SettingsPage() {
                 <section className="settings-panel settings-privacy-panel" role="region" aria-label="隐私与数据">
                   <header className="settings-panel-heading">
                     <div>
-                      <span>数据边界</span>
                       <h2>数据隐私</h2>
-                      <p>这里说明 EduNova 实际保存什么、如何使用，不提供没有后端能力支撑的装饰性开关。</p>
                     </div>
                   </header>
                   <div className="settings-privacy-list">

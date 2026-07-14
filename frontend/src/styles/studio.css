@@ -529,18 +529,21 @@
   min-width: 0;
 }
 
-.studio-regenerate-dialog header span,
-.studio-compare-dialog header span {
-  color: var(--accent-strong);
-  font-size: var(--font-meta);
-  font-weight: 750;
-}
-
 .studio-regenerate-dialog h2,
 .studio-compare-dialog h2 {
   margin: 0;
   overflow-wrap: anywhere;
   font-size: 1.15rem;
+}
+
+.studio-regenerate-dialog header p,
+.studio-compare-dialog header p {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .studio-regenerate-dialog header button,
@@ -728,17 +731,6 @@
   min-height: 70px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--line);
-}
-
-.studio-drawer-header > div {
-  display: grid;
-  gap: 2px;
-}
-
-.studio-drawer-header span {
-  color: var(--accent-strong);
-  font-size: var(--font-meta);
-  font-weight: 750;
 }
 
 .studio-drawer-header h2 {

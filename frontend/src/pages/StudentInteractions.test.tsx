@@ -416,7 +416,7 @@ describe("student interaction affordances", () => {
     expect(screen.getByLabelText("课程状态")).toHaveTextContent("1");
     expect(screen.getByLabelText("课程状态")).toHaveTextContent("知识点");
     expect(screen.getByLabelText("课程状态")).toHaveTextContent("2");
-    expect(screen.getByRole("region", { name: "课程提问引导" })).toHaveTextContent("推荐问题");
+    expect(screen.getByRole("region", { name: "课程提问引导" })).toHaveTextContent("可以从这些问题开始");
 
     await user.click(screen.getByRole("button", { name: "课程内容" }));
 
@@ -600,7 +600,8 @@ describe("student interaction affordances", () => {
 
     renderPage(<PracticePage />);
 
-    await screen.findByRole("heading", { name: "反向传播" });
+    await screen.findByRole("heading", { name: "开始针对性练习" });
+    expect(screen.getByText("反向传播")).toBeInTheDocument();
     const startPractice = screen.getByRole("button", { name: "开始针对性练习" });
     expect(startPractice).toBeEnabled();
     await user.click(startPractice);

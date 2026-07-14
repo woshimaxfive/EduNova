@@ -397,9 +397,8 @@ export function PracticePage() {
             ) : (
               <>
                 {restoreError ? <WarningCircle size={34} weight="duotone" aria-hidden="true" /> : <ClipboardText size={38} weight="duotone" aria-hidden="true" />}
-                <span>{restoreError ? "练习恢复失败" : selectedPointTitle ? "针对当前知识点开始" : "准备一次课程练习"}</span>
-                <h2>{restoreError ? "暂时无法恢复上次练习" : selectedPointTitle || "选择课程和知识点"}</h2>
-                <p>{restoreError ? "当前选择和返回上下文仍然保留，可以重试恢复或创建新练习。" : "系统会根据掌握度和薄弱点决定实际难度，不会自动开始或消耗模型调用。"}</p>
+                <h2>{restoreError ? "暂时无法恢复上次练习" : selectedPointTitle ? "开始针对性练习" : "选择知识点开始练习"}</h2>
+                <p>{restoreError ? "当前选择和返回上下文仍然保留，可以重试恢复或创建新练习。" : selectedPointTitle ? "练习难度会根据当前学习状态自动调整。" : "在练习设置中选择课程和知识点。"}</p>
                 <button type="button" disabled={!canUseCourse || knowledgePoints.length === 0} onClick={() => setDrawerMode("settings")}>
                   <SlidersHorizontal size={18} weight="bold" aria-hidden="true" />
                   {restoreError ? "调整并重新开始" : "开始针对性练习"}

@@ -401,7 +401,6 @@ export function LibraryPage() {
       {drawerMode === "detail" ? (
         <LibraryDrawer
           title={selectedMaterial?.title ?? "资料详情"}
-          eyebrow="资料库"
           onClose={closeDrawer}
           footer={selectedMaterial ? (
             <div className="library-detail-actions">
@@ -434,7 +433,6 @@ export function LibraryPage() {
       {drawerMode === "compare" ? (
         <LibraryDrawer
           title={compareView === "setup" ? "资料对比" : "对比结果"}
-          eyebrow="MaterialComparisonGraph"
           workspaceInteractive={compareView === "setup"}
           onClose={closeDrawer}
           footer={compareFooter}

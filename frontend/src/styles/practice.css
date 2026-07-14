@@ -615,15 +615,8 @@
 
 .practice-empty-canvas > svg { color: var(--accent); }
 
-.practice-empty-canvas > span {
-  margin-top: 16px;
-  color: var(--accent-strong);
-  font-size: var(--font-meta);
-  font-weight: 850;
-}
-
 .practice-empty-canvas h2 {
-  margin: 7px 0 6px;
+  margin: 16px 0 6px;
   color: var(--text-strong);
   font-size: 1.35rem;
 }
@@ -700,17 +693,6 @@
   min-height: 70px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--wide-workspace-divider);
-}
-
-.practice-drawer > header > div {
-  display: grid;
-  gap: 3px;
-}
-
-.practice-drawer > header span {
-  color: var(--accent-strong);
-  font-size: var(--font-caption);
-  font-weight: 850;
 }
 
 .practice-drawer > header h2 {

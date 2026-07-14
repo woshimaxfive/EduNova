@@ -148,7 +148,6 @@
 }
 
 .profile-radar-heading span,
-.profile-evolution-heading span,
 .profile-related-events > header span,
 .profile-graph-replay > header span {
   color: var(--accent-strong);
@@ -718,17 +717,6 @@
   min-height: 70px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--wide-workspace-divider);
-}
-
-.profile-drawer > header > div {
-  display: grid;
-  gap: 3px;
-}
-
-.profile-drawer > header span {
-  color: var(--accent-strong);
-  font-size: var(--font-caption);
-  font-weight: 850;
 }
 
 .profile-drawer > header h2 {

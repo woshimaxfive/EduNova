@@ -13,7 +13,7 @@ export type RegisterRequest = {
   email: string;
   password: string;
   display_name: string;
-  starter_mode?: "blank" | "ai_intro";
+  starter_mode?: "blank" | "data_structures";
 };
 
 export type LoginRequest = {

@@ -19,4 +19,4 @@ COPY backend /app/backend
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python -m alembic upgrade head && python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "python -m alembic upgrade head && python -m backend.app.cli sync-builtin-courses && python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000"]

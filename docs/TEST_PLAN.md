@@ -24,6 +24,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 - Markdown/PDF/DOCX 异步学习档案导出任务、下载和用户隔离。
 - `AIJobRuntime` 的建课/资源后台任务、幂等、活动上限、节点进度、心跳、取消、重试、失联检测和安全响应。
 - 前端 API 合同模块、核心页面测试、Vitest、lint 和生产构建。
+- 数据结构与算法内置课程包的固定数量、先修 DAG、内容占位/重复检查、21 个 C 风格伪代码片段和 16 个 Python 实验实跑。
 
 当前阶段的完整状态见 [STATUS.md](STATUS.md)。
 
@@ -49,7 +50,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 | 用户系统 | 注册、登录、退出、鉴权、访问保护 |
 | AI 学习空间 | AI 对话主页、贴边可收起历史侧栏、侧栏账号入口、发送后主页对话态、底部学习输入区、输入区资料库浮层入口、文件上传、联网搜索/深度思考激活态、最近学习轻量列表、按需全部课程抽屉、课程空间、引用来源和 Agent 过程展开 |
 | 对话式画像 | ProfileGraph 8 维提案、证据门控、审核/修订、逐维可信度和事件记录 |
-| 课程系统 | 内置人工智能导论课程、课程列表、课程详情 |
+| 课程系统 | 数据结构与算法内置课程、54 个知识点、178 个切片、16 个实验、课程列表和课程详情 |
 | 上传建课 | PDF、PPTX、DOCX、Markdown、TXT 解析，CourseBuilderGraph 来源覆盖、先修 DAG、审核与事务生成 |
 | RAG 检索 | 切片、向量化、检索、引用来源展示 |
 | 多智能体 | Agent 流程、trace_id、agent_run_logs、失败记录 |
@@ -61,7 +62,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 | 练习评估 | 出题、作答、批改、错题讲解、报告生成 |
 | 资料对比 | 多资料重复重点、试卷独有考点、优先复习顺序 |
 | 导出 | Markdown 同步兼容接口、Markdown/PDF/DOCX 异步学习档案导出 |
-| 快速体验 | 注册示例课程入口、用户数据隔离和 fallback 标记 |
+| 快速体验 | 注册内置课程入口、用户数据隔离、资料库隔离和 fallback 标记 |
 | 部署 | Docker Compose 启动、环境变量、Nginx 入口 |
 | 文档 | README、部署说明、开发说明、测试说明、开源说明、答辩问答、用户指南、AI 辅助开发说明和验收证据 |
 | 前端体验 | `docs/UI_UX_DESIGN.md` 中的布局、状态、动效和响应式约束 |
@@ -147,7 +148,7 @@ cd ..
 | `/auth/register` | 注册成功、重复邮箱、弱密码 |
 | `/auth/login` | 登录成功、密码错误 |
 | `/auth/me`、`/auth/me/password` | 有 token 成功、无 token 失败、昵称保存、当前密码校验、弱密码/相同密码拒绝、旧密码失效、新密码登录和旧 JWT 失效 |
-| `/dashboard/summary` | 无 token 401、blank 用户空状态、ai_intro 用户返回当前用户课程和资料、真实进度显示、主页历史和资源摘要、多用户隔离 |
+| `/dashboard/summary` | 无 token 401、blank 用户空状态、data_structures 用户返回当前用户课程但资料库为空、真实进度显示、主页历史和资源摘要、多用户隔离 |
 | `/materials/upload`、`/materials`、`/materials/{material_id}`、`/materials/{material_id}/progress`、`/courses/{course_id}/materials` | 无 token 401、当前用户隔离、TXT/Markdown 轻解析、PDF/DOCX/PPTX 文本解析、损坏文件 failed、旧版 DOC/PPT uploaded、图片仅入库且不 OCR、不支持扩展名、大小限制、未归属筛选、课程关联唯一性、进度状态稳定 |
 | `/courses/from-materials`、`/courses/*` | 无 token 401、用户隔离、五类已解析资料建课、v2 结构、来源覆盖、先修 ID 映射、环路拦截、embedding warning、事务回滚和旧课程兼容 |
 | `/rag/search` | 无 token 401、用户隔离、关键词命中、向量命中、混合排序、懒加载、fallback、无命中和新增分数字段 |
@@ -257,7 +258,7 @@ cd ..
 - P3.15 已用 Codex 内置浏览器复验桌面端：连续追问不新增多条历史，回答详情默认折叠且可展开/切换/收起，搜索历史浮层可过滤，资料库默认未选且主按钮禁用，点选资料后启用，资料库进入生成课程只保留单一浮层，生成课程操作关闭浮层并反馈，资源工坊只保留一个生成资源按钮；390px 下 `/app` 和 `/app/library` 无水平溢出。
 - P3.16 Phase 4 前口径对齐后，前端测试必须覆盖：登录页不预填 demo 邮箱和密码，资源工坊资源类型包含代码实操且不把复盘报告作为五类资源入口，课程空间 Agent 过程显示 PathAgent 而不是 PlannerAgent，图片资料上传后显示“仅入库，暂不做 OCR”。
 - P3 收尾补完后，`/app/path` 必须按浏览器验收规则通过桌面和 390px 移动宽度可见验收：学习路径、阶段任务、路径依据、下一步行动和开始练习入口可见，页面无水平溢出。
-- Phase 4.2 后，`/app` 必须通过 `/dashboard/summary` 渲染最近学习、主页历史和主页资料库浮层资料：blank summary 不得出现前端假课程、假资料或假历史；ai_intro summary 应显示当前用户自己的人工智能导论课程和资料；资料库浮层默认未选中。
+- `/app` 必须通过 `/dashboard/summary` 渲染最近学习、主页历史和资料浮层：blank summary 不得出现假课程、假资料或假历史；data_structures summary 应显示当前用户自己的数据结构与算法课程，资料库保持为空。
 - Phase 4.3 后，`/app` 主页发送必须走 `/tutor/sessions`：首次发送先创建 home session，再发送消息；当前主页 assistant 内容来自普通模型回答，未配置模型时给出清晰提示；连续追问不创建第二条历史；点击左侧历史必须从后端恢复 messages；历史菜单必须能改名和软删除，删除当前会话后回到默认主页；发送失败必须提示且保留输入；刷新后左侧历史仍由 `/dashboard/summary` 保留。
 - 主页输入区状态必须贴近 composer：选择资料后只显示“已选择 N 份资料”，联网搜索和深度思考只通过按钮高亮与 `aria-pressed` 表达，不出现“联网搜索已开”文字。
 - Phase 4.4 后，资料上传和资料库必须走 `/materials`：主页上传文件调用 `/materials/upload` 并刷新 `/dashboard/summary`；`/app/library` 与主页资料浮层调用 `/materials` 渲染完整真实列表，不再出现静态假资料。
@@ -293,7 +294,7 @@ cd ..
 -> 上传资料进入独立资料库
 -> 选择资料生成课程或加入已有课程
 -> 完成对话式画像
--> 选择人工智能导论课程
+-> 选择数据结构与算法课程
 -> 生成 6 类结构化资源
 -> 查看 Agent 轨迹和引用来源
 -> 生成学习路径
@@ -365,7 +366,7 @@ AI 能力不能只看“有没有输出”，还要看输出是否可用、可�
 
 预期结果：
 
-- 回答引用人工智能导论资料。
+- 回答引用数据结构与算法课程内部来源。
 - 至少显示 1 条引用来源。
 - 引用来源包含章节、材料或片段信息。
 - 如果资料不足，明确提示依据不足。
@@ -544,7 +545,7 @@ cd ..
 
 ### 9.1 内置课程数据
 
-课程：人工智能导论
+课程：数据结构与算法
 
 知识点至少包括：
 
@@ -576,7 +577,7 @@ cd ..
 
 ### 9.3 Starter 示例数据
 
-自动化测试按用例创建独立用户。前端快速体验通过注册页选择“带一个示例课程开始”，把人工智能导论复制到当前用户空间；不使用共享演示账号。
+自动化测试按用例创建独立用户。前端快速体验通过注册页选择“从数据结构与算法开始”，把内置课程安装到当前用户空间；不使用共享演示账号。
 
 ## 10. 缺陷分级
 
@@ -598,7 +599,7 @@ cd ..
 | Phase 1B | Docker Compose 草案包含 PostgreSQL、Redis、backend、frontend 和 Nginx；后端服务健康检查通过，前端静态服务和统一入口配置可解析 |
 | Phase 2A | 数据库配置、SQLAlchemy、Alembic 和 pgvector 扩展迁移通过 |
 | Phase 2B | 用户、课程、资料、知识点和知识切片核心表创建成功 |
-| Phase 2C | 人工智能导论课程可导入且重复执行不产生重复课程 |
+| 内置课程 | 数据结构与算法课程可安装且重复同步不产生重复课程，个人资料库保持为空 |
 | Phase 3 | `/app` 重定向为 AI 对话主页，具备贴边可收起历史侧栏、侧栏账号入口、发送后主页对话态、底部学习输入区、输入区资料库浮层入口、上传或选择资料、联网搜索/深度思考激活态、生成课程浮层、最近学习轻量列表、最近课程进入课程空间、课程内对话壳子、回答下方引用/Agent 展开入口；`/app/library` 为文件库式资料库并支持从资料生成课程浮层；`/app/path` 展示学习路径、阶段任务和路径依据；核心按钮具备本地反馈；上传建课状态、低依据、错误恢复、本地预备反馈、界面文案减法、API 合同、页面结构和交互测试通过，构建通过 |
 | Phase 4.1 | 注册登录闭环通过 |
 | Phase 4.2 | `/dashboard/summary` 受保护接口通过，`/app` 首页最近学习、主页历史和资料库浮层列表来自当前用户真实 summary，不再显示前端假数据 |
@@ -664,9 +665,9 @@ Phase 1A 起，仓库提供统一验证脚本：
 - 后端 pytest 测试。
 - 数据库配置、SQLAlchemy engine、Alembic metadata 和 pgvector 首迁移测试。
 - 核心业务模型、约束、JSONB 字段、向量字段和第二条迁移测试。
-- 人工智能导论课程包结构、对象图映射和导入幂等性测试。
-- 认证测试覆盖 bcrypt 密码哈希、JWT 生成解析、注册、登录、重复邮箱、弱密码、错误密码、无 token `/auth/me`、退出和 `ai_intro` starter 课程图复制。
-- 首页总览测试覆盖无 token `/dashboard/summary` 返回 401、授权路由返回当前用户 summary、blank 用户空状态、ai_intro 用户课程和资料、真实进度/画像/主页历史/资源摘要，以及 summary 服务只请求当前用户数据。
+- 数据结构与算法课程包固定数量、对象图映射、先修 DAG、内容质量、实验输出和同步幂等性测试。
+- 认证测试覆盖 bcrypt 密码哈希、JWT 生成解析、注册、登录、重复邮箱、弱密码、错误密码、无 token `/auth/me`、退出和 `data_structures` starter 课程图复制。
+- 首页总览测试覆盖无 token `/dashboard/summary` 返回 401、授权路由返回当前用户 summary、blank 用户空状态、data_structures 用户内置课程与空资料库、真实进度/画像/主页历史/资源摘要，以及 summary 服务只请求当前用户数据。
 - Tutor 会话测试覆盖无 token `/tutor/sessions` 返回 401、创建 home session、课程 session 缺少 `course_id` 校验、多用户隔离、追加消息写入 user 和 assistant、主页 assistant 调用普通模型且不调用课程检索、未配置模型提示、模型失败不写入半截消息、详情按时间返回 messages、列表只返回当前用户当前 scope；Phase 5.3 起还覆盖课程会话发送命中问题后写入真实 `citation_json`、无命中写入空引用和资料不足提示。
 - 模型设置测试覆盖三能力独立连接、默认与安全测试，所有凭证加密/脱敏，连接变化不复用旧 Key；覆盖 Spark thinking、讯飞签名和 2560 维、兼容向量实际维度、硅基/百炼 Rerank、Provider 错误分类与关键词降级。
 - 课程生成测试覆盖无 token 访问课程接口返回 401、TXT/Markdown/PDF/DOCX/PPTX 已解析资料生成课程、Markdown 标题知识点、无标题 TXT 分段知识点、多用户资料隔离、拒绝未解析/失败/旧版 Office/图片资料、课程列表/详情/概览/知识点只返回当前用户课程；Phase 6.4 起覆盖建课后 best-effort 生成 chunks embedding，embedding 失败不导致建课失败。
@@ -677,7 +678,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - 前端 Vitest 路由、登录态和学习空间对话主页测试。
 - 前端 API 合同测试，覆盖 `/api/v1` 基础路径和关键业务模块路径常量。
 - RAG 搜索测试覆盖无 token 401、当前用户课程命中引用、多用户隔离、空 query 和非法 `top_k` 校验、无命中稳定空结果、Markdown 标题/TXT 内容/中文关键词命中，以及 `/rag/search` envelope；Phase 6.4 起覆盖关键词命中、向量命中、混合排序、缺失向量懒加载、本地 fallback 状态、外部 embedding 失败回退和新分数字段稳定返回。
-- 前端认证联调测试覆盖登录成功写入 token、登录失败提示、注册 `blank/ai_intro` 请求体、注册后自动登录、后端用户字段映射，以及登录页不出现 demo 账号。
+- 前端认证联调测试覆盖登录成功写入 token、登录失败提示、注册 `blank/data_structures` 请求体、默认 blank、注册后自动登录、后端用户字段映射，以及登录页不出现 demo 账号。
 - 上传建课工作流状态测试，覆盖 chunking、failed 和必要短状态信号。
 - 学习空间页面测试，覆盖 AI 对话主页、贴边历史侧栏、侧栏收起、侧栏账号入口、历史搜索居中浮层、发送后主页对话态、底部学习输入区、发送成功不显示持久“已生成回答”状态条、Enter 发送、Shift+Enter 换行、AI 学习入口、资料库入口、语义化最近学习列表、按需全部课程抽屉、最近课程链接、生成课程浮层、主页不渲染预设快捷问题，以及首页不再渲染资料库右栏和知识学习画布；Phase 4.2 起还覆盖 `/app` 调用 `/dashboard/summary`，用接口课程、接口资料和接口主页历史渲染页面，并确认 blank summary 不出现静态 starter 课程、资料和历史；Phase 4.3 起还覆盖首次发送创建 session、连续发送复用 session、点击历史加载后端 messages、刷新后仍可从 summary 看到主页历史、发送失败不新增全局提示条但显示输入区局部错误且输入不丢失；Phase 4.4 起还覆盖主页上传调用 `/materials/upload`、上传成功刷新 summary、资料库浮层显示真实资料。
 - Phase 5.1 前端测试覆盖主页资料库浮层调用 `/courses/from-materials` 后跳转新课程、资料库页调用同一建课接口、API 错误时保留选择，以及课程空间通过 `/courses/{course_id}` 和 `/knowledge-points` 渲染真实标题、资料数和知识点。
@@ -798,7 +799,7 @@ docker compose config
 docker compose up --build -d
 docker compose exec -T backend python -m alembic upgrade head
 docker compose exec -T backend python -m alembic current
-docker compose exec -T backend python -m backend.app.cli seed-ai-intro
+docker compose exec -T backend python -m backend.app.cli sync-builtin-courses
 docker compose ps
 Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/health" -Method Get
 Invoke-RestMethod -Uri "http://127.0.0.1:8080/api/health" -Method Get
@@ -810,7 +811,7 @@ docker compose down
 只有同时满足以下条件，才能认为 EduNova 第一版测试通过：
 
 1. 核心学生学习闭环可以在浏览器中完整走通。
-2. 至少一门人工智能导论课程可正常学习。
+2. 数据结构与算法内置课程可正常学习，课程内部来源可检索且个人资料库不出现衍生文件。
 3. 至少一份用户上传资料可以自动生成课程。
 4. 当前六类个性化结构化资源全部生成成功。
 5. AI 输出包含引用来源、审核状态和 Agent 轨迹。

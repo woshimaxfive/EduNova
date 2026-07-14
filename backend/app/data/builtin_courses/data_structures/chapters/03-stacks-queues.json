@@ -1,0 +1,82 @@
+{
+  "key": "chapter-03",
+  "order": 3,
+  "title": "栈与队列",
+  "learning_objectives": [
+    "理解受限线性表如何约束操作顺序",
+    "实现顺序栈、链栈、循环队列和链队列",
+    "使用栈处理递归与表达式，使用队列处理分层任务"
+  ],
+  "knowledge_points": [
+    {
+      "key": "stack-adt",
+      "title": "栈的抽象与后进先出",
+      "summary": "掌握只在栈顶进行插入和删除的 LIFO 结构及其操作契约。",
+      "difficulty": "easy",
+      "prerequisites": ["linear-list-adt"],
+      "concept": {"title": "受限操作形成后进先出", "content": "栈是只允许在同一端插入和删除的线性表，该端称为栈顶，另一端称为栈底。最后压入的元素最先弹出，因此栈适合保存尚未完成、需要按相反次序恢复的状态。"},
+      "process": {"title": "用不变式描述栈操作", "content": "Push 在栈顶加入一个元素，Pop 删除并返回栈顶，Top 只读取而不修改。每次操作后都要保持栈中元素次序不变；Pop 和 Top 的前置条件是栈非空，失败语义必须明确。"},
+      "pitfall": {"title": "读取栈顶不等于出栈", "content": "把 Top 写成同时删除元素会破坏调用者预期；在空栈上直接 Pop 则可能访问非法位置。分析算法时还要区分栈存储的业务元素和程序运行时的函数调用栈，二者概念相似但用途不同。"}
+    },
+    {
+      "key": "stack-implementations",
+      "title": "顺序栈与链栈",
+      "summary": "比较数组栈和链式栈的栈顶表示、容量管理与操作成本。",
+      "difficulty": "medium",
+      "prerequisites": ["stack-adt", "sequential-list", "singly-linked-list"],
+      "concept": {"title": "两种实现都保持常数栈顶操作", "content": "顺序栈用数组和 top 下标表示有效区间，链栈通常把链表头作为栈顶。只要容量可用或内存分配成功，Push、Pop 和 Top 都是 O(1)，区别主要在扩容、额外指针和内存局部性。"},
+      "process": {"title": "先统一 top 的含义", "content": "top 可以表示当前栈顶下标，也可以表示下一个空位置，两种约定都会影响判空、元素个数和压栈顺序。链栈压栈时把新结点接到表头，出栈时先保存头结点后继再释放旧栈顶。"},
+      "pitfall": {"title": "边界公式必须匹配约定", "content": "若 top=-1 表示空栈，则元素数为 top+1；若 top=0 表示下一个空位，则元素数为 top。混用约定会造成少存或多取一个元素，链栈还要避免把头结点误当作业务数据弹出。"}
+    },
+    {
+      "key": "recursion-stack",
+      "title": "递归与运行栈",
+      "summary": "理解递归调用如何借助栈保存参数、局部变量和返回位置。",
+      "difficulty": "medium",
+      "prerequisites": ["stack-implementations", "complexity-analysis"],
+      "concept": {"title": "递归把同类子问题推迟处理", "content": "递归函数必须包含规模缩小的递归步骤和能够直接求解的基例。每次调用都会建立活动记录，保存参数、局部变量和返回地址；后调用的记录先结束，天然符合栈的后进先出顺序。"},
+      "process": {"title": "验证终止与递归关系", "content": "设计递归算法时先定义函数语义，再写基例，最后证明每次调用都朝基例推进。分析成本时应同时计算每层非递归工作量、递归分支数量和最大深度，空间通常与最大未返回调用层数相关。"},
+      "pitfall": {"title": "递归简洁不代表开销更小", "content": "缺少基例或规模不减会导致无限递归；重复计算子问题可能把时间放大为指数级。尾递归在某些语言中可优化，但不能默认 C 或 Python 一定消除调用帧，深度过大仍可能栈溢出。"}
+    },
+    {
+      "key": "stack-applications",
+      "title": "栈的典型应用",
+      "summary": "使用栈完成括号匹配、表达式求值、进制转换和非递归遍历。",
+      "difficulty": "hard",
+      "prerequisites": ["recursion-stack"],
+      "concept": {"title": "未完成任务按逆序恢复", "content": "括号匹配把尚未配对的左括号压栈，遇到右括号时检查栈顶；表达式求值可分别维护操作数栈和运算符栈。共同模式是把暂时不能处理的状态保存起来，待后续信息到达后逆序恢复。"},
+      "process": {"title": "运算符优先级驱动归约", "content": "扫描中缀表达式时，操作数直接入栈；新运算符与栈顶比较优先级，必要时弹出运算符和操作数完成计算，再压入结果。括号改变归约边界，扫描结束后必须把剩余运算符按顺序处理。"},
+      "pitfall": {"title": "顺序和结合性同样重要", "content": "弹出两个操作数时，先弹出的是右操作数，颠倒会使减法和除法错误。相同优先级还要考虑左结合或右结合；括号不匹配、非法符号和除零都应作为输入错误，而不是让栈操作越界。"}
+    },
+    {
+      "key": "queue-adt",
+      "title": "队列的抽象与先进先出",
+      "summary": "掌握队尾插入、队头删除的 FIFO 结构及其顺序公平性。",
+      "difficulty": "easy",
+      "prerequisites": ["linear-list-adt"],
+      "concept": {"title": "两端分工形成先进先出", "content": "队列只允许在队尾入队、队头出队，最早进入的元素最先被处理。它适合表示等待服务的任务、图的分层遍历和生产者消费者之间的缓冲，使处理顺序与到达顺序一致。"},
+      "process": {"title": "保持 front 与 rear 语义稳定", "content": "Enqueue 在 rear 一侧加入元素，Dequeue 从 front 一侧返回并移除元素，Front 只查看队头。实现应明确两个指针指向有效元素还是空位置，并基于同一约定定义长度、判空和判满。"},
+      "pitfall": {"title": "队列不是只能用数组移动实现", "content": "每次出队都把剩余数组元素整体前移会产生 O(n) 开销。更好的做法是移动 front 索引或使用链式结点；但索引只向后增加会产生假溢出，需要循环利用已释放的前部空间。"}
+    },
+    {
+      "key": "circular-queue",
+      "title": "循环队列",
+      "summary": "用模运算复用数组空间，并解决队空与队满状态区分。",
+      "difficulty": "medium",
+      "prerequisites": ["queue-adt", "sequential-list"],
+      "concept": {"title": "逻辑环连接数组两端", "content": "循环队列把长度为 capacity 的数组视作首尾相接，front 和 rear 每次通过取模前进。这样出队留下的低下标空间能够再次使用，所有入队出队操作都只修改常数个位置。"},
+      "process": {"title": "牺牲一个单元区分状态", "content": "常见约定令 front 指向队头，rear 指向下一个可写位置，并空出一个数组单元。此时 front==rear 表示空，(rear+1)%capacity==front 表示满，长度为 (rear-front+capacity)%capacity。"},
+      "pitfall": {"title": "容量和可用元素数不同", "content": "采用空一格方案时，数组容量为 m 只能保存 m-1 个元素。若既用 front==rear 表示空又允许填满所有位置，就无法区分空和满；也可额外维护 size 或标志位，但公式必须整体同步更换。"}
+    },
+    {
+      "key": "linked-queue-applications",
+      "title": "链队列与队列应用",
+      "summary": "实现动态链队列，并用队列组织层次遍历、调度和缓冲。",
+      "difficulty": "medium",
+      "prerequisites": ["queue-adt", "singly-linked-list"],
+      "concept": {"title": "头删尾插避免整体移动", "content": "链队列通常设置头结点，front 指向头结点，rear 指向最后一个业务结点。入队把新结点接到 rear 后并更新 rear；出队删除 front.next，因此无需预先确定最大容量。"},
+      "process": {"title": "最后一个元素出队要重置队尾", "content": "出队先取得首元结点 q，再令 front.next=q.next。若 q 原本就是 rear，删除后必须把 rear 重置为 front，否则 rear 会悬空。层次遍历中则按出队结点顺序把其尚未访问的邻接结点入队。"},
+      "pitfall": {"title": "动态队列也可能失败", "content": "链队列不受固定数组容量限制，但仍受内存资源约束，结点申请失败应显式处理。层次算法若不记录已访问状态，图中的环会让同一顶点反复入队；并发队列还需要额外同步，普通链队列本身不是线程安全的。"}
+    }
+  ]
+}

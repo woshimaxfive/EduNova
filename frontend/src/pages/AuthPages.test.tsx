@@ -58,7 +58,7 @@ describe("auth entry pages", () => {
               email: "student@edunova.local",
               display_name: "真实学生",
               role: "student",
-              starter_mode: "ai_intro"
+              starter_mode: "data_structures"
             }
           },
           trace_id: "trace_login"
@@ -96,7 +96,7 @@ describe("auth entry pages", () => {
         id: 7,
         email: "student@edunova.local",
         displayName: "真实学生",
-        starterMode: "ai_intro"
+        starterMode: "data_structures"
       },
       isAuthenticated: true
     });
@@ -193,13 +193,12 @@ describe("auth entry pages", () => {
     expect(screen.getByRole("heading", { name: "准备你的学习空间" })).toBeInTheDocument();
 
     const blankMode = screen.getByRole("radio", { name: /空白开始/ });
-    const aiIntroMode = screen.getByRole("radio", { name: /带一个示例课程开始/ });
+    const dataStructuresMode = screen.getByRole("radio", { name: /从数据结构与算法开始/ });
 
     expect(blankMode).toHaveAttribute("value", "blank");
-    expect(aiIntroMode).toHaveAttribute("value", "ai_intro");
-    expect(aiIntroMode).toBeChecked();
+    expect(dataStructuresMode).toHaveAttribute("value", "data_structures");
+    expect(blankMode).toBeChecked();
 
-    await user.click(blankMode);
     await user.clear(screen.getByRole("textbox", { name: "昵称" }));
     await user.type(screen.getByRole("textbox", { name: "昵称" }), "空白学习者");
     await user.type(screen.getByRole("textbox", { name: "邮箱" }), "blank@edunova.local");

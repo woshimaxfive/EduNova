@@ -67,9 +67,12 @@ class InMemoryAuthRepository:
     def add_course(self, course: Course) -> None:
         course.id = self.next_course_id
         self.next_course_id += 1
-        for material in course.materials:
-            if material.id is None:
-                material.id = len(self.materials) + len(course.materials)
+        for index, material in enumerate(course.materials, start=1):
+            material.id = index
+        for index, point in enumerate(course.knowledge_points, start=1):
+            point.id = index
+        for index, chunk in enumerate(course.knowledge_chunks, start=1):
+            chunk.id = index
         self.courses.append(course)
 
     def add_material(self, material: Material) -> None:
@@ -138,30 +141,33 @@ def test_register_blank_creates_user_without_starter_course() -> None:
     assert repo.courses == []
 
 
-def test_register_ai_intro_copies_course_graph_to_current_user() -> None:
+def test_register_data_structures_copies_internal_course_without_library_materials() -> None:
     repo = InMemoryAuthRepository()
     user = make_service(repo).register(
         email="starter@edunova.local",
         password="Password123",
         display_name="示例学习者",
-        starter_mode="ai_intro",
+        starter_mode="data_structures",
     )
 
-    assert user.starter_mode == "ai_intro"
+    assert user.starter_mode == "data_structures"
     assert len(repo.courses) == 1
     course = repo.courses[0]
     assert course.owner is user
-    assert course.title == "人工智能导论"
-    assert course.materials[0].user is user
-    assert course.knowledge_points
-    assert course.knowledge_chunks
+    assert course.title == "数据结构与算法"
+    assert len(course.materials) == 9
+    assert all(material.user is user for material in course.materials)
+    assert all(material.storage_path.startswith("builtin://") for material in course.materials)
+    assert len(course.knowledge_points) == 54
+    assert len(course.knowledge_chunks) == 178
     assert all(chunk.course is course for chunk in course.knowledge_chunks)
-    assert len(repo.materials) == 1
-    assert repo.materials[0].user_id == user.id
-    assert repo.materials[0].filename == course.materials[0].filename
-    assert len(repo.material_links) == 1
-    assert repo.material_links[0].course_id == course.id
-    assert repo.material_links[0].material_id == repo.materials[0].id
+    assert all(
+        prerequisite_id in {point.id for point in course.knowledge_points}
+        for point in course.knowledge_points
+        for prerequisite_id in point.prerequisites_json
+    )
+    assert repo.materials == []
+    assert repo.material_links == []
 
 
 def test_register_rejects_duplicate_email_and_weak_password() -> None:
@@ -274,7 +280,7 @@ def test_auth_routes_register_login_me_and_logout() -> None:
             "email": "api@edunova.local",
             "password": "Password123",
             "display_name": "接口学生",
-            "starter_mode": "ai_intro",
+            "starter_mode": "data_structures",
         },
     )
 
@@ -284,7 +290,7 @@ def test_auth_routes_register_login_me_and_logout() -> None:
         "email": "api@edunova.local",
         "display_name": "接口学生",
         "role": "student",
-        "starter_mode": "ai_intro",
+        "starter_mode": "data_structures",
     }
     assert len(repo.courses) == 1
 

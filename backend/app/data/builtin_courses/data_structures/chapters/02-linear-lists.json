@@ -1,0 +1,82 @@
+{
+  "key": "chapter-02",
+  "order": 2,
+  "title": "线性表",
+  "learning_objectives": [
+    "掌握线性表的抽象操作和位置语义",
+    "实现顺序表、单链表、循环链表和双向链表",
+    "根据访问与修改负载选择合适实现"
+  ],
+  "knowledge_points": [
+    {
+      "key": "linear-list-adt",
+      "title": "线性表抽象与基本操作",
+      "summary": "理解有限序列的位置、前驱后继关系和增删查改契约。",
+      "difficulty": "easy",
+      "prerequisites": ["abstract-data-type"],
+      "concept": {"title": "有限且有序的一对一关系", "content": "线性表是由零个或多个同类型数据元素组成的有限序列。除第一个和最后一个元素外，每个元素都有唯一直接前驱和直接后继；位置通常从 1 或 0 开始编号，但接口必须始终使用同一约定。"},
+      "process": {"title": "围绕位置定义操作", "content": "典型操作包括初始化、判空、求长度、按位置取值、按值查找、在位置前插入和删除指定位置。实现前应先写清合法位置范围，例如长度为 n 时插入位置可以是 n+1，而删除位置最多为 n。"},
+      "pitfall": {"title": "区分元素值与元素位置", "content": "按值查找返回的是位置或不存在标记，按位置取值才返回元素。插入和删除后的后续元素位置都会变化；混用 0 基与 1 基下标会造成边界偏移，尤其容易漏掉空表和表尾操作。"}
+    },
+    {
+      "key": "sequential-list",
+      "title": "顺序表表示",
+      "summary": "用连续存储区和逻辑长度表示线性表，理解容量与长度的区别。",
+      "difficulty": "easy",
+      "prerequisites": ["linear-list-adt", "storage-representation"],
+      "concept": {"title": "连续地址支持随机访问", "content": "顺序表把逻辑相邻元素存放在物理相邻单元中，已知首地址和元素大小即可按公式定位任意位置。length 表示当前元素数，capacity 表示已分配空间，两者分离才能安全支持动态扩容。"},
+      "process": {"title": "访问与扩容的成本", "content": "按下标访问只需一次地址计算，时间为 O(1)。容量不足时应申请更大空间、复制现有元素并更新基址；常用倍增策略把连续追加的均摊成本控制在 O(1)，但单次扩容仍可能是 O(n)。"},
+      "pitfall": {"title": "越界与失效引用", "content": "访问前必须检查 0≤i<length，插入则允许 i=length。扩容后旧数组地址可能失效，不能继续保存指向旧存储区的裸指针；删除元素后还要及时调整 length，避免把已移出逻辑范围的数据当成有效元素。"}
+    },
+    {
+      "key": "sequential-list-update",
+      "title": "顺序表插入与删除",
+      "summary": "通过元素搬移维护连续序列，并准确分析不同位置的操作成本。",
+      "difficulty": "medium",
+      "prerequisites": ["sequential-list"],
+      "concept": {"title": "修改位置决定搬移范围", "content": "在位置 i 插入元素时，原区间 [i,n-1] 必须从后向前移动一格；删除位置 i 时，区间 [i+1,n-1] 从前向后覆盖空位。移动方向用于防止尚未读取的数据被提前覆盖。"},
+      "process": {"title": "先校验再移动再更新长度", "content": "插入流程是校验位置、确保容量、逆序搬移、写入新值并增加长度；删除流程是校验非空与位置、保存被删值、正序搬移并减少长度。表头修改为 O(n)，表尾插入在容量足够时为 O(1)。"},
+      "pitfall": {"title": "搬移边界最容易出错", "content": "插入若从前向后搬移会把后续元素重复覆盖；删除若循环终点多走一步会读取逻辑表尾之外。复杂度分析应报告平均移动次数，而不是因为某次表尾操作很快就宣称所有插入删除都是常数时间。"}
+    },
+    {
+      "key": "singly-linked-list",
+      "title": "单链表与头结点",
+      "summary": "用数据域和后继指针连接结点，理解头指针、首元结点和头结点。",
+      "difficulty": "medium",
+      "prerequisites": ["linear-list-adt", "storage-representation"],
+      "concept": {"title": "显式链接替代物理相邻", "content": "单链表结点由数据域和 next 指针组成，next 保存逻辑后继的位置。头指针指向链表入口；可选的头结点不存放业务元素，却能统一空表、表头插入和删除的代码路径。"},
+      "process": {"title": "沿链逐结点定位", "content": "按位置访问必须从头沿 next 前进，因此第 i 个元素的定位成本为 O(i)。遍历时保存当前结点并在每一步检查空指针；带头结点链表的第一个业务元素是 head.next，而不是 head 本身。"},
+      "pitfall": {"title": "不要混淆三个头部概念", "content": "头指针是变量，头结点是可选的哨兵结点，首元结点才保存第一个元素。若释放或修改结点前丢失 next，剩余链会无法访问；判断空表也要与设计一致，带头结点时通常检查 head.next 是否为空。"}
+    },
+    {
+      "key": "linked-list-update",
+      "title": "链表插入、删除与创建",
+      "summary": "通过修改局部链接完成更新，并正确管理前驱和结点生命周期。",
+      "difficulty": "medium",
+      "prerequisites": ["singly-linked-list"],
+      "concept": {"title": "局部改链本身是常数操作", "content": "已知前驱 p 时，在其后插入 s 只需令 s.next=p.next、p.next=s；删除 p 的后继 q 则令 p.next=q.next 后释放 q。真正的总成本取决于前驱是否已经获得，定位前驱通常仍需 O(n)。"},
+      "process": {"title": "头插与尾插控制顺序", "content": "头插法每次把新结点接到头结点之后，构造结果与输入顺序相反；尾插法维护 tail 指针，把新结点接到链尾，保持输入次序。尾插后必须更新 tail，空输入时 tail 应仍指向头结点。"},
+      "pitfall": {"title": "改链顺序和内存释放", "content": "若先覆盖 p.next 再保存旧后继，会丢失链段；删除后继续访问 q 会形成悬空引用。插入失败时还应释放已申请结点，循环构造结束后要保证尾结点 next 为空，避免遍历进入未定义区域。"}
+    },
+    {
+      "key": "circular-doubly-lists",
+      "title": "循环链表与双向链表",
+      "summary": "利用首尾相接和双向链接改善循环处理及前驱访问。",
+      "difficulty": "medium",
+      "prerequisites": ["linked-list-update"],
+      "concept": {"title": "改变边界而非改变线性关系", "content": "循环链表让尾结点 next 指向头部，使任意结点都能继续循环访问；双向链表为每个结点增加 prior 指针，可从当前结点直接访问前驱。它们仍表达线性次序，只是增加了导航能力。"},
+      "process": {"title": "双向插入要维护四条链接", "content": "在 p 后插入 s 时，应依次连接 s.prior=p、s.next=p.next、原后继.prior=s、p.next=s。删除 s 时把其前驱的 next 与后继的 prior 相互接通；带哨兵的循环双链表可统一首尾分支。"},
+      "pitfall": {"title": "终止条件不再是空指针", "content": "循环链表遍历若仍以 current!=NULL 为条件会无限循环，应以回到头结点或起点为结束。双向链表只更新 next 而漏掉 prior 会形成不一致结构，正向遍历看似正常，反向遍历却会出错。"}
+    },
+    {
+      "key": "list-selection-applications",
+      "title": "线性表选择与典型应用",
+      "summary": "综合访问、更新、空间与局部性，解决有序合并和多项式等问题。",
+      "difficulty": "hard",
+      "prerequisites": ["sequential-list-update", "circular-doubly-lists"],
+      "concept": {"title": "不存在绝对最优的实现", "content": "顺序表具有紧凑存储、缓存友好和随机访问优势，链表适合长度变化大、局部插删频繁且无需随机定位的场景。选择时还要考虑指针额外空间、内存分配成本和实现复杂度。"},
+      "process": {"title": "双指针完成有序合并", "content": "合并两个有序序列时维护两个当前位置，每次取较小元素并推进对应指针，最后追加未耗尽部分。顺序表通常写入新数组；链表可重接现有结点，二者都能在 O(m+n) 时间内完成。"},
+      "pitfall": {"title": "应用算法要保持结构不变式", "content": "多项式链表合并时，相同指数项需要合并系数并删除零项，不能只按普通序列拼接。重用原链结点时要明确所有权，避免两个表同时引用同一结点，导致后续修改或释放发生冲突。"}
+    }
+  ]
+}

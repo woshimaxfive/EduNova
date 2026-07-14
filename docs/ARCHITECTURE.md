@@ -169,7 +169,7 @@ frontend/src/
 - `ProtectedRoute` 统一保护 `/app/*`。
 - `PublicOnlyRoute` 处理已登录用户访问 `/login` 和 `/register`。
 - API client 收到 401 后清理登录态并跳回 `/login`。
-- 快速体验通过真实注册流程复制示例课程，不创建共享账号或前端假 session。
+- 快速体验通过真实注册流程安装当前用户独立的数据结构与算法内置课程，不创建共享账号或前端假 session。
 
 前端状态分工：
 
@@ -218,7 +218,7 @@ frontend/src/
 当前边界：
 
 - Phase 4.1 已完成真实注册、登录、读取当前用户和退出闭环；注册 starter mode 已落入后端注册接口和用户初始化流程。
-- Phase 4.2 已完成受保护的 `/dashboard/summary` 首页总览；当前 `/app` 左侧主页历史、最近课程、主页资料库浮层资料和 blank/ai_intro 空状态来自当前登录用户的真实 summary，不再使用前端假课程、假资料和假历史伪装真实数据。
+- `/dashboard/summary` 首页总览读取当前登录用户的真实数据；`blank` 用户保持空课程，`data_structures` 用户显示自己的内置课程，但主页资料摘要仍只统计个人上传原文件。
 - Phase 4.3 已完成受保护的 `/tutor/sessions` 主页会话与消息持久化；当前 `/app` 首次发送会创建 home session，连续追问复用当前 session，主页 assistant 调用当前用户默认模型生成普通回答。完整主页历史由 `/tutor/sessions/history` 分页查询并做服务端正文搜索，`/dashboard/summary` 只保留首页轻量最近数据。当前会话通过内部 `session_id` 恢复，详情响应同时恢复会话级 `selected_material_ids`。
 - Phase 4.4 已完成受保护的 `/materials` 真实资料库闭环；当前 `/app` 上传资料会写入个人资料库并刷新 `/dashboard/summary`，`/app/library` 从 `/materials` 读取当前用户资料，支持文档/图片筛选、搜索、详情反馈和上传刷新。
 - Phase 13.2 已完成 PDF/DOCX/PPTX 文本解析；当前 `/app` 和 `/app/library` 可用已解析 TXT/Markdown/PDF/DOCX/PPTX 资料生成课程，并跳转 `/app/courses/:courseId`。旧版 DOC/PPT、图片和扫描件不伪装解析完成。
@@ -264,8 +264,8 @@ backend/app/
 | `backend/app/db/base.py` | SQLAlchemy Declarative Base |
 | `backend/app/db/session.py` | 数据库 engine、Session 工厂和依赖入口 |
 | `backend/app/models` | 用户、课程、资料、知识点、知识切片核心模型，以及画像、路径、资源、Agent 轨迹、练习、报告、对话和模型设置基础模型 |
-| `backend/app/data/builtin_courses` | 内置课程包数据 |
-| `backend/app/services/course_seed.py` | 内置课程导入服务 |
+| `backend/app/data/builtin_courses/data_structures/` | 8 个理论章节、伪代码、16 个实验和公开书目组成的静态内置课程包 |
+| `backend/app/services/course_seed.py` | 为用户确定性安装课程内部来源，并按内部 slug 幂等替换旧内置课 |
 | `backend/app/services/tutor.py` | 主页/课程会话 API 边界和依赖装配；`HomeTutorGraphRunner` 接管主页上下文、路由、资料检索、联网、规划、回答、Review/Repair 和持久化，`CourseTutorGraphRunner` 接管严格课程 RAG 问答 |
 | `backend/app/services/model_settings.py` | 模型设置服务，负责单配置内回答/向量/重排序独立连接、三类默认、系统兜底、凭证加密、连接测试与实际向量维度识别 |
 | `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计 |
@@ -285,6 +285,8 @@ backend/app/
 | `backend/app/api/v1/tutor.py` | `/api/v1/tutor/sessions` 受保护会话接口 |
 | `backend/app/api/v1/materials.py` | `/api/v1/materials/*` 和 `/api/v1/courses/{course_id}/materials` 受保护资料接口 |
 | `backend/app/api/v1/courses.py` | `/api/v1/courses/*`、同步 `/from-materials` 和异步 `/from-materials/jobs` 受保护课程接口 |
+
+内置课程与个人资料库分层：内置章节写入 `course_materials` 和 `knowledge_chunks`，只在课程内容与引用接口中可见；只有用户上传原文件写入 `materials`。Docker backend 在 Alembic 迁移后执行 `sync-builtin-courses`，安装过程不调用模型、网络或 RQ Worker。
 | `backend/app/api/v1/settings.py` | `/api/v1/settings/model` 和 `/api/v1/settings/model/test` 受保护模型设置接口 |
 | `backend/app/providers/openai_compatible.py` | OpenAI-compatible Provider，支持非流式/流式回答、Spark thinking 控制、最终 content 隔离和动态维度 `/embeddings` |
 | `backend/migrations` | Alembic 迁移环境、pgvector 扩展迁移、核心学习表迁移、学习闭环表迁移和资料库兼容迁移 |

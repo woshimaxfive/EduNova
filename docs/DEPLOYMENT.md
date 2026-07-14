@@ -34,7 +34,7 @@
 - Alembic 迁移。
 - pgvector 扩展初始化。
 - 用户、课程、选课、课程资料、个人资料库、课程资料关联、知识点、知识切片、画像、学习路径、生成资源、Agent 轨迹、练习、报告、对话和模型设置表。
-- 人工智能导论内置课程包导入命令。
+- 数据结构与算法内置课程包同步命令。
 - 注册、登录、读取当前用户和退出登录接口。
 - 受保护学习空间首页总览接口 `/api/v1/dashboard/summary`。
 - 受保护主页会话接口 `/api/v1/tutor/sessions`。
@@ -282,16 +282,16 @@ docker compose exec -T backend python -m alembic current
 CREATE EXTENSION IF NOT EXISTS vector
 ```
 
-导入内置课程包：
+同步内置课程包并清理旧内置课：
 
 ```powershell
-.\.venv\Scripts\python -m backend.app.cli seed-ai-intro
+.\.venv\Scripts\python -m backend.app.cli sync-builtin-courses
 ```
 
 完整 Docker 栈中可以改用：
 
 ```powershell
-docker compose exec -T backend python -m backend.app.cli seed-ai-intro
+docker compose exec -T backend python -m backend.app.cli sync-builtin-courses
 ```
 
 ## 7. 当前验收标准
@@ -305,8 +305,8 @@ docker compose exec -T backend python -m backend.app.cli seed-ai-intro
 5. 浏览器或命令行访问 `/api/health` 返回预期 JSON。
 6. 本地或后端容器内 `alembic upgrade head` 能完成 pgvector 扩展迁移。
 7. 本地或后端容器内 `alembic upgrade head` 能创建第一批核心业务表和学习闭环基础表。
-8. `python -m backend.app.cli seed-ai-intro` 能导入人工智能导论课程包。
-9. 重复执行导入命令不会创建重复课程。
+8. `python -m backend.app.cli sync-builtin-courses` 能安装数据结构与算法课程，并按内部 slug 清理旧内置课。
+9. 重复执行同步命令不会创建重复课程，也不会删除用户自行创建的同名课程。
 10. `frontend` 可执行 `pnpm lint`、`pnpm test` 和 `pnpm build`。
 11. `frontend` 静态服务和 `nginx` 统一入口能通过 Compose 配置校验。
 12. 停止服务后本地 Git 状态不出现运行产物。

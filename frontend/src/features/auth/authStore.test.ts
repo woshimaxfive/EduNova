@@ -34,14 +34,14 @@ describe("authStore", () => {
         email: "student@edunova.local",
         display_name: "真实学生",
         role: "student",
-        starter_mode: "ai_intro"
+        starter_mode: "data_structures"
       })
     ).toEqual({
       id: 12,
       email: "student@edunova.local",
       displayName: "真实学生",
       role: "student",
-      starterMode: "ai_intro"
+      starterMode: "data_structures"
     });
   });
 });

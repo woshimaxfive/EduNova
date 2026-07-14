@@ -77,7 +77,7 @@ describe("student core pages", () => {
             data: {
               profile_summary: {
                 display_name: "核心页面学生",
-                starter_mode: "ai_intro",
+                starter_mode: "data_structures",
                 has_profile: true,
                 knowledge_foundation: "机器学习刚入门",
                 learning_goal: "期末前掌握神经网络"

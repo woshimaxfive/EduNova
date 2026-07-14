@@ -5,14 +5,14 @@ import { PATHS } from "../../app/routePaths";
 
 const options = [
   {
-    title: "从人工智能导论开始",
-    text: "使用内置课程进入完整学习闭环。",
+    title: "学习数据结构与算法",
+    text: "从内置课程的知识点、实验和课程问答开始。",
     to: PATHS.app,
     icon: BookOpen
   },
   {
     title: "上传自己的课程资料",
-    text: "PPT、PDF、电子书和期末题会进入资料库。",
+    text: "PDF、DOCX、PPTX 和文本资料会保留为你的原文件。",
     to: PATHS.library,
     icon: FileArrowUp
   },

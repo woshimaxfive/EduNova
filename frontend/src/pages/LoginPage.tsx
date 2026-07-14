@@ -66,13 +66,13 @@ export function LoginPage() {
         </div>
         <div className="preview-note secondary">
           <BookOpen size={22} weight="duotone" aria-hidden="true" />
-          <span>人工智能导论示例课程会作为可复制模板，不与其他用户共享修改。</span>
+          <span>数据结构与算法内置课程会复制到个人空间，学习记录彼此独立。</span>
         </div>
       </section>
       <section className="entry-panel" aria-label="登录">
         <p className="section-kicker">学生入口</p>
         <h1>进入你的学习空间</h1>
-        <p>继续使用自己的资料、课程和对话。新账号可以在注册时选择空白开始，或带一门人工智能导论示例课程。</p>
+        <p>继续使用自己的资料、课程和对话。新账号可以空白开始，也可以加入数据结构与算法内置课程。</p>
         <form className="entry-form" onSubmit={handleSubmit}>
           {notice ? <p className="form-info">{notice}</p> : null}
           {formMessage ? <p className="form-error" role="alert">{formMessage}</p> : null}

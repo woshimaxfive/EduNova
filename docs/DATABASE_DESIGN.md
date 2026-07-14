@@ -32,7 +32,8 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/app/db/base.py`：SQLAlchemy metadata 入口。
 - `backend/app/db/session.py`：engine 与 Session 工厂。
 - `backend/app/models`：核心业务模型和学习闭环基础模型。
-- `backend/app/data/builtin_courses/ai_intro.py`：人工智能导论内置课程包。
+- `backend/app/data/builtin_courses/data_structures/`：数据结构与算法结构化内置课程包。
+- `backend/app/data/builtin_courses/data_structures.py`：课程包加载、数量、先修 DAG、重复与占位内容校验器。
 - `backend/app/services/course_seed.py`：内置课程导入服务。
 - `backend/migrations`：Alembic 迁移目录。
 - `backend/migrations/versions/20260701_0001_enable_pgvector.py`：启用 pgvector 扩展。
@@ -105,7 +106,7 @@ erDiagram
 | `hashed_password` | varchar | 加密密码 |
 | `display_name` | varchar | 显示名称 |
 | `role` | varchar | `student` 或 `admin` |
-| `starter_mode` | varchar | 注册初始化方式，`blank` 或 `ai_intro` |
+| `starter_mode` | varchar | 注册初始化方式，`blank` 或 `data_structures` |
 | `auth_version` | integer | JWT 认证版本，修改密码后递增，非空默认 `0` |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
@@ -114,7 +115,7 @@ erDiagram
 
 - `email` 唯一。
 - 第一版默认 `role=student`。
-- 旧用户迁移默认 `starter_mode=blank`；新注册未传时由服务层按 `ai_intro` 处理。
+- 旧用户迁移默认 `starter_mode=blank`；新注册未传时服务层保持 `blank`。
 - 历史 JWT 缺少认证版本声明时按 `0` 兼容；密码修改后数据库版本递增，所有旧版本令牌失效。
 
 ### 4.2 `courses`
@@ -803,7 +804,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
   {
     "chunk_id": 1,
     "material_id": 1,
-    "source_title": "人工智能导论讲义",
+    "source_title": "数据结构与算法内部章节",
     "page_number": 12,
     "section_title": "启发式搜索",
     "content_preview": "启发式搜索利用启发函数..."
@@ -870,16 +871,16 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 
 接口层和服务层都应校验访问权限。不能只依赖前端隐藏入口。
 
-## 8. Starter 示例数据规则
+## 8. Starter 内置课程规则
 
-注册新账号时，系统通过 `starter_mode` 决定是否初始化示例内容：
+注册新账号时，系统通过 `starter_mode` 决定是否初始化内置课程：
 
-- `blank`：不创建内置课程副本、示例资料和示例历史。
-- `ai_intro`：把系统内置“人工智能导论”课程、示例资料、知识点和知识切片复制到当前用户空间。
+- `blank`：不创建内置课程、内部来源或演示学习数据。
+- `data_structures`：为当前用户创建独立的“数据结构与算法”课程、9 份 `course_materials`、54 个知识点和 178 个知识切片。
 
-`starter_mode` 只影响当前用户初始化，不等同于共享演示账号，也不能让多个真实用户共用同一份可写学习记录。当前实现中，`ai_intro` 不创建主页历史、画像、练习或最近学习记录；这些数据后续由真实使用行为生成。
+内置课程不会创建 `materials` 或 `course_material_links`，因此个人资料库只展示用户上传的原文件。`starter_mode` 不创建主页历史、画像、路径、练习、资源或报告；这些数据由真实学习行为生成。
 
-项目不创建共享演示账号。快速体验使用 `ai_intro` 注册选项，每个学生仍拥有独立用户、课程副本和学习记录；规则 fallback 必须明确标记且不得包含真实个人隐私数据。
+项目不创建共享演示账号。快速体验使用 `data_structures` 注册选项，每个学生仍拥有独立用户、课程副本和学习记录。
 
 ## 9. 迁移策略
 
@@ -918,7 +919,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 2. Alembic 能连接 PostgreSQL 并执行迁移。
 3. pgvector 扩展可通过迁移启用。
 4. 所有核心表可通过迁移创建。
-5. 内置人工智能导论课程可导入。
+5. 数据结构与算法内置课程可确定性安装并重复同步。
 6. 当前内置课程资料能写入课程、材料、知识点和知识切片。
 7. Phase 4.4 后，上传资料能先进入用户资料库，再选择加入课程。
 8. Phase 13.2 后，已解析 TXT/Markdown/PDF/DOCX/PPTX 资料能生成用户自己的课程、课程资料副本、资料关联、知识点和知识切片；未解析、解析失败、旧版 Office、图片和扫描件不得伪装成可建课资料。
@@ -955,9 +956,9 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - 删除资料会级联删除资料切片。
 - 第二条迁移已完成 downgrade/upgrade 往返验证。
 - `users.starter_mode` 已进入模型和迁移合同，旧用户默认 `blank`。
-- 人工智能导论内置课程包可导入，包含 12 个知识点和 24 个基础资料切片。
+- 数据结构与算法课程包可确定性安装，包含 9 份内部来源、54 个知识点、178 个切片和 16 个 Python 实验。
 - 内置课程导入具备幂等性，重复执行不会创建重复课程。
-- Phase 4.2 首页总览服务已验证只请求当前用户数据：blank 用户返回空课程/空资料/空历史，ai_intro 用户返回自己空间中的人工智能导论课程和资料，已有进度时显示真实进度，没有进度时显示“未开始”。
+- 首页总览只请求当前用户数据：blank 用户返回空课程/空资料/空历史，data_structures 用户返回自己空间中的内置课程但资料库仍为空；已有进度时显示真实进度，没有进度时显示“未开始”。
 - Phase 4.4 资料库服务已验证上传、列表、详情、进度和加入课程都只访问当前用户数据；迁移 `0005` 会把旧 `course_materials` 兼容复制为 `materials` 与 `course_material_links`。
 - Phase 13.2 资料解析和课程生成服务已验证 TXT/Markdown/PDF/DOCX/PPTX 资料能创建 `courses`、`course_enrollments`、`course_materials`、`course_material_links`、`knowledge_points` 和 `knowledge_chunks`；损坏 PDF/DOCX/PPTX 标记 `failed`，旧版 DOC/PPT 和图片不伪装解析完成；A 用户不能用 B 用户资料建课，也不能读取 B 用户课程。
 - 模型设置服务已验证用户 API Key 不以明文进入数据库，同一用户多套模型配置互相隔离；连接不变时空 Key 保留原密钥，连接变化且没有新 Key 时清除旧凭据，缺少加密 Key 时拒绝保存用户 Key。课程会话命中引用且默认模型配置可用时，assistant 内容来自模型回答，`citation_json` 保留真实引用，`trace_id` 非空。

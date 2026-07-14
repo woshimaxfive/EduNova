@@ -18,7 +18,7 @@ import { LearningSpacePage } from "./LearningSpacePage";
 const starterSummary: DashboardSummary = {
   profile_summary: {
     display_name: "示例学生",
-    starter_mode: "ai_intro",
+    starter_mode: "data_structures",
     has_profile: false,
     knowledge_foundation: null,
     learning_goal: null
@@ -732,7 +732,7 @@ describe("LearningSpacePage", () => {
     const dialog = screen.getByRole("dialog", { name: "从资料生成课程" });
 
     expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByRole("textbox", { name: "课程名称" })).toHaveValue("人工智能导论期末复习");
+    expect(within(dialog).getByRole("textbox", { name: "课程名称" })).toHaveValue("我的资料课程");
     expect(within(dialog).getByRole("button", { name: /真实资料讲义.md/ })).toHaveAttribute("aria-pressed", "false");
     expect(within(dialog).getByText("先选择要生成课程的资料")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "生成课程" })).toBeDisabled();
@@ -1389,7 +1389,7 @@ describe("LearningSpacePage", () => {
         url: COURSE_ENDPOINTS.fromMaterialsJobs,
         payload: {
           material_ids: [201],
-          course_title: "人工智能导论期末复习"
+          course_title: "我的资料课程"
         }
       })
     );

@@ -324,11 +324,17 @@ class DashboardService:
                 action_label="上传资料",
             )
 
-        if user.starter_mode == "ai_intro" and courses and not conversations and not resources and profile is None:
+        if (
+            user.starter_mode == "data_structures"
+            and courses
+            and not conversations
+            and not resources
+            and profile is None
+        ):
             return EmptyState(
                 kind="starter",
-                title="从人工智能导论开始",
-                description="内置课程已经进入你的个人空间，可以直接开始学习。",
+                title="从数据结构与算法开始",
+                description="内置课程已经进入你的学习空间，可以直接阅读课程内容或开始提问。",
                 action_label="开始学习",
             )
 

@@ -154,16 +154,16 @@ Authorization: Bearer <token>
   "email": "student@example.com",
   "password": "Password123",
   "display_name": "小新",
-  "starter_mode": "ai_intro"
+  "starter_mode": "data_structures"
 }
 ```
 
-`starter_mode` 用于决定新账号首次进入学习空间时是否带示例内容：
+`starter_mode` 用于决定新账号首次进入学习空间时是否安装内置课程：
 
-- `blank`：空白开始，不自动创建内置课程、资料和主页历史。
-- `ai_intro`：复制“人工智能导论”示例课程、示例资料、知识点和知识切片到当前用户空间。
+- `blank`：空白开始，不自动创建内置课程、资料或主页历史。
+- `data_structures`：安装“数据结构与算法”课程、课程内部来源、54 个知识点和 178 个知识切片。
 
-如果前端没有传入，后端默认按 `ai_intro` 处理，保证比赛演示和初次试用有可见主链路。该字段不能指向共享演示账号，也不能复用其他用户资料。
+如果前端没有传入，后端默认按 `blank` 处理。内置课程来源只保存在 `course_materials`，不会创建个人资料库 `materials`，也不能复用其他用户资料。
 
 注册接口只返回用户对象，不直接返回 token。前端注册成功后再调用登录接口写入本地 session；如果自动登录失败，跳回登录页提示用户重新登录。
 
@@ -176,7 +176,7 @@ Authorization: Bearer <token>
     "email": "student@example.com",
     "display_name": "小新",
     "role": "student",
-    "starter_mode": "ai_intro"
+    "starter_mode": "data_structures"
   },
   "trace_id": "trace_20260701_001"
 }
@@ -207,7 +207,7 @@ Authorization: Bearer <token>
       "email": "student@example.com",
       "display_name": "小新",
       "role": "student",
-      "starter_mode": "ai_intro"
+      "starter_mode": "data_structures"
     }
   },
   "trace_id": "trace_20260701_002"
@@ -227,7 +227,7 @@ Authorization: Bearer <token>
     "email": "student@example.com",
     "display_name": "小新",
     "role": "student",
-    "starter_mode": "ai_intro"
+    "starter_mode": "data_structures"
   },
   "trace_id": "trace_20260701_003"
 }
@@ -254,7 +254,7 @@ Authorization: Bearer <token>
     "email": "student@example.com",
     "display_name": "小新",
     "role": "student",
-    "starter_mode": "ai_intro"
+    "starter_mode": "data_structures"
   },
   "trace_id": "trace_20260707_001"
 }
@@ -325,7 +325,7 @@ Authorization: Bearer <token>
 阶段边界：
 
 - `blank` 注册用户返回空课程、空资料、空主页历史和 `empty_state.kind=blank`。
-- `ai_intro` 注册用户返回复制到该用户空间的人工智能导论课程和资料，不返回共享系统模板。
+- `data_structures` 注册用户返回复制到该用户空间的数据结构与算法课程；资料摘要仍只统计用户上传原文件。
 - 课程进度只显示真实进度；没有进度记录时显示“未开始”，不使用前端写死的演示百分比。
 - 本接口不创建会话、不上传资料、不触发 AI/RAG，也不生成课程。
 
@@ -336,7 +336,7 @@ Authorization: Bearer <token>
   "data": {
     "profile_summary": {
       "display_name": "小新",
-      "starter_mode": "ai_intro",
+      "starter_mode": "data_structures",
       "has_profile": true,
       "knowledge_foundation": "机器学习入门",
       "learning_goal": "期末前掌握神经网络"
@@ -353,32 +353,23 @@ Authorization: Bearer <token>
     "recent_courses": [
       {
         "id": "101",
-        "title": "人工智能导论",
+        "title": "数据结构与算法",
         "source_type": "builtin",
         "progress_label": "未开始",
-        "focus": "人工智能",
+        "focus": "计算机科学",
         "next": "开始学习"
       }
     ],
     "material_library_summary": {
-      "material_count": 1,
+      "material_count": 0,
       "unassigned_count": 0
     },
-    "recent_materials": [
-      {
-        "id": "201",
-        "title": "人工智能导论讲义.md",
-        "type": "MD",
-        "detail": "已解析",
-        "modified": "今天",
-        "size": "12 KB"
-      }
-    ],
+    "recent_materials": [],
     "recent_resources": [],
     "command_suggestions": [
-      "帮我复习人工智能导论",
-      "把反向传播讲到我能做题",
-      "用这些资料生成期末复习课"
+      "继续学习《数据结构与算法》",
+      "帮我复习《数据结构与算法》的薄弱点",
+      "先帮我拆解下一步复习计划"
     ],
     "evidence_summary": {
       "citation_count": 0,
@@ -387,8 +378,8 @@ Authorization: Bearer <token>
     },
     "empty_state": {
       "kind": "starter",
-      "title": "从人工智能导论开始",
-      "description": "内置课程已经进入你的个人空间，可以直接开始学习。",
+      "title": "从数据结构与算法开始",
+      "description": "内置课程已经进入你的学习空间，可以直接阅读课程内容或开始提问。",
       "action_label": "开始学习"
     }
   },
@@ -736,7 +727,7 @@ Authorization: Bearer <token>
     "course_ids": [],
     "filename": "ai-notes.md",
     "content_type": "text/markdown",
-    "extracted_text_preview": "第一章 人工智能导论...",
+    "extracted_text_preview": "第一章 数据结构与算法基础...",
     "chunk_count": 8,
     "section_count": 3,
     "page_count": 6,
@@ -933,7 +924,7 @@ Authorization: Bearer <token>
       {
         "title": "启发式搜索",
         "material_ids": ["1", "2"],
-        "source_titles": ["人工智能导论讲义.md", "期末样题.md"],
+        "source_titles": ["数据结构讲义.md", "期末样题.md"],
         "reason": "多份资料重复出现。",
         "confidence": "high",
         "support_count": 2,
@@ -948,7 +939,7 @@ Authorization: Bearer <token>
     "citations": [
       {
         "material_id": "1",
-        "source_title": "人工智能导论讲义.md",
+        "source_title": "数据结构讲义.md",
         "section_title": "启发式搜索",
         "page_number": null,
         "excerpt": "启发式搜索使用启发函数估计路径代价。",
@@ -1018,7 +1009,7 @@ Authorization: Bearer <token>
         "material_id": 1,
         "knowledge_point_id": 2,
         "content": "启发式搜索利用启发函数估计路径代价。",
-        "source_title": "人工智能导论讲义",
+        "source_title": "数据结构讲义",
         "page_number": 12,
         "section_title": "启发式搜索",
         "score": 8.42,
@@ -1739,7 +1730,7 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
   "data": {
     "id": "501",
     "course_id": "101",
-    "title": "人工智能导论 练习",
+    "title": "数据结构与算法练习",
     "status": "in_progress",
     "score": null,
     "requested_difficulty": "adaptive",
@@ -1899,7 +1890,7 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
           "score": 0
         }
       ],
-      "next_step_suggestions": ["优先复习《人工智能导论》中得分较低的知识点。"],
+      "next_step_suggestions": ["优先复习《数据结构与算法》中得分较低的知识点。"],
       "trend": {
         "direction": "improved",
         "score_delta": 12,
@@ -2071,9 +2062,9 @@ course_id=101
 {
   "data": {
     "course_id": "101",
-    "filename": "edunova-人工智能导论-learning-dossier.md",
+    "filename": "edunova-数据结构与算法-learning-dossier.md",
     "content_type": "text/markdown; charset=utf-8",
-    "markdown": "# 人工智能导论 学习档案\n\n## 数据概览\n...",
+    "markdown": "# 数据结构与算法 学习档案\n\n## 数据概览\n...",
     "generated_at": "2026-07-05T15:00:00Z",
     "agent_trace_id": "trace_export",
     "source_summary": {
@@ -2118,7 +2109,7 @@ course_id=101
     "format": "pdf",
     "export_type": "learning_dossier",
     "resource_id": null,
-    "filename": "edunova-人工智能导论-learning-dossier.pdf",
+    "filename": "edunova-数据结构与算法-learning-dossier.pdf",
     "content_type": "application/pdf",
     "agent_trace_id": "trace_export_job",
     "error_message": null,

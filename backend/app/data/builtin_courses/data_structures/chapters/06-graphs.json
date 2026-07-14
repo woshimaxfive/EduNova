@@ -1,0 +1,92 @@
+{
+  "key": "chapter-06",
+  "order": 6,
+  "title": "图及图算法",
+  "learning_objectives": [
+    "掌握图的术语、邻接矩阵和邻接表",
+    "实现深度优先与广度优先遍历",
+    "解决生成树、最短路径、拓扑和关键路径问题"
+  ],
+  "knowledge_points": [
+    {
+      "key": "graph-terminology",
+      "title": "图的定义与基本术语",
+      "summary": "理解顶点、边、方向、权、度、路径、连通和子图等概念。",
+      "difficulty": "easy",
+      "prerequisites": ["logical-structures"],
+      "concept": {"title": "图表达任意多对多关系", "content": "图 G=(V,E) 由顶点集合和边集合组成。无向边表示对称关系，有向边具有起点和终点；带权图为边附加距离、费用或容量。路径由相邻边连接，简单路径不重复顶点。"},
+      "process": {"title": "先确认方向与连通语义", "content": "无向图中顶点的度是关联边数，所有顶点度数之和等于边数的两倍；有向图分别计算入度和出度。连通分量用于无向图，强连通要求有向图中任意两点相互可达。"},
+      "pitfall": {"title": "可达不等于直接相邻", "content": "两个顶点之间存在路径说明可达，不代表它们之间有一条边。无向图的一条边在度数统计中贡献两次；有向路径必须遵循边方向，忽略方向会把弱连通误认为强连通。"}
+    },
+    {
+      "key": "graph-storage",
+      "title": "邻接矩阵与邻接表",
+      "summary": "根据图的稠密程度和操作需求选择矩阵或链式邻接表示。",
+      "difficulty": "medium",
+      "prerequisites": ["graph-terminology", "multidimensional-arrays", "singly-linked-list"],
+      "concept": {"title": "矩阵重查询，邻接表重枚举", "content": "邻接矩阵用 n×n 单元记录边或权值，判断两点是否相邻为 O(1)，适合稠密图。邻接表为每个顶点保存出边链表，空间为 O(n+e)，遍历某顶点邻居与其度数成正比。"},
+      "process": {"title": "建图时统一顶点映射", "content": "先把外部顶点标识映射为稳定下标，再初始化矩阵无边值或邻接表头。无向边需要在两个方向各记录一次，有向边只加入起点的出边表；带权图还要区分权值零和不存在。"},
+      "pitfall": {"title": "无边值不能与合法权值冲突", "content": "最短路径图可能存在权值为零的边，因此不能总用 0 表示无边，可使用无穷或单独存在标志。邻接表中的无向边出现两次，统计总边数时要除以二，删除时也必须同步移除两侧记录。"}
+    },
+    {
+      "key": "depth-first-search",
+      "title": "深度优先搜索",
+      "summary": "沿未访问邻接点深入并回溯，形成深度优先森林。",
+      "difficulty": "medium",
+      "prerequisites": ["graph-storage", "recursion-stack"],
+      "concept": {"title": "一条路径走到底再回退", "content": "DFS 从起点标记并访问，随后选择一个未访问邻接点递归深入；当前顶点没有新邻居时回溯到最近仍有选择的顶点。递归调用栈或显式栈保存尚未完成的搜索分支。"},
+      "process": {"title": "遍历非连通图要扫描所有顶点", "content": "单次 DFS 只能覆盖起点所在连通区域。完整遍历应初始化 visited，再按顶点顺序检查每个未访问顶点并启动一次 DFS，由此得到若干搜索树组成的森林。邻接表实现时间为 O(n+e)。"},
+      "pitfall": {"title": "必须在入栈或递归前标记", "content": "若等到返回后才标记，含环图会在相邻顶点间无限递归。邻接点枚举顺序不同会产生不同但都合法的遍历序列；不能把某一固定顺序当作图本身唯一性质。"}
+    },
+    {
+      "key": "breadth-first-search",
+      "title": "广度优先搜索",
+      "summary": "使用队列按距离层次扩展顶点，并求无权图最短边数路径。",
+      "difficulty": "medium",
+      "prerequisites": ["graph-storage", "linked-queue-applications"],
+      "concept": {"title": "先发现的层次先扩展", "content": "BFS 从起点入队，反复出队一个顶点并把其所有未访问邻接点标记后入队。队列保证距离起点边数较少的顶点先被处理，因此首次发现某顶点时得到无权图中的最短边数距离。"},
+      "process": {"title": "记录前驱恢复最短路径", "content": "除 visited 外维护 distance 和 predecessor。发现邻接点 v 时设置 distance[v]=distance[u]+1、predecessor[v]=u；到达目标后沿前驱反向回溯，再逆序得到从起点到目标的完整路径。"},
+      "pitfall": {"title": "入队时标记避免重复", "content": "若等到出队才标记，同一顶点可能被多个父结点重复入队，浪费空间并使前驱不稳定。BFS 只保证边权相同或无权图的最短边数路径，不能直接解决一般带权最短路径。"}
+    },
+    {
+      "key": "minimum-spanning-tree",
+      "title": "最小生成树",
+      "summary": "理解生成树，并比较 Prim 与 Kruskal 的贪心选择。",
+      "difficulty": "hard",
+      "prerequisites": ["graph-storage", "tree-terminology"],
+      "concept": {"title": "以最小总权连接全部顶点", "content": "连通无向带权图的生成树包含全部 n 个顶点和 n-1 条边，且不含环。最小生成树使边权总和最小；权值相同时结果可能不唯一，但最小总权值相同。"},
+      "process": {"title": "Prim 扩顶点，Kruskal 选边", "content": "Prim 从一个顶点集合出发，反复加入连接集合内外的最小边；Kruskal 按权从小到大扫描边，若边的两个端点属于不同连通分量就选取，并用并查集快速判断和合并分量。"},
+      "pitfall": {"title": "最短路径树不是最小生成树", "content": "最小生成树优化全部所选边的总和，不保证根到每个顶点的路径最短。算法要求无向连通图；若图不连通只能得到最小生成森林。选择边时若不检查成环，会失去树结构。"}
+    },
+    {
+      "key": "shortest-paths",
+      "title": "最短路径算法",
+      "summary": "掌握 Dijkstra 和 Floyd 的适用范围、状态更新与路径恢复。",
+      "difficulty": "hard",
+      "prerequisites": ["graph-storage", "complexity-analysis"],
+      "concept": {"title": "单源与全源是不同问题", "content": "Dijkstra 求非负权图中一个源点到其余顶点的最短路径，反复确定当前距离最小的未确定顶点并松弛出边。Floyd 通过逐步允许中间顶点，计算所有顶点对之间的最短距离。"},
+      "process": {"title": "松弛让已知上界逐步变小", "content": "若 dist[u]+w(u,v)<dist[v]，就更新 dist[v] 和前驱。Floyd 的状态转移为 d[i][j]=min(d[i][j],d[i][k]+d[k][j])，k 必须放在最外层，表示只允许编号不超过 k 的中间点。"},
+      "pitfall": {"title": "Dijkstra 不能处理负权边", "content": "负权边可能让已经确定的距离再次变小，破坏 Dijkstra 的贪心前提。Floyd 可处理负边但不能接受可达负环；若最终 d[i][i]<0，说明存在负环，最短路径不再有有限定义。"}
+    },
+    {
+      "key": "topological-sort",
+      "title": "拓扑排序",
+      "summary": "对有向无环图建立满足先后约束的线性序列，并检测环。",
+      "difficulty": "hard",
+      "prerequisites": ["graph-terminology", "linked-queue-applications"],
+      "concept": {"title": "AOV 网用边表达先修关系", "content": "在 AOV 网中顶点表示活动，有向边 u→v 表示 u 必须先于 v。拓扑序列把所有顶点排成线性次序，使每条边的起点都位于终点之前；一个 DAG 可能有多个合法拓扑序。"},
+      "process": {"title": "反复移除入度为零的顶点", "content": "先统计每个顶点入度，把所有零入度顶点加入队列。每次取出一个顶点输出，并把其所有出边终点入度减一，新产生的零入度顶点继续入队；若输出数少于顶点数，则剩余部分存在有向环。"},
+      "pitfall": {"title": "拓扑序不代表唯一时间安排", "content": "没有路径约束的活动可以交换顺序，因此不同队列策略会得到不同合法结果。只有 DAG 才存在拓扑序；检测到环时不能继续把剩余顶点任意追加，否则会违反先修关系。"}
+    },
+    {
+      "key": "critical-path",
+      "title": "关键路径",
+      "summary": "在 AOE 网中计算事件最早最迟发生时间，识别零余量活动。",
+      "difficulty": "hard",
+      "prerequisites": ["topological-sort", "shortest-paths"],
+      "concept": {"title": "最长工期由关键活动决定", "content": "AOE 网以边表示活动、顶点表示事件，边权是活动持续时间。源点到汇点的最长路径决定项目最短完成时间；最早开始时间等于最迟开始时间的活动没有机动余量，构成关键路径。"},
+      "process": {"title": "拓扑正推与逆拓扑回推", "content": "按拓扑序用最大值计算事件最早时间 ve；项目工期确定后，按逆拓扑序用最小值计算最迟时间 vl。活动 a=<u,v> 的最早开始为 ve[u]，最迟开始为 vl[v]-duration(a)，二者相等即为关键活动。"},
+      "pitfall": {"title": "关键路径可能不止一条", "content": "存在多条同长度最长路径时，缩短单条路径上的某个活动未必缩短总工期，必须考虑所有关键路径。AOE 网也必须是 DAG；若有环，事件先后关系无法形成有限项目进度。"}
+    }
+  ]
+}

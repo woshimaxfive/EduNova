@@ -93,7 +93,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 - 学生注册登录。
 - 对话式 8 维学习画像。
-- 内置人工智能导论课程。
+- 可选的《数据结构与算法》内置课程：8 个理论章节、54 个知识点、178 个证据切片和 16 个 Python 实验。
 - 上传资料自动建课。
 - RAG 检索和引用展示。
 - 多智能体协作生成学习资源。
@@ -102,7 +102,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - 练习评估、掌握度地图和薄弱点复习队列。
 - 资料对比与考点提炼。
 - Markdown/PDF/DOCX 学习档案异步导出，旧 Markdown 同步接口保留兼容。
-- 快速演示通过注册页示例课程模式完成；独立共享 demo reset 不作为当前主线。
+- 快速体验可在注册页主动选择数据结构与算法内置课程；新用户默认空白开始，不创建共享 demo 账号。
 - Docker Compose 部署。
 
 当前代码已经具备第一版主学习闭环和交付基线，但仍不是完整商业产品。不要把“第一版目标”误读成 OCR、扫描件解析、旧版 Office 格式解析、教师端和完整 E2E 都已经完成。
@@ -239,16 +239,16 @@ docker compose up -d postgres redis
 docker compose exec -T backend python -m alembic upgrade head
 ```
 
-导入内置课程包：
+同步内置课程包并替换旧内置课：
 
 ```powershell
-.\.venv\Scripts\python -m backend.app.cli seed-ai-intro
+.\.venv\Scripts\python -m backend.app.cli sync-builtin-courses
 ```
 
 完整 Docker 栈中可以改用：
 
 ```powershell
-docker compose exec -T backend python -m backend.app.cli seed-ai-intro
+docker compose exec -T backend python -m backend.app.cli sync-builtin-courses
 ```
 
-内置课程包包含 12 个知识点和 24 个基础资料切片，覆盖搜索、知识表示、机器学习、神经网络、自然语言处理、计算机视觉、多智能体和 AI 伦理安全。
+Docker 后端会在迁移完成后自动执行该同步。课程包包含 9 份仅在课程内部可见的系统来源、54 个知识点、178 个切片和 16 个 Python 实验；不会在个人资料库创建衍生文件。课程正文和实验均为重新组织的原创表达，仓库不包含参考教材 PDF、扫描页、插图或教材代码。

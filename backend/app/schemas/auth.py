@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from backend.app.models import User
 
 
-StarterMode = Literal["blank", "ai_intro"]
+StarterMode = Literal["blank", "data_structures"]
 
 
 class ApiUser(BaseModel):
@@ -22,7 +22,7 @@ class RegisterRequest(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=1, max_length=255)
     display_name: str = Field(min_length=1, max_length=100)
-    starter_mode: StarterMode = "ai_intro"
+    starter_mode: StarterMode = "blank"
 
     @field_validator("email")
     @classmethod

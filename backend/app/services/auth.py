@@ -13,9 +13,12 @@ from backend.app.core.security import (
     parse_access_token_claims,
     verify_password,
 )
-from backend.app.data.builtin_courses.ai_intro import BUILTIN_AI_INTRO_COURSE
-from backend.app.models import Course, CourseMaterialLink, Material, User
-from backend.app.services.course_seed import build_builtin_ai_intro_course_graph
+from backend.app.data.builtin_courses.data_structures import BUILTIN_DATA_STRUCTURES_COURSE
+from backend.app.models import Course, User
+from backend.app.services.course_seed import (
+    build_builtin_data_structures_course_graph,
+    finalize_builtin_course_graph,
+)
 
 
 class DuplicateEmailError(Exception):
@@ -63,12 +66,6 @@ class AuthRepository(Protocol):
     def add_course(self, course: Course) -> None:
         ...
 
-    def add_material(self, material: Material) -> None:
-        ...
-
-    def add_course_material_link(self, link: CourseMaterialLink) -> None:
-        ...
-
     def flush(self) -> None:
         ...
 
@@ -112,12 +109,6 @@ class SqlAlchemyAuthRepository:
     def add_course(self, course: Course) -> None:
         self.db.add(course)
 
-    def add_material(self, material: Material) -> None:
-        self.db.add(material)
-
-    def add_course_material_link(self, link: CourseMaterialLink) -> None:
-        self.db.add(link)
-
     def flush(self) -> None:
         self.db.flush()
 
@@ -151,11 +142,11 @@ class AuthService:
         email: str,
         password: str,
         display_name: str,
-        starter_mode: str = "ai_intro",
+        starter_mode: str = "blank",
     ) -> User:
         normalized_email = email.strip().lower()
         normalized_name = display_name.strip() or normalized_email.split("@", 1)[0]
-        mode = starter_mode or "ai_intro"
+        mode = starter_mode or "blank"
 
         self._validate_starter_mode(mode)
         self._validate_password(password)
@@ -173,8 +164,8 @@ class AuthService:
         try:
             self.repository.add_user(user)
             self.repository.flush()
-            if mode == "ai_intro":
-                self._copy_ai_intro_course(user)
+            if mode == "data_structures":
+                self._copy_data_structures_course(user)
             self.repository.commit()
             self.repository.refresh(user)
         except Exception:
@@ -243,60 +234,27 @@ class AuthService:
             self.repository.rollback()
             raise
 
-    def _copy_ai_intro_course(self, user: User) -> Course:
+    def _copy_data_structures_course(self, user: User) -> Course:
         existing = self.repository.get_course_for_user(
             user,
-            title=BUILTIN_AI_INTRO_COURSE["title"],
-            source_type=BUILTIN_AI_INTRO_COURSE["source_type"],
+            title=BUILTIN_DATA_STRUCTURES_COURSE["title"],
+            source_type=BUILTIN_DATA_STRUCTURES_COURSE["source_type"],
         )
         if existing is not None:
             return existing
 
-        course = build_builtin_ai_intro_course_graph(user)
+        course = build_builtin_data_structures_course_graph(user)
         course.visibility = "private"
-        for material in course.materials:
-            material.metadata_json = {
-                **material.metadata_json,
-                "owner_scope": "registered_user",
-            }
-        for chunk in course.knowledge_chunks:
-            chunk.metadata_json = {
-                **chunk.metadata_json,
-                "source": "starter_copy",
-            }
         self.repository.add_course(course)
         self.repository.flush()
-        for course_material in course.materials:
-            library_material = Material(
-                user_id=user.id,
-                filename=course_material.filename,
-                content_type=course_material.content_type,
-                storage_path=course_material.storage_path,
-                parse_status=course_material.parse_status,
-                extracted_text=course_material.extracted_text,
-                metadata_json={
-                    **course_material.metadata_json,
-                    "owner_scope": "registered_user",
-                    "legacy_course_material_id": course_material.id,
-                },
-            )
-            self.repository.add_material(library_material)
-            self.repository.flush()
-            self.repository.add_course_material_link(
-                CourseMaterialLink(
-                    course_id=course.id,
-                    material_id=library_material.id,
-                    added_by_user_id=user.id,
-                    usage_type="course_source",
-                )
-            )
+        finalize_builtin_course_graph(course)
         self.repository.flush()
         return course
 
     @staticmethod
     def _validate_starter_mode(mode: str) -> None:
-        if mode not in {"blank", "ai_intro"}:
-            raise ValueError("starter_mode 只能是 blank 或 ai_intro。")
+        if mode not in {"blank", "data_structures"}:
+            raise ValueError("starter_mode 只能是 blank 或 data_structures。")
 
     @staticmethod
     def _validate_password(password: str) -> None:

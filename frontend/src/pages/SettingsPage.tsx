@@ -322,7 +322,7 @@ export function SettingsPage() {
   const effectiveRerankReady = defaultRerankConfig?.can_use_rerank_model
     ?? systemSummary?.can_use_rerank_model
     ?? false;
-  const starterModeLabel = authUser?.starterMode === "ai_intro" ? "示例课程开始" : "空白开始";
+  const starterModeLabel = authUser?.starterMode === "data_structures" ? "数据结构与算法开始" : "空白开始";
 
   function selectSection(section: SettingsSection) {
     const next = new URLSearchParams(searchParams);

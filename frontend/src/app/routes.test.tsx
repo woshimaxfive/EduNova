@@ -11,7 +11,7 @@ import { useAuthStore } from "../features/auth/authStore";
 const dashboardSummary: DashboardSummary = {
   profile_summary: {
     display_name: "演示学生",
-    starter_mode: "ai_intro",
+    starter_mode: "data_structures",
     has_profile: false,
     knowledge_foundation: null,
     learning_goal: null

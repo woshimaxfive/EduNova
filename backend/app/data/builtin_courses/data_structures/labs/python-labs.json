@@ -1,0 +1,148 @@
+{
+  "labs": [
+    {
+      "id": "lab-01-operation-count",
+      "title": "实验 1：用操作计数观察二次增长",
+      "knowledge_point_key": "complexity-analysis",
+      "objective": "不依赖机器计时，统计嵌套循环的基本操作次数，观察 n 从 4 增长到 8 时数量级如何变化。",
+      "code": "def pair_count(n):\n    count = 0\n    for i in range(n):\n        for j in range(i + 1, n):\n            count += 1\n    return count\n\nprint(f'n=4:{pair_count(4)}')\nprint(f'n=8:{pair_count(8)}')\n",
+      "expected_output": "n=4:6\nn=8:28",
+      "edge_case": "检查 n=0 和 n=1 时计数均为 0，避免把循环层数机械等同于固定次数。"
+    },
+    {
+      "id": "lab-02-adt-stack",
+      "title": "实验 2：用接口契约实现栈 ADT",
+      "knowledge_point_key": "abstract-data-type",
+      "objective": "通过私有列表实现 Push、Pop 和 Top，验证调用者无需知道内部存储方式。",
+      "code": "class Stack:\n    def __init__(self):\n        self._items = []\n\n    def push(self, value):\n        self._items.append(value)\n\n    def pop(self):\n        if not self._items:\n            raise IndexError('empty stack')\n        return self._items.pop()\n\n    def top(self):\n        if not self._items:\n            raise IndexError('empty stack')\n        return self._items[-1]\n\ns = Stack()\nfor value in (2, 4, 6):\n    s.push(value)\nprint(s.top())\nprint(s.pop(), s.pop(), s.pop())\n",
+      "expected_output": "6\n6 4 2",
+      "edge_case": "对空栈调用 pop 和 top 必须抛出明确异常，且 top 不得改变元素数量。"
+    },
+    {
+      "id": "lab-03-sequence-list",
+      "title": "实验 3：顺序表插入与删除",
+      "knowledge_point_key": "sequential-list-update",
+      "objective": "在固定逻辑长度上模拟逆序搬移和正序覆盖，观察位置边界与结果变化。",
+      "code": "def insert(items, index, value):\n    if not 0 <= index <= len(items):\n        raise IndexError('invalid insert index')\n    items.append(None)\n    for i in range(len(items) - 1, index, -1):\n        items[i] = items[i - 1]\n    items[index] = value\n\ndef delete(items, index):\n    if not 0 <= index < len(items):\n        raise IndexError('invalid delete index')\n    removed = items[index]\n    for i in range(index, len(items) - 1):\n        items[i] = items[i + 1]\n    items.pop()\n    return removed\n\ndata = [10, 20, 40]\ninsert(data, 2, 30)\nprint(data)\nprint(delete(data, 1), data)\n",
+      "expected_output": "[10, 20, 30, 40]\n20 [10, 30, 40]",
+      "edge_case": "覆盖空表插入、表尾插入、删除首元素，以及非法负下标和越过逻辑表尾的情况。"
+    },
+    {
+      "id": "lab-04-linked-merge",
+      "title": "实验 4：合并两个有序链表",
+      "knowledge_point_key": "list-selection-applications",
+      "objective": "只重接现有结点完成线性时间合并，体会尾指针和剩余链段的处理。",
+      "code": "class Node:\n    def __init__(self, value, next_node=None):\n        self.value = value\n        self.next = next_node\n\ndef build(values):\n    head = tail = None\n    for value in values:\n        node = Node(value)\n        if head is None:\n            head = node\n        else:\n            tail.next = node\n        tail = node\n    return head\n\ndef merge(a, b):\n    dummy = tail = Node(0)\n    while a and b:\n        if a.value <= b.value:\n            tail.next, a = a, a.next\n        else:\n            tail.next, b = b, b.next\n        tail = tail.next\n    tail.next = a or b\n    return dummy.next\n\ndef values(head):\n    result = []\n    while head:\n        result.append(head.value)\n        head = head.next\n    return result\n\nprint(values(merge(build([1, 4, 7]), build([2, 3, 8]))))\n",
+      "expected_output": "[1, 2, 3, 4, 7, 8]",
+      "edge_case": "验证任一输入为空、两边均为空和包含相等值时，结果有序且链表不形成环。"
+    },
+    {
+      "id": "lab-05-bracket-matching",
+      "title": "实验 5：括号匹配",
+      "knowledge_point_key": "stack-applications",
+      "objective": "把尚未匹配的左括号压栈，使用栈顶检查右括号是否与最近的开放边界对应。",
+      "code": "def balanced(text):\n    pairs = {')': '(', ']': '[', '}': '{'}\n    stack = []\n    for char in text:\n        if char in '([{':\n            stack.append(char)\n        elif char in pairs:\n            if not stack or stack.pop() != pairs[char]:\n                return False\n    return not stack\n\nprint(balanced('a*(b+[c-d])'))\nprint(balanced('([)]'))\n",
+      "expected_output": "True\nFalse",
+      "edge_case": "检查空串、只有左括号、先出现右括号和混入普通字符，普通字符不应影响栈状态。"
+    },
+    {
+      "id": "lab-06-circular-queue",
+      "title": "实验 6：循环队列",
+      "knowledge_point_key": "circular-queue",
+      "objective": "使用空一格方案实现判空、判满、入队和出队，验证数组尾部能够回绕到开头。",
+      "code": "class CircularQueue:\n    def __init__(self, capacity):\n        self.data = [None] * (capacity + 1)\n        self.front = 0\n        self.rear = 0\n\n    def enqueue(self, value):\n        nxt = (self.rear + 1) % len(self.data)\n        if nxt == self.front:\n            raise OverflowError('full queue')\n        self.data[self.rear] = value\n        self.rear = nxt\n\n    def dequeue(self):\n        if self.front == self.rear:\n            raise IndexError('empty queue')\n        value = self.data[self.front]\n        self.front = (self.front + 1) % len(self.data)\n        return value\n\nq = CircularQueue(3)\nq.enqueue(1); q.enqueue(2); q.enqueue(3)\nprint(q.dequeue())\nq.enqueue(4)\nprint(q.dequeue(), q.dequeue(), q.dequeue())\n",
+      "expected_output": "1\n2 3 4",
+      "edge_case": "验证容量为 1、满队继续入队和空队继续出队，并确认回绕后元素次序仍为先进先出。"
+    },
+    {
+      "id": "lab-07-kmp",
+      "title": "实验 7：KMP 前缀函数与匹配",
+      "knowledge_point_key": "kmp-matching",
+      "objective": "计算模式的最长相等前后缀长度，并在失配时只回退模式位置而不回退主串。",
+      "code": "def prefix_function(pattern):\n    pi = [0] * len(pattern)\n    for i in range(1, len(pattern)):\n        j = pi[i - 1]\n        while j and pattern[i] != pattern[j]:\n            j = pi[j - 1]\n        if pattern[i] == pattern[j]:\n            j += 1\n        pi[i] = j\n    return pi\n\ndef kmp(text, pattern):\n    if not pattern:\n        return 0\n    pi = prefix_function(pattern)\n    j = 0\n    for i, char in enumerate(text):\n        while j and char != pattern[j]:\n            j = pi[j - 1]\n        if char == pattern[j]:\n            j += 1\n        if j == len(pattern):\n            return i - j + 1\n    return -1\n\nprint(prefix_function('ababaca'))\nprint(kmp('ababcababaca', 'ababaca'))\n",
+      "expected_output": "[0, 0, 1, 2, 3, 0, 1]\n5",
+      "edge_case": "检查空模式、单字符模式、模式长于主串、全部重复字符和不存在匹配的返回语义。"
+    },
+    {
+      "id": "lab-08-sparse-transpose",
+      "title": "实验 8：稀疏矩阵快速转置",
+      "knowledge_point_key": "matrix-compression",
+      "objective": "按目标行统计非零元素数量和起始位置，一次扫描完成三元组矩阵转置。",
+      "code": "def fast_transpose(rows, cols, terms):\n    counts = [0] * cols\n    for _, col, _ in terms:\n        counts[col] += 1\n    starts = [0] * cols\n    for col in range(1, cols):\n        starts[col] = starts[col - 1] + counts[col - 1]\n    result = [None] * len(terms)\n    for row, col, value in terms:\n        pos = starts[col]\n        result[pos] = (col, row, value)\n        starts[col] += 1\n    return result\n\nterms = [(0, 2, 5), (1, 0, 7), (2, 1, 9)]\nprint(fast_transpose(3, 3, terms))\n",
+      "expected_output": "[(0, 1, 7), (1, 2, 9), (2, 0, 5)]",
+      "edge_case": "检查空矩阵、单个非零元素、某列完全为空和输入三元组按行有序这一前置条件。"
+    },
+    {
+      "id": "lab-09-tree-traversal",
+      "title": "实验 9：二叉树递归与非递归遍历",
+      "knowledge_point_key": "binary-tree-traversal",
+      "objective": "对同一棵树实现先序和显式栈中序遍历，比较递归调用栈与手工栈保存的状态。",
+      "code": "class Node:\n    def __init__(self, value, left=None, right=None):\n        self.value = value\n        self.left = left\n        self.right = right\n\ndef preorder(root):\n    return [] if root is None else [root.value] + preorder(root.left) + preorder(root.right)\n\ndef inorder_iterative(root):\n    result, stack = [], []\n    current = root\n    while current or stack:\n        while current:\n            stack.append(current)\n            current = current.left\n        current = stack.pop()\n        result.append(current.value)\n        current = current.right\n    return result\n\nroot = Node('A', Node('B', Node('D'), Node('E')), Node('C'))\nprint(' '.join(preorder(root)))\nprint(' '.join(inorder_iterative(root)))\n",
+      "expected_output": "A B D E C\nD B E A C",
+      "edge_case": "验证空树、只有根、只有左链和只有右链，非递归循环必须在 current 与 stack 均为空时结束。"
+    },
+    {
+      "id": "lab-10-huffman",
+      "title": "实验 10：哈夫曼编码长度",
+      "knowledge_point_key": "huffman-coding",
+      "objective": "使用最小堆反复合并权值最小的两棵树，并计算所得编码的带权路径长度。",
+      "code": "import heapq\n\ndef weighted_path_length(weights):\n    heap = list(weights)\n    heapq.heapify(heap)\n    total = 0\n    while len(heap) > 1:\n        left = heapq.heappop(heap)\n        right = heapq.heappop(heap)\n        merged = left + right\n        total += merged\n        heapq.heappush(heap, merged)\n    return total\n\nprint(weighted_path_length([5, 9, 12, 13, 16, 45]))\n",
+      "expected_output": "224",
+      "edge_case": "检查单个权值、两个相同权值和包含零权值的约定，输入权值不得为负数。"
+    },
+    {
+      "id": "lab-11-bfs",
+      "title": "实验 11：广度优先遍历与最短边数",
+      "knowledge_point_key": "breadth-first-search",
+      "objective": "在无权图中按层访问顶点，同时记录距离和前驱，恢复起点到目标的最短边数路径。",
+      "code": "from collections import deque\n\ndef bfs(graph, start):\n    queue = deque([start])\n    distance = {start: 0}\n    order = []\n    while queue:\n        node = queue.popleft()\n        order.append(node)\n        for neighbor in graph[node]:\n            if neighbor not in distance:\n                distance[neighbor] = distance[node] + 1\n                queue.append(neighbor)\n    return order, distance\n\ngraph = {'A': ['B', 'C'], 'B': ['D'], 'C': ['D', 'E'], 'D': [], 'E': []}\norder, distance = bfs(graph, 'A')\nprint(' '.join(order))\nprint(distance['E'])\n",
+      "expected_output": "A B C D E\n2",
+      "edge_case": "检查含环图、非连通顶点和起点不存在的输入，顶点必须在入队时记录为已发现。"
+    },
+    {
+      "id": "lab-12-dijkstra",
+      "title": "实验 12：Dijkstra 最短路径",
+      "knowledge_point_key": "shortest-paths",
+      "objective": "使用优先队列选取当前距离最小的顶点，并通过松弛更新非负权图的单源距离。",
+      "code": "import heapq\n\ndef dijkstra(graph, start):\n    distance = {node: float('inf') for node in graph}\n    distance[start] = 0\n    heap = [(0, start)]\n    while heap:\n        current, node = heapq.heappop(heap)\n        if current != distance[node]:\n            continue\n        for neighbor, weight in graph[node]:\n            candidate = current + weight\n            if candidate < distance[neighbor]:\n                distance[neighbor] = candidate\n                heapq.heappush(heap, (candidate, neighbor))\n    return distance\n\ngraph = {'A': [('B', 4), ('C', 1)], 'B': [('D', 1)], 'C': [('B', 2), ('D', 5)], 'D': []}\nprint(dijkstra(graph, 'A'))\n",
+      "expected_output": "{'A': 0, 'B': 3, 'C': 1, 'D': 4}",
+      "edge_case": "检查不可达顶点仍为无穷，并在调用前拒绝负权边，避免误用 Dijkstra。"
+    },
+    {
+      "id": "lab-13-binary-search",
+      "title": "实验 13：查找第一个重复关键字",
+      "knowledge_point_key": "binary-search",
+      "objective": "在普通折半命中后继续收缩右边界，返回重复关键字第一次出现的位置。",
+      "code": "def first_index(values, target):\n    low, high = 0, len(values)\n    while low < high:\n        mid = low + (high - low) // 2\n        if values[mid] < target:\n            low = mid + 1\n        else:\n            high = mid\n    return low if low < len(values) and values[low] == target else -1\n\nvalues = [1, 2, 2, 2, 5, 8]\nprint(first_index(values, 2))\nprint(first_index(values, 3))\n",
+      "expected_output": "1\n-1",
+      "edge_case": "检查空数组、目标位于两端、全部元素相同和目标不存在，始终保持半开区间不变式。"
+    },
+    {
+      "id": "lab-14-hash-table",
+      "title": "实验 14：开放定址散列表",
+      "knowledge_point_key": "hash-tables",
+      "objective": "使用线性探测处理冲突，并沿同一探测序列完成插入和查找。",
+      "code": "class HashTable:\n    def __init__(self, capacity):\n        self.table = [None] * capacity\n\n    def insert(self, key):\n        start = key % len(self.table)\n        for step in range(len(self.table)):\n            index = (start + step) % len(self.table)\n            if self.table[index] in (None, key):\n                self.table[index] = key\n                return index\n        raise OverflowError('hash table full')\n\n    def find(self, key):\n        start = key % len(self.table)\n        for step in range(len(self.table)):\n            index = (start + step) % len(self.table)\n            if self.table[index] is None:\n                return -1\n            if self.table[index] == key:\n                return index\n        return -1\n\nh = HashTable(7)\nfor key in (10, 17, 24):\n    h.insert(key)\nprint(h.table)\nprint(h.find(24), h.find(99))\n",
+      "expected_output": "[None, None, None, 10, 17, 24, None]\n5 -1",
+      "edge_case": "检查表满、重复插入和环回探测；若增加删除功能，必须使用墓碑标记而不能直接清空。"
+    },
+    {
+      "id": "lab-15-quick-sort",
+      "title": "实验 15：三路快速排序",
+      "knowledge_point_key": "quick-sort",
+      "objective": "把区间划分为小于、等于和大于枢轴三部分，改善大量重复元素下的递归行为。",
+      "code": "def quick_sort(values):\n    if len(values) <= 1:\n        return values[:]\n    pivot = values[len(values) // 2]\n    less = [value for value in values if value < pivot]\n    equal = [value for value in values if value == pivot]\n    greater = [value for value in values if value > pivot]\n    return quick_sort(less) + equal + quick_sort(greater)\n\nprint(quick_sort([5, 1, 3, 3, 9, 2, 5]))\n",
+      "expected_output": "[1, 2, 3, 3, 5, 5, 9]",
+      "edge_case": "检查空序列、全部相等、已经有序和逆序输入；此教学版本非原地，但划分语义清晰。"
+    },
+    {
+      "id": "lab-16-merge-sort",
+      "title": "实验 16：稳定归并排序",
+      "knowledge_point_key": "merge-sort",
+      "objective": "排序带相同关键字的记录，并验证合并时优先取左侧元素能够保持原相对顺序。",
+      "code": "def merge_sort(records):\n    if len(records) <= 1:\n        return records[:]\n    middle = len(records) // 2\n    left = merge_sort(records[:middle])\n    right = merge_sort(records[middle:])\n    result = []\n    i = j = 0\n    while i < len(left) and j < len(right):\n        if left[i][0] <= right[j][0]:\n            result.append(left[i]); i += 1\n        else:\n            result.append(right[j]); j += 1\n    return result + left[i:] + right[j:]\n\nrecords = [(2, 'A'), (1, 'B'), (2, 'C'), (1, 'D')]\nprint(merge_sort(records))\n",
+      "expected_output": "[(1, 'B'), (1, 'D'), (2, 'A'), (2, 'C')]",
+      "edge_case": "检查空序列、单元素和全部关键字相同，合并条件使用小于等于以保持稳定。"
+    }
+  ]
+}

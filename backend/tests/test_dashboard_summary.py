@@ -195,35 +195,25 @@ def test_blank_user_dashboard_summary_stays_empty_and_stable() -> None:
     assert summary["empty_state"]["title"] == "还没有课程"
 
 
-def test_ai_intro_user_summary_uses_current_user_course_and_material() -> None:
+def test_data_structures_user_summary_uses_internal_course_without_library_material() -> None:
     module = load_dashboard_module()
-    user = make_user(1, "ai_intro", "示例学习者")
+    user = make_user(1, "data_structures", "课程学习者")
     course = Course(
         id=101,
         owner_id=1,
-        title="人工智能导论",
-        description="AI 入门课程",
-        subject="人工智能",
+        title="数据结构与算法",
+        description="数据结构核心课程",
+        subject="计算机科学",
         source_type="builtin",
         visibility="private",
         status="ready",
     )
     course.created_at = NOW - timedelta(days=1)
     course.updated_at = NOW - timedelta(hours=2)
-    material = Material(
-        id=201,
-        user_id=1,
-        filename="人工智能导论讲义.md",
-        content_type="text/markdown",
-        storage_path="starter/ai_intro.md",
-        parse_status="completed",
-        metadata_json={"size_label": "12 KB"},
-    )
-    material.created_at = NOW
 
     summary = as_dict(
         module.DashboardService(
-            FakeDashboardRepository(courses=[course], materials=[material], linked_material_ids={201}),
+            FakeDashboardRepository(courses=[course]),
             now=NOW,
         ).build_summary(user)
     )
@@ -231,33 +221,26 @@ def test_ai_intro_user_summary_uses_current_user_course_and_material() -> None:
     assert summary["recent_courses"] == [
         {
             "id": "101",
-            "title": "人工智能导论",
+            "title": "数据结构与算法",
             "source_type": "builtin",
             "progress_label": "未开始",
-            "focus": "人工智能",
+            "focus": "计算机科学",
             "next": "开始学习",
         }
     ]
-    assert summary["recent_materials"][0] == {
-        "id": "201",
-        "title": "人工智能导论讲义.md",
-        "type": "MD",
-        "detail": "已解析",
-        "modified": "今天",
-        "size": "12 KB",
-    }
-    assert summary["material_library_summary"] == {"material_count": 1, "unassigned_count": 0}
+    assert summary["recent_materials"] == []
+    assert summary["material_library_summary"] == {"material_count": 0, "unassigned_count": 0}
     assert summary["empty_state"]["kind"] == "starter"
     assert summary["command_suggestions"] == [
-        "继续学习《人工智能导论》",
-        "帮我复习《人工智能导论》的薄弱点",
-        "根据《人工智能导论讲义.md》整理复习重点",
+        "继续学习《数据结构与算法》",
+        "帮我复习《数据结构与算法》的薄弱点",
+        "先帮我拆解下一步复习计划",
     ]
 
 
 def test_dashboard_summary_uses_real_progress_profile_conversations_and_resources() -> None:
     module = load_dashboard_module()
-    user = make_user(1, "ai_intro", "进阶学生")
+    user = make_user(1, "data_structures", "进阶学生")
     profile = StudentProfile(
         id=301,
         user_id=1,

@@ -8,7 +8,7 @@ import { PATHS } from "../app/routePaths";
 import { mapApiUserToStudentUser } from "../features/auth/authMappers";
 import { useAuthStore } from "../features/auth/authStore";
 
-type StarterMode = "blank" | "ai_intro";
+type StarterMode = "blank" | "data_structures";
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -17,7 +17,7 @@ export function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [starterMode, setStarterMode] = useState<StarterMode>("ai_intro");
+  const [starterMode, setStarterMode] = useState<StarterMode>("blank");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const passwordMismatch = Boolean(confirmPassword && password !== confirmPassword);
@@ -68,7 +68,7 @@ export function RegisterPage() {
         </div>
         <p className="section-kicker">创建账号</p>
         <h1>准备你的学习空间</h1>
-        <p>先决定这个账号从哪里开始：空白上传自己的资料，或者复制一门人工智能导论示例课程用于体验。</p>
+        <p>可以从空白空间开始，也可以加入一门完整的内置课程体验学习闭环。</p>
         <form className="entry-form" onSubmit={handleSubmit}>
           {formError ? <p className="form-error" role="alert">{formError}</p> : null}
           <label>
@@ -117,20 +117,20 @@ export function RegisterPage() {
                 <small>进入后没有课程和资料，从自己的文件开始。</small>
               </span>
             </label>
-            <label className={starterMode === "ai_intro" ? "starter-mode-option active" : "starter-mode-option"}>
+            <label className={starterMode === "data_structures" ? "starter-mode-option active" : "starter-mode-option"}>
               <input
                 type="radio"
                 name="starterMode"
-                value="ai_intro"
-                checked={starterMode === "ai_intro"}
-                onChange={() => setStarterMode("ai_intro")}
+                value="data_structures"
+                checked={starterMode === "data_structures"}
+                onChange={() => setStarterMode("data_structures")}
               />
               <span className="starter-mode-icon" aria-hidden="true">
                 <BookOpen size={18} weight="duotone" />
               </span>
               <span>
-                <strong>带一个示例课程开始</strong>
-                <small>复制「人工智能导论」到你的空间，用于快速体验完整学习闭环。</small>
+                <strong>从数据结构与算法开始</strong>
+                <small>加入 54 个知识点和 16 个 Python 实验，课程来源不会出现在个人资料库。</small>
               </span>
             </label>
           </fieldset>

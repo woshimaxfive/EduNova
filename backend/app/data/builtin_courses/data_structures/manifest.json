@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "slug": "data-structures-c-python",
+  "version": "2026.07.14",
+  "title": "数据结构与算法",
+  "description": "面向大学本科生的数据结构核心课程。理论沿用 C 语言课程语境，配套 Python 可运行实验，覆盖抽象数据类型、线性结构、树、图、查找与排序。",
+  "subject": "计算机科学",
+  "source_type": "builtin",
+  "visibility": "private",
+  "status": "ready",
+  "language": "zh-CN",
+  "generation_mode": "handcrafted_source",
+  "chapter_files": [
+    "chapters/01-foundations.json",
+    "chapters/02-linear-lists.json",
+    "chapters/03-stacks-queues.json",
+    "chapters/04-strings-arrays.json",
+    "chapters/05-trees.json",
+    "chapters/06-graphs.json",
+    "chapters/07-searching.json",
+    "chapters/08-sorting.json"
+  ],
+  "pseudocode_file": "theory-pseudocode.json",
+  "lab_file": "labs/python-labs.json",
+  "expected_counts": {
+    "materials": 9,
+    "chapters": 8,
+    "knowledge_points": 54,
+    "concept_chunks": 162,
+    "labs": 16,
+    "chunks": 178
+  },
+  "bibliography": [
+    {
+      "title": "数据结构（C语言版）（第2版）",
+      "authors": ["严蔚敏", "李冬梅", "吴伟民"],
+      "publisher": "人民邮电出版社",
+      "isbn": "978-7-115-37950-4",
+      "usage": "课程体系与知识范围参考；课程正文、实验和伪代码均重新编写。"
+    }
+  ]
+}

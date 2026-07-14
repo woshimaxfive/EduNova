@@ -5,7 +5,7 @@ export const DASHBOARD_ENDPOINTS = {
   summary: "/dashboard/summary"
 } as const;
 
-export type DashboardStarterMode = "blank" | "ai_intro";
+export type DashboardStarterMode = "blank" | "data_structures";
 
 export type DashboardProfileSummary = {
   display_name: string;

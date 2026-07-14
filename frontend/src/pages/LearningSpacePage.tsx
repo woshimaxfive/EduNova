@@ -1206,7 +1206,7 @@ function CourseGenerationDialog({
   feedback
 }: CourseGenerationDialogWithNoticeProps) {
   const selectedCount = selectedMaterialIds.length;
-  const [courseTitle, setCourseTitle] = useState(initialCourseTitle || "人工智能导论期末复习");
+  const [courseTitle, setCourseTitle] = useState(initialCourseTitle || "我的资料课程");
 
   return (
     <div className="course-dialog-backdrop">

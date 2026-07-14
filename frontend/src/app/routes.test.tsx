@@ -93,7 +93,7 @@ describe("EduNova routes", () => {
   it("redirects unauthenticated app routes to the calm login entry", async () => {
     renderRoutes(["/app/studio"]);
 
-    expect(await screen.findByRole("heading", { name: "登录 EduNova" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "登录" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /演示学生/ })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "创建账号" })).toHaveAttribute("href", "/register");
   });

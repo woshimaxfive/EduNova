@@ -29,7 +29,10 @@ describe("auth entry pages", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("heading", { name: "登录 EduNova" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+    expect(screen.getByLabelText("EduNova 学习工作区缩略图")).toBeInTheDocument();
+    expect(screen.queryByText("从资料到掌握，持续向前")).not.toBeInTheDocument();
+    expect(screen.queryByText("个性化学习闭环")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "创建账号" })).toHaveAttribute("href", "/register");
     expect(screen.queryByRole("button", { name: /演示学生/ })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "账号" })).toHaveValue("");
@@ -190,7 +193,7 @@ describe("auth entry pages", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("heading", { name: "创建 EduNova 账号" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "创建账号" })).toBeInTheDocument();
 
     const blankMode = screen.getByRole("radio", { name: /空白开始/ });
     const dataStructuresMode = screen.getByRole("radio", { name: /数据结构与算法/ });
@@ -276,7 +279,7 @@ describe("auth entry pages", () => {
     await user.type(screen.getByLabelText("确认密码"), "Password123");
     await user.click(screen.getByRole("button", { name: "创建并进入" }));
 
-    expect(await screen.findByRole("heading", { name: "登录 EduNova" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "登录" })).toBeInTheDocument();
     expect(screen.getByText("账号已创建，请重新登录。")).toBeInTheDocument();
     expect(callCount).toBe(2);
   });

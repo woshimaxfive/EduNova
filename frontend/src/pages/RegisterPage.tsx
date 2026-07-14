@@ -58,42 +58,37 @@ export function RegisterPage() {
   }
 
   return (
-    <AuthShell mode="register" starterMode={starterMode}>
-      <div className="auth-form-heading compact">
-        <span>开始使用</span>
-        <h1>创建 EduNova 账号</h1>
+    <AuthShell mode="register">
+      <div className="auth-form-heading">
+        <h1>创建账号</h1>
         <p>账号用于登录，昵称用于学习空间展示。</p>
       </div>
       <form className="auth-form auth-register-form" onSubmit={handleSubmit}>
         {formError ? <p className="auth-feedback error" role="alert">{formError}</p> : null}
-        <div className="auth-field-row">
-          <label className="auth-field">
-            <span>账号</span>
-            <input
-              value={account}
-              onChange={(event) => setAccount(event.target.value)}
-              onBlur={() => setAccount(normalizedAccount)}
-              autoComplete="username"
-              autoCapitalize="none"
-              spellCheck={false}
-              aria-describedby="account-help"
-              aria-invalid={Boolean(account && !accountValid)}
-              required
-            />
-          </label>
-          <label className="auth-field">
-            <span>昵称</span>
-            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoComplete="nickname" required />
-          </label>
-        </div>
+        <label className="auth-field">
+          <span>账号</span>
+          <input
+            value={account}
+            onChange={(event) => setAccount(event.target.value)}
+            onBlur={() => setAccount(normalizedAccount)}
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            aria-describedby="account-help"
+            aria-invalid={Boolean(account && !accountValid)}
+            required
+          />
+        </label>
         <small id="account-help" className={account && !accountValid ? "auth-help error" : "auth-help"}>
           4–24 位字母、数字或下划线，不区分大小写。
         </small>
-        <div className="auth-field-row">
-          <PasswordField label="密码" value={password} onChange={setPassword} autoComplete="new-password" invalid={Boolean(password && !passwordValid)} />
-          <PasswordField label="确认密码" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" invalid={passwordMismatch} />
-        </div>
+        <label className="auth-field">
+          <span>昵称</span>
+          <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoComplete="nickname" required />
+        </label>
+        <PasswordField label="密码" value={password} onChange={setPassword} autoComplete="new-password" invalid={Boolean(password && !passwordValid)} />
         <small className={password && !passwordValid ? "auth-help error" : "auth-help"}>至少 8 位，同时包含字母和数字。</small>
+        <PasswordField label="确认密码" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" invalid={passwordMismatch} />
         {passwordMismatch ? <p className="auth-feedback error compact" role="alert">两次输入的密码不一致。</p> : null}
 
         <fieldset className="auth-starter-group">

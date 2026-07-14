@@ -46,9 +46,8 @@ export function LoginPage() {
   return (
     <AuthShell mode="login">
       <div className="auth-form-heading">
-        <span>继续学习</span>
-        <h1>登录 EduNova</h1>
-        <p>回到你的课程、资料和学习记录。</p>
+        <h1>登录</h1>
+        <p>使用 EduNova 账号继续。</p>
       </div>
       <form className="auth-form" onSubmit={handleSubmit}>
         {locationState?.notice ? <p className="auth-feedback info">{locationState.notice}</p> : null}

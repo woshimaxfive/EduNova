@@ -2877,6 +2877,49 @@ a {
     var(--focus-ring);
 }
 
+.tutor-image-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  padding: 0 0.8rem 0.45rem;
+  min-width: 0;
+}
+
+.tutor-image-picker.compact {
+  grid-column: 1 / -1;
+  padding: 0;
+}
+
+.tutor-image-picker > small { color: var(--text-muted); font-size: 0.75rem; }
+.tutor-image-picker > a { color: var(--accent-strong); font-size: 0.78rem; }
+.tutor-image-add {
+  display: inline-flex; align-items: center; gap: 0.35rem; border: 0; background: transparent;
+  color: var(--text-secondary); cursor: pointer; padding: 0.35rem 0.45rem; border-radius: 0.6rem;
+}
+.tutor-image-add:hover { background: rgba(15, 118, 110, 0.08); color: var(--accent-strong); }
+.tutor-image-drafts, .tutor-message-images { display: flex; gap: 0.5rem; flex-wrap: wrap; width: 100%; }
+.tutor-image-drafts figure { position: relative; width: 72px; height: 72px; margin: 0; border-radius: 0.7rem; overflow: hidden; border: 1px solid var(--border-soft); background: var(--surface-muted); }
+.tutor-image-drafts img, .tutor-message-images img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tutor-image-drafts figure > button { position: absolute; right: 3px; top: 3px; border: 0; border-radius: 50%; width: 24px; height: 24px; display: grid; place-items: center; background: rgba(15, 23, 42, 0.78); color: white; }
+.tutor-image-drafts figure > svg { position: absolute; inset: 27px; color: white; }
+.tutor-image-drafts figure > span { position: absolute; inset: auto 2px 2px; background: rgba(127, 29, 29, 0.88); color: white; font-size: 0.62rem; padding: 2px; }
+.tutor-message-images { margin-bottom: 0.5rem; }
+.tutor-message-images > button { width: 112px; height: 88px; border: 1px solid var(--border-soft); border-radius: 0.75rem; padding: 0; overflow: hidden; background: var(--surface-muted); cursor: zoom-in; }
+.tutor-message-images > span { font-size: 0.8rem; color: var(--text-muted); }
+.tutor-image-dialog { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1rem; background: rgba(7, 16, 28, 0.72); }
+.tutor-image-dialog section { position: relative; max-width: min(960px, 94vw); max-height: 92vh; }
+.tutor-image-dialog img { max-width: 100%; max-height: 88vh; object-fit: contain; border-radius: 0.8rem; background: white; }
+.tutor-image-dialog button { position: absolute; right: 0.6rem; top: 0.6rem; z-index: 1; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; color: white; background: rgba(15, 23, 42, 0.8); }
+.spin { animation: tutor-spin 0.9s linear infinite; }
+@keyframes tutor-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 390px) {
+  .tutor-image-picker > small { display: none; }
+  .tutor-image-drafts figure { width: 60px; height: 60px; }
+  .tutor-message-images > button { width: 88px; height: 72px; }
+}
+
 .conversation-composer textarea {
   width: 100%;
   min-height: 58px;

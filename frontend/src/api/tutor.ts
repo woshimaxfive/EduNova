@@ -10,7 +10,10 @@ export const TUTOR_ENDPOINTS = {
   history: "/tutor/sessions/history",
   detail: (sessionId: number | string) => `/tutor/sessions/${sessionId}`,
   message: (sessionId: number | string) => `/tutor/sessions/${sessionId}/messages`,
-  stream: (sessionId: number | string) => `/tutor/sessions/${sessionId}/messages/stream`
+  stream: (sessionId: number | string) => `/tutor/sessions/${sessionId}/messages/stream`,
+  attachments: (sessionId: number | string) => `/tutor/sessions/${sessionId}/attachments`,
+  attachment: (attachmentId: number | string) => `/tutor/attachments/${attachmentId}`,
+  attachmentContent: (attachmentId: number | string) => `/tutor/attachments/${attachmentId}/content`
 } as const;
 
 export type TutorSessionScope = "home" | "course";
@@ -22,6 +25,19 @@ export type CreateTutorSessionRequest = {
   mode: TutorSessionMode;
   title: string;
   selected_material_ids?: number[];
+};
+
+export type TutorImageAttachment = {
+  id: string;
+  message_id: string | null;
+  filename: string;
+  mime_type: "image/png" | "image/jpeg" | string;
+  size_bytes: number;
+  width: number;
+  height: number;
+  status: "pending" | "bound" | "deleted";
+  content_url: string | null;
+  created_at: string;
 };
 
 export type UpdateTutorSessionRequest = {
@@ -39,6 +55,7 @@ export type SendTutorMessageRequest = {
   use_web_search?: boolean;
   deep_thinking?: boolean;
   selected_material_ids?: number[];
+  attachment_ids?: number[];
 };
 
 export type TutorSessionSummary = {
@@ -90,6 +107,7 @@ export type TutorMessage = {
   citation_json: TutorCitation[];
   trace_id: string | null;
   created_at: string;
+  attachments?: TutorImageAttachment[];
 };
 
 export type TutorSessionDetail = {
@@ -198,6 +216,26 @@ export async function deleteTutorSession(sessionId: number | string) {
 
 export async function sendTutorMessage(sessionId: number | string, payload: SendTutorMessageRequest) {
   const response = await apiClient.post<ApiEnvelope<TutorSessionDetail>>(TUTOR_ENDPOINTS.message(sessionId), payload);
+  return response.data;
+}
+
+export async function uploadTutorAttachment(sessionId: number | string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await apiClient.post<ApiEnvelope<TutorImageAttachment>>(
+    TUTOR_ENDPOINTS.attachments(sessionId),
+    form
+  );
+  return response.data;
+}
+
+export async function deleteTutorAttachment(attachmentId: number | string) {
+  const response = await apiClient.delete<ApiEnvelope<TutorImageAttachment>>(TUTOR_ENDPOINTS.attachment(attachmentId));
+  return response.data;
+}
+
+export async function getTutorAttachmentBlob(attachmentId: number | string) {
+  const response = await apiClient.get<Blob>(TUTOR_ENDPOINTS.attachmentContent(attachmentId), { responseType: "blob" });
   return response.data;
 }
 

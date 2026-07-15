@@ -38,6 +38,7 @@ import {
   renameTutorSession,
   streamTutorMessage,
   type TutorCitation,
+  type TutorImageAttachment,
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
@@ -65,6 +66,8 @@ import { useLearningNextAction } from "../features/learning-actions/learningActi
 import { type LearningNextAction } from "../api/learning";
 import { SpeechPlaybackControls } from "../features/speech/SpeechPlaybackControls";
 import { useBrowserSpeech } from "../features/speech/useBrowserSpeech";
+import { SecureTutorImages, TutorImagePicker } from "../features/tutor/TutorImageAttachments";
+import { useTutorImageDraft } from "../features/tutor/useTutorImageDraft";
 import "../styles/course-space.css";
 
 function retrievalSourceLabel(source?: string | null) {
@@ -138,6 +141,7 @@ type CourseMessage = {
   citations?: RagSearchResultItem[];
   supplementalSources?: TutorCitation[];
   traceId?: string | null;
+  attachments?: TutorImageAttachment[];
 };
 
 function courseQuestionTitle(question: string) {
@@ -173,7 +177,8 @@ function mapTutorMessagesToCourseMessages(messages: TutorMessage[]): CourseMessa
       content: message.content,
       citations: message.role === "assistant" ? citations : undefined,
       supplementalSources: message.role === "assistant" ? supplementalSources : undefined,
-      traceId: message.role === "assistant" ? message.trace_id : null
+      traceId: message.role === "assistant" ? message.trace_id : null,
+      attachments: message.attachments ?? []
     };
   });
 }
@@ -288,6 +293,7 @@ export function CourseSpacePage() {
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [isSearchingCourse, setIsSearchingCourse] = useState(false);
   const [courseFeedback, setCourseFeedback] = useState<string | null>(null);
+  const imageDraft = useTutorImageDraft(ensureCourseImageSession, setCourseFeedback);
   const [weaknessFeedback, setWeaknessFeedback] = useState<string | null>(null);
   const [courseResourceFeedback, setCourseResourceFeedback] = useState<string | null>(null);
   const [latestGeneratedResources, setLatestGeneratedResources] = useState<GeneratedResource[]>([]);
@@ -558,6 +564,7 @@ export function CourseSpacePage() {
       return;
     }
 
+    imageDraft.discardAll();
     setActiveCourseSessionId(sessionId);
     setStreamingSessionId(null);
     setCourseMessages([]);
@@ -782,8 +789,16 @@ export function CourseSpacePage() {
   async function sendCourseQuestion() {
     const question = coursePrompt.trim();
 
-    if (!question) {
-      setCourseFeedback("先输入课程问题。");
+    if (!question && imageDraft.attachmentIds.length === 0) {
+      setCourseFeedback("先输入课程问题或添加图片。");
+      return;
+    }
+    if (imageDraft.uploading || imageDraft.hasFailed) {
+      setCourseFeedback(imageDraft.uploading ? "图片上传完成后才能发送。" : "请移除上传失败的图片后重试。");
+      return;
+    }
+    if (imageDraft.attachmentIds.length > 0 && !imageDraft.visionReady) {
+      setCourseFeedback("图片草稿已保留，请先配置默认图片理解模型。");
       return;
     }
 
@@ -808,7 +823,7 @@ export function CourseSpacePage() {
           scope: "course",
           course_id: numericCourseId,
           mode: "chat",
-          title: courseQuestionTitle(question)
+          title: courseQuestionTitle(question || "图片提问")
         });
         sessionId = createdSession.data.id;
       }
@@ -820,12 +835,15 @@ export function CourseSpacePage() {
       const assistantMessageId = `course-assistant-stream-${optimisticId}`;
       const optimisticMessages: CourseMessage[] = [
         ...previousMessages,
-        { id: `course-user-stream-${optimisticId}`, role: "user", content: question },
-        { id: assistantMessageId, role: "assistant", content: "", citations: [] }
+        { id: `course-user-stream-${optimisticId}`, role: "user", content: question || "请分析并讲解这张图片", attachments: imageDraft.images.flatMap((image) => image.attachment ? [image.attachment] : []) },
+        { id: assistantMessageId, role: "assistant", content: "", citations: [], attachments: [] }
       ];
       setCourseMessages(optimisticMessages);
 
-      const detail = await streamTutorMessage(sessionId, { message: question }, {
+      const detail = await streamTutorMessage(sessionId, {
+        message: question,
+        ...(imageDraft.attachmentIds.length ? { attachment_ids: imageDraft.attachmentIds } : {})
+      }, {
         onToken: (content) => {
           setCourseMessages((current) =>
             current.map((message) =>
@@ -840,6 +858,7 @@ export function CourseSpacePage() {
       setCourseMessages(messages);
       setStreamingSessionId(null);
       setCoursePrompt("");
+      imageDraft.clearAfterSend();
       const persistedAssistant = [...messages].reverse().find((message) => message.role === "assistant");
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set("course_session_id", detail.session.id);
@@ -855,6 +874,14 @@ export function CourseSpacePage() {
     } finally {
       setIsSearchingCourse(false);
     }
+  }
+
+  async function ensureCourseImageSession() {
+    if (selectedCourseSessionId) return selectedCourseSessionId;
+    if (!hasRealCourseId) throw new Error("课程地址无效");
+    const created = await createTutorSession({ scope: "course", course_id: numericCourseId, mode: "chat", title: "图片提问" });
+    setActiveCourseSessionId(created.data.id);
+    return created.data.id;
   }
 
   function handleCourseComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -903,7 +930,7 @@ export function CourseSpacePage() {
                     <section className="course-message-stack" aria-label="课程即时对话">
                       {displayedCourseMessages.map((message, index) => {
                         if (message.role === "user") {
-                          return <article className="course-message user" key={message.id}><p>{message.content}</p></article>;
+                          return <article className="course-message user" key={message.id}><SecureTutorImages attachments={message.attachments ?? []} /><p>{message.content}</p></article>;
                         }
 
                         const isPersisted = !message.id.startsWith("course-assistant-stream-");
@@ -1062,8 +1089,18 @@ export function CourseSpacePage() {
                     value={coursePrompt}
                     onChange={(event) => setCoursePrompt(event.target.value)}
                     onKeyDown={handleCourseComposerKeyDown}
+                    onPaste={(event) => {
+                      const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
+                      if (files.length) { event.preventDefault(); void imageDraft.addFiles(files); }
+                    }}
+                    onDrop={(event) => {
+                      const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith("image/"));
+                      if (files.length) { event.preventDefault(); void imageDraft.addFiles(files); }
+                    }}
+                    onDragOver={(event) => event.preventDefault()}
                     placeholder="继续问这门课，例如：给我生成监督学习 10 分钟复习路线"
                   />
+                  <TutorImagePicker draft={imageDraft} compact />
                   <button className="course-voice-button" type="button" aria-pressed={speech.isListening} onClick={speech.toggleListening}>
                     <Microphone size={17} weight={speech.isListening ? "fill" : "regular"} aria-hidden="true" />
                     <span>{speech.isListening ? "停止聆听" : "语音输入"}</span>

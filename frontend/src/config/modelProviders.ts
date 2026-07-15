@@ -38,6 +38,46 @@ export const CHAT_MODEL_PROVIDER_PRESETS: ChatModelProviderPreset[] = [
     modelsHint: "默认 Spark X2-Flash（spark-x）；额度与可用能力以讯飞控制台为准。"
   },
   {
+    id: "spark-vision",
+    name: "讯飞 MaaS 图像理解",
+    description: "国内优先的独立图片理解服务。需要单独填写 MaaS Model ID 与 API Key，不复用 spark-x 权限。",
+    baseUrl: "https://maas-api.cn-huabei-1.xf-yun.com/v2",
+    chatModel: "",
+    apiKeyLabel: "API Key",
+    apiKeyPlaceholder: "填入讯飞 MaaS 图像理解 API Key",
+    modelsHint: "兼容候选；只有通过下方真实图片连接测试后才算可用。"
+  },
+  {
+    id: "openai-vision",
+    name: "OpenAI 图片理解",
+    description: "使用官方 OpenAI Chat Completions 图像输入协议；模型名按账号实际权限填写。",
+    baseUrl: "https://api.openai.com/v1",
+    chatModel: "",
+    apiKeyLabel: "API Key",
+    apiKeyPlaceholder: "填入 OpenAI API Key",
+    modelsHint: "协议已验证；具体模型与图片额度以 OpenAI 控制台为准。"
+  },
+  {
+    id: "hunyuan-vision",
+    name: "腾讯混元图片理解",
+    description: "OpenAI-compatible 图片理解兼容候选，需按腾讯控制台填写地址、模型和密钥。",
+    baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
+    chatModel: "",
+    apiKeyLabel: "API Key",
+    apiKeyPlaceholder: "填入腾讯混元 API Key",
+    modelsHint: "兼容候选；通过真实图片连接测试后再设为默认。"
+  },
+  {
+    id: "custom-vision",
+    name: "自定义图片理解服务",
+    description: "适合支持 OpenAI text + image_url 协议的校内网关或其它视觉模型服务。",
+    baseUrl: "",
+    chatModel: "",
+    apiKeyLabel: "API Key",
+    apiKeyPlaceholder: "填入图片理解服务 API Key",
+    modelsHint: "兼容候选；不会自动假定普通文本模型支持图片。"
+  },
+  {
     id: "deepseek",
     name: "DeepSeek",
     description: "DeepSeek 官方 OpenAI-compatible 接口，适合通用问答、推理与课程 RAG。",
@@ -256,6 +296,10 @@ export const RERANK_MODEL_PROVIDER_PRESETS: RerankModelProviderPreset[] = [
 
 export function getChatProviderPreset(presetId: string | null | undefined) {
   return CHAT_MODEL_PROVIDER_PRESETS.find((preset) => preset.id === presetId) ?? CHAT_MODEL_PROVIDER_PRESETS[0];
+}
+
+export function isVisionProviderPreset(presetId: string | null | undefined) {
+  return ["spark-vision", "openai-vision", "hunyuan-vision", "custom-vision"].includes(presetId ?? "");
 }
 
 export function getEmbeddingProviderPreset(presetId: string | null | undefined) {

@@ -28,6 +28,7 @@ import {
   setDefaultEmbeddingConfig,
   setDefaultModelConfig,
   setDefaultRerankConfig,
+  setDefaultVisionConfig,
   testModelConfig,
   testModelSettings,
   updateModelConfig,
@@ -51,7 +52,8 @@ import {
   getRerankProviderPreset,
   inferChatProviderPresetId,
   inferEmbeddingProviderPresetId,
-  inferRerankProviderPresetId
+  inferRerankProviderPresetId,
+  isVisionProviderPreset
 } from "../config/modelProviders";
 import { mapApiUserToStudentUser } from "../features/auth/authMappers";
 import { useAuthStore } from "../features/auth/authStore";
@@ -266,16 +268,18 @@ export function SettingsPage() {
   const defaultChatConfigId = settingsList?.default_chat_config_id ?? settingsList?.default_config_id ?? null;
   const defaultEmbeddingConfigId = settingsList?.default_embedding_config_id ?? null;
   const defaultRerankConfigId = settingsList?.default_rerank_config_id ?? null;
+  const defaultVisionConfigId = settingsList?.default_vision_config_id ?? null;
   const defaultChatConfig = configs.find((config) => config.id === defaultChatConfigId) ?? null;
   const defaultEmbeddingConfig = configs.find((config) => config.id === defaultEmbeddingConfigId) ?? null;
   const defaultRerankConfig = configs.find((config) => config.id === defaultRerankConfigId) ?? null;
+  const defaultVisionConfig = configs.find((config) => config.id === defaultVisionConfigId) ?? null;
   const selectedConfig = useMemo(() => {
     if (selectedConfigId === "new") return null;
     if (typeof selectedConfigId === "number") {
       return configs.find((config) => config.id === selectedConfigId) ?? null;
     }
-    return defaultChatConfig ?? defaultEmbeddingConfig ?? defaultRerankConfig ?? configs[0] ?? null;
-  }, [configs, defaultChatConfig, defaultEmbeddingConfig, defaultRerankConfig, selectedConfigId]);
+    return defaultChatConfig ?? defaultVisionConfig ?? defaultEmbeddingConfig ?? defaultRerankConfig ?? configs[0] ?? null;
+  }, [configs, defaultChatConfig, defaultVisionConfig, defaultEmbeddingConfig, defaultRerankConfig, selectedConfigId]);
   const currentDraft = selectedConfigId === null && selectedConfig ? draftFromConfig(selectedConfig) : draft;
   const selectedChatPreset = getChatProviderPreset(currentDraft.preset_id);
   const selectedEmbeddingPreset = getEmbeddingProviderPreset(currentDraft.embedding_preset_id);
@@ -330,6 +334,7 @@ export function SettingsPage() {
   const effectiveRerankReady = defaultRerankConfig?.can_use_rerank_model
     ?? systemSummary?.can_use_rerank_model
     ?? false;
+  const effectiveVisionReady = defaultVisionConfig?.can_use_model ?? false;
   const starterModeLabel = authUser?.starterMode === "data_structures" ? "数据结构与算法开始" : "空白开始";
 
   function selectSection(section: SettingsSection) {
@@ -396,6 +401,15 @@ export function SettingsPage() {
     onError: (error) => setModelFeedback(getApiErrorMessage(error, "默认重排序配置切换失败，请稍后重试。"))
   });
 
+  const visionDefaultConfigMutation = useMutation({
+    mutationFn: (configId: number) => setDefaultVisionConfig(configId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["settings", "model-configs"] });
+      showToast("已设为默认图片理解配置。", "success");
+    },
+    onError: (error) => setModelFeedback(getApiErrorMessage(error, "默认图片理解配置切换失败，请稍后重试。"))
+  });
+
   const testConnectionMutation = useMutation({
     mutationFn: ({ configId, operation }: { configId: number | null; operation: ModelConnectionOperation }) =>
       configId === null ? testModelSettings(operation) : testModelConfig(configId, operation),
@@ -431,6 +445,7 @@ export function SettingsPage() {
       queryClient.setQueryData(["settings", "model-configs"], response);
       await queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
       const nextConfig = response.data.configs.find((config) => config.id === response.data.default_chat_config_id)
+        ?? response.data.configs.find((config) => config.id === response.data.default_vision_config_id)
         ?? response.data.configs.find((config) => config.id === response.data.default_embedding_config_id)
         ?? response.data.configs.find((config) => config.id === response.data.default_rerank_config_id)
         ?? response.data.configs[0]
@@ -593,9 +608,12 @@ export function SettingsPage() {
     if (isCreating || activeConfigId === null) {
       createConfigMutation.mutate({
         ...payload,
-        make_default: !defaultChatConfig && Boolean(payload.chat_model),
+        make_default: !defaultChatConfig && !isVisionProviderPreset(payload.preset_id) && Boolean(payload.chat_model),
         make_embedding_default: !defaultEmbeddingConfig && Boolean(payload.embedding_model),
-        make_rerank_default: !defaultRerankConfig && Boolean(payload.rerank_model)
+        make_rerank_default: !defaultRerankConfig && Boolean(payload.rerank_model),
+        ...(!defaultVisionConfig && isVisionProviderPreset(payload.preset_id) && Boolean(payload.chat_model)
+          ? { make_vision_default: true }
+          : {})
       });
     } else {
       updateConfigMutation.mutate({ configId: activeConfigId, payload });
@@ -655,6 +673,7 @@ export function SettingsPage() {
               <span className={effectiveChatReady ? "ready" : "inactive"}>回答{effectiveChatReady ? "正常" : "未连接"}</span>
               <span className={effectiveEmbeddingReady ? "ready" : "inactive"}>向量{effectiveEmbeddingReady ? "正常" : "未连接"}</span>
               <span className={effectiveRerankReady ? "ready" : "inactive"}>重排序{effectiveRerankReady ? "正常" : "未连接"}</span>
+              <span className={effectiveVisionReady ? "ready" : "inactive"}>图片理解{effectiveVisionReady ? "正常" : "未连接"}</span>
             </div>
           </header>
 
@@ -754,6 +773,7 @@ export function SettingsPage() {
                                 {config.is_default ? <small>回答</small> : null}
                                 {config.is_embedding_default ? <small>向量</small> : null}
                                 {config.is_rerank_default ? <small>重排</small> : null}
+                                {config.is_vision_default ? <small>图片</small> : null}
                               </span>
                             </span>
                             <span>
@@ -889,6 +909,18 @@ export function SettingsPage() {
                             pending={testPending("chat")}
                             onTest={() => runConnectionTest("chat")}
                           />
+                          {isVisionProviderPreset(currentDraft.preset_id) ? (
+                            <ConnectionTestCard
+                              operation="vision"
+                              model={currentDraft.chat_model || null}
+                              missingMessage="请填写该图片服务的 Model ID。"
+                              result={selectedConfig?.connection_tests?.vision ?? null}
+                              dirty={isCreating || isDirty}
+                              disabled={isCreating || isDirty || testConnectionMutation.isPending}
+                              pending={testPending("vision")}
+                              onTest={() => runConnectionTest("vision")}
+                            />
+                          ) : null}
                         </section>
 
                         <section className="settings-service-group" aria-labelledby="embedding-service-title">
@@ -1096,6 +1128,11 @@ export function SettingsPage() {
                         {!isCreating && currentDraft.chat_model && !selectedConfig?.is_default ? (
                           <button type="button" className="secondary-action" onClick={() => activeConfigId && defaultConfigMutation.mutate(activeConfigId)} disabled={defaultConfigMutation.isPending || isDirty}>
                             设为回答默认
+                          </button>
+                        ) : null}
+                        {!isCreating && currentDraft.chat_model && isVisionProviderPreset(currentDraft.preset_id) && !selectedConfig?.is_vision_default ? (
+                          <button type="button" className="secondary-action" onClick={() => activeConfigId && visionDefaultConfigMutation.mutate(activeConfigId)} disabled={visionDefaultConfigMutation.isPending || isDirty}>
+                            设为图片理解默认
                           </button>
                         ) : null}
                         {!isCreating && currentDraft.embedding_model && !selectedConfig?.is_embedding_default ? (

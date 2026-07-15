@@ -40,7 +40,8 @@ export function ConnectionTestCard({
 }: ConnectionTestCardProps) {
   const isEmbedding = operation === "embedding";
   const isRerank = operation === "rerank";
-  const label = isEmbedding ? "向量服务" : isRerank ? "重排序服务" : "回答服务";
+  const isVision = operation === "vision";
+  const label = isEmbedding ? "向量服务" : isRerank ? "重排序服务" : isVision ? "图片理解服务" : "回答服务";
   const testedAt = formatTestTime(result?.tested_at);
   const status = !model
     ? "not-configured"
@@ -65,7 +66,7 @@ export function ConnectionTestCard({
       </div>
       <p>
         {!model
-          ? missingMessage ?? (isEmbedding ? "此配置未设置向量模型。" : isRerank ? "此配置未设置重排序模型。" : "此配置未设置回答模型。")
+          ? missingMessage ?? (isEmbedding ? "此配置未设置向量模型。" : isRerank ? "此配置未设置重排序模型。" : isVision ? "此配置未设置图片理解模型。" : "此配置未设置回答模型。")
           : dirty
             ? "保存修改后可验证当前连接。"
             : result?.message || "尚未验证连接。"}

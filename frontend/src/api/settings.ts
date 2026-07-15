@@ -11,6 +11,7 @@ export const SETTINGS_ENDPOINTS = {
   defaultConfig: (configId: number) => `/settings/model/configs/${configId}/default`,
   embeddingDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/embedding-default`,
   rerankDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/rerank-default`,
+  visionDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/vision-default`,
   embeddingReindexJobs: "/settings/model/embedding/reindex-jobs",
   privacy: "/settings/privacy",
   conversationMemory: "/settings/privacy/conversation-memory"
@@ -20,7 +21,7 @@ export type ModelSettingsSource = "user" | "system" | "none";
 
 export type ModelSettingsProvider = "openai_compatible" | "xfyun_embedding" | "siliconflow_rerank" | "bailian_rerank";
 
-export type ModelConnectionOperation = "chat" | "embedding" | "rerank";
+export type ModelConnectionOperation = "chat" | "embedding" | "rerank" | "vision";
 
 export type ModelSettingsRequest = {
   provider: ModelSettingsProvider;
@@ -49,6 +50,7 @@ export type ModelConfigRequest = ModelSettingsRequest & {
   make_default?: boolean;
   make_embedding_default?: boolean;
   make_rerank_default?: boolean;
+  make_vision_default?: boolean;
 };
 
 export type ModelConfigUpdateRequest = Partial<ModelSettingsRequest> & {
@@ -58,6 +60,7 @@ export type ModelConfigUpdateRequest = Partial<ModelSettingsRequest> & {
   rerank_preset_id?: string | null;
   is_default?: boolean;
   make_default?: boolean;
+  make_vision_default?: boolean;
 };
 
 export type ModelSettingsSummary = {
@@ -96,6 +99,7 @@ export type ModelConfigSummary = ModelSettingsSummary & {
   is_default: boolean;
   is_embedding_default: boolean;
   is_rerank_default?: boolean;
+  is_vision_default?: boolean;
   last_test_ok: boolean | null;
   last_test_message: string | null;
   last_tested_at: string | null;
@@ -119,6 +123,7 @@ export type ModelSettingsListResponse = {
   default_chat_config_id: number | null;
   default_embedding_config_id: number | null;
   default_rerank_config_id?: number | null;
+  default_vision_config_id?: number | null;
   system_summary: ModelSettingsSummary;
 };
 
@@ -196,6 +201,13 @@ export async function setDefaultEmbeddingConfig(configId: number) {
 export async function setDefaultRerankConfig(configId: number) {
   const response = await apiClient.post<ApiEnvelope<ModelSettingsListResponse>>(
     SETTINGS_ENDPOINTS.rerankDefaultConfig(configId)
+  );
+  return response.data;
+}
+
+export async function setDefaultVisionConfig(configId: number) {
+  const response = await apiClient.post<ApiEnvelope<ModelSettingsListResponse>>(
+    SETTINGS_ENDPOINTS.visionDefaultConfig(configId)
   );
   return response.data;
 }

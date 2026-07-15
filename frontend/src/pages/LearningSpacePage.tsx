@@ -27,6 +27,7 @@ import {
   renameTutorSession,
   streamTutorMessage,
   type TutorCitation,
+  type TutorImageAttachment,
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
@@ -46,6 +47,8 @@ import { useHomeConversationHistory } from "../features/home/useHomeConversation
 import { invalidateLearningNextActions, learningActionHref, useLearningNextAction } from "../features/learning-actions/learningActions";
 import { SpeechPlaybackControls } from "../features/speech/SpeechPlaybackControls";
 import { useBrowserSpeech } from "../features/speech/useBrowserSpeech";
+import { SecureTutorImages, TutorImagePicker } from "../features/tutor/TutorImageAttachments";
+import { useTutorImageDraft } from "../features/tutor/useTutorImageDraft";
 
 type LibraryMaterial = {
   id: string;
@@ -63,6 +66,7 @@ type HomeMessage = {
   content: string;
   citation_json: TutorCitation[];
   trace_id: string | null;
+  attachments: TutorImageAttachment[];
   streaming?: boolean;
 };
 
@@ -81,7 +85,8 @@ function mapTutorMessages(apiMessages: TutorMessage[]) {
     role: message.role,
     content: message.role === "assistant" ? sanitizeHomeAnswerContent(message.content) : message.content,
     citation_json: message.citation_json ?? [],
-    trace_id: message.trace_id ?? null
+    trace_id: message.trace_id ?? null,
+    attachments: message.attachments ?? []
   }));
 }
 
@@ -138,6 +143,7 @@ export function LearningSpacePage() {
   const [courseDialogFeedback, setCourseDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [materialDialogFeedback, setMaterialDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [isCourseDrawerOpen, setIsCourseDrawerOpen] = useState(false);
+  const imageDraft = useTutorImageDraft(ensureHomeImageSession, (message) => setComposerFeedback({ message, tone: "warning" }));
   const speech = useBrowserSpeech({
     onTranscript: (transcript) => setPrompt((current) => current.trim() ? `${current.trim()} ${transcript}` : transcript),
     onNotice: (message, tone) => setComposerFeedback({ message, tone })
@@ -412,8 +418,17 @@ export function LearningSpacePage() {
   async function handleSendQuestion() {
     const question = prompt.trim();
 
-    if (!question) {
-      setComposerFeedback({ message: "先输入一个学习问题。", tone: "warning" });
+    if (!question && imageDraft.attachmentIds.length === 0) {
+      setComposerFeedback({ message: "先输入问题或添加图片。", tone: "warning" });
+      return;
+    }
+
+    if (imageDraft.uploading || imageDraft.hasFailed) {
+      setComposerFeedback({ message: imageDraft.uploading ? "图片上传完成后才能发送。" : "请移除上传失败的图片后重试。", tone: "warning" });
+      return;
+    }
+    if (imageDraft.attachmentIds.length > 0 && !imageDraft.visionReady) {
+      setComposerFeedback({ message: "图片草稿已保留，请先配置默认图片理解模型。", tone: "warning" });
       return;
     }
 
@@ -435,7 +450,7 @@ export function LearningSpacePage() {
           scope: "home",
           course_id: null,
           mode: "chat",
-          title: buildHomeSessionTitle(question),
+          title: buildHomeSessionTitle(question || "图片提问"),
           selected_material_ids: effectiveConversationMaterialIds.map(Number)
         });
         sessionId = created.data.id;
@@ -452,9 +467,10 @@ export function LearningSpacePage() {
         {
           id: optimisticUserId,
           role: "user",
-          content: question,
+          content: question || "请分析并讲解这张图片",
           citation_json: [],
-          trace_id: null
+          trace_id: null,
+          attachments: imageDraft.images.flatMap((image) => image.attachment ? [image.attachment] : [])
         },
         {
           id: optimisticAssistantId,
@@ -462,6 +478,7 @@ export function LearningSpacePage() {
           content: "",
           citation_json: [],
           trace_id: null,
+          attachments: [],
           streaming: true
         }
       ]);
@@ -469,7 +486,8 @@ export function LearningSpacePage() {
       const detail = await streamTutorMessage(
         sessionId,
         {
-          message: question
+          message: question,
+          ...(imageDraft.attachmentIds.length ? { attachment_ids: imageDraft.attachmentIds } : {})
         },
         {
           onMetadata: (metadata) => {
@@ -534,6 +552,7 @@ export function LearningSpacePage() {
       navigate(`${PATHS.app}?session_id=${detail.session.id}`, { replace: true, state: null });
       upsertHomeThread(detail.session);
       setPrompt("");
+      imageDraft.clearAfterSend();
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
     } catch (error) {
       setMessages(messagesBeforeSend);
@@ -546,6 +565,17 @@ export function LearningSpacePage() {
       setGraphStatus(null);
       setIsSendingQuestion(false);
     }
+  }
+
+  async function ensureHomeImageSession() {
+    if (activeHomeThreadId) return activeHomeThreadId;
+    const created = await createTutorSession({
+      scope: "home", course_id: null, mode: "chat", title: "图片提问",
+      selected_material_ids: effectiveConversationMaterialIds.map(Number)
+    });
+    setActiveHomeThreadId(created.data.id);
+    upsertHomeThread(created.data);
+    return created.data.id;
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -567,6 +597,7 @@ export function LearningSpacePage() {
     isResettingHomeRef.current = true;
     speech.stopListening();
     speech.stopSpeaking();
+    imageDraft.discardAll();
     setPrompt("");
     setMessages([]);
     setActiveHomeThreadId(null);
@@ -598,6 +629,7 @@ export function LearningSpacePage() {
   }
 
   const selectHomeConversation = useCallback(async (conversation: DashboardSummaryThread) => {
+    imageDraft.discardAll();
     setActiveHomeThreadId(conversation.id);
 
     try {
@@ -611,7 +643,7 @@ export function LearningSpacePage() {
       void error;
       setComposerFeedback({ message: "历史对话读取失败，请稍后再试。", tone: "warning" });
     }
-  }, [navigate]);
+  }, [imageDraft, navigate]);
 
   useEffect(() => {
     if (!selectedHomeThreadIdFromNavigation) {
@@ -713,6 +745,7 @@ export function LearningSpacePage() {
                       {message.id === streamingAnswerId ? graphStatus ?? "正在组织回答" : "正在组织回答"}
                     </span>
                   ) : null}
+                  {message.role === "user" ? <SecureTutorImages attachments={message.attachments} /> : null}
                   {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : <p>{message.content}</p>}
                   {message.role === "assistant" && !message.streaming ? (
                     <button className="message-speak-button" type="button" aria-label="朗读回答" onClick={() => handleSpeakMessage(message.content)}>
@@ -761,8 +794,18 @@ export function LearningSpacePage() {
                 rows={2}
                 onChange={(event) => setPrompt(event.target.value)}
                 onKeyDown={handleComposerKeyDown}
+                onPaste={(event) => {
+                  const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
+                  if (files.length) { event.preventDefault(); void imageDraft.addFiles(files); }
+                }}
+                onDrop={(event) => {
+                  const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith("image/"));
+                  if (files.length) { event.preventDefault(); void imageDraft.addFiles(files); }
+                }}
+                onDragOver={(event) => event.preventDefault()}
                 placeholder="问学习问题，或用资料生成课程"
               />
+              <TutorImagePicker draft={imageDraft} />
               <div className="composer-actions">
                 <div className="composer-toolbar" aria-label="输入工具">
                   <input

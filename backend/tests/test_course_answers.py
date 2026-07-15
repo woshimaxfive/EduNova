@@ -145,6 +145,7 @@ def test_home_answer_merges_long_conversation_summary_into_single_system_message
     sent_messages = model.calls[0]
     assert [message["role"] for message in sent_messages] == ["system", "user", "assistant", "user"]
     assert "会话安全摘要：学生此前关注反向传播，已建议先复习链式法则。" in sent_messages[0]["content"]
+    assert "不能声称无法记住或访问这些已提供的内容" in sent_messages[0]["content"]
     assert sum(message["role"] == "system" for message in sent_messages) == 1
 
 

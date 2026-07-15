@@ -35,6 +35,7 @@ from backend.app.services.tutor import (
     TutorSessionService,
 )
 from backend.app.services.web_search import WebSearchService
+from backend.app.services.conversation_memory import ConversationMemoryService, RqConversationMemoryQueue
 
 
 router = APIRouter(prefix="/tutor", tags=["tutor"])
@@ -66,6 +67,15 @@ def get_tutor_session_service(db=Depends(get_db_session)) -> TutorSessionService
             rerank_service=model_settings_service,
         ),
         semantic_decision_service=SemanticDecisionService(model_settings_service),
+        native_web_search_provider=model_settings_service,
+        conversation_memory_service=ConversationMemoryService(
+            db,
+            EmbeddingService(model_settings_service),
+            RqConversationMemoryQueue(
+                redis_url=get_settings().redis_url,
+                queue_name=get_settings().ai_job_queue_name,
+            ),
+        ),
     )
 
 

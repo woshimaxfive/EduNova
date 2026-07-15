@@ -6,6 +6,7 @@ from backend.app.models.learning import (
     AssessmentReport,
     ChatMessage,
     ChatSession,
+    ConversationMemoryEntry,
     ExportJob,
     GeneratedResource,
     LearningPath,
@@ -17,6 +18,7 @@ from backend.app.models.learning import (
     ProfileEvent,
     ResourceQualityScore,
     StudentProfile,
+    UserPrivacySetting,
     WeaknessReviewItem,
 )
 from backend.app.models.material import CourseMaterialLink, Material, MaterialChunk, MaterialComparisonRun
@@ -28,6 +30,7 @@ __all__ = [
     "AssessmentReport",
     "ChatMessage",
     "ChatSession",
+    "ConversationMemoryEntry",
     "Course",
     "CourseEnrollment",
     "CourseMaterial",
@@ -49,5 +52,6 @@ __all__ = [
     "ResourceQualityScore",
     "StudentProfile",
     "User",
+    "UserPrivacySetting",
     "WeaknessReviewItem",
 ]

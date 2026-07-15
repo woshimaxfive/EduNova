@@ -15,9 +15,28 @@ from backend.app.core.security import create_access_token
 from backend.app.main import create_app
 from backend.app.models import ChatMessage, ChatSession, Material, User
 from backend.app.services.auth import AuthService
+from backend.app.services.tutor import HomeTutorGraphRunner
 
 
 NOW = datetime(2026, 7, 3, 16, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "抱歉，我无法记住之前的对话内容。",
+        "很抱歉，我无法直接回忆或访问之前的对话内容。",
+        "很抱歉，目前我没有获取到您之前学习的具体内容记录。",
+    ],
+)
+def test_history_denial_is_rejected_when_context_is_available(answer: str) -> None:
+    flags = HomeTutorGraphRunner._deterministic_risk_flags(
+        question="还记得上面说过什么吗？",
+        answer=answer,
+        citations=[],
+        history_available=True,
+    )
+    assert "history_denial" in flags
 
 
 def load_tutor_module():

@@ -115,3 +115,44 @@ def test_provider_specific_intent_and_empty_object_profile_signals_remain_usable
     assert decision.decision_mode == "model"
     assert decision.intent == "video_recommendation"
     assert decision.search_required is True
+
+
+def test_model_rewrites_follow_up_using_real_turn_ids() -> None:
+    model = FakeModel(
+        '{"intent":"follow_up","search_required":false,"search_query":"","reasoning_mode":"auto",'
+        '"course_related":false,"confidence":0.95,"reason_codes":["history_reference"],'
+        '"reason_summary":"用户要求回顾上一轮。","profile_signals":[],'
+        '"standalone_query":"回顾上一轮对机器学习的定义","uses_history":true,'
+        '"referenced_turn_ids":["message-8"]}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(),
+        question="还记得上面说过什么吗？",
+        scope="home",
+        conversation_messages=[{"role": "assistant", "content": "机器学习是从数据中学习规律。", "turn_id": "message-8"}],
+    )
+
+    assert decision.uses_history is True
+    assert decision.standalone_query == "回顾上一轮对机器学习的定义"
+    assert decision.referenced_turn_ids == ("message-8",)
+
+
+def test_course_evidence_assessment_rejects_unreturned_citation_ids() -> None:
+    model = FakeModel(
+        '{"relation_type":"adjacent","relevant_citation_ids":["12","forged"],'
+        '"course_evidence_sufficient":false,"external_search_helpful":true,'
+        '"confidence":0.89,"reason_summary":"主题相邻但教材依据不足。"}'
+    )
+
+    result = SemanticDecisionService(model).assess_course_evidence(
+        user=user(),
+        question="B 树为什么适合数据库索引？",
+        course_title="数据结构",
+        citations=[{"chunk_id": 12, "source_title": "树", "content": "B 树保持较低树高。"}],
+    )
+
+    assert result is not None
+    assert result["relation_type"] == "adjacent"
+    assert result["relevant_citation_ids"] == ["12"]
+    assert result["external_search_helpful"] is True

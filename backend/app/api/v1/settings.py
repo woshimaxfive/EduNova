@@ -22,6 +22,12 @@ from backend.app.services.model_settings import (
     UpdateModelConfigRequest,
 )
 from backend.app.services.ai_jobs import AiJobService, RqAiJobQueue, SqlAlchemyAiJobRepository
+from backend.app.services.conversation_memory import (
+    ConversationMemoryService,
+    RqConversationMemoryQueue,
+    UpdatePrivacySettingsRequest,
+)
+from backend.app.services.embeddings import EmbeddingService
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -42,6 +48,47 @@ def get_settings_ai_job_service(db=Depends(get_db_session)) -> AiJobService:
         settings=settings,
         queue=RqAiJobQueue(settings),
     )
+
+
+def get_conversation_memory_service(db=Depends(get_db_session)) -> ConversationMemoryService:
+    settings = get_settings()
+    model_service = ModelSettingsService(
+        repository=SqlAlchemyModelSettingsRepository(db),
+        settings=get_settings(),
+        provider=OpenAICompatibleChatProvider(),
+    )
+    return ConversationMemoryService(
+        db,
+        EmbeddingService(model_service),
+        RqConversationMemoryQueue(redis_url=settings.redis_url, queue_name=settings.ai_job_queue_name),
+    )
+
+
+@router.get("/privacy")
+def get_privacy_settings(
+    current_user: User = Depends(get_current_user),
+    service: ConversationMemoryService = Depends(get_conversation_memory_service),
+) -> dict:
+    return api_response(service.get_settings(current_user).model_dump())
+
+
+@router.put("/privacy")
+def update_privacy_settings(
+    payload: UpdatePrivacySettingsRequest,
+    current_user: User = Depends(get_current_user),
+    service: ConversationMemoryService = Depends(get_conversation_memory_service),
+) -> dict:
+    return api_response(
+        service.update_settings(current_user, payload.conversation_memory_enabled).model_dump()
+    )
+
+
+@router.delete("/privacy/conversation-memory")
+def clear_conversation_memory(
+    current_user: User = Depends(get_current_user),
+    service: ConversationMemoryService = Depends(get_conversation_memory_service),
+) -> dict:
+    return api_response(service.clear(current_user).model_dump())
 
 
 @router.get("/model")

@@ -27,6 +27,9 @@ class ToolDecision:
     confidence: float = 0.0
     decision_mode: DecisionMode = "degraded"
     course_related: bool = False
+    standalone_query: str = ""
+    uses_history: bool = False
+    referenced_turn_ids: tuple[str, ...] = ()
     profile_updates: dict[str, object] = field(default_factory=dict)
     profile_confidence: dict[str, float] = field(default_factory=dict)
     summary: str = "语义决策模型不可用，已采用保守降级。"
@@ -75,6 +78,7 @@ def decide_tool_capabilities(
         reasoning_mode="deep" if force_deep else "auto",
         reason_codes=tuple(reason_codes),
         search_query=" ".join(str(question or "").split()),
+        standalone_query=" ".join(str(question or "").split()),
         decision_mode="forced" if forced else "degraded",
         course_related=course_related,
         summary=summary,

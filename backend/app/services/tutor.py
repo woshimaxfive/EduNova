@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import logging
 import re
 from time import perf_counter
 from inspect import signature
 from typing import Any, Iterator, Protocol
 
+from langchain_core.messages import AIMessage, HumanMessage, trim_messages
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy import func, or_, select
@@ -15,6 +17,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.errors import make_trace_id
 from backend.app.agents.runtime import PendingAgentTrace, agent_log_from_pending_trace
 from backend.app.agents.schemas import AgentState
+from backend.app.agents.search_tools import SearchToolExecutor
 from backend.app.agents.tool_policy import decide_tool_capabilities
 from backend.app.models import AgentRunLog, ChatMessage, ChatSession, Course, CourseEnrollment, Material, User
 from backend.app.schemas.tutor import (
@@ -35,6 +38,9 @@ from backend.app.services.course_answers import (
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.providers.openai_compatible import ModelProviderError
+
+
+logger = logging.getLogger(__name__)
 
 
 COURSE_ASSISTANT_REPLY_WITH_CITATIONS = "我先从课程资料里找到了相关依据。下面保留真实引用片段，后续接入大模型后会基于这些来源生成完整回答。"
@@ -269,8 +275,35 @@ class WebSearchProvider(Protocol):
         ...
 
 
+class NativeWebSearchProvider(Protocol):
+    def native_web_search(
+        self,
+        user: User,
+        query: str,
+        *,
+        reasoning_mode: str = "auto",
+        force: bool = False,
+    ) -> Any:
+        ...
+
+
 class SemanticDecisionProvider(Protocol):
     def decide(self, **kwargs: Any) -> Any:
+        ...
+
+
+class ConversationMemoryProvider(Protocol):
+    def search(self, *, user: User, current_session_id: int, query: str, limit: int = 5) -> list[dict[str, Any]]:
+        ...
+
+    def index_pair(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        user_message: ChatMessage,
+        assistant_message: ChatMessage,
+    ) -> bool:
         ...
 
 
@@ -425,6 +458,8 @@ class TutorSessionService:
         web_search_service: WebSearchProvider | None = None,
         material_citation_searcher: MaterialCitationSearcher | None = None,
         semantic_decision_service: SemanticDecisionProvider | None = None,
+        native_web_search_provider: NativeWebSearchProvider | None = None,
+        conversation_memory_service: ConversationMemoryProvider | None = None,
     ) -> None:
         self.repository = repository
         self.course_citation_searcher = course_citation_searcher
@@ -433,6 +468,8 @@ class TutorSessionService:
         self.web_search_service = web_search_service
         self.material_citation_searcher = material_citation_searcher
         self.semantic_decision_service = semantic_decision_service
+        self.native_web_search_provider = native_web_search_provider
+        self.conversation_memory_service = conversation_memory_service
 
     def _semantic_decision(
         self,
@@ -442,6 +479,7 @@ class TutorSessionService:
         question: str,
         force_search: bool,
         force_deep: bool,
+        conversation_context: ConversationContext | None = None,
     ) -> Any:
         if self.semantic_decision_service is None:
             return decide_tool_capabilities(question, force_search=force_search, force_deep=force_deep)
@@ -457,6 +495,10 @@ class TutorSessionService:
             selected_materials=bool(getattr(session, "selected_material_ids", None)),
             force_search=force_search,
             force_deep=force_deep,
+            conversation_messages=[
+                {**message, "turn_id": conversation_context.turn_ids[index] if index < len(conversation_context.turn_ids) else ""}
+                for index, message in enumerate(conversation_context.messages)
+            ] if conversation_context is not None else [],
         )
 
     def create_session(
@@ -919,7 +961,22 @@ class TutorSessionService:
             self.repository.rollback()
             raise
 
-        course_evidence = [item for item in citation_json if item.get("source_type") != "web"]
+        if self.conversation_memory_service is not None:
+            try:
+                schedule = getattr(self.conversation_memory_service, "schedule_pair", None)
+                (schedule if callable(schedule) else self.conversation_memory_service.index_pair)(
+                    user=user,
+                    session=session,
+                    user_message=user_message,
+                    assistant_message=assistant_message,
+                )
+            except Exception:
+                try:
+                    self.repository.rollback()
+                except Exception:
+                    pass
+
+        course_evidence = [item for item in citation_json if item.get("source_type") not in {"web", "history"}]
         if (
             self.profile_event_recorder is not None
             and session.scope == "course"
@@ -1213,15 +1270,42 @@ class TutorSessionService:
             )
         return citations
 
-    def _web_search_citations(self, message_text: str, warnings: list[str]) -> list[dict[str, Any]]:
+    def _web_search_citations(
+        self,
+        message_text: str,
+        warnings: list[str],
+        *,
+        user: User | None = None,
+        reasoning_mode: str = "auto",
+        force: bool = False,
+    ) -> list[dict[str, Any]]:
+        if user is not None and self.native_web_search_provider is not None:
+            try:
+                native = self.native_web_search_provider.native_web_search(
+                    user,
+                    message_text,
+                    reasoning_mode=reasoning_mode,
+                    force=force,
+                )
+            except Exception:
+                native = None
+            native_citations = getattr(native, "citations", []) if native is not None else []
+            if isinstance(native_citations, list) and native_citations:
+                return [dict(item) for item in native_citations[:5] if isinstance(item, dict)]
+            native_warning = getattr(native, "warning", None) if native is not None else None
+            if native_warning and "不提供厂商原生" not in str(native_warning):
+                warnings.append(str(native_warning))
         if self.web_search_service is None:
             warnings.append("联网搜索未配置。")
             return []
-        result = self.web_search_service.search(message_text, max_results=5)
-        warning = getattr(result, "warning", None)
+        try:
+            tool_result = SearchToolExecutor(self.web_search_service).search(message_text, max_results=5)
+        except Exception:
+            tool_result = {"citations": [], "warning": "联网搜索暂不可用。"}
+        warning = tool_result.get("warning")
         if warning:
             warnings.append(str(warning))
-        raw_citations = getattr(result, "citations", [])
+        raw_citations = tool_result.get("citations", [])
         if not isinstance(raw_citations, list):
             return []
         citations: list[dict[str, Any]] = []
@@ -1231,14 +1315,16 @@ class TutorSessionService:
             title = self._safe_snippet(str(item.get("title") or "联网来源"), 120)
             snippet = self._safe_snippet(str(item.get("snippet") or item.get("content") or ""), 240)
             url = self._safe_snippet(str(item.get("url") or ""), 300)
-            citations.append(
-                {
-                    "source_type": "web",
-                    "title": title,
-                    "url": url,
-                    "snippet": snippet,
-                }
-            )
+            citation: dict[str, Any] = {
+                "source_type": "web",
+                "title": title,
+                "url": url,
+                "snippet": snippet,
+            }
+            for key in ("search_backend", "evidence_role", "retrieved_at"):
+                if item.get(key):
+                    citation[key] = str(item[key])
+            citations.append(citation)
         return citations
 
     def _search_course_citations(
@@ -1259,7 +1345,13 @@ class TutorSessionService:
         )
         return [self._citation_to_dict(item) for item in result.results]
 
-    def _build_conversation_context(self, session: ChatSession) -> ConversationContext:
+    def _build_conversation_context(
+        self,
+        session: ChatSession,
+        *,
+        user: User | None = None,
+        current_question: str = "",
+    ) -> ConversationContext:
         history = [
             message
             for message in self.repository.list_messages(session.id)
@@ -1268,27 +1360,84 @@ class TutorSessionService:
         if not history:
             return ConversationContext()
 
-        older_messages = history[:-CONTEXT_RECENT_MESSAGE_LIMIT]
-        recent_messages = history[-CONTEXT_RECENT_MESSAGE_LIMIT:]
-        summary = self._summarize_older_messages(older_messages)
-        remaining_budget = max(CONTEXT_TOTAL_CHAR_LIMIT - len(summary), 0)
-        selected_messages: list[dict[str, str]] = []
-        for message in reversed(recent_messages):
+        langchain_messages = [
+            (HumanMessage if message.role == "user" else AIMessage)(
+                content=self._safe_context_text(str(message.content or ""), limit=CONTEXT_MESSAGE_CHAR_LIMIT),
+                additional_kwargs={"turn_id": str(message.id)},
+            )
+            for message in history
+        ]
+        trimmed = trim_messages(
+            langchain_messages,
+            max_tokens=3000,
+            token_counter="approximate",
+            strategy="last",
+            allow_partial=False,
+            start_on=HumanMessage,
+        )
+        trimmed_items = [
+            {
+                "role": "user" if isinstance(message, HumanMessage) else "assistant",
+                "content": str(message.content),
+                "turn_id": str(message.additional_kwargs.get("turn_id") or ""),
+            }
+            for message in trimmed
+            if str(message.content).strip()
+        ][-CONTEXT_RECENT_MESSAGE_LIMIT:]
+        selected_messages_with_ids: list[dict[str, str]] = []
+        remaining_budget = CONTEXT_TOTAL_CHAR_LIMIT - CONTEXT_SUMMARY_CHAR_LIMIT
+        for item in reversed(trimmed_items):
             if remaining_budget <= 0:
                 break
-            limit = min(CONTEXT_MESSAGE_CHAR_LIMIT, remaining_budget)
-            content = self._safe_context_text(str(message.content or ""), limit=limit)
+            content = self._safe_context_text(item["content"], limit=min(CONTEXT_MESSAGE_CHAR_LIMIT, remaining_budget))
             if not content:
                 continue
-            selected_messages.append({"role": message.role, "content": content})
+            selected_messages_with_ids.append({**item, "content": content})
             remaining_budget -= len(content)
-
-        selected_messages.reverse()
+        selected_messages_with_ids.reverse()
+        selected_turn_ids = {item["turn_id"] for item in selected_messages_with_ids}
+        selected_messages = [
+            {"role": item["role"], "content": item["content"]}
+            for item in selected_messages_with_ids
+        ]
+        older_messages = [message for message in history if str(message.id) not in selected_turn_ids]
+        summary = self._summarize_older_messages(older_messages)
+        history_citations: list[dict[str, Any]] = []
+        if user is not None and current_question.strip() and self.conversation_memory_service is not None:
+            try:
+                history_citations = self.conversation_memory_service.search(
+                    user=user,
+                    current_session_id=session.id,
+                    query=current_question,
+                    limit=5,
+                )
+                logger.info(
+                    "conversation_memory_search_completed user_id=%s session_id=%s result_count=%s",
+                    user.id,
+                    session.id,
+                    len(history_citations),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "conversation_memory_search_failed user_id=%s session_id=%s error_type=%s",
+                    user.id,
+                    session.id,
+                    type(exc).__name__,
+                )
+                history_citations = []
+        if history_citations:
+            memory_summary = "；".join(str(item.get("snippet") or "")[:300] for item in history_citations[:3])
+            summary = self._safe_context_text(
+                f"{summary}；相关历史对话（仅用于理解上下文，不是课程证据）：{memory_summary}".strip("；"),
+                limit=CONTEXT_SUMMARY_CHAR_LIMIT,
+            )
         return ConversationContext(
             summary=summary,
             messages=selected_messages,
             message_count=len(selected_messages),
             summary_used=bool(summary),
+            history_citations=history_citations,
+            turn_ids=[item["turn_id"] for item in selected_messages_with_ids],
         )
 
     def _summarize_older_messages(self, messages: list[ChatMessage]) -> str:
@@ -1314,17 +1463,16 @@ class TutorSessionService:
         return self._safe_context_text("；".join(summary_parts), limit=CONTEXT_SUMMARY_CHAR_LIMIT)
 
     def _build_contextual_query(self, message_text: str, conversation_context: ConversationContext) -> str:
+        if self.semantic_decision_service is not None:
+            return self._safe_query_text(message_text, limit=CONTEXT_MESSAGE_CHAR_LIMIT)
         previous_user_questions = [
             item["content"]
             for item in conversation_context.messages
             if item.get("role") == "user" and item.get("content")
         ][-CONTEXT_RETRIEVAL_USER_MESSAGE_LIMIT:]
-        if not previous_user_questions:
+        if not previous_user_questions or not self._should_use_previous_questions(message_text, previous_user_questions[-1]):
             return message_text
-        if not self._should_use_previous_questions(message_text, previous_user_questions[-1]):
-            return message_text
-        query = "\n".join([*previous_user_questions, message_text])
-        return self._safe_query_text(query, limit=CONTEXT_MESSAGE_CHAR_LIMIT)
+        return self._safe_query_text("\n".join([*previous_user_questions, message_text]), limit=CONTEXT_MESSAGE_CHAR_LIMIT)
 
     @classmethod
     def _should_use_previous_questions(cls, current: str, previous: str) -> bool:
@@ -1632,7 +1780,11 @@ class HomeTutorGraphRunner:
         }
 
     def _context_node(self, state: AgentState) -> dict[str, Any]:
-        conversation_context = self.service._build_conversation_context(state["session"])
+        conversation_context = self.service._build_conversation_context(
+            state["session"],
+            user=state["user"],
+            current_question=str(state["message_text"]),
+        )
         retrieval_query = self.service._build_contextual_query(str(state["message_text"]), conversation_context)
         context_service = context_service_from_repository(self.service.repository)
         global_context = context_service.global_context(int(state["user_id"])) if context_service is not None else None
@@ -1707,6 +1859,7 @@ class HomeTutorGraphRunner:
                 question=message,
                 force_search=bool(state.get("use_web_search")),
                 force_deep=bool(state.get("deep_thinking")),
+                conversation_context=state.get("conversation_context"),
             )
             intent = "material_question" if state.get("selected_material_ids") else decision.intent
             warnings = list(state.get("warnings", []))
@@ -1723,6 +1876,14 @@ class HomeTutorGraphRunner:
                 "semantic_decision_mode": decision.decision_mode,
                 "semantic_decision_confidence": decision.confidence,
                 "semantic_warning": decision.warning,
+                "retrieval_query": (
+                    getattr(decision, "standalone_query", "")
+                    if getattr(decision, "uses_history", False)
+                    else (str(state["message_text"]) if str(decision.decision_mode) in {"model", "model_forced"} else str(state.get("retrieval_query") or state["message_text"]))
+                ),
+                "standalone_query": getattr(decision, "standalone_query", str(state["message_text"])),
+                "uses_history": bool(getattr(decision, "uses_history", False)),
+                "referenced_turn_ids": list(getattr(decision, "referenced_turn_ids", ())),
                 "warnings": warnings,
             }
             metadata = {
@@ -1733,6 +1894,8 @@ class HomeTutorGraphRunner:
                 "semantic_decision_mode": decision.decision_mode,
                 "semantic_decision_confidence": decision.confidence,
                 "semantic_intent": intent,
+                "uses_history": bool(getattr(decision, "uses_history", False)),
+                "referenced_turn_count": len(getattr(decision, "referenced_turn_ids", ())),
             }
             return updates, f"已识别为 {intent}，{decision.reason_summary}。", "completed", metadata
 
@@ -1751,8 +1914,9 @@ class HomeTutorGraphRunner:
             if not selected_ids or self.service.material_citation_searcher is None:
                 retrieval_mode = "none"
                 embedding_status = "unavailable"
+                history_citations = list(getattr(state.get("conversation_context"), "history_citations", []))
                 return (
-                    {"citation_json": [], "retrieval_mode": retrieval_mode, "embedding_status": embedding_status},
+                    {"citation_json": history_citations, "retrieval_mode": retrieval_mode, "embedding_status": embedding_status},
                     "本次未选择资料。" if not selected_ids else "资料检索服务暂不可用。",
                     "skipped" if not selected_ids else "warning",
                     {
@@ -1768,7 +1932,7 @@ class HomeTutorGraphRunner:
                 query=str(state["retrieval_query"]),
                 top_k=5,
             )
-            citations = list(getattr(result, "citations", []))
+            citations = [*list(getattr(state.get("conversation_context"), "history_citations", [])), *list(getattr(result, "citations", []))]
             retrieval_mode = str(getattr(result, "retrieval_mode", "keyword"))
             embedding_status = str(getattr(result, "embedding_status", "unavailable"))
             rerank_status = str(getattr(result, "rerank_status", "not_configured"))
@@ -1818,8 +1982,12 @@ class HomeTutorGraphRunner:
                     else state["retrieval_query"]
                 ),
                 warnings=warnings,
+                user=state["user"],
+                reasoning_mode=str(state.get("reasoning_mode") or "auto"),
+                force=bool(state.get("use_web_search")),
             )
             citations.extend(web_citations)
+            search_backend = str(web_citations[0].get("search_backend") or "external") if web_citations else "none"
             self._write(state, "sources", {"citations": citations, "warnings": warnings})
             return (
                 {"citation_json": citations, "warnings": warnings, "web_citation_count": len(web_citations)},
@@ -1829,6 +1997,7 @@ class HomeTutorGraphRunner:
                     "citation_count": len(citations),
                     "source_count": len(citations),
                     "warning_count": len(warnings),
+                    "search_backend": search_backend,
                 },
             )
 
@@ -1956,6 +2125,10 @@ class HomeTutorGraphRunner:
                 question=str(state["message_text"]),
                 answer=reply,
                 citations=list(state.get("citation_json", [])),
+                history_available=bool(
+                    getattr(state.get("conversation_context"), "message_count", 0) > 0
+                    or getattr(state.get("conversation_context"), "history_citations", [])
+                ),
             )
             model_review = None
             reviewer = getattr(self.service.course_answer_generator, "review_home", None)
@@ -2217,6 +2390,7 @@ class HomeTutorGraphRunner:
         question: str,
         answer: str,
         citations: list[dict[str, Any]],
+        history_available: bool = False,
     ) -> list[str]:
         flags: list[str] = []
         if any(marker in answer for marker in ("学生问题：", "工具状态：", "可用来源摘要：", "工具提示：")):
@@ -2239,6 +2413,21 @@ class HomeTutorGraphRunner:
             flags.append("fake_web_source")
         if not citations and any(marker in answer for marker in ("根据资料", "资料显示", "从所选资料")):
             flags.append("citation_mismatch")
+        if history_available and any(
+            marker in answer
+            for marker in (
+                "无法记住之前",
+                "不能记住之前",
+                "无法直接回忆",
+                "无法回忆之前",
+                "无法访问之前的对话",
+                "没有获取到您之前",
+                "未获取到您之前",
+                "没有对话记忆",
+                "看不到上文",
+            )
+        ):
+            flags.append("history_denial")
         return list(dict.fromkeys(flags))
 
     @staticmethod
@@ -2250,6 +2439,7 @@ class HomeTutorGraphRunner:
             "malformed_markdown": ("markdown", "格式", "结构混乱", "缺少换行"),
             "citation_mismatch": ("引用不匹配", "依据不匹配", "来源不支持"),
             "fake_web_source": ("虚假网页", "伪造来源", "联网来源不存在"),
+            "history_denial": ("否认历史", "无法记住", "看不到上文", "没有对话记忆"),
             "sensitive_output": ("敏感", "隐私", "泄露", "api key", "系统提示词"),
         }
         negations = ("没有", "未发现", "不存在", "不包含", "未包含", "无")
@@ -2439,7 +2629,11 @@ class CourseTutorGraphRunner:
         force_search: bool,
         force_deep: bool,
     ) -> AgentState:
-        conversation_context = self.service._build_conversation_context(session)
+        conversation_context = self.service._build_conversation_context(
+            session,
+            user=user,
+            current_question=message_text,
+        )
         retrieval_query = self.service._build_contextual_query(message_text, conversation_context)
         context_metadata = self.service._context_metadata(
             conversation_context,
@@ -2471,25 +2665,6 @@ class CourseTutorGraphRunner:
             "warnings": [],
             "errors": [],
         }
-
-    def _course_title_matches(self, user_id: int, course_id: int | None, query: str) -> bool:
-        if course_id is None:
-            return False
-        getter = getattr(self.service.repository, "get_course_for_user", None)
-        if not callable(getter):
-            return False
-        course = getter(user_id, course_id)
-        title = str(getattr(course, "title", "") or "").lower()
-        normalized_query = query.lower()
-        ignored = {"课程", "导论", "基础", "学习", "教程", "复习"}
-        title_parts = re.split(r"[与和、/·\s]+", title)
-        terms = [
-            term
-            for part in title_parts
-            for term in re.findall(r"[一-龥]{2,}|[a-z0-9+#.]{2,}", part)
-            if term not in ignored
-        ]
-        return any(term in normalized_query for term in terms)
 
     def _profile_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
@@ -2526,6 +2701,7 @@ class CourseTutorGraphRunner:
                 question=str(state["message_text"]),
                 force_search=bool(state.get("use_web_search")),
                 force_deep=bool(state.get("deep_thinking")),
+                conversation_context=state.get("conversation_context"),
             )
             warnings = list(state.get("warnings", []))
             if decision.warning and decision.warning not in warnings:
@@ -2540,6 +2716,14 @@ class CourseTutorGraphRunner:
                 "semantic_decision_mode": decision.decision_mode,
                 "semantic_decision_confidence": decision.confidence,
                 "semantic_warning": decision.warning,
+                "retrieval_query": (
+                    getattr(decision, "standalone_query", "")
+                    if getattr(decision, "uses_history", False)
+                    else (str(state["message_text"]) if str(decision.decision_mode) in {"model", "model_forced"} else str(state.get("retrieval_query") or state["message_text"]))
+                ),
+                "standalone_query": getattr(decision, "standalone_query", str(state["message_text"])),
+                "uses_history": bool(getattr(decision, "uses_history", False)),
+                "referenced_turn_ids": list(getattr(decision, "referenced_turn_ids", ())),
                 "course_related": decision.course_related,
                 "profile_signal_updates": dict(decision.profile_updates),
                 "profile_signal_confidence": dict(decision.profile_confidence),
@@ -2573,6 +2757,8 @@ class CourseTutorGraphRunner:
                 message_text=str(state["message_text"]),
                 retrieval_query=str(state["retrieval_query"]),
             )
+            history_citations = list(getattr(state.get("conversation_context"), "history_citations", []))
+            citations = [*history_citations, *citations]
             return (
                 {"citation_json": citations, "citations": citations},
                 f"命中 {len(citations)} 条课程引用。",
@@ -2591,10 +2777,39 @@ class CourseTutorGraphRunner:
     def _web_search_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             citations = list(state.get("citation_json", []))
-            course_citation_count = sum(1 for item in citations if item.get("source_type") != "web")
+            assessor = getattr(self.service.semantic_decision_service, "assess_course_evidence", None)
+            evidence_decision = None
+            if callable(assessor):
+                course = self.service.repository.get_course_for_user(int(state["user_id"]), int(state["course_id"]))
+                evidence_decision = assessor(
+                    user=state["user"],
+                    question=str(state["message_text"]),
+                    course_title=str(getattr(course, "title", "") or ""),
+                    citations=citations,
+                )
+            if isinstance(evidence_decision, dict):
+                relation_type = str(evidence_decision.get("relation_type") or "off_topic")
+                relevant_ids = {str(item) for item in evidence_decision.get("relevant_citation_ids", [])}
+                if relevant_ids:
+                    citations = [
+                        item for item in citations
+                        if item.get("source_type") == "history"
+                        or str(item.get("chunk_id") or item.get("id") or "") in relevant_ids
+                    ]
+                state["course_related"] = relation_type in {"direct", "adjacent"}
+            else:
+                relation_type = "direct" if state.get("course_related") else "unknown"
+            course_citation_count = sum(1 for item in citations if item.get("source_type") not in {"web", "history"})
             search_required = bool(state.get("search_required"))
             reason_codes = list(state.get("tool_reason_codes", []))
-            if course_citation_count == 0 and state.get("course_related") and not search_required:
+            if isinstance(evidence_decision, dict):
+                if relation_type == "off_topic":
+                    search_required = False
+                    reason_codes.append("course_off_topic")
+                elif bool(evidence_decision.get("external_search_helpful")) and not bool(evidence_decision.get("course_evidence_sufficient")):
+                    search_required = True
+                    reason_codes.append("course_evidence_gap")
+            elif course_citation_count == 0 and state.get("course_related") and not search_required:
                 search_required = True
                 reason_codes.append("course_evidence_gap")
             updates: dict[str, Any] = {
@@ -2603,6 +2818,10 @@ class CourseTutorGraphRunner:
                 "tool_reason_codes": list(dict.fromkeys(reason_codes)),
                 "tool_reason_summary": str(state.get("tool_reason_summary") or ""),
                 "course_citation_count": course_citation_count,
+                "relation_type": relation_type,
+                "course_evidence_sufficient": bool(evidence_decision.get("course_evidence_sufficient")) if isinstance(evidence_decision, dict) else course_citation_count > 0,
+                "external_search_helpful": bool(evidence_decision.get("external_search_helpful")) if isinstance(evidence_decision, dict) else search_required,
+                "evidence_decision_confidence": float(evidence_decision.get("confidence") or 0) if isinstance(evidence_decision, dict) else 0.0,
             }
             if not search_required:
                 return (
@@ -2616,6 +2835,10 @@ class CourseTutorGraphRunner:
                         "tool_reason_summary": str(state.get("tool_reason_summary") or ""),
                         "course_citation_count": course_citation_count,
                         "web_citation_count": 0,
+                        "search_backend": "none",
+                        "relation_type": relation_type,
+                        "course_evidence_sufficient": updates["course_evidence_sufficient"],
+                        "external_search_helpful": updates["external_search_helpful"],
                     },
                 )
 
@@ -2627,9 +2850,13 @@ class CourseTutorGraphRunner:
                     else state["retrieval_query"]
                 ),
                 warnings,
+                user=state["user"],
+                reasoning_mode=str(state.get("reasoning_mode") or "auto"),
+                force=bool(state.get("use_web_search")),
             )
             supplements = [{**item, "evidence_role": "external_supplement"} for item in web_citations]
             citations.extend(supplements)
+            search_backend = str(supplements[0].get("search_backend") or "external") if supplements else "none"
             return (
                 {
                     **updates,
@@ -2648,6 +2875,10 @@ class CourseTutorGraphRunner:
                     "course_citation_count": course_citation_count,
                     "web_citation_count": len(supplements),
                     "warning_count": len(warnings),
+                    "search_backend": search_backend,
+                    "relation_type": relation_type,
+                    "course_evidence_sufficient": updates["course_evidence_sufficient"],
+                    "external_search_helpful": updates["external_search_helpful"],
                 },
             )
 
@@ -2692,7 +2923,8 @@ class CourseTutorGraphRunner:
     def _tutor_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             citations = list(state.get("citation_json", []))
-            if not citations:
+            evidence_citations = [item for item in citations if item.get("source_type") != "history"]
+            if not evidence_citations:
                 return (
                     {
                         "assistant_reply": COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS,
@@ -2703,7 +2935,7 @@ class CourseTutorGraphRunner:
                     {"citation_count": 0, "risk_flags": ["low_evidence"]},
                 )
             if self.service.course_answer_generator is None:
-                course_count = sum(1 for item in citations if item.get("source_type") != "web")
+                course_count = sum(1 for item in citations if item.get("source_type") not in {"web", "history"})
                 return (
                     {
                         "assistant_reply": COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED if course_count else HOME_MODEL_NOT_CONFIGURED_MESSAGE,

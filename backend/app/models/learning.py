@@ -17,6 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
+from pgvector.sqlalchemy import Vector
 
 from backend.app.db.base import Base
 from backend.app.models.mixins import CreatedAtMixin, IdMixin, TimestampMixin
@@ -507,6 +508,56 @@ class ChatMessage(IdMixin, CreatedAtMixin, Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     citation_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+
+class UserPrivacySetting(IdMixin, TimestampMixin, Base):
+    __tablename__ = "user_privacy_settings"
+    __table_args__ = (UniqueConstraint("user_id", name="uq_user_privacy_settings_user_id"),)
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    conversation_memory_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class ConversationMemoryEntry(IdMixin, CreatedAtMixin, Base):
+    __tablename__ = "conversation_memory_entries"
+    __table_args__ = (
+        UniqueConstraint("assistant_message_id", name="uq_conversation_memory_assistant_message"),
+        Index("ix_conversation_memory_user_profile", "user_id", "embedding_profile_hash"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    session_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_message_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("chat_messages.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    assistant_message_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("chat_messages.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(), nullable=False)
+    embedding_provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    embedding_model: Mapped[str] = mapped_column(String(120), nullable=False)
+    embedding_dimension: Mapped[int] = mapped_column(Integer, nullable=False)
+    embedding_profile_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class ModelSetting(IdMixin, TimestampMixin, Base):

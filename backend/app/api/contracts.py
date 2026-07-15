@@ -52,6 +52,10 @@ from backend.app.services.model_settings import (
     ModelSettingsListResponse,
     ModelSettingsSummary,
 )
+from backend.app.services.conversation_memory import (
+    ClearConversationMemoryResponse,
+    PrivacySettingsResponse,
+)
 
 
 T = TypeVar("T")
@@ -186,6 +190,9 @@ RESPONSE_MODELS: dict[str, Any] = {
     "test_model_config": ApiEnvelope[ModelConnectionTestResponse],
     "test_model_settings": ApiEnvelope[ModelConnectionTestResponse],
     "create_embedding_reindex_job": ApiEnvelope[AiJobResponse],
+    "get_privacy_settings": ApiEnvelope[PrivacySettingsResponse],
+    "update_privacy_settings": ApiEnvelope[PrivacySettingsResponse],
+    "clear_conversation_memory": ApiEnvelope[ClearConversationMemoryResponse],
     "create_session": ApiEnvelope[TutorSessionSummary],
     "list_sessions": ApiEnvelope[list[TutorSessionSummary]],
     "list_home_history": ApiEnvelope[TutorSessionHistoryPage],

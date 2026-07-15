@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,7 +17,7 @@ candidates = (
 )
 interpreter = next((path.resolve() for path in candidates if path.exists()), None)
 if interpreter is not None and Path(sys.executable).resolve() != interpreter:
-    os.execv(str(interpreter), [str(interpreter), __file__])
+    raise SystemExit(subprocess.call([str(interpreter), __file__]))
 
 from backend.app.main import app  # noqa: E402
 

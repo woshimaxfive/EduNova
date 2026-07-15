@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.models import AssessmentReport
 from backend.app.schemas.personalization import PersonalizationFreshnessResponse
@@ -13,6 +13,29 @@ class GenerateReportRequest(BaseModel):
     practice_session_id: int | None = None
 
 
+class ResourceUsageCounts(BaseModel):
+    opened: int = 0
+    started: int = 0
+    completed: int = 0
+    helpful: int = 0
+    too_easy: int = 0
+    too_hard: int = 0
+    not_helpful: int = 0
+
+
+class AssessmentReportContent(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    summary: str = ""
+    mastery_update: dict = Field(default_factory=dict)
+    weakness_list: list[dict] = Field(default_factory=list)
+    evidence_refs: list[dict] = Field(default_factory=list)
+    next_step_suggestions: list[str] = Field(default_factory=list)
+    review_queue_updates: list[dict] = Field(default_factory=list)
+    profile_changes: list[str] = Field(default_factory=list)
+    resource_usage_summary: dict[str, ResourceUsageCounts] = Field(default_factory=dict)
+
+
 class ReportEnvelope(BaseModel):
     id: str | None
     course_id: str
@@ -20,7 +43,7 @@ class ReportEnvelope(BaseModel):
     status: str
     agent_trace_id: str | None = None
     score: int | None
-    report: dict
+    report: AssessmentReportContent
     personalization: PersonalizationFreshnessResponse | None = None
     created_at: str | None
 

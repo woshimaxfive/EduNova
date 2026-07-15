@@ -1414,6 +1414,68 @@
         "title": "ApiUser",
         "type": "object"
       },
+      "AssessmentReportContent": {
+        "additionalProperties": true,
+        "properties": {
+          "evidence_refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "mastery_update": {
+            "additionalProperties": true,
+            "title": "Mastery Update",
+            "type": "object"
+          },
+          "next_step_suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Next Step Suggestions",
+            "type": "array"
+          },
+          "profile_changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Profile Changes",
+            "type": "array"
+          },
+          "resource_usage_summary": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ResourceUsageCounts"
+            },
+            "title": "Resource Usage Summary",
+            "type": "object"
+          },
+          "review_queue_updates": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Review Queue Updates",
+            "type": "array"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          },
+          "weakness_list": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Weakness List",
+            "type": "array"
+          }
+        },
+        "title": "AssessmentReportContent",
+        "type": "object"
+      },
       "AttachCourseMaterialsRequest": {
         "properties": {
           "material_ids": {
@@ -7012,9 +7074,7 @@
             "title": "Practice Session Id"
           },
           "report": {
-            "additionalProperties": true,
-            "title": "Report",
-            "type": "object"
+            "$ref": "#/components/schemas/AssessmentReportContent"
           },
           "score": {
             "anyOf": [
@@ -7280,6 +7340,47 @@
           "created_at"
         ],
         "title": "ResourceQualityScoreResponse",
+        "type": "object"
+      },
+      "ResourceUsageCounts": {
+        "properties": {
+          "completed": {
+            "default": 0,
+            "title": "Completed",
+            "type": "integer"
+          },
+          "helpful": {
+            "default": 0,
+            "title": "Helpful",
+            "type": "integer"
+          },
+          "not_helpful": {
+            "default": 0,
+            "title": "Not Helpful",
+            "type": "integer"
+          },
+          "opened": {
+            "default": 0,
+            "title": "Opened",
+            "type": "integer"
+          },
+          "started": {
+            "default": 0,
+            "title": "Started",
+            "type": "integer"
+          },
+          "too_easy": {
+            "default": 0,
+            "title": "Too Easy",
+            "type": "integer"
+          },
+          "too_hard": {
+            "default": 0,
+            "title": "Too Hard",
+            "type": "integer"
+          }
+        },
+        "title": "ResourceUsageCounts",
         "type": "object"
       },
       "SaveModelConfigRequest": {

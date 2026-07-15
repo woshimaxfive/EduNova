@@ -1078,6 +1078,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/resources/{resource_id}/interactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Resource Interaction */
+        post: operations["record_resource_interaction_api_v1_resources__resource_id__interactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resources/{resource_id}/learning-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Resource Learning State */
+        get: operations["get_resource_learning_state_api_v1_resources__resource_id__learning_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/resources/{resource_id}/quality": {
         parameters: {
             query?: never;
@@ -1390,6 +1424,10 @@ export interface components {
             status: string;
             /** Steps */
             steps: components["schemas"]["AgentTraceStep"][];
+            /** Summary */
+            summary?: {
+                [key: string]: unknown;
+            };
             /** Trace Id */
             trace_id: string;
             /** Workflow */
@@ -1725,6 +1763,12 @@ export interface components {
             /** Trace Id */
             trace_id: string;
         };
+        /** ApiEnvelope[ResourceLearningStateResponse] */
+        ApiEnvelope_ResourceLearningStateResponse_: {
+            data: components["schemas"]["ResourceLearningStateResponse"];
+            /** Trace Id */
+            trace_id: string;
+        };
         /** ApiEnvelope[StudentProfileResponse] */
         ApiEnvelope_StudentProfileResponse_: {
             data: components["schemas"]["StudentProfileResponse"];
@@ -1845,6 +1889,40 @@ export interface components {
              * @enum {string}
              */
             starter_mode: "blank" | "data_structures";
+        };
+        /** AssessmentReportContent */
+        AssessmentReportContent: {
+            /** Evidence Refs */
+            evidence_refs?: {
+                [key: string]: unknown;
+            }[];
+            /** Mastery Update */
+            mastery_update?: {
+                [key: string]: unknown;
+            };
+            /** Next Step Suggestions */
+            next_step_suggestions?: string[];
+            /** Profile Changes */
+            profile_changes?: string[];
+            /** Resource Usage Summary */
+            resource_usage_summary?: {
+                [key: string]: components["schemas"]["ResourceUsageCounts"];
+            };
+            /** Review Queue Updates */
+            review_queue_updates?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /** Weakness List */
+            weakness_list?: {
+                [key: string]: unknown;
+            }[];
+        } & {
+            [key: string]: unknown;
         };
         /** AttachCourseMaterialsRequest */
         AttachCourseMaterialsRequest: {
@@ -2482,8 +2560,10 @@ export interface components {
              * @default
              */
             learning_goal: string;
+            /** Path Task Id */
+            path_task_id?: number | null;
             /** Resource Types */
-            resource_types: ("doc" | "mindmap" | "quiz" | "code" | "slide" | "animation")[];
+            resource_types: ("doc" | "mindmap" | "quiz" | "code" | "slide" | "animation" | "video")[];
             /** Source Resource Id */
             source_resource_id?: number | null;
         };
@@ -2565,6 +2645,35 @@ export interface components {
             /** Service */
             service: string;
             /** Status */
+            status: string;
+        };
+        /** LearningBundle */
+        LearningBundle: {
+            /** Items */
+            items?: components["schemas"]["LearningBundleItem"][];
+            /**
+             * Rationale
+             * @default
+             */
+            rationale: string;
+            /**
+             * Strategy
+             * @default
+             */
+            strategy: string;
+        };
+        /** LearningBundleItem */
+        LearningBundleItem: {
+            /** Resource Id */
+            resource_id?: string | null;
+            /** Resource Type */
+            resource_type: string;
+            /** Role */
+            role: string;
+            /**
+             * Status
+             * @default recommended
+             */
             status: string;
         };
         /** LearningDossierExport */
@@ -2688,6 +2797,7 @@ export interface components {
             id: string;
             /** Knowledge Point Id */
             knowledge_point_id: string | null;
+            learning_bundle: components["schemas"]["LearningBundle"];
             /** Path Id */
             path_id: string;
             /** Reason */
@@ -3782,10 +3892,7 @@ export interface components {
             personalization?: components["schemas"]["PersonalizationFreshnessResponse"] | null;
             /** Practice Session Id */
             practice_session_id: string | null;
-            /** Report */
-            report: {
-                [key: string]: unknown;
-            };
+            report: components["schemas"]["AssessmentReportContent"];
             /** Score */
             score: number | null;
             /** Status */
@@ -3798,6 +3905,58 @@ export interface components {
              * @default pptx
              */
             format: string;
+        };
+        /** ResourceInteractionRequest */
+        ResourceInteractionRequest: {
+            /** Event Id */
+            event_id: string;
+            /**
+             * Event Type
+             * @enum {string}
+             */
+            event_type: "opened" | "started" | "progress" | "completed" | "feedback";
+            /** Feedback */
+            feedback?: ("helpful" | "too_easy" | "too_hard" | "not_helpful") | null;
+            /** Path Task Id */
+            path_task_id?: number | null;
+            /** Progress Percent */
+            progress_percent?: number | null;
+        };
+        /** ResourceLearningStateResponse */
+        ResourceLearningStateResponse: {
+            /**
+             * Completed
+             * @default false
+             */
+            completed: boolean;
+            /**
+             * Event Count
+             * @default 0
+             */
+            event_count: number;
+            /** Feedback */
+            feedback?: ("helpful" | "too_easy" | "too_hard" | "not_helpful") | null;
+            /**
+             * Opened
+             * @default false
+             */
+            opened: boolean;
+            /** Path Task Id */
+            path_task_id?: string | null;
+            /**
+             * Progress Percent
+             * @default 0
+             */
+            progress_percent: number;
+            /** Resource Id */
+            resource_id: string;
+            /**
+             * Started
+             * @default false
+             */
+            started: boolean;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /** ResourceListEnvelope */
         ResourceListEnvelope: {
@@ -3826,6 +3985,44 @@ export interface components {
             score_name: string;
             /** Score Value */
             score_value: number;
+        };
+        /** ResourceUsageCounts */
+        ResourceUsageCounts: {
+            /**
+             * Completed
+             * @default 0
+             */
+            completed: number;
+            /**
+             * Helpful
+             * @default 0
+             */
+            helpful: number;
+            /**
+             * Not Helpful
+             * @default 0
+             */
+            not_helpful: number;
+            /**
+             * Opened
+             * @default 0
+             */
+            opened: number;
+            /**
+             * Started
+             * @default 0
+             */
+            started: number;
+            /**
+             * Too Easy
+             * @default 0
+             */
+            too_easy: number;
+            /**
+             * Too Hard
+             * @default 0
+             */
+            too_hard: number;
         };
         /** SaveModelConfigRequest */
         SaveModelConfigRequest: {
@@ -11027,6 +11224,220 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_ExportJobResponse_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    record_resource_interaction_api_v1_resources__resource_id__interactions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                resource_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceInteractionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_ResourceLearningStateResponse_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_resource_learning_state_api_v1_resources__resource_id__learning_state_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                resource_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_ResourceLearningStateResponse_"];
                 };
             };
             /** @description Bad Request */

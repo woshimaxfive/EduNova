@@ -9,7 +9,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint . --max-warnings=0",
     "openapi:generate": "python ../scripts/export_openapi.py && openapi-typescript ../backend/openapi.json -o src/types/openapi.generated.ts",
-    "openapi:check": "pnpm openapi:generate && git diff --exit-code -- ../backend/openapi.json src/types/openapi.generated.ts",
+    "openapi:check": "python ../scripts/check_openapi.py",
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run",
     "test:e2e": "playwright test"

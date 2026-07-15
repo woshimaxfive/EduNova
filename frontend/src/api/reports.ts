@@ -36,6 +36,18 @@ export type AssessmentReportContent = {
     source_type: string;
   }>;
   profile_changes: string[];
+  resource_usage_summary?: Partial<Record<
+    "doc" | "mindmap" | "quiz" | "code" | "slide" | "animation" | "video",
+    {
+      opened: number;
+      started: number;
+      completed: number;
+      helpful: number;
+      too_easy: number;
+      too_hard: number;
+      not_helpful: number;
+    }
+  >>;
   trend?: {
     direction: "improved" | "declined" | "stable" | "insufficient";
     score_delta: number;

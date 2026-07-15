@@ -133,6 +133,7 @@ class LearningTask(IdMixin, TimestampMixin, Base):
         nullable=False,
         default=list,
     )
+    learning_bundle_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     next_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -180,6 +181,28 @@ class GeneratedResource(IdMixin, TimestampMixin, Base):
     )
     version_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     generation_action: Mapped[str] = mapped_column(String(20), nullable=False, default="new")
+
+
+class ResourceInteraction(IdMixin, CreatedAtMixin, Base):
+    __tablename__ = "resource_interactions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "event_id", name="uq_resource_interactions_user_event"),
+        Index("ix_resource_interactions_user_resource", "user_id", "resource_id", "created_at"),
+        Index("ix_resource_interactions_course_type", "course_id", "event_type"),
+    )
+
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    course_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("courses.id", ondelete="CASCADE"), nullable=True)
+    resource_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("generated_resources.id", ondelete="CASCADE"), nullable=False
+    )
+    path_task_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("learning_tasks.id", ondelete="SET NULL"), nullable=True
+    )
+    event_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    progress_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    feedback: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
 
 class ResourceQualityScore(IdMixin, CreatedAtMixin, Base):

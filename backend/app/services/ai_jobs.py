@@ -14,7 +14,7 @@ from backend.app.core.config import Settings, get_settings
 from backend.app.core.errors import ConflictDomainError, NotFoundDomainError, ValidationDomainError
 from backend.app.core.observability import get_tracer
 from backend.app.db.session import SessionLocal
-from backend.app.models import AiJob, Course, GeneratedResource, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, ModelSetting, User
+from backend.app.models import AiJob, Course, GeneratedResource, KnowledgeChunk, KnowledgePoint, LearningTask, Material, MaterialChunk, ModelSetting, User
 from backend.app.schemas.ai_jobs import AiJobListResponse, AiJobResponse, ai_job_to_api, iso_timestamp
 
 
@@ -346,17 +346,24 @@ class AiJobService:
         difficulty: str,
         generation_action: str = "new",
         source_resource_id: int | None = None,
+        path_task_id: int | None = None,
         idempotency_key: str | None = None,
     ) -> AiJobResponse:
         if self.repository.get_course_for_user(user.id, course_id) is None:
             raise AiJobNotFoundError("课程不存在或无权访问。")
         if knowledge_point_id is not None and self.repository.get_knowledge_point(course_id, knowledge_point_id) is None:
             raise AiJobNotFoundError("知识点不存在或不属于当前课程。")
-        unique_types = [item for item in dict.fromkeys(resource_types) if item in {"doc", "mindmap", "quiz", "code", "slide", "animation"}]
+        unique_types = [item for item in dict.fromkeys(resource_types) if item in {"doc", "mindmap", "quiz", "code", "slide", "animation", "video"}]
         if not unique_types:
             raise AiJobValidationError("至少选择一种资源类型。")
         if difficulty not in {"easy", "medium", "hard"}:
             raise AiJobValidationError("不支持的资源难度。")
+        if path_task_id is not None:
+            task = self.repository.db.scalar(
+                select(LearningTask).where(LearningTask.id == path_task_id, LearningTask.user_id == user.id)
+            )
+            if task is None or task.course_id != course_id:
+                raise AiJobNotFoundError("学习路径任务不存在或无权访问。")
         if generation_action not in {"new", "alternative", "refine"}:
             raise AiJobValidationError("不支持的资源生成动作。")
         source_resource = None
@@ -395,6 +402,7 @@ class AiJobService:
                 "difficulty": difficulty,
                 "generation_action": generation_action,
                 "source_resource_id": source_resource_id,
+                "path_task_id": path_task_id,
             },
             idempotency_key=idempotency_key,
         )
@@ -818,6 +826,7 @@ class AiJobService:
             difficulty=str(request.get("difficulty") or "medium"),
             generation_action=str(request.get("generation_action") or "new"),
             source_resource=source_resource,
+            path_task_id=(int(request["path_task_id"]) if request.get("path_task_id") is not None else None),
             trace_id=job.agent_trace_id,
             job_context=context,
         )

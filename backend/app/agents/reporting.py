@@ -210,6 +210,7 @@ class ReportGraphRunner:
             }
             learner_context = state.get("learner_context")
             if learner_context is not None:
+                report["resource_usage_summary"] = learner_context.resource_feedback_summary
                 report["profile_changes"] = [
                     f"报告应用画像版本 {learner_context.global_context.profile_applied_version}，"
                     f"参考 {len(learner_context.global_context.trusted_dimensions)} 个可信维度。"

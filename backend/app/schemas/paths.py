@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.app.models import GeneratedResource, LearningPath, LearningTask
 from backend.app.schemas.personalization import PersonalizationFreshnessResponse
@@ -27,6 +27,19 @@ class PathResourceBrief(BaseModel):
     resource_type: str
 
 
+class LearningBundleItem(BaseModel):
+    resource_type: str
+    role: str
+    resource_id: str | None = None
+    status: str = "recommended"
+
+
+class LearningBundle(BaseModel):
+    strategy: str = ""
+    rationale: str = ""
+    items: list[LearningBundleItem] = Field(default_factory=list)
+
+
 class LearningPathTaskResponse(BaseModel):
     id: str
     path_id: str
@@ -37,6 +50,7 @@ class LearningPathTaskResponse(BaseModel):
     reason: str | None
     recommended_resource_ids: list[str]
     recommended_resources: list[PathResourceBrief]
+    learning_bundle: LearningBundle
     status: str
     created_at: str
     updated_at: str
@@ -109,6 +123,18 @@ def path_to_api(
 
 def task_to_api(task: LearningTask, resources_by_id: dict[int, GeneratedResource]) -> LearningPathTaskResponse:
     resource_ids = [int(item) for item in (task.recommended_resource_ids or []) if str(item).isdigit()]
+    raw_bundle = task.learning_bundle_json or {}
+    bundle_items = []
+    for item in raw_bundle.get("items", []) if isinstance(raw_bundle.get("items"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        resource_id = item.get("resource_id")
+        bundle_items.append(LearningBundleItem(
+            resource_type=str(item.get("resource_type") or "doc"),
+            role=str(item.get("role") or "辅助当前学习目标"),
+            resource_id=str(resource_id) if resource_id is not None else None,
+            status=str(item.get("status") or ("available" if resource_id is not None else "recommended")),
+        ))
     return LearningPathTaskResponse(
         id=str(task.id),
         path_id=str(task.path_id),
@@ -119,6 +145,11 @@ def task_to_api(task: LearningTask, resources_by_id: dict[int, GeneratedResource
         reason=task.reason,
         recommended_resource_ids=[str(resource_id) for resource_id in resource_ids],
         recommended_resources=[resource_brief(resources_by_id[resource_id]) for resource_id in resource_ids if resource_id in resources_by_id],
+        learning_bundle=LearningBundle(
+            strategy=str(raw_bundle.get("strategy") or ""),
+            rationale=str(raw_bundle.get("rationale") or ""),
+            items=bundle_items,
+        ),
         status=task.status,
         created_at=iso_timestamp(task.created_at) or "",
         updated_at=iso_timestamp(task.updated_at) or "",

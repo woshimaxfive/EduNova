@@ -16,6 +16,7 @@ RESOURCE_ROLES = {
     "code": "通过可运行实验验证知识过程与结果",
     "slide": "组织一段完整、可讲授的学习过程",
     "animation": "呈现状态、流程或关系随步骤发生的变化",
+    "video": "补充可信平台上的外部教学讲解",
 }
 
 BASE_STRATEGIES = {
@@ -25,6 +26,7 @@ BASE_STRATEGIES = {
     "code": "executable_experiment",
     "slide": "guided_lesson",
     "animation": "process_visualization",
+    "video": "curated_external_explanation",
 }
 
 ALTERNATIVE_STRATEGIES = {
@@ -34,6 +36,7 @@ ALTERNATIVE_STRATEGIES = {
     "code": ("boundary_experiment", "step_trace", "comparison_experiment"),
     "slide": ("case_led_lesson", "question_led_lesson", "review_workshop"),
     "animation": ("state_transition", "cause_effect_sequence", "error_correction_sequence"),
+    "video": ("concept_walkthrough", "worked_example_video", "review_video"),
 }
 
 ALLOWED_TEACHING_STRATEGIES = frozenset(BASE_STRATEGIES.values()) | frozenset(
@@ -47,6 +50,7 @@ COGNITIVE_LEVELS = {
     "code": ("apply", "create"),
     "slide": ("understand", "apply"),
     "animation": ("understand", "analyze"),
+    "video": ("understand", "apply"),
 }
 
 INTERACTION_STRUCTURES = {
@@ -56,6 +60,7 @@ INTERACTION_STRUCTURES = {
     "code": ("观察输出-修改参数-验证结论", "逐步跟踪-边界测试-结果解释"),
     "slide": ("目标-讲解-示例-练习-总结", "问题-证据-推导-讨论-行动"),
     "animation": ("状态变化-原因-结果-回看", "输入-步骤-关键转折-输出"),
+    "video": ("观看目标-关键片段-自检问题", "问题-讲解-例子-迁移"),
 }
 
 CASE_DIRECTIONS = (
@@ -94,6 +99,10 @@ STRATEGY_LABELS = {
     "state_transition": "按状态变化解释过程",
     "cause_effect_sequence": "按因果顺序解释变化",
     "error_correction_sequence": "通过纠错过程展示变化",
+    "curated_external_explanation": "精选外部教学讲解",
+    "concept_walkthrough": "跟随讲解理解概念",
+    "worked_example_video": "通过视频案例完成迁移",
+    "review_video": "通过视频复习关键结论",
 }
 
 
@@ -376,6 +385,7 @@ def _success_criteria(resource_type: str, topic: str) -> tuple[str, ...]:
         "code": "能够运行、修改并解释输出为何符合知识规律",
         "slide": "能够按页面顺序完成一次结构化复述",
         "animation": "能够描述每个场景的状态变化与因果关系",
+        "video": "能够说明视频讲解与当前知识点的关联并完成自检",
     }
     return common, specific[resource_type]
 
@@ -387,6 +397,7 @@ def _learner_factors(profile_summary: dict[str, Any]) -> list[str]:
         ("cognitive_style", "更容易理解知识的方式"),
         ("learning_pace", "可持续的学习节奏"),
         ("motivation_interest", "当前学习动力与兴趣"),
+        ("major_background", "专业背景"),
     )
     for key, label in mapping:
         if _clean(profile_summary.get(key)):

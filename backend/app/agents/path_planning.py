@@ -8,7 +8,7 @@ from langgraph.graph import END, START, StateGraph
 
 from backend.app.agents.learning_review import contains_sensitive_text, parse_json_object, review_contract, safe_text
 from backend.app.api.errors import make_trace_id
-from backend.app.models import LearningPath, LearningTask, User
+from backend.app.models import GeneratedResource, LearningPath, LearningTask, User
 from backend.app.schemas.profiles import normalize_profile_json
 from backend.app.services.paths import PathReplanResult, PathService, PlannedTask
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
@@ -316,6 +316,7 @@ class PathPlanningGraphRunner:
                             else "legacy"
                         ),
                         "personalization": {
+                            "major_background": safe_text(profile.get("major_background"), limit=80),
                             "learning_preference": safe_text(profile.get("learning_preference"), limit=80),
                             "knowledge_foundation": safe_text(profile.get("knowledge_foundation"), limit=80),
                         },
@@ -344,6 +345,7 @@ class PathPlanningGraphRunner:
                         task_type=planned.task_type,
                         reason=planned.reason,
                         recommended_resource_ids=planned.resource_ids,
+                        learning_bundle_json=self._learning_bundle(planned, resources, profile),
                         status=planned.status,
                     )
                 )
@@ -426,6 +428,7 @@ class PathPlanningGraphRunner:
                         "role": "user",
                         "content": (
                             f"{instruction} 画像目标={safe_text(state.get('profile_summary', {}).get('learning_goal'), limit=120)}；"
+                            f"专业背景={safe_text(state.get('profile_summary', {}).get('major_background'), limit=120)}；"
                             f"学习基础={safe_text(state.get('profile_summary', {}).get('knowledge_foundation'), limit=120)}；"
                             f"学习偏好={safe_text(state.get('profile_summary', {}).get('learning_preference'), limit=120)}；"
                             f"理解习惯={safe_text(state.get('profile_summary', {}).get('cognitive_style'), limit=120)}；"
@@ -546,6 +549,42 @@ class PathPlanningGraphRunner:
                 reason = f"{reason}；学习偏好将由规划模型结合真实资源判断：{preference}"
             personalized.append(replace(task, resource_ids=sorted(task.resource_ids), reason=reason))
         return personalized
+
+    @staticmethod
+    def _learning_bundle(
+        task: PlannedTask,
+        resources: list[GeneratedResource],
+        profile: dict[str, Any],
+    ) -> dict[str, Any]:
+        resources_by_id = {resource.id: resource for resource in resources if resource.status == "completed"}
+        items = [
+            {
+                "resource_type": resources_by_id[resource_id].resource_type,
+                "resource_id": resource_id,
+                "role": "按当前路径顺序完成该学习资源",
+                "status": "available",
+            }
+            for resource_id in task.resource_ids
+            if resource_id in resources_by_id
+        ]
+        existing_types = {str(item["resource_type"]) for item in items}
+        for resource_type, role in (
+            ("doc", "建立证据型概念框架"),
+            ("video", "使用外部视频形成直观理解"),
+            ("quiz", "检查本知识点是否掌握"),
+        ):
+            if resource_type not in existing_types:
+                items.append({"resource_type": resource_type, "resource_id": None, "role": role, "status": "recommended"})
+        factors = [
+            str(profile.get(key) or "").strip()
+            for key in ("major_background", "knowledge_foundation", "learning_preference", "cognitive_style")
+            if str(profile.get(key) or "").strip()
+        ]
+        return {
+            "strategy": "证据讲解、直观理解与掌握检查相结合",
+            "rationale": f"结合当前课程进度与{len(factors)}项可信个性化因素安排。",
+            "items": items[:7],
+        }
 
     @staticmethod
     def _task_key(task: PlannedTask) -> str:

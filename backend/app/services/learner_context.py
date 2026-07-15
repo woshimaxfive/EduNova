@@ -19,6 +19,7 @@ from backend.app.models import (
     PracticeAnswer,
     PracticeSession,
     ProfileEvent,
+    ResourceInteraction,
     StudentProfile,
     WeaknessReviewItem,
 )
@@ -67,6 +68,7 @@ class CourseLearnerContext:
     current_task_title: str | None
     recent_practice_score: int | None
     resource_types: tuple[str, ...]
+    resource_feedback_summary: dict[str, dict[str, int]]
     report_ready: bool
     context_hash: str
 
@@ -81,18 +83,34 @@ class CourseLearnerContext:
             "weak_points": list(self.active_weaknesses),
             "mastery_average": self.mastery_average,
             "current_task_title": self.current_task_title,
+            "major_background": global_context.trusted_value("major_background"),
             "learning_preference": global_context.advisory_value("learning_preference"),
             "cognitive_style": global_context.advisory_value("cognitive_style"),
             "learning_pace": global_context.advisory_value("learning_pace"),
             "motivation_interest": global_context.advisory_value("motivation_interest"),
+            "resource_feedback": self.resource_feedback_summary,
         }
 
     def trace_metadata(self) -> dict[str, Any]:
+        summary = self.prompt_summary()
+        factor_codes = [
+            key
+            for key in ("major_background", "knowledge_foundation", "learning_goal", "learning_preference", "cognitive_style", "learning_pace", "motivation_interest")
+            if summary.get(key)
+        ]
+        if self.active_weaknesses:
+            factor_codes.append("confirmed_weaknesses")
+        if self.mastery_average is not None:
+            factor_codes.append("course_mastery")
+        if self.resource_feedback_summary:
+            factor_codes.append("resource_feedback")
         return {
             **self.global_context.trace_metadata(),
             "course_context_hash": self.context_hash,
             "course_weakness_count": len(self.active_weaknesses),
             "mastery_average": self.mastery_average,
+            "resource_feedback_type_count": len(self.resource_feedback_summary),
+            "personalization_factors": factor_codes,
         }
 
 
@@ -224,6 +242,21 @@ class LearnerContextService:
                 ).order_by(GeneratedResource.updated_at.desc())
             )
         ))
+        feedback_rows = list(
+            self.db.execute(
+                select(GeneratedResource.resource_type, ResourceInteraction.event_type, ResourceInteraction.feedback)
+                .join(GeneratedResource, GeneratedResource.id == ResourceInteraction.resource_id)
+                .where(
+                    ResourceInteraction.user_id == user_id,
+                    ResourceInteraction.course_id == course_id,
+                )
+            )
+        )
+        resource_feedback_summary: dict[str, dict[str, int]] = {}
+        for resource_type, event_type, feedback in feedback_rows:
+            bucket = resource_feedback_summary.setdefault(str(resource_type), {})
+            key = str(feedback or event_type)
+            bucket[key] = bucket.get(key, 0) + 1
         report_ready = self.db.scalar(
             select(AssessmentReport.id).where(
                 AssessmentReport.user_id == user_id,
@@ -246,6 +279,7 @@ class LearnerContextService:
             "mastery_average": mastery_average,
             "current_task": current_task.title if current_task is not None else None,
             "resource_types": list(resource_types),
+            "resource_feedback": resource_feedback_summary,
             "report_ready": report_ready,
         }
         context_hash = hashlib.sha256(
@@ -263,6 +297,7 @@ class LearnerContextService:
             current_task_title=current_task.title if current_task is not None else None,
             recent_practice_score=scores[0] if scores else None,
             resource_types=resource_types,
+            resource_feedback_summary=resource_feedback_summary,
             report_ready=report_ready,
             context_hash=context_hash,
         )

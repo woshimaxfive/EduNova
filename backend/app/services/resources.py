@@ -24,6 +24,7 @@ from backend.app.models import (
     GeneratedResource,
     KnowledgeChunk,
     KnowledgePoint,
+    LearningTask,
     ResourceQualityScore,
     StudentProfile,
     User,
@@ -67,9 +68,10 @@ from backend.app.services.resource_intent import (
     safe_history_summary,
 )
 from backend.app.services.structured_output import parse_json_object
+from backend.app.services.video_resources import VideoCurationService
 
 
-RESOURCE_TYPES = ("doc", "mindmap", "quiz", "code", "slide", "animation")
+RESOURCE_TYPES = ("doc", "mindmap", "quiz", "code", "slide", "animation", "video")
 QUALITY_SCORE_NAMES = (
     "source_match",
     "profile_fit",
@@ -123,6 +125,7 @@ class ResourceGenerationState(AgentState, total=False):
     historical_resources: list[GeneratedResource]
     artifact_intents: dict[str, dict[str, Any]]
     generation_batch_id: str
+    path_task_id: int | None
 
 
 class ResourceModelService(Protocol):
@@ -139,6 +142,8 @@ class ResourceRepository(Protocol):
     def list_course_chunks(self, course_id: int, knowledge_point_id: int | None = None) -> list[KnowledgeChunk]: ...
 
     def get_profile(self, user_id: int) -> StudentProfile | None: ...
+
+    def get_learning_task_for_user(self, user_id: int, task_id: int) -> LearningTask | None: ...
 
     def add_resource(self, resource: GeneratedResource) -> GeneratedResource: ...
 
@@ -207,6 +212,9 @@ class SqlAlchemyResourceRepository:
 
     def get_profile(self, user_id: int) -> StudentProfile | None:
         return self.db.scalar(select(StudentProfile).where(StudentProfile.user_id == user_id))
+
+    def get_learning_task_for_user(self, user_id: int, task_id: int) -> LearningTask | None:
+        return self.db.scalar(select(LearningTask).where(LearningTask.id == task_id, LearningTask.user_id == user_id))
 
     def add_resource(self, resource: GeneratedResource) -> GeneratedResource:
         self.db.add(resource)
@@ -331,11 +339,13 @@ class ResourceGenerationService:
         model_settings_service: ResourceModelService,
         trace_recorder: AgentTraceRecorder | None = None,
         code_verifier: CodeVerifier | None = None,
+        video_curator: VideoCurationService | None = None,
     ) -> None:
         self.repository = repository
         self.model_settings_service = model_settings_service
         self.trace_recorder = trace_recorder or AgentTraceRecorder(repository_add_log=repository.add_agent_log)
         self.code_verifier = code_verifier
+        self.video_curator = video_curator or VideoCurationService()
 
     def generate_resources(
         self,
@@ -348,6 +358,7 @@ class ResourceGenerationService:
         difficulty: str = "medium",
         generation_action: GenerationAction = "new",
         source_resource_id: int | None = None,
+        path_task_id: int | None = None,
     ) -> GenerateResourcesResult:
         course = self._require_course(user, course_id)
         unique_types = self._normalize_resource_types(resource_types)
@@ -370,6 +381,10 @@ class ResourceGenerationService:
             source_difficulty = str(source_metadata.get("difficulty") or difficulty)
             difficulty = source_difficulty if source_difficulty in {"easy", "medium", "hard"} else difficulty
         knowledge_point = self._resolve_knowledge_point(course.id, knowledge_point_id)
+        if path_task_id is not None:
+            task = self.repository.get_learning_task_for_user(user.id, path_task_id)
+            if task is None or task.course_id != course.id:
+                raise ResourceNotFoundError("学习路径任务不存在或无权访问。")
 
         return ResourceGenerationGraphRunner(self).generate(
             user=user,
@@ -380,6 +395,7 @@ class ResourceGenerationService:
             difficulty=difficulty,
             generation_action=generation_action,
             source_resource=source_resource,
+            path_task_id=path_task_id,
         )
 
     def _resolve_source_resource(
@@ -476,8 +492,8 @@ class ResourceGenerationService:
         invalid_types = [resource_type for resource_type in unique_types if resource_type not in RESOURCE_TYPES]
         if invalid_types:
             raise ResourceValidationError("不支持的资源类型。")
-        if len(unique_types) > 6:
-            raise ResourceValidationError("一次最多生成 6 类资源。")
+        if len(unique_types) > 7:
+            raise ResourceValidationError("一次最多生成 7 类资源。")
         return unique_types
 
     @staticmethod
@@ -1494,6 +1510,7 @@ class ResourceGenerationGraphRunner:
         "code": "CodeWorker",
         "slide": "SlideWorker",
         "animation": "AnimationWorker",
+        "video": "VideoCuratorWorker",
     }
     job_progress = {
         "profile": (8, "已读取学习画像"),
@@ -1521,6 +1538,7 @@ class ResourceGenerationGraphRunner:
         difficulty: str,
         generation_action: GenerationAction = "new",
         source_resource: GeneratedResource | None = None,
+        path_task_id: int | None = None,
         trace_id: str | None = None,
         job_context: Any | None = None,
     ) -> GenerateResourcesResult:
@@ -1541,6 +1559,7 @@ class ResourceGenerationGraphRunner:
             "generation_action": generation_action,
             "source_resource": source_resource,
             "generation_batch_id": uuid4().hex,
+            "path_task_id": path_task_id,
             "worker_results": [],
             "warnings": [],
             "errors": [],
@@ -1866,6 +1885,35 @@ class ResourceGenerationGraphRunner:
             contexts = list(state.get("contexts", []))
             profile_summary = dict(state.get("profile_summary", {}))
             artifact_intent = dict(state.get("artifact_intents", {}).get(resource_type, {}))
+            if resource_type == "video":
+                topic = knowledge_point.title if knowledge_point is not None else course.title
+                curated = self.service.video_curator.curate(topic=topic, profile_summary=profile_summary)
+                fit_reason = str(artifact_intent.get("learning_need") or f"补充“{topic}”的外部讲解")[:240]
+                artifact = curated.artifact(topic=topic, fit_reason=fit_reason)
+                markdown = f"# {curated.title}\n\n外部教学视频（{curated.platform}）：[{curated.title}]({curated.watch_url})\n\n{fit_reason}"
+                source = ArtifactBuildInput(
+                    resource_type="video", topic=topic, course_title=course.title,
+                    difficulty=str(state.get("difficulty") or "medium"), citation_lines=[], excerpt_lines=[],
+                    weak_points="", profile_goal="", foundation="", learning_preference="", citation_refs=[],
+                )
+                content_json = {
+                    "schema_version": 3, "format": "rich", "topic": topic, "course_title": course.title,
+                    "summary": curated.snippet or fit_reason, "learning_objectives": ["观看后说明讲解与当前知识点的关联"],
+                    "markdown": markdown, "artifact": artifact, "citation_summaries": [],
+                    "intent": artifact_intent, "personalization_summary": personalization_summary(artifact_intent),
+                    "diversity": {"status": "passed", "score": 1.0, "risk_flags": []},
+                    "quality": {"status": "passed", "risk_flags": [], "prompt_version": RESOURCE_PROMPT_VERSION,
+                                "source_coverage": 0.0, "model_delta": False, "dimensions": {}},
+                    "metadata": {"generation_mode": "curated_external", "external_supplement": True},
+                    "external_citations": [curated.citation()],
+                }
+                draft = ResourceDraft(title=curated.title, markdown=markdown, content_json=content_json, source=source)
+                return {"worker_results": [{
+                    "status": "completed", "resource_type": "video", "draft": draft, "markdown": markdown,
+                    "content_json": content_json, "generation_mode": "curated_external", "model_failed": False,
+                    "warnings": [], "comparison_contents": [], "source_content": None, "source_intent": None,
+                    "artifact_intent": artifact_intent,
+                }]}
             source_resource = state.get("source_resource")
             source_content = (
                 source_resource.content_json
@@ -2192,7 +2240,7 @@ class ResourceGenerationGraphRunner:
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name="review")):
             model_reviews, review_model_failed = self.service._review_resources_with_model(
                 user=state["user"],
-                payloads=payloads,
+                payloads=[payload for payload in payloads if payload.get("resource_type") != "video"],
                 contexts=contexts,
                 learning_goal=str(state.get("learning_goal") or ""),
                 history_summaries=list(dict(state.get("resource_plan", {})).get("history") or []),
@@ -2204,12 +2252,14 @@ class ResourceGenerationGraphRunner:
         for payload in payloads:
             resource_type = str(payload["resource_type"])
             quality = payload["content_json"].get("quality")
-            deterministic_risks = list(quality.get("risk_flags", [])) if isinstance(quality, dict) else validate_resource_content(resource_type, payload["content_json"])
+            deterministic_risks = validate_resource_content(resource_type, payload["content_json"])
+            if isinstance(quality, dict):
+                deterministic_risks = list(dict.fromkeys([*deterministic_risks, *quality.get("risk_flags", [])]))
             model_review = model_reviews.get(resource_type)
             model_risks = list(model_review.get("risk_flags", [])) if model_review else []
             risk_flags = list(dict.fromkeys([*deterministic_risks, *model_risks]))
             model_rejected = model_review is not None and model_review.get("status") == "failed"
-            review_status = "failed" if risk_flags or model_rejected else "low_evidence" if not contexts else "passed"
+            review_status = "failed" if risk_flags or model_rejected else "passed" if resource_type == "video" else "low_evidence" if not contexts else "passed"
             review_mode = "model_and_rules" if model_review is not None else "rules_only"
             if review_status == "failed":
                 needs_repair = True
@@ -2484,7 +2534,11 @@ class ResourceGenerationGraphRunner:
                     title=draft.title,
                     agent_trace_id=trace_id,
                     content_json=content_json,
-                    citation_json=[citation.to_json() for citation in citations],
+                    citation_json=(
+                        list(content_json.get("external_citations") or [])
+                        if payload["resource_type"] == "video"
+                        else [citation.to_json() for citation in citations]
+                    ),
                     status="completed",
                     review_status=payload["review_status"],
                     confidence_score=payload["confidence"],
@@ -2509,6 +2563,23 @@ class ResourceGenerationGraphRunner:
             quality_scores[str(resource.id)] = [
                 quality_score_to_api(self.service.repository.add_quality_score(score)) for score in scores
             ]
+
+        path_task_id = state.get("path_task_id")
+        if path_task_id is not None and resources:
+            task = self.service.repository.get_learning_task_for_user(int(state["user_id"]), int(path_task_id))
+            if task is None or task.course_id != course.id:
+                raise ResourceNotFoundError("学习路径任务不存在或无权访问。")
+            resource_ids = list(dict.fromkeys([*list(task.recommended_resource_ids or []), *[item.id for item in resources]]))
+            task.recommended_resource_ids = resource_ids
+            bundle = dict(task.learning_bundle_json or {})
+            bundle_items = list(bundle.get("items") or [])
+            by_type = {item.resource_type: item for item in resources}
+            for item in bundle_items:
+                generated = by_type.get(str(item.get("resource_type") or "")) if isinstance(item, dict) else None
+                if generated is not None:
+                    item["resource_id"] = generated.id
+                    item["status"] = "ready"
+            task.learning_bundle_json = {**bundle, "items": bundle_items}
 
         return {"resource_objects": resources, "quality_scores": quality_scores}
 

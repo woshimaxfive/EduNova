@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.app.models import AgentRunLog
 
@@ -21,6 +21,7 @@ SAFE_AGENT_METADATA_KEYS = {
     "error_code",
     "generation_mode",
     "reasoning_mode",
+    "search_backend",
     "embedding_status",
     "embedding_call_count",
     "embedding_dimension",
@@ -70,6 +71,9 @@ SAFE_AGENT_METADATA_KEYS = {
     "profile_context_used",
     "course_context_hash",
     "course_weakness_count",
+    "resource_feedback_type_count",
+    "personalization_factors",
+    "personalization_summary",
     "mastery_average",
     "scored_dimension_count",
     "source_factor",
@@ -118,6 +122,7 @@ class AgentTraceResponse(BaseModel):
     course_id: str | None
     status: str
     steps: list[AgentTraceStep]
+    summary: dict[str, Any] = Field(default_factory=dict)
 
 
 def iso_timestamp(value: datetime | None) -> str:

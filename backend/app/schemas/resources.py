@@ -10,7 +10,7 @@ from backend.app.models import GeneratedResource, ResourceQualityScore
 from backend.app.schemas.personalization import PersonalizationFreshnessResponse
 
 
-ResourceType = Literal["doc", "mindmap", "quiz", "code", "slide", "animation"]
+ResourceType = Literal["doc", "mindmap", "quiz", "code", "slide", "animation", "video"]
 ResourceDifficulty = Literal["easy", "medium", "hard"]
 ResourceGenerationAction = Literal["new", "alternative", "refine"]
 
@@ -23,6 +23,7 @@ class GenerateResourcesRequest(BaseModel):
     difficulty: ResourceDifficulty = "medium"
     generation_action: ResourceGenerationAction = "new"
     source_resource_id: int | None = None
+    path_task_id: int | None = None
 
     @field_validator("learning_goal")
     @classmethod
@@ -84,6 +85,40 @@ class ResourceListResponse(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+ResourceInteractionType = Literal["opened", "started", "progress", "completed", "feedback"]
+ResourceFeedback = Literal["helpful", "too_easy", "too_hard", "not_helpful"]
+
+
+class ResourceInteractionRequest(BaseModel):
+    event_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    event_type: ResourceInteractionType
+    path_task_id: int | None = None
+    progress_percent: int | None = Field(default=None, ge=0, le=100)
+    feedback: ResourceFeedback | None = None
+
+    @model_validator(mode="after")
+    def validate_event_payload(self) -> ResourceInteractionRequest:
+        if self.event_type == "progress" and self.progress_percent is None:
+            raise ValueError("进度事件必须提供 progress_percent。")
+        if self.event_type == "feedback" and self.feedback is None:
+            raise ValueError("反馈事件必须提供 feedback。")
+        if self.event_type != "feedback" and self.feedback is not None:
+            raise ValueError("只有反馈事件可以提供 feedback。")
+        return self
+
+
+class ResourceLearningStateResponse(BaseModel):
+    resource_id: str
+    path_task_id: str | None = None
+    opened: bool = False
+    started: bool = False
+    completed: bool = False
+    progress_percent: int = 0
+    feedback: ResourceFeedback | None = None
+    event_count: int = 0
+    updated_at: str | None = None
 
 
 def iso_timestamp(value: datetime | None) -> str:

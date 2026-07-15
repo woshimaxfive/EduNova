@@ -12,7 +12,7 @@ from backend.app.db.session import get_db_session
 from backend.app.models import User
 from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.exports import ResourceExportJobRequest
-from backend.app.schemas.resources import GenerateResourcesRequest
+from backend.app.schemas.resources import GenerateResourcesRequest, ResourceInteractionRequest
 from backend.app.services.exports import (
     ExportNotFoundError,
     ExportService,
@@ -30,6 +30,11 @@ from backend.app.services.resources import (
     SqlAlchemyResourceRepository,
 )
 from backend.app.services.ai_jobs import AiJobService
+from backend.app.services.resource_interactions import (
+    ResourceInteractionNotFoundError,
+    ResourceInteractionService,
+    ResourceInteractionValidationError,
+)
 
 
 router = APIRouter(prefix="/resources", tags=["resources"])
@@ -59,6 +64,10 @@ def get_resource_export_service(db=Depends(get_db_session)) -> ExportService:
     )
 
 
+def get_resource_interaction_service(db=Depends(get_db_session)) -> ResourceInteractionService:
+    return ResourceInteractionService(db)
+
+
 @router.post("/generate")
 def generate_resources(
     payload: GenerateResourcesRequest,
@@ -75,6 +84,7 @@ def generate_resources(
             difficulty=payload.difficulty,
             generation_action=payload.generation_action,
             source_resource_id=payload.source_resource_id,
+            path_task_id=payload.path_task_id,
         )
     except ResourceNotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
@@ -102,6 +112,7 @@ def create_resource_generation_job(
         difficulty=payload.difficulty,
         generation_action=payload.generation_action,
         source_resource_id=payload.source_resource_id,
+        path_task_id=payload.path_task_id,
         idempotency_key=idempotency_key,
     )
     return api_response(result.model_dump(mode="json"))
@@ -177,3 +188,30 @@ def list_resource_export_jobs(
     except ExportNotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
     return api_response([job.model_dump() for job in jobs])
+
+
+@router.post("/{resource_id}/interactions")
+def record_resource_interaction(
+    resource_id: int,
+    payload: ResourceInteractionRequest,
+    current_user: User = Depends(get_current_user),
+    service: ResourceInteractionService = Depends(get_resource_interaction_service),
+) -> dict:
+    try:
+        return api_response(service.record(current_user, resource_id, payload).model_dump())
+    except ResourceInteractionNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+    except ResourceInteractionValidationError as exc:
+        raise ApiError(400, "VALIDATION_ERROR", str(exc)) from exc
+
+
+@router.get("/{resource_id}/learning-state")
+def get_resource_learning_state(
+    resource_id: int,
+    current_user: User = Depends(get_current_user),
+    service: ResourceInteractionService = Depends(get_resource_interaction_service),
+) -> dict:
+    try:
+        return api_response(service.state(current_user, resource_id).model_dump())
+    except ResourceInteractionNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc

@@ -72,6 +72,18 @@ class AgentTraceService:
         workflow = self._first_metadata_value(logs, "workflow")
         artifact_type = self._first_metadata_value(logs, "artifact_type")
         artifact_id = self._first_metadata_value(logs, "artifact_id")
+        total_duration = sum(int(log.duration_ms or 0) for log in logs)
+        summary = {
+            "duration_ms": total_duration,
+            "course_source_count": int(self._last_metadata_value(logs, "course_citation_count") or 0),
+            "web_source_count": int(self._last_metadata_value(logs, "web_citation_count") or 0),
+            "history_source_count": int(self._last_metadata_value(logs, "context_message_count") or 0),
+            "reasoning_mode": self._last_metadata_value(logs, "reasoning_mode") or "auto",
+            "search_backend": self._last_metadata_value(logs, "search_backend") or "none",
+            "review_status": self._last_metadata_value(logs, "review_status"),
+            "safety_summary": self._last_metadata_value(logs, "safety_summary"),
+            "personalization_factors": self._last_metadata_value(logs, "personalization_factors") or [],
+        }
         return AgentTraceResponse(
             trace_id=trace_id,
             workflow=str(workflow) if workflow is not None else None,
@@ -80,13 +92,22 @@ class AgentTraceService:
             course_id=str(course_id) if course_id is not None else None,
             status=self._derive_trace_status(logs),
             steps=steps,
+            summary=summary,
         )
 
     @staticmethod
     def _first_metadata_value(logs: list[AgentRunLog], key: str) -> object | None:
         for log in logs:
             metadata = log.metadata_json or {}
-            if key in metadata and metadata[key] not in {"", None}:
+            if key in metadata and metadata[key] is not None and metadata[key] != "":
+                return metadata[key]
+        return None
+
+    @staticmethod
+    def _last_metadata_value(logs: list[AgentRunLog], key: str) -> object | None:
+        for log in reversed(logs):
+            metadata = log.metadata_json or {}
+            if key in metadata and metadata[key] is not None and metadata[key] != "":
                 return metadata[key]
         return None
 

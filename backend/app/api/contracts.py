@@ -40,6 +40,7 @@ from backend.app.schemas.resources import (
     GeneratedResourceResponse,
     GenerateResourcesResult,
     ResourceQualityScoreResponse,
+    ResourceLearningStateResponse,
 )
 from backend.app.schemas.tutor import (
     DeleteTutorSessionResponse,
@@ -180,6 +181,8 @@ RESPONSE_MODELS: dict[str, Any] = {
     "get_resource_quality": ApiEnvelope[list[ResourceQualityScoreResponse]],
     "create_resource_export_job": ApiEnvelope[ExportJobResponse],
     "list_resource_export_jobs": ApiEnvelope[list[ExportJobResponse]],
+    "record_resource_interaction": ApiEnvelope[ResourceLearningStateResponse],
+    "get_resource_learning_state": ApiEnvelope[ResourceLearningStateResponse],
     "get_model_settings": ApiEnvelope[ModelSettingsSummary],
     "save_model_settings": ApiEnvelope[ModelSettingsSummary],
     "list_model_configs": ApiEnvelope[ModelSettingsListResponse],

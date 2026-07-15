@@ -11,6 +11,7 @@ ARTIFACT_KINDS = {
     "code": "code_lab",
     "slide": "slide_deck",
     "animation": "animation",
+    "video": "external_video",
 }
 
 FORBIDDEN_CODE_MARKERS = (
@@ -76,9 +77,20 @@ def validate_resource_content(resource_type: str, content: dict[str, Any]) -> li
         "code": _validate_code,
         "slide": _validate_slides,
         "animation": _validate_animation,
+        "video": _validate_external_video,
     }
     risks.extend(validators.get(resource_type, lambda _artifact: ["unsupported_resource_type"])(artifact))
     return list(dict.fromkeys(risks))
+
+
+def _validate_external_video(artifact: dict[str, Any]) -> list[str]:
+    if artifact.get("platform") not in {"youtube", "bilibili"}:
+        return ["invalid_video_platform"]
+    if not str(artifact.get("video_id") or "").strip() or not str(artifact.get("watch_url") or "").startswith("https://"):
+        return ["invalid_video_url"]
+    if artifact.get("external_supplement") is not True:
+        return ["invalid_video_evidence_role"]
+    return []
 
 
 def artifact_to_markdown(resource_type: str, artifact: dict[str, Any], source: ArtifactBuildInput) -> str:

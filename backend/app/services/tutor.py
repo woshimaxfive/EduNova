@@ -1699,55 +1699,50 @@ class HomeTutorGraphRunner:
         )
 
     def _route_node(self, state: AgentState) -> dict[str, Any]:
-        message = str(state["message_text"])
-        decision = self.service._semantic_decision(
-            user=state["user"],
-            session=state["session"],
-            question=message,
-            force_search=bool(state.get("use_web_search")),
-            force_deep=bool(state.get("deep_thinking")),
-        )
-        requires_fresh_info = decision.intent in {"current_information", "verification"}
-        if state.get("selected_material_ids"):
-            intent = "material_question"
-        elif requires_fresh_info:
-            intent = decision.intent
-        else:
-            intent = decision.intent
-        warnings = list(state.get("warnings", []))
-        if decision.warning and decision.warning not in warnings:
-            warnings.append(decision.warning)
+        def work():
+            message = str(state["message_text"])
+            decision = self.service._semantic_decision(
+                user=state["user"],
+                session=state["session"],
+                question=message,
+                force_search=bool(state.get("use_web_search")),
+                force_deep=bool(state.get("deep_thinking")),
+            )
+            intent = "material_question" if state.get("selected_material_ids") else decision.intent
+            warnings = list(state.get("warnings", []))
+            if decision.warning and decision.warning not in warnings:
+                warnings.append(decision.warning)
+            updates = {
+                "intent": intent,
+                "requires_fresh_info": decision.intent in {"current_information", "verification"},
+                "search_required": decision.search_required,
+                "reasoning_mode": decision.reasoning_mode,
+                "tool_reason_codes": list(decision.reason_codes),
+                "tool_reason_summary": decision.reason_summary,
+                "semantic_search_query": decision.search_query,
+                "semantic_decision_mode": decision.decision_mode,
+                "semantic_decision_confidence": decision.confidence,
+                "semantic_warning": decision.warning,
+                "warnings": warnings,
+            }
+            metadata = {
+                "search_required": decision.search_required,
+                "reasoning_mode": decision.reasoning_mode,
+                "tool_reason_codes": list(decision.reason_codes),
+                "tool_reason_summary": decision.reason_summary,
+                "semantic_decision_mode": decision.decision_mode,
+                "semantic_decision_confidence": decision.confidence,
+                "semantic_intent": intent,
+            }
+            return updates, f"已识别为 {intent}，{decision.reason_summary}。", "completed", metadata
+
         return self._run_node(
             state,
             agent_name="route",
             step_index=2,
             input_summary="判断问题类型与工具需求",
             status_label="正在理解问题",
-            work=lambda: (
-                {
-                    "intent": intent,
-                    "requires_fresh_info": requires_fresh_info,
-                    "search_required": decision.search_required,
-                    "reasoning_mode": decision.reasoning_mode,
-                    "tool_reason_codes": list(decision.reason_codes),
-                    "tool_reason_summary": decision.reason_summary,
-                    "semantic_search_query": decision.search_query,
-                    "semantic_decision_mode": decision.decision_mode,
-                    "semantic_decision_confidence": decision.confidence,
-                    "semantic_warning": decision.warning,
-                    "warnings": warnings,
-                },
-                f"已识别为 {intent}，{decision.reason_summary}。",
-                "completed",
-                {
-                    "search_required": decision.search_required,
-                    "reasoning_mode": decision.reasoning_mode,
-                    "tool_reason_codes": list(decision.reason_codes),
-                    "tool_reason_summary": decision.reason_summary,
-                    "semantic_decision_mode": decision.decision_mode,
-                    "semantic_decision_confidence": decision.confidence,
-                },
-            ),
+            work=work,
         )
 
     def _material_retriever_node(self, state: AgentState) -> dict[str, Any]:
@@ -2293,6 +2288,9 @@ class HomeTutorGraphRunner:
             "reasoning_mode": str(state.get("reasoning_mode") or "auto"),
             "tool_reason_codes": list(state.get("tool_reason_codes", [])),
             "tool_reason_summary": str(state.get("tool_reason_summary") or "")[:240],
+            "semantic_decision_mode": str(state.get("semantic_decision_mode") or "degraded"),
+            "semantic_decision_confidence": round(float(state.get("semantic_decision_confidence") or 0), 4),
+            "semantic_intent": str(state.get("intent") or "general_learning")[:64],
             **self.service._safe_trace_context_metadata(state.get("context_metadata")),
         }
 
@@ -2521,48 +2519,50 @@ class CourseTutorGraphRunner:
         )
 
     def _route_node(self, state: AgentState) -> dict[str, Any]:
-        decision = self.service._semantic_decision(
-            user=state["user"],
-            session=state["session"],
-            question=str(state["message_text"]),
-            force_search=bool(state.get("use_web_search")),
-            force_deep=bool(state.get("deep_thinking")),
-        )
-        warnings = list(state.get("warnings", []))
-        if decision.warning and decision.warning not in warnings:
-            warnings.append(decision.warning)
+        def work():
+            decision = self.service._semantic_decision(
+                user=state["user"],
+                session=state["session"],
+                question=str(state["message_text"]),
+                force_search=bool(state.get("use_web_search")),
+                force_deep=bool(state.get("deep_thinking")),
+            )
+            warnings = list(state.get("warnings", []))
+            if decision.warning and decision.warning not in warnings:
+                warnings.append(decision.warning)
+            updates = {
+                "intent": decision.intent,
+                "search_required": decision.search_required,
+                "reasoning_mode": decision.reasoning_mode,
+                "tool_reason_codes": list(decision.reason_codes),
+                "tool_reason_summary": decision.reason_summary,
+                "semantic_search_query": decision.search_query,
+                "semantic_decision_mode": decision.decision_mode,
+                "semantic_decision_confidence": decision.confidence,
+                "semantic_warning": decision.warning,
+                "course_related": decision.course_related,
+                "profile_signal_updates": dict(decision.profile_updates),
+                "profile_signal_confidence": dict(decision.profile_confidence),
+                "warnings": warnings,
+            }
+            metadata = {
+                "search_required": decision.search_required,
+                "reasoning_mode": decision.reasoning_mode,
+                "tool_reason_codes": list(decision.reason_codes),
+                "tool_reason_summary": decision.reason_summary,
+                "semantic_decision_mode": decision.decision_mode,
+                "semantic_decision_confidence": decision.confidence,
+                "semantic_intent": decision.intent,
+                "profile_signal_count": len(decision.profile_updates),
+            }
+            return updates, decision.reason_summary, "completed", metadata
+
         return self._run_node(
             state,
             agent_name="route",
             step_index=2,
             input_summary="判断课程问题的工具与推理需求",
-            work=lambda: (
-                {
-                    "search_required": decision.search_required,
-                    "reasoning_mode": decision.reasoning_mode,
-                    "tool_reason_codes": list(decision.reason_codes),
-                    "tool_reason_summary": decision.reason_summary,
-                    "semantic_search_query": decision.search_query,
-                    "semantic_decision_mode": decision.decision_mode,
-                    "semantic_decision_confidence": decision.confidence,
-                    "semantic_warning": decision.warning,
-                    "course_related": decision.course_related,
-                    "profile_signal_updates": dict(decision.profile_updates),
-                    "profile_signal_confidence": dict(decision.profile_confidence),
-                    "warnings": warnings,
-                },
-                decision.reason_summary,
-                "completed",
-                {
-                    "search_required": decision.search_required,
-                    "reasoning_mode": decision.reasoning_mode,
-                    "tool_reason_codes": list(decision.reason_codes),
-                    "tool_reason_summary": decision.reason_summary,
-                    "semantic_decision_mode": decision.decision_mode,
-                    "semantic_decision_confidence": decision.confidence,
-                    "profile_signal_count": len(decision.profile_updates),
-                },
-            ),
+            work=work,
         )
 
     def _retriever_node(self, state: AgentState) -> dict[str, Any]:

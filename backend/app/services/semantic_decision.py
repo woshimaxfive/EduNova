@@ -15,16 +15,6 @@ class SemanticModelService(Protocol):
     def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
 
 
-SemanticIntent = Literal[
-    "general_learning",
-    "material_question",
-    "current_information",
-    "external_resource_recommendation",
-    "verification",
-    "comparison",
-    "diagnosis",
-    "planning",
-]
 ProfileDimension = Literal["weak_points", "learning_preference", "learning_goal", "knowledge_foundation"]
 
 
@@ -45,7 +35,7 @@ class ProfileSignalPayload(BaseModel):
 class SemanticDecisionPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    intent: SemanticIntent
+    intent: str = Field(min_length=1, max_length=64)
     search_required: bool
     search_query: str = Field(default="", max_length=300)
     reasoning_mode: Literal["auto", "deep"]
@@ -54,6 +44,16 @@ class SemanticDecisionPayload(BaseModel):
     reason_codes: list[str] = Field(default_factory=list, max_length=6)
     reason_summary: str = Field(min_length=1, max_length=160)
     profile_signals: list[ProfileSignalPayload] = Field(default_factory=list, max_length=4)
+
+    @field_validator("intent")
+    @classmethod
+    def normalize_intent(cls, value: str) -> str:
+        return "_".join(value.strip().lower().split())[:64]
+
+    @field_validator("profile_signals", mode="before")
+    @classmethod
+    def normalize_empty_profile_signals(cls, value: object) -> object:
+        return [] if value == {} or value is None else value
 
     @field_validator("search_query", "reason_summary")
     @classmethod
@@ -166,7 +166,9 @@ class SemanticDecisionService:
             "profile_signals 只允许 weak_points、learning_preference、learning_goal、knowledge_foundation。"
             "reason_codes 使用简短英文标识，reason_summary 只给安全原因摘要。"
             "输出字段固定为 intent、search_required、search_query、reasoning_mode、course_related、"
-            "confidence、reason_codes、reason_summary、profile_signals。"
+            "confidence、reason_codes、reason_summary、profile_signals。intent 优先使用 general_learning、"
+            "material_question、current_information、external_resource_recommendation、verification、comparison、"
+            "diagnosis、planning；没有画像信号时 profile_signals 必须是 []，不能输出 {}。"
         )
         context: dict[str, Any] = {
             "scope": scope,

@@ -98,3 +98,20 @@ def test_legacy_force_overrides_model_false() -> None:
     assert decision.search_required is True
     assert decision.reasoning_mode == "deep"
     assert decision.decision_mode == "model_forced"
+
+
+def test_provider_specific_intent_and_empty_object_profile_signals_remain_usable() -> None:
+    model = FakeModel(
+        '{"intent":"video_recommendation","search_required":true,'
+        '"search_query":"Java learning video tutorials","reasoning_mode":"auto",'
+        '"course_related":false,"confidence":0.92,"reason_codes":["SEARCH_REQUIRED"],'
+        '"reason_summary":"需要外部视频资源。","profile_signals":{}}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="可以给我一些 Java 学习的视频吗？", scope="home"
+    )
+
+    assert decision.decision_mode == "model"
+    assert decision.intent == "video_recommendation"
+    assert decision.search_required is True

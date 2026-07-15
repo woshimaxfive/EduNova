@@ -111,7 +111,12 @@ class S3StorageAdapter:
 
 
 def build_storage(settings: Settings, *, kind: str) -> StorageAdapter:
-    root = settings.material_storage_dir if kind == "materials" else settings.export_dir
+    roots = {
+        "materials": settings.material_storage_dir,
+        "chat-attachments": settings.chat_attachment_storage_dir,
+        "exports": settings.export_dir,
+    }
+    root = roots.get(kind, settings.export_dir)
     if settings.storage_backend == "local":
         return LocalStorageAdapter(root)
     import boto3

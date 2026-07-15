@@ -62,6 +62,7 @@ class ModelSettingsRepository(Protocol):
     def get_default_for_user(self, user_id: int) -> ModelSetting | None: ...
     def get_embedding_default_for_user(self, user_id: int) -> ModelSetting | None: ...
     def get_rerank_default_for_user(self, user_id: int) -> ModelSetting | None: ...
+    def get_vision_default_for_user(self, user_id: int) -> ModelSetting | None: ...
     def list_for_user(self, user_id: int) -> list[ModelSetting]: ...
     def get_by_id_for_user(self, setting_id: int, user_id: int) -> ModelSetting | None: ...
     def save(self, setting: ModelSetting) -> None: ...
@@ -69,6 +70,7 @@ class ModelSettingsRepository(Protocol):
     def unset_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
     def unset_embedding_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
     def unset_rerank_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
+    def unset_vision_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
     def commit(self) -> None: ...
     def rollback(self) -> None: ...
 
@@ -87,6 +89,15 @@ class ModelChatProvider(Protocol):
         messages: list[dict[str, str]],
         timeout_seconds: float,
     ) -> Iterator[str]: ...
+
+    def vision_completion(
+        self,
+        config: OpenAICompatibleConfig,
+        *,
+        prompt: str,
+        image_data_urls: list[str],
+        timeout_seconds: float,
+    ) -> str: ...
 
     def embed_texts(
         self,
@@ -162,6 +173,7 @@ class SaveModelConfigRequest(SaveModelSettingsRequest):
     make_default: bool = False
     make_embedding_default: bool = False
     make_rerank_default: bool = False
+    make_vision_default: bool = False
 
     @field_validator("display_name", "preset_id", "embedding_preset_id", "rerank_preset_id", mode="before")
     @classmethod
@@ -195,6 +207,7 @@ class UpdateModelConfigRequest(BaseModel):
     make_default: bool | None = None
     make_embedding_default: bool | None = None
     make_rerank_default: bool | None = None
+    make_vision_default: bool | None = None
 
     @field_validator(
         "display_name",
@@ -222,7 +235,7 @@ class UpdateModelConfigRequest(BaseModel):
         return str(value).strip()
 
 
-ModelConnectionOperation = Literal["chat", "embedding", "rerank"]
+ModelConnectionOperation = Literal["chat", "embedding", "rerank", "vision"]
 
 
 class ModelConnectionTestRequest(BaseModel):
@@ -304,6 +317,7 @@ class ModelConfigSummary(BaseModel):
     is_default: bool
     is_embedding_default: bool
     is_rerank_default: bool = False
+    is_vision_default: bool = False
     last_test_ok: bool | None
     last_test_message: str | None
     last_tested_at: datetime | None
@@ -317,6 +331,7 @@ class ModelSettingsListResponse(BaseModel):
     default_chat_config_id: int | None
     default_embedding_config_id: int | None
     default_rerank_config_id: int | None = None
+    default_vision_config_id: int | None = None
 
 
 class ModelConnectionTestResponse(BaseModel):
@@ -385,6 +400,13 @@ class SqlAlchemyModelSettingsRepository:
             .order_by(ModelSetting.updated_at.desc(), ModelSetting.id.desc())
         )
 
+    def get_vision_default_for_user(self, user_id: int) -> ModelSetting | None:
+        return self.db.scalar(
+            select(ModelSetting)
+            .where(ModelSetting.user_id == user_id, ModelSetting.is_vision_default.is_(True))
+            .order_by(ModelSetting.updated_at.desc(), ModelSetting.id.desc())
+        )
+
     def list_for_user(self, user_id: int) -> list[ModelSetting]:
         return list(
             self.db.scalars(
@@ -394,6 +416,7 @@ class SqlAlchemyModelSettingsRepository:
                     ModelSetting.is_default.desc(),
                     ModelSetting.is_embedding_default.desc(),
                     ModelSetting.is_rerank_default.desc(),
+                    ModelSetting.is_vision_default.desc(),
                     ModelSetting.updated_at.desc(),
                     ModelSetting.id.desc(),
                 )
@@ -430,6 +453,12 @@ class SqlAlchemyModelSettingsRepository:
         if except_setting_id is not None:
             statement = statement.where(ModelSetting.id != except_setting_id)
         self.db.execute(statement.values(is_rerank_default=False))
+
+    def unset_vision_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None:
+        statement = update(ModelSetting).where(ModelSetting.user_id == user_id)
+        if except_setting_id is not None:
+            statement = statement.where(ModelSetting.id != except_setting_id)
+        self.db.execute(statement.values(is_vision_default=False))
 
     def commit(self) -> None:
         self.db.commit()
@@ -478,6 +507,7 @@ class ModelSettingsService:
         default_chat_config = next((config for config in configs if config.is_default), None)
         default_embedding_config = next((config for config in configs if config.is_embedding_default), None)
         default_rerank_config = next((config for config in configs if config.is_rerank_default), None)
+        default_vision_config = next((config for config in configs if config.is_vision_default), None)
         return ModelSettingsListResponse(
             configs=configs,
             system_summary=self._system_summary(),
@@ -485,6 +515,7 @@ class ModelSettingsService:
             default_chat_config_id=default_chat_config.id if default_chat_config else None,
             default_embedding_config_id=default_embedding_config.id if default_embedding_config else None,
             default_rerank_config_id=default_rerank_config.id if default_rerank_config else None,
+            default_vision_config_id=default_vision_config.id if default_vision_config else None,
         )
 
     def save(self, user: User, payload: SaveModelSettingsRequest) -> ModelSettingsSummary:
@@ -516,24 +547,34 @@ class ModelSettingsService:
         has_chat_default = any(candidate.is_default for candidate in existing_configs)
         has_embedding_default = any(candidate.is_embedding_default for candidate in existing_configs)
         has_rerank_default = any(candidate.is_rerank_default for candidate in existing_configs)
+        capabilities = provider_capabilities(
+            preset_id=payload.preset_id,
+            base_url=payload.base_url,
+        )
         setting = ModelSetting(
             user_id=user.id,
             display_name=payload.display_name,
             preset_id=payload.preset_id or None,
             provider="openai_compatible",
-            is_default=bool(payload.chat_model) and (payload.make_default or not has_chat_default),
+            is_default=bool(payload.chat_model)
+            and (payload.make_default or (not has_chat_default and not capabilities.supports_image_input)),
             is_embedding_default=bool(payload.embedding_model)
             and (payload.make_embedding_default or not has_embedding_default),
             is_rerank_default=bool(payload.rerank_model)
             and (payload.make_rerank_default or not has_rerank_default),
+            is_vision_default=bool(payload.chat_model) and payload.make_vision_default,
         )
         self._apply_settings_payload(setting, payload)
+        if setting.is_vision_default and not capabilities.supports_image_input:
+            raise ModelSettingsValidationError("该配置未声明图片理解能力。")
         if setting.is_default:
             self.repository.unset_defaults_for_user(user.id)
         if setting.is_embedding_default:
             self.repository.unset_embedding_defaults_for_user(user.id)
         if setting.is_rerank_default:
             self.repository.unset_rerank_defaults_for_user(user.id)
+        if setting.is_vision_default:
+            self.repository.unset_vision_defaults_for_user(user.id)
         self._save_and_commit(setting)
         return self._config_summary(setting)
 
@@ -653,6 +694,14 @@ class ModelSettingsService:
                 raise ModelSettingsValidationError("该配置没有重排序模型，不能设为重排序默认。")
             self.repository.unset_rerank_defaults_for_user(user.id, except_setting_id=config_id)
             setting.is_rerank_default = True
+        if payload.make_vision_default:
+            if not setting.chat_model:
+                raise ModelSettingsValidationError("该配置没有模型，不能设为图片理解默认。")
+            capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
+            if not capabilities.supports_image_input:
+                raise ModelSettingsValidationError("该配置未声明图片理解能力。")
+            self.repository.unset_vision_defaults_for_user(user.id, except_setting_id=config_id)
+            setting.is_vision_default = True
         if not setting.chat_model and not setting.embedding_model and not setting.rerank_model:
             raise ModelSettingsValidationError("回答、向量和重排序模型至少填写一项。")
         if setting.is_default and not setting.chat_model:
@@ -669,6 +718,7 @@ class ModelSettingsService:
         was_default = setting.is_default
         was_embedding_default = setting.is_embedding_default
         was_rerank_default = setting.is_rerank_default
+        was_vision_default = setting.is_vision_default
         try:
             self.repository.delete(setting)
             if was_default:
@@ -689,6 +739,23 @@ class ModelSettingsService:
                 if next_rerank:
                     next_rerank.is_rerank_default = True
                     self.repository.save(next_rerank)
+            if was_vision_default:
+                remaining = [candidate for candidate in self.repository.list_for_user(user.id) if candidate.id != config_id]
+                next_vision = next(
+                    (
+                        candidate
+                        for candidate in remaining
+                        if candidate.chat_model
+                        and provider_capabilities(
+                            preset_id=candidate.preset_id,
+                            base_url=candidate.base_url,
+                        ).supports_image_input
+                    ),
+                    None,
+                )
+                if next_vision:
+                    next_vision.is_vision_default = True
+                    self.repository.save(next_vision)
             self.repository.commit()
         except Exception:
             self.repository.rollback()
@@ -719,6 +786,18 @@ class ModelSettingsService:
             raise ModelSettingsValidationError("该配置没有重排序模型，不能设为重排序默认。")
         setting.is_rerank_default = True
         self.repository.unset_rerank_defaults_for_user(user.id, except_setting_id=config_id)
+        self._save_and_commit(setting)
+        return self.list_configs(user)
+
+    def set_vision_default_config(self, user: User, config_id: int) -> ModelSettingsListResponse:
+        setting = self._get_user_setting_or_raise(user, config_id)
+        if not setting.chat_model:
+            raise ModelSettingsValidationError("该配置没有模型，不能设为图片理解默认。")
+        capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
+        if not capabilities.supports_image_input:
+            raise ModelSettingsValidationError("该配置未声明图片理解能力。")
+        setting.is_vision_default = True
+        self.repository.unset_vision_defaults_for_user(user.id, except_setting_id=config_id)
         self._save_and_commit(setting)
         return self.list_configs(user)
 
@@ -780,6 +859,56 @@ class ModelSettingsService:
             chat_model=None,
             embedding_model=None,
             can_use_model=False,
+        )
+
+    def resolve_vision_runtime_config(self, user: User) -> RuntimeModelConfig:
+        setting = self.repository.get_vision_default_for_user(user.id)
+        if setting is None:
+            return RuntimeModelConfig(
+                source="none",
+                provider="openai_compatible",
+                base_url=None,
+                api_key=None,
+                chat_model=None,
+                embedding_model=None,
+                can_use_model=False,
+            )
+        runtime = self._runtime_from_user_setting(setting)
+        capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
+        if not capabilities.supports_image_input:
+            return RuntimeModelConfig(
+                source="none",
+                provider="openai_compatible",
+                base_url=None,
+                api_key=None,
+                chat_model=None,
+                embedding_model=None,
+                can_use_model=False,
+            )
+        return runtime
+
+    def vision_completion(self, user: User, *, prompt: str, image_data_urls: list[str]) -> str:
+        runtime = self.resolve_vision_runtime_config(user)
+        if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
+            raise ModelNotConfiguredError("当前未配置可用图片理解模型。")
+        config = OpenAICompatibleConfig(
+            base_url=runtime.base_url,
+            api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+            chat_model=runtime.chat_model,
+        )
+        return self.execution_runtime.execute(
+            user_id=user.id,
+            provider_source=runtime.source,
+            model_config_id=runtime.config_id,
+            model_name=runtime.chat_model,
+            operation="vision",
+            call=lambda: self.provider.vision_completion(
+                config,
+                prompt=prompt,
+                image_data_urls=image_data_urls[:3],
+                timeout_seconds=self.settings.model_request_timeout_seconds,
+            ),
+            timeout_seconds=self.settings.model_request_timeout_seconds,
         )
 
     def chat_completion_with_timeout(
@@ -1015,9 +1144,14 @@ class ModelSettingsService:
         operation: ModelConnectionOperation,
     ) -> ModelConnectionTestResponse:
         tested_at = datetime.now(UTC)
-        model = runtime.chat_model if operation == "chat" else runtime.embedding_model
+        model = runtime.chat_model if operation in {"chat", "vision"} else runtime.embedding_model
         if not runtime.can_use_model or model is None:
-            label = {"chat": "回答模型", "embedding": "向量模型", "rerank": "重排序模型"}[operation]
+            label = {
+                "chat": "回答模型",
+                "embedding": "向量模型",
+                "rerank": "重排序模型",
+                "vision": "图片理解模型",
+            }[operation]
             return ModelConnectionTestResponse(
                 ok=False,
                 source=runtime.source,
@@ -1098,6 +1232,33 @@ class ModelSettingsService:
                         max_attempts=1,
                         bypass_circuit=True,
                     )
+                elif operation == "vision":
+                    capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
+                    if not capabilities.supports_image_input:
+                        raise ModelProviderError("该配置未声明图片理解能力。", code="not_configured")
+                    visual_config = OpenAICompatibleConfig(
+                        base_url=runtime.base_url or "",
+                        api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+                        chat_model=runtime.chat_model or "",
+                    )
+                    self.execution_runtime.execute(
+                        user_id=user_id,
+                        provider_source=runtime.source,
+                        model_config_id=runtime.config_id,
+                        model_name=model,
+                        operation="vision",
+                        call=lambda: self.provider.vision_completion(
+                            visual_config,
+                            prompt="图片中是什么颜色的方块？请只回复颜色。",
+                            image_data_urls=[
+                                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X8fJ4wAAAABJRU5ErkJggg=="
+                            ],
+                            timeout_seconds=self.settings.model_request_timeout_seconds,
+                        ),
+                        timeout_seconds=self.settings.model_request_timeout_seconds,
+                        max_attempts=1,
+                        bypass_circuit=True,
+                    )
                 else:
                     chat_config = OpenAICompatibleConfig(
                         base_url=runtime.base_url or "",
@@ -1153,7 +1314,13 @@ class ModelSettingsService:
             ok=True,
             source=runtime.source,
             chat_model=runtime.chat_model,
-            message="向量服务连接正常。" if operation == "embedding" else "AI 服务连接正常。",
+            message=(
+                "向量服务连接正常。"
+                if operation == "embedding"
+                else "图片理解服务连接正常。"
+                if operation == "vision"
+                else "AI 服务连接正常。"
+            ),
             config_id=runtime.config_id,
             operation=operation,
             model=model,
@@ -1166,6 +1333,8 @@ class ModelSettingsService:
             return self.resolve_embedding_runtime_config(user)
         if operation == "rerank":
             return self.resolve_rerank_runtime_config(user)
+        if operation == "vision":
+            return self.resolve_vision_runtime_config(user)
         return self.resolve_runtime_config(user)
 
     def _runtime_for_setting(self, setting: ModelSetting, operation: ModelConnectionOperation) -> RuntimeModelConfig:
@@ -1173,7 +1342,22 @@ class ModelSettingsService:
             return self._embedding_runtime_from_user_setting(setting)
         if operation == "rerank":
             return self._rerank_runtime_from_user_setting(setting)
-        return self._runtime_from_user_setting(setting)
+        runtime = self._runtime_from_user_setting(setting)
+        if operation == "vision":
+            capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
+            if not capabilities.supports_image_input:
+                return RuntimeModelConfig(
+                    source=runtime.source,
+                    provider=runtime.provider,
+                    base_url=runtime.base_url,
+                    api_key=runtime.api_key,
+                    chat_model=runtime.chat_model,
+                    embedding_model=runtime.embedding_model,
+                    can_use_model=False,
+                    config_id=runtime.config_id,
+                    preset_id=runtime.preset_id,
+                )
+        return runtime
 
     def _runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
         api_key = self._decrypt_api_key(setting.api_key_ciphertext)
@@ -1356,6 +1540,7 @@ class ModelSettingsService:
             is_default=setting.is_default,
             is_embedding_default=setting.is_embedding_default,
             is_rerank_default=setting.is_rerank_default,
+            is_vision_default=bool(getattr(setting, "is_vision_default", False)),
             last_test_ok=setting.last_test_ok,
             last_test_message=setting.last_test_message,
             last_tested_at=setting.last_tested_at,

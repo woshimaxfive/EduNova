@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
     material_storage_dir: str = "var/uploads/materials"
+    chat_attachment_storage_dir: str = "var/uploads/chat-attachments"
     material_max_upload_mb: int = 25
     edunova_document_parser: str = "docling"
     docling_artifacts_path: str = "var/models/docling"

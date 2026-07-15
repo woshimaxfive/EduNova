@@ -87,6 +87,10 @@ SAFE_AGENT_METADATA_KEYS = {
     "source_count",
     "warning_count",
     "workflow",
+    "vision_image_count",
+    "vision_provider",
+    "vision_confidence",
+    "reused_history_image",
 }
 
 SENSITIVE_TEXT_MARKERS = (

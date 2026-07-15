@@ -19,7 +19,16 @@ from backend.app.agents.runtime import PendingAgentTrace, agent_log_from_pending
 from backend.app.agents.schemas import AgentState
 from backend.app.agents.search_tools import SearchToolExecutor
 from backend.app.agents.tool_policy import decide_tool_capabilities
-from backend.app.models import AgentRunLog, ChatMessage, ChatSession, Course, CourseEnrollment, Material, User
+from backend.app.models import (
+    AgentRunLog,
+    ChatMessage,
+    ChatMessageAttachment,
+    ChatSession,
+    Course,
+    CourseEnrollment,
+    Material,
+    User,
+)
 from backend.app.schemas.tutor import (
     TutorSessionDetail,
     TutorSessionHistoryItem,
@@ -69,6 +78,7 @@ HOME_TUTOR_GRAPH_STEPS = [
     "repair",
     "persist",
 ]
+DEFAULT_IMAGE_QUESTION = "请分析并讲解这张图片"
 CONTEXT_RECENT_MESSAGE_LIMIT = 12
 CONTEXT_RETRIEVAL_USER_MESSAGE_LIMIT = 2
 CONTEXT_MESSAGE_CHAR_LIMIT = 1200
@@ -119,6 +129,18 @@ class TutorSessionRepository(Protocol):
 
     def add_message(self, message: ChatMessage) -> None:
         ...
+
+    def pending_attachments(
+        self, user_id: int, session_id: int, attachment_ids: list[int]
+    ) -> list[ChatMessageAttachment]: ...
+
+    def bind_attachments(self, attachments: list[ChatMessageAttachment], message_id: int) -> None: ...
+
+    def attachment_map(self, message_ids: list[int]) -> dict[int, list[ChatMessageAttachment]]: ...
+
+    def bound_attachments(
+        self, user_id: int, session_id: int, message_ids: list[int]
+    ) -> list[ChatMessageAttachment]: ...
 
     def add_agent_log(self, log: AgentRunLog) -> None:
         ...
@@ -417,6 +439,64 @@ class SqlAlchemyTutorSessionRepository:
     def add_message(self, message: ChatMessage) -> None:
         self.db.add(message)
 
+    def pending_attachments(
+        self, user_id: int, session_id: int, attachment_ids: list[int]
+    ) -> list[ChatMessageAttachment]:
+        if not attachment_ids:
+            return []
+        return list(
+            self.db.scalars(
+                select(ChatMessageAttachment)
+                .where(
+                    ChatMessageAttachment.id.in_(attachment_ids),
+                    ChatMessageAttachment.user_id == user_id,
+                    ChatMessageAttachment.session_id == session_id,
+                    ChatMessageAttachment.status == "pending",
+                    ChatMessageAttachment.message_id.is_(None),
+                )
+                .order_by(ChatMessageAttachment.id.asc())
+            )
+        )
+
+    def bind_attachments(self, attachments: list[ChatMessageAttachment], message_id: int) -> None:
+        for attachment in attachments:
+            attachment.message_id = message_id
+            attachment.status = "bound"
+            attachment.expires_at = None
+            self.db.add(attachment)
+
+    def attachment_map(self, message_ids: list[int]) -> dict[int, list[ChatMessageAttachment]]:
+        if not message_ids:
+            return {}
+        result: dict[int, list[ChatMessageAttachment]] = {}
+        for attachment in self.db.scalars(
+            select(ChatMessageAttachment)
+            .where(ChatMessageAttachment.message_id.in_(message_ids))
+            .order_by(ChatMessageAttachment.created_at.asc(), ChatMessageAttachment.id.asc())
+        ):
+            if attachment.message_id is not None:
+                result.setdefault(attachment.message_id, []).append(attachment)
+        return result
+
+    def bound_attachments(
+        self, user_id: int, session_id: int, message_ids: list[int]
+    ) -> list[ChatMessageAttachment]:
+        if not message_ids:
+            return []
+        return list(
+            self.db.scalars(
+                select(ChatMessageAttachment)
+                .where(
+                    ChatMessageAttachment.user_id == user_id,
+                    ChatMessageAttachment.session_id == session_id,
+                    ChatMessageAttachment.message_id.in_(message_ids),
+                    ChatMessageAttachment.status == "bound",
+                )
+                .order_by(ChatMessageAttachment.created_at.desc(), ChatMessageAttachment.id.desc())
+                .limit(3)
+            )
+        )
+
     def add_agent_log(self, log: AgentRunLog) -> None:
         self.db.add(log)
 
@@ -461,6 +541,7 @@ class TutorSessionService:
         semantic_decision_service: SemanticDecisionProvider | None = None,
         native_web_search_provider: NativeWebSearchProvider | None = None,
         conversation_memory_service: ConversationMemoryProvider | None = None,
+        vision_understanding_service: Any | None = None,
     ) -> None:
         self.repository = repository
         self.course_citation_searcher = course_citation_searcher
@@ -471,6 +552,7 @@ class TutorSessionService:
         self.semantic_decision_service = semantic_decision_service
         self.native_web_search_provider = native_web_search_provider
         self.conversation_memory_service = conversation_memory_service
+        self.vision_understanding_service = vision_understanding_service
 
     def _semantic_decision(
         self,
@@ -570,7 +652,7 @@ class TutorSessionService:
 
     def get_session(self, user: User, session_id: int) -> TutorSessionDetail:
         session = self._get_session_for_user(user.id, session_id)
-        return session_detail_to_api(session, self.repository.list_messages(session.id))
+        return self._session_detail(session)
 
     def update_session(
         self,
@@ -624,12 +706,20 @@ class TutorSessionService:
         use_web_search: bool = False,
         deep_thinking: bool = False,
         selected_material_ids: list[int] | None = None,
+        attachment_ids: list[int] | None = None,
     ) -> TutorSessionDetail:
-        message_text = content.strip()
+        normalized_attachment_ids = list(dict.fromkeys(attachment_ids or []))[:3]
+        stored_message_text = content.strip() or (DEFAULT_IMAGE_QUESTION if normalized_attachment_ids else "")
+        session = self._get_session_for_user(user.id, session_id)
+        message_text, vision_decision = self._prepare_visual_question(
+            user=user,
+            session=session,
+            question=stored_message_text,
+            attachment_ids=normalized_attachment_ids,
+        )
         if not message_text:
             raise EmptyMessageError("消息不能为空。")
 
-        session = self._get_session_for_user(user.id, session_id)
         if session.scope == "course":
             return CourseTutorGraphRunner(self).append(
                 user=user,
@@ -637,6 +727,9 @@ class TutorSessionService:
                 message_text=message_text,
                 force_search=use_web_search,
                 force_deep=deep_thinking,
+                attachment_ids=normalized_attachment_ids,
+                stored_message_text=stored_message_text,
+                vision_decision=vision_decision,
             )
         material_ids, material_warnings = self._material_context_for_message(user, session, selected_material_ids)
         return HomeTutorGraphRunner(self).append(
@@ -647,6 +740,9 @@ class TutorSessionService:
             deep_thinking=deep_thinking,
             selected_material_ids=material_ids,
             initial_warnings=material_warnings,
+            attachment_ids=normalized_attachment_ids,
+            stored_message_text=stored_message_text,
+            vision_decision=vision_decision,
         )
 
     def stream_message(
@@ -657,12 +753,20 @@ class TutorSessionService:
         use_web_search: bool = False,
         deep_thinking: bool = False,
         selected_material_ids: list[int] | None = None,
+        attachment_ids: list[int] | None = None,
     ) -> Iterator[dict[str, Any]]:
-        message_text = content.strip()
+        normalized_attachment_ids = list(dict.fromkeys(attachment_ids or []))[:3]
+        stored_message_text = content.strip() or (DEFAULT_IMAGE_QUESTION if normalized_attachment_ids else "")
+        session = self._get_session_for_user(user.id, session_id)
+        message_text, vision_decision = self._prepare_visual_question(
+            user=user,
+            session=session,
+            question=stored_message_text,
+            attachment_ids=normalized_attachment_ids,
+        )
         if not message_text:
             raise EmptyMessageError("消息不能为空。")
 
-        session = self._get_session_for_user(user.id, session_id)
         if session.scope == "course":
             return CourseTutorGraphRunner(self).stream(
                 user=user,
@@ -670,6 +774,9 @@ class TutorSessionService:
                 message_text=message_text,
                 force_search=use_web_search,
                 force_deep=deep_thinking,
+                attachment_ids=normalized_attachment_ids,
+                stored_message_text=stored_message_text,
+                vision_decision=vision_decision,
             )
         material_ids, material_warnings = self._material_context_for_message(user, session, selected_material_ids)
         return HomeTutorGraphRunner(self).stream(
@@ -680,7 +787,64 @@ class TutorSessionService:
             deep_thinking=deep_thinking,
             selected_material_ids=material_ids,
             initial_warnings=material_warnings,
+            attachment_ids=normalized_attachment_ids,
+            stored_message_text=stored_message_text,
+            vision_decision=vision_decision,
         )
+
+    def _prepare_visual_question(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        question: str,
+        attachment_ids: list[int],
+    ) -> tuple[str, dict[str, Any] | None]:
+        if not attachment_ids:
+            return question, None
+        if self.vision_understanding_service is None:
+            raise CourseAnswerGenerationError("当前未配置可用图片理解模型。")
+        attachments = self.repository.pending_attachments(user.id, session.id, attachment_ids)
+        if len(attachments) != len(attachment_ids):
+            raise InvalidMaterialContextError("部分图片不存在、已使用或无权访问。")
+        try:
+            result = self.vision_understanding_service.understand(
+                user=user,
+                question=question,
+                attachment_ids=attachment_ids,
+            )
+        except Exception as exc:
+            raise CourseAnswerGenerationError(str(exc) or "图片理解失败，请稍后重试。") from exc
+        contextualizer = getattr(self.vision_understanding_service, "contextual_question")
+        return contextualizer(question, result), result.model_dump()
+
+    def _prepare_history_visual_question(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        question: str,
+        referenced_turn_ids: list[str],
+    ) -> tuple[str, dict[str, Any] | None]:
+        if self.vision_understanding_service is None or not referenced_turn_ids:
+            return question, None
+        message_ids = [int(item) for item in referenced_turn_ids if str(item).isdigit()]
+        finder = getattr(self.repository, "bound_attachments", None)
+        if not callable(finder):
+            return question, None
+        attachments = finder(user.id, session.id, message_ids)
+        if not attachments:
+            return question, None
+        result = self.vision_understanding_service.understand(
+            user=user,
+            question=question,
+            attachment_ids=[int(item.id) for item in attachments],
+        )
+        contextualizer = getattr(self.vision_understanding_service, "contextual_question")
+        payload = result.model_dump()
+        payload["reused_history_image"] = True
+        payload["image_count"] = len(attachments)
+        return contextualizer(question, result), payload
 
     def _material_context_for_message(
         self,
@@ -900,7 +1064,16 @@ class TutorSessionService:
         home_trace_records: list[PendingAgentTrace] | None = None,
         profile_signal_updates: dict[str, Any] | None = None,
         profile_signal_confidence: dict[str, float] | None = None,
+        attachment_ids: list[int] | None = None,
     ) -> TutorSessionDetail:
+        normalized_attachment_ids = list(dict.fromkeys(attachment_ids or []))[:3]
+        attachments = (
+            self.repository.pending_attachments(user.id, session.id, normalized_attachment_ids)
+            if normalized_attachment_ids
+            else []
+        )
+        if len(attachments) != len(normalized_attachment_ids):
+            raise InvalidMaterialContextError("部分图片不存在、已使用或无权访问。")
         user_message = ChatMessage(
             session_id=session.id,
             user_id=user.id,
@@ -923,6 +1096,8 @@ class TutorSessionService:
             self.repository.add_message(assistant_message)
             self.repository.touch_session(session)
             self.repository.flush()
+            if attachments:
+                self.repository.bind_attachments(attachments, user_message.id)
             if home_trace_records is not None and session.scope == "home" and trace_id is not None:
                 self._persist_home_tutor_graph_trace(
                     user=user,
@@ -1000,7 +1175,13 @@ class TutorSessionService:
             except Exception:
                 self.repository.rollback()
 
-        return session_detail_to_api(session, self.repository.list_messages(session.id))
+        return self._session_detail(session)
+
+    def _session_detail(self, session: ChatSession) -> TutorSessionDetail:
+        messages = self.repository.list_messages(session.id)
+        mapper = getattr(self.repository, "attachment_map", None)
+        attachment_map = mapper([message.id for message in messages]) if callable(mapper) else {}
+        return session_detail_to_api(session, messages, attachment_map)
 
     def _persist_course_tutor_graph_trace(
         self,
@@ -1652,6 +1833,9 @@ class HomeTutorGraphRunner:
         deep_thinking: bool,
         selected_material_ids: list[int],
         initial_warnings: list[str] | None = None,
+        attachment_ids: list[int] | None = None,
+        stored_message_text: str | None = None,
+        vision_decision: dict[str, Any] | None = None,
     ) -> TutorSessionDetail:
         state = self._initial_state(
             user=user,
@@ -1662,6 +1846,9 @@ class HomeTutorGraphRunner:
             selected_material_ids=selected_material_ids,
             initial_warnings=initial_warnings,
             streaming=False,
+            attachment_ids=attachment_ids or [],
+            stored_message_text=stored_message_text or message_text,
+            vision_decision=vision_decision,
         )
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
             result = self.graph.invoke(state)
@@ -1680,6 +1867,9 @@ class HomeTutorGraphRunner:
         deep_thinking: bool,
         selected_material_ids: list[int],
         initial_warnings: list[str] | None = None,
+        attachment_ids: list[int] | None = None,
+        stored_message_text: str | None = None,
+        vision_decision: dict[str, Any] | None = None,
     ) -> Iterator[dict[str, Any]]:
         state = self._initial_state(
             user=user,
@@ -1690,6 +1880,9 @@ class HomeTutorGraphRunner:
             selected_material_ids=selected_material_ids,
             initial_warnings=initial_warnings,
             streaming=True,
+            attachment_ids=attachment_ids or [],
+            stored_message_text=stored_message_text or message_text,
+            vision_decision=vision_decision,
         )
         try:
             final_detail: TutorSessionDetail | None = None
@@ -1751,6 +1944,9 @@ class HomeTutorGraphRunner:
         selected_material_ids: list[int],
         initial_warnings: list[str] | None,
         streaming: bool,
+        attachment_ids: list[int],
+        stored_message_text: str,
+        vision_decision: dict[str, Any] | None,
     ) -> AgentState:
         decision = decide_tool_capabilities(
             message_text,
@@ -1766,6 +1962,9 @@ class HomeTutorGraphRunner:
             "user": user,
             "session": session,
             "message_text": message_text,
+            "attachment_ids": attachment_ids,
+            "stored_message_text": stored_message_text,
+            "vision_decision": vision_decision,
             "use_web_search": use_web_search,
             "deep_thinking": deep_thinking,
             "search_required": decision.search_required,
@@ -1855,6 +2054,40 @@ class HomeTutorGraphRunner:
     def _route_node(self, state: AgentState) -> dict[str, Any]:
         def work():
             message = str(state["message_text"])
+            visual = state.get("vision_decision")
+            if isinstance(visual, dict):
+                search_required = bool(visual.get("search_required")) or bool(state.get("use_web_search"))
+                reasoning_mode = "deep" if bool(state.get("deep_thinking")) else str(visual.get("reasoning_mode") or "auto")
+                intent = "material_question" if state.get("selected_material_ids") else str(visual.get("intent") or "visual_learning")
+                summary = "已结合本次图片形成可审计的学习问题。"
+                updates = {
+                    "intent": intent,
+                    "requires_fresh_info": search_required,
+                    "search_required": search_required,
+                    "reasoning_mode": reasoning_mode,
+                    "source_scope": "mainland_preferred",
+                    "tool_reason_codes": ["vision_understanding"],
+                    "tool_reason_summary": summary,
+                    "semantic_search_query": str(visual.get("standalone_query") or message),
+                    "semantic_decision_mode": "vision_model",
+                    "semantic_decision_confidence": float(visual.get("confidence") or 0),
+                    "semantic_warning": None,
+                    "retrieval_query": str(visual.get("standalone_query") or message),
+                    "standalone_query": str(visual.get("standalone_query") or message),
+                    "uses_history": False,
+                    "referenced_turn_ids": [],
+                    "warnings": list(state.get("warnings", [])),
+                }
+                return updates, summary, "completed", {
+                    "search_required": search_required,
+                    "reasoning_mode": reasoning_mode,
+                    "semantic_decision_mode": "vision_model",
+                    "semantic_decision_confidence": float(visual.get("confidence") or 0),
+                    "semantic_intent": intent,
+                    "vision_image_count": len(state.get("attachment_ids", [])),
+                    "vision_provider": str(visual.get("provider") or "unknown"),
+                    "vision_confidence": float(visual.get("confidence") or 0),
+                }
             decision = self.service._semantic_decision(
                 user=state["user"],
                 session=state["session"],
@@ -1863,35 +2096,49 @@ class HomeTutorGraphRunner:
                 force_deep=bool(state.get("deep_thinking")),
                 conversation_context=state.get("conversation_context"),
             )
-            intent = "material_question" if state.get("selected_material_ids") else decision.intent
+            referenced_turn_ids = list(getattr(decision, "referenced_turn_ids", ()))
+            history_message, history_visual = self.service._prepare_history_visual_question(
+                user=state["user"],
+                session=state["session"],
+                question=message,
+                referenced_turn_ids=referenced_turn_ids,
+            )
+            intent = "material_question" if state.get("selected_material_ids") else (
+                str(history_visual.get("intent") or "visual_learning") if history_visual else decision.intent
+            )
+            search_required = decision.search_required or bool(history_visual and history_visual.get("search_required"))
+            reasoning_mode = "deep" if decision.reasoning_mode == "deep" or bool(history_visual and history_visual.get("reasoning_mode") == "deep") else "auto"
+            standalone_query = str(history_visual.get("standalone_query") or history_message) if history_visual else getattr(decision, "standalone_query", str(state["message_text"]))
             warnings = list(state.get("warnings", []))
             if decision.warning and decision.warning not in warnings:
                 warnings.append(decision.warning)
             updates = {
                 "intent": intent,
                 "requires_fresh_info": decision.intent in {"current_information", "verification"},
-                "search_required": decision.search_required,
-                "reasoning_mode": decision.reasoning_mode,
+                "search_required": search_required,
+                "reasoning_mode": reasoning_mode,
                 "source_scope": getattr(decision, "source_scope", "mainland_preferred"),
                 "tool_reason_codes": list(decision.reason_codes),
                 "tool_reason_summary": decision.reason_summary,
-                "semantic_search_query": decision.search_query,
+                "semantic_search_query": standalone_query if history_visual else decision.search_query,
                 "semantic_decision_mode": decision.decision_mode,
                 "semantic_decision_confidence": decision.confidence,
                 "semantic_warning": decision.warning,
-                "retrieval_query": (
+                "retrieval_query": standalone_query if history_visual else (
                     getattr(decision, "standalone_query", "")
                     if getattr(decision, "uses_history", False)
                     else (str(state["message_text"]) if str(decision.decision_mode) in {"model", "model_forced"} else str(state.get("retrieval_query") or state["message_text"]))
                 ),
-                "standalone_query": getattr(decision, "standalone_query", str(state["message_text"])),
+                "standalone_query": standalone_query,
+                "message_text": history_message,
+                "vision_decision": history_visual,
                 "uses_history": bool(getattr(decision, "uses_history", False)),
-                "referenced_turn_ids": list(getattr(decision, "referenced_turn_ids", ())),
+                "referenced_turn_ids": referenced_turn_ids,
                 "warnings": warnings,
             }
             metadata = {
-                "search_required": decision.search_required,
-                "reasoning_mode": decision.reasoning_mode,
+                "search_required": search_required,
+                "reasoning_mode": reasoning_mode,
                 "tool_reason_codes": list(decision.reason_codes),
                 "tool_reason_summary": decision.reason_summary,
                 "semantic_decision_mode": decision.decision_mode,
@@ -1900,6 +2147,10 @@ class HomeTutorGraphRunner:
                 "semantic_intent": intent,
                 "uses_history": bool(getattr(decision, "uses_history", False)),
                 "referenced_turn_count": len(getattr(decision, "referenced_turn_ids", ())),
+                "reused_history_image": bool(history_visual),
+                "vision_image_count": int(history_visual.get("image_count", 0)) if history_visual else 0,
+                "vision_provider": str(history_visual.get("provider") or "unknown") if history_visual else None,
+                "vision_confidence": float(history_visual.get("confidence") or 0) if history_visual else None,
             }
             return updates, f"已识别为 {intent}，{decision.reason_summary}。", "completed", metadata
 
@@ -2254,7 +2505,7 @@ class HomeTutorGraphRunner:
         detail = self.service._persist_message_pair(
             user=state["user"],
             session=state["session"],
-            message_text=str(state["message_text"]),
+            message_text=str(state.get("stored_message_text") or state["message_text"]),
             assistant_reply=str(state.get("assistant_reply") or ""),
             citation_json=list(state.get("citation_json", [])),
             trace_id=str(state["trace_id"]),
@@ -2263,6 +2514,7 @@ class HomeTutorGraphRunner:
             home_trace_records=list(state.get("pending_traces", [])),
             profile_signal_updates=dict(state.get("profile_signal_updates", {})),
             profile_signal_confidence=dict(state.get("profile_signal_confidence", {})),
+            attachment_ids=list(state.get("attachment_ids", [])),
         )
         duration_ms = max(1, int((perf_counter() - started) * 1000))
         artifact_id = detail.messages[-1].id if detail.messages else None
@@ -2509,6 +2761,9 @@ class CourseTutorGraphRunner:
         message_text: str,
         force_search: bool = False,
         force_deep: bool = False,
+        attachment_ids: list[int] | None = None,
+        stored_message_text: str | None = None,
+        vision_decision: dict[str, Any] | None = None,
     ) -> TutorSessionDetail:
         state = self._initial_state(
             user=user,
@@ -2516,13 +2771,16 @@ class CourseTutorGraphRunner:
             message_text=message_text,
             force_search=force_search,
             force_deep=force_deep,
+            attachment_ids=attachment_ids or [],
+            stored_message_text=stored_message_text or message_text,
+            vision_decision=vision_decision,
         )
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
             result = self.graph.invoke(state)
         return self.service._persist_message_pair(
             user=user,
             session=session,
-            message_text=message_text,
+            message_text=stored_message_text or message_text,
             assistant_reply=str(result.get("assistant_reply") or ""),
             citation_json=list(result.get("citation_json", [])),
             trace_id=str(result.get("trace_id") or ""),
@@ -2531,6 +2789,7 @@ class CourseTutorGraphRunner:
             course_trace_records=list(result.get("pending_traces", [])),
             profile_signal_updates=dict(result.get("profile_signal_updates", {})),
             profile_signal_confidence=dict(result.get("profile_signal_confidence", {})),
+            attachment_ids=attachment_ids or [],
         )
 
     def stream(
@@ -2541,6 +2800,9 @@ class CourseTutorGraphRunner:
         message_text: str,
         force_search: bool = False,
         force_deep: bool = False,
+        attachment_ids: list[int] | None = None,
+        stored_message_text: str | None = None,
+        vision_decision: dict[str, Any] | None = None,
     ) -> Iterator[dict[str, Any]]:
         state = self._initial_state(
             user=user,
@@ -2548,6 +2810,9 @@ class CourseTutorGraphRunner:
             message_text=message_text,
             force_search=force_search,
             force_deep=force_deep,
+            attachment_ids=attachment_ids or [],
+            stored_message_text=stored_message_text or message_text,
+            vision_decision=vision_decision,
         )
         try:
             state.update(self._profile_node(state))
@@ -2586,7 +2851,7 @@ class CourseTutorGraphRunner:
             detail = self.service._persist_message_pair(
                 user=user,
                 session=session,
-                message_text=message_text,
+                message_text=stored_message_text or message_text,
                 assistant_reply=assistant_reply,
                 citation_json=citation_json,
                 trace_id=trace_id,
@@ -2595,6 +2860,7 @@ class CourseTutorGraphRunner:
                 course_trace_records=list(state.get("pending_traces", [])),
                 profile_signal_updates=dict(state.get("profile_signal_updates", {})),
                 profile_signal_confidence=dict(state.get("profile_signal_confidence", {})),
+                attachment_ids=attachment_ids or [],
             )
             yield {"event": "done", "data": detail.model_dump()}
         except Exception as exc:
@@ -2636,6 +2902,9 @@ class CourseTutorGraphRunner:
         message_text: str,
         force_search: bool,
         force_deep: bool,
+        attachment_ids: list[int],
+        stored_message_text: str,
+        vision_decision: dict[str, Any] | None,
     ) -> AgentState:
         conversation_context = self.service._build_conversation_context(
             session,
@@ -2659,6 +2928,9 @@ class CourseTutorGraphRunner:
             "user": user,
             "session": session,
             "message_text": message_text,
+            "attachment_ids": attachment_ids,
+            "stored_message_text": stored_message_text,
+            "vision_decision": vision_decision,
             "use_web_search": force_search,
             "deep_thinking": force_deep,
             "search_required": decision.search_required,
@@ -2704,6 +2976,43 @@ class CourseTutorGraphRunner:
 
     def _route_node(self, state: AgentState) -> dict[str, Any]:
         def work():
+            visual = state.get("vision_decision")
+            if isinstance(visual, dict):
+                search_required = bool(visual.get("search_required")) or bool(state.get("use_web_search"))
+                reasoning_mode = "deep" if bool(state.get("deep_thinking")) else str(visual.get("reasoning_mode") or "auto")
+                intent = str(visual.get("intent") or "visual_learning")
+                summary = "已结合本次图片形成课程检索问题。"
+                updates = {
+                    "intent": intent,
+                    "search_required": search_required,
+                    "reasoning_mode": reasoning_mode,
+                    "source_scope": "mainland_preferred",
+                    "tool_reason_codes": ["vision_understanding"],
+                    "tool_reason_summary": summary,
+                    "semantic_search_query": str(visual.get("standalone_query") or state["message_text"]),
+                    "semantic_decision_mode": "vision_model",
+                    "semantic_decision_confidence": float(visual.get("confidence") or 0),
+                    "semantic_warning": None,
+                    "retrieval_query": str(visual.get("standalone_query") or state["message_text"]),
+                    "standalone_query": str(visual.get("standalone_query") or state["message_text"]),
+                    "uses_history": False,
+                    "referenced_turn_ids": [],
+                    "course_related": True,
+                    "profile_signal_updates": {},
+                    "profile_signal_confidence": {},
+                    "warnings": list(state.get("warnings", [])),
+                }
+                return updates, summary, "completed", {
+                    "search_required": search_required,
+                    "reasoning_mode": reasoning_mode,
+                    "semantic_decision_mode": "vision_model",
+                    "semantic_decision_confidence": float(visual.get("confidence") or 0),
+                    "semantic_intent": intent,
+                    "profile_signal_count": 0,
+                    "vision_image_count": len(state.get("attachment_ids", [])),
+                    "vision_provider": str(visual.get("provider") or "unknown"),
+                    "vision_confidence": float(visual.get("confidence") or 0),
+                }
             decision = self.service._semantic_decision(
                 user=state["user"],
                 session=state["session"],
@@ -2712,43 +3021,60 @@ class CourseTutorGraphRunner:
                 force_deep=bool(state.get("deep_thinking")),
                 conversation_context=state.get("conversation_context"),
             )
+            referenced_turn_ids = list(getattr(decision, "referenced_turn_ids", ()))
+            history_message, history_visual = self.service._prepare_history_visual_question(
+                user=state["user"],
+                session=state["session"],
+                question=str(state["message_text"]),
+                referenced_turn_ids=referenced_turn_ids,
+            )
+            intent = str(history_visual.get("intent") or "visual_learning") if history_visual else decision.intent
+            search_required = decision.search_required or bool(history_visual and history_visual.get("search_required"))
+            reasoning_mode = "deep" if decision.reasoning_mode == "deep" or bool(history_visual and history_visual.get("reasoning_mode") == "deep") else "auto"
+            standalone_query = str(history_visual.get("standalone_query") or history_message) if history_visual else getattr(decision, "standalone_query", str(state["message_text"]))
             warnings = list(state.get("warnings", []))
             if decision.warning and decision.warning not in warnings:
                 warnings.append(decision.warning)
             updates = {
-                "intent": decision.intent,
-                "search_required": decision.search_required,
-                "reasoning_mode": decision.reasoning_mode,
+                "intent": intent,
+                "search_required": search_required,
+                "reasoning_mode": reasoning_mode,
                 "source_scope": getattr(decision, "source_scope", "mainland_preferred"),
                 "tool_reason_codes": list(decision.reason_codes),
                 "tool_reason_summary": decision.reason_summary,
-                "semantic_search_query": decision.search_query,
+                "semantic_search_query": standalone_query if history_visual else decision.search_query,
                 "semantic_decision_mode": decision.decision_mode,
                 "semantic_decision_confidence": decision.confidence,
                 "semantic_warning": decision.warning,
-                "retrieval_query": (
+                "retrieval_query": standalone_query if history_visual else (
                     getattr(decision, "standalone_query", "")
                     if getattr(decision, "uses_history", False)
                     else (str(state["message_text"]) if str(decision.decision_mode) in {"model", "model_forced"} else str(state.get("retrieval_query") or state["message_text"]))
                 ),
-                "standalone_query": getattr(decision, "standalone_query", str(state["message_text"])),
+                "standalone_query": standalone_query,
+                "message_text": history_message,
+                "vision_decision": history_visual,
                 "uses_history": bool(getattr(decision, "uses_history", False)),
-                "referenced_turn_ids": list(getattr(decision, "referenced_turn_ids", ())),
+                "referenced_turn_ids": referenced_turn_ids,
                 "course_related": decision.course_related,
-                "profile_signal_updates": dict(decision.profile_updates),
-                "profile_signal_confidence": dict(decision.profile_confidence),
+                "profile_signal_updates": {} if history_visual else dict(decision.profile_updates),
+                "profile_signal_confidence": {} if history_visual else dict(decision.profile_confidence),
                 "warnings": warnings,
             }
             metadata = {
-                "search_required": decision.search_required,
-                "reasoning_mode": decision.reasoning_mode,
+                "search_required": search_required,
+                "reasoning_mode": reasoning_mode,
                 "tool_reason_codes": list(decision.reason_codes),
                 "tool_reason_summary": decision.reason_summary,
                 "semantic_decision_mode": decision.decision_mode,
                 "semantic_decision_confidence": decision.confidence,
                 "source_scope": getattr(decision, "source_scope", "mainland_preferred"),
-                "semantic_intent": decision.intent,
-                "profile_signal_count": len(decision.profile_updates),
+                "semantic_intent": intent,
+                "profile_signal_count": 0 if history_visual else len(decision.profile_updates),
+                "reused_history_image": bool(history_visual),
+                "vision_image_count": int(history_visual.get("image_count", 0)) if history_visual else 0,
+                "vision_provider": str(history_visual.get("provider") or "unknown") if history_visual else None,
+                "vision_confidence": float(history_visual.get("confidence") or 0) if history_visual else None,
             }
             return updates, decision.reason_summary, "completed", metadata
 

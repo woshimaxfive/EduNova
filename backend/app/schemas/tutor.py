@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from backend.app.models import ChatMessage, ChatSession
+from backend.app.models import ChatMessage, ChatMessageAttachment, ChatSession
 
 
 TutorSessionScope = Literal["home", "course"]
@@ -65,7 +65,8 @@ class DeleteTutorSessionResponse(BaseModel):
 
 
 class SendTutorMessageRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=8000)
+    message: str = Field(default="", max_length=8000)
+    attachment_ids: list[int] = Field(default_factory=list)
     use_web_search: bool = Field(
         default=False,
         json_schema_extra={"deprecated": True},
@@ -82,6 +83,20 @@ class SendTutorMessageRequest(BaseModel):
     @classmethod
     def normalize_message(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("attachment_ids")
+    @classmethod
+    def normalize_attachment_ids(cls, value: list[int]) -> list[int]:
+        normalized = list(dict.fromkeys(item for item in value if item > 0))
+        if len(normalized) > 3:
+            raise ValueError("每条消息最多上传 3 张图片。")
+        return normalized
+
+    @model_validator(mode="after")
+    def require_message_or_attachment(self):
+        if not self.message and not self.attachment_ids:
+            raise ValueError("消息和图片不能同时为空。")
+        return self
 
     @field_validator("selected_material_ids")
     @classmethod
@@ -106,6 +121,19 @@ class TutorSessionSummary(BaseModel):
     updated_at: str
 
 
+class TutorImageAttachment(BaseModel):
+    id: str
+    message_id: str | None
+    filename: str
+    mime_type: str
+    size_bytes: int
+    width: int
+    height: int
+    status: Literal["pending", "bound", "deleted"]
+    content_url: str | None
+    created_at: str
+
+
 class TutorMessage(BaseModel):
     id: str
     session_id: str
@@ -114,6 +142,7 @@ class TutorMessage(BaseModel):
     citation_json: list
     trace_id: str | None
     created_at: str
+    attachments: list[TutorImageAttachment] = Field(default_factory=list)
 
 
 class TutorSessionDetail(BaseModel):
@@ -155,7 +184,26 @@ def session_to_summary(session: ChatSession) -> TutorSessionSummary:
     )
 
 
-def message_to_api(message: ChatMessage) -> TutorMessage:
+def attachment_to_api(attachment: ChatMessageAttachment) -> TutorImageAttachment:
+    return TutorImageAttachment(
+        id=str(attachment.id),
+        message_id=str(attachment.message_id) if attachment.message_id is not None else None,
+        filename=attachment.original_filename,
+        mime_type=attachment.mime_type,
+        size_bytes=attachment.size_bytes,
+        width=attachment.width,
+        height=attachment.height,
+        status=attachment.status,
+        content_url=(
+            f"/api/v1/tutor/attachments/{attachment.id}/content"
+            if attachment.status != "deleted" and attachment.storage_key
+            else None
+        ),
+        created_at=_iso_timestamp(attachment.created_at),
+    )
+
+
+def message_to_api(message: ChatMessage, attachments: list[ChatMessageAttachment] | None = None) -> TutorMessage:
     return TutorMessage(
         id=str(message.id),
         session_id=str(message.session_id),
@@ -164,11 +212,16 @@ def message_to_api(message: ChatMessage) -> TutorMessage:
         citation_json=message.citation_json or [],
         trace_id=message.trace_id,
         created_at=_iso_timestamp(message.created_at),
+        attachments=[attachment_to_api(item) for item in (attachments or [])],
     )
 
 
-def session_detail_to_api(session: ChatSession, messages: list[ChatMessage]) -> TutorSessionDetail:
+def session_detail_to_api(
+    session: ChatSession,
+    messages: list[ChatMessage],
+    attachment_map: dict[int, list[ChatMessageAttachment]] | None = None,
+) -> TutorSessionDetail:
     return TutorSessionDetail(
         session=session_to_summary(session),
-        messages=[message_to_api(message) for message in messages],
+        messages=[message_to_api(message, (attachment_map or {}).get(message.id, [])) for message in messages],
     )

@@ -88,6 +88,33 @@ class OpenAICompatibleChatProvider:
             raise ModelProviderError("模型服务没有返回可用内容。", code="invalid_response", retryable=True)
         return content.strip()
 
+    def vision_completion(
+        self,
+        config: OpenAICompatibleConfig,
+        *,
+        prompt: str,
+        image_data_urls: list[str],
+        timeout_seconds: float,
+    ) -> str:
+        content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+        content.extend(
+            {"type": "image_url", "image_url": {"url": data_url}}
+            for data_url in image_data_urls
+        )
+        try:
+            with self._client(config.base_url, config.api_key, timeout_seconds) as client:
+                response = client.chat.completions.create(
+                    model=config.chat_model,
+                    messages=[{"role": "user", "content": content}],  # type: ignore[list-item]
+                    temperature=0.1,
+                )
+        except APIError as exc:
+            raise self._sdk_error(exc) from exc
+        text = response.choices[0].message.content if response.choices else None
+        if not isinstance(text, str) or not text.strip():
+            raise ModelProviderError("图片理解服务没有返回可用内容。", code="invalid_response", retryable=True)
+        return text.strip()
+
     def chat_completion_stream(
         self,
         config: OpenAICompatibleConfig,

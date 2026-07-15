@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -533,6 +534,41 @@ class ChatMessage(IdMixin, CreatedAtMixin, Base):
     trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
+class ChatMessageAttachment(IdMixin, CreatedAtMixin, Base):
+    __tablename__ = "chat_message_attachments"
+    __table_args__ = (
+        Index("ix_chat_message_attachments_session_status", "session_id", "status"),
+        Index("ix_chat_message_attachments_message", "message_id"),
+        Index("ix_chat_message_attachments_pending_expiry", "status", "expires_at"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    session_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    message_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("chat_messages.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    width: Mapped[int] = mapped_column(Integer, nullable=False)
+    height: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class UserPrivacySetting(IdMixin, TimestampMixin, Base):
     __tablename__ = "user_privacy_settings"
     __table_args__ = (UniqueConstraint("user_id", name="uq_user_privacy_settings_user_id"),)
@@ -589,6 +625,12 @@ class ModelSetting(IdMixin, TimestampMixin, Base):
         Index("ix_model_settings_user_default", "user_id", "is_default"),
         Index("ix_model_settings_user_embedding_default", "user_id", "is_embedding_default"),
         Index("ix_model_settings_user_rerank_default", "user_id", "is_rerank_default"),
+        Index(
+            "uq_model_settings_user_vision_default",
+            "user_id",
+            unique=True,
+            postgresql_where=text("is_vision_default"),
+        ),
         Index("ix_model_settings_user_updated", "user_id", "updated_at"),
     )
 
@@ -625,6 +667,7 @@ class ModelSetting(IdMixin, TimestampMixin, Base):
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_embedding_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_rerank_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_vision_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_test_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

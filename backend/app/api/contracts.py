@@ -47,6 +47,7 @@ from backend.app.schemas.tutor import (
     TutorSessionDetail,
     TutorSessionHistoryPage,
     TutorSessionSummary,
+    TutorImageAttachment,
 )
 from backend.app.services.model_settings import (
     ModelConfigSummary,
@@ -194,6 +195,7 @@ RESPONSE_MODELS: dict[str, Any] = {
     "set_default_model_config": ApiEnvelope[ModelSettingsListResponse],
     "set_embedding_default_model_config": ApiEnvelope[ModelSettingsListResponse],
     "set_rerank_default_model_config": ApiEnvelope[ModelSettingsListResponse],
+    "set_vision_default_model_config": ApiEnvelope[ModelSettingsListResponse],
     "test_model_config": ApiEnvelope[ModelConnectionTestResponse],
     "test_model_settings": ApiEnvelope[ModelConnectionTestResponse],
     "create_embedding_reindex_job": ApiEnvelope[AiJobResponse],
@@ -207,6 +209,8 @@ RESPONSE_MODELS: dict[str, Any] = {
     "rename_session": ApiEnvelope[TutorSessionSummary],
     "delete_session": ApiEnvelope[DeleteTutorSessionResponse],
     "send_message": ApiEnvelope[TutorSessionDetail],
+    "upload_tutor_attachment": ApiEnvelope[TutorImageAttachment],
+    "delete_tutor_attachment": ApiEnvelope[TutorImageAttachment],
 }
 
 

@@ -603,3 +603,11 @@ Phase 5 以后：
 - 真正模态的 Dialog、Drawer、AlertDialog 和 Toast 使用项目 Radix 包装层，非模态资料检查区域继续保留普通页面语义。
 - 前端 SSE 继续使用可携带 Authorization、POST body 和 AbortSignal 的 Fetch，但分包、多行数据和 UTF-8 边界由 `eventsource-parser` 处理，不再由页面直接读取并拼接 `ReadableStream` 字符串。
 - OpenAPI 生成物只描述传输合同；Query Key、缓存失效、路由状态和页面 ViewModel 保持项目所有。
+
+## 22. Phase 26 统一下一步路由
+
+- `/api/v1/learning/next-action` 只返回动作语义和安全 ID；`learningActionHref` 是前端唯一映射器，后端不拼接页面 URL。
+- 首页和资料库使用全局动作；课程、路径、资源、练习、报告和画像使用当前课程动作，并同时失效全局与当前课程缓存。
+- `continue_path_task` 优先进入真实资源，否则进入课程知识点；URL 可携带 `path_task_id`，资源页完成后显式回写任务并移除该参数。
+- 课程空会话只展示一个主动作，提问、自由练习和报告作为次级导航；历史回答不再重复显示闭环主动作。
+- AI Job 完成后保留“查看结果”入口并刷新动作，不新增通知路由或第二套任务状态。

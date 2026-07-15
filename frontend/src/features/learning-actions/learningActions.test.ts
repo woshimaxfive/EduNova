@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { type LearningNextAction } from "../../api/learning";
-import { learningActionHref } from "./learningActions";
+import { learningActionButtonLabel, learningActionHref } from "./learningActions";
 
 function action(kind: string, overrides: Partial<LearningNextAction> = {}): LearningNextAction {
   return {
@@ -19,6 +19,13 @@ function action(kind: string, overrides: Partial<LearningNextAction> = {}): Lear
 }
 
 describe("learning action routes", () => {
+  it("uses an explicit verb for each primary action", () => {
+    expect(learningActionButtonLabel(action("upload_material"))).toBe("上传资料");
+    expect(learningActionButtonLabel(action("review_material"))).toBe("确认目录");
+    expect(learningActionButtonLabel(action("practice_weakness"))).toBe("开始练习");
+    expect(learningActionButtonLabel(action("update_report"))).toBe("更新报告");
+  });
+
   it("routes the material lifecycle to the selected material", () => {
     expect(learningActionHref(action("review_material", { course_id: null, material_id: "12" }))).toBe("/app/library?material_id=12");
     expect(learningActionHref(action("upload_material", { course_id: null }))).toBe("/app/library");
@@ -35,4 +42,3 @@ describe("learning action routes", () => {
     expect(learningActionHref(action("update_report"))).toBe("/app/reports?course_id=8");
   });
 });
-

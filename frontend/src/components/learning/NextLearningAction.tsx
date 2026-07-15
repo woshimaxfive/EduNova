@@ -2,7 +2,7 @@ import { ArrowRight, CircleNotch, WarningCircle } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 
 import { type LearningNextAction } from "../../api/learning";
-import { learningActionHref } from "../../features/learning-actions/learningActions";
+import { learningActionButtonLabel, learningActionHref } from "../../features/learning-actions/learningActions";
 
 type NextLearningActionProps = {
   action: LearningNextAction | null | undefined;
@@ -18,7 +18,7 @@ export function NextLearningAction({ action, isLoading = false, error = false, c
   }
   if (error || !action) return null;
   const href = learningActionHref(action);
-  const content = <>{action.status === "blocked" ? <WarningCircle size={19} weight="duotone" /> : action.status === "waiting" ? <CircleNotch className="spin" size={19} /> : null}<span>{action.status === "waiting" ? "查看进度" : "继续"}</span><ArrowRight size={17} weight="bold" /></>;
+  const content = <>{action.status === "blocked" ? <WarningCircle size={19} weight="duotone" /> : action.status === "waiting" ? <CircleNotch className="spin" size={19} /> : null}<span>{learningActionButtonLabel(action)}</span><ArrowRight size={17} weight="bold" /></>;
   return (
     <section className={`next-learning-action ${action.status}${compact ? " compact" : ""}`} aria-label="下一步学习">
       <div><span>下一步学习</span><strong>{action.label}</strong><p>{action.description}</p></div>
@@ -26,4 +26,3 @@ export function NextLearningAction({ action, isLoading = false, error = false, c
     </section>
   );
 }
-

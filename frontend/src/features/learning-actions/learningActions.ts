@@ -69,3 +69,23 @@ export function learningActionHref(action: LearningNextAction) {
   if (action.course_id) return buildCoursePath(action.course_id);
   return PATHS.app;
 }
+
+const ACTION_BUTTON_LABELS: Record<string, string> = {
+  upload_material: "上传资料",
+  wait_for_material: "查看进度",
+  retry_material: "重新解析",
+  review_material: "确认目录",
+  create_course: "生成课程",
+  wait_for_course: "查看进度",
+  confirm_weakness: "确认薄弱点",
+  continue_path_task: "继续任务",
+  practice_weakness: "开始练习",
+  generate_path: "生成路径",
+  study_knowledge_point: "开始学习",
+  update_report: "更新报告",
+  review_report: "查看报告"
+};
+
+export function learningActionButtonLabel(action: LearningNextAction) {
+  return ACTION_BUTTON_LABELS[action.kind] ?? (action.status === "waiting" ? "查看进度" : "继续");
+}

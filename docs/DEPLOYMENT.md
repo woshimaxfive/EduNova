@@ -424,3 +424,7 @@ docker compose build
 这些配置均为可选 Build Args；不设置时回到 Debian、PyPI、Hugging Face 和 npm 官方源。发布构建需要同时保留固定版本、依赖审计和许可证门禁，不能因为使用镜像源而跳过供应链检查。
 
 AI Worker 默认从 PyTorch 官方 CPU index 安装固定 `torch`/`torchvision` CPU wheel；网络受限时可显式切换到已验证的高校镜像。不要改回 PyPI 默认 Linux wheel，否则会额外引入 CUDA、cuDNN、NCCL 等当前不使用的 GPU 运行库，并显著放大镜像。
+
+## 12. Phase 26 部署影响
+
+Phase 26 只新增 backend JSON 路由和 frontend 静态代码，不新增环境变量、镜像依赖、Worker 队列、数据卷或 Alembic 迁移。滚动更新 backend 与 frontend/nginx 即可；旧客户端和 `DashboardSummary.empty_state.action_label` 保持兼容。发布后可用已登录账号请求 `/api/v1/learning/next-action` 验证用户隔离与响应 Schema。

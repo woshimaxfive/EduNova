@@ -532,6 +532,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/learning/next-action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Learning Next Action */
+        get: operations["get_learning_next_action_api_v1_learning_next_action_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/materials": {
         parameters: {
             query?: never;
@@ -1594,6 +1611,12 @@ export interface components {
             /** Trace Id */
             trace_id: string;
         };
+        /** ApiEnvelope[LearningNextAction] */
+        ApiEnvelope_LearningNextAction_: {
+            data: components["schemas"]["LearningNextAction"];
+            /** Trace Id */
+            trace_id: string;
+        };
         /** ApiEnvelope[LearningPathDetail] */
         ApiEnvelope_LearningPathDetail_: {
             data: components["schemas"]["LearningPathDetail"];
@@ -2591,6 +2614,30 @@ export interface components {
             resource_count: number;
             /** Weakness Count */
             weakness_count: number;
+        };
+        /** LearningNextAction */
+        LearningNextAction: {
+            /** Course Id */
+            course_id?: string | null;
+            /** Description */
+            description: string;
+            /** Kind */
+            kind: string;
+            /** Knowledge Point Id */
+            knowledge_point_id?: string | null;
+            /** Label */
+            label: string;
+            /** Material Id */
+            material_id?: string | null;
+            /** Path Task Id */
+            path_task_id?: string | null;
+            /** Resource Id */
+            resource_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ready" | "waiting" | "blocked";
         };
         /** LearningPathDetail */
         LearningPathDetail: {
@@ -7361,6 +7408,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_learning_next_action_api_v1_learning_next_action_get: {
+        parameters: {
+            query?: {
+                course_id?: number | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_LearningNextAction_"];
                 };
             };
             /** @description Bad Request */

@@ -997,6 +997,8 @@ Phase 23 不新增数据库迁移。自动能力决策只写入既有 `agent_run
 
 ## 14. Phase 25 跨会话记忆
 
+Phase 26 不新增迁移或通用事件表。`LearningNextActionService` 只读取现有 `materials`、`course_material_links`、`courses`、`ai_jobs`、`weakness_review_queue`、`learning_paths`、`learning_tasks`、`practice_sessions` 和 `assessment_reports`；掌握度继续由现有课程服务从有效证据派生。动作结果不持久化，避免形成第二套学习状态真相。
+
 ### `user_privacy_settings`
 
 | 字段 | 类型 | 说明 |

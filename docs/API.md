@@ -2557,3 +2557,28 @@ OpenRouter 不再作为可见预设。
   "trace_id": "trace_api"
 }
 ```
+
+## 23. Phase 26 统一下一最佳行动
+
+### `GET /api/v1/learning/next-action`
+
+可选查询参数 `course_id`。缺省时恢复当前用户最近的资料建课或课程学习链路；提供课程时只计算该课程，课程不存在或不属于当前用户统一返回 404。
+
+```json
+{
+  "data": {
+    "kind": "continue_path_task",
+    "status": "ready",
+    "label": "继续任务：理解监督学习",
+    "description": "先理解基本概念",
+    "course_id": "10",
+    "material_id": null,
+    "knowledge_point_id": "40",
+    "path_task_id": "30",
+    "resource_id": "50"
+  },
+  "trace_id": "trace_api"
+}
+```
+
+`status` 为 `ready|waiting|blocked`。`kind` 表达上传、等待解析、重试、确认目录、建课、确认薄弱点、继续路径、针对练习、生成路径、学习知识点、更新报告或查看报告等动作。接口只返回语义和安全 ID，不返回前端 URL，也不会执行动作。

@@ -37,10 +37,15 @@ if (Test-Path -LiteralPath "$repoRoot\backend") {
     Invoke-CheckedCommand $python -m pytest "$repoRoot\backend\tests"
     Write-Host "== Offline AI quality evaluation =="
     Invoke-CheckedCommand $python -m backend.evals.run --mode offline --output "$repoRoot\output\ai-eval\offline-latest.json"
+    Write-Host "== Contest readiness evidence =="
+    Invoke-CheckedCommand $python -m backend.evals.contest_readiness --output "$repoRoot\output\contest-readiness\latest.json"
   }
   else {
     Write-Host "backend tests not found; skipped"
   }
+
+  Write-Host "== OpenAPI contract drift check =="
+  Invoke-CheckedCommand $python "$repoRoot\scripts\check_openapi.py"
 
   if (Test-Path -LiteralPath "$repoRoot\backend") {
     Invoke-CheckedCommand $python -m ruff check "$repoRoot\backend"

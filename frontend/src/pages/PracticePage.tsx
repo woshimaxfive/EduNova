@@ -347,6 +347,7 @@ export function PracticePage() {
                   score={activeSession.score}
                   gradingStatus={activeSession.grading_status}
                   correctCount={resultSummary.correctCount}
+                  gradedCount={resultSummary.gradedCount}
                   totalCount={resultSummary.totalCount}
                   effectiveDifficulty={activeSession.effective_difficulty}
                   nextAction={nextActionQuery.data?.data ?? null}

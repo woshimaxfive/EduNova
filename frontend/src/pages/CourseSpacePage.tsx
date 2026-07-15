@@ -1298,6 +1298,7 @@ function AnswerDetailPanel({
               <strong>{citation.source_title}</strong>
               <span>{citation.section_title ?? "课程切片"}</span>
               <small className="citation-meta">
+                {citation.page_number ? <span>教材第 {citation.page_number} 页</span> : null}
                 <span>匹配度 {citation.score.toFixed(1)}</span>
                 <span>{retrievalSourceLabel(citation.retrieval_source)}</span>
                 <span>{embeddingStatusLabel(citation.embedding_status)}</span>

@@ -9,6 +9,7 @@ type PracticeResultSummaryProps = {
   score: number | null;
   gradingStatus: "complete" | "partial" | "ungraded";
   correctCount: number;
+  gradedCount: number;
   totalCount: number;
   effectiveDifficulty: string;
   nextAction: LearningNextAction | null;
@@ -22,6 +23,7 @@ export function PracticeResultSummary({
   score,
   gradingStatus,
   correctCount,
+  gradedCount,
   totalCount,
   effectiveDifficulty,
   nextAction,
@@ -60,7 +62,9 @@ export function PracticeResultSummary({
         <span>{gradingStatus === "complete" ? "练习完成" : gradingStatus === "partial" ? "部分评分" : "暂未评分"}</span>
         <h2>{summary}</h2>
         <div>
-          <span><CheckCircle size={16} weight="duotone" aria-hidden="true" />答对 {correctCount} / {totalCount}</span>
+          <span><CheckCircle size={16} weight="duotone" aria-hidden="true" />
+            {gradingStatus === "complete" ? `答对 ${correctCount} / ${totalCount}` : `已评分 ${gradedCount} / ${totalCount}`}
+          </span>
           <span><Target size={16} weight="duotone" aria-hidden="true" />{difficultyLabel(effectiveDifficulty)}难度</span>
         </div>
       </div>

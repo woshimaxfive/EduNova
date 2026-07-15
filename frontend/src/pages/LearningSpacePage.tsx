@@ -41,6 +41,7 @@ import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { isCompactWorkspaceViewport, useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
 import { useAuthStore } from "../features/auth/authStore";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
+import { isRestorableCourseBuilderJob } from "../features/aiJobs/jobRestoration";
 import { useHomeConversationHistory } from "../features/home/useHomeConversationHistory";
 import { invalidateLearningNextActions, learningActionHref, useLearningNextAction } from "../features/learning-actions/learningActions";
 import { SpeechPlaybackControls } from "../features/speech/SpeechPlaybackControls";
@@ -205,7 +206,7 @@ export function LearningSpacePage() {
 
   useEffect(() => {
     if (courseJobId) return;
-    const restored = jobs.find((job) => job.workflow === "course_builder" && ["queued", "running", "cancelling", "failed"].includes(job.status));
+    const restored = jobs.find(isRestorableCourseBuilderJob);
     if (!restored) return;
     const materialIds = Array.isArray(restored.request.material_ids) ? restored.request.material_ids.map(String) : [];
     // Restore durable server state after navigation or refresh.

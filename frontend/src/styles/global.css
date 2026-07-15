@@ -6817,10 +6817,12 @@ a {
 .ai-job-tray {
   position: fixed;
   z-index: 80;
-  right: 18px;
-  bottom: 18px;
-  width: max-content;
+  top: 50%;
+  right: 0;
+  bottom: auto;
+  width: 44px;
   max-width: calc(100vw - 32px);
+  transform: translateY(-50%);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--surface-strong) 94%, transparent);
@@ -6829,7 +6831,19 @@ a {
 }
 
 .ai-job-tray--expanded {
+  right: 18px;
   width: min(340px, calc(100vw - 32px));
+}
+
+.ai-job-tray:not(.ai-job-tray--expanded) .ai-job-tray__toggle {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: 8px;
+}
+
+.ai-job-tray:not(.ai-job-tray--expanded) .ai-job-tray__toggle span,
+.ai-job-tray:not(.ai-job-tray--expanded) .ai-job-tray__toggle svg:last-child {
+  display: none;
 }
 
 .ai-job-tray__toggle {
@@ -6869,9 +6883,8 @@ a {
 }
 
 @media (max-width: 600px) {
-  .ai-job-tray {
+  .ai-job-tray--expanded {
     right: 10px;
-    bottom: 10px;
     width: calc(100vw - 20px);
   }
 }

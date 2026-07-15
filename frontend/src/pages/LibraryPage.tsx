@@ -154,6 +154,11 @@ export function LibraryPage() {
   const courseTitles = useMemo(() => new Map(courses.map((course) => [course.id, course.title])), [courses]);
   const selectedMaterialId = parsePositiveId(searchParams.get("material_id"));
   const selectedMaterial = files.find((material) => Number(material.id) === selectedMaterialId) ?? null;
+  const activeMaterialJob = jobs.find((job) => (
+    job.workflow === "material_ingestion"
+    && ["queued", "running", "cancelling"].includes(job.status)
+    && Number(job.request.material_id) === selectedMaterialId
+  )) ?? null;
   const materialDetailQuery = useQuery({
     queryKey: ["materials", "detail", selectedMaterialId],
     queryFn: () => getMaterial(selectedMaterialId ?? 0),
@@ -526,11 +531,11 @@ export function LibraryPage() {
           onClose={closeDrawer}
           footer={detailState ? (
             <div className="library-detail-actions">
-              {detailState.ingestion_status === "legacy" || detailState.ingestion_status === "failed" ? (
+              {!activeMaterialJob && ["legacy", "failed", "awaiting_confirmation"].includes(detailState.ingestion_status ?? "") ? (
                 <button className="soft-button" type="button" disabled={isUpdatingOutline} onClick={() => void handleReingestMaterial()}>重新精细解析</button>
               ) : null}
               {materialOutline && !materialOutline.confirmed ? (
-                <button className="primary-action" type="button" disabled={isUpdatingOutline || !materialOutline.quality.passed} onClick={() => void handleConfirmOutline()}>
+                <button className="primary-action" type="button" disabled={Boolean(activeMaterialJob) || isUpdatingOutline || !materialOutline.quality.passed} onClick={() => void handleConfirmOutline()}>
                   {isUpdatingOutline ? "保存中" : "确认目录"}
                 </button>
               ) : null}
@@ -551,6 +556,7 @@ export function LibraryPage() {
           <MaterialDetailPanel
             material={materialDetail}
             fallbackMaterial={selectedMaterial}
+            activeJob={activeMaterialJob}
             outline={materialOutline}
             tab={detailTab}
             isLoading={materialDetailQuery.isLoading}
@@ -615,6 +621,7 @@ export function LibraryPage() {
 function MaterialDetailPanel(props: {
   material: MaterialDetail | null;
   fallbackMaterial: MaterialListItem | null;
+  activeJob: AiJob | null;
   outline: MaterialOutline | null;
   tab: DetailTab;
   isLoading: boolean;
@@ -643,16 +650,22 @@ function MaterialDetailPanel(props: {
       </div>
       {props.tab === "overview" ? (
         <section className="library-detail-overview" role="tabpanel" aria-label="资料概览">
+          {props.activeJob ? (
+            <InlineFeedback
+              message={`${props.activeJob.label}（${props.activeJob.progress_percent}%）`}
+              tone="warning"
+            />
+          ) : null}
           <div className="library-detail-metrics">
-            <div><span>结构状态</span><strong>{material.outline_confirmed ? "目录已确认" : material.ingestion_status === "awaiting_confirmation" ? "等待确认" : props.fallbackMaterial?.detail ?? material.detail}</strong></div>
-            <div><span>解析质量</span><strong>{quality.passed ? "通过" : material.ingestion_status === "legacy" ? "旧版待重建" : "未通过或处理中"}</strong></div>
+            <div><span>结构状态</span><strong>{props.activeJob?.label ?? (material.outline_confirmed ? "目录已确认" : material.ingestion_status === "awaiting_confirmation" ? "等待确认" : props.fallbackMaterial?.detail ?? material.detail)}</strong></div>
+            <div><span>解析质量</span><strong>{props.activeJob ? `重新解析中（上次${quality.passed ? "通过" : "未通过"}）` : quality.passed ? "通过" : material.ingestion_status === "legacy" ? "旧版待重建" : "未通过或处理中"}</strong></div>
             <div><span>章节</span><strong>{quality.section_count ?? material.section_count ?? 0}</strong></div>
             <div><span>切片</span><strong>{quality.chunk_count ?? material.chunk_count ?? 0}</strong></div>
             <div><span>页数</span><strong>{quality.page_count ?? material.page_count ?? "—"}</strong></div>
             <div><span>可读页面</span><strong>{typeof quality.readable_page_ratio === "number" ? `${Math.round(quality.readable_page_ratio * 100)}%` : "—"}</strong></div>
           </div>
-          {(quality.warnings ?? []).map((warning) => <InlineFeedback key={warning} message={warning} tone="warning" />)}
-          {(quality.risk_flags ?? []).length > 0 ? <InlineFeedback message={`质量门禁未通过：${quality.risk_flags?.join("、")}`} tone="warning" /> : null}
+          {!props.activeJob ? (quality.warnings ?? []).map((warning) => <InlineFeedback key={warning} message={warning} tone="warning" />) : null}
+          {!props.activeJob && (quality.risk_flags ?? []).length > 0 ? <InlineFeedback message={`质量门禁未通过：${quality.risk_flags?.join("、")}`} tone="warning" /> : null}
           <section className="library-preview-block">
             <h3>内容短预览</h3>
             <p>{material.extracted_text_preview || "当前资料没有可展示的文本预览。"}</p>

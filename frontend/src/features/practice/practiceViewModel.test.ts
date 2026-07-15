@@ -20,6 +20,6 @@ describe("practice view model", () => {
       { question_id: "q1", answer_text: "a", is_correct: true, feedback: { score: 100, grading_status: "deterministic", message: "", matched_concepts: [], missing_concepts: [], confidence: 1, matched_keywords: [], missing_keywords: [], explanation: "" } },
       { question_id: "q2", answer_text: "b", is_correct: false, feedback: { score: 0, grading_status: "deterministic", message: "", matched_concepts: [], missing_concepts: [], confidence: 1, matched_keywords: [], missing_keywords: [], explanation: "" } }
     ]);
-    expect(result).toEqual({ correctCount: 1, totalCount: 2, wrongQuestionIds: ["q2"] });
+    expect(result).toEqual({ correctCount: 1, gradedCount: 2, totalCount: 2, wrongQuestionIds: ["q2"] });
   });
 });

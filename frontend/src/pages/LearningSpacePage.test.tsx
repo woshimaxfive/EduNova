@@ -12,6 +12,7 @@ import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
+import { isRestorableCourseBuilderJob } from "../features/aiJobs/jobRestoration";
 import { makeCompletedAiJob } from "../test/aiJobs";
 import { LearningSpacePage } from "./LearningSpacePage";
 
@@ -636,6 +637,14 @@ function renderWithDashboardSummary(
 }
 
 describe("LearningSpacePage", () => {
+  it("restores only active course-building jobs and never reopens an old failed job", () => {
+    expect(isRestorableCourseBuilderJob({ workflow: "course_builder", status: "queued" })).toBe(true);
+    expect(isRestorableCourseBuilderJob({ workflow: "course_builder", status: "running" })).toBe(true);
+    expect(isRestorableCourseBuilderJob({ workflow: "course_builder", status: "cancelling" })).toBe(true);
+    expect(isRestorableCourseBuilderJob({ workflow: "course_builder", status: "failed" })).toBe(false);
+    expect(isRestorableCourseBuilderJob({ workflow: "course_builder", status: "completed" })).toBe(false);
+    expect(isRestorableCourseBuilderJob({ workflow: "path_planning", status: "running" })).toBe(false);
+  });
   beforeEach(() => {
     previousAdapter = apiClient.defaults.adapter;
     previousFetch = globalThis.fetch;

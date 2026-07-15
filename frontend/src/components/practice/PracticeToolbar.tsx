@@ -37,7 +37,9 @@ export function PracticeToolbar({
         <span>{session ? difficultyLabel(session.effective_difficulty) : "智能适配"}</span>
         <strong>
           {completed
-            ? `得分 ${session?.score ?? 0}`
+            ? session?.score === null
+              ? "暂未评分"
+              : `得分 ${session.score}`
             : total > 0
               ? `${Math.min(activeIndex + 1, total)} / ${total} · 已答 ${answeredCount}`
               : "尚未开始"}

@@ -410,7 +410,7 @@ describe("ReportsPage", () => {
     expect(await screen.findByText("已生成 Markdown 学习档案。")).toBeInTheDocument();
     expect(createObjectUrlSpy).toHaveBeenCalledTimes(1);
     expect(clickSpy).toHaveBeenCalledTimes(1);
-    expect(revokeObjectUrlSpy).toHaveBeenCalledWith("blob:learning-dossier");
+    expect(revokeObjectUrlSpy).not.toHaveBeenCalled();
     expect(calls).toContainEqual(
       expect.objectContaining({
         method: "post",

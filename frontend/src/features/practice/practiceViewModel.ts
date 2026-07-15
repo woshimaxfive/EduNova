@@ -14,12 +14,15 @@ export function isAnswered(value: string | null | undefined) {
 export function practiceResultSummary(questions: PracticeQuestion[], answers: PracticeAnswerResult[]) {
   const answerByQuestion = new Map(answers.map((answer) => [answer.question_id, answer]));
   const correctCount = questions.filter((question) => answerByQuestion.get(question.id)?.is_correct === true).length;
+  const gradedCount = questions.filter((question) => answerByQuestion.get(question.id)?.is_correct !== null
+    && answerByQuestion.get(question.id)?.is_correct !== undefined).length;
   const wrongQuestionIds = questions
     .filter((question) => answerByQuestion.get(question.id)?.is_correct === false)
     .map((question) => question.id);
 
   return {
     correctCount,
+    gradedCount,
     totalCount: questions.length,
     wrongQuestionIds
   };

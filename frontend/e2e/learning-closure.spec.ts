@@ -13,7 +13,7 @@ async function confirmUploadedMaterial(page: Page, title: string) {
   await expect(page.getByText("目录已确认", { exact: true }).first()).toBeVisible();
 }
 
-async function createAndSubmitUngradedPractice(page: Page) {
+async function createAndSubmitPartiallyGradedPractice(page: Page) {
   await page.goto("/app/practice");
   const start = page.getByRole("button", { name: /开始新练习|开始针对性练习/ }).first();
   await expect(start).toBeVisible();
@@ -29,12 +29,14 @@ async function createAndSubmitUngradedPractice(page: Page) {
   await page.getByRole("button", { name: "提交练习" }).click();
   const confirm = page.getByRole("alertdialog", { name: /还有 3 题未作答/ });
   await confirm.getByRole("button", { name: "仍然提交" }).click();
-  await expect(page.getByText("简答题暂未评分，当前结果不会影响掌握度、弱点或学习路径。")).toBeVisible();
+  await expect(page.getByText("部分评分", { exact: true })).toBeVisible();
+  await expect(page.getByText("已评分 2 / 3", { exact: true })).toBeVisible();
+  await expect(page.getByText("暂未评分", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "查看学习更新" }).click();
   await expect(page.getByText("本次练习已写入学习状态")).toBeVisible();
 }
 
-test("rules-only Docker environment preserves ungraded boundaries with real traces", async ({ page }) => {
+test("rules-only Docker environment preserves partial-grading boundaries with real traces", async ({ page }) => {
   test.setTimeout(240_000);
   await page.goto("/register");
   await page.getByLabel("昵称").fill("Phase 14 验收账号");
@@ -54,7 +56,7 @@ test("rules-only Docker environment preserves ungraded boundaries with real trac
   await page.getByRole("button", { name: "查看 PathPlanningGraph" }).click();
   await expect(page.getByText("deterministic_rank")).toBeVisible();
 
-  await createAndSubmitUngradedPractice(page);
+  await createAndSubmitPartiallyGradedPractice(page);
   await page.getByRole("button", { name: "查看 AssessmentGraph" }).click();
   await expect(page.getByText("deterministic_score")).toBeVisible();
 
@@ -64,7 +66,7 @@ test("rules-only Docker environment preserves ungraded boundaries with real trac
   await page.getByRole("tab", { name: "规划依据" }).click();
   await expect(page.getByText(/规则底稿 · 规则审核/)).toBeVisible();
 
-  await createAndSubmitUngradedPractice(page);
+  await createAndSubmitPartiallyGradedPractice(page);
 
   await page.goto("/app/reports");
   await expect(page.getByRole("button", { name: "生成学习报告" })).toBeEnabled();

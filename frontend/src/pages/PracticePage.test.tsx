@@ -396,11 +396,37 @@ describe("PracticePage", () => {
 
     const summary = await screen.findByRole("region", { name: "练习结果摘要" });
     expect(within(summary).getByText("部分评分")).toBeInTheDocument();
+    expect(within(summary).getByText("已评分 2 / 3")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "q3 批改结果" })).toHaveClass("pending");
     expect(screen.getByText("简答题暂未评分")).toBeInTheDocument();
     await user.click(within(summary).getByRole("button", { name: "重试简答题评分" }));
     await waitFor(() => expect(within(summary).queryByRole("button", { name: "重试简答题评分" })).not.toBeInTheDocument());
     expect(calls).toContainEqual(expect.objectContaining({ method: "post", url: PRACTICE_ENDPOINTS.regrade(501) }));
+  });
+
+  it("does not display a zero score when every answer is ungraded", async () => {
+    const ungradedSession = {
+      ...completedSession,
+      score: null,
+      grading_status: "ungraded",
+      answers: completedSession.answers.map((answer) => ({
+        ...answer,
+        is_correct: null,
+        feedback: {
+          ...answer.feedback,
+          score: null,
+          grading_status: "ungraded",
+          message: "简答题暂未评分，可稍后重试。"
+        }
+      }))
+    };
+    installAdapter({ detail: ungradedSession });
+    renderWithProviders(`${PATHS.practice}?course_id=808&session_id=501&question_id=q1`);
+
+    expect((await screen.findAllByText("暂未评分")).length).toBeGreaterThan(0);
+    const summary = screen.getByRole("region", { name: "练习结果摘要" });
+    expect(within(summary).getByText("已评分 0 / 3")).toBeInTheDocument();
+    expect(screen.queryByText("得分 0")).not.toBeInTheDocument();
   });
 
   it("keeps settings and return context when generation fails", async () => {

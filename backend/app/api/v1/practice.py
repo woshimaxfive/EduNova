@@ -134,3 +134,16 @@ def submit_practice_answers(
     except PracticeValidationError as exc:
         raise ApiError(status.HTTP_400_BAD_REQUEST, "VALIDATION_ERROR", str(exc)) from exc
     return api_response(result.model_dump())
+
+
+@router.post("/sessions/{session_id}/regrade")
+def regrade_practice_answers(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    service: PracticeService = Depends(get_practice_service),
+) -> dict:
+    try:
+        result = service.regrade_answers(current_user, session_id)
+    except PracticeNotFoundError as exc:
+        raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc
+    return api_response(result.model_dump())

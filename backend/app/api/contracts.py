@@ -160,6 +160,7 @@ RESPONSE_MODELS: dict[str, Any] = {
     "get_practice_session": ApiEnvelope[PracticeSessionDetail],
     "save_practice_draft": ApiEnvelope[PracticeSessionDetail],
     "submit_practice_answers": ApiEnvelope[PracticeSessionDetail],
+    "regrade_practice_answers": ApiEnvelope[PracticeSessionDetail],
     "get_my_profile": ApiEnvelope[StudentProfileResponse],
     "update_profile_by_chat": ApiEnvelope[ProfileChatResponse],
     "list_profile_events": ApiEnvelope[list[ProfileEventResponse]],

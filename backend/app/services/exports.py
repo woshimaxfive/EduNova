@@ -824,13 +824,15 @@ class ExportService:
     def _practice_lines(self, answers: list[PracticeAnswer]) -> list[str]:
         if not answers:
             return ["还没有可用于导出的练习作答证据。"]
-        scored = [int((answer.feedback_json or {}).get("score") or 0) for answer in answers]
+        scored = [int((answer.feedback_json or {})["score"]) for answer in answers if (answer.feedback_json or {}).get("score") is not None]
         low_score_count = sum(1 for score in scored if score < 60)
+        ungraded_count = sum(1 for answer in answers if (answer.feedback_json or {}).get("score") is None)
         correct_count = sum(1 for answer in answers if answer.is_correct is True)
         return [
             f"- 已记录作答：{len(answers)} 条",
             f"- 正确作答：{correct_count} 条",
             f"- 低分或错误：{low_score_count} 条",
+            f"- 暂未评分：{ungraded_count} 条",
         ]
 
     def _suggestion_lines(self, report_body: dict) -> list[str]:

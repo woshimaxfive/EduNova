@@ -55,8 +55,12 @@ class PracticeQuestion(BaseModel):
 
 
 class PracticeFeedback(BaseModel):
-    score: int
+    score: int | None
+    grading_status: Literal["deterministic", "model", "ungraded"]
     message: str
+    matched_concepts: list[str] = Field(default_factory=list)
+    missing_concepts: list[str] = Field(default_factory=list)
+    confidence: float | None = Field(default=None, ge=0, le=1)
     matched_keywords: list[str]
     missing_keywords: list[str]
     explanation: str
@@ -98,6 +102,7 @@ class PracticeSessionDetail(BaseModel):
     status: str
     agent_trace_id: str | None = None
     score: int | None
+    grading_status: Literal["complete", "partial", "ungraded"] = "ungraded"
     requested_difficulty: PracticeDifficulty = "medium"
     effective_difficulty: Literal["easy", "medium", "hard"] = "medium"
     draft_saved_at: str | None = None
@@ -114,6 +119,7 @@ class PracticeSessionSummary(BaseModel):
     title: str
     status: str
     score: int | None
+    grading_status: Literal["complete", "partial", "ungraded"] = "ungraded"
     effective_difficulty: Literal["easy", "medium", "hard"] = "medium"
     created_at: str
     updated_at: str
@@ -147,6 +153,7 @@ def session_to_api(session: PracticeSession, answers: list[PracticeAnswer]) -> P
         status=session.status,
         agent_trace_id=getattr(session, "agent_trace_id", None),
         score=int(session.score) if session.score is not None else None,
+        grading_status=_session_grading_status(session, answers),
         requested_difficulty=requested_difficulty,
         effective_difficulty=effective_difficulty,
         draft_saved_at=str(assessment.get("draft_saved_at")) if assessment.get("draft_saved_at") else None,
@@ -169,6 +176,7 @@ def session_to_summary(session: PracticeSession) -> PracticeSessionSummary:
         title=session.title,
         status=session.status,
         score=int(session.score) if session.score is not None else None,
+        grading_status=_summary_grading_status(session),
         effective_difficulty=effective_difficulty,
         created_at=iso_timestamp(session.created_at) or "",
         updated_at=iso_timestamp(session.updated_at) or "",
@@ -193,14 +201,38 @@ def answer_to_api(answer: PracticeAnswer) -> PracticeAnswerResponse:
         answer_text=answer.answer_text,
         is_correct=answer.is_correct,
         feedback=PracticeFeedback(
-            score=int(feedback.get("score") or 0),
+            score=int(feedback["score"]) if feedback.get("score") is not None else None,
+            grading_status=str(feedback.get("grading_status") or ("deterministic" if feedback.get("score") is not None else "ungraded")),
             message=str(feedback.get("message") or ""),
+            matched_concepts=[str(item) for item in feedback.get("matched_concepts") or []],
+            missing_concepts=[str(item) for item in feedback.get("missing_concepts") or []],
+            confidence=float(feedback["confidence"]) if feedback.get("confidence") is not None else None,
             matched_keywords=[str(item) for item in feedback.get("matched_keywords") or []],
             missing_keywords=[str(item) for item in feedback.get("missing_keywords") or []],
             explanation=str(feedback.get("explanation") or ""),
             diagnosis=_diagnosis(feedback.get("diagnosis")),
         ),
     )
+
+
+def _session_grading_status(session: PracticeSession, answers: list[PracticeAnswer]) -> str:
+    assessment = session.assessment_json if isinstance(session.assessment_json, dict) else {}
+    stored = str(assessment.get("grading_status") or "")
+    if stored in {"complete", "partial", "ungraded"}:
+        return stored
+    submitted = [answer for answer in answers if answer.answer_text is not None]
+    graded = sum(1 for answer in submitted if (answer.feedback_json or {}).get("score") is not None)
+    if submitted and graded == len(submitted):
+        return "complete"
+    return "partial" if graded else "ungraded"
+
+
+def _summary_grading_status(session: PracticeSession) -> str:
+    assessment = session.assessment_json if isinstance(session.assessment_json, dict) else {}
+    stored = str(assessment.get("grading_status") or "")
+    if stored in {"complete", "partial", "ungraded"}:
+        return stored
+    return "complete" if session.score is not None else "ungraded"
 
 
 def _diagnosis(value: object) -> PracticeDiagnosis | None:

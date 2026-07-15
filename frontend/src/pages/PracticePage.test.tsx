@@ -108,6 +108,7 @@ const inProgressSession = {
   title: "人工智能导论练习",
   status: "in_progress",
   score: null,
+  grading_status: "ungraded",
   requested_difficulty: "adaptive",
   effective_difficulty: "easy",
   questions: questions.map((question) => ({ ...question })),
@@ -121,6 +122,7 @@ const completedSession = {
   ...inProgressSession,
   status: "completed",
   score: 66,
+  grading_status: "complete",
   agent_trace_id: "trace_assessment",
   questions: [
     { ...questions[0], correct_answer: "估计剩余代价" },
@@ -196,6 +198,7 @@ type AdapterOptions = {
   detail?: unknown;
   created?: unknown;
   submitted?: unknown;
+  regraded?: unknown;
   failCreate?: boolean;
 };
 
@@ -217,6 +220,7 @@ function installAdapter(options: AdapterOptions = {}) {
       return { data: { data: options.created ?? inProgressSession }, status: 200, statusText: "OK", headers: {}, config };
     }
     if (url === PRACTICE_ENDPOINTS.answers(501)) return { data: { data: options.submitted ?? completedSession }, status: 200, statusText: "OK", headers: {}, config };
+    if (url === PRACTICE_ENDPOINTS.regrade(501)) return { data: { data: options.regraded ?? completedSession }, status: 200, statusText: "OK", headers: {}, config };
     if (url === PRACTICE_ENDPOINTS.draft(501)) return { data: { data: options.detail ?? inProgressSession }, status: 200, statusText: "OK", headers: {}, config };
     if (url === AGENT_ENDPOINTS.trace("trace_assessment") || url === AGENT_ENDPOINTS.trace("trace_path_replan")) {
       return {
@@ -363,6 +367,40 @@ describe("PracticePage", () => {
       "href",
       "/app/courses/808?course_session_id=77&course_message_id=88&knowledge_point_id=402"
     );
+  });
+
+  it("shows ungraded short answers without a red error state and can retry grading", async () => {
+    const user = userEvent.setup();
+    const partialSession = {
+      ...completedSession,
+      score: 50,
+      grading_status: "partial",
+      answers: completedSession.answers.map((answer) => answer.question_id === "q3" ? {
+        ...answer,
+        is_correct: null,
+        feedback: {
+          score: null,
+          grading_status: "ungraded",
+          message: "简答题暂未评分，可稍后重试。",
+          matched_concepts: [],
+          missing_concepts: [],
+          confidence: null,
+          matched_keywords: [],
+          missing_keywords: [],
+          explanation: answer.feedback.explanation
+        }
+      } : answer)
+    };
+    const calls = installAdapter({ detail: partialSession, regraded: completedSession });
+    renderWithProviders(`${PATHS.practice}?course_id=808&session_id=501&question_id=q3`);
+
+    const summary = await screen.findByRole("region", { name: "练习结果摘要" });
+    expect(within(summary).getByText("部分评分")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "q3 批改结果" })).toHaveClass("pending");
+    expect(screen.getByText("简答题暂未评分")).toBeInTheDocument();
+    await user.click(within(summary).getByRole("button", { name: "重试简答题评分" }));
+    await waitFor(() => expect(within(summary).queryByRole("button", { name: "重试简答题评分" })).not.toBeInTheDocument());
+    expect(calls).toContainEqual(expect.objectContaining({ method: "post", url: PRACTICE_ENDPOINTS.regrade(501) }));
   });
 
   it("keeps settings and return context when generation fails", async () => {

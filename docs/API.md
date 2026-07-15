@@ -446,7 +446,7 @@ Authorization: Bearer <token>
 
 ### POST `/profiles/chat`
 
-用途：通过 `ProfileGraph` 对话更新学习画像。模型负责理解自然语言并生成现有 8 个白名单字段，不再要求模型结果先命中人工关键词；同一维度以有效模型结果为主，规则补充模型遗漏的高确定性字段，并负责字段、类型、长度、去重、敏感内容和可信度校验。模型输出支持纯 JSON、JSON 代码块和正文中的完整 JSON 对象；首次结构无效时只修复一次，仍不可用则使用明确的 `rules_only` 中文规则抽取。职业愿景、兴趣方向和社会贡献可进入 `motivation_interest`，明确想达到的能力或状态可同时进入 `learning_goal`。
+用途：通过 `ProfileGraph` 对话更新学习画像。模型负责理解自然语言并生成现有 8 个白名单字段，不要求结果先命中人工关键词；只有有效模型提案可以更新画像，规则只负责字段、类型、长度、去重、敏感内容和可信度校验，不补写模型遗漏。模型输出支持纯 JSON、JSON 代码块和正文中的完整 JSON 对象；首次结构无效时只修复一次，仍不可用、低置信或审核拒绝时不改变长期画像。职业愿景、兴趣方向和社会贡献可以由模型提案为 `motivation_interest`，明确能力目标可以提案为 `learning_goal`。
 
 请求：
 
@@ -1633,7 +1633,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 ### POST `/tutor/sessions/{session_id}/messages`
 
-用途：发送问题并获取完整回答。主页和课程会话都复用当前路径；前端默认使用下方流式接口，本接口保留为兼容和自动化测试路径。`scope=home` 由真实 `HomeTutorGraph` 处理通用知识、已选资料检索、自动联网、自适应规划、回答、Review/Repair 和持久化；`scope=course` 由 `CourseTutorGraph` 优先执行严格课程 RAG，并只在策略允许时加入明确标注的外部补充。
+用途：发送问题并获取完整回答。主页和课程会话都复用当前路径；前端默认使用下方流式接口，本接口保留为兼容和自动化测试路径。`scope=home/course` 都先由 `SemanticDecisionService` 使用当前用户有效回答模型输出结构化意图、搜索词、联网和推理模式；每条消息最多一次额外路由调用。`HomeTutorGraph` 随后处理资料、网页、规划和回答，`CourseTutorGraph` 优先执行严格课程 RAG，并只在证据策略允许时加入明确标注的外部补充。
 
 请求：
 
@@ -1820,7 +1820,7 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
 
 用途：按更新时间从新到旧返回当前用户当前课程最近已完成的练习摘要，供学习报告实时趋势使用。`limit` 默认为 5，范围为 1–20。
 
-响应只包含 `id`、`course_id`、`title`、`status`、`score`、`effective_difficulty`、`created_at` 和 `updated_at`，不返回题目、作答正文或诊断原文。课程不存在或不属于当前用户时返回 404。
+响应只包含 `id`、`course_id`、`title`、`status`、`score`、`grading_status`、`effective_difficulty`、`created_at` 和 `updated_at`，不返回题目、作答正文或诊断原文。课程不存在或不属于当前用户时返回 404。
 
 ### PATCH `/practice/sessions/{session_id}/draft`
 
@@ -1853,11 +1853,13 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
 
 - 客观题按标准答案确定性批改。
 - 多选题使用逗号分隔答案，至少覆盖标准答案才算正确；部分覆盖按命中比例给分。
-- 简答题按关键词、课程引用覆盖和关键概念命中率给分。
+- 所有简答题在一次提交中批量交给当前用户有效回答模型，依据题目、课程证据、参考答案和明确量规进行语义评分；关键词兼容字段不参与判分。
+- 模型输出必须通过题目 ID、0–100 分、正确性、字段白名单和引用集合校验；缺项、伪造引用、非法结构或调用失败时，该简答题为 `score=null`、`is_correct=null`、`grading_status="ungraded"`。
+- 未评分简答题排除总分分母，不进入弱点、画像、掌握度、报告趋势或路径重排；没有任何已评分题时会话 `score=null`。
 - 空答案或提交不属于当前练习的题目返回 400。
 - 当前实现允许重复提交同一练习，后一次提交会替换本练习的作答记录并重算分数。
 
-响应仍为 `PracticeSessionDetail`，`status` 变为 `completed`，`score` 为本次规则平均分。每条反馈可选增加：
+响应仍为 `PracticeSessionDetail`，`status` 变为 `completed`，`score` 为全部已评分题的平均分，`grading_status` 为 `complete | partial | ungraded`。每条反馈包含 `grading_status=deterministic|model|ungraded`、可空 `score`、`matched_concepts`、`missing_concepts`、可空 `confidence`，并暂时保留 `matched_keywords/missing_keywords` 兼容字段。低分题可选增加：
 
 ```json
 {
@@ -1884,6 +1886,10 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
 ```
 
 `path_update_status` 为 `not_started | replanned | unchanged | failed`。路径失败不影响已完成练习和弱点更新。
+
+### POST `/practice/sessions/{session_id}/regrade`
+
+用途：幂等重试当前用户该练习中仍为 `ungraded` 的简答题。接口使用已保存答案，不接收新的作答正文；成功后原子更新对应反馈、重新计算已评分题平均分，并只对本次新评分结果执行一次弱点、画像候选和既有路径闭环。没有未评分题时直接返回当前结果；模型仍不可用时保留原有部分评分状态。
 
 ### POST `/reports/generate`
 

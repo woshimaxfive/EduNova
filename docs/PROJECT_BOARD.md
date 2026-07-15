@@ -31,12 +31,12 @@ EduNova 坚持“基础不牢，地动山摇”的开发原则。
 
 | 项目 | 状态 |
 | --- | --- |
-| 最新完成阶段 | Phase 23 |
+| 最新完成阶段 | Phase 24 |
 | 当前主链路 | 精细资料解析、动态画像、智能建课、主页/课程问答、资源、持续路径、练习评估、报告和资料对比已由十条真实 LangGraph 接管 |
 | 当前主要缺口 | 学习闭环的跨页面恢复、异常提示和高质量真实样例仍需持续打磨；OCR、旧版 Office 和扫描件仍不支持 |
 | 下一步建议 | 以截止日期交付质量为优先，集中做真实学习闭环验收、异常恢复和展示证据，不扩张基础设施范围 |
 
-Phase 13.2 已完成基础资料解析、主页工具和异步导出增强；Phase 14 已完成路径、评估、报告三条真实 Graph；Phase 15 已完成 ProfileGraph、CourseBuilderGraph、个性化策略、练习恢复和 React Flow/ECharts 可视化；Phase 16 完成过资料对比与冲刺，当前冲刺已退役；Phase 21 新增 MaterialIngestionGraph，当前为十条生产 Graph；Phase 22 已将通用基础设施迁移到成熟工具；Phase 23 已把主页和课程空间的联网与推理改为内置自动能力。
+Phase 13.2 已完成基础资料解析、主页工具和异步导出增强；Phase 14 已完成路径、评估、报告三条真实 Graph；Phase 15 已完成 ProfileGraph、CourseBuilderGraph、个性化策略、练习恢复和 React Flow/ECharts 可视化；Phase 16 完成过资料对比与冲刺，当前冲刺已退役；Phase 21 新增 MaterialIngestionGraph，当前为十条生产 Graph；Phase 22 已将通用基础设施迁移到成熟工具；Phase 23 已把主页和课程空间的联网与推理改为内置自动能力；Phase 24 已将联网/推理、画像信号和简答评分改为模型主导的结构化语义决策。
 
 Phase 17 已新增统一 `AIJobRuntime`，智能建课和资源生成进入独立后台队列；四个前端入口共用持久化进度、SSE/轮询恢复、取消和重试。
 
@@ -303,3 +303,11 @@ Phase 20 已把资源个性化从 Prompt 附加字段升级为逐类型 `Artifac
 - [x] `HomeTutorGraph` 与 `CourseTutorGraph` 共用自动能力策略；旧 API true 字段只保留强制启用兼容。
 - [x] 课程网页来源标记为外部补充，不进入画像、弱点、掌握度或课程证据。
 - [x] Spark X2-Flash 使用 `thinking.auto/enabled`，其他 Provider 不发送未验证私有参数。
+
+## 13. Phase 24 模型主导的核心语义决策
+
+- [x] `SemanticDecisionService` 每条主页/课程消息最多执行一次结构化路由调用，规则仅保留显式强制和安全降级。
+- [x] 课程画像信号只接受模型高置信白名单提案；普通提问、“为什么”和模型失败均不写画像。
+- [x] 简答题按一次提交批量语义评分，客观题继续确定性评分。
+- [x] 未评分简答题排除总分、弱点、画像、掌握度、报告趋势和路径重排。
+- [x] 新增幂等 `/practice/sessions/{session_id}/regrade`，前端展示部分评分、未评分与重试入口。

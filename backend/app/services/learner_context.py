@@ -287,9 +287,9 @@ class LearnerContextService:
         for point in knowledge_points:
             point_answers = answers_by_point.get(point.id, [])
             answer_scores = [
-                int((answer.feedback_json or {}).get("score") or 0)
+                int((answer.feedback_json or {})["score"])
                 for answer in point_answers
-                if answer.answer_text is not None
+                if answer.answer_text is not None and (answer.feedback_json or {}).get("score") is not None
             ]
             if answer_scores:
                 result.append(round(sum(answer_scores) / len(answer_scores)))

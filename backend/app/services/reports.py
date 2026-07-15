@@ -199,7 +199,11 @@ class ReportService:
 
     @staticmethod
     def _score_from_answers(answers: list[PracticeAnswer]) -> int | None:
-        scored = [int((answer.feedback_json or {}).get("score") or 0) for answer in answers if answer.answer_text is not None]
+        scored = [
+            int((answer.feedback_json or {})["score"])
+            for answer in answers
+            if answer.answer_text is not None and (answer.feedback_json or {}).get("score") is not None
+        ]
         if not scored:
             return None
         return round(sum(scored) / len(scored))
@@ -213,7 +217,8 @@ class ReportService:
         score: int | None,
     ) -> dict:
         answered = [answer for answer in answers if answer.answer_text is not None]
-        wrong_answers = [answer for answer in answered if answer.is_correct is False or int((answer.feedback_json or {}).get("score") or 0) < 60]
+        graded_answers = [answer for answer in answered if (answer.feedback_json or {}).get("score") is not None]
+        wrong_answers = [answer for answer in graded_answers if answer.is_correct is False or int((answer.feedback_json or {})["score"]) < 60]
         weak_point_ids = {
             int((answer.question_json or {}).get("knowledge_point_id"))
             for answer in wrong_answers
@@ -249,7 +254,7 @@ class ReportService:
                     "knowledge_point_id": str((answer.question_json or {}).get("knowledge_point_id") or ""),
                     "score": int((answer.feedback_json or {}).get("score") or 0),
                 }
-                for answer in answered
+                for answer in graded_answers
             ],
             "next_step_suggestions": suggestions,
             "review_queue_updates": [

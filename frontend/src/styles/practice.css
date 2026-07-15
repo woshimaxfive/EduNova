@@ -219,6 +219,7 @@
 
 .practice-rail-legend i.answered { background: var(--accent); }
 .practice-rail-legend i.wrong { background: var(--coral); }
+.practice-rail-legend i.pending { background: var(--text-muted); }
 
 .practice-session-main {
   display: grid;
@@ -436,6 +437,8 @@
 
 .practice-review.correct > button svg { color: var(--green); }
 .practice-review.wrong > button svg { color: var(--coral); }
+.practice-review.pending { border-color: var(--border-strong); background: var(--surface-muted); }
+.practice-review.pending > button strong { color: var(--text-strong); }
 
 .practice-review-detail {
   display: grid;

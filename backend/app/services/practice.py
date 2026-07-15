@@ -187,7 +187,7 @@ class SqlAlchemyPracticeRepository:
 class EvaluatedAnswer:
     question: dict
     answer_text: str
-    is_correct: bool
+    is_correct: bool | None
     feedback: dict
 
 
@@ -294,6 +294,11 @@ class PracticeService:
 
         return AssessmentGraphRunner(self).submit_answers(user=user, session_id=session_id, answers=answers)
 
+    def regrade_answers(self, user: User, session_id: int) -> PracticeSessionDetail:
+        from backend.app.agents.assessment import AssessmentGraphRunner
+
+        return AssessmentGraphRunner(self).regrade_answers(user=user, session_id=session_id)
+
     def resolve_difficulty(self, user: User, course_id: int, points: list[KnowledgePoint], requested: str) -> str:
         if requested != "adaptive":
             return requested
@@ -309,8 +314,8 @@ class PracticeService:
             if question.get("knowledge_point_id") not in point_ids:
                 continue
             feedback = answer.feedback_json or {}
-            if "score" in feedback:
-                scores.append(int(feedback.get("score") or 0))
+            if feedback.get("score") is not None:
+                scores.append(int(feedback["score"]))
             if len(scores) >= max(3, len(points) * 2):
                 break
         if scores:
@@ -518,12 +523,30 @@ class PracticeService:
             is_correct = normalized_expected.issubset(normalized_answer)
             score = 100 if is_correct else round(100 * len(normalized_expected.intersection(normalized_answer)) / max(len(normalized_expected), 1))
         else:
-            score = min(100, round(100 * len(matched) / max(len(keywords[:3]), 1)))
-            is_correct = score >= 60
+            return EvaluatedAnswer(
+                question=question,
+                answer_text=answer_text,
+                is_correct=None,
+                feedback={
+                    "score": None,
+                    "grading_status": "ungraded",
+                    "message": "简答题暂未评分，可稍后重试。",
+                    "matched_concepts": [],
+                    "missing_concepts": [],
+                    "confidence": None,
+                    "matched_keywords": [],
+                    "missing_keywords": [],
+                    "explanation": str(question.get("explanation") or ""),
+                },
+            )
         missing = [keyword for keyword in keywords[:3] if keyword not in matched]
         feedback = {
             "score": score,
+            "grading_status": "deterministic",
             "message": "已掌握关键依据。" if is_correct else "这道题暴露了需要复习的知识点。",
+            "matched_concepts": [],
+            "missing_concepts": [],
+            "confidence": 1.0,
             "matched_keywords": matched,
             "missing_keywords": missing,
             "explanation": str(question.get("explanation") or ""),

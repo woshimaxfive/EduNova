@@ -895,7 +895,11 @@ class CourseService:
         now: datetime,
         practice_answers: list[PracticeAnswer] | None = None,
     ) -> tuple[str, int | None, int, float, datetime | None]:
-        answered = [answer for answer in practice_answers or [] if answer.answer_text is not None]
+        answered = [
+            answer
+            for answer in practice_answers or []
+            if answer.answer_text is not None and (answer.feedback_json or {}).get("score") is not None
+        ]
         active_weaknesses = [item for item in weaknesses if item.status in {"confirmed", "reviewing"}]
         completed_weaknesses = [item for item in weaknesses if item.status == "completed"]
         evidence_count = len(answered) + len(active_weaknesses) + len(completed_weaknesses)
@@ -1006,7 +1010,7 @@ class CourseService:
     @staticmethod
     def _practice_answer_score(answer: PracticeAnswer) -> int:
         try:
-            return int((answer.feedback_json or {}).get("score") or 0)
+            return int((answer.feedback_json or {})["score"])
         except (TypeError, ValueError):
             return 0
 

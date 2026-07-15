@@ -35,7 +35,9 @@ export function PracticeQuestionRail({
           const status = completed
             ? evaluated?.is_correct === true
               ? "correct"
-              : "wrong"
+              : evaluated?.is_correct === false
+                ? "wrong"
+                : "pending"
             : answered
               ? "answered"
               : "unanswered";
@@ -46,12 +48,13 @@ export function PracticeQuestionRail({
               type="button"
               key={question.id}
               aria-current={isActive ? "step" : undefined}
-              aria-label={`第 ${index + 1} 题，${completed ? (status === "correct" ? "正确" : "错误") : (answered ? "已答" : "未答")}`}
+              aria-label={`第 ${index + 1} 题，${completed ? (status === "correct" ? "正确" : status === "wrong" ? "错误" : "暂未评分") : (answered ? "已答" : "未答")}`}
               onClick={() => onSelect(question.id)}
             >
               <span>{index + 1}</span>
               {status === "correct" ? <Check size={14} weight="bold" aria-hidden="true" /> : null}
               {status === "wrong" ? <X size={14} weight="bold" aria-hidden="true" /> : null}
+              {status === "pending" ? <Circle size={11} weight="fill" aria-hidden="true" /> : null}
               {status === "answered" ? <Check size={14} weight="bold" aria-hidden="true" /> : null}
               {status === "unanswered" ? <Circle size={11} weight="fill" aria-hidden="true" /> : null}
             </button>
@@ -62,6 +65,7 @@ export function PracticeQuestionRail({
         <span><i className="answered" />已答</span>
         <span><i />未答</span>
         {completed ? <span><i className="wrong" />需复习</span> : null}
+        {completed ? <span><i className="pending" />暂未评分</span> : null}
       </div>
     </aside>
   );

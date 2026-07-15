@@ -856,6 +856,23 @@ export interface paths {
         patch: operations["save_practice_draft_api_v1_practice_sessions__session_id__draft_patch"];
         trace?: never;
     };
+    "/api/v1/practice/sessions/{session_id}/regrade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regrade Practice Answers */
+        post: operations["regrade_practice_answers_api_v1_practice_sessions__session_id__regrade_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/profiles/chat": {
         parameters: {
             query?: never;
@@ -3334,17 +3351,28 @@ export interface components {
         };
         /** PracticeFeedback */
         PracticeFeedback: {
+            /** Confidence */
+            confidence?: number | null;
             diagnosis?: components["schemas"]["PracticeDiagnosis"] | null;
             /** Explanation */
             explanation: string;
+            /**
+             * Grading Status
+             * @enum {string}
+             */
+            grading_status: "deterministic" | "model" | "ungraded";
+            /** Matched Concepts */
+            matched_concepts?: string[];
             /** Matched Keywords */
             matched_keywords: string[];
             /** Message */
             message: string;
+            /** Missing Concepts */
+            missing_concepts?: string[];
             /** Missing Keywords */
             missing_keywords: string[];
             /** Score */
-            score: number;
+            score: number | null;
         };
         /** PracticeQuestion */
         PracticeQuestion: {
@@ -3407,6 +3435,12 @@ export interface components {
              * @enum {string}
              */
             effective_difficulty: "easy" | "medium" | "hard";
+            /**
+             * Grading Status
+             * @default ungraded
+             * @enum {string}
+             */
+            grading_status: "complete" | "partial" | "ungraded";
             /** Id */
             id: string;
             /** Questions */
@@ -3438,6 +3472,12 @@ export interface components {
              * @enum {string}
              */
             effective_difficulty: "easy" | "medium" | "hard";
+            /**
+             * Grading Status
+             * @default ungraded
+             * @enum {string}
+             */
+            grading_status: "complete" | "partial" | "ungraded";
             /** Id */
             id: string;
             /** Score */
@@ -9373,6 +9413,111 @@ export interface operations {
                 "application/json": components["schemas"]["SavePracticeDraftRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_PracticeSessionDetail_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    regrade_practice_answers_api_v1_practice_sessions__session_id__regrade_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

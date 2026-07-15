@@ -18,9 +18,9 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 - `ModelExecutionRuntime` 错误分类、同配置重试、Redis 并发/熔断、取消、流中断和隐私安全审计。
 - 讯飞/兼容 Embedding、动态维度、配置指纹、RRF、可选 Rerank 和关键词 fallback。
 - 课程空间双模式前端已接入，覆盖默认问答、单一推荐行动、逐回答附件隔离、真实知识点正文、跨页返回、学习进度抽屉和桌面工作区布局。
-- ProfileGraph 节点顺序、显式画像更新、隐式信号双来源门槛、Lite 结构化输出与单次修复、中文规则 fallback、逐维可信度、画像事件和用户隔离。
+- ProfileGraph 节点顺序、显式模型提案、模型失败零写入、隐式信号双来源门槛、结构化输出与单次修复、逐维可信度、画像事件和用户隔离。
 - PDF/DOCX/PPTX 文本解析、损坏文件失败分支、旧版 Office/图片/OCR 边界。
-- 主页/课程自动联网与自适应推理、已选资料来源、多轮会话上下文、`home_tutor/course_tutor` trace 和浏览器语音输入/朗读。
+- 主页/课程模型语义路由、自动联网与自适应推理、非法输出保守降级、已选资料来源、多轮会话上下文、`home_tutor/course_tutor` trace 和浏览器语音输入/朗读。
 - Markdown/PDF/DOCX 异步学习档案导出任务、下载和用户隔离。
 - `AIJobRuntime` 的建课/资源后台任务、幂等、活动上限、节点进度、心跳、取消、重试、失联检测和安全响应。
 - 前端 API 合同模块、核心页面测试、Vitest、lint 和生产构建。
@@ -160,7 +160,7 @@ cd ..
 | `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要、上下文计数 metadata 和 metadata 白名单 |
 | `/resources/generate`、资源详情/质量、`/resources/{resource_id}/exports` | 无 token 401、用户隔离、六类 v3 证据型资源、并行 Worker、完整 artifact 审核、结构修复、内容修订、严格类型失败、代码实跑验证、部分失败、PPTX 任务和隐私安全 |
 | `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}`、`/courses/{course_id}/mastery-map` | 无 token 401、课程/任务用户隔离、空路径、路径生成、旧路径归档、任务状态更新、掌握度映射、推荐资源、隐私安全 |
-| `/practice/sessions`、`/practice/sessions/{session_id}`、`/practice/sessions/{session_id}/answers` | 无 token 401、课程/练习用户隔离、知识点过滤、题型生成、确定性批改、空答案校验、弱点队列反哺、掌握度回归、隐私安全 |
+| `/practice/sessions`、`/practice/sessions/{session_id}`、`/practice/sessions/{session_id}/answers`、`/practice/sessions/{session_id}/regrade` | 无 token 401、课程/练习用户隔离、知识点过滤、客观题确定性批改、简答题批量语义评分、部分评分、幂等重评、空答案校验、弱点队列反哺、掌握度回归、隐私安全 |
 | `/reports/generate`、`/reports/latest` | 无 token 401、课程/练习/报告用户隔离、空报告、报告生成、最新报告读取、掌握度摘要、下一步建议、隐私安全 |
 | `/exports/learning-dossier`、`/exports/learning-dossier/jobs`、`/exports/{job_id}`、`/exports/{job_id}/download` | 无 token 401、课程/任务用户隔离、无报告真实空状态、有报告 Markdown 同步导出、异步 job 创建和状态流转、Markdown/PDF/DOCX 文件下载、失败分支、路径/资源/练习证据摘要、文件名安全、隐私安全 |
 
@@ -712,7 +712,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 9 后端测试覆盖 `/courses/{course_id}/mastery-map` 空课程、弱点状态映射、路径任务映射、资源推荐、多用户隔离和隐私字段；覆盖 `/courses/{course_id}/learning-state` 的真实 `path_summary`、`mastery_summary`、弱点推荐资源和 `next_review_at`。
 - Phase 9 前端测试覆盖 `PATH_ENDPOINTS`、`generatePath`、`getCurrentPath`、`updatePathTask` 和 `COURSE_ENDPOINTS.masteryMap` API 合同；`LearningPathPage` 覆盖课程预选、空路径、一键生成/更新、任务状态、当前任务置顶、推荐资源、掌握度/依据/轨迹抽屉、局部错误和旧冲刺 URL 参数清理。
 - 课程闭环缓存测试覆盖统一 Query Key、知识点平均掌握度的空值/边界/四舍五入，以及课程问答、弱点、资源任务、路径、练习和报告操作后的课程级失效；课程空间测试覆盖抽屉强制刷新五组数据、目标和下一步重算、部分失败保留旧内容与手动重试。
-- Phase 10 后端测试覆盖 `/practice/sessions` 创建练习、知识点过滤、跨课程校验、单选/多选/简答确定性批改、空答案校验、重复提交策略、错题或低分题写入 `weakness_review_queue`、多用户隔离、报告生成和 latest 读取，以及 `/mastery-map` 和 `/learning-state` 对练习结果的反哺。
+- Phase 10 的客观题确定性批改继续回归；Phase 24 起简答题覆盖同义正确、关键词堆砌、部分正确、明显误解、伪造引用、批量缺项、模型失败部分评分和幂等重评。未评分简答题必须排除总分、弱点、画像、掌握度、报告趋势和路径重排。
 - Phase 10 前端测试覆盖 `PRACTICE_ENDPOINTS`、`REPORT_ENDPOINTS` 类型化 API 合同；`PracticePage` 当前覆盖课程/知识点预选、创建练习、单题作答、题目 URL 与草稿恢复、未答确认、结果反馈、资源与轨迹、空状态和局部错误；`ReportsPage` 覆盖课程预选、空报告、生成报告、实时掌握度、报告快照、新练习过期提示、针对练习上下文和局部错误；`CourseSpacePage` 覆盖练习/报告入口及返回上下文。
 - 退役回归测试覆盖 `/exam-sprint/*` 不再注册、工作流列表和离线评测不再包含 `exam_sprint`，旧 `sprint_*` 数据不会被普通 active 路径查询或重排。
 - Phase 11.2 后端测试覆盖 `/materials/compare` 无 token 401、非本人课程/资料和未绑定当前课程资料 404、少于两份资料 400 或 422、课程切片对比、TXT/Markdown fallback、重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先复习顺序、安全引用和隐私字段不泄露。
@@ -731,6 +731,8 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 14 前端测试覆盖共享 trace 展开、错因/缺失概念/复习动作、路径回流状态、报告趋势与证据摘要、失败空态和旧响应兼容。
 - `scripts/test_e2e.ps1` 使用独立 Compose project、独立端口和临时卷，显式禁用真实模型与联网 Key；覆盖注册示例课程、创建路径、两次错题练习、弱点诊断、路径重排、报告生成、三类真实轨迹和 `390px` 无横向溢出，结束后执行 `down -v`。
 - Phase 23 前端测试覆盖主页不渲染工具按钮、发送 payload 不含旧字段、自动来源和 trace 展示；浏览器语音输入和朗读、资料库及导出合同继续回归。
+- Phase 24 后端测试覆盖资源推荐自动搜索、稳定知识不搜索、复杂综合进入 deep、旧字段强制和模型非法输出降级；画像覆盖普通“为什么”零写入、明确困难候选、模型失败零写入和双来源提升；练习覆盖批量语义评分、引用白名单、部分评分及重评幂等。
+- Phase 24 前端测试覆盖“部分评分/简答题暂未评分”、中性非红色状态、重试按钮和成功重评后闭环缓存刷新。
 - HomeTutorGraph hardening 前端测试覆盖主页 SSE `metadata/status/sources/token/replace/done/error`、UTF-8 单字节分片、增量 Markdown、Review 替换、工具 warning、失败保留输入、持久化消息校准和旧 Prompt 回显历史安全清洗。
 - 主页历史与资料记忆前端测试覆盖首批历史、加载更多、250ms 服务端搜索、正文匹配片段、刷新 `session_id` 恢复、资料草稿取消、确认保存失败保留、历史切换替换资料范围，以及建课选料不反向修改会话资料。
 - 2026-07-07 会话上下文增强后，后端测试覆盖主页/课程连续追问、长历史截断与摘要、课程流式 SSE 上下文 metadata、无历史单轮兼容和 trace metadata 脱敏；2026-07-10 补充超过 12 条历史后仍只发送一条 system 消息的 OpenAI-compatible 回归测试，避免安全摘要启用时出现固定轮次发送失败；前端测试覆盖主页与课程空间轨迹展示“已参考最近 N 条会话”，API contract 覆盖 `context_message_count`、`context_summary_used` 和 `retrieval_query_mode`。

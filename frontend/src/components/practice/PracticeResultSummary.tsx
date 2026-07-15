@@ -4,25 +4,33 @@ import { Link } from "react-router-dom";
 import { type PracticeNextAction, difficultyLabel } from "../../features/practice/practiceViewModel";
 
 type PracticeResultSummaryProps = {
-  score: number;
+  score: number | null;
+  gradingStatus: "complete" | "partial" | "ungraded";
   correctCount: number;
   totalCount: number;
   effectiveDifficulty: string;
   nextAction: PracticeNextAction;
   onStartNew: () => void;
   onOpenResults: () => void;
+  onRegrade: () => void;
+  isRegrading: boolean;
 };
 
 export function PracticeResultSummary({
   score,
+  gradingStatus,
   correctCount,
   totalCount,
   effectiveDifficulty,
   nextAction,
   onStartNew,
-  onOpenResults
+  onOpenResults,
+  onRegrade,
+  isRegrading
 }: PracticeResultSummaryProps) {
-  const summary = score >= 80
+  const summary = score === null
+    ? "简答题暂未评分，当前结果不会影响掌握度、弱点或学习路径。"
+    : score >= 80
     ? "核心概念掌握较稳，可以继续推进下一项学习任务。"
     : score >= 60
       ? "基础已经建立，先补齐错题暴露的概念再继续。"
@@ -44,10 +52,10 @@ export function PracticeResultSummary({
     <section className="practice-result-summary" aria-label="练习结果摘要">
       <div className="practice-result-score">
         <span>本次得分</span>
-        <strong>{score}</strong>
+        <strong>{score ?? "—"}</strong>
       </div>
       <div className="practice-result-copy">
-        <span>练习完成</span>
+        <span>{gradingStatus === "complete" ? "练习完成" : gradingStatus === "partial" ? "部分评分" : "暂未评分"}</span>
         <h2>{summary}</h2>
         <div>
           <span><CheckCircle size={16} weight="duotone" aria-hidden="true" />答对 {correctCount} / {totalCount}</span>
@@ -55,6 +63,11 @@ export function PracticeResultSummary({
         </div>
       </div>
       <div className="practice-result-actions">
+        {gradingStatus !== "complete" ? (
+          <button type="button" onClick={onRegrade} disabled={isRegrading}>
+            {isRegrading ? "正在重评" : "重试简答题评分"}
+          </button>
+        ) : null}
         {primaryAction}
         <button type="button" onClick={onOpenResults}>
           <ChartLineUp size={17} weight="duotone" aria-hidden="true" />

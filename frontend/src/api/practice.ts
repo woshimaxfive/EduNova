@@ -7,7 +7,8 @@ export const PRACTICE_ENDPOINTS = {
   recent: "/practice/sessions/recent",
   detail: (sessionId: number) => `/practice/sessions/${sessionId}`,
   draft: (sessionId: number) => `/practice/sessions/${sessionId}/draft`,
-  answers: (sessionId: number) => `/practice/sessions/${sessionId}/answers`
+  answers: (sessionId: number) => `/practice/sessions/${sessionId}/answers`,
+  regrade: (sessionId: number) => `/practice/sessions/${sessionId}/regrade`
 } as const;
 
 export type CreatePracticeSessionRequest = {
@@ -42,8 +43,12 @@ export type PracticeQuestion = {
 };
 
 export type PracticeAnswerFeedback = {
-  score: number;
+  score: number | null;
+  grading_status: "deterministic" | "model" | "ungraded";
   message: string;
+  matched_concepts: string[];
+  missing_concepts: string[];
+  confidence: number | null;
   matched_keywords: string[];
   missing_keywords: string[];
   explanation: string;
@@ -73,6 +78,7 @@ export type PracticeSessionDetail = {
   status: "in_progress" | "completed" | string;
   agent_trace_id?: string | null;
   score: number | null;
+  grading_status: "complete" | "partial" | "ungraded";
   requested_difficulty: "adaptive" | "easy" | "medium" | "hard";
   effective_difficulty: "easy" | "medium" | "hard";
   draft_saved_at?: string | null;
@@ -128,5 +134,10 @@ export async function submitPracticeAnswers(sessionId: number, payload: SubmitPr
     PRACTICE_ENDPOINTS.answers(sessionId),
     payload
   );
+  return response.data;
+}
+
+export async function regradePracticeAnswers(sessionId: number) {
+  const response = await apiClient.post<ApiEnvelope<PracticeSessionDetail>>(PRACTICE_ENDPOINTS.regrade(sessionId));
   return response.data;
 }

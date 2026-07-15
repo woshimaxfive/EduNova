@@ -277,7 +277,8 @@ backend/app/
 | `backend/app/services/materials.py` | 个人资料库服务，负责上传保存、解析、列表、详情、进度和课程资料关联 |
 | `backend/app/services/material_retrieval.py` | 共享资料分块和主页资料级 RAG，负责上传后切片、既有资料惰性补齐、当前用户选中资料限制、关键词/pgvector 混合排序和安全引用 |
 | `backend/app/services/web_search.py` | Tavily-compatible 联网搜索服务，未配置 Key 时返回 warning，不生成假来源 |
-| `backend/app/agents/tool_policy.py` | 确定性能力路由，根据问题时效性、显式检索意图、复杂度和课程证据状态输出联网与推理决策 |
+| `backend/app/services/semantic_decision.py` | 使用当前用户有效回答模型输出结构化意图、联网查询、推理模式和可选课程画像信号；失败时进入保守降级 |
+| `backend/app/agents/tool_policy.py` | 只保留旧 true 字段、明确联网命令和模型不可用时的保守降级，不再用关键词枚举推断资源、时效或复杂度 |
 | `backend/app/services/courses.py` | 课程 API 边界和依赖装配；`CourseBuilderGraphRunner` 接管来源大纲、课程结构、知识点、切片、embedding、审核/修订与事务持久化 |
 | `backend/app/services/exports.py` | 学习档案导出服务，负责旧同步 Markdown 兼容接口和 Markdown/PDF/DOCX 异步 job 渲染 |
 | `backend/app/workers/export_jobs.py` | Redis/RQ 导出 worker 入口 |
@@ -380,7 +381,7 @@ ReviewAgent 审核内容
 
 当前真实接管生产主流程的是 `MaterialIngestionGraph`、`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。十条 Graph 都落真实节点耗时和白名单 metadata，生成型节点均有规则与可选模型审核。学习档案导出继续由确定性 Service 聚合并交给 Redis/RQ Worker 生成文件，不注册为生产 Graph。
 
-`ProfileGraph` 的显式画像回答采用模型主导语义抽取：有效白名单字段不再由关键词许可，规则负责补充明显遗漏、格式与隐私边界，并在模型不可用、结构无效或 Review 拒绝时兜底。职业愿景、兴趣方向和社会贡献可被理解为学习动力，明确想达到的状态可同时进入学习目标；隐式学习信号仍需多来源证据门控。
+`ProfileGraph` 的显式画像回答采用模型主导语义抽取：只有通过结构、白名单、隐私和 Review 的模型提案可以更新画像，规则不再补充遗漏或在模型失败时猜测写入。课程问答由同一次语义路由给出可选画像信号，普通提问和“为什么”不代表薄弱；隐式学习信号仍需课程证据、多来源与置信度门控。
 
 ### 6.1 AI 长任务运行时
 
@@ -403,7 +404,7 @@ POST jobs + Idempotency-Key
 后半程闭环：
 
 ```text
-AssessmentGraph 规则评分
+AssessmentGraph 客观题确定性评分 + 简答题批量语义评分
   -> 错因诊断与 PracticeAnswer 证据
   -> 合并更新 weakness_review_queue
   -> 独立 PathPlanningGraph 重排已有路径

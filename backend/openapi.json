@@ -5860,6 +5860,19 @@
       },
       "PracticeFeedback": {
         "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
           "diagnosis": {
             "anyOf": [
               {
@@ -5874,6 +5887,22 @@
             "title": "Explanation",
             "type": "string"
           },
+          "grading_status": {
+            "enum": [
+              "deterministic",
+              "model",
+              "ungraded"
+            ],
+            "title": "Grading Status",
+            "type": "string"
+          },
+          "matched_concepts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Concepts",
+            "type": "array"
+          },
           "matched_keywords": {
             "items": {
               "type": "string"
@@ -5885,6 +5914,13 @@
             "title": "Message",
             "type": "string"
           },
+          "missing_concepts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Concepts",
+            "type": "array"
+          },
           "missing_keywords": {
             "items": {
               "type": "string"
@@ -5893,12 +5929,20 @@
             "type": "array"
           },
           "score": {
-            "title": "Score",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
           }
         },
         "required": [
           "score",
+          "grading_status",
           "message",
           "matched_keywords",
           "missing_keywords",
@@ -6077,6 +6121,16 @@
             "title": "Effective Difficulty",
             "type": "string"
           },
+          "grading_status": {
+            "default": "ungraded",
+            "enum": [
+              "complete",
+              "partial",
+              "ungraded"
+            ],
+            "title": "Grading Status",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -6155,6 +6209,16 @@
               "hard"
             ],
             "title": "Effective Difficulty",
+            "type": "string"
+          },
+          "grading_status": {
+            "default": "ungraded",
+            "enum": [
+              "complete",
+              "partial",
+              "ungraded"
+            ],
+            "title": "Grading Status",
             "type": "string"
           },
           "id": {
@@ -15330,6 +15394,144 @@
           }
         },
         "summary": "Save Practice Draft",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
+    "/api/v1/practice/sessions/{session_id}/regrade": {
+      "post": {
+        "operationId": "regrade_practice_answers_api_v1_practice_sessions__session_id__regrade_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_PracticeSessionDetail_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Regrade Practice Answers",
         "tags": [
           "practice"
         ]

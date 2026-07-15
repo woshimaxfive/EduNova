@@ -8,6 +8,7 @@ import {
   createPracticeSession,
   getLatestPracticeSession,
   getPracticeSession,
+  regradePracticeAnswers,
   savePracticeDraft,
   type PracticeSessionDetail,
   submitPracticeAnswers
@@ -247,6 +248,22 @@ export function PracticePage() {
     }
   });
 
+  const regradeMutation = useMutation({
+    mutationFn: () => {
+      if (!activeSession) throw new Error("missing session");
+      return regradePracticeAnswers(Number(activeSession.id));
+    },
+    onSuccess: (response) => {
+      const evaluated = resolvePracticeSession(response);
+      if (evaluated) {
+        setCurrentSession(evaluated);
+        setLocalError(evaluated.grading_status === "complete" ? "" : "简答题仍暂未评分，请检查模型配置后重试。");
+        void invalidateCourseLearningLoop(queryClient, numericCourseId);
+      }
+    },
+    onError: () => setLocalError("简答题重评失败，原有评分结果已保留。")
+  });
+
   function selectQuestion(questionId: string) {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("question_id", questionId);
@@ -335,13 +352,16 @@ export function PracticePage() {
               <div className="practice-session-scroll">
               {completed ? (
                 <PracticeResultSummary
-                  score={activeSession.score ?? 0}
+                  score={activeSession.score}
+                  gradingStatus={activeSession.grading_status}
                   correctCount={resultSummary.correctCount}
                   totalCount={resultSummary.totalCount}
                   effectiveDifficulty={activeSession.effective_difficulty}
                   nextAction={nextAction}
                   onStartNew={startNewPractice}
                   onOpenResults={() => setDrawerMode("results")}
+                  onRegrade={() => regradeMutation.mutate()}
+                  isRegrading={regradeMutation.isPending}
                 />
               ) : null}
               {localError ? <p className="practice-local-error" role="alert">{localError}</p> : null}

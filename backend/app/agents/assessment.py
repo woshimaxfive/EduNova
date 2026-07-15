@@ -23,6 +23,7 @@ from backend.app.schemas.practice import PracticeSessionDetail, SubmitPracticeAn
 from backend.app.services.practice import EvaluatedAnswer, PracticeService, PracticeValidationError
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
+from backend.app.services.semantic_grading import SemanticShortAnswerGrader
 
 
 ASSESSMENT_PROMPT_VERSION = "assessment-v3.1"
@@ -53,7 +54,7 @@ class AssessmentState(TypedDict, total=False):
     session: PracticeSession
     answer_rows: list[PracticeAnswer]
     evaluated: list[EvaluatedAnswer]
-    score: int
+    score: int | None
     diagnoses: dict[str, dict[str, Any]]
     touched_weaknesses: dict[str, WeaknessReviewItem]
     weaknesses_added: int
@@ -117,6 +118,64 @@ class AssessmentGraphRunner:
         }
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, purpose="answer_evaluation")):
             return self.submit_graph.invoke(state)["detail"]
+
+    def regrade_answers(self, *, user: User, session_id: int) -> PracticeSessionDetail:
+        session = self.service._require_session(user, session_id)
+        rows = self.service.repository.list_answers_for_session(session.id)
+        pending = [
+            row
+            for row in rows
+            if row.answer_text
+            and (row.question_json or {}).get("question_type") == "short_answer"
+            and (row.feedback_json or {}).get("grading_status") == "ungraded"
+        ]
+        if not pending:
+            return session_to_api(session, rows)
+        items = [self._grading_item(row.question_json or {}, str(row.answer_text)) for row in pending]
+        grades = SemanticShortAnswerGrader(self.service.model_service).grade(user=user, items=items)
+        if grades is None:
+            return session_to_api(session, rows)
+        evaluated = [self._semantic_evaluated(row.question_json or {}, str(row.answer_text), grades[str((row.question_json or {}).get("id"))]) for row in pending]
+        diagnoses = {str(item.question.get("id")): self._diagnosis_from_evaluation(item) for item in evaluated if item.feedback.get("score") is not None and item.feedback["score"] < 60}
+        by_question = {str((row.question_json or {}).get("id")): row for row in rows}
+        for item in evaluated:
+            question_id = str(item.question.get("id"))
+            row = by_question[question_id]
+            diagnosis = diagnoses.get(question_id)
+            if diagnosis:
+                diagnosis = {**diagnosis, "evidence_ref": {"type": "practice_answer", "id": str(row.id)}}
+            row.feedback_json = {**item.feedback, "diagnosis": diagnosis}
+            row.is_correct = item.is_correct
+        course = self.service._require_course(user, int(session.course_id or 0))
+        state: AssessmentState = {
+            "trace_id": make_trace_id(),
+            "operation": "answer_regrade",
+            "user": user,
+            "user_id": user.id,
+            "course_id": course.id,
+            "session": session,
+            "resources": self.service.repository.list_generated_resources(user.id, course.id),
+            "evaluated": evaluated,
+            "diagnoses": diagnoses,
+        }
+        try:
+            added, updated, recommended, touched = self._sync_weakness_items(state, by_question)
+            session.score = self._score_from_rows(rows)
+            session.assessment_json = {
+                **(session.assessment_json or {}),
+                "grading_status": self._grading_status_from_rows(rows),
+                "weaknesses_added": int((session.assessment_json or {}).get("weaknesses_added") or 0) + added,
+                "weaknesses_updated": int((session.assessment_json or {}).get("weaknesses_updated") or 0) + updated,
+                "recommended_resource_ids": list(dict.fromkeys([*(session.assessment_json or {}).get("recommended_resource_ids", []), *[str(value) for value in recommended]])),
+            }
+            session.updated_at = datetime.now(UTC)
+            self.service.repository.commit()
+            self.service.repository.refresh(session)
+        except Exception:
+            self.service.repository.rollback()
+            raise
+        self._run_post_grade_closure(user, session, touched, state["trace_id"])
+        return session_to_api(session, self.service.repository.list_answers_for_session(session.id))
 
     def _build_create_graph(self):
         graph = StateGraph(AssessmentState)
@@ -328,18 +387,42 @@ class AssessmentGraphRunner:
                 evaluated.append(self.service._evaluate_answer(question, answer_text))
             if not evaluated:
                 raise PracticeValidationError("至少提交一道题。")
-            score = round(sum(item.feedback["score"] for item in evaluated) / len(evaluated))
-            return {"evaluated": evaluated, "score": score}, f"规则已完成 {len(evaluated)} 道题评分，总分 {score}。", "completed", {"practice_count": len(evaluated)}
+            short_answers = [item for item in evaluated if item.feedback.get("grading_status") == "ungraded"]
+            grades = SemanticShortAnswerGrader(self.service.model_service).grade(
+                user=state["user"],
+                items=[self._grading_item(item.question, item.answer_text) for item in short_answers],
+            )
+            if grades is not None:
+                evaluated = [
+                    self._semantic_evaluated(item.question, item.answer_text, grades[str(item.question.get("id"))])
+                    if item in short_answers
+                    else item
+                    for item in evaluated
+                ]
+            graded_scores = [int(item.feedback["score"]) for item in evaluated if item.feedback.get("score") is not None]
+            score = round(sum(graded_scores) / len(graded_scores)) if graded_scores else None
+            ungraded_count = len(evaluated) - len(graded_scores)
+            status = "warning" if ungraded_count else "completed"
+            summary = f"已评分 {len(graded_scores)} 道题，{ungraded_count} 道简答题暂未评分。"
+            return {"evaluated": evaluated, "score": score}, summary, status, {
+                "practice_count": len(evaluated),
+                "graded_count": len(graded_scores),
+                "ungraded_count": ungraded_count,
+                "semantic_grading_used": grades is not None,
+            }
 
         return self._run_node(state, "deterministic_score", 2, "按题型规则计算不可篡改的客观分数", work)
 
     def _diagnose_node(self, state: AssessmentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
-            diagnoses = self._model_diagnoses(state)
-            model_used = diagnoses is not None
-            if diagnoses is None:
-                diagnoses = {str(item.question.get("id")): self._deterministic_diagnosis(item) for item in state.get("evaluated", []) if item.feedback["score"] < 60}
-            return {"diagnoses": diagnoses, "generation_mode": "model_enhanced" if model_used else "deterministic_source"}, f"已为 {len(diagnoses)} 道低分题生成错因诊断。", "completed" if model_used else "warning", {"model_used": model_used, "weakness_count": len(diagnoses), "generation_mode": "model_enhanced" if model_used else "deterministic_source"}
+            diagnoses = {
+                str(item.question.get("id")): self._diagnosis_from_evaluation(item)
+                for item in state.get("evaluated", [])
+                if item.feedback.get("score") is not None and item.feedback["score"] < 60
+            }
+            model_used = any(item.feedback.get("grading_status") == "model" for item in state.get("evaluated", []))
+            mode = "semantic_grading" if model_used else "deterministic_source"
+            return {"diagnoses": diagnoses, "generation_mode": mode}, f"已为 {len(diagnoses)} 道低分题生成错因诊断。", "completed", {"model_used": model_used, "weakness_count": len(diagnoses), "generation_mode": mode}
 
         return self._run_node(state, "diagnose_errors", 3, "分析低分题的错因和缺失概念", work)
 
@@ -365,7 +448,11 @@ class AssessmentGraphRunner:
 
     def _answer_repair_node(self, state: AssessmentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
-            diagnoses = {str(item.question.get("id")): self._deterministic_diagnosis(item) for item in state.get("evaluated", []) if item.feedback["score"] < 60}
+            diagnoses = {
+                str(item.question.get("id")): self._diagnosis_from_evaluation(item)
+                for item in state.get("evaluated", [])
+                if item.feedback.get("score") is not None and item.feedback["score"] < 60
+            }
             rows_by_question = {str((row.question_json or {}).get("id")): row for row in state.get("answer_rows", [])}
             for question_id, diagnosis in diagnoses.items():
                 row = rows_by_question[question_id]
@@ -384,7 +471,7 @@ class AssessmentGraphRunner:
         session = state["session"]
         try:
             session.status = "completed"
-            session.score = Decimal(str(state["score"]))
+            session.score = Decimal(str(state["score"])) if state.get("score") is not None else None
             session.agent_trace_id = state["trace_id"]
             session.updated_at = datetime.now(UTC)
             session.assessment_json = {
@@ -397,6 +484,7 @@ class AssessmentGraphRunner:
                 "generation_mode": state.get("generation_mode", "deterministic_source"),
                 "review_mode": state.get("review_mode", "rules_only"),
                 "review_result": state.get("review_result", {}),
+                "grading_status": self._grading_status(state.get("evaluated", [])),
             }
             self.service.repository.commit()
             self.service.repository.refresh(session)
@@ -412,7 +500,7 @@ class AssessmentGraphRunner:
             session = state["session"]
             status = "not_started"
             path_trace_id = None
-            if self.service.path_service is not None:
+            if state.get("score") is not None and self.service.path_service is not None:
                 try:
                     result = self.service.path_service.replan_after_assessment(state["user"], int(state["course_id"]), session.id)
                     status = str(getattr(result, "status", "unchanged"))
@@ -552,6 +640,118 @@ class AssessmentGraphRunner:
             enhanced.append(candidate)
         return enhanced if enhanced != drafts else None
 
+    @staticmethod
+    def _grading_item(question: dict[str, Any], answer_text: str) -> dict[str, Any]:
+        return {
+            "question_id": str(question.get("id") or ""),
+            "question": question.get("prompt"),
+            "knowledge_point": question.get("knowledge_point_title"),
+            "student_answer": answer_text,
+            "reference_answer": question.get("correct_answer"),
+            "course_evidence": question.get("source_excerpt") or question.get("explanation"),
+            "rubric": (
+                "0-39：核心概念错误或与题目无关；40-59：有相关内容但关键关系错误或缺失；"
+                "60-79：核心含义正确但存在遗漏；80-100：概念、关系和课程依据均准确。"
+            ),
+            "allowed_evidence_refs": list(question.get("citation_refs") or []),
+        }
+
+    @staticmethod
+    def _semantic_evaluated(question: dict[str, Any], answer_text: str, grade: dict[str, Any]) -> EvaluatedAnswer:
+        missing = [str(value) for value in grade.get("missing_concepts") or []]
+        return EvaluatedAnswer(
+            question=question,
+            answer_text=answer_text,
+            is_correct=bool(grade["is_correct"]),
+            feedback={
+                "score": int(grade["score"]),
+                "grading_status": "model",
+                "message": safe_text(grade.get("feedback"), limit=500),
+                "matched_concepts": [str(value) for value in grade.get("matched_concepts") or []],
+                "missing_concepts": missing,
+                "confidence": float(grade.get("confidence") or 0.0),
+                "evidence_refs": [str(value) for value in grade.get("evidence_refs") or []],
+                "misconception": safe_text(grade.get("misconception"), limit=300),
+                "matched_keywords": [],
+                "missing_keywords": [],
+                "explanation": str(question.get("explanation") or ""),
+            },
+        )
+
+    @classmethod
+    def _diagnosis_from_evaluation(cls, item: EvaluatedAnswer) -> dict[str, Any]:
+        if item.feedback.get("grading_status") == "model":
+            point = safe_text(item.question.get("knowledge_point_title") or "当前知识点", limit=120)
+            return {
+                "misconception": safe_text(item.feedback.get("misconception"), limit=300)
+                or f"回答尚未完整说明{point}的关键关系。",
+                "missing_concepts": [str(value) for value in item.feedback.get("missing_concepts") or []][:6],
+                "recommended_action": safe_text(item.feedback.get("message"), limit=300)
+                or f"复习{point}的课程证据后重新作答。",
+                "confidence": clamp_confidence(item.feedback.get("confidence"), 0.6),
+            }
+        return cls._deterministic_diagnosis(item)
+
+    @staticmethod
+    def _grading_status(evaluated: list[EvaluatedAnswer]) -> str:
+        graded = sum(1 for item in evaluated if item.feedback.get("score") is not None)
+        if graded == len(evaluated):
+            return "complete"
+        return "partial" if graded else "ungraded"
+
+    @staticmethod
+    def _grading_status_from_rows(rows: list[PracticeAnswer]) -> str:
+        submitted = [row for row in rows if row.answer_text is not None]
+        graded = sum(1 for row in submitted if (row.feedback_json or {}).get("score") is not None)
+        if submitted and graded == len(submitted):
+            return "complete"
+        return "partial" if graded else "ungraded"
+
+    @staticmethod
+    def _score_from_rows(rows: list[PracticeAnswer]) -> Decimal | None:
+        scores = [int((row.feedback_json or {})["score"]) for row in rows if (row.feedback_json or {}).get("score") is not None]
+        return Decimal(str(round(sum(scores) / len(scores)))) if scores else None
+
+    def _run_post_grade_closure(
+        self,
+        user: User,
+        session: PracticeSession,
+        touched: dict[str, WeaknessReviewItem],
+        trace_id: str,
+    ) -> None:
+        path_status = str((session.assessment_json or {}).get("path_update_status") or "not_started")
+        path_trace_id = (session.assessment_json or {}).get("path_agent_trace_id")
+        if self.service.path_service is not None:
+            try:
+                result = self.service.path_service.replan_after_assessment(user, int(session.course_id or 0), session.id)
+                path_status = str(getattr(result, "status", "unchanged"))
+                path_trace_id = getattr(result, "trace_id", None)
+            except Exception:
+                path_status = "failed"
+        session.assessment_json = {
+            **(session.assessment_json or {}),
+            "path_update_status": path_status,
+            "path_agent_trace_id": path_trace_id,
+        }
+        self.service.repository.commit()
+        self.service.repository.refresh(session)
+        if self.service.profile_service is None or not touched:
+            return
+        ingest = getattr(self.service.profile_service, "ingest_learning_signal", None)
+        if callable(ingest):
+            try:
+                ingest(
+                    user=user,
+                    source_type="practice_assessment",
+                    source_ref_type="practice_session",
+                    source_ref_id=session.id,
+                    suggested_updates={"weak_points": list(dict.fromkeys(item.title for item in touched.values()))[:5]},
+                    course_id=int(session.course_id or 0),
+                    parent_trace_id=trace_id,
+                )
+            except Exception:
+                pass
+
     def _model_diagnoses(self, state: AssessmentState) -> dict[str, dict[str, Any]] | None:
         if self.service.model_service is None:
             return None
@@ -622,7 +822,7 @@ class AssessmentGraphRunner:
         recommended: list[int] = []
         touched: dict[str, WeaknessReviewItem] = {}
         for evaluated in state.get("evaluated", []):
-            if evaluated.feedback["score"] >= 60:
+            if evaluated.feedback.get("score") is None or evaluated.feedback["score"] >= 60:
                 continue
             question_id = str(evaluated.question.get("id"))
             row = rows_by_question[question_id]
@@ -755,11 +955,11 @@ class AssessmentGraphRunner:
                 "question": safe_text(item.question.get("prompt"), limit=800),
                 "correct_answer": item.question.get("correct_answer"),
                 "student_answer": safe_text(item.answer_text, limit=500),
-                "score": int(item.feedback.get("score") or 0),
+                "score": item.feedback.get("score"),
                 "diagnosis": state.get("diagnoses", {}).get(str(item.question.get("id"))),
             }
             for item in state.get("evaluated", [])
-            if int(item.feedback.get("score") or 0) < 60
+            if item.feedback.get("score") is not None and int(item.feedback["score"]) < 60
         ]
 
     def _answer_risks(self, state: AssessmentState) -> list[str]:
@@ -770,7 +970,9 @@ class AssessmentGraphRunner:
             evaluated = evaluated_by_id.get(question_id)
             if evaluated is None or row.answer_text is None:
                 continue
-            if int((row.feedback_json or {}).get("score") or 0) != int(evaluated.feedback["score"]):
+            persisted_score = (row.feedback_json or {}).get("score")
+            expected_score = evaluated.feedback.get("score")
+            if persisted_score != expected_score:
                 risks.append("score_mismatch")
             if contains_sensitive_text((row.feedback_json or {}).get("diagnosis")):
                 risks.append("sensitive_output")

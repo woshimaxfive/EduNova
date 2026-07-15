@@ -104,12 +104,12 @@ export function PracticeQuestionCanvas({
       )}
 
       {completed && feedback ? (
-        <section className={feedback.is_correct ? "practice-review correct" : "practice-review wrong"} aria-label={`${question.id} 批改结果`}>
+        <section className={feedback.is_correct === null ? "practice-review pending" : feedback.is_correct ? "practice-review correct" : "practice-review wrong"} aria-label={`${question.id} 批改结果`}>
           <button type="button" aria-expanded={reviewExpanded} onClick={onToggleReview}>
             <span>
-              {feedback.is_correct ? <CheckCircle size={22} weight="duotone" aria-hidden="true" /> : <WarningCircle size={22} weight="duotone" aria-hidden="true" />}
+              {feedback.is_correct === true ? <CheckCircle size={22} weight="duotone" aria-hidden="true" /> : feedback.is_correct === false ? <WarningCircle size={22} weight="duotone" aria-hidden="true" /> : null}
               <span>
-                <strong>{feedback.is_correct ? "回答正确" : "需要复习"} · 得分 {feedback.feedback.score}</strong>
+                <strong>{feedback.is_correct === null ? "简答题暂未评分" : `${feedback.is_correct ? "回答正确" : "需要复习"} · 得分 ${feedback.feedback.score}`}</strong>
                 <small>{feedback.feedback.message}</small>
               </span>
             </span>

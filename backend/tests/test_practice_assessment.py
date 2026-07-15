@@ -365,14 +365,16 @@ def test_submit_practice_answers_scores_and_writes_confirmed_weakness_items() ->
     evaluated = as_dict(service.submit_answers(make_user(), session_id, answers))
 
     assert evaluated["status"] == "completed"
-    assert evaluated["score"] == 67
+    assert evaluated["score"] == 50
+    assert evaluated["grading_status"] == "partial"
     assert len(evaluated["answers"]) == 3
     assert evaluated["answers"][0]["is_correct"] is False
     assert evaluated["answers"][0]["feedback"]["score"] == 0
-    assert evaluated["answers"][2]["feedback"]["score"] > 0
+    assert evaluated["answers"][2]["feedback"]["score"] is None
+    assert evaluated["answers"][2]["feedback"]["grading_status"] == "ungraded"
     assert evaluated["questions"][0]["correct_answer"] == stored_questions[0]["correct_answer"]
     assert evaluated["questions"][1]["correct_answer"] == stored_questions[1]["correct_answer"]
-    assert repo.sessions[0].score == Decimal("67")
+    assert repo.sessions[0].score == Decimal("50")
     assert repo.sessions[0].status == "completed"
     assert len(repo.weakness_items) == 1
     assert repo.weakness_items[0].source_type == "practice_assessment"
@@ -426,14 +428,14 @@ def test_generate_and_read_latest_report_uses_practice_and_learning_state_eviden
 
     assert report["course_id"] == "101"
     assert report["practice_session_id"] == created["id"]
-    assert report["score"] == 67
+    assert report["score"] == 50
     assert report["report"]["mastery_update"]["weak_count"] == 1
     assert report["report"]["weakness_list"][0]["knowledge_point_id"] == "401"
     assert report["report"]["next_step_suggestions"]
     assert report["report"]["deterministic_statistics"] == {
         "practice_session_count": 1,
         "answered_question_count": 3,
-        "correct_answer_count": 2,
+        "correct_answer_count": 1,
         "assessed_knowledge_point_count": 2,
         "completed_path_task_count": 0,
     }
@@ -493,7 +495,8 @@ def test_latest_report_returns_empty_state_and_routes_require_login() -> None:
     assert recent.json()["data"][0]["id"] == created.json()["data"]["id"]
     assert recent.json()["data"][0]["course_id"] == "101"
     assert recent.json()["data"][0]["status"] == "completed"
-    assert recent.json()["data"][0]["score"] == 0
+    assert recent.json()["data"][0]["score"] is None
+    assert recent.json()["data"][0]["grading_status"] == "ungraded"
     assert recent.json()["data"][0]["effective_difficulty"] == "easy"
     assert "questions" not in recent.json()["data"][0]
     assert "answers" not in recent.json()["data"][0]
@@ -504,7 +507,7 @@ def test_latest_report_returns_empty_state_and_routes_require_login() -> None:
     assert missing.status_code == 404
 
 
-def test_assessment_graph_keeps_rule_score_and_persists_model_diagnosis_with_trace() -> None:
+def test_assessment_graph_semantically_grades_short_answer_and_persists_diagnosis_with_trace() -> None:
     from backend.app.services.practice import PracticeService
 
     repo = make_repo()
@@ -512,11 +515,10 @@ def test_assessment_graph_keeps_rule_score_and_persists_model_diagnosis_with_tra
     logs: list[Any] = []
     model = FakeModelService(
         responses=[
-            '{"diagnoses":[{"question_id":"q1","misconception":"混淆了启发式搜索与无信息搜索",'
-            '"missing_concepts":["启发函数"],"recommended_action":"复习课程引用并完成同类题",'
-            '"confidence":0.88,"score":100}]}',
-            '{"review_status":"passed","confidence":0.92,"risk_flags":[],'
-            '"safety_summary":"诊断与规则分数一致。"}',
+            '{"grades":[{"question_id":"q1","score":0,"is_correct":false,'
+            '"matched_concepts":[],"missing_concepts":["启发函数"],'
+            '"misconception":"混淆了启发式搜索与无信息搜索",'
+            '"feedback":"复习课程引用并完成同类题","evidence_refs":[],"confidence":0.88}]}',
         ]
     )
     service = PracticeService(repo, model_service=model, trace_recorder=make_trace_recorder(logs))
@@ -530,6 +532,8 @@ def test_assessment_graph_keeps_rule_score_and_persists_model_diagnosis_with_tra
     )
 
     assert result["score"] == 0
+    assert result["grading_status"] == "complete"
+    assert result["answers"][0]["feedback"]["grading_status"] == "model"
     diagnosis = result["answers"][0]["feedback"]["diagnosis"]
     assert diagnosis["misconception"] == "混淆了启发式搜索与无信息搜索"
     assert diagnosis["evidence_ref"]["type"] == "practice_answer"
@@ -546,6 +550,42 @@ def test_assessment_graph_keeps_rule_score_and_persists_model_diagnosis_with_tra
         "persist",
         "path_replan",
     ]
+    assert len(model.calls) == 1
+
+
+def test_ungraded_short_answer_can_be_regraded_once_and_repeated_regrade_is_idempotent() -> None:
+    from backend.app.services.practice import PracticeService
+
+    repo = make_repo()
+    created = PracticeService(repo).create_session(make_user(), 101, [401], 1, "medium")
+    ungraded = as_dict(
+        PracticeService(repo).submit_answers(
+            make_user(),
+            int(created.id),
+            [{"question_id": "q1", "answer_text": "启发函数用来估计从当前状态到目标的剩余代价。"}],
+        )
+    )
+    assert ungraded["score"] is None
+    assert ungraded["grading_status"] == "ungraded"
+
+    model = FakeModelService(
+        responses=[
+            '{"grades":[{"question_id":"q1","score":88,"is_correct":true,'
+            '"matched_concepts":["启发函数","剩余代价"],"missing_concepts":[],"misconception":"",'
+            '"feedback":"核心含义与作用说明准确。","evidence_refs":[],"confidence":0.91}]}'
+        ]
+    )
+    service = PracticeService(repo, model_service=model)
+
+    regraded = as_dict(service.regrade_answers(make_user(), int(created.id)))
+    repeated = as_dict(service.regrade_answers(make_user(), int(created.id)))
+
+    assert regraded["score"] == 88
+    assert regraded["grading_status"] == "complete"
+    assert regraded["answers"][0]["feedback"]["matched_concepts"] == ["启发函数", "剩余代价"]
+    assert repeated == regraded
+    assert len(model.calls) == 1
+    assert repo.weakness_items == []
 
 
 def test_assessment_path_failure_does_not_rollback_completed_practice() -> None:
@@ -564,9 +604,10 @@ def test_assessment_path_failure_does_not_rollback_completed_practice() -> None:
     )
 
     assert result["status"] == "completed"
-    assert result["score"] == 0
-    assert result["closure_update"]["path_update_status"] == "failed"
-    assert len(repo.weakness_items) == 1
+    assert result["score"] is None
+    assert result["grading_status"] == "ungraded"
+    assert result["closure_update"]["path_update_status"] == "not_started"
+    assert len(repo.weakness_items) == 0
 
 
 def test_report_graph_aggregates_recent_trend_without_allowing_model_to_change_numbers() -> None:
@@ -592,13 +633,13 @@ def test_report_graph_aggregates_recent_trend_without_allowing_model_to_change_n
 
     report = as_dict(report_service.generate_report(make_user(), 101))
 
-    assert report["score"] == 100
+    assert report["score"] is None
     assert report["report"]["summary"] == "近期练习表现明显提升。"
     assert report["report"]["trend"] == {
-        "direction": "improved",
-        "score_delta": 100,
-        "sessions_compared": 2,
-        "scores": [0, 100],
+        "direction": "insufficient",
+        "score_delta": 0,
+        "sessions_compared": 0,
+        "scores": [],
     }
     assert report["report"]["evidence_summary"]["practice_count"] == 2
     assert report["report"]["review_result"]["review_status"] == "passed"

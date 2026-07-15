@@ -37,6 +37,7 @@ import {
   listTutorSessions,
   renameTutorSession,
   streamTutorMessage,
+  type TutorCitation,
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
@@ -132,6 +133,7 @@ type CourseMessage = {
   role: "user" | "assistant";
   content: string;
   citations?: RagSearchResultItem[];
+  supplementalSources?: TutorCitation[];
   traceId?: string | null;
 };
 
@@ -158,12 +160,16 @@ function isRagCitation(citation: unknown): citation is RagSearchResultItem {
 function mapTutorMessagesToCourseMessages(messages: TutorMessage[]): CourseMessage[] {
   return messages.map((message) => {
     const citations = message.role === "assistant" ? message.citation_json.filter(isRagCitation) : [];
+    const supplementalSources = message.role === "assistant"
+      ? message.citation_json.filter((citation) => !isRagCitation(citation))
+      : [];
 
     return {
       id: message.id,
       role: message.role,
       content: message.content,
       citations: message.role === "assistant" ? citations : undefined,
+      supplementalSources: message.role === "assistant" ? supplementalSources : undefined,
       traceId: message.role === "assistant" ? message.trace_id : null
     };
   });
@@ -952,6 +958,7 @@ export function CourseSpacePage() {
                               activePanel={turnPanel}
                               courseId={hasRealCourseId ? numericCourseId : null}
                               citations={citations}
+                              supplementalSources={message.supplementalSources ?? []}
                               hasRealCourse={Boolean(apiCourse)}
                               hasSearched
                               pathSummary={learningState?.path_summary ?? null}
@@ -1123,6 +1130,7 @@ type AnswerDetailPanelProps = {
   activePanel: CourseAnswerPanelKind;
   courseId: number | null;
   citations: RagSearchResultItem[];
+  supplementalSources: TutorCitation[];
   hasRealCourse: boolean;
   hasSearched: boolean;
   pathSummary: CoursePathSummary | null;
@@ -1138,6 +1146,7 @@ function AnswerDetailPanel({
   activePanel,
   courseId,
   citations,
+  supplementalSources,
   hasRealCourse,
   hasSearched,
   pathSummary,
@@ -1233,7 +1242,7 @@ function AnswerDetailPanel({
       );
     }
 
-    if (citations.length === 0) {
+    if (citations.length === 0 && supplementalSources.length === 0) {
       return (
         <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
           <strong>来源</strong>
@@ -1262,6 +1271,14 @@ function AnswerDetailPanel({
               </small>
               <span className="citation-content">{citation.content}</span>
             </button>
+          ))}
+          {supplementalSources.map((citation, index) => (
+            <article className="citation-item" key={`${citation.source_type ?? "source"}-${citation.url ?? citation.title ?? index}`}>
+              <strong>{citation.title ?? (citation.source_type === "history" ? "历史对话" : "外部补充")}</strong>
+              <span>{citation.source_type === "history" ? "历史对话，仅用于上下文" : "外部补充，不作为课程证据"}</span>
+              <span className="citation-content">{citation.snippet ?? citation.content ?? "来源已记录"}</span>
+              {citation.url ? <a href={citation.url} target="_blank" rel="noreferrer">打开来源</a> : null}
+            </article>
           ))}
         </div>
       </section>

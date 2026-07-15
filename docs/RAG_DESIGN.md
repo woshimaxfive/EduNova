@@ -6,7 +6,7 @@ EduNova 的主页资料问答与课程问答共用同一套检索底座，但保
 
 - 主页只检索当前用户在该会话中确认选择的资料，并允许模型使用通用知识。
 - 课程空间优先检索当前用户课程内的知识切片；只有时效问题、明确外部核实，或已确认课程相关但没有课程命中时才补充网页来源。
-- 联网搜索由 `HomeTutorGraph.web_search` 和 `CourseTutorGraph.web_search` 调用同一个 Tavily-compatible 服务，模型 Provider 不接管网页搜索。
+- 联网搜索由 `HomeTutorGraph.web_search` 和 `CourseTutorGraph.web_search` 统一编排：星火 X2-Flash/官方 OpenAI 原生搜索优先，无可验证来源时回退 Tavily-compatible 服务；DeepSeek 与普通兼容接口使用 EduNova `search_web` 工具。
 - 引用只返回安全短片段、来源、章节、页码和检索状态，不返回完整资料、向量或模型输入。
 
 ## 2. 向量能力
@@ -88,7 +88,7 @@ base_url = https://spark-api-open.xf-yun.com/agent/v1/
 model = spark-x
 ```
 
-主页和课程普通问题发送 `thinking.auto`，复杂比较、推导、诊断、规划与多证据综合发送 `thinking.enabled`。Provider 只消费最终 `content`，忽略 `reasoning_content`。星火内置 `web_search` 不启用，保证网页来源继续由 EduNova 的 Tavily 节点、引用协议和 Agent trace 统一管理；其他 Provider 不接收未经验证的私有 thinking 参数。
+主页和课程普通问题发送 `thinking.auto`，复杂比较、推导、诊断、规划与多证据综合发送 `thinking.enabled`。Provider 只消费最终 `content`，忽略 `reasoning_content`。Phase 25 起允许星火原生 `web_search`，但只有能提取可验证 URL 才进入证据链；否则回退 EduNova 外部搜索。其他 Provider 不接收未经验证的私有 thinking 参数。
 
 ## 7. 验收边界
 
@@ -101,7 +101,7 @@ model = spark-x
 
 ## 8. 话题切换与概念归并
 
-- 会话追问只在包含指代词、继续语义或与上一问存在足够主题重合时拼接历史问题。明显从 A* 切换到反向传播等新主题时直接使用当前问题检索，避免旧上下文污染召回。
+- 会话追问由 `SemanticDecisionService` 结合裁剪后的真实消息输出独立问题、历史引用消息 ID 与置信度，不再用指代词或词项重合决定是否拼接。失败时保守使用当前问题，避免旧上下文污染召回。
 - `MaterialComparisonGraph` 在判断共同重点前先按知识点 ID、规范化标题和概念别名归并证据。A*、A 星、启发式搜索和 `f(n)=g(n)+h(n)` 归为同一概念；反向传播与误差反传归为同一概念，同时保留每份资料自己的引用。
 - Embedding 或 Rerank 降级仍允许关键词检索，但引用和 trace 必须返回实际 `retrieval_source`、`embedding_status` 与 `rerank_status`，不得把关键词结果描述为语义命中。
 
@@ -115,7 +115,7 @@ model = spark-x
 
 ## 10. Phase 22 解析与检索边界
 
-Docling 只替换 PDF、DOCX、PPTX 的通用结构提取，仍输出 EduNova 的 `ParsedDocument / ParsedPage / ParsedBlock`。目录确认、章节内切片、质量门禁、配置指纹、课程与用户隔离、混合召回、重排序和证据引用均不交给第三方框架。LangChain Loader 目录只作为生态参考，本阶段没有引入 LangChain、LlamaIndex 或 Haystack 生产依赖。
+Docling 只替换 PDF、DOCX、PPTX 的通用结构提取，仍输出 EduNova 的 `ParsedDocument / ParsedPage / ParsedBlock`。目录确认、章节内切片、质量门禁、配置指纹、课程与用户隔离、混合召回、重排序和证据引用均不交给第三方框架。Phase 25 仅引入 LangChain 消息裁剪、`@tool` 和 `ToolNode`，不使用其 Loader、Memory、Agent 或 VectorStore 重写本链路。
 
 ## 11. Phase 23 外部补充边界
 
@@ -130,3 +130,11 @@ Docling 只替换 PDF、DOCX、PPTX 的通用结构提取，仍输出 EduNova �
 - 课程资料检索仍在语义决策之后执行，实际课程命中由确定性证据策略决定是否允许网页补充。
 - 同一次课程语义决策可以给出 `explicit_weakness/preference/goal/foundation` 候选，但必须高置信、具备课程引用并通过画像白名单和重复证据门禁；网页不成为画像证据。
 - 未配置搜索、超时、限流、空结果均返回 warning 并保留课程或通用回答降级，不生成假 URL 或假来源。
+
+## 13. Phase 25 原生搜索、历史与语义证据
+
+- Provider 能力注册表只对白名单星火/官方 OpenAI 开启原生搜索；其他 OpenAI-compatible 地址默认 `none`。原生与外部搜索不会默认并行，只有前者失败或无可验证来源才回退。
+- 外部搜索由 LangChain `@tool` 与 LangGraph `ToolNode` 执行，但节点选择、权限、超时、引用归一和降级仍由 EduNova Graph 控制。
+- 历史对话引用使用 `source_type=history/evidence_role=conversation_memory`，排除当前会话且最多 5 条；它可以帮助理解上下文，但不得进入 RAG 教材证据、画像可信证据或课程闭环统计。
+- 课程检索后执行结构化证据判断，输出 `direct/adjacent/off_topic`、相关 citation ID、证据充分性和外部搜索价值。返回的 citation ID 必须存在于真实候选，离题问题不得借联网绕过课程边界。
+- 资料语义分类只补充资料类型、章节角色、知识领域、概念组、难度与置信度；低置信结果进入 `needs_review`。Docling 结构、目录、页码、切片、质量门禁和证据绑定保持确定性。

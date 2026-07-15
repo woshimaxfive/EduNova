@@ -1662,7 +1662,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 课程会话规则：
 
 - 命中课程知识切片时，assistant `citation_json` 采用 `/rag/search` 的结果字段结构，并可包含关键词、向量、RRF 与重排序状态；所有引用仍绑定真实 chunk ID。
-- 课程 RAG 查询会把最近 2 条用户问题和当前问题合成上下文化 query，改善“这个”“继续”“刚才那个”等追问的召回；主页联网搜索也使用同样的上下文化 query，但网页来源必须来自真实搜索结果。
+- 同会话真实消息先按模型上下文预算裁剪；`SemanticDecisionService` 输出 `standalone_query`、`uses_history` 和 `referenced_turn_ids`。课程 RAG 与搜索只使用模型改写后的必要问题，不再按固定代词或最近两问拼接。
 - 无命中时 `citation_json=[]`，assistant 内容提示“资料依据不足”，前端不得伪造引用。
 - 有命中且可解析模型配置时，assistant `content` 保存模型基于引用生成的回答，`trace_id` 写入本次 `CourseTutorGraph` trace。
 - 有命中但无可用模型配置时，assistant 保存“已找到资料依据，但当前未配置可用模型。”，引用仍保留。
@@ -2508,3 +2508,52 @@ OpenRouter 不再作为可见预设。
 - 错误继续使用 `ApiErrorEnvelope`，保留现有 HTTP 状态码、业务错误码、中文消息和 `trace_id`；`DomainError` 由全局异常处理器映射，路由不重复转换同类异常。
 - `backend/openapi.json` 是前端传输类型的输入，`frontend/src/types/openapi.generated.ts` 由 `openapi-typescript` 生成。生成物不替代 Axios 拦截器、Query Key、缓存失效或页面 ViewModel。
 - SSE 事件名和 JSON 数据结构保持现有合同；规范编码和分包解析不改变取消、完成、错误与轮询恢复语义。
+
+## 22. Phase 25 搜索、来源与隐私合同
+
+主页和课程消息接口保持原请求结构与 SSE 事件协议。`use_web_search=true/deep_thinking=true` 继续作为旧客户端强制提示；false 或缺省进入模型自动判断。响应引用新增可选字段：
+
+```json
+{
+  "source_type": "web | history",
+  "search_backend": "native_spark | native_openai | external",
+  "evidence_role": "external_supplement | conversation_memory",
+  "retrieved_at": "2026-07-15T04:00:00Z"
+}
+```
+
+- `source_type=web` 必须包含可验证 HTTP(S) URL；网页只作为外部补充。
+- `source_type=history` 包含历史会话与消息引用和脱敏摘要，不返回向量，不作为课程证据。
+- Trace 的白名单 metadata 可包含 `search_backend`、触发方式、来源数量、`relation_type`、证据充分性和降级原因，不包含搜索 Provider 原始响应或思维链。
+
+### `GET /api/v1/settings/privacy`
+
+返回当前用户的跨会话记忆开关和派生索引数量：
+
+```json
+{
+  "data": {
+    "conversation_memory_enabled": true,
+    "indexed_memory_count": 12
+  },
+  "trace_id": "trace_api"
+}
+```
+
+### `PUT /api/v1/settings/privacy`
+
+请求体为 `{"conversation_memory_enabled": false}`。关闭后立即停止新增与检索并删除当前用户派生记忆；开启后 best-effort 排队执行幂等回填。原始聊天记录始终保留。
+
+### `DELETE /api/v1/settings/privacy/conversation-memory`
+
+只删除当前用户派生记忆索引：
+
+```json
+{
+  "data": {
+    "deleted_count": 12,
+    "raw_chat_history_preserved": true
+  },
+  "trace_id": "trace_api"
+}
+```

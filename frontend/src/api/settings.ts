@@ -11,7 +11,9 @@ export const SETTINGS_ENDPOINTS = {
   defaultConfig: (configId: number) => `/settings/model/configs/${configId}/default`,
   embeddingDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/embedding-default`,
   rerankDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/rerank-default`,
-  embeddingReindexJobs: "/settings/model/embedding/reindex-jobs"
+  embeddingReindexJobs: "/settings/model/embedding/reindex-jobs",
+  privacy: "/settings/privacy",
+  conversationMemory: "/settings/privacy/conversation-memory"
 } as const;
 
 export type ModelSettingsSource = "user" | "system" | "none";
@@ -134,6 +136,16 @@ export type ModelConnectionTestResponse = {
   dimension?: number | null;
 };
 
+export type PrivacySettings = {
+  conversation_memory_enabled: boolean;
+  indexed_memory_count: number;
+};
+
+export type ClearConversationMemoryResponse = {
+  deleted_count: number;
+  raw_chat_history_preserved: boolean;
+};
+
 export async function getModelSettings() {
   const response = await apiClient.get<ApiEnvelope<ModelSettingsSummary>>(SETTINGS_ENDPOINTS.model);
   return response.data;
@@ -203,4 +215,23 @@ export async function createEmbeddingReindexJob(configId: number, idempotencyKey
     { headers: { "Idempotency-Key": idempotencyKey } }
   );
   return response.data.data;
+}
+
+export async function getPrivacySettings() {
+  const response = await apiClient.get<ApiEnvelope<PrivacySettings>>(SETTINGS_ENDPOINTS.privacy);
+  return response.data;
+}
+
+export async function updatePrivacySettings(conversationMemoryEnabled: boolean) {
+  const response = await apiClient.put<ApiEnvelope<PrivacySettings>>(SETTINGS_ENDPOINTS.privacy, {
+    conversation_memory_enabled: conversationMemoryEnabled
+  });
+  return response.data;
+}
+
+export async function clearConversationMemory() {
+  const response = await apiClient.delete<ApiEnvelope<ClearConversationMemoryResponse>>(
+    SETTINGS_ENDPOINTS.conversationMemory
+  );
+  return response.data;
 }

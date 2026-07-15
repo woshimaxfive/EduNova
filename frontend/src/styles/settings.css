@@ -41,6 +41,26 @@
   align-items: center;
 }
 
+.settings-memory-toggle {
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+}
+
+.settings-memory-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-strong);
+}
+
+.settings-privacy-list article > .secondary-action {
+  grid-column: 2 / -1;
+  justify-self: start;
+}
+
 .settings-toolbar-identity {
   gap: 10px;
   min-width: 0;

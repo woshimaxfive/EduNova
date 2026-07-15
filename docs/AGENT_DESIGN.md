@@ -131,10 +131,12 @@ EduNova 的第一版坚持确定性可用稿优先：
 - 课程空间“课堂协作轨迹”展示 Profile、Route、Retriever、WebSearch、Planner、Tutor、Weakness、Review、NextAction；跳过节点仍说明安全决策，不展示原始思维链。
 - 课程空间顶部用 A3 个性化学习闭环摘要和固定步骤流解释画像、检索、辅导、弱点、资源、路径、评估、报告的协作关系；这是面向用户的过程证据，不是原始思维链。
 - 课程回答展示层和生成层都必须过滤 `学生问题`、`课程引用`、`匹配度`、资料片段等模型输入字段；引用证据只进入来源面板，不作为回答正文泄露。
-- 主页会话和课程空间会话默认使用同一 `session_id` 内最近 12 条消息作为多轮上下文；更早历史只生成确定性安全摘要。课程 RAG、主页资料上下文和联网搜索会用最近用户问题 + 当前问题做上下文化查询，前端只展示“已参考最近 N 条会话”等安全提示。
+- 主页会话和课程空间会话读取同一 `session_id` 的真实消息，由 LangChain `trim_messages` 按模型预算裁剪；`SemanticDecisionService` 输出独立问题、是否使用历史和引用消息 ID。跨会话只检索当前用户、排除当前会话的脱敏向量摘要，前端标记为“历史对话”。
 - 资源工坊和课程空间共用结构化资源渲染器，展示 Markmap、交互练习、浏览器 Python、PPT、动画图解和 `ResourceGenerationGraph` 全链路；资源工坊额外按版本族提供切换、比较、换教法和优化版本，并展示安全的“为什么为你这样生成”。旧 Markdown/Mermaid 资源继续降级可读。
 - 学习路径、练习和报告页面通过共享 `AgentTraceDisclosure` 展开真实 PathPlanning、Assessment、Report 节点轨迹；局部轨迹失败不阻断主流程。
 - 主页和课程空间不显示联网/思考开关。发送后通过 SSE 展示实际发生的安全 Graph 状态、真实来源、Markdown token 和可选 Review 替换；规划只展示安全摘要，不展示原始思维链。
+- `HomeTutorGraph/CourseTutorGraph` 仍决定工具边界。星火/官方 OpenAI 可先尝试原生搜索；其他兼容模型由结构化路由后调用 LangChain `search_web` ToolNode。原生无可验证 URL 才回退，禁止默认双路搜索。
+- LangChain 只提供消息裁剪、工具 Schema 和 ToolNode；不使用通用 Agent、Memory 或 VectorStore 替换十条生产 Graph、数据库会话或课程证据边界。
 - 所有 trace 读取失败都只影响局部轨迹区，不阻断学习主流程。
 
 ## 8. 答辩解释口径

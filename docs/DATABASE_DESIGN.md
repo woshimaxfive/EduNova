@@ -962,6 +962,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 30. Phase 19 不新增迁移。题目引用、生成模式和质量摘要继续保存在 `practice_answers.question_json`；报告不可变统计与审核摘要继续保存在 `assessment_reports.report_json`；资源 v3 质量与代码验证摘要继续保存在 `generated_resources.content_json`。代码正文和运行输出不写入独立验证日志。
 31. Phase 20 使用迁移 `20260714_0021` 为 `generated_resources` 增加版本族、来源版本、版本序号和生成动作。教学意图、个性化说明和差异质量继续保存在 v3 `content_json`，不复制完整画像或原始模型输入。
 32. 账号体系使用迁移 `20260714_0022` 将 `users.email` 替换为 `users.account`。升级旧库时从邮箱前缀生成规范化且不冲突的账号；空库直接使用新结构。账号统一小写，昵称继续独立保存。
+33. Phase 25 使用迁移 `20260715_0024` 新增 `user_privacy_settings` 和 `conversation_memory_entries`。记忆表保存当前用户、会话与消息引用、脱敏摘要、动态向量、Provider/模型/维度和配置指纹；不复制原始消息，不允许跨用户检索。
 
 当前已验证：
 
@@ -993,3 +994,25 @@ Phase 22 不新增数据库迁移。资料原文件与导出文件字段继续�
 ## 13. Phase 23 数据边界
 
 Phase 23 不新增数据库迁移。自动能力决策只写入既有 `agent_run_logs.metadata_json` 白名单字段；网页引用继续存入当次 assistant 的 `citation_json`，使用 `source_type=web` 和 `evidence_role=external_supplement`。画像、弱点、掌握度和客观评分只消费非网页课程证据。
+
+## 14. Phase 25 跨会话记忆
+
+### `user_privacy_settings`
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `user_id` | bigint | 当前用户，一对一唯一且级联删除 |
+| `conversation_memory_enabled` | boolean | 默认开启；关闭时停止索引和检索 |
+
+### `conversation_memory_entries`
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `user_id` | bigint | 所属用户，查询第一隔离条件 |
+| `session_id` | bigint | 原会话；检索时排除当前会话 |
+| `user_message_id` / `assistant_message_id` | bigint | 原始消息引用；assistant 唯一保证幂等 |
+| `summary` | text | 受长度限制的脱敏派生摘要，不替代原消息 |
+| `embedding` | vector | 动态维度语义索引 |
+| `embedding_provider/model/dimension/profile_hash` | string/int | 检索兼容与配置指纹 |
+
+关闭或清除记忆只删除 `conversation_memory_entries`；`chat_sessions/chat_messages` 不联动删除。Embedding 不可用时不创建索引，也不退回关键词搜索跨会话历史。同一用户查询只比较当前配置指纹和维度，最多返回 5 条。

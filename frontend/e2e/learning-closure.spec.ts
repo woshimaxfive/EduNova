@@ -2,7 +2,18 @@ import { resolve } from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
 
-async function createAndSubmitWrongPractice(page: Page) {
+async function confirmUploadedMaterial(page: Page, title: string) {
+  const drawer = page.getByRole("dialog", { name: title });
+  await expect(drawer).toBeVisible();
+  const confirmOutline = drawer.getByRole("button", { name: "确认目录" });
+  await expect(confirmOutline).toBeEnabled({ timeout: 90_000 });
+  await confirmOutline.click();
+  await expect(confirmOutline).toHaveCount(0);
+  await drawer.getByRole("button", { name: `关闭${title}` }).click();
+  await expect(page.getByText("目录已确认", { exact: true }).first()).toBeVisible();
+}
+
+async function createAndSubmitUngradedPractice(page: Page) {
   await page.goto("/app/practice");
   const start = page.getByRole("button", { name: /开始新练习|开始针对性练习/ }).first();
   await expect(start).toBeVisible();
@@ -16,21 +27,21 @@ async function createAndSubmitWrongPractice(page: Page) {
 
   await expect(page.getByRole("article", { name: "第 1 题" })).toBeVisible();
   await page.getByRole("button", { name: "提交练习" }).click();
-  const confirm = page.getByRole("dialog", { name: /还有 3 题未作答/ });
+  const confirm = page.getByRole("alertdialog", { name: /还有 3 题未作答/ });
   await confirm.getByRole("button", { name: "仍然提交" }).click();
-  await expect(page.getByText("练习完成")).toBeVisible();
-  await expect(page.getByText("错因与复习动作").first()).toBeVisible();
+  await expect(page.getByText("简答题暂未评分，当前结果不会影响掌握度、弱点或学习路径。")).toBeVisible();
   await page.getByRole("button", { name: "查看学习更新" }).click();
-  await expect(page.getByText("学习路径已按本次结果重排")).toBeVisible();
+  await expect(page.getByText("本次练习已写入学习状态")).toBeVisible();
 }
 
-test("rules-only Docker environment closes the learning loop with real traces", async ({ page }) => {
+test("rules-only Docker environment preserves ungraded boundaries with real traces", async ({ page }) => {
+  test.setTimeout(240_000);
   await page.goto("/register");
   await page.getByLabel("昵称").fill("Phase 14 验收账号");
   await page.getByLabel("账号").fill("phase14_e2e");
   await page.getByLabel("密码", { exact: true }).fill("Phase14Test2026");
-  await page.getByLabel("确认密码").fill("Phase14Test2026");
-  await expect(page.getByRole("radio", { name: /带一个示例课程开始/ })).toBeChecked();
+  await page.getByRole("textbox", { name: "确认密码 显示确认密码" }).fill("Phase14Test2026");
+  await page.getByRole("radio", { name: /数据结构与算法/ }).check();
   await page.getByRole("button", { name: "创建并进入" }).click();
   await expect(page).toHaveURL(/\/app$/);
 
@@ -43,17 +54,17 @@ test("rules-only Docker environment closes the learning loop with real traces", 
   await page.getByRole("button", { name: "查看 PathPlanningGraph" }).click();
   await expect(page.getByText("deterministic_rank")).toBeVisible();
 
-  await createAndSubmitWrongPractice(page);
+  await createAndSubmitUngradedPractice(page);
   await page.getByRole("button", { name: "查看 AssessmentGraph" }).click();
   await expect(page.getByText("deterministic_score")).toBeVisible();
 
   await page.goto("/app/path");
-  await expect(page.getByText(/由练习结果更新 · 保留 \d+ 个既有任务/)).toBeVisible();
+  await expect(page.getByText(/由练习结果更新 · 保留 \d+ 个既有任务/)).toHaveCount(0);
   await page.getByRole("button", { name: "路径详情" }).click();
   await page.getByRole("tab", { name: "规划依据" }).click();
   await expect(page.getByText(/规则底稿 · 规则审核/)).toBeVisible();
 
-  await createAndSubmitWrongPractice(page);
+  await createAndSubmitUngradedPractice(page);
 
   await page.goto("/app/reports");
   await expect(page.getByRole("button", { name: "生成学习报告" })).toBeEnabled();
@@ -77,11 +88,12 @@ test("rules-only Docker environment closes the learning loop with real traces", 
 });
 
 test("material comparison remains an independent evidence tool", async ({ page }) => {
+  test.setTimeout(240_000);
   await page.goto("/register");
   await page.getByLabel("昵称").fill("Phase 16 验收账号");
   await page.getByLabel("账号").fill("phase16_e2e");
   await page.getByLabel("密码", { exact: true }).fill("Phase16Test2026");
-  await page.getByLabel("确认密码").fill("Phase16Test2026");
+  await page.getByRole("textbox", { name: "确认密码 显示确认密码" }).fill("Phase16Test2026");
   await page.getByRole("button", { name: "创建并进入" }).click();
   await expect(page).toHaveURL(/\/app$/);
 
@@ -92,10 +104,14 @@ test("material comparison remains an independent evidence tool", async ({ page }
 
   await uploadInput.setInputFiles(notesPath);
   await expect(page.getByText("phase16-ai-notes.md").first()).toBeVisible();
+  await confirmUploadedMaterial(page, "phase16-ai-notes.md");
   await uploadInput.setInputFiles(examPath);
   await expect(page.getByText("phase16-exam-guide.md").first()).toBeVisible();
+  await confirmUploadedMaterial(page, "phase16-exam-guide.md");
 
-  await page.getByRole("button", { name: "生成课程" }).first().click();
+  const generateCourse = page.getByRole("button", { name: "生成课程" }).first();
+  await expect(generateCourse).toBeEnabled();
+  await generateCourse.click();
   const courseDialog = page.getByRole("dialog", { name: "从资料生成课程" });
   await courseDialog.getByLabel("课程名称").fill("Phase 16 资料对比课");
   await courseDialog.getByRole("button", { name: /phase16-ai-notes\.md/ }).click();
@@ -107,8 +123,8 @@ test("material comparison remains an independent evidence tool", async ({ page }
   await page.getByRole("button", { name: "资料对比" }).click();
   await page.getByRole("button", { name: /phase16-ai-notes\.md/ }).click();
   await page.getByRole("button", { name: /phase16-exam-guide\.md/ }).click();
-  const comparisonSetup = page.getByRole("dialog", { name: "资料对比" });
-  await comparisonSetup.getByLabel("对比课程").selectOption({ label: "Phase 16 资料对比课" });
+  const comparisonSetup = page.getByRole("region", { name: "资料对比" });
+  await expect(comparisonSetup.getByLabel("对比课程")).toHaveValue(/.+/);
   await comparisonSetup.getByRole("button", { name: "生成资料对比" }).click();
   const comparisonResult = page.getByRole("dialog", { name: "对比结果" });
   await comparisonResult.getByRole("tab", { name: "来源与轨迹" }).click();

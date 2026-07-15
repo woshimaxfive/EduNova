@@ -66,7 +66,7 @@ export type TutorSessionHistoryPage = {
 };
 
 export type TutorCitation = Partial<RagSearchResultItem> & {
-  source_type?: "course" | "material" | "web" | string;
+  source_type?: "course" | "material" | "web" | "history" | string;
   title?: string;
   url?: string;
   snippet?: string;
@@ -77,6 +77,8 @@ export type TutorCitation = Partial<RagSearchResultItem> & {
   retrieval_source?: "keyword" | "vector" | "hybrid" | string | null;
   embedding_status?: string | null;
   warning?: string;
+  search_backend?: "native_spark" | "native_openai" | "external" | string;
+  evidence_role?: "external_supplement" | "conversation_memory" | string;
 };
 
 export type TutorMessage = {

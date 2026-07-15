@@ -423,6 +423,8 @@ describe("student core pages", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /数据隐私/ }));
     expect(screen.getByRole("region", { name: "隐私与数据" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "跨会话记忆" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "清除派生记忆" })).toBeDisabled();
     expect(screen.queryByRole("region", { name: "模型设置" })).not.toBeInTheDocument();
   });
 

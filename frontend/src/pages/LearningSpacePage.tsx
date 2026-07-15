@@ -1133,7 +1133,10 @@ function HomeAnswerInsights({
 
 function sourceTypeLabel(sourceType: TutorCitation["source_type"]) {
   if (sourceType === "web") {
-    return "网页";
+    return "外部补充";
+  }
+  if (sourceType === "history") {
+    return "历史对话";
   }
   if (sourceType === "material") {
     return "资料";

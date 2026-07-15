@@ -21,7 +21,9 @@ import { getApiErrorMessage } from "../api/errors";
 import {
   createModelConfig,
   createEmbeddingReindexJob,
+  clearConversationMemory,
   deleteModelConfig,
+  getPrivacySettings,
   listModelConfigs,
   setDefaultEmbeddingConfig,
   setDefaultModelConfig,
@@ -29,6 +31,7 @@ import {
   testModelConfig,
   testModelSettings,
   updateModelConfig,
+  updatePrivacySettings,
   type ModelConfigRequest,
   type ModelConfigSummary,
   type ModelConfigUpdateRequest,
@@ -253,6 +256,11 @@ export function SettingsPage() {
     queryFn: listModelConfigs,
     staleTime: 30_000
   });
+  const privacyQuery = useQuery({
+    queryKey: ["settings", "privacy"],
+    queryFn: getPrivacySettings,
+    enabled: activeSection === "privacy"
+  });
   const settingsList = modelConfigsQuery.data?.data ?? null;
   const configs = useMemo(() => settingsList?.configs ?? [], [settingsList?.configs]);
   const defaultChatConfigId = settingsList?.default_chat_config_id ?? settingsList?.default_config_id ?? null;
@@ -459,6 +467,27 @@ export function SettingsPage() {
       });
     },
     onError: (error) => setPasswordFeedback(getApiErrorMessage(error, "密码修改失败，请稍后重试。"))
+  });
+
+  const privacyMutation = useMutation({
+    mutationFn: updatePrivacySettings,
+    onSuccess: (response) => {
+      queryClient.setQueryData(["settings", "privacy"], response);
+      showToast(
+        response.data.conversation_memory_enabled ? "跨会话记忆已开启。" : "跨会话记忆已关闭，派生索引已清除。",
+        "success"
+      );
+    },
+    onError: (error) => showToast(getApiErrorMessage(error, "隐私设置更新失败，请稍后重试。"), "warning")
+  });
+
+  const clearMemoryMutation = useMutation({
+    mutationFn: clearConversationMemory,
+    onSuccess: async (response) => {
+      await queryClient.invalidateQueries({ queryKey: ["settings", "privacy"] });
+      showToast(`已清除 ${response.data.deleted_count} 条派生记忆，聊天记录仍保留。`, "success");
+    },
+    onError: (error) => showToast(getApiErrorMessage(error, "派生记忆清除失败，请稍后重试。"), "warning")
   });
 
   const savePending = createConfigMutation.isPending || updateConfigMutation.isPending;
@@ -1159,6 +1188,32 @@ export function SettingsPage() {
                     </div>
                   </header>
                   <div className="settings-privacy-list">
+                    <article>
+                      <Database size={21} weight="duotone" />
+                      <div>
+                        <strong>跨会话记忆</strong>
+                        <p>只保存当前账号的脱敏摘要与向量索引，用于在新对话中找回相关背景；不会复制原始聊天，也不会作为教材、画像或掌握度证据。</p>
+                        <small>当前派生记忆：{privacyQuery.data?.data.indexed_memory_count ?? 0} 条</small>
+                      </div>
+                      <label className="settings-memory-toggle">
+                        <input
+                          type="checkbox"
+                          aria-label="跨会话记忆"
+                          checked={privacyQuery.data?.data.conversation_memory_enabled ?? true}
+                          disabled={privacyQuery.isLoading || privacyMutation.isPending}
+                          onChange={(event) => privacyMutation.mutate(event.target.checked)}
+                        />
+                        <span>{(privacyQuery.data?.data.conversation_memory_enabled ?? true) ? "已开启" : "已关闭"}</span>
+                      </label>
+                      <button
+                        type="button"
+                        className="secondary-action"
+                        disabled={clearMemoryMutation.isPending || !(privacyQuery.data?.data.indexed_memory_count ?? 0)}
+                        onClick={() => clearMemoryMutation.mutate()}
+                      >
+                        {clearMemoryMutation.isPending ? "清除中" : "清除派生记忆"}
+                      </button>
+                    </article>
                     <article><Key size={21} weight="duotone" /><div><strong>模型密钥</strong><p>个人 API Key 使用 Fernet 加密保存，页面和接口只返回脱敏摘要。</p></div><span>加密存储</span></article>
                     <article><ShieldCheck size={21} weight="duotone" /><div><strong>Agent 协作轨迹</strong><p>只展示节点、耗时、引用数量和安全审核摘要，不保存原始提示词或完整模型输入。</p></div><span>安全摘要</span></article>
                     <article><Database size={21} weight="duotone" /><div><strong>学习资料</strong><p>资料、课程和会话按账号隔离；检索只在当前用户明确选择的范围内执行。</p></div><span>用户隔离</span></article>

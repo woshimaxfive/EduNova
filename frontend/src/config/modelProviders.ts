@@ -48,6 +48,16 @@ export const CHAT_MODEL_PROVIDER_PRESETS: ChatModelProviderPreset[] = [
     modelsHint: "推荐 deepseek-v4-pro；追求速度可使用 deepseek-v4-flash。"
   },
   {
+    id: "openai",
+    name: "OpenAI",
+    description: "OpenAI 官方 API；支持的模型可通过 Responses API 使用厂商托管联网搜索。",
+    baseUrl: "https://api.openai.com/v1",
+    chatModel: "gpt-5.6-terra",
+    apiKeyLabel: "API Key",
+    apiKeyPlaceholder: "填入 OpenAI API Key",
+    modelsHint: "模型可用性、工具能力和费用以 OpenAI 控制台为准。"
+  },
+  {
     id: "qwen",
     name: "阿里云百炼 · 千问",
     description: "阿里云百炼公共云 OpenAI-compatible 接口，适合中文学习问答与 Agent 任务。",

@@ -118,7 +118,9 @@ EXPORT_DIR=storage/exports
 EXPORT_QUEUE_NAME=edunova_exports
 ```
 
-`WEB_SEARCH_API_KEY` 为空时，主页联网搜索只返回“未配置” warning，不生成假来源。Docker Compose 中 backend 和 `export-worker` 共享导出卷，确保 worker 生成的学习档案可由下载接口读取；数据库迁移由 backend 启动命令执行，`export-worker` 等 backend 健康后只消费 RQ 队列。
+`WEB_SEARCH_API_KEY` 为空时，星火/官方 OpenAI 的原生搜索仍可按 Provider 能力工作；DeepSeek 与普通兼容接口无法执行外部搜索并返回明确 warning，不生成假来源。原生搜索没有可验证 URL 时仍需要 `WEB_SEARCH_API_KEY` 才能回退。Docker Compose 中 backend 和 `export-worker` 共享导出卷，确保 worker 生成的学习档案可由下载接口读取；数据库迁移由 backend 启动命令执行，AI Worker 同时消费资源任务与跨会话记忆索引/回填任务。
+
+Phase 25 新增迁移 `20260715_0024`。部署升级必须先执行 Alembic head，再滚动 backend 和 AI Worker；旧会话无需停机批量迁移，用户开启记忆时由幂等 RQ 回填任务渐进建立派生索引。关闭记忆或清除索引无需对象存储操作。
 
 生成代码验证变量：
 

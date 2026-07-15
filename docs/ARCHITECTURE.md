@@ -276,8 +276,11 @@ backend/app/
 | `backend/app/services/material_parsers.py` | 资料解析器，负责 TXT/Markdown/PDF/DOCX/PPTX 文本抽取，并明确 OCR、旧版 Office 和扫描件边界 |
 | `backend/app/services/materials.py` | 个人资料库服务，负责上传保存、解析、列表、详情、进度和课程资料关联 |
 | `backend/app/services/material_retrieval.py` | 共享资料分块和主页资料级 RAG，负责上传后切片、既有资料惰性补齐、当前用户选中资料限制、关键词/pgvector 混合排序和安全引用 |
-| `backend/app/services/web_search.py` | Tavily-compatible 联网搜索服务，未配置 Key 时返回 warning，不生成假来源 |
-| `backend/app/services/semantic_decision.py` | 使用当前用户有效回答模型输出结构化意图、联网查询、推理模式和可选课程画像信号；失败时进入保守降级 |
+| `backend/app/providers/capabilities.py` | Provider 能力注册表，保守声明星火/官方 OpenAI 原生搜索，普通兼容接口不猜测能力 |
+| `backend/app/agents/search_tools.py` | LangChain `@tool` 与 LangGraph `ToolNode` 搜索适配层，供 DeepSeek/普通兼容模型决策后的外部搜索回退使用 |
+| `backend/app/services/web_search.py` | Tavily-compatible 外部联网搜索服务，未配置 Key 时返回 warning，不生成假来源 |
+| `backend/app/services/semantic_decision.py` | 使用当前用户有效回答模型输出独立问题、历史引用、结构化意图、联网查询、推理模式和可选课程画像信号；检索后继续判断课程相关性与证据充分性 |
+| `backend/app/services/conversation_memory.py` | 当前用户隔离的跨会话派生记忆、隐私设置、向量检索和 RQ 索引调度；不复制原始聊天 |
 | `backend/app/agents/tool_policy.py` | 只保留旧 true 字段、明确联网命令和模型不可用时的保守降级，不再用关键词枚举推断资源、时效或复杂度 |
 | `backend/app/services/courses.py` | 课程 API 边界和依赖装配；`CourseBuilderGraphRunner` 接管来源大纲、课程结构、知识点、切片、embedding、审核/修订与事务持久化 |
 | `backend/app/services/exports.py` | 学习档案导出服务，负责旧同步 Markdown 兼容接口和 Markdown/PDF/DOCX 异步 job 渲染 |
@@ -661,12 +664,30 @@ flowchart LR
 - Pydantic 响应合同是 OpenAPI 唯一来源，生成类型只覆盖传输层；Axios、React Query 和 ViewModel 仍由前端维护。
 - OpenTelemetry 只记录 HTTP、SQL、Redis、队列和任务边界的安全元数据；学生可见 Agent trace 继续保存 EduNova 特有的协作证据。
 - `StorageAdapter` 隔离 Local 与 S3-compatible 实现，数据库继续保存字符串对象键并兼容旧本地路径。
-- LangChain、LlamaIndex、Haystack、Dify 与 RAGFlow 未进入当前生产链路。`docs/superpowers` 中的 LangChain 方案是历史规划，不代表当前依赖或架构。
+- LangChain 已作为窄适配层进入生产：只使用消息裁剪、`@tool` 与 `ToolNode`；不使用通用 Agent、Memory、默认 VectorStore 或 LangSmith。LlamaIndex、Haystack、Dify 与 RAGFlow 未进入当前生产链路。`docs/superpowers` 中的整套 LangChain 方案仍是历史规划。
 
-## 18. Phase 23 内置能力策略
+## 18. Phase 23/24 内置能力策略
 
-- `ToolDecision` 是纯确定性策略，不额外调用模型；输出 `search_required`、`reasoning_mode=auto|deep` 和白名单原因摘要。
-- 主页普通解释不联网，时效信息或明确检索/核实请求自动联网；复杂比较、推导、诊断和规划进入 deep。
+- `SemanticDecisionService` 是模型主导的结构化路由；`ToolDecision` 只保留显式强制、安全降级和白名单摘要，不再用关键词枚举决定资源、时效或复杂度。
+- 模型判断独立问题、是否引用历史、联网需求和 `auto/deep`；显式“请联网核实”仍由规则强制。
 - 课程 Graph 节点为 `profile -> route -> retriever -> web_search -> planner -> tutor -> weakness -> review -> next_action`。课程来源始终优先，网页只作为 `external_supplement`。
-- Spark X2-Flash 的 auto/deep 分别映射为 `thinking.auto/enabled`；其他 Provider 不发送未验证私有参数。Provider 自带网页搜索保持关闭，来源继续由 EduNova 统一审计。
+- Spark X2-Flash 的 auto/deep 分别映射为 `thinking.auto/enabled`；其他 Provider 不发送未验证私有参数。
 - 旧 `use_web_search/deep_thinking=true` 只用于兼容客户端强制启用；false 或缺省均由策略自动判断。
+
+## 19. Phase 25 原生工具与记忆边界
+
+```text
+真实会话历史 -> trim_messages -> SemanticDecisionService 独立问题改写
+                                  -> 无需搜索 -> 回答模型
+                                  -> 需要搜索 -> 原生 Provider 搜索
+                                                -> 无可验证来源 -> search_web ToolNode
+课程切片 -> 课程证据语义判断 -> 外部补充（可选） -> 回答
+```
+
+- 星火 X2-Flash 与官方 OpenAI 可调用厂商托管搜索；来源必须归一为标题、URL、摘要、时间、后端与 `external_supplement`。DeepSeek API 和其他普通兼容地址不假定原生搜索，通过 EduNova 的受控工具执行。
+- 一次回答选择一个成功搜索后端。原生不支持、超时、空结果或无可验证 URL 才回退；回退失败继续回答并展示 warning。
+- 搜索只发送必要的独立问题文本，不发送课程原文、画像、跨会话摘要或历史私聊。
+- 同会话加载真实 `chat_messages` 并按上下文预算裁剪；结构化路由返回 `standalone_query/uses_history/referenced_turn_ids`，ReviewAgent 拒绝在已有历史时声称“无法记住之前对话”。
+- 跨会话记忆使用项目数据库与 pgvector，不使用 LangChain Memory。`conversation_memory_entries` 只保存脱敏摘要、原消息引用、向量和模型指纹；检索严格限制当前用户、排除当前会话、最多 5 条。
+- 关闭记忆会停止新增和检索并删除派生索引；原始聊天保留。历史对话仅用于上下文，不是教材、画像、掌握度或评分证据。
+- 课程证据、资源权限、任务数量、资料解析质量和隐私边界继续由确定性规则门禁；模型只做语义判断或从真实候选中选择。

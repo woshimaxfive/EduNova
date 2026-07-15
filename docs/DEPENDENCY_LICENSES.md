@@ -12,6 +12,7 @@
 | fastapi | 0.138.2 | MIT |
 | httpx | 0.28.1 | BSD-3-Clause |
 | json-repair | 0.61.4 | MIT |
+| langchain | 1.3.11 | MIT |
 | langgraph | 1.2.7 | MIT |
 | openai | 2.45.0 | Apache-2.0 |
 | opencv-python-headless | 未安装 | 需在构建镜像中复核 |

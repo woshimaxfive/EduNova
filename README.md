@@ -11,14 +11,16 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前已完成 **Phase 24 模型主导的核心语义决策**。主页和课程空间不再用关键词枚举判断联网、推理强度或学习画像信号，而是由当前用户有效回答模型一次输出结构化语义决策；规则只保留显式强制、安全、权限、证据与数值校验。简答题也改为一次批量语义评分，模型不可用时明确标记未评分且不污染总分、弱点、画像、掌握度或路径。
+当前已完成 **Phase 25 原生工具接入与模型主导学习编排**。主页和课程空间由当前用户有效回答模型统一改写追问、判断联网和推理强度；星火 X2-Flash 与官方 OpenAI 优先使用厂商原生搜索，其他 OpenAI-compatible/DeepSeek 配置通过 LangChain `@tool` 与 LangGraph `ToolNode` 调用 EduNova 搜索服务。所有网页来源必须有可验证 URL，否则自动回退或明确降级。
+
+同一会话按模型上下文预算裁剪真实消息；可控跨会话记忆默认开启，只保存当前用户的脱敏摘要、消息引用、向量和模型指纹，可在设置页关闭或清除派生索引，原始聊天记录不受影响。课程资料永远是课程问答第一证据，网页和历史对话只用于外部补充或上下文，不进入画像、弱点、掌握度、练习评分或教材证据。
 
 当前十条真实生产 Graph 为 `MaterialIngestionGraph`、`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
 
 已经具备的主链路：
 
 - 真实注册、登录、退出和受保护路由。
-- 主页真实总览、分页历史搜索、会话级参考资料记忆、主页消息持久化和通用模型回答。
+- 主页真实总览、分页历史搜索、会话级参考资料范围、同会话真实上下文、隐私可控的跨会话语义记忆、主页消息持久化和通用模型回答。
 - 当前用户个人资料库上传、列表、详情和进度查询。
 - TXT/Markdown 保留轻量解析，PDF/DOCX/PPTX 默认由 Docling 适配层输出既有结构合同，再通过 `CourseBuilderGraph` 生成带来源覆盖、学习目标、先修关系和安全审核的课程结构；`.doc`、`.ppt`、图片和扫描件不伪装解析。
 - 课程知识点、知识切片、课程内历史和引用持久化。
@@ -36,7 +38,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - `/materials/compare` 已由 `MaterialComparisonGraph` 接管；每次对比保存不可变版本，可恢复最近结果、追溯真实资料分块和审核轨迹。资料对比是资料库内的独立辅助工具，不会隐式修改学习路径或练习。
 - AI 辅导直接在 `/app/courses/:courseId` 课程空间内完成；已移除无独立能力的中转页，旧 `/app/tutor` 地址会回到学习主页。
 - 多套个人模型配置；每套配置可组合回答、向量和重排序三个不同服务商，并为三类能力分别保存连接、加密凭证、连接验证和默认用途。新配置推荐 Spark X2-Flash 回答、讯飞 LLM Embedding 和硅基 BGE Reranker，未提供完整凭证的能力保持未启用。
-- 设置中心支持回答、向量与重排序独立验证，并提供显式向量重建任务；账号体系使用独立账号和昵称，登录账号统一小写且创建后不可修改，账号区支持修改昵称和密码，密码更新后所有旧 JWT 立即失效；隐私区只说明真实的数据边界和档案导出入口。
+- 设置中心支持回答、向量与重排序独立验证，并提供显式向量重建任务；账号体系使用独立账号和昵称，登录账号统一小写且创建后不可修改，账号区支持修改昵称和密码，密码更新后所有旧 JWT 立即失效；隐私区可管理跨会话记忆并说明原始聊天与派生索引的区别。
 - 模型调用采用当前配置有限重试，不在故障后自动转发到另一 Provider；失败时保留各 Graph 的确定性 fallback。
 - `model_call_runs` 只记录模型名、状态、尝试次数、耗时和安全错误分类，Agent trace 可查看聚合调用摘要，不保存 Prompt 或回答正文。
 - 讯飞原生 2560 维 Embedding、百炼/硅基 OpenAI-compatible Embeddings、动态 pgvector 与可选 Rerank 已接入；主页资料与课程 RAG 使用关键词 Top 30、向量 Top 30、RRF Top 20、重排序后 Top 5，任一外部能力不可用时按层降级。
@@ -74,6 +76,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 | [课程空间双模式设计](docs/COURSE_SPACE_DESIGN.md) | 课程问答模式、学习模式、引用层和后续改造顺序 |
 | [测试计划](docs/TEST_PLAN.md) | 测试范围、自动化验证和浏览器验收 |
 | [安全基线](docs/SECURITY.md) | 账号、密钥、上传资料、RAG、日志和权限安全 |
+| [隐私说明](docs/PRIVACY.md) | 跨会话记忆、原始聊天、派生索引和联网数据边界 |
 | [部署说明](docs/DEPLOYMENT.md) | 本地开发、Docker Compose、环境变量和迁移 |
 | [风险登记册](docs/RISK_REGISTER.md) | 项目风险、触发信号和应对策略 |
 | [Agent 设计说明](docs/AGENT_DESIGN.md) | 多智能体角色、trace 白名单和失败恢复 |

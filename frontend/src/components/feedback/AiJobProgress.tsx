@@ -16,7 +16,8 @@ const workflowLabels = {
   course_builder: "智能建课",
   resource_generation: "资源生成",
   embedding_reindex: "向量索引重建",
-  material_ingestion: "资料解析"
+  material_ingestion: "资料解析",
+  path_planning: "学习路径规划"
 } as const;
 
 function resultHref(job: AiJob) {
@@ -27,6 +28,9 @@ function resultHref(job: AiJob) {
     return `${PATHS.studio}?course_id=${job.course_id}${resource}`;
   }
   if (job.workflow === "material_ingestion" && job.request.material_id) return `${PATHS.library}?material_id=${job.request.material_id}`;
+  if (job.workflow === "path_planning" && (job.result.course_id || job.course_id || job.request.course_id)) {
+    return `${PATHS.path}?course_id=${job.result.course_id ?? job.course_id ?? job.request.course_id}`;
+  }
   return null;
 }
 

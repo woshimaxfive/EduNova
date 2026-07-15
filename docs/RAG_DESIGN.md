@@ -150,3 +150,10 @@ Docling 只替换 PDF、DOCX、PPTX 的通用结构提取，仍输出 EduNova �
 - 外部视频、观看进度和反馈不得进入课程切片、客观评分、掌握度、弱点或长期画像可信证据；反馈只调整当前课程的资源模态策略。
 
 Phase 28 明确：资源反馈聚合不参与向量召回、RRF、Rerank、引用选择或课程相关性判断。它只作用于 RAG 之后的资源教学策略和路径学习包排序，因此 `helpful/not_helpful/too_hard/too_easy` 不能提高网页或视频成为课程证据的权重。
+
+## Phase 29 国内来源优先边界
+
+- `source_scope=mainland_preferred` 时，直接相关的大陆官方/高校来源优先，国际原始规范仍保留；国内社区只代表访问便利，不能压过直接相关的权威原始来源。
+- `source_scope=global_required` 由语义模型在用户明确要求国外平台、原始论文/标准或问题必须依赖国际原始来源时选择，规则失败回退为 `mainland_preferred`。
+- 引用增加 `access_scope=mainland_preferred|mainland_community|global_source|external_fallback`，不写“已验证可访问”。
+- 视频查询先限制 `site:bilibili.com/video`；只有无合格 BV 结果时才执行 YouTube 查询。外部视频仍不进入课程 RAG、评分、掌握度或画像证据。

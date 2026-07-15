@@ -4,8 +4,9 @@ import { consumeSseResponse } from "./sse";
 import { type ApiEnvelope } from "../types/api";
 import { type CreateCourseFromMaterialsRequest } from "./courses";
 import { type GenerateResourcesRequest } from "./resources";
+import { type GeneratePathRequest } from "./paths";
 
-export type AiJobWorkflow = "course_builder" | "resource_generation" | "embedding_reindex" | "material_ingestion";
+export type AiJobWorkflow = "course_builder" | "resource_generation" | "embedding_reindex" | "material_ingestion" | "path_planning";
 export type AiJobStatus = "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed";
 
 export type AiJobStep = {
@@ -52,7 +53,8 @@ export const AI_JOB_ENDPOINTS = {
   cancel: (jobId: string) => `/ai-jobs/${jobId}/cancel`,
   retry: (jobId: string) => `/ai-jobs/${jobId}/retry`,
   courseBuilder: "/courses/from-materials/jobs",
-  resourceGeneration: "/resources/generation-jobs"
+  resourceGeneration: "/resources/generation-jobs",
+  pathPlanning: "/paths/generation-jobs"
 } as const;
 
 export function createIdempotencyKey(prefix: string) {
@@ -69,6 +71,13 @@ export async function createCourseBuilderJob(payload: CreateCourseFromMaterialsR
 
 export async function createResourceGenerationJob(payload: GenerateResourcesRequest, idempotencyKey: string) {
   const response = await apiClient.post<ApiEnvelope<AiJob>>(AI_JOB_ENDPOINTS.resourceGeneration, payload, {
+    headers: { "Idempotency-Key": idempotencyKey }
+  });
+  return response.data.data;
+}
+
+export async function createPathPlanningJob(payload: GeneratePathRequest, idempotencyKey: string) {
+  const response = await apiClient.post<ApiEnvelope<AiJob>>(AI_JOB_ENDPOINTS.pathPlanning, payload, {
     headers: { "Idempotency-Key": idempotencyKey }
   });
   return response.data.data;

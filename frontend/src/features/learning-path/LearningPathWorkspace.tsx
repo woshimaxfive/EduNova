@@ -22,6 +22,25 @@ import { MasteryOverviewChart } from "../../components/visualization/LearningCha
 export type PathTaskFilter = "all" | PathTaskStatus;
 export type PathDetailTab = "mastery" | "evidence" | "trace";
 
+const profileFactorLabels: Record<string, string> = {
+  major_background: "专业背景",
+  knowledge_foundation: "知识基础",
+  learning_goal: "学习目标",
+  learning_preference: "学习偏好",
+  cognitive_style: "认知风格",
+  learning_pace: "学习节奏",
+  motivation_interest: "兴趣动机",
+  confirmed_weaknesses: "已确认薄弱点",
+  course_mastery: "课程掌握度",
+  resource_feedback: "资源反馈"
+};
+
+function difficultyLabel(value: string | undefined) {
+  if (value === "easy") return "基础";
+  if (value === "hard") return "进阶";
+  return "适中";
+}
+
 type CourseOption = {
   id: string;
   title: string;
@@ -228,7 +247,11 @@ export function PathTaskCanvas({
                   {task.learning_bundle?.items.length ? (
                     <section className="path-learning-bundle" aria-label="个性化学习包">
                       <strong>推荐学习包</strong>
+                      <span>{task.learning_bundle.generation_mode === "model_enhanced" ? "个性化规划" : "安全默认组合"} · 难度 {difficultyLabel(task.learning_bundle.difficulty)}</span>
                       <p>{task.learning_bundle.rationale}</p>
+                      {task.learning_bundle.used_profile_factor_codes.length > 0 ? (
+                        <small>安排依据：{task.learning_bundle.used_profile_factor_codes.map((code) => profileFactorLabels[code] ?? code).join("、")}</small>
+                      ) : null}
                       <div>
                         {task.learning_bundle.items.map((item, itemIndex) => (
                           <span key={`${item.resource_type}-${itemIndex}`}>

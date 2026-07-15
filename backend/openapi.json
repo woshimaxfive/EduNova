@@ -327,7 +327,8 @@
               "course_builder",
               "resource_generation",
               "embedding_reindex",
-              "material_ingestion"
+              "material_ingestion",
+              "path_planning"
             ],
             "title": "Workflow",
             "type": "string"
@@ -3536,6 +3537,21 @@
       },
       "LearningBundle": {
         "properties": {
+          "difficulty": {
+            "default": "medium",
+            "enum": [
+              "easy",
+              "medium",
+              "hard"
+            ],
+            "title": "Difficulty",
+            "type": "string"
+          },
+          "generation_mode": {
+            "default": "legacy",
+            "title": "Generation Mode",
+            "type": "string"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/LearningBundleItem"
@@ -3552,6 +3568,18 @@
             "default": "",
             "title": "Strategy",
             "type": "string"
+          },
+          "teaching_strategy": {
+            "default": "safe_default",
+            "title": "Teaching Strategy",
+            "type": "string"
+          },
+          "used_profile_factor_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Used Profile Factor Codes",
+            "type": "array"
           }
         },
         "title": "LearningBundle",
@@ -14927,6 +14955,7 @@
     },
     "/api/v1/paths/generate": {
       "post": {
+        "deprecated": true,
         "operationId": "generate_path_api_v1_paths_generate_post",
         "parameters": [
           {
@@ -15059,6 +15088,161 @@
           }
         },
         "summary": "Generate Path",
+        "tags": [
+          "paths"
+        ]
+      }
+    },
+    "/api/v1/paths/generation-jobs": {
+      "post": {
+        "operationId": "create_path_generation_job_api_v1_paths_generation_jobs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePathRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_AiJobResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Create Path Generation Job",
         "tags": [
           "paths"
         ]

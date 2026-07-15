@@ -1308,7 +1308,7 @@ function AnswerDetailPanel({
           {supplementalSources.map((citation, index) => (
             <article className="citation-item" key={`${citation.source_type ?? "source"}-${citation.url ?? citation.title ?? index}`}>
               <strong>{citation.title ?? (citation.source_type === "history" ? "历史对话" : "外部补充")}</strong>
-              <span>{citation.source_type === "history" ? "历史对话，仅用于上下文" : "外部补充，不作为课程证据"}</span>
+              <span>{citation.source_type === "history" ? "历史对话，仅用于上下文" : `${citation.access_scope === "external_fallback" ? "境外补充" : citation.access_scope === "mainland_preferred" ? "国内优先来源" : "外部补充"}，不作为课程证据`}</span>
               <span className="citation-content">{citation.snippet ?? citation.content ?? "来源已记录"}</span>
               {citation.url ? <a href={citation.url} target="_blank" rel="noreferrer">打开来源</a> : null}
             </article>

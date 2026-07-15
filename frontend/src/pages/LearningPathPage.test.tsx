@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AGENT_ENDPOINTS } from "../api/agents";
+import { AI_JOB_ENDPOINTS } from "../api/aiJobs";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { PATH_ENDPOINTS } from "../api/paths";
@@ -123,7 +124,7 @@ const masteryResponse = {
 };
 
 function installBaseAdapter(options: { empty?: boolean; calls?: Array<{ method: string; url: string; payload: unknown }> } = {}) {
-  let hasPath = !options.empty;
+  const hasPath = !options.empty;
   apiClient.defaults.adapter = async (config) => {
     const method = (config.method ?? "get").toLowerCase();
     const url = config.url ?? "";
@@ -137,9 +138,17 @@ function installBaseAdapter(options: { empty?: boolean; calls?: Array<{ method: 
       return { data: { data }, status: 200, statusText: "OK", headers: {}, config };
     }
     if (url === COURSE_ENDPOINTS.masteryMap(808)) return { data: { data: masteryResponse }, status: 200, statusText: "OK", headers: {}, config };
-    if (url === PATH_ENDPOINTS.generate) {
-      hasPath = true;
-      return { data: { data: activePathResponse }, status: 200, statusText: "OK", headers: {}, config };
+    if (url === AI_JOB_ENDPOINTS.pathPlanning) {
+      return {
+        data: { data: {
+          job_id: "path-job-1", workflow: "path_planning", status: "queued", course_id: "808",
+          retry_of_job_id: null, progress_percent: 0, stage: "queued", label: "学习路径规划已排队", steps: [],
+          agent_trace_id: "trace_path_job", request: { course_id: 808 }, result: {}, warnings: [], error_code: null,
+          error_message: null, attempt_count: 0, can_cancel: true, can_retry: false,
+          created_at: "2026-07-15T10:00:00Z", updated_at: "2026-07-15T10:00:00Z", started_at: null, completed_at: null
+        } },
+        status: 202, statusText: "Accepted", headers: {}, config
+      };
     }
     if (url === PATH_ENDPOINTS.updateTask(1001)) return { data: { data: { ...activePathResponse.tasks[0], status: "completed" } }, status: 200, statusText: "OK", headers: {}, config };
     if (url === AGENT_ENDPOINTS.trace("trace_path")) {
@@ -190,7 +199,7 @@ describe("LearningPathPage", () => {
     await waitFor(() => expect(calls).toContainEqual(expect.objectContaining({ method: "patch", url: PATH_ENDPOINTS.updateTask(1001), payload: { status: "completed" } })));
   });
 
-  it("creates a path with one click and only sends the course id", async () => {
+  it("queues path planning with one click and only sends the course id", async () => {
     const user = userEvent.setup();
     const calls: Array<{ method: string; url: string; payload: unknown }> = [];
     installBaseAdapter({ empty: true, calls });
@@ -198,8 +207,8 @@ describe("LearningPathPage", () => {
 
     expect(await screen.findByText("还没有个性化学习路径")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "一键生成学习路径" }));
-    expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
-    expect(calls).toContainEqual(expect.objectContaining({ method: "post", url: PATH_ENDPOINTS.generate, payload: { course_id: 808 } }));
+    expect((await screen.findAllByRole("button", { name: "正在规划" })).every((button) => button.hasAttribute("disabled"))).toBe(true);
+    expect(calls).toContainEqual(expect.objectContaining({ method: "post", url: AI_JOB_ENDPOINTS.pathPlanning, payload: { course_id: 808 } }));
     expect(screen.queryByText("学习周期")).not.toBeInTheDocument();
   });
 

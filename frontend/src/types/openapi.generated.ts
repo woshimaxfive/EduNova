@@ -746,8 +746,28 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Generate Path */
+        /**
+         * Generate Path
+         * @deprecated
+         */
         post: operations["generate_path_api_v1_paths_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/paths/generation-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Path Generation Job */
+        post: operations["create_path_generation_job_api_v1_paths_generation_jobs_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1518,7 +1538,7 @@ export interface components {
              * Workflow
              * @enum {string}
              */
-            workflow: "course_builder" | "resource_generation" | "embedding_reindex" | "material_ingestion";
+            workflow: "course_builder" | "resource_generation" | "embedding_reindex" | "material_ingestion" | "path_planning";
         };
         /** AiJobStep */
         AiJobStep: {
@@ -2649,6 +2669,17 @@ export interface components {
         };
         /** LearningBundle */
         LearningBundle: {
+            /**
+             * Difficulty
+             * @default medium
+             * @enum {string}
+             */
+            difficulty: "easy" | "medium" | "hard";
+            /**
+             * Generation Mode
+             * @default legacy
+             */
+            generation_mode: string;
             /** Items */
             items?: components["schemas"]["LearningBundleItem"][];
             /**
@@ -2661,6 +2692,13 @@ export interface components {
              * @default
              */
             strategy: string;
+            /**
+             * Teaching Strategy
+             * @default safe_default
+             */
+            teaching_strategy: string;
+            /** Used Profile Factor Codes */
+            used_profile_factor_codes?: string[];
         };
         /** LearningBundleItem */
         LearningBundleItem: {
@@ -9095,6 +9133,114 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_LearningPathDetail_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    create_path_generation_job_api_v1_paths_generation_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeneratePathRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_AiJobResponse_"];
                 };
             };
             /** @description Bad Request */

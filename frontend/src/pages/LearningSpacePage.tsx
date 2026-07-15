@@ -1031,7 +1031,7 @@ function HomeAnswerInsights({
                     <li key={`${citation.source_type ?? "source"}-${citation.url ?? citation.source_title ?? citation.title ?? index}`}>
                       <div>
                         <strong>{citation.title ?? citation.source_title ?? `来源 ${index + 1}`}</strong>
-                        <span>{sourceTypeLabel(citation.source_type)}</span>
+                        <span>{sourceTypeLabel(citation.source_type)}{citation.access_scope === "external_fallback" ? " · 境外补充" : citation.access_scope === "mainland_preferred" ? " · 国内优先来源" : ""}</span>
                       </div>
                       {citation.snippet || citation.content ? <p>{citation.snippet ?? citation.content}</p> : null}
                       {citation.url ? (

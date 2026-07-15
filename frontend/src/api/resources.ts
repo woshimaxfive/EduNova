@@ -129,6 +129,7 @@ export type ResourceExternalVideoArtifact = {
   fit_reason: string;
   embed_status: "unknown" | "available" | "unavailable";
   external_supplement: true;
+  access_scope?: "mainland_preferred" | "mainland_community" | "global_source" | "external_fallback";
   citation_refs: [];
 };
 

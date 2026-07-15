@@ -3,7 +3,9 @@ import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { getMasteryMap, listCourses } from "../api/courses";
-import { generatePath, getCurrentPath, updatePathTask, type LearningPathTask, type PathTaskStatus } from "../api/paths";
+import { getCurrentPath, updatePathTask, type LearningPathTask, type PathTaskStatus } from "../api/paths";
+import { createIdempotencyKey, createPathPlanningJob } from "../api/aiJobs";
+import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import {
   LearningPathDrawer,
   LearningPathToolbar,
@@ -35,6 +37,7 @@ export function LearningPathPage() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<PathDetailTab>("mastery");
   const [feedback, setFeedback] = useState<string | null>(null);
+  const { jobs, trackJob } = useAiJobs();
 
   const coursesQuery = useQuery({
     queryKey: ["courses", "list"],
@@ -64,6 +67,12 @@ export function LearningPathPage() {
   const tasks = pathDetail?.tasks ?? [];
   const masteryPoints = masteryQuery.data?.data?.points ?? [];
   const completedCount = tasks.filter((task) => task.status === "completed").length;
+  const pathJob = jobs.find((job) => (
+    job.workflow === "path_planning"
+    && Number(job.request.course_id ?? job.course_id) === effectiveCourseId
+    && ["queued", "running", "cancelling", "failed"].includes(job.status)
+  ));
+  const pathJobActive = pathJob ? ["queued", "running", "cancelling"].includes(pathJob.status) : false;
 
   useEffect(() => {
     const hasDeprecatedParams = ["view", "comparison_id", "sprint_plan_id"].some((key) => searchParams.has(key));
@@ -76,13 +85,15 @@ export function LearningPathPage() {
   }, [searchParams, setSearchParams]);
 
   const generateMutation = useMutation({
-    mutationFn: (courseId: number) => generatePath({ course_id: courseId }),
-    onSuccess: (result, courseId) => {
+    mutationFn: (courseId: number) => createPathPlanningJob(
+      { course_id: courseId },
+      createIdempotencyKey(`path-${courseId}`)
+    ),
+    onSuccess: (job) => {
       setFeedback(null);
-      queryClient.setQueryData(courseLoopQueryKeys.currentPath(courseId), result);
-      void invalidateCourseLearningLoop(queryClient, courseId);
+      trackJob(job);
     },
-    onError: () => setFeedback("学习路径生成失败，请稍后重试。")
+    onError: () => setFeedback("学习路径任务创建失败，请稍后重试。")
   });
   const updateTaskMutation = useMutation({
     mutationFn: ({ task, status }: { task: LearningPathTask; status: PathTaskStatus }) => updatePathTask(Number(task.id), { status }),
@@ -115,7 +126,7 @@ export function LearningPathPage() {
   }
 
   function generateLearningPath() {
-    if (!effectiveCourseId || generateMutation.isPending) return;
+    if (!effectiveCourseId || generateMutation.isPending || pathJobActive) return;
     generateMutation.mutate(effectiveCourseId);
   }
 
@@ -126,7 +137,10 @@ export function LearningPathPage() {
 
   const readError = coursesQuery.isError || currentPathQuery.isError
     ? "学习路径数据读取失败，请稍后重试。"
-    : feedback;
+    : pathJob?.status === "failed"
+      ? pathJob.error_message ?? "学习路径规划失败，可从任务托盘重试。"
+      : feedback;
+  const planningPending = generateMutation.isPending || pathJobActive;
 
   return (
     <>
@@ -140,7 +154,7 @@ export function LearningPathPage() {
             completedCount={completedCount}
             totalCount={tasks.length}
             hasPlan={Boolean(pathDetail?.path)}
-            generatePending={generateMutation.isPending}
+            generatePending={planningPending}
             onCourseChange={handleCourseChange}
             onGenerate={generateLearningPath}
             onOpenDetails={() => {
@@ -155,7 +169,7 @@ export function LearningPathPage() {
               filter={pathFilter}
               isPending={currentPathQuery.isPending}
               errorMessage={readError}
-              mutationPending={generateMutation.isPending || updateTaskMutation.isPending}
+              mutationPending={planningPending || updateTaskMutation.isPending}
               onGenerate={generateLearningPath}
               onUpdateTask={updateTask}
             />

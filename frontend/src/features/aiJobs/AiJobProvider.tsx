@@ -50,6 +50,17 @@ export function AiJobProvider({ children }: PropsWithChildren) {
           }
           if (
             snapshot.status === "completed"
+            && snapshot.workflow === "path_planning"
+            && !invalidatedTerminalJobIds.current.has(snapshot.job_id)
+          ) {
+            invalidatedTerminalJobIds.current.add(snapshot.job_id);
+            const courseId = Number(snapshot.request.course_id ?? snapshot.course_id);
+            if (Number.isFinite(courseId) && courseId > 0) {
+              void invalidateCourseLearningLoop(queryClient, courseId);
+            }
+          }
+          if (
+            snapshot.status === "completed"
             && snapshot.workflow === "resource_generation"
             && !invalidatedTerminalJobIds.current.has(snapshot.job_id)
           ) {

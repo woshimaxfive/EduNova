@@ -5,6 +5,7 @@ import type { PersonalizationFreshness } from "./personalization";
 
 export const PATH_ENDPOINTS = {
   generate: "/paths/generate",
+  generationJobs: "/paths/generation-jobs",
   current: "/paths/current",
   updateTask: (taskId: number) => `/paths/tasks/${taskId}`
 } as const;
@@ -44,6 +45,10 @@ export type LearningPathTask = {
   recommended_resources: CourseResourceBrief[];
   learning_bundle?: {
     strategy: string;
+    teaching_strategy: string;
+    difficulty: "easy" | "medium" | "hard";
+    used_profile_factor_codes: string[];
+    generation_mode: string;
     rationale: string;
     items: Array<{
       resource_type: string;

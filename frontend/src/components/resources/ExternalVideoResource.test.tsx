@@ -36,6 +36,7 @@ describe("ExternalVideoResource", () => {
   it("keeps the original platform fallback and reports the iframe load honestly", () => {
     render(<ExternalVideoResource artifact={artifact()} />);
 
+    expect(screen.getByText(/境外补充/)).toBeInTheDocument();
     expect(screen.getByText(/正在确认播放器/)).toBeInTheDocument();
     const frame = screen.getByTitle("二叉树遍历讲解");
     fireEvent.load(frame);

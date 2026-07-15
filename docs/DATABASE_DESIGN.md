@@ -1028,3 +1028,7 @@ Phase 26 不新增迁移或通用事件表。`LearningNextActionService` 只读�
 - 不保存页面正文、音频、鼠标轨迹、搜索原文或画像原文。删除资源级联删除互动，删除路径任务只将关联置空。
 
 Phase 28 不新增迁移。报告的 `resource_usage_summary` 继续保存在既有 `assessment_reports.report_json`；它是生成报告时的课程级聚合快照。互动事实不改写历史行，最新反馈与唯一资源计数在读取时派生。`learning_bundle_json` 继续保存模型校验后的 2–4 类有序模态，非法模型输出不会进入数据库。
+
+## Phase 29 数据兼容
+
+Phase 29 不新增表或迁移。`ai_jobs.workflow` 的既有字符串字段新增 `path_planning` 值；请求和结果 JSON 保存课程、路径、触发方式、保留任务数、warning 与安全 trace。`learning_bundle_json` 增加 `teaching_strategy`、`difficulty`、`used_profile_factor_codes` 和 `generation_mode`，旧 JSON 缺少这些字段时按 `legacy/medium` 安全默认读取。来源的 `access_scope` 继续存放在既有引用 JSON 中，不改变教材证据关系。

@@ -79,6 +79,7 @@ export type TutorCitation = Partial<RagSearchResultItem> & {
   warning?: string;
   search_backend?: "native_spark" | "native_openai" | "external" | string;
   evidence_role?: "external_supplement" | "conversation_memory" | string;
+  access_scope?: "mainland_preferred" | "mainland_community" | "global_source" | "external_fallback" | string;
 };
 
 export type TutorMessage = {

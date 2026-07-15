@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { AGENT_ENDPOINTS, getAgentTrace, mapAgentTraceStepToEvent } from "./agents";
+import { AI_JOB_ENDPOINTS, createPathPlanningJob } from "./aiJobs";
 import { AUTH_ENDPOINTS, changePassword, login } from "./auth";
 import { apiClient } from "./client";
 import { COURSE_ENDPOINTS, getCourseLearningState, getMasteryMap, updateCourseWeaknessReviewItem } from "./courses";
@@ -1072,6 +1073,15 @@ describe("frontend API contracts", () => {
           config
         };
       }
+      if (config.url === AI_JOB_ENDPOINTS.pathPlanning) {
+        return {
+          data: { data: { job_id: "path-job-1", workflow: "path_planning", status: "queued", request: { course_id: 7 } } },
+          status: 202,
+          statusText: "Accepted",
+          headers: {},
+          config
+        };
+      }
 
       return {
         data: {
@@ -1086,11 +1096,18 @@ describe("frontend API contracts", () => {
     };
 
     try {
+      const job = await createPathPlanningJob({ course_id: 7 }, "path-contract-test");
       const generated = await generatePath({ course_id: 7 });
       const current = await getCurrentPath(7);
       const updated = await updatePathTask(1001, { status: "completed" });
 
       expect(calls).toEqual([
+        {
+          url: AI_JOB_ENDPOINTS.pathPlanning,
+          method: "post",
+          data: { course_id: 7 },
+          params: undefined
+        },
         {
           url: PATH_ENDPOINTS.generate,
           method: "post",
@@ -1110,6 +1127,7 @@ describe("frontend API contracts", () => {
           params: undefined
         }
       ]);
+      expect(job.workflow).toBe("path_planning");
       expect(generated.data.tasks[0].recommended_resources[0].title).toBe("启发式搜索讲解");
       expect(current.data.evidence_summary.knowledge_point_count).toBe(3);
       expect(updated.data.status).toBe("completed");

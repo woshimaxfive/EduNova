@@ -1354,9 +1354,13 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 - `plan_json` 只保存安全摘要、生成规则、计数、依据说明和可展示 metadata，不保存系统提示词、模型输入、API Key、完整资料原文或完整画像原文。
 - 路径响应可携带 `agent_trace_id`，用于前端展示 `PathPlanningGraph` 的轻量轨迹入口。
 
-### POST `/paths/generate`
+### POST `/paths/generation-jobs`
 
-用途：为当前用户的一门课程生成可执行学习路径。
+用途：异步创建当前用户某课程的路径规划任务。请求体继续为 `{"course_id": 1}`，必须携带 `Idempotency-Key`，成功返回 HTTP 202 与现有 `AiJobResponse`。同用户同课程已有 `queued/running/cancelling` 任务时返回该任务；刷新后通过 AI Job 列表或事件流恢复。结果包含 `course_id/path_id/generation_mode/preserved_task_count/warnings/trace_id`。失败或取消不覆盖原有效路径。
+
+### POST `/paths/generate`（已废弃兼容）
+
+用途：为旧客户端同步生成可执行学习路径。新版前端和项目内部流程不得调用。
 
 请求：
 
@@ -1385,7 +1389,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
       "goal": "完成《机器学习》学习",
       "status": "active",
       "plan_json": {
-        "schema_version": 4,
+        "schema_version": 5,
         "path_mode": "ordered",
         "strategy": "reviewing_first_then_confirmed_then_uncovered",
         "personalization": {"learning_preference": "图示优先"},
@@ -1411,6 +1415,15 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
             "resource_type": "doc"
           }
         ],
+        "learning_bundle": {
+          "strategy": "先代码实验再概念复盘",
+          "teaching_strategy": "先代码实验再概念复盘",
+          "difficulty": "medium",
+          "used_profile_factor_codes": ["major_background", "confirmed_weaknesses"],
+          "generation_mode": "model_enhanced",
+          "rationale": "先处理已确认薄弱点",
+          "items": []
+        },
         "status": "doing",
         "created_at": "2026-07-05T16:00:00Z",
         "updated_at": "2026-07-05T16:00:00Z"
@@ -2419,6 +2432,12 @@ OpenRouter 不再作为可见预设。
 ### POST `/resources/generation-jobs`
 
 用途：异步运行 `ResourceGenerationGraph`。请求体与同步资源生成接口相同，包含可选版本动作与来源资源，必须携带 `Idempotency-Key`；成功返回 HTTP 202。任务请求摘要会保存 `generation_action/source_resource_id` 以支持刷新与安全重试。单个 Worker 失败但仍有成功资源时任务为 `completed`，失败类型写入结果；全部失败才为 `failed`。
+
+### POST `/paths/generation-jobs`
+
+用途：异步运行 `PathPlanningGraph`。请求体为 `GeneratePathRequest`，必须携带 `Idempotency-Key`，成功返回 HTTP 202。手动生成和练习后重排共用 `workflow=path_planning`；评分接口不等待该任务，排队失败只返回 warning。任务每次最多一次路径模型调用，取消或失败保留原 active 路径。
+
+Phase 29 起 `AiJobWorkflow` 增加 `path_planning`。来源引用可携带 `access_scope=mainland_preferred|mainland_community|global_source|external_fallback`；该字段是策略分层，不表示实时网络可达性。
 
 ### GET `/ai-jobs?status=active&limit=20`
 

@@ -159,7 +159,7 @@ cd ..
 | `/profiles/me`、`/profiles/chat`、`/profiles/events` | 无 token 401、稳定 8 维结构、显式更新、候选阈值、来源去重、自动应用、Review/Repair、逐维可信度、事件倒序、用户隔离和 metadata 脱敏 |
 | `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要、上下文计数 metadata 和 metadata 白名单 |
 | `/resources/generate`、资源详情/质量、`/resources/{resource_id}/exports` | 无 token 401、用户隔离、六类 v3 证据型资源、并行 Worker、完整 artifact 审核、结构修复、内容修订、严格类型失败、代码实跑验证、部分失败、PPTX 任务和隐私安全 |
-| `/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}`、`/courses/{course_id}/mastery-map` | 无 token 401、课程/任务用户隔离、空路径、路径生成、旧路径归档、任务状态更新、掌握度映射、推荐资源、隐私安全 |
+| `/paths/generation-jobs`、`/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}`、`/courses/{course_id}/mastery-map` | 无 token 401、课程/任务用户隔离、异步任务复用、幂等、取消/重试/失联、旧同步兼容、旧路径原子保留、任务状态、掌握度、推荐资源和隐私安全 |
 | `/practice/sessions`、`/practice/sessions/{session_id}`、`/practice/sessions/{session_id}/answers`、`/practice/sessions/{session_id}/regrade` | 无 token 401、课程/练习用户隔离、知识点过滤、客观题确定性批改、简答题批量语义评分、部分评分、幂等重评、空答案校验、弱点队列反哺、掌握度回归、隐私安全 |
 | `/reports/generate`、`/reports/latest` | 无 token 401、课程/练习/报告用户隔离、空报告、报告生成、最新报告读取、掌握度摘要、下一步建议、隐私安全 |
 | `/exports/learning-dossier`、`/exports/learning-dossier/jobs`、`/exports/{job_id}`、`/exports/{job_id}/download` | 无 token 401、课程/任务用户隔离、无报告真实空状态、有报告 Markdown 同步导出、异步 job 创建和状态流转、Markdown/PDF/DOCX 文件下载、失败分支、路径/资源/练习证据摘要、文件名安全、隐私安全 |
@@ -1012,3 +1012,13 @@ docker compose down
 - 最终阶段只运行一次完整门禁、一次 Docker E2E、一次供应链门禁和一次 agent-browser 桌面/390px验收；真实模型与搜索调用总量不超过 20 次，只保存聚合指标。
 
 2026-07-15 Phase 28 实际验收：`scripts/test.ps1` 通过后端 393 项、前端 233 项和离线 AI 评测 10 项，同时通过编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、build 与 Compose。隔离 Docker E2E 通过八服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例。真实调用共 19 次模型和 1 次搜索；`contest_readiness --require-live` 的引用、数字、泄漏与全部规定性能阈值通过。供应链脚本仅运行一次，依赖与 Trivy 漏洞、密钥及 Dockerfile 配置均为 0 命中。`agent-browser` 在桌面和 390px 验证路径学习包、YouTube 安全 iframe、始终可见的原平台链接、报告资源聚合和无水平溢出。临时账号及数据已清理。同步路径规划 53–62 秒及一次 nginx 504、画像对照中一组模型回退，作为未解决风险保留。
+
+## Phase 29 异步路径与国内策略验收
+
+- AIJob 覆盖同用户同课程活动任务复用、`Idempotency-Key`、取消、重试、队列失败、Worker 失联及失败不覆盖旧路径；练习和简答重评必须先保存评分再排队。
+- 路径结构覆盖最多 24 个候选和 8 个近期优先任务、非法 key/资源/模态/因素、Malformed JSON、模型超时与明确 fallback，并断言每次最多一次模型调用。
+- 可信画像对照要求计算机工程实践与非计算机图解备考至少两项可观察差异；低可信画像必须与无画像基线一致，fallback 不计为模型成功。
+- 国内策略覆盖简体中文、国内高校场景、国外术语原名、事实/公式/代码标识符不改写、来源分层、B站成功不调用 YouTube 及 YouTube 回退标签。
+- 前端覆盖任务托盘、刷新恢复、失败重试、学习包模式/难度/因素、国内/境外标签、桌面和 390px 无横向溢出。
+
+2026-07-15 Phase 29 实际验收：`scripts/test.ps1` 通过后端 401 项、前端 233 项和离线 AI 评测 10 项，同时通过编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、build 与 Compose；隔离 Docker E2E 通过服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例并自动清理。`agent-browser` 单一会话验证路径 AIJob 立即返回、托盘进度、刷新恢复、完成后读取 `/paths/current`、fallback 诚实标记，以及 1440px/390px 无水平溢出和无控制台错误。真实调用共 4 次路径模型和 1 次搜索：计算机/代码实践画像得到 `model_enhanced` 并在顺序、难度、策略、模态上变化；非计算机/图解备考一次返回触发严格合同 fallback，低可信画像与无画像均保持安全默认组合。B站首次检索命中合法 BV 视频并标记 `mainland_preferred`，未调用 YouTube。临时账号及数据已删除；不把单次 fallback 写成双画像稳定通过。

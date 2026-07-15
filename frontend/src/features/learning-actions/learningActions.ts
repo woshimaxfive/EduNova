@@ -37,7 +37,7 @@ export function learningActionHref(action: LearningNextAction) {
     return withParams(PATHS.library, { material_id: action.material_id });
   }
   if (action.kind === "wait_for_course") return PATHS.app;
-  if (action.kind === "generate_path") return withParams(PATHS.path, { course_id: action.course_id });
+  if (["generate_path", "wait_for_path"].includes(action.kind)) return withParams(PATHS.path, { course_id: action.course_id });
   if (action.kind === "continue_path_task") {
     if (action.resource_id) {
       return withParams(PATHS.studio, {
@@ -81,6 +81,7 @@ const ACTION_BUTTON_LABELS: Record<string, string> = {
   continue_path_task: "继续任务",
   practice_weakness: "开始练习",
   generate_path: "生成路径",
+  wait_for_path: "查看规划进度",
   study_knowledge_point: "开始学习",
   update_report: "更新报告",
   review_report: "查看报告"

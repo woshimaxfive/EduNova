@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AI_JOB_ENDPOINTS,
   createCourseBuilderJob,
+  createPathPlanningJob,
   createResourceGenerationJob,
   streamAiJob
 } from "./aiJobs";
@@ -28,7 +29,7 @@ describe("AI job API contracts", () => {
     useAuthStore.getState().clearSession();
   });
 
-  it("sends idempotency keys to both long-running creation endpoints", async () => {
+  it("sends idempotency keys to all long-running creation endpoints", async () => {
     const calls: Array<{ url?: string; key?: string; data?: unknown }> = [];
     apiClient.defaults.adapter = async (config) => {
       calls.push({
@@ -47,10 +48,12 @@ describe("AI job API contracts", () => {
 
     await createCourseBuilderJob({ material_ids: [11], course_title: "冲刺课" }, "course-key");
     await createResourceGenerationJob({ course_id: 8, resource_types: ["doc"], difficulty: "medium" }, "resource-key");
+    await createPathPlanningJob({ course_id: 8 }, "path-key");
 
     expect(calls).toEqual([
       { url: AI_JOB_ENDPOINTS.courseBuilder, key: "course-key", data: { material_ids: [11], course_title: "冲刺课" } },
-      { url: AI_JOB_ENDPOINTS.resourceGeneration, key: "resource-key", data: { course_id: 8, resource_types: ["doc"], difficulty: "medium" } }
+      { url: AI_JOB_ENDPOINTS.resourceGeneration, key: "resource-key", data: { course_id: 8, resource_types: ["doc"], difficulty: "medium" } },
+      { url: AI_JOB_ENDPOINTS.pathPlanning, key: "path-key", data: { course_id: 8 } }
     ]);
   });
 

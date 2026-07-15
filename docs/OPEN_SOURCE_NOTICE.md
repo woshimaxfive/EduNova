@@ -15,7 +15,7 @@ EduNova 使用的主要开源技术包括：
 | 层 | 依赖 |
 | --- | --- |
 | 前端 | React、Vite、TypeScript、Tailwind CSS、React Router、React Query、Zustand、ECharts、Mermaid、Markmap、CodeMirror、Pyodide 0.29.2、Radix UI、Phosphor Icons |
-| 文档与课件 | python-docx、reportlab、python-pptx |
+| 文档、课件与图片 | python-docx、reportlab、python-pptx、Pillow（图像解码、限制检查与安全重编码） |
 | 后端 | FastAPI、SQLAlchemy、Alembic、Pydantic、PyJWT、bcrypt、httpx、cryptography、LangChain、LangGraph |
 | 数据 | PostgreSQL、pgvector、Redis |
 | 工程 | Docker Compose、Nginx、pytest、Vitest、ESLint、ruff |

@@ -2629,3 +2629,11 @@ Phase 29 起 `AiJobWorkflow` 增加 `path_planning`。来源引用可携带 `acc
 ## 25. Phase 31 行为兼容
 
 Phase 31 不新增接口路径或数据库迁移。现有资料解析进度对大型 PDF 使用真实心跳与“正在解析大型教材”标签；练习 `score=null` 和 `grading_status` 语义保持兼容；路径更新仍返回既有 AIJob 合同，但手动更新也保留已完成任务。历史失败的 `course_builder` AIJob 仍可在任务托盘查看，前端只自动恢复非终态任务，不再强制打开旧失败弹窗。
+# Phase 32 图片提问接口
+
+- `POST /api/v1/tutor/sessions/{session_id}/attachments`：上传单张 PNG/JPEG，最大 4 MiB，返回私有附件摘要。
+- `GET /api/v1/tutor/attachments/{attachment_id}/content`：当前用户鉴权读取图片内容，响应禁止缓存和 MIME sniff。
+- `DELETE /api/v1/tutor/attachments/{attachment_id}`：待发送附件删除对象；已发送附件保留删除占位。
+- tutor 消息请求增加 `attachment_ids`，最多 3 项；`message` 可为空，但文字和附件不能同时为空。
+- `TutorMessage.attachments` 随历史、非流式响应和 SSE 完成事件返回。
+- `POST /api/v1/settings/model/configs/{config_id}/vision-default`：设置独立图片理解默认配置；连接测试 `operation=vision` 会发送程序化无版权小图。

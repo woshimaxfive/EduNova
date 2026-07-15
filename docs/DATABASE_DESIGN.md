@@ -52,6 +52,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260713_0018_split_model_defaults.py`：为模型配置增加独立向量默认标记；旧回答默认中已配置向量模型的记录自动继承向量默认。
 - `backend/migrations/versions/20260713_0019_split_embedding_connection.py`：为同一模型配置增加向量专用 Provider 预设、Base URL 和加密 Key；旧非空向量配置从共享连接兼容复制。
 - `backend/migrations/versions/20260713_0020_dynamic_embedding_and_rerank.py`：把课程/资料向量列升级为动态维度，增加向量配置指纹字段，并为模型配置增加讯飞向量凭证与独立重排序连接。
+- `backend/migrations/versions/20260716_0026_visual_tutor.py`：为模型配置增加独立视觉默认标记，并创建私有聊天图片附件表。
 
 Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
@@ -1036,3 +1037,7 @@ Phase 29 不新增表或迁移。`ai_jobs.workflow` 的既有字符串字段新�
 ## Phase 31 数据兼容
 
 Phase 31 不新增表或迁移。大型资料仍使用现有资料、解析版本、目录、切片和向量关系；源页数与解析质量作为现有解析 metadata/质量结果保存。路径更新继续创建新版本并归档旧 active 路径，但会把旧路径已完成任务合并到新版本；可信画像难点仅进入当次路径候选和安全因素代码，不创建 `weakness_review_items`。练习未评分、报告资源聚合和 DOCX 导出均沿用现有可空字段与 JSON 合同。
+
+## Phase 32 图片附件
+
+`chat_message_attachments` 保存 `user_id/session_id/message_id`、私有 `storage_key`、原文件名、真实 MIME、重编码后字节数、宽高、SHA-256、`pending|bound|deleted` 状态和待绑定过期时间。附件只能绑定同一用户同一会话的用户消息；绑定和消息落库同一事务完成。图片对象不进入资料、切片、知识点或跨会话记忆表。`model_settings.is_vision_default` 通过部分唯一索引保证每个用户至多一个视觉默认配置。

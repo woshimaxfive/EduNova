@@ -196,3 +196,6 @@ validate_confirmed_materials -> coherence_gate -> load_outlines
 - PathPlanningGraph 继续每次最多一次模型调用。Provider 返回单层 `output` 包装时可确定性解包，但仍必须通过 Pydantic 和任务/资源/权限白名单；未知因素代码被剔除，不能进入学习包说明。
 - 可信总画像中的明确难点只用于把相关真实知识点加入模型候选，不自动创建课程弱点。课程弱点、掌握度和评分仍只接受课程内确认或练习证据。
 - 手动更新与练习触发重排都合并旧路径已完成任务；Review/Repair 不调用模型，失败继续原子保留旧有效路径。
+# Phase 32 视觉理解边界
+
+`VisionUnderstandingService` 是图片输入适配服务，不是新 Agent。它在每个图片轮次最多调用一次视觉模型并输出 `standalone_query/visual_summary/extracted_text/observations/uncertainties/intent/search_required/reasoning_mode/confidence`。主页和课程 LangGraph继续拥有检索、联网、个性化、回答、引用和审核节点；用户图片不成为课程证据，普通图片提问也不直接形成画像或弱点。安全 trace 只展示结构化协作摘要，不公开 Provider 思维链或原始响应。

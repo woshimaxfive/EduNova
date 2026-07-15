@@ -74,7 +74,9 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 | 能力 | 原因 |
 | --- | --- |
 | 扫描版 PDF OCR | 第一版暂不支持 |
-| 图片题目识别 | 第一版暂不支持 |
+| 图片题目识别 | 主页与课程空间支持 PNG/JPEG 图文或纯图片提问；独立视觉配置、私有附件和课程证据隔离必须通过回归 |
+
+Phase 32 收口验收还必须确认：无独立视觉配置时已上传图片和输入草稿不被发送或静默丢弃；进入模型设置使用新标签，原提问页保持草稿；未执行真实图片连接试验的预设只能标为兼容候选。真实浏览器至少覆盖桌面与 390px 的图片入口、预览、设置引导和水平溢出。
 | 视频文件解析 | 第一版暂不支持 |
 | 真实教学视频生成 | 暂不支持；当前提供明确标注的交互动画图解，不伪装视频 |
 | 完整教师端 | 第一版学生端优先 |
@@ -155,7 +157,7 @@ cd ..
 | `/courses/from-materials`、`/courses/*` | 无 token 401、用户隔离、只接受已确认资料、多资料一致性、章节并行 Worker、最多 120 知识点、覆盖率、证据绑定、先修 ID 映射、环路拦截、embedding warning、事务回滚和旧课程兼容 |
 | `/rag/search` | 无 token 401、用户隔离、关键词命中、向量命中、混合排序、懒加载、fallback、无命中和新增分数字段 |
 | `/settings/model`、`/settings/model/test`、`/settings/model/configs` | 无 token 401、多配置隔离、回答/向量独立默认、跨 Provider 运行时解析、旧默认迁移、Key 加密、脱敏返回、独立测试、未配置向量不污染回答状态、测试摘要持久化和不泄露 Key |
-| `/tutor/sessions` | 无 token 401、home/course 会话、用户隔离、消息写入、引用持久化、会话改名、软删除归档、自动联网/推理与旧字段兼容、同一 session 多轮上下文、上下文化 RAG/联网 query、课程外部补充隔离、无搜索 Key 不伪造来源、两类 tutor trace、模型回答、SSE 流式、错误回滚和历史恢复 |
+| `/tutor/sessions` 与图片附件接口 | 无 token 401、home/course 会话、用户/会话隔离、消息与附件事务绑定、PNG/JPEG 安全、私有读取、删除占位、未绑定清理、自动联网/推理、同会话图片追问、课程外部补充隔离、两类 tutor trace、SSE、错误回滚和历史恢复 |
 | `/profiles/me`、`/profiles/chat`、`/profiles/events` | 无 token 401、稳定 8 维结构、显式更新、候选阈值、来源去重、自动应用、Review/Repair、逐维可信度、事件倒序、用户隔离和 metadata 脱敏 |
 | `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要、上下文计数 metadata 和 metadata 白名单 |
 | `/resources/generate`、资源详情/质量、`/resources/{resource_id}/exports` | 无 token 401、用户隔离、六类 v3 证据型资源、并行 Worker、完整 artifact 审核、结构修复、内容修订、严格类型失败、代码实跑验证、部分失败、PPTX 任务和隐私安全 |

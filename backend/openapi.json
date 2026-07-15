@@ -5355,6 +5355,21 @@
             "title": "Has Rerank Api Key",
             "type": "boolean"
           },
+          "has_vision_api_key": {
+            "default": false,
+            "title": "Has Vision Api Key",
+            "type": "boolean"
+          },
+          "has_vision_api_secret": {
+            "default": false,
+            "title": "Has Vision Api Secret",
+            "type": "boolean"
+          },
+          "has_vision_app_id": {
+            "default": false,
+            "title": "Has Vision App Id",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -5497,6 +5512,28 @@
             "default": "user",
             "title": "Source",
             "type": "string"
+          },
+          "vision_api_key_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Api Key Masked"
+          },
+          "vision_app_id_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision App Id Masked"
           }
         },
         "required": [
@@ -7731,6 +7768,42 @@
               }
             ],
             "title": "Rerank Workspace Id"
+          },
+          "vision_api_key": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Api Key"
+          },
+          "vision_api_secret": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Api Secret"
+          },
+          "vision_app_id": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision App Id"
           }
         },
         "required": [
@@ -7929,6 +8002,42 @@
               }
             ],
             "title": "Rerank Workspace Id"
+          },
+          "vision_api_key": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Api Key"
+          },
+          "vision_api_secret": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Api Secret"
+          },
+          "vision_app_id": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision App Id"
           }
         },
         "required": [
@@ -8856,6 +8965,42 @@
               }
             ],
             "title": "Rerank Workspace Id"
+          },
+          "vision_api_key": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Api Key"
+          },
+          "vision_api_secret": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Api Secret"
+          },
+          "vision_app_id": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision App Id"
           }
         },
         "title": "UpdateModelConfigRequest",

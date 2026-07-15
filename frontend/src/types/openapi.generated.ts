@@ -3418,6 +3418,21 @@ export interface components {
              * @default false
              */
             has_rerank_api_key: boolean;
+            /**
+             * Has Vision Api Key
+             * @default false
+             */
+            has_vision_api_key: boolean;
+            /**
+             * Has Vision Api Secret
+             * @default false
+             */
+            has_vision_api_secret: boolean;
+            /**
+             * Has Vision App Id
+             * @default false
+             */
+            has_vision_app_id: boolean;
             /** Id */
             id: number;
             /** Is Default */
@@ -3462,6 +3477,10 @@ export interface components {
              * @constant
              */
             source: "user";
+            /** Vision Api Key Masked */
+            vision_api_key_masked?: string | null;
+            /** Vision App Id Masked */
+            vision_app_id_masked?: string | null;
         };
         /** ModelConnectionTestRequest */
         ModelConnectionTestRequest: {
@@ -4246,6 +4265,12 @@ export interface components {
             rerank_provider?: ("siliconflow_rerank" | "bailian_rerank" | "openai_compatible") | null;
             /** Rerank Workspace Id */
             rerank_workspace_id?: string | null;
+            /** Vision Api Key */
+            vision_api_key?: string | null;
+            /** Vision Api Secret */
+            vision_api_secret?: string | null;
+            /** Vision App Id */
+            vision_app_id?: string | null;
         };
         /** SaveModelSettingsRequest */
         SaveModelSettingsRequest: {
@@ -4284,6 +4309,12 @@ export interface components {
             rerank_provider?: ("siliconflow_rerank" | "bailian_rerank" | "openai_compatible") | null;
             /** Rerank Workspace Id */
             rerank_workspace_id?: string | null;
+            /** Vision Api Key */
+            vision_api_key?: string | null;
+            /** Vision Api Secret */
+            vision_api_secret?: string | null;
+            /** Vision App Id */
+            vision_app_id?: string | null;
         };
         /** SavePracticeDraftRequest */
         SavePracticeDraftRequest: {
@@ -4565,6 +4596,12 @@ export interface components {
             rerank_provider?: ("siliconflow_rerank" | "bailian_rerank" | "openai_compatible") | null;
             /** Rerank Workspace Id */
             rerank_workspace_id?: string | null;
+            /** Vision Api Key */
+            vision_api_key?: string | null;
+            /** Vision Api Secret */
+            vision_api_secret?: string | null;
+            /** Vision App Id */
+            vision_app_id?: string | null;
         };
         /** UpdatePathTaskRequest */
         UpdatePathTaskRequest: {

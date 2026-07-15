@@ -19,7 +19,9 @@ def _png_bytes(size: tuple[int, int] = (24, 16)) -> bytes:
 
 
 def test_vision_capabilities_are_explicit_and_do_not_assume_text_models() -> None:
-    assert provider_capabilities(preset_id="spark-vision", base_url=None).supports_image_input is True
+    xfyun = provider_capabilities(preset_id="xfyun-vision", base_url=None)
+    assert xfyun.supports_image_input is True
+    assert xfyun.vision_protocol == "xfyun_websocket"
     assert provider_capabilities(preset_id="openai-vision", base_url=None).verified_vision is True
     assert provider_capabilities(preset_id="spark", base_url=None).supports_image_input is False
     assert provider_capabilities(preset_id="deepseek", base_url=None).supports_image_input is False
@@ -71,7 +73,7 @@ class _FakeVisionModelService:
 
     def resolve_vision_runtime_config(self, user):
         del user
-        return SimpleNamespace(preset_id="spark-vision", provider="openai_compatible")
+        return SimpleNamespace(preset_id="xfyun-vision", provider="xfyun_vision")
 
 
 def test_visual_understanding_uses_one_call_and_returns_safe_structure() -> None:
@@ -88,7 +90,7 @@ def test_visual_understanding_uses_one_call_and_returns_safe_structure() -> None
     assert len(model.calls[0][2]) == 2
     assert result.standalone_query == "解释流程图第二步"
     assert result.reasoning_mode == "deep"
-    assert result.provider == "spark-vision"
+    assert result.provider == "xfyun-vision"
     assert "data:image/png;base64," in model.calls[0][2][0]
 
 

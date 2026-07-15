@@ -409,7 +409,7 @@ describe("student core pages", () => {
     expect(screen.queryByText("连接配置")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "模型设置" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "回答服务商" })).toBeInTheDocument();
-    expect(within(screen.getByRole("combobox", { name: "回答服务商" })).queryByRole("option", { name: "讯飞 MaaS 图像理解" })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("combobox", { name: "回答服务商" })).queryByRole("option", { name: "讯飞开放平台 · 图片理解" })).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "向量服务商" })).toBeInTheDocument();
     expect(screen.getAllByText("讯飞星火 X2-Flash")).toHaveLength(2);
     const embeddingProviderPreset = screen.getByRole("combobox", { name: "向量服务商" });

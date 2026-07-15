@@ -11,6 +11,7 @@ type ModelProviderPresetBase = {
 
 export type ChatModelProviderPreset = ModelProviderPresetBase & {
   chatModel: string;
+  requiresXfyunCredentials?: boolean;
 };
 
 export type EmbeddingModelProviderPreset = ModelProviderPresetBase & {
@@ -38,14 +39,15 @@ export const CHAT_MODEL_PROVIDER_PRESETS: ChatModelProviderPreset[] = [
     modelsHint: "默认 Spark X2-Flash（spark-x）；额度与可用能力以讯飞控制台为准。"
   },
   {
-    id: "spark-vision",
-    name: "讯飞 MaaS 图像理解",
-    description: "国内优先的独立图片理解服务。需要单独填写 MaaS Model ID 与 API Key，不复用 spark-x 权限。",
-    baseUrl: "https://maas-api.cn-huabei-1.xf-yun.com/v2",
-    chatModel: "",
-    apiKeyLabel: "API Key",
-    apiKeyPlaceholder: "填入讯飞 MaaS 图像理解 API Key",
-    modelsHint: "兼容候选；只有通过下方真实图片连接测试后才算可用。"
+    id: "xfyun-vision",
+    name: "讯飞开放平台 · 图片理解",
+    description: "讯飞原生图片理解服务，使用独立的 APPID、APIKey 和 APISecret，通过官方 WebSocket 协议调用。",
+    baseUrl: "wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image",
+    chatModel: "imagev3",
+    apiKeyLabel: "APIKey",
+    apiKeyPlaceholder: "填入图片理解服务的 APIKey",
+    modelsHint: "已通过 EduNova 完整视觉结构合同验证；凭证来自讯飞开放平台图片理解服务。",
+    requiresXfyunCredentials: true
   },
   {
     id: "openai-vision",
@@ -185,7 +187,7 @@ export const CHAT_MODEL_PROVIDER_PRESETS: ChatModelProviderPreset[] = [
 ];
 
 export const VISION_MODEL_PROVIDER_PRESETS = CHAT_MODEL_PROVIDER_PRESETS.filter((preset) =>
-  ["spark-vision", "openai-vision", "hunyuan-vision", "custom-vision"].includes(preset.id)
+  ["xfyun-vision", "openai-vision", "hunyuan-vision", "custom-vision"].includes(preset.id)
 );
 
 export const TEXT_CHAT_MODEL_PROVIDER_PRESETS = CHAT_MODEL_PROVIDER_PRESETS.filter((preset) =>
@@ -307,7 +309,7 @@ export function getChatProviderPreset(presetId: string | null | undefined) {
 }
 
 export function isVisionProviderPreset(presetId: string | null | undefined) {
-  return ["spark-vision", "openai-vision", "hunyuan-vision", "custom-vision"].includes(presetId ?? "");
+  return ["xfyun-vision", "openai-vision", "hunyuan-vision", "custom-vision"].includes(presetId ?? "");
 }
 
 export function getEmbeddingProviderPreset(presetId: string | null | undefined) {

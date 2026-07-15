@@ -109,3 +109,4 @@
 | --- | --- | --- | --- | --- |
 | torch | 2.13.0+cpu | [PyTorch](https://github.com/pytorch/pytorch) | BSD-3-Clause | Docling CPU 推理运行时 |
 | torchvision | 0.28.0+cpu | [TorchVision](https://github.com/pytorch/vision) | BSD-3-Clause | Docling 视觉模型运行时 |
+| websockets | 15.0.1 | [websockets](https://github.com/python-websockets/websockets) | BSD-3-Clause | 讯飞原生图片理解 WebSocket 客户端 |

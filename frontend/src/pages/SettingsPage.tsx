@@ -75,6 +75,9 @@ type ModelConfigDraft = {
   base_url: string;
   api_key: string;
   chat_model: string;
+  vision_app_id: string;
+  vision_api_key: string;
+  vision_api_secret: string;
   embedding_preset_id: string;
   embedding_base_url: string;
   embedding_api_key: string;
@@ -95,6 +98,9 @@ const EMPTY_CONFIG_DRAFT: ModelConfigDraft = {
   base_url: "https://spark-api-open.xf-yun.com/agent/v1/",
   api_key: "",
   chat_model: "spark-x",
+  vision_app_id: "",
+  vision_api_key: "",
+  vision_api_secret: "",
   embedding_preset_id: "xfyun-embedding",
   embedding_base_url: "https://emb-cn-huabei-1.xf-yun.com/",
   embedding_api_key: "",
@@ -118,6 +124,9 @@ function draftFromConfig(config: ModelConfigSummary): ModelConfigDraft {
     base_url: config.base_url ?? "",
     api_key: "",
     chat_model: config.chat_model ?? "",
+    vision_app_id: "",
+    vision_api_key: "",
+    vision_api_secret: "",
     embedding_preset_id: config.embedding_model
       ? inferEmbeddingProviderPresetId(
         config.embedding_base_url ?? config.base_url,
@@ -151,6 +160,9 @@ function newDraftFromPreset(presetId = "spark"): ModelConfigDraft {
     base_url: preset.baseUrl,
     api_key: "",
     chat_model: preset.chatModel,
+    vision_app_id: "",
+    vision_api_key: "",
+    vision_api_secret: "",
     embedding_preset_id: embeddingPreset.id,
     embedding_base_url: embeddingPreset.baseUrl,
     embedding_api_key: "",
@@ -172,6 +184,9 @@ function draftsMatch(left: ModelConfigDraft, right: ModelConfigDraft) {
     && left.base_url === right.base_url
     && !left.api_key
     && left.chat_model === right.chat_model
+    && !left.vision_app_id
+    && !left.vision_api_key
+    && !left.vision_api_secret
     && left.embedding_preset_id === right.embedding_preset_id
     && left.embedding_base_url === right.embedding_base_url
     && !left.embedding_api_key
@@ -311,9 +326,17 @@ export function SettingsPage() {
     || currentDraft.rerank_preset_id !== savedDraft.rerank_preset_id
     || currentDraft.rerank_base_url !== savedDraft.rerank_base_url;
   const chatKeyReady = !currentDraft.chat_model.trim()
+    || selectedChatPreset.requiresXfyunCredentials
     || selectedChatPreset.allowEmptyApiKey
     || Boolean(currentDraft.api_key.trim())
     || (!chatConnectionChanged && Boolean(selectedConfig?.has_api_key));
+  const xfyunVisionCredentialsReady = !currentDraft.chat_model.trim()
+    || !selectedChatPreset.requiresXfyunCredentials
+    || (
+      (Boolean(currentDraft.vision_app_id.trim()) || (!chatConnectionChanged && Boolean(selectedConfig?.has_vision_app_id)))
+      && (Boolean(currentDraft.vision_api_key.trim()) || (!chatConnectionChanged && Boolean(selectedConfig?.has_vision_api_key)))
+      && (Boolean(currentDraft.vision_api_secret.trim()) || (!chatConnectionChanged && Boolean(selectedConfig?.has_vision_api_secret)))
+    );
   const embeddingKeyReady = !currentDraft.embedding_model.trim()
     || selectedEmbeddingPreset.allowEmptyApiKey
     || Boolean(currentDraft.embedding_api_key.trim())
@@ -532,7 +555,10 @@ export function SettingsPage() {
       preset_id: preset.id,
       base_url: preset.id === "custom" ? currentDraft.base_url : preset.baseUrl,
       chat_model: preset.id === "custom" ? currentDraft.chat_model : preset.chatModel,
-      api_key: preset.id === currentDraft.preset_id ? currentDraft.api_key : ""
+      api_key: preset.id === currentDraft.preset_id ? currentDraft.api_key : "",
+      vision_app_id: preset.id === currentDraft.preset_id ? currentDraft.vision_app_id : "",
+      vision_api_key: preset.id === currentDraft.preset_id ? currentDraft.vision_api_key : "",
+      vision_api_secret: preset.id === currentDraft.preset_id ? currentDraft.vision_api_secret : ""
     });
     setModelFeedback(null);
   }
@@ -577,7 +603,7 @@ export function SettingsPage() {
 
   function createVisionConfig() {
     setSelectedConfigId("new");
-    setDraft(newDraftFromPreset("spark-vision"));
+    setDraft(newDraftFromPreset("xfyun-vision"));
     setModelFeedback(null);
   }
 
@@ -588,8 +614,8 @@ export function SettingsPage() {
   }
 
   function saveModelConfiguration() {
-    if (!chatKeyReady || !embeddingKeyReady || !xfyunEmbeddingCredentialsReady || !rerankKeyReady) {
-      setModelFeedback("请补全已启用能力对应的安全凭证；讯飞向量需要 APPID、APIKey 和 APISecret。");
+    if (!chatKeyReady || !xfyunVisionCredentialsReady || !embeddingKeyReady || !xfyunEmbeddingCredentialsReady || !rerankKeyReady) {
+      setModelFeedback("请补全已启用能力对应的安全凭证；讯飞图片理解和向量服务均需要各自的 APPID、APIKey 和 APISecret。");
       return;
     }
     if (!canSave) {
@@ -599,12 +625,18 @@ export function SettingsPage() {
     const chatApiKey = currentDraft.api_key.trim();
     const embeddingApiKey = currentDraft.embedding_api_key.trim();
     const rerankApiKey = currentDraft.rerank_api_key.trim();
+    const visionAppId = currentDraft.vision_app_id.trim();
+    const visionApiKey = currentDraft.vision_api_key.trim();
+    const visionApiSecret = currentDraft.vision_api_secret.trim();
     const payload = {
       display_name: currentDraft.display_name.trim(),
       preset_id: currentDraft.preset_id,
       provider: "openai_compatible" as const,
       base_url: currentDraft.base_url.trim(),
       chat_model: currentDraft.chat_model.trim(),
+      ...(visionAppId ? { vision_app_id: visionAppId } : {}),
+      ...(visionApiKey ? { vision_api_key: visionApiKey } : {}),
+      ...(visionApiSecret ? { vision_api_secret: visionApiSecret } : {}),
       embedding_preset_id: currentDraft.embedding_preset_id,
       embedding_provider: selectedEmbeddingPreset.provider,
       embedding_base_url: currentDraft.embedding_base_url.trim(),
@@ -916,21 +948,38 @@ export function SettingsPage() {
                               <span>{isVisionConfig ? "图片 Base URL" : "回答 Base URL"}</span>
                               <input aria-label={isVisionConfig ? "图片 Base URL" : "回答 Base URL"} value={currentDraft.base_url} onChange={(event) => updateDraft("base_url", event.target.value)} />
                             </label>
-                            <label className="settings-form-span">
-                              <span>{isVisionConfig ? "图片" : "回答"} {selectedChatPreset.apiKeyLabel}</span>
-                              <input
-                                aria-label={isVisionConfig ? "图片 API Key" : "回答 API Key"}
-                                type="password"
-                                autoComplete="off"
-                                value={currentDraft.api_key}
-                                placeholder={chatConnectionChanged
-                                  ? selectedChatPreset.apiKeyPlaceholder
-                                  : selectedConfig?.has_api_key
-                                    ? "留空保留已保存的回答密钥"
-                                    : selectedChatPreset.apiKeyPlaceholder}
-                                onChange={(event) => updateDraft("api_key", event.target.value)}
-                              />
-                            </label>
+                            {selectedChatPreset.requiresXfyunCredentials ? (
+                              <>
+                                <label>
+                                  <span>讯飞图片 APPID</span>
+                                  <input aria-label="讯飞图片 APPID" type="password" autoComplete="off" value={currentDraft.vision_app_id} placeholder={!chatConnectionChanged && selectedConfig?.has_vision_app_id ? "留空保留已保存的 APPID" : "填入图片理解 APPID"} onChange={(event) => updateDraft("vision_app_id", event.target.value)} />
+                                </label>
+                                <label>
+                                  <span>讯飞图片 APIKey</span>
+                                  <input aria-label="讯飞图片 APIKey" type="password" autoComplete="off" value={currentDraft.vision_api_key} placeholder={!chatConnectionChanged && selectedConfig?.has_vision_api_key ? "留空保留已保存的 APIKey" : selectedChatPreset.apiKeyPlaceholder} onChange={(event) => updateDraft("vision_api_key", event.target.value)} />
+                                </label>
+                                <label className="settings-form-span">
+                                  <span>讯飞图片 APISecret</span>
+                                  <input aria-label="讯飞图片 APISecret" type="password" autoComplete="off" value={currentDraft.vision_api_secret} placeholder={!chatConnectionChanged && selectedConfig?.has_vision_api_secret ? "留空保留已保存的 APISecret" : "填入图片理解 APISecret"} onChange={(event) => updateDraft("vision_api_secret", event.target.value)} />
+                                </label>
+                              </>
+                            ) : (
+                              <label className="settings-form-span">
+                                <span>{isVisionConfig ? "图片" : "回答"} {selectedChatPreset.apiKeyLabel}</span>
+                                <input
+                                  aria-label={isVisionConfig ? "图片 API Key" : "回答 API Key"}
+                                  type="password"
+                                  autoComplete="off"
+                                  value={currentDraft.api_key}
+                                  placeholder={chatConnectionChanged
+                                    ? selectedChatPreset.apiKeyPlaceholder
+                                    : selectedConfig?.has_api_key
+                                      ? "留空保留已保存的回答密钥"
+                                      : selectedChatPreset.apiKeyPlaceholder}
+                                  onChange={(event) => updateDraft("api_key", event.target.value)}
+                                />
+                              </label>
+                            )}
                           </div>
                           {!isVisionConfig ? <ConnectionTestCard
                             operation="chat"

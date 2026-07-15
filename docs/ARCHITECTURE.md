@@ -735,6 +735,8 @@ OpenAPI 漂移检查在临时目录生成 JSON/TypeScript 后与跟踪文件比�
 PathPlanningGraph 接受 Provider 常见的单层 `output` 协议包装，解包后仍执行同一 Pydantic 严格校验。未知画像因素代码被白名单剔除；伪造任务、资源、模态或权限越界仍使整体方案回退。该兼容层不记录模型原文，也不增加第二次模型调用。
 ## 25. Phase 32 图片提问架构
 
+视觉 Provider 通过项目适配层隔离。国内默认 `XfyunVisionProvider` 使用讯飞开放平台图片理解 WSS、HMAC签名和 `imagev3` domain；OpenAI-compatible视觉模型继续由原有 SDK适配器承载。两者统一只向 `VisionUnderstandingService` 返回文本，再经一次 `json-repair` 与 Pydantic九字段合同校验，供应商响应类型不进入 Graph。OCR模型不作为结构图、公式或流程语义理解的替代方案。
+
 图片提问复用 `StorageAdapter`、上传安全、模型运行时和 tutor SSE，但保持独立边界：`ChatMessageAttachment` 只属于当前用户和会话；`VisionUnderstandingService` 通过 OpenAI-compatible `text + image_url` 适配层调用明确声明视觉能力的配置，供应商类型不进入 Graph。视觉输出先经 Pydantic 校验，回答模型只接收结构化摘要和必要课程证据，不接收原始图片。
 
 主页与课程 Graph 的 route 节点复用视觉决策，避免同一图片轮次再调用普通语义路由。文本追问仍先由语义模型产生 `referenced_turn_ids`，随后只在当前会话中查找已绑定图片并重新理解。课程切片继续是教材事实和页码来源；用户图片标为本次提问输入，网页仍是外部补充。日志和 trace 只记录图片数量、Provider 预设、置信度和历史复用状态，不记录 Base64、存储键、视觉原始响应或思维链。

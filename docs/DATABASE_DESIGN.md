@@ -1040,4 +1040,6 @@ Phase 31 不新增表或迁移。大型资料仍使用现有资料、解析版�
 
 ## Phase 32 图片附件
 
+`model_settings` 另存 `vision_app_id_ciphertext`、`vision_api_key_ciphertext`、`vision_api_secret_ciphertext`，用于讯飞原生图片理解。三项凭证与回答、向量凭证隔离加密，API不返回明文；`is_vision_default` 仍决定当前用户的唯一默认视觉配置。
+
 `chat_message_attachments` 保存 `user_id/session_id/message_id`、私有 `storage_key`、原文件名、真实 MIME、重编码后字节数、宽高、SHA-256、`pending|bound|deleted` 状态和待绑定过期时间。附件只能绑定同一用户同一会话的用户消息；绑定和消息落库同一事务完成。图片对象不进入资料、切片、知识点或跨会话记忆表。`model_settings.is_vision_default` 通过部分唯一索引保证每个用户至多一个视觉默认配置。

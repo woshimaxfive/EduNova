@@ -9,6 +9,7 @@ from typing import Iterator, Literal, Protocol
 
 from cryptography.fernet import Fernet, InvalidToken
 from PIL import Image, ImageDraw
+from json_repair import loads as repair_json
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -31,6 +32,7 @@ from backend.app.providers.retrieval import (
     XFYUN_EMBEDDING_DIMENSION,
     XfyunEmbeddingProvider,
 )
+from backend.app.providers.xfyun_vision import XfyunVisionConfig, XfyunVisionProvider
 from backend.app.services.model_execution import (
     ModelExecutionContext,
     ModelExecutionRuntime,
@@ -48,6 +50,24 @@ def _vision_connection_test_image() -> str:
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+class _VisionConnectionContract(BaseModel):
+    standalone_query: str
+    visual_summary: str
+    extracted_text: str
+    observations: list[str]
+    uncertainties: list[str]
+    intent: str
+    search_required: bool
+    reasoning_mode: Literal["auto", "deep"]
+    confidence: float = Field(ge=0, le=1)
+
+
+VISION_CONNECTION_TEST_PROMPT = """请分析图片并只返回 JSON 对象，不要 Markdown。必须包含：
+standalone_query、visual_summary、extracted_text、observations（字符串数组）、
+uncertainties（字符串数组）、intent、search_required（布尔值）、
+reasoning_mode（auto 或 deep）、confidence（0 到 1）。"""
 
 
 class ModelSettingsConfigurationError(RuntimeError):
@@ -135,6 +155,9 @@ class SaveModelSettingsRequest(BaseModel):
     base_url: str = Field(min_length=1, max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
     chat_model: str | None = Field(default=None, max_length=120)
+    vision_app_id: str | None = Field(default=None, max_length=500)
+    vision_api_key: str | None = Field(default=None, max_length=500)
+    vision_api_secret: str | None = Field(default=None, max_length=500)
     embedding_provider: Literal["openai_compatible", "xfyun_embedding"] | None = None
     embedding_base_url: str | None = Field(default=None, max_length=500)
     embedding_api_key: str | None = Field(default=None, max_length=500)
@@ -152,6 +175,9 @@ class SaveModelSettingsRequest(BaseModel):
         "base_url",
         "api_key",
         "chat_model",
+        "vision_app_id",
+        "vision_api_key",
+        "vision_api_secret",
         "embedding_base_url",
         "embedding_api_key",
         "embedding_app_id",
@@ -201,6 +227,9 @@ class UpdateModelConfigRequest(BaseModel):
     base_url: str | None = Field(default=None, min_length=1, max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
     chat_model: str | None = Field(default=None, max_length=120)
+    vision_app_id: str | None = Field(default=None, max_length=500)
+    vision_api_key: str | None = Field(default=None, max_length=500)
+    vision_api_secret: str | None = Field(default=None, max_length=500)
     embedding_provider: Literal["openai_compatible", "xfyun_embedding"] | None = None
     embedding_preset_id: str | None = Field(default=None, max_length=80)
     embedding_base_url: str | None = Field(default=None, max_length=500)
@@ -226,6 +255,9 @@ class UpdateModelConfigRequest(BaseModel):
         "base_url",
         "api_key",
         "chat_model",
+        "vision_app_id",
+        "vision_api_key",
+        "vision_api_secret",
         "embedding_preset_id",
         "embedding_base_url",
         "embedding_api_key",
@@ -310,6 +342,11 @@ class ModelConfigSummary(BaseModel):
     embedding_dimension: int | None = None
     has_api_key: bool
     api_key_masked: str | None
+    has_vision_app_id: bool = False
+    vision_app_id_masked: str | None = None
+    has_vision_api_key: bool = False
+    vision_api_key_masked: str | None = None
+    has_vision_api_secret: bool = False
     has_embedding_api_key: bool = False
     embedding_api_key_masked: str | None = None
     has_embedding_app_id: bool = False
@@ -494,12 +531,14 @@ class ModelSettingsService:
         execution_runtime: ModelExecutionRuntime | None = None,
         xfyun_embedding_provider: XfyunEmbeddingProvider | None = None,
         rerank_provider: HttpRerankProvider | None = None,
+        xfyun_vision_provider: XfyunVisionProvider | None = None,
     ) -> None:
         self.repository = repository
         self.settings = settings
         self.provider = provider or OpenAICompatibleChatProvider()
         self.xfyun_embedding_provider = xfyun_embedding_provider or XfyunEmbeddingProvider()
         self.rerank_provider = rerank_provider or HttpRerankProvider()
+        self.xfyun_vision_provider = xfyun_vision_provider or XfyunVisionProvider()
         self.execution_runtime = execution_runtime or ModelExecutionRuntime(settings)
 
     def get_summary(self, user: User) -> ModelSettingsSummary:
@@ -625,6 +664,12 @@ class ModelSettingsService:
             setting.base_url = payload.base_url
         if payload.chat_model is not None:
             setting.chat_model = payload.chat_model or None
+        if payload.vision_app_id:
+            setting.vision_app_id_ciphertext = self._encrypt_api_key(payload.vision_app_id)
+        if payload.vision_api_key:
+            setting.vision_api_key_ciphertext = self._encrypt_api_key(payload.vision_api_key)
+        if payload.vision_api_secret:
+            setting.vision_api_secret_ciphertext = self._encrypt_api_key(payload.vision_api_secret)
         if payload.embedding_provider is not None:
             setting.embedding_provider = self._normalize_provider(payload.embedding_provider)
         if payload.embedding_preset_id is not None:
@@ -884,7 +929,7 @@ class ModelSettingsService:
                 embedding_model=None,
                 can_use_model=False,
             )
-        runtime = self._runtime_from_user_setting(setting)
+        runtime = self._vision_runtime_from_user_setting(setting)
         capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
         if not capabilities.supports_image_input:
             return RuntimeModelConfig(
@@ -902,23 +947,41 @@ class ModelSettingsService:
         runtime = self.resolve_vision_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
             raise ModelNotConfiguredError("当前未配置可用图片理解模型。")
-        config = OpenAICompatibleConfig(
-            base_url=runtime.base_url,
-            api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
-            chat_model=runtime.chat_model,
-        )
+        capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
+        if capabilities.vision_protocol == "xfyun_websocket":
+            def call() -> str:
+                return self.xfyun_vision_provider.vision_completion(
+                    XfyunVisionConfig(
+                        base_url=runtime.base_url or "",
+                        app_id=runtime.app_id or "",
+                        api_key=runtime.api_key or "",
+                        api_secret=runtime.api_secret or "",
+                        domain=runtime.chat_model or "imagev3",
+                    ),
+                    prompt=prompt,
+                    image_data_urls=image_data_urls[:3],
+                    timeout_seconds=self.settings.model_request_timeout_seconds,
+                )
+        else:
+            visual_config = OpenAICompatibleConfig(
+                base_url=runtime.base_url,
+                api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+                chat_model=runtime.chat_model,
+            )
+            def call() -> str:
+                return self.provider.vision_completion(
+                    visual_config,
+                    prompt=prompt,
+                    image_data_urls=image_data_urls[:3],
+                    timeout_seconds=self.settings.model_request_timeout_seconds,
+                )
         return self.execution_runtime.execute(
             user_id=user.id,
             provider_source=runtime.source,
             model_config_id=runtime.config_id,
             model_name=runtime.chat_model,
             operation="vision",
-            call=lambda: self.provider.vision_completion(
-                config,
-                prompt=prompt,
-                image_data_urls=image_data_urls[:3],
-                timeout_seconds=self.settings.model_request_timeout_seconds,
-            ),
+            call=call,
             timeout_seconds=self.settings.model_request_timeout_seconds,
         )
 
@@ -1247,27 +1310,51 @@ class ModelSettingsService:
                     capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
                     if not capabilities.supports_image_input:
                         raise ModelProviderError("该配置未声明图片理解能力。", code="not_configured")
-                    visual_config = OpenAICompatibleConfig(
-                        base_url=runtime.base_url or "",
-                        api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
-                        chat_model=runtime.chat_model or "",
-                    )
-                    self.execution_runtime.execute(
+                    if capabilities.vision_protocol == "xfyun_websocket":
+                        def call() -> str:
+                            return self.xfyun_vision_provider.vision_completion(
+                                XfyunVisionConfig(
+                                    base_url=runtime.base_url or "",
+                                    app_id=runtime.app_id or "",
+                                    api_key=runtime.api_key or "",
+                                    api_secret=runtime.api_secret or "",
+                                    domain=runtime.chat_model or "imagev3",
+                                ),
+                                prompt=VISION_CONNECTION_TEST_PROMPT,
+                                image_data_urls=[_vision_connection_test_image()],
+                                timeout_seconds=self.settings.model_request_timeout_seconds,
+                            )
+                    else:
+                        visual_config = OpenAICompatibleConfig(
+                            base_url=runtime.base_url or "",
+                            api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+                            chat_model=runtime.chat_model or "",
+                        )
+                        def call() -> str:
+                            return self.provider.vision_completion(
+                                visual_config,
+                                prompt=VISION_CONNECTION_TEST_PROMPT,
+                                image_data_urls=[_vision_connection_test_image()],
+                                timeout_seconds=self.settings.model_request_timeout_seconds,
+                            )
+                    raw_vision = self.execution_runtime.execute(
                         user_id=user_id,
                         provider_source=runtime.source,
                         model_config_id=runtime.config_id,
                         model_name=model,
                         operation="vision",
-                        call=lambda: self.provider.vision_completion(
-                            visual_config,
-                            prompt="请读取图片中的文字，并简短回复。",
-                            image_data_urls=[_vision_connection_test_image()],
-                            timeout_seconds=self.settings.model_request_timeout_seconds,
-                        ),
+                        call=call,
                         timeout_seconds=self.settings.model_request_timeout_seconds,
                         max_attempts=1,
                         bypass_circuit=True,
                     )
+                    try:
+                        _VisionConnectionContract.model_validate(repair_json(raw_vision))
+                    except (TypeError, ValueError) as exc:
+                        raise ModelProviderError(
+                            "图片理解服务未返回完整的结构化结果。",
+                            code="invalid_response",
+                        ) from exc
                 else:
                     chat_config = OpenAICompatibleConfig(
                         base_url=runtime.base_url or "",
@@ -1351,8 +1438,8 @@ class ModelSettingsService:
             return self._embedding_runtime_from_user_setting(setting)
         if operation == "rerank":
             return self._rerank_runtime_from_user_setting(setting)
-        runtime = self._runtime_from_user_setting(setting)
         if operation == "vision":
+            runtime = self._vision_runtime_from_user_setting(setting)
             capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
             if not capabilities.supports_image_input:
                 return RuntimeModelConfig(
@@ -1366,7 +1453,29 @@ class ModelSettingsService:
                     config_id=runtime.config_id,
                     preset_id=runtime.preset_id,
                 )
-        return runtime
+            return runtime
+        return self._runtime_from_user_setting(setting)
+
+    def _vision_runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
+        capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
+        if capabilities.vision_protocol == "xfyun_websocket":
+            app_id = self._decrypt_api_key(getattr(setting, "vision_app_id_ciphertext", None))
+            api_key = self._decrypt_api_key(getattr(setting, "vision_api_key_ciphertext", None))
+            api_secret = self._decrypt_api_key(getattr(setting, "vision_api_secret_ciphertext", None))
+            return RuntimeModelConfig(
+                source="user",
+                provider="xfyun_vision",
+                base_url=setting.base_url,
+                api_key=api_key,
+                chat_model=setting.chat_model,
+                embedding_model=None,
+                can_use_model=bool(setting.base_url and setting.chat_model and app_id and api_key and api_secret),
+                config_id=setting.id,
+                preset_id=setting.preset_id,
+                app_id=app_id,
+                api_secret=api_secret,
+            )
+        return self._runtime_from_user_setting(setting)
 
     def _runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
         api_key = self._decrypt_api_key(setting.api_key_ciphertext)
@@ -1513,6 +1622,8 @@ class ModelSettingsService:
 
     def _config_summary(self, setting: ModelSetting) -> ModelConfigSummary:
         runtime = self._runtime_from_user_setting(setting)
+        vision_runtime = self._vision_runtime_from_user_setting(setting)
+        capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
         embedding_runtime = self._embedding_runtime_from_user_setting(setting)
         rerank_runtime = self._rerank_runtime_from_user_setting(setting)
         has_embedding = bool(setting.embedding_model)
@@ -1531,6 +1642,13 @@ class ModelSettingsService:
             embedding_dimension=embedding_runtime.dimensions if has_embedding else None,
             has_api_key=bool(runtime.api_key),
             api_key_masked=self._mask_api_key(runtime.api_key),
+            has_vision_app_id=bool(vision_runtime.app_id),
+            vision_app_id_masked=self._mask_api_key(vision_runtime.app_id),
+            has_vision_api_key=bool(vision_runtime.api_key) if setting.preset_id == "xfyun-vision" else False,
+            vision_api_key_masked=(
+                self._mask_api_key(vision_runtime.api_key) if setting.preset_id == "xfyun-vision" else None
+            ),
+            has_vision_api_secret=bool(vision_runtime.api_secret),
             has_embedding_api_key=has_embedding and bool(embedding_runtime.api_key),
             embedding_api_key_masked=self._mask_api_key(embedding_runtime.api_key) if has_embedding else None,
             has_embedding_app_id=has_embedding and bool(embedding_runtime.app_id),
@@ -1543,7 +1661,7 @@ class ModelSettingsService:
             rerank_workspace_id=rerank_runtime.workspace_id if has_rerank else None,
             has_rerank_api_key=has_rerank and bool(rerank_runtime.api_key),
             rerank_api_key_masked=self._mask_api_key(rerank_runtime.api_key) if has_rerank else None,
-            can_use_model=runtime.can_use_model,
+            can_use_model=vision_runtime.can_use_model if capabilities.supports_image_input else runtime.can_use_model,
             can_use_embedding_model=embedding_runtime.can_use_model,
             can_use_rerank_model=rerank_runtime.can_use_model,
             is_default=setting.is_default,
@@ -1650,6 +1768,12 @@ class ModelSettingsService:
             setting.rerank_preset_id = payload.rerank_preset_id if setting.rerank_model else None
         if payload.api_key:
             setting.api_key_ciphertext = self._encrypt_api_key(payload.api_key)
+        if payload.vision_app_id:
+            setting.vision_app_id_ciphertext = self._encrypt_api_key(payload.vision_app_id)
+        if payload.vision_api_key:
+            setting.vision_api_key_ciphertext = self._encrypt_api_key(payload.vision_api_key)
+        if payload.vision_api_secret:
+            setting.vision_api_secret_ciphertext = self._encrypt_api_key(payload.vision_api_secret)
         if setting.embedding_model:
             if payload.embedding_api_key:
                 setting.embedding_api_key_ciphertext = self._encrypt_api_key(payload.embedding_api_key)
@@ -1681,6 +1805,9 @@ class ModelSettingsService:
         payload: SaveModelSettingsRequest | UpdateModelConfigRequest,
     ) -> None:
         current_key = self._decrypt_api_key(setting.api_key_ciphertext)
+        current_vision_app_id = self._decrypt_api_key(getattr(setting, "vision_app_id_ciphertext", None))
+        current_vision_api_key = self._decrypt_api_key(getattr(setting, "vision_api_key_ciphertext", None))
+        current_vision_api_secret = self._decrypt_api_key(getattr(setting, "vision_api_secret_ciphertext", None))
         current_embedding_key = self._decrypt_api_key(setting.embedding_api_key_ciphertext)
         current_embedding_app_id = self._decrypt_api_key(setting.embedding_app_id_ciphertext)
         current_embedding_secret = self._decrypt_api_key(setting.embedding_api_secret_ciphertext)
@@ -1699,6 +1826,14 @@ class ModelSettingsService:
             or (payload.base_url is not None and payload.base_url != setting.base_url)
             or (bool(payload.api_key) and payload.api_key != current_key)
             or (payload.chat_model is not None and payload.chat_model != setting.chat_model)
+        )
+        vision_changed = (
+            preset_changed
+            or (payload.base_url is not None and payload.base_url != setting.base_url)
+            or (payload.chat_model is not None and payload.chat_model != setting.chat_model)
+            or (bool(payload.vision_app_id) and payload.vision_app_id != current_vision_app_id)
+            or (bool(payload.vision_api_key) and payload.vision_api_key != current_vision_api_key)
+            or (bool(payload.vision_api_secret) and payload.vision_api_secret != current_vision_api_secret)
         )
         embedding_changed = (
             (
@@ -1733,10 +1868,11 @@ class ModelSettingsService:
         tests = dict(setting.connection_test_json or {})
         if chat_changed:
             tests.pop("chat", None)
-            tests.pop("vision", None)
             setting.last_test_ok = None
             setting.last_test_message = None
             setting.last_tested_at = None
+        if vision_changed:
+            tests.pop("vision", None)
         if embedding_changed:
             tests.pop("embedding", None)
         if rerank_changed:

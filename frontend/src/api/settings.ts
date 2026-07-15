@@ -28,6 +28,9 @@ export type ModelSettingsRequest = {
   base_url: string;
   api_key?: string;
   chat_model?: string;
+  vision_app_id?: string;
+  vision_api_key?: string;
+  vision_api_secret?: string;
   embedding_provider?: ModelSettingsProvider;
   embedding_base_url?: string;
   embedding_api_key?: string;
@@ -74,6 +77,11 @@ export type ModelSettingsSummary = {
   embedding_dimension?: number | null;
   has_api_key: boolean;
   api_key_masked: string | null;
+  has_vision_app_id?: boolean;
+  vision_app_id_masked?: string | null;
+  has_vision_api_key?: boolean;
+  vision_api_key_masked?: string | null;
+  has_vision_api_secret?: boolean;
   has_embedding_api_key?: boolean;
   embedding_api_key_masked?: string | null;
   has_embedding_app_id?: boolean;

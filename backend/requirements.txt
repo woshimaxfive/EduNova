@@ -1,6 +1,7 @@
 fastapi
 sse-starlette==3.4.5
 uvicorn[standard]
+websockets==15.0.1
 alembic
 pydantic-settings
 psycopg[binary]

@@ -1008,34 +1008,23 @@ def test_openai_compatible_provider_posts_chat_completions_and_reads_content() -
     assert requests[0].read()
 
 
-def test_xfyun_maas_vision_normalizes_png_data_url_to_jpeg() -> None:
-    provider_module = load_openai_provider_module()
-    requests: list[httpx.Request] = []
+def test_xfyun_native_vision_builds_signed_websocket_url_and_accepts_png() -> None:
+    from backend.app.providers.xfyun_vision import XfyunVisionConfig, XfyunVisionProvider
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        return httpx.Response(200, json={"choices": [{"message": {"content": "EduNova"}}]})
-
-    provider = provider_module.OpenAICompatibleChatProvider(transport=httpx.MockTransport(handler))
-    config = provider_module.OpenAICompatibleConfig(
-        base_url="https://maas-api.cn-huabei-1.xf-yun.com/v2",
-        api_key="maas-secret",
-        chat_model="vision-model",
+    config = XfyunVisionConfig(
+        base_url="wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image",
+        app_id="app-id",
+        api_key="api-key",
+        api_secret="api-secret",
     )
     image_buffer = BytesIO()
     Image.new("RGB", (32, 32), "white").save(image_buffer, format="PNG")
     png_data_url = "data:image/png;base64," + base64.b64encode(image_buffer.getvalue()).decode("ascii")
 
-    assert provider.vision_completion(
-        config,
-        prompt="读取图片",
-        image_data_urls=[png_data_url],
-        timeout_seconds=3.0,
-    ) == "EduNova"
-
-    payload = requests[0].read()
-    assert b"data:image/jpeg;base64," in payload
-    assert b"data:image/png;base64," not in payload
+    signed_url = XfyunVisionProvider._signed_url(config)
+    assert signed_url.startswith("wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image?")
+    assert "authorization=" in signed_url
+    assert XfyunVisionProvider._image_base64(png_data_url) == png_data_url.split(",", 1)[1]
 
 
 def test_model_settings_serializes_saved_vision_connection_snapshot() -> None:

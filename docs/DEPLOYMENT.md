@@ -446,4 +446,4 @@ Phase 31 不新增服务、端口、依赖或环境变量。`ai-worker` 与 back
 生产部署应为 AI Worker 预留足够 CPU、内存和临时磁盘。437 页、约 24.4 MiB 文本层 PDF 的本机 Docker 实测解析约 11 分 45 秒，该值是单机样本而非 SLA；监控应区分 Docling 本地耗时与 Provider 外部耗时。教材文件、切片、Prompt 和模型原始响应不得进入通用 trace 或构建产物。
 # Phase 32 图片附件存储
 
-Local 模式使用 `CHAT_ATTACHMENT_STORAGE_DIR`（默认 `var/uploads/chat-attachments`）；Compose 通过独立 `chat_attachment_data` volume 持久化。S3-compatible 模式继续使用既有 Storage Adapter。公开部署启用 ClamAV 后，图片扫描失败或扫描服务不可用均拒绝上传。视觉模型是用户独立配置，不在 `.env.example` 预置真实 Key。
+Local 模式使用 `CHAT_ATTACHMENT_STORAGE_DIR`（默认 `var/uploads/chat-attachments`）；Compose 通过独立 `chat_attachment_data` volume 持久化。S3-compatible 模式继续使用既有 Storage Adapter。公开部署启用 ClamAV 后，图片扫描失败或扫描服务不可用均拒绝上传。视觉模型是用户独立配置，不在 `.env.example` 预置真实 Key。讯飞原生图片理解需要服务端能够访问 `wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image`。

@@ -1928,9 +1928,11 @@ describe("student interaction affordances", () => {
 
     await user.click(screen.getByRole("button", { name: "配置图片理解" }));
     expect(screen.getByRole("region", { name: "图片理解配置编辑器" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "图片理解服务商" })).toHaveValue("spark-vision");
-    expect(screen.getByRole("textbox", { name: "图片 Base URL" })).toHaveValue("https://maas-api.cn-huabei-1.xf-yun.com/v2");
-    expect(screen.getByLabelText("图片 API Key")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "图片理解服务商" })).toHaveValue("xfyun-vision");
+    expect(screen.getByRole("textbox", { name: "图片 Base URL" })).toHaveValue("wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image");
+    expect(screen.getByLabelText("讯飞图片 APPID")).toBeInTheDocument();
+    expect(screen.getByLabelText("讯飞图片 APIKey")).toBeInTheDocument();
+    expect(screen.getByLabelText("讯飞图片 APISecret")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "向量服务商" })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "回答服务商" })).not.toBeInTheDocument();
 
@@ -1959,7 +1961,7 @@ describe("student interaction affordances", () => {
     expect(screen.getByRole("textbox", { name: "向量模型" })).toHaveValue("text-embedding-v4");
 
     await user.click(screen.getByRole("button", { name: "保存配置" }));
-    expect(screen.getByText("请补全已启用能力对应的安全凭证；讯飞向量需要 APPID、APIKey 和 APISecret。")).toBeInTheDocument();
+    expect(screen.getByText("请补全已启用能力对应的安全凭证；讯飞图片理解和向量服务均需要各自的 APPID、APIKey 和 APISecret。")).toBeInTheDocument();
 
     await user.clear(screen.getByRole("textbox", { name: "配置名称" }));
     await user.type(screen.getByRole("textbox", { name: "配置名称" }), "腾讯混元默认");

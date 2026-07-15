@@ -44,6 +44,11 @@ export function AgentTraceDisclosure({ traceId, label, staggered = false }: Agen
         <div className="agent-trace-disclosure-content" role="region" aria-label={`${label}执行轨迹`}>
           {traceQuery.isPending ? <p className="empty-inline-note">正在读取协作轨迹。</p> : null}
           {traceQuery.isError ? <p className="form-error">协作轨迹读取失败，请稍后重试。</p> : null}
+          {traceQuery.data?.data.summary ? (
+            <p className="agent-trace-safe-summary">
+              耗时 {traceQuery.data.data.summary.duration_ms ?? 0} ms · 来源 {Number(traceQuery.data.data.summary.course_source_count ?? 0) + Number(traceQuery.data.data.summary.web_source_count ?? 0) + Number(traceQuery.data.data.summary.history_source_count ?? 0)} 条 · 个性化因素 {traceQuery.data.data.summary.personalization_factors?.length ?? 0} 项
+            </p>
+          ) : null}
           {events.length > 0 ? <AgentTimeline events={events} staggered={staggered} /> : null}
         </div>
       ) : null}

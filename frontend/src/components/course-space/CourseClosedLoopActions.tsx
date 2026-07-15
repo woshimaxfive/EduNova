@@ -14,7 +14,7 @@ import { Link } from "react-router-dom";
 
 import { type LearningNextAction } from "../../api/learning";
 
-export type CourseAnswerPanelKind = "citations" | "resources" | "path" | "thinking";
+export type CourseAnswerPanelKind = "citations" | "resources" | "path" | "why" | "thinking";
 
 type CourseClosedLoopActionsProps = {
   recommendation: LearningNextAction | null;
@@ -31,6 +31,7 @@ type CourseClosedLoopActionsProps = {
   onOpenCitations: () => void;
   onOpenResources: () => void;
   onOpenPath: () => void;
+  onOpenWhy: () => void;
   onOpenTrace: () => void;
 };
 
@@ -49,6 +50,7 @@ export function CourseClosedLoopActions({
   onOpenCitations,
   onOpenResources,
   onOpenPath,
+  onOpenWhy,
   onOpenTrace
 }: CourseClosedLoopActionsProps) {
   const [moreOpen, setMoreOpen] = useState(false);
@@ -103,6 +105,10 @@ export function CourseClosedLoopActions({
             <Graph size={17} weight="duotone" aria-hidden="true" />
             <span>课堂协作轨迹</span>
             <em>{hasTrace ? "真实 trace" : "暂无"}</em>
+          </button>
+          <button type="button" aria-label="为什么这样回答" aria-pressed={activePanel === "why"} onClick={onOpenWhy}>
+            <Sparkle size={17} weight="duotone" aria-hidden="true" />
+            <span>为什么这样回答</span>
           </button>
         </div>
       ) : null}

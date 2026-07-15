@@ -27,6 +27,17 @@ export type AgentTrace = {
   course_id: string | null;
   status: AgentTraceStatus;
   steps: AgentTraceStep[];
+  summary?: {
+    duration_ms?: number;
+    course_source_count?: number;
+    web_source_count?: number;
+    history_source_count?: number;
+    personalization_factors?: string[];
+    reasoning_mode?: string | null;
+    search_backend?: string | null;
+    review_status?: string | null;
+    safety_summary?: string | null;
+  };
 };
 
 export async function getAgentTrace(traceId: string) {

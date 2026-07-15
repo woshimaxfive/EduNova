@@ -1045,7 +1045,7 @@ describe("LearningSpacePage", () => {
     expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("真实资料讲义.md");
     expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("联网搜索结果");
 
-    await user.click(within(thread).getByRole("button", { name: "思考过程" }));
+    await user.click(within(thread).getByRole("button", { name: "协作过程" }));
 
     expect(await within(thread).findByText("context")).toBeInTheDocument();
     expect(within(thread).getByText("确认不展示原始思维链")).toBeInTheDocument();
@@ -1100,7 +1100,7 @@ describe("LearningSpacePage", () => {
     await user.click(screen.getByRole("button", { name: "语音输入" }));
 
     expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("语音输入的问题");
-    expect(await screen.findByText("已识别语音输入。")).toBeInTheDocument();
+    expect(await screen.findByText("已识别语音输入，确认后再发送。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "发送" }));
     await user.click(await screen.findByRole("button", { name: "朗读回答" }));
@@ -1116,7 +1116,7 @@ describe("LearningSpacePage", () => {
 
     await user.click(screen.getByRole("button", { name: "语音输入" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("当前浏览器不支持语音输入。");
+    expect(await screen.findByRole("alert")).toHaveTextContent("当前浏览器不支持语音输入，请使用键盘输入。");
     expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("");
   });
 
@@ -1341,7 +1341,7 @@ describe("LearningSpacePage", () => {
 
     expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("先用 10 分钟补概念");
 
-    await user.click(screen.getByRole("button", { name: "思考过程" }));
+    await user.click(screen.getByRole("button", { name: "协作过程" }));
 
     expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("课堂协作轨迹");
     expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("确认不展示原始思维链");

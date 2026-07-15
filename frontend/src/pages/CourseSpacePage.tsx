@@ -2,7 +2,8 @@ import {
   ArrowRight,
   ChartLineUp,
   ChatCircleText,
-  ListChecks
+  ListChecks,
+  Microphone
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -62,6 +63,8 @@ import { type AgentTraceEvent } from "../types/api";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import { useLearningNextAction } from "../features/learning-actions/learningActions";
 import { type LearningNextAction } from "../api/learning";
+import { SpeechPlaybackControls } from "../features/speech/SpeechPlaybackControls";
+import { useBrowserSpeech } from "../features/speech/useBrowserSpeech";
 import "../styles/course-space.css";
 
 function retrievalSourceLabel(source?: string | null) {
@@ -292,10 +295,13 @@ export function CourseSpacePage() {
     question: null,
     knowledgePointId: null
   });
-  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [resourceJobId, setResourceJobId] = useState<string | null>(null);
   const [selectedCourseResourceTypes, setSelectedCourseResourceTypes] = useState<ResourceType[]>(["doc", "mindmap", "quiz"]);
   const [updatingWeaknessItemId, setUpdatingWeaknessItemId] = useState<string | null>(null);
+  const speech = useBrowserSpeech({
+    onTranscript: (transcript) => setCoursePrompt((current) => current.trim() ? `${current.trim()} ${transcript}` : transcript),
+    onNotice: (message) => setCourseFeedback(message)
+  });
   const optimisticMessageSequence = useRef(0);
   const handledResourceJobId = useRef<string | null>(null);
   const courseQuestionInputRef = useRef<HTMLTextAreaElement>(null);
@@ -385,7 +391,7 @@ export function CourseSpacePage() {
   const agentTraceQuery = useQuery({
     queryKey: ["agents", "trace", activeDetailTraceId],
     queryFn: () => getAgentTrace(activeDetailTraceId ?? ""),
-    enabled: Boolean(activeDetailTraceId) && activeTurnDetail?.panel === "thinking",
+    enabled: Boolean(activeDetailTraceId) && (activeTurnDetail?.panel === "thinking" || activeTurnDetail?.panel === "why"),
     staleTime: 10_000
   });
   const courseResourcesQuery = useQuery({
@@ -733,24 +739,11 @@ export function CourseSpacePage() {
   }
 
   function toggleReadMessage(message: CourseMessage) {
-    if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
-      setCourseFeedback("当前浏览器不支持朗读。");
+    if (speech.activeSpeechId === message.id) {
+      speech.stopSpeaking();
       return;
     }
-    if (speakingMessageId === message.id) {
-      window.speechSynthesis.cancel();
-      setSpeakingMessageId(null);
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(sanitizeCourseAnswerContent(message.content));
-    utterance.lang = "zh-CN";
-    utterance.rate = 1;
-    utterance.onend = () => setSpeakingMessageId(null);
-    utterance.onerror = () => setSpeakingMessageId(null);
-    setSpeakingMessageId(message.id);
-    window.speechSynthesis.speak(utterance);
+    speech.speak(sanitizeCourseAnswerContent(message.content), message.id);
   }
 
   function toggleCourseResourceType(resourceType: ResourceType) {
@@ -972,6 +965,7 @@ export function CourseSpacePage() {
                               pathHref={pathHref}
                               agentTraceId={effectiveTraceId}
                               agentTraceEvents={agentTraceEvents}
+                              agentTraceSummary={agentTraceQuery.data?.data.summary ?? null}
                               isAgentTraceLoading={agentTraceQuery.isPending && agentTraceQuery.fetchStatus !== "idle"}
                               isAgentTraceError={agentTraceQuery.isError}
                               onOpenCitation={openCitationStudy}
@@ -992,7 +986,7 @@ export function CourseSpacePage() {
                                 hasActivePath={hasActivePath}
                                 hasTrace={Boolean(effectiveTraceId)}
                                 activePanel={turnPanel}
-                                isSpeaking={speakingMessageId === message.id}
+                                isSpeaking={speech.activeSpeechId === message.id}
                                 practiceHref={practiceHref}
                                 reportHref={reportHref}
                                 onRecommendedAction={() => runRecommendedAction(message.id, citations, recommendation)}
@@ -1000,6 +994,7 @@ export function CourseSpacePage() {
                                 onOpenCitations={() => toggleTurnPanel(message.id, "citations", question, citations)}
                                 onOpenResources={() => toggleTurnPanel(message.id, "resources", question, citations)}
                                 onOpenPath={() => toggleTurnPanel(message.id, "path", question, citations)}
+                                onOpenWhy={() => toggleTurnPanel(message.id, "why", question, citations)}
                                 onOpenTrace={() => toggleTurnPanel(message.id, "thinking", question, citations)}
                               />
                             ) : undefined}
@@ -1050,6 +1045,15 @@ export function CourseSpacePage() {
                 </div>
 
                 <div className="course-composer" role="region" aria-label="课程输入区">
+                  <SpeechPlaybackControls
+                    active={Boolean(speech.activeSpeechId)}
+                    paused={speech.isPaused}
+                    rate={speech.rate}
+                    onPause={speech.pause}
+                    onResume={speech.resume}
+                    onStop={speech.stopSpeaking}
+                    onRateChange={speech.setRate}
+                  />
                   <label htmlFor="course-question-input">课程问题输入</label>
                   <textarea
                     ref={courseQuestionInputRef}
@@ -1060,6 +1064,10 @@ export function CourseSpacePage() {
                     onKeyDown={handleCourseComposerKeyDown}
                     placeholder="继续问这门课，例如：给我生成监督学习 10 分钟复习路线"
                   />
+                  <button className="course-voice-button" type="button" aria-pressed={speech.isListening} onClick={speech.toggleListening}>
+                    <Microphone size={17} weight={speech.isListening ? "fill" : "regular"} aria-hidden="true" />
+                    <span>{speech.isListening ? "停止聆听" : "语音输入"}</span>
+                  </button>
                   <button className="course-send-button" type="button" disabled={isSearchingCourse} onClick={() => void sendCourseQuestion()}>
                     <ArrowRight size={17} weight="bold" aria-hidden="true" />
                     <span>{isSearchingCourse ? "正在回答" : "发送"}</span>
@@ -1143,6 +1151,7 @@ type AnswerDetailPanelProps = {
   pathHref: string;
   agentTraceId: string | null;
   agentTraceEvents: AgentTraceEvent[];
+  agentTraceSummary: { duration_ms?: number; personalization_factors?: string[]; course_source_count?: number; web_source_count?: number; history_source_count?: number } | null;
   isAgentTraceLoading: boolean;
   isAgentTraceError: boolean;
   onOpenCitation: (citation: RagSearchResultItem) => void;
@@ -1159,10 +1168,25 @@ function AnswerDetailPanel({
   pathHref,
   agentTraceId,
   agentTraceEvents,
+  agentTraceSummary,
   isAgentTraceLoading,
   isAgentTraceError,
   onOpenCitation
 }: AnswerDetailPanelProps) {
+  if (activePanel === "why") {
+    const factors = agentTraceSummary?.personalization_factors?.length ?? 0;
+    return (
+      <section className="answer-detail-panel" role="region" aria-label="为什么这样回答">
+        <strong>为什么这样回答</strong>
+        <p>
+          {factors > 0
+            ? `系统使用 ${factors} 项可信学习因素调整讲解深度、案例和下一步，同时保持课程事实、引用和评分边界不变。`
+            : "系统主要依据当前问题、会话上下文和课程证据组织回答，没有让候选或低可信画像改变事实。"}
+        </p>
+      </section>
+    );
+  }
+
   if (activePanel === "resources") {
     const studioHref = courseId !== null ? `${PATHS.studio}?course_id=${courseId}` : PATHS.studio;
 
@@ -1219,6 +1243,9 @@ function AnswerDetailPanel({
       return (
         <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
           <strong>课堂协作轨迹</strong>
+          {agentTraceSummary ? (
+            <p>{`耗时 ${agentTraceSummary.duration_ms ?? 0} ms · 来源 ${Number(agentTraceSummary.course_source_count ?? 0) + Number(agentTraceSummary.web_source_count ?? 0) + Number(agentTraceSummary.history_source_count ?? 0)} 条 · 个性化因素 ${agentTraceSummary.personalization_factors?.length ?? 0} 项`}</p>
+          ) : null}
           <AgentTimeline events={agentTraceEvents} />
         </section>
       );

@@ -43,6 +43,8 @@ import { useAuthStore } from "../features/auth/authStore";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import { useHomeConversationHistory } from "../features/home/useHomeConversationHistory";
 import { invalidateLearningNextActions, learningActionHref, useLearningNextAction } from "../features/learning-actions/learningActions";
+import { SpeechPlaybackControls } from "../features/speech/SpeechPlaybackControls";
+import { useBrowserSpeech } from "../features/speech/useBrowserSpeech";
 
 type LibraryMaterial = {
   id: string;
@@ -70,34 +72,7 @@ type LearningSpaceNavigationState = {
 
 type DashboardSummaryResponse = Awaited<ReturnType<typeof getDashboardSummary>>;
 
-type HomeAnswerPanel = "sources" | "path" | "thinking";
-
-type SpeechRecognitionEventLike = {
-  results: ArrayLike<ArrayLike<{ transcript: string }>>;
-};
-
-type SpeechRecognitionErrorEventLike = {
-  error?: string;
-};
-
-type BrowserSpeechRecognition = {
-  lang: string;
-  interimResults: boolean;
-  maxAlternatives: number;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-
-type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
-
-type SpeechWindow = Window &
-  typeof globalThis & {
-    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
-    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
-  };
+type HomeAnswerPanel = "sources" | "path" | "why" | "thinking";
 
 function mapTutorMessages(apiMessages: TutorMessage[]) {
   return apiMessages.map((message) => ({
@@ -138,7 +113,6 @@ export function LearningSpacePage() {
     : [];
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const homeChatStageRef = useRef<HTMLElement | null>(null);
-  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const isResettingHomeRef = useRef(false);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
@@ -154,7 +128,6 @@ export function LearningSpacePage() {
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
   const [courseJobId, setCourseJobId] = useState<string | null>(null);
   const [isLibraryOpen, setIsLibraryOpen] = useState(() => selectedMaterialIdsFromNavigation.length > 0);
-  const [isListening, setIsListening] = useState(false);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>("sources");
   const [expandedAnswerId, setExpandedAnswerId] = useState<string | null>(null);
   const [streamingAnswerId, setStreamingAnswerId] = useState<string | null>(null);
@@ -164,6 +137,11 @@ export function LearningSpacePage() {
   const [courseDialogFeedback, setCourseDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [materialDialogFeedback, setMaterialDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [isCourseDrawerOpen, setIsCourseDrawerOpen] = useState(false);
+  const speech = useBrowserSpeech({
+    onTranscript: (transcript) => setPrompt((current) => current.trim() ? `${current.trim()} ${transcript}` : transcript),
+    onNotice: (message, tone) => setComposerFeedback({ message, tone })
+  });
+  const isListening = speech.isListening;
   const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
   const courseJob = getJob(courseJobId);
   const isCreatingCourse = Boolean(courseJob && ["queued", "running", "cancelling"].includes(courseJob.status));
@@ -270,12 +248,6 @@ export function LearningSpacePage() {
       }
     });
   }, [hasHomeThread, messages.length]);
-
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.stop();
-    };
-  }, []);
 
   function openLibrary() {
     setMaterialDraftIds(effectiveConversationMaterialIds);
@@ -582,75 +554,18 @@ export function LearningSpacePage() {
     }
   }
 
-  function getSpeechRecognitionConstructor() {
-    if (typeof window === "undefined") {
-      return null;
-    }
-
-    const speechWindow = window as SpeechWindow;
-    return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition ?? null;
-  }
-
   function handleVoiceInput() {
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      return;
-    }
-
-    const SpeechRecognitionConstructor = getSpeechRecognitionConstructor();
-    if (!SpeechRecognitionConstructor) {
-      setComposerFeedback({ message: "当前浏览器不支持语音输入。", tone: "warning" });
-      return;
-    }
-
-    const recognition = new SpeechRecognitionConstructor();
-    recognition.lang = "zh-CN";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map((result) => result[0]?.transcript ?? "")
-        .join("")
-        .trim();
-
-      if (transcript) {
-        setPrompt((current) => (current.trim() ? `${current.trim()} ${transcript}` : transcript));
-        setComposerFeedback({ message: "已识别语音输入。", tone: "success" });
-      }
-    };
-    recognition.onerror = () => {
-      setComposerFeedback({ message: "语音输入暂时不可用，请改用键盘输入。", tone: "warning" });
-      setIsListening(false);
-    };
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-    recognitionRef.current = recognition;
-    setComposerFeedback({ message: "正在聆听，请说出你的学习问题。", tone: "info" });
-    setIsListening(true);
-    recognition.start();
+    speech.toggleListening();
   }
 
   function handleSpeakMessage(content: string) {
-    if (typeof window === "undefined" || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
-      setComposerFeedback({ message: "当前浏览器不支持朗读回答。", tone: "warning" });
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(content);
-    utterance.lang = "zh-CN";
-    window.speechSynthesis.speak(utterance);
-    setComposerFeedback({ message: "正在朗读回答。", tone: "info" });
+    speech.speak(content, "home-answer");
   }
 
   function resetHomeEntry() {
     isResettingHomeRef.current = true;
-    recognitionRef.current?.stop();
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
+    speech.stopListening();
+    speech.stopSpeaking();
     setPrompt("");
     setMessages([]);
     setActiveHomeThreadId(null);
@@ -660,7 +575,6 @@ export function LearningSpacePage() {
     setIsHistoryCollapsed(isCompactWorkspaceViewport());
     setIsLibraryOpen(false);
     setIsCourseDialogOpen(false);
-    setIsListening(false);
     setActiveAnswerPanel("sources");
     setExpandedAnswerId(null);
     setStreamingAnswerId(null);
@@ -830,6 +744,15 @@ export function LearningSpacePage() {
           )}
 
           <section className={hasHomeThread ? "composer-frame docked" : "composer-frame"} aria-label={hasHomeThread ? "底部学习输入" : "学习输入区"}>
+            <SpeechPlaybackControls
+              active={Boolean(speech.activeSpeechId)}
+              paused={speech.isPaused}
+              rate={speech.rate}
+              onPause={speech.pause}
+              onResume={speech.resume}
+              onStop={speech.stopSpeaking}
+              onRateChange={speech.setRate}
+            />
             <div className="conversation-composer">
               <textarea
                 aria-label="学习问题输入"
@@ -1019,7 +942,7 @@ function HomeAnswerInsights({
   const traceQuery = useQuery({
     queryKey: ["agents", "trace", message.trace_id],
     queryFn: () => getAgentTrace(message.trace_id ?? ""),
-    enabled: Boolean(message.trace_id) && isExpanded && activePanel === "thinking",
+    enabled: Boolean(message.trace_id) && isExpanded && (activePanel === "thinking" || activePanel === "why"),
     staleTime: 10_000
   });
   const traceEvents = useMemo(
@@ -1044,6 +967,16 @@ function HomeAnswerInsights({
   return (
     <section className="home-answer-insights" aria-label="回答附加信息">
       <div className="answer-insight-tabs" aria-label="回答展开入口">
+        <button
+          className={isExpanded && activePanel === "why" ? "active" : ""}
+          type="button"
+          aria-expanded={isExpanded && activePanel === "why"}
+          aria-pressed={isExpanded && activePanel === "why"}
+          onClick={() => handleInsightClick("why")}
+        >
+          <Sparkle size={16} weight="duotone" aria-hidden="true" />
+          <span>为什么这样回答</span>
+        </button>
         <button
           className={isExpanded && activePanel === "sources" ? "active" : ""}
           type="button"
@@ -1072,7 +1005,7 @@ function HomeAnswerInsights({
           onClick={() => handleInsightClick("thinking")}
         >
           <Sparkle size={16} weight="duotone" aria-hidden="true" />
-          <span>思考过程</span>
+          <span>协作过程</span>
         </button>
       </div>
 
@@ -1128,6 +1061,9 @@ function HomeAnswerInsights({
                 课堂协作轨迹
               </span>
               {message.trace_id ? <p>{`Trace ${message.trace_id}`}</p> : <p>当前回答没有返回可追踪 Agent 记录。</p>}
+              {traceQuery.data?.data.summary ? (
+                <p>{`耗时 ${traceQuery.data.data.summary.duration_ms ?? 0} ms，使用 ${traceQuery.data.data.summary.personalization_factors?.length ?? 0} 项可信个性化因素。`}</p>
+              ) : null}
               {traceQuery.isLoading ? <p>正在读取协作轨迹。</p> : null}
               {traceQuery.isError ? <p>Agent 轨迹读取失败，请稍后重试。</p> : null}
               {traceEvents.length > 0 ? (
@@ -1145,6 +1081,16 @@ function HomeAnswerInsights({
                   ))}
                 </ol>
               ) : null}
+            </>
+          ) : null}
+          {activePanel === "why" ? (
+            <>
+              <span className="insight-mark"><Sparkle size={16} weight="fill" aria-hidden="true" />为什么这样回答</span>
+              <p>
+                {traceQuery.data?.data.summary?.personalization_factors?.length
+                  ? `本次讲解依据课程上下文，并使用 ${traceQuery.data.data.summary.personalization_factors.length} 项可信学习因素调整讲解深度、案例和下一步；这些因素不会改变事实或引用。`
+                  : "本次主要依据问题、会话上下文和可验证来源组织回答，没有使用低可信画像改变内容。"}
+              </p>
             </>
           ) : null}
         </div>

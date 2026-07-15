@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -84,6 +85,16 @@ class FakeModelSettingsRepository:
             None,
         )
 
+    def get_vision_default_for_user(self, user_id: int) -> ModelSetting | None:
+        return next(
+            (
+                setting
+                for setting in self.settings_by_id.values()
+                if setting.user_id == user_id and setting.is_vision_default
+            ),
+            None,
+        )
+
     def list_for_user(self, user_id: int) -> list[ModelSetting]:
         return sorted(
             [setting for setting in self.settings_by_id.values() if setting.user_id == user_id],
@@ -120,6 +131,11 @@ class FakeModelSettingsRepository:
         for setting in self.settings_by_id.values():
             if setting.user_id == user_id and setting.id != except_setting_id:
                 setting.is_embedding_default = False
+
+    def unset_vision_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None:
+        for setting in self.settings_by_id.values():
+            if setting.user_id == user_id and setting.id != except_setting_id:
+                setting.is_vision_default = False
 
     def commit(self) -> None:
         self.committed = True
@@ -1044,6 +1060,32 @@ def test_model_settings_serializes_saved_vision_connection_snapshot() -> None:
 
     assert parsed["vision"].ok is True
     assert parsed["vision"].model == "vision-model"
+
+
+def test_system_vision_uses_server_fallback_without_personal_config() -> None:
+    module = load_model_settings_module()
+    service = module.ModelSettingsService(
+        repository=FakeModelSettingsRepository({}),
+        settings=make_settings(
+            system_vision_provider="xfyun_vision",
+            system_vision_base_url="wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image",
+            system_vision_model="imagev3",
+            system_vision_app_id="vision-app",
+            system_vision_api_key="vision-key",
+            system_vision_api_secret="vision-secret",
+        ),
+        provider=FakeProvider(),
+    )
+
+    user = SimpleNamespace(id=7)
+    runtime = service.resolve_vision_runtime_config(user)
+    summary = service.list_configs(user).system_summary
+
+    assert runtime.source == "system"
+    assert runtime.preset_id == "xfyun-vision"
+    assert runtime.can_use_model is True
+    assert summary.can_use_vision_model is True
+    assert summary.vision_model == "imagev3"
 
 
 def test_openai_compatible_provider_streams_chat_completion_deltas() -> None:

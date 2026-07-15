@@ -5869,6 +5869,11 @@
             "title": "Can Use Rerank Model",
             "type": "boolean"
           },
+          "can_use_vision_model": {
+            "default": false,
+            "title": "Can Use Vision Model",
+            "type": "boolean"
+          },
           "chat_model": {
             "anyOf": [
               {
@@ -6037,6 +6042,39 @@
             ],
             "title": "Source",
             "type": "string"
+          },
+          "vision_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Base Url"
+          },
+          "vision_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Model"
+          },
+          "vision_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Provider"
           }
         },
         "required": [

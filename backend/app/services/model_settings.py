@@ -325,6 +325,10 @@ class ModelSettingsSummary(BaseModel):
     can_use_model: bool
     can_use_embedding_model: bool
     can_use_rerank_model: bool = False
+    vision_model: str | None = None
+    vision_provider: str | None = None
+    vision_base_url: str | None = None
+    can_use_vision_model: bool = False
 
 
 class ModelConfigSummary(BaseModel):
@@ -919,29 +923,23 @@ class ModelSettingsService:
 
     def resolve_vision_runtime_config(self, user: User) -> RuntimeModelConfig:
         setting = self.repository.get_vision_default_for_user(user.id)
-        if setting is None:
-            return RuntimeModelConfig(
-                source="none",
-                provider="openai_compatible",
-                base_url=None,
-                api_key=None,
-                chat_model=None,
-                embedding_model=None,
-                can_use_model=False,
-            )
-        runtime = self._vision_runtime_from_user_setting(setting)
-        capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
-        if not capabilities.supports_image_input:
-            return RuntimeModelConfig(
-                source="none",
-                provider="openai_compatible",
-                base_url=None,
-                api_key=None,
-                chat_model=None,
-                embedding_model=None,
-                can_use_model=False,
-            )
-        return runtime
+        if setting is not None:
+            runtime = self._vision_runtime_from_user_setting(setting)
+            capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
+            if capabilities.supports_image_input and runtime.can_use_model:
+                return runtime
+        system_runtime = self._vision_runtime_from_system_settings()
+        if system_runtime.can_use_model:
+            return system_runtime
+        return RuntimeModelConfig(
+            source="none",
+            provider="xfyun_vision",
+            base_url=None,
+            api_key=None,
+            chat_model=None,
+            embedding_model=None,
+            can_use_model=False,
+        )
 
     def vision_completion(self, user: User, *, prompt: str, image_data_urls: list[str]) -> str:
         runtime = self.resolve_vision_runtime_config(user)
@@ -1514,6 +1512,30 @@ class ModelSettingsService:
             preset_id="spark" if "spark-api-open.xf-yun.com" in self.settings.system_model_base_url else None,
         )
 
+    def _vision_runtime_from_system_settings(self) -> RuntimeModelConfig:
+        provider = self.settings.system_vision_provider.strip() or "xfyun_vision"
+        base_url = self.settings.system_vision_base_url.strip()
+        app_id = self.settings.system_vision_app_id.strip() or self.settings.system_embedding_app_id.strip()
+        api_key = self.settings.system_vision_api_key.strip() or self.settings.system_embedding_api_key.strip()
+        api_secret = (
+            self.settings.system_vision_api_secret.strip() or self.settings.system_embedding_api_secret.strip()
+        )
+        model = self.settings.system_vision_model.strip() or "imagev3"
+        return RuntimeModelConfig(
+            source="system",
+            provider=provider,
+            base_url=base_url or None,
+            api_key=api_key or None,
+            chat_model=model,
+            embedding_model=None,
+            can_use_model=bool(
+                provider == "xfyun_vision" and base_url and app_id and api_key and api_secret and model
+            ),
+            preset_id="xfyun-vision" if provider == "xfyun_vision" else None,
+            app_id=app_id or None,
+            api_secret=api_secret or None,
+        )
+
     def _embedding_runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
         uses_separate_connection = bool(setting.embedding_base_url or setting.embedding_provider)
         provider = setting.embedding_provider or setting.provider
@@ -1712,8 +1734,28 @@ class ModelSettingsService:
         system_runtime = self._runtime_from_system_settings()
         embedding_runtime = self._embedding_runtime_from_system_settings()
         rerank_runtime = self._rerank_runtime_from_system_settings()
-        if system_runtime.base_url or system_runtime.chat_model or embedding_runtime.embedding_model or rerank_runtime.embedding_model:
-            return self._summary_from_runtimes(system_runtime, embedding_runtime, rerank_runtime, source="system")
+        vision_runtime = self._vision_runtime_from_system_settings()
+        if (
+            system_runtime.base_url
+            or system_runtime.chat_model
+            or embedding_runtime.embedding_model
+            or rerank_runtime.embedding_model
+            or vision_runtime.chat_model
+        ):
+            summary = self._summary_from_runtimes(
+                system_runtime,
+                embedding_runtime,
+                rerank_runtime,
+                source="system",
+            )
+            return summary.model_copy(
+                update={
+                    "vision_model": vision_runtime.chat_model,
+                    "vision_provider": vision_runtime.provider,
+                    "vision_base_url": vision_runtime.base_url,
+                    "can_use_vision_model": vision_runtime.can_use_model,
+                }
+            )
         return self._empty_summary()
 
     @staticmethod
@@ -1740,6 +1782,10 @@ class ModelSettingsService:
             can_use_model=False,
             can_use_embedding_model=False,
             can_use_rerank_model=False,
+            vision_model=None,
+            vision_provider=None,
+            vision_base_url=None,
+            can_use_vision_model=False,
         )
 
     def _apply_settings_payload(self, setting: ModelSetting, payload: SaveModelSettingsRequest) -> None:

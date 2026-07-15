@@ -367,7 +367,9 @@ export function SettingsPage() {
   const effectiveRerankReady = defaultRerankConfig?.can_use_rerank_model
     ?? systemSummary?.can_use_rerank_model
     ?? false;
-  const effectiveVisionReady = defaultVisionConfig?.can_use_model ?? false;
+  const effectiveVisionReady = defaultVisionConfig?.can_use_model
+    ?? systemSummary?.can_use_vision_model
+    ?? false;
   const starterModeLabel = authUser?.starterMode === "data_structures" ? "数据结构与算法开始" : "空白开始";
 
   function selectSection(section: SettingsSection) {

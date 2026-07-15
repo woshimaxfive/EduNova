@@ -737,6 +737,8 @@ PathPlanningGraph 接受 Provider 常见的单层 `output` 协议包装，解包
 
 视觉 Provider 通过项目适配层隔离。国内默认 `XfyunVisionProvider` 使用讯飞开放平台图片理解 WSS、HMAC签名和 `imagev3` domain；OpenAI-compatible视觉模型继续由原有 SDK适配器承载。两者统一只向 `VisionUnderstandingService` 返回文本，再经一次 `json-repair` 与 Pydantic九字段合同校验，供应商响应类型不进入 Graph。OCR模型不作为结构图、公式或流程语义理解的替代方案。
 
+视觉配置遵循“用户图片理解默认 → `SYSTEM_VISION_*` 服务器兜底 → 明确未配置”的优先级，与回答、向量、重排序的多配置模型一致。服务器讯飞视觉变量为空时，本地兼容模式可复用同一讯飞应用的 `SYSTEM_EMBEDDING_*` 三凭证；显式视觉变量始终优先。
+
 图片提问复用 `StorageAdapter`、上传安全、模型运行时和 tutor SSE，但保持独立边界：`ChatMessageAttachment` 只属于当前用户和会话；`VisionUnderstandingService` 通过 OpenAI-compatible `text + image_url` 适配层调用明确声明视觉能力的配置，供应商类型不进入 Graph。视觉输出先经 Pydantic 校验，回答模型只接收结构化摘要和必要课程证据，不接收原始图片。
 
 主页与课程 Graph 的 route 节点复用视觉决策，避免同一图片轮次再调用普通语义路由。文本追问仍先由语义模型产生 `referenced_turn_ids`，随后只在当前会话中查找已绑定图片并重新理解。课程切片继续是教材事实和页码来源；用户图片标为本次提问输入，网页仍是外部补充。日志和 trace 只记录图片数量、Provider 预设、置信度和历史复用状态，不记录 Base64、存储键、视觉原始响应或思维链。

@@ -2638,3 +2638,4 @@ Phase 31 不新增接口路径或数据库迁移。现有资料解析进度对�
 - `TutorMessage.attachments` 随历史、非流式响应和 SSE 完成事件返回。
 - `POST /api/v1/settings/model/configs/{config_id}/vision-default`：设置独立图片理解默认配置；连接测试 `operation=vision` 会发送程序化无版权小图。
 - 讯飞原生图片理解配置使用 `vision_app_id`、`vision_api_key`、`vision_api_secret` 写入字段；读取接口只返回是否已配置及掩码，不回传明文。连接测试必须返回完整结构化结果才判定成功。
+- 模型设置的 `system_summary` 返回 `vision_model`、`vision_provider`、`vision_base_url` 与 `can_use_vision_model`，用于表示服务器级图片理解兜底；不返回服务器凭证明文或掩码。

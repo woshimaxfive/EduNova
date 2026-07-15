@@ -3588,6 +3588,11 @@ export interface components {
              * @default false
              */
             can_use_rerank_model: boolean;
+            /**
+             * Can Use Vision Model
+             * @default false
+             */
+            can_use_vision_model: boolean;
             /** Chat Model */
             chat_model: string | null;
             /** Embedding Api Key Masked */
@@ -3641,6 +3646,12 @@ export interface components {
              * @enum {string}
              */
             source: "user" | "system" | "none";
+            /** Vision Base Url */
+            vision_base_url?: string | null;
+            /** Vision Model */
+            vision_model?: string | null;
+            /** Vision Provider */
+            vision_provider?: string | null;
         };
         /** OkResponse */
         OkResponse: {

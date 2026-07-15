@@ -96,6 +96,10 @@ export type ModelSettingsSummary = {
   can_use_model: boolean;
   can_use_embedding_model: boolean;
   can_use_rerank_model?: boolean;
+  vision_model?: string | null;
+  vision_provider?: string | null;
+  vision_base_url?: string | null;
+  can_use_vision_model?: boolean;
 };
 
 export type ModelConfigSummary = ModelSettingsSummary & {

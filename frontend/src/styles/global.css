@@ -6865,3 +6865,33 @@ a {
   border-color: rgba(8, 127, 115, 0.3);
   background: rgba(223, 244, 240, 0.74);
 }
+.next-learning-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface-strong));
+}
+
+.next-learning-action > div { min-width: 0; }
+.next-learning-action > div > span { display: block; color: var(--accent-strong); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+.next-learning-action strong { display: block; margin-top: 3px; color: var(--text); font-size: 16px; }
+.next-learning-action p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; }
+.next-learning-action > a,
+.next-learning-action > button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px; min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--text); color: var(--surface-strong); font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+.next-learning-action.waiting { border-style: dashed; }
+.next-learning-action.blocked { border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); }
+.next-learning-action.compact { padding: 12px 14px; border-radius: 14px; }
+.next-learning-action.compact p { display: none; }
+
+@media (max-width: 640px) {
+  .next-learning-action { align-items: flex-start; gap: 12px; padding: 14px; }
+  .next-learning-action > a,
+  .next-learning-action > button { min-height: 38px; padding: 0 11px; }
+  .next-learning-action > a span,
+  .next-learning-action > button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+}

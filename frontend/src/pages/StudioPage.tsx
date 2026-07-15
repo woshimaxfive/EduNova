@@ -1,4 +1,4 @@
-import { ArrowClockwise, X } from "@phosphor-icons/react";
+import { ArrowClockwise, CheckCircle, X } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import { createIdempotencyKey, createResourceGenerationJob } from "../api/aiJobs";
 import { getKnowledgePoints, listCourses } from "../api/courses";
+import { updatePathTask } from "../api/paths";
 import {
   getResourceQuality,
   listResources,
@@ -15,6 +16,7 @@ import {
   type ResourceType
 } from "../api/resources";
 import { InlineFeedback, type FeedbackTone } from "../components/feedback/InlineFeedback";
+import { NextLearningAction } from "../components/learning/NextLearningAction";
 import { StudioArtifactCanvas } from "../components/studio/StudioArtifactCanvas";
 import {
   StudioDrawer,
@@ -27,6 +29,7 @@ import { StudioRegenerateDialog, StudioVersionCompareDialog } from "../component
 import { groupResourceVersions } from "../components/studio/studioResourceVersions";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
+import { useLearningNextAction } from "../features/learning-actions/learningActions";
 import { PageFrame } from "./PageFrame";
 import "../styles/studio.css";
 
@@ -41,6 +44,7 @@ export function StudioPage() {
   const queryClient = useQueryClient();
   const initialCourseId = parsePositiveId(searchParams.get("course_id"));
   const initialResourceId = searchParams.get("resource_id");
+  const pathTaskId = searchParams.get("path_task_id");
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(initialCourseId);
   const [selectedKnowledgePointId, setSelectedKnowledgePointId] = useState<number | null>(null);
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(initialResourceId);
@@ -308,6 +312,22 @@ export function StudioPage() {
     && !isGenerating;
   const showCompactJob = resourceJob && ["queued", "running", "cancelling"].includes(resourceJob.status);
   const dataError = coursesQuery.isError || resourcesQuery.isError;
+  const nextActionQuery = useLearningNextAction(effectiveCourseId);
+  const completePathTaskMutation = useMutation({
+    mutationFn: () => updatePathTask(Number(pathTaskId), { status: "completed" }),
+    onSuccess: async () => {
+      if (effectiveCourseId) await invalidateCourseLearningLoop(queryClient, effectiveCourseId);
+      setFeedbackTone("success");
+      setFeedback("这项资源学习已标记完成，下一项任务已经更新。");
+      const next = new URLSearchParams(searchParams);
+      next.delete("path_task_id");
+      setSearchParams(next, { replace: true });
+    },
+    onError: () => {
+      setFeedbackTone("warning");
+      setFeedback("任务完成状态更新失败，资源仍可继续查看。");
+    }
+  });
 
   return (
     <>
@@ -336,6 +356,17 @@ export function StudioPage() {
           {feedback && drawerMode === null ? (
             <InlineFeedback message={feedback} tone={feedbackTone} className="studio-workspace-feedback" />
           ) : null}
+          {pathTaskId ? (
+            <section className="studio-job-strip" aria-label="路径任务">
+              <CheckCircle size={17} weight="duotone" aria-hidden="true" />
+              <div><strong>来自当前学习路径</strong><span>阅读并理解资源后，由你确认完成。</span></div>
+              <button type="button" disabled={completePathTaskMutation.isPending} onClick={() => completePathTaskMutation.mutate()}>
+                {completePathTaskMutation.isPending ? "正在更新" : "完成这项学习"}
+              </button>
+            </section>
+          ) : (
+            <NextLearningAction action={nextActionQuery.data?.data} isLoading={nextActionQuery.isPending} error={nextActionQuery.isError} compact />
+          )}
 
           <div className="studio-workspace-body">
             <StudioResourceLibrary

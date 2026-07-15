@@ -5,7 +5,6 @@ import type { PracticeSessionSummary } from "../../api/practice";
 import type { AssessmentReport } from "../../api/reports";
 import {
   buildCurrentTrendScores,
-  buildReportPrimaryAction,
   calculateCurrentTrend,
   calculateAverageMastery,
   getReportFreshness
@@ -77,19 +76,7 @@ describe("reportViewModel", () => {
     expect(buildCurrentTrendScores(report, recent)).toEqual([58, 64, 70, 76, 82]);
     expect(buildCurrentTrendScores(report, [])).toEqual([60, 70]);
   });
-
-  it("keeps empty reports honest and prioritizes the weakest point otherwise", () => {
+  it("keeps empty reports honest", () => {
     expect(getReportFreshness({ ...report, status: "empty" }, null)).toBe("empty");
-    const action = buildReportPrimaryAction({
-      freshness: "current",
-      masteryMap: {
-        course_id: "808",
-        summary: { total_count: 2, weak_count: 1, learning_count: 1, mastered_count: 0, recommended_review_count: 0, not_started_count: 0, assessed_count: 2, unassessed_count: 0, average_score: 43 },
-        points: [point("1", 54, "learning"), point("2", 31, "weak")]
-      },
-      currentPath: null
-    });
-    expect(action.type).toBe("practice");
-    expect(action.label).toContain("知识点 2");
   });
 });

@@ -342,7 +342,7 @@ describe("PracticePage", () => {
     const summary = await screen.findByRole("region", { name: "练习结果摘要" });
     expect(within(summary).getByText("66")).toBeInTheDocument();
     expect(within(summary).getByText("答对 2 / 3")).toBeInTheDocument();
-    expect(within(summary).getByRole("link", { name: "学习薄弱知识点" })).toHaveAttribute("href", "/app/courses/808?knowledge_point_id=402");
+    expect(within(summary).getByRole("button", { name: "开始新练习" })).toBeInTheDocument();
     expect(screen.getByText("把评估函数误认为随机选择。")).toBeInTheDocument();
     expect(screen.getByText("实际代价")).toBeInTheDocument();
     const wrongReview = screen.getByRole("region", { name: "q2 批改结果" });

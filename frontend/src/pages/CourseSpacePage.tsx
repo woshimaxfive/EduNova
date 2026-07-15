@@ -2,7 +2,6 @@ import {
   ArrowRight,
   ChartLineUp,
   ChatCircleText,
-  Compass,
   ListChecks
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -46,6 +45,7 @@ import { CourseClosedLoopActions, type CourseAnswerPanelKind } from "../componen
 import { CourseContentView, type CourseContentMode } from "../components/course-space/CourseContentView";
 import { CourseInlineResourcePanel } from "../components/course-space/CourseInlineResourcePanel";
 import { CourseProgressDrawer } from "../components/course-space/CourseProgressDrawer";
+import { NextLearningAction } from "../components/learning/NextLearningAction";
 import { CourseWorkspaceHeader, type CourseWorkspaceMode } from "../components/course-space/CourseWorkspaceHeader";
 import { AgentTimeline } from "../components/evidence/AgentTimeline";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
@@ -55,13 +55,13 @@ import { useResponsiveSidebarState } from "../components/layout/useResponsiveSid
 import { buildCourseLoopSummary, buildStudySteps, calculateMasteryPercent } from "../features/course-space/a3Loop";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import {
-  buildCourseLearningRecommendation,
   findBestCitationKnowledgePoint,
-  resourceDifficultyForPoint,
-  type CourseLearningRecommendation
+  resourceDifficultyForPoint
 } from "../features/course-space/courseRecommendation";
 import { type AgentTraceEvent } from "../types/api";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
+import { useLearningNextAction } from "../features/learning-actions/learningActions";
+import { type LearningNextAction } from "../api/learning";
 import "../styles/course-space.css";
 
 function retrievalSourceLabel(source?: string | null) {
@@ -191,10 +191,10 @@ function findQuestionForAssistant(messages: CourseMessage[], assistantIndex: num
 }
 
 function buildCourseStarterQuestions(
-  recommendation: CourseLearningRecommendation,
+  recommendation: LearningNextAction,
   points: ApiCourseKnowledgePoint[]
 ) {
-  const recommendedPoint = points.find((point) => point.id === recommendation.knowledgePointId) ?? points[0];
+  const recommendedPoint = points.find((point) => point.id === recommendation.knowledge_point_id) ?? points[0];
   const pointTitle = recommendedPoint?.title ?? "这门课的核心知识";
   return [
     `请结合课程资料解释${pointTitle}，并给一个具体例子`,
@@ -442,14 +442,18 @@ export function CourseSpacePage() {
     : "empty";
   const hasActivePath = Boolean(currentPath?.path) || learningState?.path_summary?.status === "active";
   const masteryPoints = masteryMapQuery.data?.data.points ?? [];
-  const recommendation = buildCourseLearningRecommendation({
-    weaknesses: weaknessItems,
-    pathTasks: currentPath?.tasks ?? [],
-    masteryPoints,
-    latestCitations: latestRagResults,
-    latestPractice,
-    latestReport
-  });
+  const nextActionQuery = useLearningNextAction(hasRealCourseId ? numericCourseId : null);
+  const recommendation: LearningNextAction = nextActionQuery.data?.data ?? {
+    kind: "study_knowledge_point",
+    status: "ready",
+    label: "从课程内容开始学习",
+    description: "先建立课程知识基础，再通过问答和练习形成学习闭环。",
+    course_id: hasRealCourseId ? String(numericCourseId) : null,
+    material_id: null,
+    knowledge_point_id: apiKnowledgePoints[0]?.id ?? null,
+    path_task_id: null,
+    resource_id: null
+  };
   const courseStarterQuestions = buildCourseStarterQuestions(recommendation, apiKnowledgePoints);
   const profileOverlay = learningState?.profile_overlay;
   const hasProfileEvidence = Boolean(
@@ -473,7 +477,7 @@ export function CourseSpacePage() {
     hasLatestReport: latestReport?.status === "ready",
     hasProfileEvidence,
     hasCompletedPractice: latestPractice?.status === "completed",
-    recommendedGoal: recommendation.reason,
+    recommendedGoal: recommendation.description,
     recommendedAction: recommendation.label
   };
   const courseLoopSummary = buildCourseLoopSummary(courseLoopInput);
@@ -692,33 +696,37 @@ export function CourseSpacePage() {
 
   function runRecommendedAction(
     messageId: string,
-    question: string | null,
     citations: RagSearchResultItem[],
-    turnRecommendation: CourseLearningRecommendation
+    turnRecommendation: LearningNextAction
   ) {
-    const knowledgePointId = turnRecommendation.kind === "generate_resource"
-      ? findBestCitationKnowledgePoint(citations)
-      : turnRecommendation.knowledgePointId;
+    const knowledgePointId = turnRecommendation.knowledge_point_id ?? findBestCitationKnowledgePoint(citations);
 
     if (turnRecommendation.kind === "confirm_weakness") {
       openCourseProgress();
       return;
     }
-    if (turnRecommendation.kind === "study_point" && knowledgePointId) {
+    if (turnRecommendation.kind === "study_knowledge_point" && knowledgePointId) {
       openKnowledgeStudy(knowledgePointId);
       return;
     }
-    if (turnRecommendation.kind === "generate_resource") {
-      setResourceContext({ question, knowledgePointId });
-      setActiveTurnDetail({ messageId, panel: "resources" });
-      return;
-    }
-    if (turnRecommendation.kind === "continue_path") {
-      navigate(buildCourseClosureHref(PATHS.path, numericCourseId, selectedCourseSessionId, messageId, knowledgePointId));
+    if (turnRecommendation.kind === "continue_path_task") {
+      if (turnRecommendation.resource_id) {
+        const params = new URLSearchParams({ course_id: String(numericCourseId), resource_id: turnRecommendation.resource_id });
+        if (turnRecommendation.path_task_id) params.set("path_task_id", turnRecommendation.path_task_id);
+        navigate(`${PATHS.studio}?${params.toString()}`);
+      } else if (knowledgePointId) {
+        openKnowledgeStudy(knowledgePointId);
+      } else {
+        navigate(buildCourseClosureHref(PATHS.path, numericCourseId, selectedCourseSessionId, messageId));
+      }
       return;
     }
     if (turnRecommendation.kind === "practice_weakness") {
       navigate(buildCourseClosureHref(PATHS.practice, numericCourseId, selectedCourseSessionId, messageId, knowledgePointId));
+      return;
+    }
+    if (turnRecommendation.kind === "generate_path") {
+      navigate(buildCourseClosureHref(PATHS.path, numericCourseId, selectedCourseSessionId, messageId, knowledgePointId));
       return;
     }
     navigate(buildCourseClosureHref(PATHS.reports, numericCourseId, selectedCourseSessionId, messageId));
@@ -910,15 +918,14 @@ export function CourseSpacePage() {
                         const question = findQuestionForAssistant(displayedCourseMessages, index);
                         const citations = message.citations ?? [];
                         const citationKnowledgePointId = findBestCitationKnowledgePoint(citations);
-                        const turnRecommendation = recommendation.kind === "generate_resource"
-                          ? { ...recommendation, knowledgePointId: citationKnowledgePointId }
-                          : recommendation;
+                        const isLatestAssistant = !displayedCourseMessages.slice(index + 1).some((item) => item.role === "assistant");
+                        const turnKnowledgePointId = recommendation.knowledge_point_id ?? citationKnowledgePointId;
                         const practiceHref = buildCourseClosureHref(
                           PATHS.practice,
                           numericCourseId,
                           selectedCourseSessionId,
                           message.id,
-                          turnRecommendation.knowledgePointId
+                          turnKnowledgePointId
                         );
                         const reportHref = buildCourseClosureHref(
                           PATHS.reports,
@@ -931,7 +938,7 @@ export function CourseSpacePage() {
                           numericCourseId,
                           selectedCourseSessionId,
                           message.id,
-                          turnRecommendation.knowledgePointId
+                          turnKnowledgePointId
                         );
                         const effectiveTraceId = message.traceId
                           ?? (message.id === latestAssistantWithRetrieval?.id ? latestAgentTraceId : null);
@@ -979,7 +986,7 @@ export function CourseSpacePage() {
                             content={sanitizeCourseAnswerContent(message.content)}
                             actions={isPersisted && message.content.trim() ? (
                               <CourseClosedLoopActions
-                                recommendation={turnRecommendation}
+                                recommendation={isLatestAssistant ? recommendation : null}
                                 citationCount={citations.length}
                                 resourceCount={generatedResources.length}
                                 hasActivePath={hasActivePath}
@@ -988,7 +995,7 @@ export function CourseSpacePage() {
                                 isSpeaking={speakingMessageId === message.id}
                                 practiceHref={practiceHref}
                                 reportHref={reportHref}
-                                onRecommendedAction={() => runRecommendedAction(message.id, question, citations, turnRecommendation)}
+                                onRecommendedAction={() => runRecommendedAction(message.id, citations, recommendation)}
                                 onRead={() => toggleReadMessage(message)}
                                 onOpenCitations={() => toggleTurnPanel(message.id, "citations", question, citations)}
                                 onOpenResources={() => toggleTurnPanel(message.id, "resources", question, citations)}
@@ -1015,30 +1022,29 @@ export function CourseSpacePage() {
                   )}
 
                   {!hasDisplayedCourseMessages && hasRealCourseId ? (
-                    <nav className="course-action-links" aria-label="课程行动入口">
-                      <Link to={`${PATHS.path}?course_id=${numericCourseId}`}>
-                        <Compass size={17} weight="duotone" aria-hidden="true" />
-                        <span>查看学习路径</span>
-                      </Link>
-                      <a
-                        href="#course-question-input"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          courseQuestionInputRef.current?.focus();
-                        }}
-                      >
-                        <ChatCircleText size={17} weight="duotone" aria-hidden="true" />
-                        <span>开始提问</span>
-                      </a>
-                      <Link to={`${PATHS.practice}?course_id=${numericCourseId}`}>
-                        <ListChecks size={17} weight="duotone" aria-hidden="true" />
-                        <span>开始练习</span>
-                      </Link>
-                      <Link to={`${PATHS.reports}?course_id=${numericCourseId}`}>
-                        <ChartLineUp size={17} weight="duotone" aria-hidden="true" />
-                        <span>查看学习报告</span>
-                      </Link>
-                    </nav>
+                    <>
+                      <NextLearningAction action={recommendation} compact />
+                      <nav className="course-action-links" aria-label="课程辅助入口">
+                        <a
+                          href="#course-question-input"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            courseQuestionInputRef.current?.focus();
+                          }}
+                        >
+                          <ChatCircleText size={17} weight="duotone" aria-hidden="true" />
+                          <span>开始提问</span>
+                        </a>
+                        <Link to={`${PATHS.practice}?course_id=${numericCourseId}`}>
+                          <ListChecks size={17} weight="duotone" aria-hidden="true" />
+                          <span>自由练习</span>
+                        </Link>
+                        <Link to={`${PATHS.reports}?course_id=${numericCourseId}`}>
+                          <ChartLineUp size={17} weight="duotone" aria-hidden="true" />
+                          <span>查看报告</span>
+                        </Link>
+                      </nav>
+                    </>
                   ) : null}
                   <div className="course-chat-end" ref={courseChatEndRef} aria-hidden="true" />
                 </div>

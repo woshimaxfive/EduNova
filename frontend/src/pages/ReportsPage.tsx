@@ -10,24 +10,22 @@ import {
   type ExportFormat,
   type ExportJob
 } from "../api/exports";
-import { getCurrentPath } from "../api/paths";
 import { listRecentCompletedPracticeSessions } from "../api/practice";
 import { generateReport, getLatestReport } from "../api/reports";
-import { PATHS, buildCoursePath } from "../app/routePaths";
+import { PATHS } from "../app/routePaths";
 import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
-import { buildCourseReturnHref } from "../components/course-space/courseReturn";
 import { ReportDashboard } from "../components/reports/ReportDashboard";
 import { ReportDrawer, type ReportDetailTab, type ReportDrawerMode } from "../components/reports/ReportDrawer";
 import { ReportWorkspaceToolbar } from "../components/reports/ReportWorkspaceToolbar";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import {
   buildCurrentTrendScores,
-  buildReportPrimaryAction,
   calculateAverageMastery,
   calculateCurrentTrend,
   getReportFreshness,
   sortMasteryPoints
 } from "../features/reports/reportViewModel";
+import { useLearningNextAction } from "../features/learning-actions/learningActions";
 import { PageFrame } from "./PageFrame";
 import "../styles/reports.css";
 
@@ -101,11 +99,7 @@ export function ReportsPage() {
     queryFn: () => listRecentCompletedPracticeSessions(numericCourseId, 5),
     enabled: canUseCourse
   });
-  const currentPathQuery = useQuery({
-    queryKey: courseLoopQueryKeys.currentPath(numericCourseId),
-    queryFn: () => getCurrentPath(numericCourseId),
-    enabled: canUseCourse
-  });
+  const nextActionQuery = useLearningNextAction(canUseCourse ? numericCourseId : null);
 
   const generateMutation = useMutation({
     mutationFn: () => generateReport({ course_id: numericCourseId }),
@@ -142,7 +136,6 @@ export function ReportsPage() {
   const masteryMap = masteryQuery.data?.data;
   const recentPractices = recentPracticesQuery.data?.data;
   const latestPractice = recentPractices?.[0] ?? null;
-  const currentPath = currentPathQuery.data?.data;
   const freshness = latestReportQuery.isError
     ? "unavailable"
     : report?.status === "ready" && recentPracticesQuery.isError
@@ -154,9 +147,9 @@ export function ReportsPage() {
   const weakestPoints = sortMasteryPoints(masteryMap?.points ?? [])
     .filter((point) => point.status === "weak" || point.status === "recommended_review")
     .slice(0, 5);
-  const primaryAction = buildReportPrimaryAction({ freshness, masteryMap, currentPath });
+  const primaryAction = nextActionQuery.data?.data ?? null;
   const readError = latestReportQuery.isError ? "学习报告读取失败，请稍后重试。" : "";
-  const dataWarning = [masteryQuery, recentPracticesQuery, currentPathQuery].some((query) => query.isError)
+  const dataWarning = [masteryQuery, recentPracticesQuery, nextActionQuery].some((query) => query.isError)
     ? "部分实时学习状态暂未更新，已保留其余可用数据。"
     : "";
   const isLoading = canUseCourse && [latestReportQuery, masteryQuery, recentPracticesQuery].some((query) => query.isPending);
@@ -175,14 +168,6 @@ export function ReportsPage() {
     Object.entries(extras).forEach(([key, value]) => params.set(key, value));
     return `${path}?${params.toString()}`;
   }
-
-  const primaryActionHref = primaryAction.type === "practice"
-    ? buildContextHref(PATHS.practice, { course_id: effectiveCourseId, knowledge_point_id: primaryAction.knowledgePoint.id, new: "1" })
-    : primaryAction.type === "path"
-      ? buildContextHref(PATHS.path, { course_id: effectiveCourseId })
-      : primaryAction.type === "course"
-        ? buildCourseReturnHref(searchParams, numericCourseId) || buildCoursePath(effectiveCourseId)
-        : null;
 
   function handleCourseChange(courseId: string) {
     const next = new URLSearchParams(searchParams);
@@ -227,7 +212,6 @@ export function ReportsPage() {
               trendLabel={currentTrend.label}
               weakestPoints={weakestPoints}
               primaryAction={primaryAction}
-              primaryActionHref={primaryActionHref}
               buildPracticeHref={(knowledgePointId) => buildContextHref(PATHS.practice, {
                 course_id: effectiveCourseId,
                 knowledge_point_id: knowledgePointId,

@@ -12,12 +12,12 @@ import {
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import { type CourseLearningRecommendation } from "../../features/course-space/courseRecommendation";
+import { type LearningNextAction } from "../../api/learning";
 
 export type CourseAnswerPanelKind = "citations" | "resources" | "path" | "thinking";
 
 type CourseClosedLoopActionsProps = {
-  recommendation: CourseLearningRecommendation;
+  recommendation: LearningNextAction | null;
   citationCount: number;
   resourceCount: number;
   hasActivePath: boolean;
@@ -55,10 +55,12 @@ export function CourseClosedLoopActions({
 
   return (
     <section className="course-closed-loop-actions" aria-label="课程闭环行动">
-      <button className="course-recommended-action" type="button" title={recommendation.reason} onClick={onRecommendedAction}>
-        <Lightning size={17} weight="fill" aria-hidden="true" />
-        <span>{recommendation.label}</span>
-      </button>
+      {recommendation ? (
+        <button className="course-recommended-action" type="button" title={recommendation.description} onClick={onRecommendedAction}>
+          <Lightning size={17} weight="fill" aria-hidden="true" />
+          <span>{recommendation.label}</span>
+        </button>
+      ) : null}
       <button
         className="course-more-action"
         type="button"

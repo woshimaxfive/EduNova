@@ -1,7 +1,9 @@
 import { ArrowRight, ChartLineUp, CheckCircle, Target } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 
-import { type PracticeNextAction, difficultyLabel } from "../../features/practice/practiceViewModel";
+import { type LearningNextAction } from "../../api/learning";
+import { learningActionHref } from "../../features/learning-actions/learningActions";
+import { difficultyLabel } from "../../features/practice/practiceViewModel";
 
 type PracticeResultSummaryProps = {
   score: number | null;
@@ -9,7 +11,7 @@ type PracticeResultSummaryProps = {
   correctCount: number;
   totalCount: number;
   effectiveDifficulty: string;
-  nextAction: PracticeNextAction;
+  nextAction: LearningNextAction | null;
   onStartNew: () => void;
   onOpenResults: () => void;
   onRegrade: () => void;
@@ -36,14 +38,14 @@ export function PracticeResultSummary({
       ? "基础已经建立，先补齐错题暴露的概念再继续。"
       : "当前知识点仍需巩固，建议先回到课程内容完成针对性复习。";
 
-  const primaryAction = nextAction.href ? (
-    <Link className="practice-result-primary" to={nextAction.href}>
+  const primaryAction = nextAction ? (
+    <Link className="practice-result-primary" to={learningActionHref(nextAction)}>
       {nextAction.label}
       <ArrowRight size={17} weight="bold" aria-hidden="true" />
     </Link>
   ) : (
     <button className="practice-result-primary" type="button" onClick={onStartNew}>
-      {nextAction.label}
+      开始新练习
       <ArrowRight size={17} weight="bold" aria-hidden="true" />
     </button>
   );

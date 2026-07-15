@@ -15,7 +15,6 @@ import {
 } from "../api/practice";
 import { listResources } from "../api/resources";
 import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
-import { buildCourseReturnHref } from "../components/course-space/courseReturn";
 import { PracticeDrawer, type PracticeDrawerMode } from "../components/practice/PracticeDrawer";
 import { PracticeQuestionCanvas } from "../components/practice/PracticeQuestionCanvas";
 import { PracticeQuestionRail } from "../components/practice/PracticeQuestionRail";
@@ -24,11 +23,10 @@ import { PracticeToolbar } from "../components/practice/PracticeToolbar";
 import { ConfirmDialog } from "../components/primitives/Dialog";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import {
-  buildPracticeNextAction,
-  firstWrongKnowledgePoint,
   isAnswered,
   practiceResultSummary
 } from "../features/practice/practiceViewModel";
+import { useLearningNextAction } from "../features/learning-actions/learningActions";
 import { PageFrame } from "./PageFrame";
 import "../styles/practice.css";
 
@@ -131,13 +129,7 @@ export function PracticePage() {
   const answeredCount = (activeSession?.questions.length ?? 0) - unansweredQuestions.length;
   const completed = activeSession?.status === "completed";
   const resultSummary = practiceResultSummary(activeSession?.questions ?? [], activeSession?.answers ?? []);
-  const courseReturnHref = buildCourseReturnHref(searchParams, canUseCourse ? numericCourseId : null);
-  const nextAction = buildPracticeNextAction({
-    courseId: numericCourseId,
-    wrongKnowledgePointId: firstWrongKnowledgePoint(activeSession?.questions ?? [], activeSession?.answers ?? []),
-    pathReplanned: activeSession?.closure_update?.path_update_status === "replanned",
-    courseReturnHref
-  });
+  const nextActionQuery = useLearningNextAction(canUseCourse ? numericCourseId : null);
   const recommendedResourceIdSet = new Set(activeSession?.closure_update?.recommended_resource_ids ?? []);
   const courseResources = Array.isArray(resourcesQuery.data?.data) ? resourcesQuery.data.data : [];
   const recommendedResources = courseResources.filter((resource) => recommendedResourceIdSet.has(resource.id));
@@ -357,7 +349,7 @@ export function PracticePage() {
                   correctCount={resultSummary.correctCount}
                   totalCount={resultSummary.totalCount}
                   effectiveDifficulty={activeSession.effective_difficulty}
-                  nextAction={nextAction}
+                  nextAction={nextActionQuery.data?.data ?? null}
                   onStartNew={startNewPractice}
                   onOpenResults={() => setDrawerMode("results")}
                   onRegrade={() => regradeMutation.mutate()}

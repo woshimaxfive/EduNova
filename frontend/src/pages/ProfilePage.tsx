@@ -19,6 +19,7 @@ import {
   type ProfileLocalInteraction
 } from "../components/profile/ProfileEventStream";
 import { ProfileWorkspaceToolbar } from "../components/profile/ProfileWorkspaceToolbar";
+import { NextLearningAction } from "../components/learning/NextLearningAction";
 import {
   buildProfileDimensions,
   buildProfileUpdateReceipt,
@@ -27,6 +28,7 @@ import {
   type ProfileDimensionKey
 } from "../features/profile/profileViewModel";
 import { type ApiEnvelope } from "../types/api";
+import { invalidateLearningNextActions, useLearningNextAction } from "../features/learning-actions/learningActions";
 import { PageFrame } from "./PageFrame";
 import "../styles/profile.css";
 
@@ -84,6 +86,7 @@ export function ProfilePage() {
     staleTime: 30_000
   });
   const profile = profileQuery.data?.data ?? EMPTY_PROFILE;
+  const nextActionQuery = useLearningNextAction();
   const profileEvents = useMemo(() => eventsQuery.data?.data ?? [], [eventsQuery.data?.data]);
   const dimensions = useMemo(() => buildProfileDimensions(profile, profileEvents), [profile, profileEvents]);
   const selectedDimension = selectedKey ? dimensions.find((item) => item.key === selectedKey) ?? null : null;
@@ -124,6 +127,7 @@ export function ProfilePage() {
       void queryClient.invalidateQueries({ queryKey: ["resources", "course"] });
       void queryClient.invalidateQueries({ queryKey: ["paths", "current"] });
       void queryClient.invalidateQueries({ queryKey: ["reports", "latest"] });
+      void invalidateLearningNextActions(queryClient);
       setLocalInteraction({
         message: variables.message,
         reply: response.data.reply,
@@ -180,6 +184,9 @@ export function ProfilePage() {
             updatedAt={profile.updated_at}
             onFocusComposer={() => composerRef.current?.focus()}
           />
+          {localInteraction ? (
+            <NextLearningAction action={nextActionQuery.data?.data} isLoading={nextActionQuery.isPending} error={nextActionQuery.isError} compact />
+          ) : null}
           <div className="profile-workspace-body">
             <ProfileDimensionRail
               dimensions={dimensions}

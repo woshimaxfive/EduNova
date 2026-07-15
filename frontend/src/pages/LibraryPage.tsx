@@ -33,7 +33,9 @@ import { LibraryDrawer } from "../components/library/LibraryDrawer";
 import { LibraryFileTable } from "../components/library/LibraryFileTable";
 import { isComparableMaterial } from "../components/library/libraryMaterialState";
 import { LibraryWorkspaceToolbar, type LibraryFilter } from "../components/library/LibraryWorkspaceToolbar";
+import { NextLearningAction } from "../components/learning/NextLearningAction";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
+import { invalidateLearningNextActions, useLearningNextAction } from "../features/learning-actions/learningActions";
 import { PageFrame } from "./PageFrame";
 import "../styles/library.css";
 
@@ -146,6 +148,7 @@ export function LibraryPage() {
 
   const materialsQuery = useQuery({ queryKey: ["materials", "list"], queryFn: () => listMaterials(), staleTime: 30_000 });
   const coursesQuery = useQuery({ queryKey: ["courses", "list"], queryFn: () => listCourses(), staleTime: 30_000 });
+  const nextActionQuery = useLearningNextAction();
   const files = useMemo(() => asArray<MaterialListItem>(materialsQuery.data?.data), [materialsQuery.data?.data]);
   const courses = useMemo(() => asArray<ApiCourseSummary>(coursesQuery.data?.data), [coursesQuery.data?.data]);
   const courseTitles = useMemo(() => new Map(courses.map((course) => [course.id, course.title])), [courses]);
@@ -178,6 +181,19 @@ export function LibraryPage() {
       ? sharedCourseIds[0]
       : "";
   const recentComparisonCourseId = compareCourseId || courses[0]?.id || "";
+
+  function handleNextAction(action: NonNullable<typeof nextActionQuery.data>["data"]) {
+    if (action.kind === "upload_material") {
+      uploadInputRef.current?.click();
+      return;
+    }
+    if (action.kind === "create_course" && action.material_id) {
+      openCourseDialog([action.material_id]);
+      return;
+    }
+    const material = files.find((item) => item.id === action.material_id);
+    if (material) openMaterial(material);
+  }
   const latestComparisonQuery = useQuery({
     queryKey: ["materials", "comparison", "latest", parsePositiveId(recentComparisonCourseId)],
     queryFn: () => getLatestMaterialComparison(parsePositiveId(recentComparisonCourseId) ?? 0),
@@ -224,7 +240,8 @@ export function LibraryPage() {
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
         queryClient.invalidateQueries({ queryKey: ["courses", "list"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] }),
+        invalidateLearningNextActions(queryClient)
       ]);
       navigate(buildCoursePath(String(courseId)));
     }
@@ -303,7 +320,8 @@ export function LibraryPage() {
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] }),
+        invalidateLearningNextActions(queryClient)
       ]);
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
@@ -349,7 +367,8 @@ export function LibraryPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["materials", "detail", selectedMaterialId] }),
         queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] })
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] }),
+        invalidateLearningNextActions(queryClient)
       ]);
       setOutlineFeedback("目录已确认，这份资料现在可以用于问答、对比和智能建课。");
     } catch (error) {
@@ -472,6 +491,13 @@ export function LibraryPage() {
             onGenerateCourse={() => openCourseDialog()}
             onStartCompare={() => startCompare()}
             onOpenRecentComparison={openRecentComparison}
+          />
+          <NextLearningAction
+            action={nextActionQuery.data?.data}
+            isLoading={nextActionQuery.isPending}
+            error={nextActionQuery.isError}
+            compact
+            onAction={handleNextAction}
           />
           <InlineFeedback message={libraryFeedback} tone="warning" className="library-workspace-feedback" />
           {drawerMode === "compare" && compareView === "setup" ? (

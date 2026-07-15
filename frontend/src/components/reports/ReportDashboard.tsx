@@ -4,7 +4,9 @@ import { Link } from "react-router-dom";
 import type { CourseMasteryMap, CourseMasteryPoint } from "../../api/courses";
 import type { PracticeSessionSummary } from "../../api/practice";
 import type { AssessmentReport } from "../../api/reports";
-import type { ReportFreshness, ReportPrimaryAction } from "../../features/reports/reportViewModel";
+import type { ReportFreshness } from "../../features/reports/reportViewModel";
+import type { LearningNextAction } from "../../api/learning";
+import { learningActionHref } from "../../features/learning-actions/learningActions";
 import { MasteryOverviewChart, PracticeTrendChart } from "../visualization/LearningCharts";
 
 type ReportDashboardProps = {
@@ -17,8 +19,7 @@ type ReportDashboardProps = {
   trendDelta: number | null;
   trendLabel: string;
   weakestPoints: CourseMasteryPoint[];
-  primaryAction: ReportPrimaryAction;
-  primaryActionHref: string | null;
+  primaryAction: LearningNextAction | null;
   buildPracticeHref: (knowledgePointId: string) => string;
   dataWarning: string;
   reportError: string;
@@ -42,7 +43,6 @@ export function ReportDashboard({
   trendLabel,
   weakestPoints,
   primaryAction,
-  primaryActionHref,
   buildPracticeHref,
   dataWarning,
   reportError,
@@ -191,12 +191,12 @@ export function ReportDashboard({
 
         <aside className="report-next-action" aria-label="建议下一步">
           <span>建议下一步</span>
-          <h2>{primaryAction.label}</h2>
-          <p>{primaryAction.description}</p>
-          {primaryAction.type === "update_report" ? (
+          <h2>{primaryAction?.label ?? "继续积累学习证据"}</h2>
+          <p>{primaryAction?.description ?? "完成课程学习或练习后，这里会给出明确的下一步。"}</p>
+          {primaryAction?.kind === "update_report" ? (
             <button type="button" onClick={onGenerate}>更新学习报告<ArrowRight size={17} weight="bold" /></button>
-          ) : primaryActionHref ? (
-            <Link to={primaryActionHref}>{primaryAction.label}<ArrowRight size={17} weight="bold" /></Link>
+          ) : primaryAction ? (
+            <Link to={learningActionHref(primaryAction)}>{primaryAction.label}<ArrowRight size={17} weight="bold" /></Link>
           ) : null}
         </aside>
       </section>

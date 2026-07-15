@@ -1192,9 +1192,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(await screen.findByRole("dialog", { name: "学习进度" })).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "学习进度" })).toHaveTextContent("课程画像");
     expect(screen.getByRole("dialog", { name: "学习进度" })).toHaveTextContent("总画像 + 本课程实时状态");
-    expect(
-      screen.getByText(/先确认问答或练习识别出的薄弱点/),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "下一步学习", hidden: true })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "A3 学习步骤" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "课程对话空间", hidden: true })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "进入你的学习空间" })).not.toBeInTheDocument();
@@ -1404,12 +1402,12 @@ describe("CourseSpacePage course tutor sessions", () => {
   it("links practice and reports entries with the current course preselected", async () => {
     renderCoursePage();
 
-    const actionLinks = await screen.findByRole("navigation", { name: "课程行动入口" });
-    expect(within(actionLinks).getByRole("link", { name: "开始练习" })).toHaveAttribute(
+    const actionLinks = await screen.findByRole("navigation", { name: "课程辅助入口" });
+    expect(within(actionLinks).getByRole("link", { name: "自由练习" })).toHaveAttribute(
       "href",
       `${PATHS.practice}?course_id=808`
     );
-    expect(within(actionLinks).getByRole("link", { name: "查看学习报告" })).toHaveAttribute(
+    expect(within(actionLinks).getByRole("link", { name: "查看报告" })).toHaveAttribute(
       "href",
       `${PATHS.reports}?course_id=808`
     );
@@ -1510,8 +1508,6 @@ describe("CourseSpacePage course tutor sessions", () => {
       expect(screen.getByLabelText("课程状态")).toHaveTextContent("掌握度 77%");
     });
     const drawer = screen.getByRole("dialog", { name: "学习进度" });
-    expect(within(drawer).getByText("通过自适应练习验证薄弱点是否已经掌握。")).toBeInTheDocument();
-    expect(within(drawer).getByText("针对练习：启发式搜索")).toBeInTheDocument();
     expect(within(drawer).getByText(/1 份资料 · 2 个知识点 · 0 条引用 · 1 个资源/)).toBeInTheDocument();
     expect(within(drawer).getByText("启发式搜索")).toBeInTheDocument();
 

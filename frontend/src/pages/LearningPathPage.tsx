@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { getMasteryMap, listCourses } from "../api/courses";
 import { generatePath, getCurrentPath, updatePathTask, type LearningPathTask, type PathTaskStatus } from "../api/paths";
@@ -16,6 +16,7 @@ import {
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import { PageFrame } from "./PageFrame";
 import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
+import { buildCoursePath, PATHS } from "../app/routePaths";
 import "../styles/learning-path.css";
 
 function parsePositiveId(value: string | null) {
@@ -26,6 +27,7 @@ function parsePositiveId(value: string | null) {
 
 export function LearningPathPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryCourseId = parsePositiveId(searchParams.get("course_id"));
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(queryCourseId);
@@ -83,10 +85,19 @@ export function LearningPathPage() {
     onError: () => setFeedback("学习路径生成失败，请稍后重试。")
   });
   const updateTaskMutation = useMutation({
-    mutationFn: ({ taskId, status }: { taskId: number; status: PathTaskStatus }) => updatePathTask(taskId, { status }),
-    onSuccess: () => {
+    mutationFn: ({ task, status }: { task: LearningPathTask; status: PathTaskStatus }) => updatePathTask(Number(task.id), { status }),
+    onSuccess: (_result, variables) => {
       setFeedback(null);
       if (effectiveCourseId) void invalidateCourseLearningLoop(queryClient, effectiveCourseId);
+      if (variables.status !== "doing" || !effectiveCourseId) return;
+      const resourceId = variables.task.recommended_resources[0]?.id ?? variables.task.recommended_resource_ids[0];
+      if (variables.task.task_type === "resource" && resourceId) {
+        navigate(`${PATHS.studio}?course_id=${effectiveCourseId}&resource_id=${resourceId}&path_task_id=${variables.task.id}`);
+        return;
+      }
+      const params = new URLSearchParams({ path_task_id: variables.task.id });
+      if (variables.task.knowledge_point_id) params.set("knowledge_point_id", variables.task.knowledge_point_id);
+      navigate(`${buildCoursePath(effectiveCourseId)}?${params.toString()}`);
     },
     onError: () => setFeedback("任务状态更新失败，请稍后重试。")
   });
@@ -108,9 +119,8 @@ export function LearningPathPage() {
   }
 
   function updateTask(task: LearningPathTask, status: PathTaskStatus) {
-    const taskId = parsePositiveId(task.id);
-    if (!taskId || updateTaskMutation.isPending) return;
-    updateTaskMutation.mutate({ taskId, status });
+    if (!parsePositiveId(task.id) || updateTaskMutation.isPending) return;
+    updateTaskMutation.mutate({ task, status });
   }
 
   const readError = coursesQuery.isError || currentPathQuery.isError

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PracticeQuestion } from "../../api/practice";
-import { buildPracticeNextAction, difficultyLabel, isAnswered, practiceResultSummary } from "./practiceViewModel";
+import { difficultyLabel, isAnswered, practiceResultSummary } from "./practiceViewModel";
 
 describe("practice view model", () => {
   it("derives labels and answer state", () => {
@@ -21,16 +21,5 @@ describe("practice view model", () => {
       { question_id: "q2", answer_text: "b", is_correct: false, feedback: { score: 0, grading_status: "deterministic", message: "", matched_concepts: [], missing_concepts: [], confidence: 1, matched_keywords: [], missing_keywords: [], explanation: "" } }
     ]);
     expect(result).toEqual({ correctCount: 1, totalCount: 2, wrongQuestionIds: ["q2"] });
-  });
-
-  it("uses the fixed next-action priority", () => {
-    expect(buildPracticeNextAction({ courseId: 8, wrongKnowledgePointId: "42", pathReplanned: true, courseReturnHref: "/course" })).toEqual({
-      kind: "knowledge",
-      label: "学习薄弱知识点",
-      href: "/app/courses/8?knowledge_point_id=42"
-    });
-    expect(buildPracticeNextAction({ courseId: 8, wrongKnowledgePointId: null, pathReplanned: true, courseReturnHref: "/course" }).kind).toBe("path");
-    expect(buildPracticeNextAction({ courseId: 8, wrongKnowledgePointId: null, pathReplanned: false, courseReturnHref: "/course" }).kind).toBe("course");
-    expect(buildPracticeNextAction({ courseId: 8, wrongKnowledgePointId: null, pathReplanned: false, courseReturnHref: null }).kind).toBe("new_practice");
   });
 });

@@ -1,4 +1,4 @@
-import { ArrowClockwise, CircleNotch, Stop } from "@phosphor-icons/react";
+import { ArrowClockwise, CircleNotch, Stop, X } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 
 import { type AiJob } from "../../api/aiJobs";
@@ -9,6 +9,7 @@ type Props = {
   compact?: boolean;
   onCancel?: () => void;
   onRetry?: () => void;
+  onDismiss?: () => void;
 };
 
 const workflowLabels = {
@@ -18,7 +19,19 @@ const workflowLabels = {
   material_ingestion: "资料解析"
 } as const;
 
-export function AiJobProgress({ job, compact = false, onCancel, onRetry }: Props) {
+function resultHref(job: AiJob) {
+  if (job.workflow === "course_builder" && job.result.course_id) return `/app/courses/${job.result.course_id}`;
+  if (job.workflow === "resource_generation" && job.course_id) {
+    const resourceIds = Array.isArray(job.result.resource_ids) ? job.result.resource_ids : [];
+    const resource = resourceIds[0] ? `&resource_id=${resourceIds[0]}` : "";
+    return `${PATHS.studio}?course_id=${job.course_id}${resource}`;
+  }
+  if (job.workflow === "material_ingestion" && job.request.material_id) return `${PATHS.library}?material_id=${job.request.material_id}`;
+  return null;
+}
+
+export function AiJobProgress({ job, compact = false, onCancel, onRetry, onDismiss }: Props) {
+  const completedHref = job.status === "completed" ? resultHref(job) : null;
   return (
     <section className={`ai-job-progress${compact ? " ai-job-progress--compact" : ""}`} aria-live="polite">
       <div className="ai-job-progress__heading">
@@ -40,6 +53,7 @@ export function AiJobProgress({ job, compact = false, onCancel, onRetry }: Props
       ) : null}
       {job.error_message ? <p className="ai-job-progress__error">{job.error_message}</p> : null}
       <div className="ai-job-progress__actions">
+        {completedHref ? <Link className="icon-text-button" to={completedHref}>查看结果</Link> : null}
         {job.error_code === "authentication_failed" || job.error_code === "not_configured" ? (
           <Link className="icon-text-button" to={PATHS.settings}>检查模型设置</Link>
         ) : null}
@@ -55,6 +69,7 @@ export function AiJobProgress({ job, compact = false, onCancel, onRetry }: Props
             <span>重试</span>
           </button>
         ) : null}
+        {job.status === "completed" && onDismiss ? <button type="button" className="icon-text-button" onClick={onDismiss}><X size={14} /><span>收起</span></button> : null}
       </div>
     </section>
   );

@@ -434,10 +434,10 @@ describe("student interaction affordances", () => {
       </MemoryRouter>
     );
 
-    const courseActions = screen.getByRole("navigation", { name: "课程行动入口" });
+    const courseActions = screen.getByRole("navigation", { name: "课程辅助入口" });
     const expectedActions = [
-      ["开始练习", `${PATHS.practice}?course_id=808`],
-      ["查看学习报告", `${PATHS.reports}?course_id=808`]
+      ["自由练习", `${PATHS.practice}?course_id=808`],
+      ["查看报告", `${PATHS.reports}?course_id=808`]
     ] as const;
 
     for (const [label, path] of expectedActions) {

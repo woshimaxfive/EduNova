@@ -35,12 +35,14 @@ import { AiJobProgress } from "../components/feedback/AiJobProgress";
 import { ModalFrame } from "../components/primitives/Dialog";
 import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
 import { HomeCourseDrawer } from "../components/home/HomeCourseDrawer";
+import { NextLearningAction } from "../components/learning/NextLearningAction";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { isCompactWorkspaceViewport, useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
 import { useAuthStore } from "../features/auth/authStore";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import { useHomeConversationHistory } from "../features/home/useHomeConversationHistory";
+import { invalidateLearningNextActions, learningActionHref, useLearningNextAction } from "../features/learning-actions/learningActions";
 
 type LibraryMaterial = {
   id: string;
@@ -173,6 +175,7 @@ export function LearningSpacePage() {
     staleTime: 30_000
   });
   const dashboardSummary = dashboardQuery.data?.data;
+  const nextActionQuery = useLearningNextAction();
   const historyQuery = useHomeConversationHistory("", Boolean(token));
   const historySearchQuery = useHomeConversationHistory(historySearch, Boolean(token && historySearch));
   const allMaterialsQuery = useQuery({
@@ -214,6 +217,14 @@ export function LearningSpacePage() {
     [conversationMaterialIds, materials]
   );
 
+  function handleNextLearningAction(action: NonNullable<typeof nextActionQuery.data>["data"]) {
+    if (action.kind === "upload_material") {
+      uploadInputRef.current?.click();
+      return;
+    }
+    navigate(learningActionHref(action));
+  }
+
   useEffect(() => {
     if (courseJobId) return;
     const restored = jobs.find((job) => job.workflow === "course_builder" && ["queued", "running", "cancelling", "failed"].includes(job.status));
@@ -241,6 +252,7 @@ export function LearningSpacePage() {
       setIsCourseDialogOpen(false);
       setIsLibraryOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      void invalidateLearningNextActions(queryClient);
       navigate(buildCoursePath(String(courseId)));
     }
   }, [courseJob, navigate, queryClient]);
@@ -298,6 +310,7 @@ export function LearningSpacePage() {
         trackJob(await getAiJob(response.data.ingestion_job_id));
       }
       await queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      await invalidateLearningNextActions(queryClient);
       setComposerFeedback({ message: "资料已上传，正在后台识别目录和正文切片。完成后可到资料库检查并确认。", tone: "success" });
       event.target.value = "";
     } catch (error) {
@@ -881,6 +894,15 @@ export function LearningSpacePage() {
             ) : null}
             <InlineFeedback message={composerFeedback?.message ?? null} tone={composerFeedback?.tone} className="composer-inline-feedback" />
           </section>
+
+          {!hasHomeThread ? (
+            <NextLearningAction
+              action={nextActionQuery.data?.data}
+              isLoading={nextActionQuery.isPending}
+              error={nextActionQuery.isError}
+              onAction={handleNextLearningAction}
+            />
+          ) : null}
 
           {!hasHomeThread && dashboardQuery.isLoading ? (
             <section className="recent-course-strip empty" aria-label="最近学习">

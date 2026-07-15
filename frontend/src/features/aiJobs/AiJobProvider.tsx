@@ -4,6 +4,7 @@ import { createContext, type PropsWithChildren, useCallback, useContext, useEffe
 import { cancelAiJob, listAiJobs, retryAiJob, streamAiJob, type AiJob } from "../../api/aiJobs";
 import { useAuthStore } from "../auth/authStore";
 import { invalidateCourseLearningLoop } from "../course-space/courseLoopQueries";
+import { invalidateLearningNextActions } from "../learning-actions/learningActions";
 
 type AiJobContextValue = {
   jobs: AiJob[];
@@ -11,6 +12,7 @@ type AiJobContextValue = {
   getJob: (jobId: string | null | undefined) => AiJob | undefined;
   cancelJob: (jobId: string) => Promise<AiJob>;
   retryJob: (jobId: string) => Promise<AiJob>;
+  dismissJob: (jobId: string) => void;
 };
 
 const AiJobContext = createContext<AiJobContextValue | null>(null);
@@ -41,6 +43,11 @@ export function AiJobProvider({ children }: PropsWithChildren) {
         if (terminalStatuses.has(snapshot.status)) {
           streams.current.delete(snapshot.job_id);
           void queryClient.invalidateQueries({ queryKey: ["ai-jobs"] });
+          void invalidateLearningNextActions(queryClient);
+          if (snapshot.status === "completed" && snapshot.workflow === "course_builder") {
+            void queryClient.invalidateQueries({ queryKey: ["courses"] });
+            void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+          }
           if (
             snapshot.status === "completed"
             && snapshot.workflow === "resource_generation"
@@ -127,14 +134,23 @@ export function AiJobProvider({ children }: PropsWithChildren) {
     subscribe(job);
     return job;
   }, [subscribe]);
+  const dismissJob = useCallback((jobId: string) => {
+    hiddenJobIds.current.add(jobId);
+    setJobMap((current) => {
+      const next = { ...current };
+      delete next[jobId];
+      return next;
+    });
+  }, []);
 
   const value = useMemo<AiJobContextValue>(() => ({
     jobs: Object.values(jobMap).sort((left, right) => right.updated_at.localeCompare(left.updated_at)),
     trackJob: subscribe,
     getJob: (jobId) => (jobId ? jobMap[jobId] : undefined),
     cancelJob,
-    retryJob
-  }), [cancelJob, jobMap, retryJob, subscribe]);
+    retryJob,
+    dismissJob
+  }), [cancelJob, dismissJob, jobMap, retryJob, subscribe]);
 
   return <AiJobContext.Provider value={value}>{children}</AiJobContext.Provider>;
 }
@@ -166,7 +182,12 @@ export function useAiJobs() {
     trackJob: localTrackJob,
     getJob: (jobId) => (jobId ? localJobMap[jobId] : undefined),
     cancelJob: localCancelJob,
-    retryJob: localRetryJob
+    retryJob: localRetryJob,
+    dismissJob: (jobId) => setLocalJobMap((current) => {
+      const next = { ...current };
+      delete next[jobId];
+      return next;
+    })
   }), [localCancelJob, localJobMap, localRetryJob, localTrackJob]);
   return context ?? fallback;
 }

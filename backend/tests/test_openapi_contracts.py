@@ -3,7 +3,7 @@ from __future__ import annotations
 from backend.app.main import app
 
 
-STREAM_OR_DOWNLOAD_SUFFIXES = ("/events", "/messages/stream", "/download")
+STREAM_OR_DOWNLOAD_SUFFIXES = ("/events", "/messages/stream", "/download", "/content")
 
 
 def test_all_json_operations_have_bounded_response_schemas() -> None:
@@ -17,8 +17,14 @@ def test_all_json_operations_have_bounded_response_schemas() -> None:
             if path.endswith(STREAM_OR_DOWNLOAD_SUFFIXES):
                 continue
             responses = operation.get("responses", {})
-            success = responses.get("200") or responses.get("202")
-            schema = (success or {}).get("content", {}).get("application/json", {}).get("schema")
+            success = next(
+                (response for code, response in responses.items() if str(code).isdigit() and 200 <= int(code) < 300),
+                None,
+            )
+            content = (success or {}).get("content", {})
+            if content and "application/json" not in content:
+                continue
+            schema = content.get("application/json", {}).get("schema")
             key = f"{method.upper()} {path}"
             if not schema:
                 missing.append(key)

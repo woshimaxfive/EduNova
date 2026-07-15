@@ -83,6 +83,7 @@ services:
       CODE_VERIFIER_URL: http://code-verifier:8090
       CODE_VERIFIER_TIMEOUT_SECONDS: ${CODE_VERIFIER_TIMEOUT_SECONDS:-40}
       STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      CHAT_ATTACHMENT_STORAGE_DIR: ${CHAT_ATTACHMENT_STORAGE_DIR:-var/uploads/chat-attachments}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
       S3_BUCKET: ${S3_BUCKET:-}
       S3_REGION: ${S3_REGION:-us-east-1}
@@ -98,6 +99,7 @@ services:
     volumes:
       - export_data:/app/storage/exports
       - material_data:/app/var/uploads/materials
+      - chat_attachment_data:/app/var/uploads/chat-attachments
     depends_on:
       postgres:
         condition: service_healthy
@@ -147,6 +149,7 @@ services:
       EXPORT_DIR: ${EXPORT_DIR:-storage/exports}
       EXPORT_QUEUE_NAME: ${EXPORT_QUEUE_NAME:-edunova_exports}
       STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      CHAT_ATTACHMENT_STORAGE_DIR: ${CHAT_ATTACHMENT_STORAGE_DIR:-var/uploads/chat-attachments}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
       S3_BUCKET: ${S3_BUCKET:-}
       S3_REGION: ${S3_REGION:-us-east-1}
@@ -226,6 +229,7 @@ services:
     command: ["sh", "-c", "rq worker $${AI_JOB_QUEUE_NAME:-edunova_ai} --url $${REDIS_URL}"]
     volumes:
       - material_data:/app/var/uploads/materials
+      - chat_attachment_data:/app/var/uploads/chat-attachments
     depends_on:
       backend:
         condition: service_healthy
@@ -326,6 +330,7 @@ volumes:
   redis_data:
   export_data:
   material_data:
+  chat_attachment_data:
   clamav_data:
 
 networks:

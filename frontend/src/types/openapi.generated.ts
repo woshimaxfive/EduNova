@@ -1288,6 +1288,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/model/configs/{config_id}/vision-default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Vision Default Model Config */
+        post: operations["set_vision_default_model_config_api_v1_settings_model_configs__config_id__vision_default_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/model/embedding/reindex-jobs": {
         parameters: {
             query?: never;
@@ -1357,6 +1374,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tutor/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Tutor Attachment */
+        delete: operations["delete_tutor_attachment_api_v1_tutor_attachments__attachment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tutor/attachments/{attachment_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Tutor Attachment Content */
+        get: operations["get_tutor_attachment_content_api_v1_tutor_attachments__attachment_id__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tutor/sessions": {
         parameters: {
             query?: never;
@@ -1409,6 +1460,23 @@ export interface paths {
         head?: never;
         /** Rename Session */
         patch: operations["rename_session_api_v1_tutor_sessions__session_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/tutor/sessions/{session_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Tutor Attachment */
+        post: operations["upload_tutor_attachment_api_v1_tutor_sessions__session_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/tutor/sessions/{session_id}/messages": {
@@ -1812,6 +1880,12 @@ export interface components {
             /** Trace Id */
             trace_id: string;
         };
+        /** ApiEnvelope[TutorImageAttachment] */
+        ApiEnvelope_TutorImageAttachment_: {
+            data: components["schemas"]["TutorImageAttachment"];
+            /** Trace Id */
+            trace_id: string;
+        };
         /** ApiEnvelope[TutorSessionDetail] */
         ApiEnvelope_TutorSessionDetail_: {
             data: components["schemas"]["TutorSessionDetail"];
@@ -1979,6 +2053,11 @@ export interface components {
         Body_upload_material_api_v1_materials_upload_post: {
             /** Course Id */
             course_id?: number | null;
+            /** File */
+            file: string;
+        };
+        /** Body_upload_tutor_attachment_api_v1_tutor_sessions__session_id__attachments_post */
+        Body_upload_tutor_attachment_api_v1_tutor_sessions__session_id__attachments_post: {
             /** File */
             file: string;
         };
@@ -3350,6 +3429,11 @@ export interface components {
              * @default false
              */
             is_rerank_default: boolean;
+            /**
+             * Is Vision Default
+             * @default false
+             */
+            is_vision_default: boolean;
             /** Last Test Message */
             last_test_message: string | null;
             /** Last Test Ok */
@@ -3386,7 +3470,7 @@ export interface components {
              * @default chat
              * @enum {string}
              */
-            operation: "chat" | "embedding" | "rerank";
+            operation: "chat" | "embedding" | "rerank" | "vision";
         };
         /** ModelConnectionTestResponse */
         ModelConnectionTestResponse: {
@@ -3409,7 +3493,7 @@ export interface components {
              * @default chat
              * @enum {string}
              */
-            operation: "chat" | "embedding" | "rerank";
+            operation: "chat" | "embedding" | "rerank" | "vision";
             /**
              * Retryable
              * @default false
@@ -3442,7 +3526,7 @@ export interface components {
              * Operation
              * @enum {string}
              */
-            operation: "chat" | "embedding" | "rerank";
+            operation: "chat" | "embedding" | "rerank" | "vision";
             /**
              * Retryable
              * @default false
@@ -3466,6 +3550,8 @@ export interface components {
             default_embedding_config_id: number | null;
             /** Default Rerank Config Id */
             default_rerank_config_id?: number | null;
+            /** Default Vision Config Id */
+            default_vision_config_id?: number | null;
             system_summary: components["schemas"]["ModelSettingsSummary"];
         };
         /** ModelSettingsSummary */
@@ -4136,6 +4222,11 @@ export interface components {
              * @default false
              */
             make_rerank_default: boolean;
+            /**
+             * Make Vision Default
+             * @default false
+             */
+            make_vision_default: boolean;
             /** Preset Id */
             preset_id?: string | null;
             /**
@@ -4201,6 +4292,8 @@ export interface components {
         };
         /** SendTutorMessageRequest */
         SendTutorMessageRequest: {
+            /** Attachment Ids */
+            attachment_ids?: number[];
             /**
              * Deep Thinking
              * @deprecated
@@ -4208,7 +4301,10 @@ export interface components {
              * @default false
              */
             deep_thinking: boolean;
-            /** Message */
+            /**
+             * Message
+             * @default
+             */
             message: string;
             /** Selected Material Ids */
             selected_material_ids?: number[] | null;
@@ -4284,8 +4380,36 @@ export interface components {
             /** Answers */
             answers: components["schemas"]["SubmitPracticeAnswerItem"][];
         };
+        /** TutorImageAttachment */
+        TutorImageAttachment: {
+            /** Content Url */
+            content_url: string | null;
+            /** Created At */
+            created_at: string;
+            /** Filename */
+            filename: string;
+            /** Height */
+            height: number;
+            /** Id */
+            id: string;
+            /** Message Id */
+            message_id: string | null;
+            /** Mime Type */
+            mime_type: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "bound" | "deleted";
+            /** Width */
+            width: number;
+        };
         /** TutorMessage */
         TutorMessage: {
+            /** Attachments */
+            attachments?: components["schemas"]["TutorImageAttachment"][];
             /** Citation Json */
             citation_json: unknown[];
             /** Content */
@@ -4423,6 +4547,8 @@ export interface components {
             make_embedding_default?: boolean | null;
             /** Make Rerank Default */
             make_rerank_default?: boolean | null;
+            /** Make Vision Default */
+            make_vision_default?: boolean | null;
             /** Preset Id */
             preset_id?: string | null;
             /** Provider */
@@ -12971,6 +13097,111 @@ export interface operations {
             };
         };
     };
+    set_vision_default_model_config_api_v1_settings_model_configs__config_id__vision_default_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                config_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_ModelSettingsListResponse_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
     create_embedding_reindex_job_api_v1_settings_model_embedding_reindex_jobs_post: {
         parameters: {
             query?: never;
@@ -13414,6 +13645,216 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_ClearConversationMemoryResponse_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    delete_tutor_attachment_api_v1_tutor_attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                attachment_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_TutorImageAttachment_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_tutor_attachment_content_api_v1_tutor_attachments__attachment_id__content_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                attachment_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Bad Request */
@@ -14053,6 +14494,115 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_TutorSessionSummary_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    upload_tutor_attachment_api_v1_tutor_sessions__session_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_tutor_attachment_api_v1_tutor_sessions__session_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_TutorImageAttachment_"];
                 };
             };
             /** @description Bad Request */

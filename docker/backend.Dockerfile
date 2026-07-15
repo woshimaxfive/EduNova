@@ -41,7 +41,7 @@ RUN HF_ENDPOINT="$HF_ENDPOINT" docling-tools models download \
 
 COPY backend /app/backend
 
-RUN mkdir -p /app/storage/exports /app/var/uploads/materials \
+RUN mkdir -p /app/storage/exports /app/var/uploads/materials /app/var/uploads/chat-attachments \
   && chown -R edunova:edunova /app/storage /app/var
 
 ENV HF_HUB_OFFLINE=1
@@ -55,7 +55,7 @@ FROM base AS runtime
 COPY alembic.ini /app/alembic.ini
 COPY backend /app/backend
 
-RUN mkdir -p /app/storage/exports /app/var/uploads/materials \
+RUN mkdir -p /app/storage/exports /app/var/uploads/materials /app/var/uploads/chat-attachments \
   && chown -R edunova:edunova /app/storage /app/var
 
 USER edunova

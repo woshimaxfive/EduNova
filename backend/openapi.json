@@ -1087,6 +1087,23 @@
         "title": "ApiEnvelope[StudentProfileResponse]",
         "type": "object"
       },
+      "ApiEnvelope_TutorImageAttachment_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TutorImageAttachment"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "trace_id"
+        ],
+        "title": "ApiEnvelope[TutorImageAttachment]",
+        "type": "object"
+      },
       "ApiEnvelope_TutorSessionDetail_": {
         "properties": {
           "data": {
@@ -1542,6 +1559,20 @@
           "file"
         ],
         "title": "Body_upload_material_api_v1_materials_upload_post",
+        "type": "object"
+      },
+      "Body_upload_tutor_attachment_api_v1_tutor_sessions__session_id__attachments_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_tutor_attachment_api_v1_tutor_sessions__session_id__attachments_post",
         "type": "object"
       },
       "ChangePasswordRequest": {
@@ -5341,6 +5372,11 @@
             "title": "Is Rerank Default",
             "type": "boolean"
           },
+          "is_vision_default": {
+            "default": false,
+            "title": "Is Vision Default",
+            "type": "boolean"
+          },
           "last_test_message": {
             "anyOf": [
               {
@@ -5491,7 +5527,8 @@
             "enum": [
               "chat",
               "embedding",
-              "rerank"
+              "rerank",
+              "vision"
             ],
             "title": "Operation",
             "type": "string"
@@ -5570,7 +5607,8 @@
             "enum": [
               "chat",
               "embedding",
-              "rerank"
+              "rerank",
+              "vision"
             ],
             "title": "Operation",
             "type": "string"
@@ -5652,7 +5690,8 @@
             "enum": [
               "chat",
               "embedding",
-              "rerank"
+              "rerank",
+              "vision"
             ],
             "title": "Operation",
             "type": "string"
@@ -5730,6 +5769,17 @@
               }
             ],
             "title": "Default Rerank Config Id"
+          },
+          "default_vision_config_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Vision Config Id"
           },
           "system_summary": {
             "$ref": "#/components/schemas/ModelSettingsSummary"
@@ -7584,6 +7634,11 @@
             "title": "Make Rerank Default",
             "type": "boolean"
           },
+          "make_vision_default": {
+            "default": false,
+            "title": "Make Vision Default",
+            "type": "boolean"
+          },
           "preset_id": {
             "anyOf": [
               {
@@ -7898,6 +7953,13 @@
       },
       "SendTutorMessageRequest": {
         "properties": {
+          "attachment_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Attachment Ids",
+            "type": "array"
+          },
           "deep_thinking": {
             "default": false,
             "deprecated": true,
@@ -7906,8 +7968,8 @@
             "type": "boolean"
           },
           "message": {
+            "default": "",
             "maxLength": 8000,
-            "minLength": 1,
             "title": "Message",
             "type": "string"
           },
@@ -7933,9 +7995,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "message"
-        ],
         "title": "SendTutorMessageRequest",
         "type": "object"
       },
@@ -8113,8 +8172,92 @@
         "title": "SubmitPracticeAnswersRequest",
         "type": "object"
       },
+      "TutorImageAttachment": {
+        "properties": {
+          "content_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Url"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "bound",
+              "deleted"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "message_id",
+          "filename",
+          "mime_type",
+          "size_bytes",
+          "width",
+          "height",
+          "status",
+          "content_url",
+          "created_at"
+        ],
+        "title": "TutorImageAttachment",
+        "type": "object"
+      },
       "TutorMessage": {
         "properties": {
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/TutorImageAttachment"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
           "citation_json": {
             "items": {},
             "title": "Citation Json",
@@ -8602,6 +8745,17 @@
               }
             ],
             "title": "Make Rerank Default"
+          },
+          "make_vision_default": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Make Vision Default"
           },
           "preset_id": {
             "anyOf": [
@@ -20080,6 +20234,144 @@
         ]
       }
     },
+    "/api/v1/settings/model/configs/{config_id}/vision-default": {
+      "post": {
+        "operationId": "set_vision_default_model_config_api_v1_settings_model_configs__config_id__vision_default_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "config_id",
+            "required": true,
+            "schema": {
+              "title": "Config Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_ModelSettingsListResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Set Vision Default Model Config",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/api/v1/settings/model/embedding/reindex-jobs": {
       "post": {
         "operationId": "create_embedding_reindex_job_api_v1_settings_model_embedding_reindex_jobs_post",
@@ -20773,6 +21065,280 @@
         "summary": "Clear Conversation Memory",
         "tags": [
           "settings"
+        ]
+      }
+    },
+    "/api/v1/tutor/attachments/{attachment_id}": {
+      "delete": {
+        "operationId": "delete_tutor_attachment_api_v1_tutor_attachments__attachment_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "required": true,
+            "schema": {
+              "title": "Attachment Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_TutorImageAttachment_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Delete Tutor Attachment",
+        "tags": [
+          "tutor"
+        ]
+      }
+    },
+    "/api/v1/tutor/attachments/{attachment_id}/content": {
+      "get": {
+        "operationId": "get_tutor_attachment_content_api_v1_tutor_attachments__attachment_id__content_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "required": true,
+            "schema": {
+              "title": "Attachment Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Tutor Attachment Content",
+        "tags": [
+          "tutor"
         ]
       }
     },
@@ -21646,6 +22212,154 @@
           }
         },
         "summary": "Rename Session",
+        "tags": [
+          "tutor"
+        ]
+      }
+    },
+    "/api/v1/tutor/sessions/{session_id}/attachments": {
+      "post": {
+        "operationId": "upload_tutor_attachment_api_v1_tutor_sessions__session_id__attachments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_tutor_attachment_api_v1_tutor_sessions__session_id__attachments_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_TutorImageAttachment_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Upload Tutor Attachment",
         "tags": [
           "tutor"
         ]

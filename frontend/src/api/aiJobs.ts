@@ -54,7 +54,8 @@ export const AI_JOB_ENDPOINTS = {
   retry: (jobId: string) => `/ai-jobs/${jobId}/retry`,
   courseBuilder: "/courses/from-materials/jobs",
   resourceGeneration: "/resources/generation-jobs",
-  pathPlanning: "/paths/generation-jobs"
+  pathPlanning: "/paths/generation-jobs",
+  pathTaskResources: (taskId: number) => `/paths/tasks/${taskId}/resource-jobs`
 } as const;
 
 export function createIdempotencyKey(prefix: string) {
@@ -78,6 +79,13 @@ export async function createResourceGenerationJob(payload: GenerateResourcesRequ
 
 export async function createPathPlanningJob(payload: GeneratePathRequest, idempotencyKey: string) {
   const response = await apiClient.post<ApiEnvelope<AiJob>>(AI_JOB_ENDPOINTS.pathPlanning, payload, {
+    headers: { "Idempotency-Key": idempotencyKey }
+  });
+  return response.data.data;
+}
+
+export async function createPathTaskResourceJob(taskId: number, idempotencyKey: string) {
+  const response = await apiClient.post<ApiEnvelope<AiJob>>(AI_JOB_ENDPOINTS.pathTaskResources(taskId), undefined, {
     headers: { "Idempotency-Key": idempotencyKey }
   });
   return response.data.data;

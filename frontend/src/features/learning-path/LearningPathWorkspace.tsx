@@ -11,11 +11,14 @@ import {
   X
 } from "@phosphor-icons/react";
 import { type ChangeEvent, type ReactNode } from "react";
+import { useState } from "react";
 
+import type { AiJob } from "../../api/aiJobs";
 import type { CourseMasteryPoint, CourseMasteryStatus } from "../../api/courses";
 import type { LearningPathDetail, LearningPathTask, PathTaskStatus } from "../../api/paths";
 import { AgentTraceDisclosure } from "../../components/evidence/AgentTraceDisclosure";
 import { ModalFrame } from "../../components/primitives/Dialog";
+import { ConfirmDialog } from "../../components/primitives/Dialog";
 import { InlineFeedback } from "../../components/feedback/InlineFeedback";
 import { MasteryOverviewChart } from "../../components/visualization/LearningCharts";
 
@@ -167,7 +170,11 @@ type PathTaskCanvasProps = {
   isPending: boolean;
   errorMessage: string | null;
   mutationPending: boolean;
+  resourceJobs: AiJob[];
   onGenerate: () => void;
+  onGenerateResources: (task: LearningPathTask) => void;
+  onOpenLearning: (task: LearningPathTask) => void;
+  onCancelResourceJob: (jobId: string) => void;
   onUpdateTask: (task: LearningPathTask, status: PathTaskStatus) => void;
 };
 
@@ -178,9 +185,14 @@ export function PathTaskCanvas({
   isPending,
   errorMessage,
   mutationPending,
+  resourceJobs,
   onGenerate,
+  onGenerateResources,
+  onOpenLearning,
+  onCancelResourceJob,
   onUpdateTask
 }: PathTaskCanvasProps) {
+  const [pendingComplete, setPendingComplete] = useState<LearningPathTask | null>(null);
   const currentTask = tasks.find((task) => task.status === "doing") ?? tasks.find((task) => task.status === "todo") ?? null;
   const filteredTasks = tasks.filter((task) => filter === "all" || task.status === filter);
   const visibleTasks = filter === "all" && currentTask
@@ -230,7 +242,17 @@ export function PathTaskCanvas({
         <ol className="path-task-list">
           {visibleTasks.map((task, index) => {
             const isCurrent = task.id === currentTask?.id && task.status !== "completed";
-            const nextStatus: PathTaskStatus | null = task.status === "todo" ? "doing" : task.status === "doing" ? "completed" : null;
+            const bundle = task.learning_bundle;
+            const itemCount = bundle?.items.length ?? 0;
+            const readyCount = bundle?.ready_count ?? bundle?.items.filter((item) => item.resource_id).length ?? 0;
+            const completedResourceCount = bundle?.completed_count ?? bundle?.items.filter((item) => item.learning_status === "completed").length ?? 0;
+            const missingCount = Math.max(0, itemCount - readyCount);
+            const allResourcesCompleted = itemCount > 0 && completedResourceCount === itemCount;
+            const resourceJob = resourceJobs.find((job) => (
+              Number(job.request.path_task_id) === Number(task.id)
+              && ["queued", "running", "cancelling", "failed"].includes(job.status)
+            ));
+            const resourceJobActive = Boolean(resourceJob && ["queued", "running", "cancelling"].includes(resourceJob.status));
             return (
               <li key={task.id} className={isCurrent ? "current" : task.status}>
                 <div className="path-task-marker">
@@ -245,8 +267,8 @@ export function PathTaskCanvas({
                   <h3>{task.title}</h3>
                   <p>{task.reason}</p>
                   {task.learning_bundle?.items.length ? (
-                    <section className="path-learning-bundle" aria-label="个性化学习包">
-                      <strong>推荐学习包</strong>
+                    <section className="path-learning-bundle" aria-label="本节学习安排">
+                      <strong>本节学习安排</strong>
                       <span>{task.learning_bundle.generation_mode === "model_enhanced" ? "个性化规划" : "安全默认组合"} · 难度 {difficultyLabel(task.learning_bundle.difficulty)}</span>
                       <p>{task.learning_bundle.rationale}</p>
                       {task.learning_bundle.used_profile_factor_codes.length > 0 ? (
@@ -255,10 +277,30 @@ export function PathTaskCanvas({
                       <div>
                         {task.learning_bundle.items.map((item, itemIndex) => (
                           <span key={`${item.resource_type}-${itemIndex}`}>
-                            {item.resource_type} · {item.role}{item.resource_id ? " · 已就绪" : " · 待生成"}
+                            {item.resource_type} · {item.role}
+                            {item.resource_id
+                              ? item.learning_status === "completed"
+                                ? " · 已完成"
+                                : item.learning_status === "in_progress"
+                                  ? " · 学习中"
+                                  : " · 已就绪"
+                              : " · 待生成"}
                           </span>
                         ))}
                       </div>
+                      <small>本节已完成 {completedResourceCount}/{itemCount} 项</small>
+                      {resourceJobActive && resourceJob ? (
+                        <div className="path-bundle-progress" role="status">
+                          <span>{resourceJob.label} · {resourceJob.progress_percent}%</span>
+                          <progress max="100" value={resourceJob.progress_percent}>{resourceJob.progress_percent}%</progress>
+                          {resourceJob.can_cancel ? (
+                            <button type="button" onClick={() => onCancelResourceJob(resourceJob.job_id)}>取消</button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {resourceJob?.status === "failed" ? (
+                        <small className="path-bundle-warning">{resourceJob.error_message ?? "部分资源生成失败，可重新补齐。"}</small>
+                      ) : null}
                     </section>
                   ) : null}
                   {task.recommended_resources.length > 0 ? (
@@ -269,17 +311,62 @@ export function PathTaskCanvas({
                     </div>
                   ) : null}
                 </article>
-                {nextStatus ? (
-                  <button className={task.status === "doing" ? "primary-action" : "soft-button"} type="button" disabled={mutationPending} onClick={() => onUpdateTask(task, nextStatus)}>
-                    {task.status === "doing" ? <CheckCircle size={17} weight="duotone" aria-hidden="true" /> : <Play size={17} weight="duotone" aria-hidden="true" />}
-                    {task.status === "doing" ? "标记完成" : "开始学习"}
+                {task.status === "todo" ? (
+                  <button className="soft-button" type="button" disabled={mutationPending} onClick={() => onUpdateTask(task, "doing")}>
+                    <Play size={17} weight="duotone" aria-hidden="true" />开始学习
                   </button>
+                ) : task.status === "doing" ? (
+                  <div className="path-task-actions">
+                    {missingCount > 0 ? (
+                      <button
+                        className={readyCount === 0 ? "primary-action" : "soft-button"}
+                        type="button"
+                        disabled={mutationPending || resourceJobActive}
+                        onClick={() => onGenerateResources(task)}
+                      >
+                        <Sparkle size={17} weight="duotone" aria-hidden="true" />
+                        {resourceJobActive ? "正在生成" : readyCount === 0 ? "生成本节学习资源" : "补齐未生成资源"}
+                      </button>
+                    ) : null}
+                    {readyCount > 0 ? (
+                      <button className={missingCount === 0 ? "primary-action" : "soft-button"} type="button" onClick={() => onOpenLearning(task)}>
+                        <Play size={17} weight="duotone" aria-hidden="true" />
+                        {completedResourceCount > 0 ? "继续本节学习" : "开始本节学习"}
+                      </button>
+                    ) : null}
+                    <button
+                      className="soft-button"
+                      type="button"
+                      disabled={mutationPending}
+                      onClick={() => {
+                        if (allResourcesCompleted || itemCount === 0) onUpdateTask(task, "completed");
+                        else setPendingComplete(task);
+                      }}
+                    >
+                      <CheckCircle size={17} weight="duotone" aria-hidden="true" />完成本节学习
+                    </button>
+                  </div>
                 ) : <span className="path-task-complete"><CheckCircle size={17} weight="fill" aria-hidden="true" />已完成</span>}
               </li>
             );
           })}
         </ol>
       )}
+      <ConfirmDialog
+        open={pendingComplete !== null}
+        title="仍有学习资源未完成"
+        description={pendingComplete?.learning_bundle
+          ? `本节还有 ${Math.max(0, pendingComplete.learning_bundle.items.length - pendingComplete.learning_bundle.completed_count)} 项资源未完成，仍要跳过并完成本节吗？`
+          : "本节仍有资源未完成，仍要跳过并完成本节吗？"}
+        confirmLabel="仍然完成本节"
+        cancelLabel="继续学习"
+        layerClassName="path-confirm-layer"
+        onOpenChange={(open) => { if (!open) setPendingComplete(null); }}
+        onConfirm={() => {
+          if (pendingComplete) onUpdateTask(pendingComplete, "completed");
+          setPendingComplete(null);
+        }}
+      />
     </section>
   );
 }

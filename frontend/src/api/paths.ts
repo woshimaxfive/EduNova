@@ -7,7 +7,8 @@ export const PATH_ENDPOINTS = {
   generate: "/paths/generate",
   generationJobs: "/paths/generation-jobs",
   current: "/paths/current",
-  updateTask: (taskId: number) => `/paths/tasks/${taskId}`
+  updateTask: (taskId: number) => `/paths/tasks/${taskId}`,
+  taskResourceJobs: (taskId: number) => `/paths/tasks/${taskId}/resource-jobs`
 } as const;
 
 export type PathTaskStatus = "todo" | "doing" | "completed";
@@ -55,7 +56,10 @@ export type LearningPathTask = {
       role: string;
       resource_id: string | null;
       status: "available" | "recommended" | "generating" | "failed" | string;
+      learning_status: "not_started" | "in_progress" | "completed";
     }>;
+    ready_count: number;
+    completed_count: number;
   } | null;
   status: PathTaskStatus;
   created_at: string;

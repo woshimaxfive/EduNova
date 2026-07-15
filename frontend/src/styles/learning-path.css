@@ -385,6 +385,18 @@
   font-weight: 800;
 }
 
+.path-task-actions {
+  display: grid;
+  align-self: center;
+  gap: 7px;
+  min-width: 172px;
+}
+
+.path-task-actions button {
+  justify-content: center;
+  white-space: nowrap;
+}
+
 .path-workspace-state {
   display: grid;
   min-height: 560px;
@@ -715,6 +727,83 @@
   font-size: 0.75rem;
 }
 
+.path-learning-bundle .path-bundle-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.path-bundle-progress progress {
+  width: 100%;
+  height: 6px;
+}
+
+.path-bundle-progress button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  border: 0;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: var(--font-caption);
+}
+
+.path-bundle-warning {
+  color: var(--warning-text, #8a5b12);
+}
+
+.path-confirm-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(18, 28, 32, 0.28);
+}
+
+.path-confirm-layer > section {
+  width: min(430px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 24px;
+  background: var(--surface-strong, #fff);
+  box-shadow: 0 22px 60px rgba(16, 24, 32, 0.2);
+}
+
+.path-confirm-layer h2 {
+  margin: 0 0 8px;
+  color: var(--text-strong);
+  font-size: 1.05rem;
+}
+
+.path-confirm-layer p {
+  margin: 0 0 20px;
+  color: var(--text-muted);
+  line-height: 1.65;
+}
+
+.path-confirm-layer section > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.path-confirm-layer button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 14px;
+  color: var(--text-strong);
+  background: var(--surface-muted);
+}
+
+.path-confirm-layer button:last-child {
+  border-color: var(--accent);
+  color: #fff;
+  background: var(--accent);
+}
+
 @media (max-width: 760px) {
   .path-workspace-toolbar {
     position: static;
@@ -784,9 +873,14 @@
 
   .path-task-list > li > button,
   .path-task-list > li > a,
-  .path-task-complete {
+  .path-task-complete,
+  .path-task-actions {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .path-task-actions {
+    width: 100%;
   }
 
   .path-drawer {

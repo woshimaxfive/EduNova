@@ -9,6 +9,7 @@ import { PATHS } from "../app/routePaths";
 import { AGENT_ENDPOINTS } from "../api/agents";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
+import { PATH_ENDPOINTS } from "../api/paths";
 import { RESOURCE_ENDPOINTS, type GeneratedResource, type ResourceQualityScore } from "../api/resources";
 import { StudioPage } from "./StudioPage";
 import { makeCompletedAiJob } from "../test/aiJobs";
@@ -712,5 +713,77 @@ describe("StudioPage resource generation", () => {
     expect(await within(generateDrawer).findByRole("alert")).toHaveTextContent("资源生成失败，请稍后重试。");
     expect(within(generateDrawer).getByRole("textbox", { name: "生成目标" })).toHaveValue("保留我的生成目标");
     expect(screen.getByRole("main", { name: "成果画布", hidden: true })).toHaveTextContent("这门课还没有学习资源");
+  });
+
+  it("opens path resources in bundle order and advances only after resource completion", async () => {
+    const user = userEvent.setup();
+    let docCompleted = false;
+    const resources = [
+      makeResource({ id: "901", title: "第一项讲解", created_at: "2026-07-05T14:00:00Z" }),
+      makeResource({ id: "902", resource_type: "quiz", title: "第二项练习", created_at: "2026-07-06T14:00:00Z" })
+    ];
+
+    apiClient.defaults.adapter = async (config) => {
+      const url = config.url ?? "";
+      const method = (config.method ?? "get").toLowerCase();
+      if (url === COURSE_ENDPOINTS.list) {
+        return { data: { data: [{ id: "808", title: "AI 搜索复习", description: "", subject: "人工智能", source_type: "uploaded", status: "ready", progress_percent: 0, material_count: 1, knowledge_point_count: 1, chunk_count: 3 }], page: 1, page_size: 1, total: 1 }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === COURSE_ENDPOINTS.knowledgePoints(808)) {
+        return { data: { data: [{ id: "401", title: "启发式搜索", summary: "", chapter: "搜索问题", order_index: 1, difficulty: "基础" }] }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === RESOURCE_ENDPOINTS.list) {
+        return { data: { data: resources, page: 1, page_size: 2, total: 2 }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === PATH_ENDPOINTS.current) {
+        return {
+          data: { data: {
+            course_id: "808", status: "active", message: "当前学习路径进行中。",
+            path: { id: "71", course_id: "808", title: "路径", goal: "掌握搜索", status: "active", plan_json: {}, created_at: "2026-07-05T09:00:00Z", updated_at: "2026-07-05T09:00:00Z" },
+            tasks: [{
+              id: "61", path_id: "71", course_id: "808", knowledge_point_id: "401", title: "本节任务", task_type: "learn", reason: "按顺序学习",
+              recommended_resource_ids: ["901", "902"], recommended_resources: [], status: "doing", created_at: "2026-07-05T09:00:00Z", updated_at: "2026-07-05T09:00:00Z",
+              learning_bundle: {
+                strategy: "先讲后练", teaching_strategy: "worked_example", difficulty: "medium", used_profile_factor_codes: [], generation_mode: "model_enhanced", rationale: "按序完成",
+                ready_count: 2, completed_count: docCompleted ? 1 : 0,
+                items: [
+                  { resource_type: "doc", role: "讲解", resource_id: "901", status: "ready", learning_status: docCompleted ? "completed" : "not_started" },
+                  { resource_type: "quiz", role: "练习", resource_id: "902", status: "ready", learning_status: "not_started" }
+                ]
+              }
+            }],
+            evidence_summary: { knowledge_point_count: 1, confirmed_or_reviewing_weakness_count: 0, pending_weakness_count: 0, resource_count: 2, basis: [] }
+          } },
+          status: 200, statusText: "OK", headers: {}, config
+        };
+      }
+      if (url === RESOURCE_ENDPOINTS.learningState(901)) {
+        return { data: { data: { resource_id: "901", opened: true, started: true, completed: docCompleted, progress_percent: docCompleted ? 100 : null, feedback: null, updated_at: null } }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === RESOURCE_ENDPOINTS.learningState(902)) {
+        return { data: { data: { resource_id: "902", opened: false, started: false, completed: false, progress_percent: null, feedback: null, updated_at: null } }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === RESOURCE_ENDPOINTS.interactions(901) && method === "post") {
+        const payload = parsePayload(config.data) as { event_type?: string };
+        if (payload.event_type === "completed") docCompleted = true;
+        return { data: { data: { resource_id: "901", opened: true, started: true, completed: docCompleted, progress_percent: docCompleted ? 100 : null, feedback: null, updated_at: null } }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === RESOURCE_ENDPOINTS.interactions(902) && method === "post") {
+        return { data: { data: { resource_id: "902", opened: true, started: false, completed: false, progress_percent: null, feedback: null, updated_at: null } }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      return { data: { data: {} }, status: 200, statusText: "OK", headers: {}, config };
+    };
+
+    renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808&path_task_id=61`);
+
+    expect(await screen.findByRole("heading", { name: "第一项讲解" })).toBeInTheDocument();
+    expect(screen.getByText("本节已完成 0/2 项")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "学习下一项" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "完成学习" }));
+    await user.click(await screen.findByRole("button", { name: "学习下一项" }));
+
+    expect(await screen.findByRole("heading", { name: "第二项练习" })).toBeInTheDocument();
+    expect(screen.getByTestId("studio-location")).toHaveTextContent("resource_id=902");
+    expect(screen.queryByRole("button", { name: "完成这项学习" })).not.toBeInTheDocument();
   });
 });

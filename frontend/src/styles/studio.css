@@ -138,9 +138,11 @@
   accent-color: var(--accent);
 }
 
-.studio-job-strip button {
+.studio-job-strip button,
+.studio-job-strip > a {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   min-height: 32px;
   border: 0;
@@ -148,6 +150,11 @@
   padding: 0 9px;
   color: var(--text-muted);
   background: var(--wide-workspace-emphasis);
+  text-decoration: none;
+}
+
+.studio-job-strip[aria-label="路径任务"] {
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
 .studio-workspace-feedback {

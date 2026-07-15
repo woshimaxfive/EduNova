@@ -25,7 +25,9 @@ function resultHref(job: AiJob) {
   if (job.workflow === "resource_generation" && job.course_id) {
     const resourceIds = Array.isArray(job.result.resource_ids) ? job.result.resource_ids : [];
     const resource = resourceIds[0] ? `&resource_id=${resourceIds[0]}` : "";
-    return `${PATHS.studio}?course_id=${job.course_id}${resource}`;
+    const pathTaskId = job.result.path_task_id ?? job.request.path_task_id;
+    const pathTask = pathTaskId ? `&path_task_id=${pathTaskId}` : "";
+    return `${PATHS.studio}?course_id=${job.course_id}${resource}${pathTask}`;
   }
   if (job.workflow === "material_ingestion" && job.request.material_id) return `${PATHS.library}?material_id=${job.request.material_id}`;
   if (job.workflow === "path_planning" && (job.result.course_id || job.course_id || job.request.course_id)) {
@@ -36,11 +38,14 @@ function resultHref(job: AiJob) {
 
 export function AiJobProgress({ job, compact = false, onCancel, onRetry, onDismiss }: Props) {
   const completedHref = job.status === "completed" ? resultHref(job) : null;
+  const workflowLabel = job.workflow === "resource_generation" && job.request.path_task_id
+    ? "本节资源生成"
+    : workflowLabels[job.workflow];
   return (
     <section className={`ai-job-progress${compact ? " ai-job-progress--compact" : ""}`} aria-live="polite">
       <div className="ai-job-progress__heading">
         <div>
-          <strong>{workflowLabels[job.workflow]}</strong>
+          <strong>{workflowLabel}</strong>
           <span>{job.label}</span>
         </div>
         <b>{job.progress_percent}%</b>

@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { getMasteryMap, listCourses } from "../api/courses";
 import { getCurrentPath, updatePathTask, type LearningPathTask, type PathTaskStatus } from "../api/paths";
-import { createIdempotencyKey, createPathPlanningJob } from "../api/aiJobs";
+import { createIdempotencyKey, createPathPlanningJob, createPathTaskResourceJob } from "../api/aiJobs";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import {
   LearningPathDrawer,
@@ -18,7 +18,7 @@ import {
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import { PageFrame } from "./PageFrame";
 import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
-import { buildCoursePath, PATHS } from "../app/routePaths";
+import { PATHS } from "../app/routePaths";
 import "../styles/learning-path.css";
 
 function parsePositiveId(value: string | null) {
@@ -37,7 +37,7 @@ export function LearningPathPage() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<PathDetailTab>("mastery");
   const [feedback, setFeedback] = useState<string | null>(null);
-  const { jobs, trackJob } = useAiJobs();
+  const { jobs, trackJob, cancelJob } = useAiJobs();
 
   const coursesQuery = useQuery({
     queryKey: ["courses", "list"],
@@ -101,17 +101,26 @@ export function LearningPathPage() {
       setFeedback(null);
       if (effectiveCourseId) void invalidateCourseLearningLoop(queryClient, effectiveCourseId);
       if (variables.status !== "doing" || !effectiveCourseId) return;
-      const bundleResourceId = variables.task.learning_bundle?.items.find((item) => item.resource_id)?.resource_id;
+      const bundleResourceId = variables.task.learning_bundle?.items.find((item) => (
+        item.resource_id && item.learning_status !== "completed"
+      ))?.resource_id ?? variables.task.learning_bundle?.items.find((item) => item.resource_id)?.resource_id;
       const resourceId = bundleResourceId ?? variables.task.recommended_resources[0]?.id ?? variables.task.recommended_resource_ids[0];
       if (resourceId) {
         navigate(`${PATHS.studio}?course_id=${effectiveCourseId}&resource_id=${resourceId}&path_task_id=${variables.task.id}`);
-        return;
       }
-      const params = new URLSearchParams({ path_task_id: variables.task.id });
-      if (variables.task.knowledge_point_id) params.set("knowledge_point_id", variables.task.knowledge_point_id);
-      navigate(`${buildCoursePath(effectiveCourseId)}?${params.toString()}`);
     },
     onError: () => setFeedback("任务状态更新失败，请稍后重试。")
+  });
+  const generateResourcesMutation = useMutation({
+    mutationFn: (task: LearningPathTask) => createPathTaskResourceJob(
+      Number(task.id),
+      createIdempotencyKey(`path-task-resources-${task.id}`)
+    ),
+    onSuccess: (job) => {
+      setFeedback(null);
+      trackJob(job);
+    },
+    onError: () => setFeedback("本节学习资源任务创建失败，请稍后重试。")
   });
 
   function handleCourseChange(event: ChangeEvent<HTMLSelectElement>) {
@@ -133,6 +142,15 @@ export function LearningPathPage() {
   function updateTask(task: LearningPathTask, status: PathTaskStatus) {
     if (!parsePositiveId(task.id) || updateTaskMutation.isPending) return;
     updateTaskMutation.mutate({ task, status });
+  }
+
+  function openTaskLearning(task: LearningPathTask) {
+    if (!effectiveCourseId) return;
+    const readyItems = task.learning_bundle?.items.filter((item) => item.resource_id) ?? [];
+    const resourceId = readyItems.find((item) => item.learning_status !== "completed")?.resource_id
+      ?? readyItems[0]?.resource_id;
+    if (!resourceId) return;
+    navigate(`${PATHS.studio}?course_id=${effectiveCourseId}&resource_id=${resourceId}&path_task_id=${task.id}`);
   }
 
   const readError = coursesQuery.isError || currentPathQuery.isError
@@ -169,8 +187,12 @@ export function LearningPathPage() {
               filter={pathFilter}
               isPending={currentPathQuery.isPending}
               errorMessage={readError}
-              mutationPending={planningPending || updateTaskMutation.isPending}
+              mutationPending={planningPending || updateTaskMutation.isPending || generateResourcesMutation.isPending}
+              resourceJobs={jobs.filter((job) => job.workflow === "resource_generation" && Boolean(job.request.path_task_id))}
               onGenerate={generateLearningPath}
+              onGenerateResources={(task) => generateResourcesMutation.mutate(task)}
+              onOpenLearning={openTaskLearning}
+              onCancelResourceJob={(jobId) => void cancelJob(jobId)}
               onUpdateTask={updateTask}
             />
           </WorkspacePane>

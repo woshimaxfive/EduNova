@@ -94,6 +94,20 @@ const activePathResponse = {
     reason: "来自已确认薄弱点",
     recommended_resource_ids: ["801"],
     recommended_resources: [{ id: "801", title: "启发式搜索讲解", resource_type: "doc" }],
+    learning_bundle: {
+      strategy: "先讲解再练习",
+      teaching_strategy: "worked_example",
+      difficulty: "medium",
+      used_profile_factor_codes: ["confirmed_weaknesses"],
+      generation_mode: "model_enhanced",
+      rationale: "先补齐概念，再用导图建立联系。",
+      ready_count: 1,
+      completed_count: 0,
+      items: [
+        { resource_type: "doc", role: "概念讲解", resource_id: "801", status: "ready", learning_status: "not_started" },
+        { resource_type: "mindmap", role: "结构梳理", resource_id: null, status: "recommended", learning_status: "not_started" }
+      ]
+    },
     status: "doing",
     created_at: "2026-07-05T09:00:00Z",
     updated_at: "2026-07-05T09:00:00Z"
@@ -150,6 +164,19 @@ function installBaseAdapter(options: { empty?: boolean; calls?: Array<{ method: 
         status: 202, statusText: "Accepted", headers: {}, config
       };
     }
+    if (url === PATH_ENDPOINTS.taskResourceJobs(1001)) {
+      return {
+        data: { data: {
+          job_id: "resource-job-1", workflow: "resource_generation", status: "queued", course_id: "808",
+          retry_of_job_id: null, progress_percent: 0, stage: "queued", label: "本节资源生成已排队", steps: [],
+          agent_trace_id: "trace_resource_job", request: { course_id: 808, path_task_id: 1001, resource_types: ["mindmap"] },
+          result: {}, warnings: [], error_code: null, error_message: null, attempt_count: 0, can_cancel: true,
+          can_retry: false, created_at: "2026-07-15T10:00:00Z", updated_at: "2026-07-15T10:00:00Z",
+          started_at: null, completed_at: null
+        } },
+        status: 202, statusText: "Accepted", headers: {}, config
+      };
+    }
     if (url === PATH_ENDPOINTS.updateTask(1001)) return { data: { data: { ...activePathResponse.tasks[0], status: "completed" } }, status: 200, statusText: "OK", headers: {}, config };
     if (url === AGENT_ENDPOINTS.trace("trace_path")) {
       return {
@@ -195,8 +222,27 @@ describe("LearningPathPage", () => {
     expect(await screen.findByText("deterministic_rank")).toBeInTheDocument();
     await user.click(within(drawer).getByRole("button", { name: "关闭" }));
 
-    await user.click(screen.getByRole("button", { name: "标记完成" }));
+    await user.click(screen.getByRole("button", { name: "完成本节学习" }));
+    expect(screen.getByRole("alertdialog", { name: "仍有学习资源未完成" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "仍然完成本节" }));
     await waitFor(() => expect(calls).toContainEqual(expect.objectContaining({ method: "patch", url: PATH_ENDPOINTS.updateTask(1001), payload: { status: "completed" } })));
+  });
+
+  it("queues only the missing resources for the current section", async () => {
+    const user = userEvent.setup();
+    const calls: Array<{ method: string; url: string; payload: unknown }> = [];
+    installBaseAdapter({ calls });
+    renderWithProviders(<LearningPathPage />);
+
+    expect(await screen.findByText("本节学习安排")).toBeInTheDocument();
+    expect(screen.getByText("本节已完成 0/2 项")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "补齐未生成资源" }));
+
+    await waitFor(() => expect(calls).toContainEqual(expect.objectContaining({
+      method: "post",
+      url: PATH_ENDPOINTS.taskResourceJobs(1001)
+    })));
+    expect(await screen.findByRole("button", { name: "正在生成" })).toBeDisabled();
   });
 
   it("queues path planning with one click and only sends the course id", async () => {

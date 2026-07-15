@@ -1,12 +1,12 @@
 import { ArrowClockwise, CheckCircle, X } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import { createIdempotencyKey, createResourceGenerationJob } from "../api/aiJobs";
 import { getKnowledgePoints, listCourses } from "../api/courses";
-import { updatePathTask } from "../api/paths";
+import { getCurrentPath } from "../api/paths";
 import {
   getResourceQuality,
   listResources,
@@ -31,6 +31,7 @@ import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/c
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import { useLearningNextAction } from "../features/learning-actions/learningActions";
 import { PageFrame } from "./PageFrame";
+import { PATHS } from "../app/routePaths";
 import "../styles/studio.css";
 
 function parsePositiveId(value: string | null) {
@@ -45,6 +46,7 @@ export function StudioPage() {
   const initialCourseId = parsePositiveId(searchParams.get("course_id"));
   const initialResourceId = searchParams.get("resource_id");
   const pathTaskId = searchParams.get("path_task_id");
+  const numericPathTaskId = parsePositiveId(pathTaskId);
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(initialCourseId);
   const [selectedKnowledgePointId, setSelectedKnowledgePointId] = useState<number | null>(null);
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(initialResourceId);
@@ -110,10 +112,26 @@ export function StudioPage() {
     () => (Array.isArray(resourcesQuery.data?.data) ? [...resourcesQuery.data.data].sort((left, right) => right.created_at.localeCompare(left.created_at)) : []),
     [resourcesQuery.data]
   );
-  const selectedResource = useMemo(
-    () => resources.find((resource) => resource.id === selectedResourceId) ?? resources[0] ?? null,
-    [resources, selectedResourceId]
-  );
+  const currentPathQuery = useQuery({
+    queryKey: courseLoopQueryKeys.currentPath(effectiveCourseId ?? 0),
+    queryFn: () => getCurrentPath(effectiveCourseId ?? 0),
+    enabled: effectiveCourseId !== null && numericPathTaskId !== null,
+    staleTime: 5_000
+  });
+  const pathTask = currentPathQuery.data?.data.tasks.find((task) => Number(task.id) === numericPathTaskId) ?? null;
+  const bundleItems = pathTask?.learning_bundle?.items ?? [];
+  const preferredBundleResourceId = bundleItems.find((item) => item.resource_id && item.learning_status !== "completed")?.resource_id
+    ?? bundleItems.find((item) => item.resource_id)?.resource_id
+    ?? null;
+  const selectedResource = resources.find((resource) => resource.id === selectedResourceId)
+    ?? resources.find((resource) => resource.id === preferredBundleResourceId)
+    ?? resources[0]
+    ?? null;
+  const selectedBundleIndex = bundleItems.findIndex((item) => item.resource_id === selectedResource?.id);
+  const selectedBundleItem = selectedBundleIndex >= 0 ? bundleItems[selectedBundleIndex] : null;
+  const nextBundleItem = selectedBundleIndex >= 0
+    ? bundleItems.slice(selectedBundleIndex + 1).find((item) => item.resource_id && item.learning_status !== "completed")
+    : bundleItems.find((item) => item.resource_id && item.learning_status !== "completed");
   const resourceFamilies = useMemo(() => groupResourceVersions(resources), [resources]);
   const selectedFamily = useMemo(
     () => resourceFamilies.find((family) => family.versions.some((resource) => resource.id === selectedResource?.id)) ?? null,
@@ -152,6 +170,9 @@ export function StudioPage() {
 
   useEffect(() => {
     if (!selectedResource || selectedResource.id === selectedResourceId) return;
+    // Lock the first path-planned selection so later progress refreshes do not skip ahead automatically.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedResourceId(selectedResource.id);
     const next = new URLSearchParams(searchParams);
     if (effectiveCourseId !== null) next.set("course_id", String(effectiveCourseId));
     next.set("resource_id", selectedResource.id);
@@ -164,7 +185,8 @@ export function StudioPage() {
       const requestCourseId = Number(job.request.course_id);
       return job.workflow === "resource_generation"
         && ["queued", "running", "cancelling", "failed"].includes(job.status)
-        && (initialCourseId === null || requestCourseId === initialCourseId);
+        && (initialCourseId === null || requestCourseId === initialCourseId)
+        && (numericPathTaskId === null || Number(job.request.path_task_id) === numericPathTaskId);
     });
     if (!restored) return;
     const request = restored.request;
@@ -181,7 +203,7 @@ export function StudioPage() {
       if (request.generation_action === "alternative" || request.generation_action === "refine") setRegenerateDialogOpen(true);
       else setDrawerMode("generate");
     }
-  }, [initialCourseId, jobs, resourceJobId]);
+  }, [initialCourseId, jobs, numericPathTaskId, resourceJobId]);
 
   useEffect(() => {
     if (!resourceJob) return;
@@ -314,21 +336,6 @@ export function StudioPage() {
   const showCompactJob = resourceJob && ["queued", "running", "cancelling"].includes(resourceJob.status);
   const dataError = coursesQuery.isError || resourcesQuery.isError;
   const nextActionQuery = useLearningNextAction(effectiveCourseId);
-  const completePathTaskMutation = useMutation({
-    mutationFn: () => updatePathTask(Number(pathTaskId), { status: "completed" }),
-    onSuccess: async () => {
-      if (effectiveCourseId) await invalidateCourseLearningLoop(queryClient, effectiveCourseId);
-      setFeedbackTone("success");
-      setFeedback("这项资源学习已标记完成，下一项任务已经更新。");
-      const next = new URLSearchParams(searchParams);
-      next.delete("path_task_id");
-      setSearchParams(next, { replace: true });
-    },
-    onError: () => {
-      setFeedbackTone("warning");
-      setFeedback("任务完成状态更新失败，资源仍可继续查看。");
-    }
-  });
 
   return (
     <>
@@ -360,10 +367,15 @@ export function StudioPage() {
           {pathTaskId ? (
             <section className="studio-job-strip" aria-label="路径任务">
               <CheckCircle size={17} weight="duotone" aria-hidden="true" />
-              <div><strong>来自当前学习路径</strong><span>阅读并理解资源后，由你确认完成。</span></div>
-              <button type="button" disabled={completePathTaskMutation.isPending} onClick={() => completePathTaskMutation.mutate()}>
-                {completePathTaskMutation.isPending ? "正在更新" : "完成这项学习"}
-              </button>
+              <div>
+                <strong>本节已完成 {pathTask?.learning_bundle?.completed_count ?? 0}/{pathTask?.learning_bundle?.items.length ?? 0} 项</strong>
+                <span>逐项学习资源，最后返回路径确认完成本节。</span>
+              </div>
+              {selectedBundleItem?.learning_status === "completed" && nextBundleItem?.resource_id ? (
+                <button type="button" onClick={() => selectResource(nextBundleItem.resource_id as string)}>学习下一项</button>
+              ) : (
+                <Link to={`${PATHS.path}?course_id=${effectiveCourseId ?? ""}`}>返回本节学习安排</Link>
+              )}
             </section>
           ) : (
             <NextLearningAction action={nextActionQuery.data?.data} isLoading={nextActionQuery.isPending} error={nextActionQuery.isError} compact />

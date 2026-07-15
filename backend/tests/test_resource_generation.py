@@ -551,7 +551,7 @@ def test_generate_six_resource_types_persists_v3_artifacts_quality_scores_and_pa
     assert all(log.metadata_json["workflow"] == "resource_generation" for log in repo.agent_logs)
     assert all(log.metadata_json["artifact_type"] == "generated_resource" for log in repo.agent_logs)
     assert set(result["quality_scores"].keys()) == {resource["id"] for resource in result["resources"]}
-    assert len(model_service.calls) == 7
+    assert len(model_service.calls) == 8
     assert model_service.timeout_calls == [30.0] * 7
     code_prompt = next(
         "\n".join(message["content"] for message in call)
@@ -701,7 +701,7 @@ def test_generate_provider_failure_only_keeps_evidence_fallback_types() -> None:
     assert "f(n)=g(n)+h(n)" in resource_by_type(repo.resources, "doc").content_json["markdown"]
     assert "f(n)=g(n)+h(n)" in resource_by_type(repo.resources, "mindmap").content_json["artifact"]["markmap_markdown"]
     assert "None%" not in resource_by_type(repo.resources, "doc").content_json["markdown"]
-    assert len(model_service.calls) == 7
+    assert len(model_service.calls) == 8
     assert model_service.timeout_calls == [30.0] * 7
     assert repo.committed is True
 
@@ -723,7 +723,7 @@ def test_generate_applies_partial_model_enhancement_and_rejects_missing_strict_t
     assert doc.content_json["metadata"]["generation_mode"] == "model_enhanced"
     assert "f(n)=g(n)+h(n)" in doc.content_json["markdown"]
     assert result["failed_resource_types"] == ["quiz"]
-    assert len(model_service.calls) == 3
+    assert len(model_service.calls) == 4
 
 
 def test_review_agent_rejects_then_repairs_once_before_persisting() -> None:

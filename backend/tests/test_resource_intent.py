@@ -9,7 +9,7 @@ from backend.app.services.resource_intent import (
 )
 
 
-def test_different_learner_contexts_change_teaching_strategy_without_changing_evidence() -> None:
+def test_keyword_preferences_do_not_decide_teaching_strategy_without_model_planning() -> None:
     derivation = build_artifact_intents(
         resource_types=["doc"],
         topic="反向传播",
@@ -30,12 +30,12 @@ def test_different_learner_contexts_change_teaching_strategy_without_changing_ev
     )["doc"]
 
     assert derivation["evidence_refs"] == example["evidence_refs"] == [701, 702]
-    assert derivation["teaching_strategy"] == "derivation_first"
-    assert example["teaching_strategy"] == "worked_example_first"
+    assert derivation["teaching_strategy"] == "evidence_to_concept"
+    assert example["teaching_strategy"] == "evidence_to_concept"
     assert derivation["personalization_status"] == example["personalization_status"] == "personalized"
     summary = personalization_summary(example)
     assert "偏好的学习方式" in summary["teaching_reason"]
-    assert "先看完整案例再归纳概念" in summary["teaching_reason"]
+    assert "从资料证据建立概念" in summary["teaching_reason"]
     assert "worked_example_first" not in summary["teaching_reason"]
 
 

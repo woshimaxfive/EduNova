@@ -9,6 +9,7 @@ from time import perf_counter
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
@@ -23,6 +24,18 @@ from backend.app.services.material_parsers import (
     create_document_structure_extractor,
 )
 from backend.app.services.storage import build_storage
+
+
+class MaterialSemanticClassification(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    material_type: str = Field(min_length=1, max_length=64)
+    chapter_role: str = Field(min_length=1, max_length=64)
+    knowledge_domain: str = Field(min_length=1, max_length=120)
+    concept_groups: list[str] = Field(default_factory=list, max_length=8)
+    difficulty: str = Field(pattern="^(introductory|intermediate|advanced|mixed|unknown)$")
+    confidence: float = Field(ge=0, le=1)
+    needs_review: bool
 
 
 class MaterialIngestionError(RuntimeError):
@@ -46,6 +59,7 @@ class MaterialIngestionState(TypedDict, total=False):
     warnings: list[str]
     result: dict[str, Any]
     job_context: Any
+    classification: dict[str, Any]
 
 
 class MaterialIngestionGraphRunner:
@@ -263,23 +277,56 @@ class MaterialIngestionGraphRunner:
         def work() -> dict[str, Any]:
             sections = state["sections"]
             ambiguous = [section for section in sections if section["confidence"] < 0.7][:40]
-            if not ambiguous or self.model_service is None:
-                return {"sections": sections, "warnings": [*state["warnings"], "目录层级由确定性规则识别，可在确认前人工调整。"]}
+            if self.model_service is None:
+                return {
+                    "sections": sections,
+                    "classification": self._unclassified(),
+                    "warnings": [*state["warnings"], "语义分类模型不可用，资料已标记为待复核。"],
+                }
             payload = [{"id": item["id"], "title": item["title"], "level": item["level"]} for item in ambiguous]
+            samples = [
+                {
+                    "title": item["title"],
+                    "text": " ".join(block["text"] for block in item["blocks"][:3])[:800],
+                }
+                for item in sections[:12]
+            ]
             try:
                 raw = self.model_service.chat_completion(
                     state["user"],
                     [
-                        {"role": "system", "content": "你是资料目录校正器。只输出 JSON，不得增加不存在的标题。"},
-                        {"role": "user", "content": f"校正这些候选标题的层级，返回 sections 数组，每项仅含 id、title、level：{payload}"},
+                        {
+                            "role": "system",
+                            "content": (
+                                "你是资料目录与语义分类器。只输出 JSON，不得增加不存在的标题。"
+                                "分类只描述资料，不改变正文、页码、目录确认、切片或质量门禁。"
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                f"文件名={state['material'].filename[:180]}；候选目录={payload}；内容短摘={samples}。"
+                                "返回 sections 数组（每项仅含 id、title、level）和 classification。"
+                                "classification 固定字段为 material_type、chapter_role、knowledge_domain、"
+                                "concept_groups、difficulty、confidence、needs_review；difficulty 仅可为 "
+                                "introductory/intermediate/advanced/mixed/unknown。"
+                            ),
+                        },
                     ],
                 )
                 parsed = parse_json_object(raw)
                 updates = parsed.get("sections") if isinstance(parsed, dict) else None
+                classification = self._classification(parsed.get("classification") if isinstance(parsed, dict) else None)
             except Exception:
                 updates = None
+                classification = self._unclassified()
+            warnings = list(state["warnings"])
             if not isinstance(updates, list):
-                return {"sections": sections, "warnings": [*state["warnings"], "模型目录校正不可用，已保留规则结果。"]}
+                updates = []
+                if ambiguous:
+                    warnings.append("模型目录校正不可用，已保留规则结果。")
+            if classification.get("needs_review"):
+                warnings.append("资料语义分类置信度不足，已标记为待复核。")
             by_id = {str(item.get("id")): item for item in updates if isinstance(item, dict)}
             for section in sections:
                 update = by_id.get(section["id"])
@@ -293,7 +340,11 @@ class MaterialIngestionGraphRunner:
                     section["level"] = level
                 section["confidence"] = max(section["confidence"], 0.78)
             self._rebuild_paths(sections)
-            return {"sections": sections}
+            return {
+                "sections": sections,
+                "classification": classification,
+                "warnings": list(dict.fromkeys(warnings)),
+            }
 
         return self._node(state, "model_refine", 5, work)
 
@@ -409,7 +460,12 @@ class MaterialIngestionGraphRunner:
             material.parser_version = self._effective_parser_version(state)
             material.content_hash = sha256(state["content"]).hexdigest()
             material.outline_version = max(1, int(material.outline_version or 0) + 1)
-            material.outline_json = {"sections": public_sections, "confirmed": False}
+            classification = dict(state.get("classification") or self._unclassified())
+            material.outline_json = {
+                "sections": public_sections,
+                "confirmed": False,
+                "classification": classification,
+            }
             material.quality_json = state["quality"]
             material.parsed_at = datetime.now(UTC)
             material.agent_trace_id = state["trace_id"]
@@ -417,6 +473,7 @@ class MaterialIngestionGraphRunner:
                 **(material.metadata_json or {}),
                 "detail": "解析完成，等待确认目录",
                 "agent_trace_id": state["trace_id"],
+                "semantic_classification": classification,
             }
             self.db.add(material)
             self.db.commit()
@@ -428,9 +485,38 @@ class MaterialIngestionGraphRunner:
                 "chunk_count": state["quality"]["chunk_count"],
                 "quality": state["quality"],
                 "warnings": state["warnings"],
+                "classification": classification,
             }}
 
         return self._node(state, "persist", 8, work)
+
+    @staticmethod
+    def _unclassified() -> dict[str, Any]:
+        return {
+            "material_type": "unclassified",
+            "chapter_role": "unknown",
+            "knowledge_domain": "unknown",
+            "concept_groups": [],
+            "difficulty": "unknown",
+            "confidence": 0.0,
+            "needs_review": True,
+        }
+
+    @classmethod
+    def _classification(cls, value: Any) -> dict[str, Any]:
+        try:
+            parsed = MaterialSemanticClassification.model_validate(value)
+        except Exception:
+            return cls._unclassified()
+        payload = parsed.model_dump()
+        payload["concept_groups"] = [
+            safe_text(item, limit=80)
+            for item in payload["concept_groups"]
+            if safe_text(item, limit=80)
+        ]
+        if payload["confidence"] < 0.70:
+            payload["needs_review"] = True
+        return payload
 
     def _effective_parser_version(self, state: MaterialIngestionState) -> str:
         return f"{self.parser_version}:{state['document'].parser}"[:50]

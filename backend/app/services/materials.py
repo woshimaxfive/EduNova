@@ -448,7 +448,11 @@ class MaterialService:
             by_id = {str(item.get("id")): item for item in sections}
         self._rebuild_outline_paths(sections, chunks)
         material.outline_version = int(material.outline_version or 0) + 1
-        material.outline_json = {"sections": sections, "confirmed": False}
+        material.outline_json = {
+            "sections": sections,
+            "confirmed": False,
+            "classification": dict((material.outline_json or {}).get("classification") or {}),
+        }
         material.ingestion_status = "awaiting_confirmation"
         self.repository.commit()
         self.repository.refresh(material)
@@ -467,7 +471,12 @@ class MaterialService:
         for chunk in self.repository.list_material_chunks(user.id, material.id):
             section_id = str((chunk.metadata_json or {}).get("section_id") or "")
             chunk.quality_json = {**(chunk.quality_json or {}), "included": section_id in included_ids}
-        material.outline_json = {"sections": sections, "confirmed": True, "confirmed_at": datetime.now(UTC).isoformat()}
+        material.outline_json = {
+            "sections": sections,
+            "confirmed": True,
+            "confirmed_at": datetime.now(UTC).isoformat(),
+            "classification": dict((material.outline_json or {}).get("classification") or {}),
+        }
         material.ingestion_status = "confirmed"
         material.metadata_json = {**(material.metadata_json or {}), "detail": "目录已确认，可生成课程"}
         self.repository.commit()

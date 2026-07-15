@@ -405,6 +405,16 @@ class PathPlanningGraphRunner:
             }
             for task in open_tasks
         ]
+        resources = {
+            resource.id: {
+                "id": resource.id,
+                "resource_type": resource.resource_type,
+                "title": safe_text(resource.title, limit=120),
+                "status": resource.status,
+            }
+            for resource in state.get("resources", [])
+            if resource.status == "completed"
+        }
         system = "你是 PathPlanningGraph 的规划 Agent。只能重排给定 task_key，禁止新增知识点、资源或任务。只输出 JSON。"
         instruction = "这是审核后的修订机会。" if repair else "根据确认弱点、课程顺序和资源证据优化任务顺序。"
         try:
@@ -420,8 +430,11 @@ class PathPlanningGraphRunner:
                             f"学习偏好={safe_text(state.get('profile_summary', {}).get('learning_preference'), limit=120)}；"
                             f"理解习惯={safe_text(state.get('profile_summary', {}).get('cognitive_style'), limit=120)}；"
                             f"学习节奏={safe_text(state.get('profile_summary', {}).get('learning_pace'), limit=120)}。"
-                            f"候选任务={candidates}。"
-                            "返回 {\"ordered_task_keys\":[\"...\"],\"rationales\":{\"task_key\":\"简短理由\"}}。"
+                            f"候选任务={candidates}；可用真实资源={list(resources.values())}。"
+                            "请根据当前知识点、具体误区、掌握度、目标、偏好和已完成资源选择任务顺序与资源组合。"
+                            "只能使用候选 task_key 和各任务原有 resource_ids，不得发明资源。"
+                            "返回 {\"ordered_task_keys\":[\"...\"],\"rationales\":{\"task_key\":\"简短理由\"},"
+                            "\"resource_rankings\":{\"task_key\":[1,2]}}。"
                         ),
                     },
                 ],
@@ -437,11 +450,24 @@ class PathPlanningGraphRunner:
             return None
         ordered_keys.extend(key for key in by_key if key not in ordered_keys)
         rationales = payload.get("rationales") if isinstance(payload.get("rationales"), dict) else {}
+        resource_rankings = payload.get("resource_rankings") if isinstance(payload.get("resource_rankings"), dict) else {}
         ordered: list[PlannedTask] = []
         for index, key in enumerate(ordered_keys):
             task = by_key[key]
             rationale = safe_text(rationales.get(key), limit=240)
-            ordered.append(replace(task, reason=rationale or task.reason, status="doing" if index == 0 else "todo"))
+            ranked_raw = resource_rankings.get(key)
+            ranked = [int(item) for item in ranked_raw if str(item).isdigit()] if isinstance(ranked_raw, list) else []
+            if len(ranked) != len(set(ranked)) or any(item not in task.resource_ids or item not in resources for item in ranked):
+                ranked = []
+            resource_ids = [*ranked, *(item for item in task.resource_ids if item not in ranked)]
+            ordered.append(
+                replace(
+                    task,
+                    reason=rationale or task.reason,
+                    resource_ids=resource_ids,
+                    status="doing" if index == 0 else "todo",
+                )
+            )
         return [*completed, *ordered]
 
     def _task_risks(self, state: PathPlanningState) -> list[str]:
@@ -513,32 +539,12 @@ class PathPlanningGraphRunner:
     def _personalize_tasks(self, tasks: list[PlannedTask], state: PathPlanningState) -> list[PlannedTask]:
         profile = state.get("profile_summary", {})
         preference = safe_text(profile.get("learning_preference"), limit=80)
-        preferred_types: list[str] = []
-        if any(word in preference for word in ("图", "视觉", "动画")):
-            preferred_types = ["mindmap", "animation", "slide"]
-        elif "代码" in preference:
-            preferred_types = ["code"]
-        elif any(word in preference for word in ("练习", "题")):
-            preferred_types = ["quiz"]
-        elif preference:
-            preferred_types = ["doc"]
-        resources = {resource.id: resource for resource in state.get("resources", [])}
         personalized: list[PlannedTask] = []
         for task in tasks:
-            resource_ids = sorted(
-                task.resource_ids,
-                key=lambda resource_id: (
-                    0
-                    if resources.get(resource_id) is not None
-                    and resources[resource_id].resource_type in preferred_types
-                    else 1,
-                    resource_id,
-                ),
-            )
             reason = task.reason
             if preference:
-                reason = f"{reason}；结合学习偏好：{preference}"
-            personalized.append(replace(task, resource_ids=resource_ids, reason=reason))
+                reason = f"{reason}；学习偏好将由规划模型结合真实资源判断：{preference}"
+            personalized.append(replace(task, resource_ids=sorted(task.resource_ids), reason=reason))
         return personalized
 
     @staticmethod

@@ -36,6 +36,10 @@ ALTERNATIVE_STRATEGIES = {
     "animation": ("state_transition", "cause_effect_sequence", "error_correction_sequence"),
 }
 
+ALLOWED_TEACHING_STRATEGIES = frozenset(BASE_STRATEGIES.values()) | frozenset(
+    strategy for strategies in ALTERNATIVE_STRATEGIES.values() for strategy in strategies
+) | {"scaffolded_foundation"}
+
 COGNITIVE_LEVELS = {
     "doc": ("understand", "analyze"),
     "mindmap": ("understand", "analyze"),
@@ -341,18 +345,8 @@ def safe_history_summary(resources: Iterable[Any], limit: int = 5) -> list[dict[
 
 
 def _strategy_for(resource_type: str, profile_summary: dict[str, Any], mastery: object) -> str:
-    preference = _clean(profile_summary.get("learning_preference")).casefold()
-    cognitive = _clean(profile_summary.get("cognitive_style")).casefold()
     if isinstance(mastery, (int, float)) and mastery < 45:
         return "scaffolded_foundation"
-    if resource_type == "doc" and any(token in cognitive for token in ("推导", "逐步", "分析")):
-        return "derivation_first"
-    if resource_type == "doc" and any(token in preference for token in ("案例", "例题")):
-        return "worked_example_first"
-    if resource_type == "mindmap" and any(token in cognitive for token in ("整体", "框架", "关系")):
-        return "framework_first"
-    if resource_type == "code" and any(token in preference for token in ("代码", "实操", "动手")):
-        return "code_first_experiment"
     return BASE_STRATEGIES[resource_type]
 
 

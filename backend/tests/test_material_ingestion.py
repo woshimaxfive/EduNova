@@ -174,3 +174,23 @@ def test_docling_adapter_preserves_heading_and_page_contract() -> None:
     assert result.pages[0].page_number == 2
     assert "二叉树" in result.pages[0].text
     assert result.parser.startswith("docling:")
+
+
+def test_material_semantic_classification_requires_review_when_confidence_is_low() -> None:
+    runner = MaterialIngestionGraphRunner.__new__(MaterialIngestionGraphRunner)
+
+    classified = runner._classification({
+        "material_type": "textbook",
+        "chapter_role": "core_chapter",
+        "knowledge_domain": "数据结构",
+        "concept_groups": ["树与森林"],
+        "difficulty": "intermediate",
+        "confidence": 0.62,
+        "needs_review": False,
+    })
+    invalid = runner._classification({"material_type": "textbook"})
+
+    assert classified["material_type"] == "textbook"
+    assert classified["needs_review"] is True
+    assert invalid["material_type"] == "unclassified"
+    assert invalid["needs_review"] is True

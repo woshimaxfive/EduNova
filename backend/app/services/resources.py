@@ -58,6 +58,7 @@ from backend.app.services.resource_quality import (
     quality_summary,
 )
 from backend.app.services.resource_intent import (
+    ALLOWED_TEACHING_STRATEGIES,
     GenerationAction,
     build_artifact_intents,
     evaluate_diversity,
@@ -1729,6 +1730,7 @@ class ResourceGenerationGraphRunner:
             generation_action=state.get("generation_action", "new"),
             source_intent=source_intent,
         )
+        intents = self._model_refine_artifact_intents(state, intents) or intents
         plan = {
             "learning_goal": learning_goal,
             "difficulty": str(state.get("difficulty") or "medium"),
@@ -1760,6 +1762,66 @@ class ResourceGenerationGraphRunner:
             "artifact_intents": intents,
             "historical_resources": historical_resources,
         }
+
+    def _model_refine_artifact_intents(
+        self,
+        state: ResourceGenerationState,
+        intents: dict[str, dict[str, Any]],
+    ) -> dict[str, dict[str, Any]] | None:
+        try:
+            raw = self.service.model_settings_service.chat_completion(
+                state["user"],
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是 EduNova 资源教学策略规划器。只输出 JSON，不输出思维链。"
+                            "只能调整给定资源的 teaching_strategy、cognitive_level、example_direction、"
+                            "interaction_structure 和 learning_need，不得新增资源类型或引用。"
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            {
+                                "profile": state.get("profile_summary", {}),
+                                "diagnosis": state.get("diagnosis", {}),
+                                "candidate_intents": intents,
+                                "allowed_strategies": sorted(ALLOWED_TEACHING_STRATEGIES),
+                                "output": {"intents": intents},
+                            },
+                            ensure_ascii=False,
+                        )[:12000],
+                    },
+                ],
+            )
+        except Exception:
+            return None
+        payload = parse_json_object(raw)
+        proposed = payload.get("intents") if isinstance(payload, dict) else None
+        if not isinstance(proposed, dict) or set(proposed) != set(intents):
+            return None
+        refined: dict[str, dict[str, Any]] = {}
+        for resource_type, baseline in intents.items():
+            candidate = proposed.get(resource_type)
+            if not isinstance(candidate, dict):
+                return None
+            strategy = str(candidate.get("teaching_strategy") or baseline["teaching_strategy"])
+            if strategy not in ALLOWED_TEACHING_STRATEGIES:
+                return None
+            cognitive_level = str(candidate.get("cognitive_level") or baseline["cognitive_level"])
+            if cognitive_level not in {"understand", "apply", "analyze", "create"}:
+                return None
+            refined[resource_type] = {
+                **baseline,
+                "teaching_strategy": strategy,
+                "cognitive_level": cognitive_level,
+                "example_direction": str(candidate.get("example_direction") or baseline["example_direction"])[:160],
+                "interaction_structure": str(candidate.get("interaction_structure") or baseline["interaction_structure"])[:160],
+                "learning_need": str(candidate.get("learning_need") or baseline["learning_need"])[:240],
+                "personalization_status": "model_personalized",
+            }
+        return refined
 
     @staticmethod
     def _dispatch_workers(state: ResourceGenerationState) -> list[Send]:

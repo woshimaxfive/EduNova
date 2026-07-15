@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from io import BytesIO
 import json
 import re
 from typing import Any, Iterator
+from urllib.parse import urlparse
 
 import httpx
 from openai import (
@@ -17,6 +20,7 @@ from openai import (
     OpenAI,
     RateLimitError,
 )
+from PIL import Image
 
 
 class ModelProviderError(RuntimeError):
@@ -61,6 +65,37 @@ class NativeWebSearchResult:
 class OpenAICompatibleChatProvider:
     """OpenAI-compatible adapter; EduNova remains responsible for runtime policy."""
 
+    @staticmethod
+    def _prepare_vision_image(config: OpenAICompatibleConfig, data_url: str) -> str:
+        """Normalize images for known OpenAI-compatible transport quirks.
+
+        Xfyun MaaS advertises PNG data URLs, but some deployed vision/OCR models
+        currently fail them with ``10042 download user image err`` while accepting
+        the same image as JPEG. Keep the workaround inside the provider adapter so
+        storage and the learning Graph retain the sanitized original image.
+        """
+        host = (urlparse(config.base_url).hostname or "").lower()
+        if host != "maas-api.cn-huabei-1.xf-yun.com" or data_url.startswith("data:image/jpeg;base64,"):
+            return data_url
+        prefix, separator, encoded = data_url.partition(",")
+        if not separator or ";base64" not in prefix or not prefix.startswith("data:image/"):
+            return data_url
+        try:
+            with Image.open(BytesIO(base64.b64decode(encoded, validate=True))) as image:
+                image.load()
+                if image.mode in {"RGBA", "LA"} or "transparency" in image.info:
+                    rgba = image.convert("RGBA")
+                    background = Image.new("RGBA", rgba.size, "white")
+                    background.alpha_composite(rgba)
+                    rgb = background.convert("RGB")
+                else:
+                    rgb = image.convert("RGB")
+                output = BytesIO()
+                rgb.save(output, format="JPEG", quality=90, optimize=True)
+        except (ValueError, OSError) as exc:
+            raise ModelProviderError("图片数据无法转换为模型支持的格式。", code="invalid_request") from exc
+        return "data:image/jpeg;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+
     def __init__(self, transport: httpx.BaseTransport | None = None) -> None:
         self.transport = transport
 
@@ -98,7 +133,10 @@ class OpenAICompatibleChatProvider:
     ) -> str:
         content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
         content.extend(
-            {"type": "image_url", "image_url": {"url": data_url}}
+            {
+                "type": "image_url",
+                "image_url": {"url": self._prepare_vision_image(config, data_url)},
+            }
             for data_url in image_data_urls
         )
         try:

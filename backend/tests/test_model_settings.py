@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import base64
 import importlib
 from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from backend.app.api.v1.deps import get_auth_service
 from backend.app.core.config import Settings
@@ -1003,6 +1006,55 @@ def test_openai_compatible_provider_posts_chat_completions_and_reads_content() -
     assert str(requests[0].url) == "https://model.example.local/v1/chat/completions"
     assert requests[0].headers["authorization"] == "Bearer sk-user-secret"
     assert requests[0].read()
+
+
+def test_xfyun_maas_vision_normalizes_png_data_url_to_jpeg() -> None:
+    provider_module = load_openai_provider_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "EduNova"}}]})
+
+    provider = provider_module.OpenAICompatibleChatProvider(transport=httpx.MockTransport(handler))
+    config = provider_module.OpenAICompatibleConfig(
+        base_url="https://maas-api.cn-huabei-1.xf-yun.com/v2",
+        api_key="maas-secret",
+        chat_model="vision-model",
+    )
+    image_buffer = BytesIO()
+    Image.new("RGB", (32, 32), "white").save(image_buffer, format="PNG")
+    png_data_url = "data:image/png;base64," + base64.b64encode(image_buffer.getvalue()).decode("ascii")
+
+    assert provider.vision_completion(
+        config,
+        prompt="读取图片",
+        image_data_urls=[png_data_url],
+        timeout_seconds=3.0,
+    ) == "EduNova"
+
+    payload = requests[0].read()
+    assert b"data:image/jpeg;base64," in payload
+    assert b"data:image/png;base64," not in payload
+
+
+def test_model_settings_serializes_saved_vision_connection_snapshot() -> None:
+    module = load_model_settings_module()
+
+    parsed = module.ModelSettingsService._parse_connection_tests(
+        {
+            "vision": {
+                "operation": "vision",
+                "ok": True,
+                "model": "vision-model",
+                "message": "图片理解服务连接正常。",
+                "tested_at": "2026-07-16T03:00:00Z",
+            }
+        }
+    )
+
+    assert parsed["vision"].ok is True
+    assert parsed["vision"].model == "vision-model"
 
 
 def test_openai_compatible_provider_streams_chat_completion_deltas() -> None:

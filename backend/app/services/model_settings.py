@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
+from io import BytesIO
 from typing import Iterator, Literal, Protocol
 
 from cryptography.fernet import Fernet, InvalidToken
+from PIL import Image, ImageDraw
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -37,6 +40,14 @@ from backend.app.services.model_execution import (
 
 MODEL_NOT_CONFIGURED_MESSAGE = "已找到资料依据，但当前未配置可用模型。"
 LOCAL_PLACEHOLDER_API_KEY = "local-dev-key"
+
+
+def _vision_connection_test_image() -> str:
+    image = Image.new("RGB", (512, 192), "white")
+    ImageDraw.Draw(image).text((32, 72), "EduNova Vision 32", fill="black")
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
 class ModelSettingsConfigurationError(RuntimeError):
@@ -1249,10 +1260,8 @@ class ModelSettingsService:
                         operation="vision",
                         call=lambda: self.provider.vision_completion(
                             visual_config,
-                            prompt="图片中是什么颜色的方块？请只回复颜色。",
-                            image_data_urls=[
-                                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X8fJ4wAAAABJRU5ErkJggg=="
-                            ],
+                            prompt="请读取图片中的文字，并简短回复。",
+                            image_data_urls=[_vision_connection_test_image()],
                             timeout_seconds=self.settings.model_request_timeout_seconds,
                         ),
                         timeout_seconds=self.settings.model_request_timeout_seconds,
@@ -1676,8 +1685,14 @@ class ModelSettingsService:
         current_embedding_app_id = self._decrypt_api_key(setting.embedding_app_id_ciphertext)
         current_embedding_secret = self._decrypt_api_key(setting.embedding_api_secret_ciphertext)
         current_rerank_key = self._decrypt_api_key(setting.rerank_api_key_ciphertext)
+        preset_changed = (
+            isinstance(payload, (SaveModelConfigRequest, UpdateModelConfigRequest))
+            and payload.preset_id is not None
+            and payload.preset_id != setting.preset_id
+        )
         chat_changed = (
-            (
+            preset_changed
+            or (
                 payload.provider is not None
                 and self._normalize_provider(payload.provider) != self._normalize_provider(setting.provider)
             )
@@ -1718,6 +1733,7 @@ class ModelSettingsService:
         tests = dict(setting.connection_test_json or {})
         if chat_changed:
             tests.pop("chat", None)
+            tests.pop("vision", None)
             setting.last_test_ok = None
             setting.last_test_message = None
             setting.last_tested_at = None
@@ -1730,7 +1746,7 @@ class ModelSettingsService:
     @staticmethod
     def _parse_connection_tests(raw_tests: dict | None) -> dict[str, ModelConnectionTestSnapshot]:
         parsed: dict[str, ModelConnectionTestSnapshot] = {}
-        for operation in ("chat", "embedding", "rerank"):
+        for operation in ("chat", "embedding", "rerank", "vision"):
             value = (raw_tests or {}).get(operation)
             if not isinstance(value, dict):
                 continue

@@ -5,6 +5,11 @@ from datetime import UTC, datetime
 from backend.app.models import GeneratedResource, LearningTask, ResourceInteraction, User
 from backend.app.schemas.resources import ResourceInteractionRequest
 from backend.app.services.resource_interactions import ResourceInteractionService
+from backend.app.services.resource_feedback import (
+    aggregate_resource_interactions,
+    deterministic_bundle_types,
+    rank_resource_types,
+)
 from backend.app.services.video_resources import normalize_video
 
 
@@ -17,6 +22,7 @@ def test_video_normalization_accepts_only_supported_canonical_ids() -> None:
     assert youtube.embed_url == "https://www.youtube.com/embed/abcDEF_1234"
     assert bilibili is not None
     assert bilibili.embed_url == "https://player.bilibili.com/player.html?bvid=BV1xx411c7mD"
+    assert youtube.artifact(topic="A*", fit_reason="补充讲解")["embed_status"] == "unknown"
 
 
 def test_video_normalization_rejects_dangerous_or_unverified_urls() -> None:
@@ -28,6 +34,34 @@ def test_video_normalization_rejects_dangerous_or_unverified_urls() -> None:
         {"title": "重定向", "url": "https://example.com/redirect?to=https://youtube.com/watch?v=abcDEF_1234"},
     )
     assert all(normalize_video(item) is None for item in candidates)
+
+
+def test_feedback_aggregation_uses_unique_resources_and_latest_feedback() -> None:
+    rows = [
+        (1, "doc", "opened", None, datetime(2026, 7, 15, 8, 0, tzinfo=UTC), 1),
+        (1, "doc", "opened", None, datetime(2026, 7, 15, 8, 1, tzinfo=UTC), 2),
+        (1, "doc", "feedback", "too_hard", datetime(2026, 7, 15, 8, 2, tzinfo=UTC), 3),
+        (1, "doc", "feedback", "helpful", datetime(2026, 7, 15, 8, 3, tzinfo=UTC), 4),
+        (2, "doc", "completed", None, datetime(2026, 7, 15, 8, 4, tzinfo=UTC), 5),
+        (2, "doc", "feedback", "not_helpful", datetime(2026, 7, 15, 8, 5, tzinfo=UTC), 6),
+    ]
+
+    summary = aggregate_resource_interactions(rows)
+
+    assert summary == {"doc": {"opened": 1, "helpful": 1, "completed": 1, "not_helpful": 1}}
+
+
+def test_feedback_reorders_but_never_removes_modalities() -> None:
+    summary = {
+        "quiz": {"helpful": 2, "completed": 2},
+        "doc": {"not_helpful": 2},
+        "mindmap": {"too_hard": 1},
+    }
+
+    assert deterministic_bundle_types(summary) == ("quiz", "mindmap", "doc")
+    assert set(rank_resource_types(("doc", "mindmap", "quiz", "video"), summary)) == {
+        "doc", "mindmap", "quiz", "video"
+    }
 
 
 class FakeInteractionDb:

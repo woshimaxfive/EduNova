@@ -25,6 +25,7 @@ from backend.app.models import (
 )
 from backend.app.schemas.profiles import PROFILE_DIMENSIONS, normalize_profile_json
 from backend.app.schemas.personalization import PersonalizationFreshnessResponse
+from backend.app.services.resource_feedback import aggregate_resource_interactions
 
 
 @dataclass(frozen=True)
@@ -244,7 +245,14 @@ class LearnerContextService:
         ))
         feedback_rows = list(
             self.db.execute(
-                select(GeneratedResource.resource_type, ResourceInteraction.event_type, ResourceInteraction.feedback)
+                select(
+                    ResourceInteraction.resource_id,
+                    GeneratedResource.resource_type,
+                    ResourceInteraction.event_type,
+                    ResourceInteraction.feedback,
+                    ResourceInteraction.created_at,
+                    ResourceInteraction.id,
+                )
                 .join(GeneratedResource, GeneratedResource.id == ResourceInteraction.resource_id)
                 .where(
                     ResourceInteraction.user_id == user_id,
@@ -252,11 +260,7 @@ class LearnerContextService:
                 )
             )
         )
-        resource_feedback_summary: dict[str, dict[str, int]] = {}
-        for resource_type, event_type, feedback in feedback_rows:
-            bucket = resource_feedback_summary.setdefault(str(resource_type), {})
-            key = str(feedback or event_type)
-            bucket[key] = bucket.get(key, 0) + 1
+        resource_feedback_summary = aggregate_resource_interactions(feedback_rows)
         report_ready = self.db.scalar(
             select(AssessmentReport.id).where(
                 AssessmentReport.user_id == user_id,

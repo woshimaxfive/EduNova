@@ -313,6 +313,9 @@ def test_generate_path_archives_previous_active_path_and_prioritizes_confirmed_r
     assert result["tasks"][1]["recommended_resource_ids"] == ["801"]
     assert "due_at" not in result["tasks"][0]
     assert "next_review_at" not in result["tasks"][0]
+    assert [item["resource_type"] for item in result["tasks"][0]["learning_bundle"]["items"]] == [
+        "doc", "mindmap", "quiz"
+    ]
     assert all(task.due_at is None and task.next_review_at is None for task in repo.list_tasks_for_path(int(result["path"]["id"])))
     serialized = str(result)
     assert "系统提示词" not in serialized
@@ -405,7 +408,9 @@ def test_path_planning_graph_runs_real_model_review_and_trace_nodes() -> None:
     model = FakeModelService(
         responses=[
             '{"ordered_task_keys":["knowledge:401","knowledge:402","knowledge:403"],'
-            '"rationales":{"knowledge:401":"先处理确认弱点","knowledge:402":"再巩固复习中弱点"}}',
+            '"rationales":{"knowledge:401":"先处理确认弱点","knowledge:402":"再巩固复习中弱点"},'
+            '"bundle_types":{"knowledge:401":["code","doc","quiz"],'
+            '"knowledge:402":["mindmap","doc"],"knowledge:403":["video","quiz"]}}',
             '{"review_status":"passed","confidence":0.91,"risk_flags":[],'
             '"safety_summary":"任务顺序与弱点证据一致。"}',
         ]
@@ -420,6 +425,9 @@ def test_path_planning_graph_runs_real_model_review_and_trace_nodes() -> None:
     assert detail["path"]["plan_json"]["review_mode"] == "model_and_rules"
     assert [task["knowledge_point_id"] for task in detail["tasks"]] == ["401", "402", "403"]
     assert detail["tasks"][0]["reason"] == "先处理确认弱点"
+    assert [item["resource_type"] for item in detail["tasks"][0]["learning_bundle"]["items"]] == [
+        "code", "doc", "quiz"
+    ]
     assert [log.agent_name for log in logs] == [
         "profile",
         "collect_evidence",

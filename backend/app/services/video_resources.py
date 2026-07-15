@@ -42,7 +42,7 @@ class CuratedVideo:
             "summary": self.snippet,
             "topic": topic,
             "fit_reason": fit_reason,
-            "embed_status": "available",
+            "embed_status": "unknown",
             "external_supplement": True,
             "citation_refs": [],
         }

@@ -109,6 +109,10 @@ const readyReport = {
       confidence: 0.91,
       risk_flags: [],
       safety_summary: "统计数字与练习证据一致。"
+    },
+    resource_usage_summary: {
+      doc: { opened: 2, started: 1, completed: 1, helpful: 1, too_easy: 0, too_hard: 0, not_helpful: 0 },
+      video: { opened: 1, started: 1, completed: 0, helpful: 0, too_easy: 0, too_hard: 1, not_helpful: 0 }
     }
   },
   created_at: "2026-07-05T10:10:00Z"
@@ -373,6 +377,8 @@ describe("ReportsPage", () => {
     expect(screen.getAllByText("启发式搜索").length).toBeGreaterThan(0);
     expect(screen.getByText("较早期提升 12 分")).toBeInTheDocument();
     expect(screen.getByText("60%")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "资源使用概览" })).toHaveTextContent("外部视频");
+    expect(screen.getByRole("region", { name: "资源使用概览" })).toHaveTextContent("偏难 1");
     const reportDetailsTrigger = screen.getByRole("button", { name: "报告详情" });
     await user.click(reportDetailsTrigger);
     const closeDetails = screen.getByRole("button", { name: "关闭报告详情" });

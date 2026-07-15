@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Literal
 
 from backend.app.services.resource_quality import normalized_text, text_similarity
+from backend.app.services.resource_feedback import feedback_adjustment
 
 
 GenerationAction = Literal["new", "alternative", "refine"]
@@ -168,6 +169,11 @@ def build_artifact_intents(
     weakness = _first_text(profile_summary.get("weak_points"))
     mastery = profile_summary.get("mastery_average")
     current_task = _clean(profile_summary.get("current_task_title"))
+    resource_feedback = (
+        profile_summary.get("resource_feedback")
+        if isinstance(profile_summary.get("resource_feedback"), dict)
+        else {}
+    )
     if weakness:
         learning_need = f"优先解决“{weakness}”相关理解或应用困难"
     elif isinstance(mastery, (int, float)) and mastery < 60:
@@ -184,10 +190,27 @@ def build_artifact_intents(
         level = _cognitive_level(resource_type, difficulty)
         example_direction = CASE_DIRECTIONS[index % len(CASE_DIRECTIONS)]
         structure = INTERACTION_STRUCTURES[resource_type][0]
+        adjustment = feedback_adjustment(resource_type, resource_feedback)
+        if adjustment == "scaffold":
+            base_strategy = "scaffolded_foundation"
+            level = "understand"
+            structure = INTERACTION_STRUCTURES[resource_type][0]
+        elif adjustment == "challenge":
+            level = _next_value(("understand", "apply", "analyze", "create"), level)
+            example_direction = "跨场景迁移应用"
+        elif adjustment == "alternative":
+            base_strategy = ALTERNATIVE_STRATEGIES[resource_type][0]
+            structure = INTERACTION_STRUCTURES[resource_type][1]
         difference_requirements = (
             f"只承担“{RESOURCE_ROLES[resource_type]}”这一教学职责，不复述其他资源的完整内容。",
             "引用同一事实时改用适合本资源类型的学习活动，而不是复制句子。",
         )
+        if adjustment == "scaffold":
+            difference_requirements += ("该模态近期反馈偏难，增加先修提示、分步示例和低门槛自检。",)
+        elif adjustment == "challenge":
+            difference_requirements += ("该模态近期反馈偏简单，提高到应用或分析层级并增加迁移任务。",)
+        elif adjustment == "alternative":
+            difference_requirements += ("至少两份同模态资源被标记为没帮助，本次必须更换教学组织方式。",)
         if generation_action == "alternative" and source_intent:
             base_strategy = _next_value(
                 ALTERNATIVE_STRATEGIES[resource_type],
@@ -408,6 +431,8 @@ def _learner_factors(profile_summary: dict[str, Any]) -> list[str]:
         factors.append("当前课程掌握度")
     if _clean(profile_summary.get("current_task_title")):
         factors.append("当前学习路径任务")
+    if isinstance(profile_summary.get("resource_feedback"), dict) and profile_summary["resource_feedback"]:
+        factors.append("课程级资源反馈")
     return list(dict.fromkeys(factors))
 
 

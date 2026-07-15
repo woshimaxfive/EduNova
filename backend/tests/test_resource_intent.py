@@ -154,3 +154,27 @@ def test_semantic_similarity_rejects_alternative_that_only_changes_wording() -> 
     assert diversity["semantic_similarity"] == 0.91
     assert diversity["semantic_status"] == "completed"
     assert "low_novelty" in risks
+
+
+def test_resource_feedback_changes_difficulty_without_becoming_profile_evidence() -> None:
+    intents = build_artifact_intents(
+        resource_types=["doc", "quiz", "video"],
+        topic="二叉树遍历",
+        learning_goal="完成考试复习",
+        difficulty="medium",
+        profile_summary={
+            "resource_feedback": {
+                "doc": {"too_hard": 1},
+                "quiz": {"too_easy": 1},
+                "video": {"not_helpful": 2},
+            }
+        },
+        evidence_refs=[701],
+        generation_action="new",
+    )
+
+    assert intents["doc"]["teaching_strategy"] == "scaffolded_foundation"
+    assert intents["doc"]["cognitive_level"] == "understand"
+    assert intents["quiz"]["cognitive_level"] == "analyze"
+    assert intents["video"]["teaching_strategy"] == "concept_walkthrough"
+    assert "课程级资源反馈" in intents["doc"]["learner_factors"]

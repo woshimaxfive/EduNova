@@ -1,28 +1,12 @@
 import { ArrowSquareOut } from "@phosphor-icons/react";
+import { useState } from "react";
 
 import { type ResourceExternalVideoArtifact } from "../../api/resources";
-
-const YOUTUBE_ID = /^[A-Za-z0-9_-]{6,20}$/;
-const BILIBILI_ID = /^BV[A-Za-z0-9]{10}$/i;
-
-function safeVideoUrls(artifact: ResourceExternalVideoArtifact) {
-  if (artifact.platform === "youtube" && YOUTUBE_ID.test(artifact.video_id)) {
-    return {
-      embed: `https://www.youtube.com/embed/${artifact.video_id}`,
-      watch: `https://www.youtube.com/watch?v=${artifact.video_id}`
-    };
-  }
-  if (artifact.platform === "bilibili" && BILIBILI_ID.test(artifact.video_id)) {
-    return {
-      embed: `https://player.bilibili.com/player.html?bvid=${artifact.video_id}`,
-      watch: `https://www.bilibili.com/video/${artifact.video_id}`
-    };
-  }
-  return null;
-}
+import { safeVideoUrls } from "./videoUrls";
 
 export function ExternalVideoResource({ artifact }: { artifact: ResourceExternalVideoArtifact }) {
   const urls = safeVideoUrls(artifact);
+  const [embedStatus, setEmbedStatus] = useState<ResourceExternalVideoArtifact["embed_status"]>(artifact.embed_status);
   if (!urls) {
     return <p className="form-error">视频来源未通过安全校验，已停止嵌入。</p>;
   }
@@ -37,12 +21,17 @@ export function ExternalVideoResource({ artifact }: { artifact: ResourceExternal
           allowFullScreen
           referrerPolicy="strict-origin-when-cross-origin"
           sandbox="allow-scripts allow-same-origin allow-presentation"
+          onLoad={() => setEmbedStatus("available")}
+          onError={() => setEmbedStatus("unavailable")}
         />
       </div>
       <div className="external-video-copy">
         <strong>{artifact.title}</strong>
         <p>{artifact.fit_reason}</p>
-        <span>联网精选 · 外部补充，不作为教材或评分证据</span>
+        <span>
+          联网精选 · 外部补充，不作为教材或评分证据 ·
+          {embedStatus === "available" ? " 播放器已载入" : embedStatus === "unavailable" ? " 播放器不可用" : " 正在确认播放器"}
+        </span>
         <a href={urls.watch} target="_blank" rel="noreferrer noopener">
           无法播放时前往原平台 <ArrowSquareOut size={15} aria-hidden="true" />
         </a>

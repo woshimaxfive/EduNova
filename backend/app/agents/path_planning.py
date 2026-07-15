@@ -13,6 +13,11 @@ from backend.app.schemas.profiles import normalize_profile_json
 from backend.app.services.paths import PathReplanResult, PathService, PlannedTask
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
+from backend.app.services.resource_feedback import (
+    RESOURCE_TYPES,
+    deterministic_bundle_types,
+    rank_resource_types,
+)
 
 
 class PathPlanningState(TypedDict, total=False):
@@ -404,6 +409,7 @@ class PathPlanningGraphRunner:
                 "task_type": task.task_type,
                 "reason": task.reason,
                 "resource_ids": task.resource_ids,
+                "bundle_types": list(task.bundle_types),
             }
             for task in open_tasks
         ]
@@ -433,11 +439,14 @@ class PathPlanningGraphRunner:
                             f"学习偏好={safe_text(state.get('profile_summary', {}).get('learning_preference'), limit=120)}；"
                             f"理解习惯={safe_text(state.get('profile_summary', {}).get('cognitive_style'), limit=120)}；"
                             f"学习节奏={safe_text(state.get('profile_summary', {}).get('learning_pace'), limit=120)}。"
+                            f"课程资源反馈聚合={state.get('profile_summary', {}).get('resource_feedback', {})}。"
                             f"候选任务={candidates}；可用真实资源={list(resources.values())}。"
                             "请根据当前知识点、具体误区、掌握度、目标、偏好和已完成资源选择任务顺序与资源组合。"
-                            "只能使用候选 task_key 和各任务原有 resource_ids，不得发明资源。"
+                            "只能使用候选 task_key 和各任务原有 resource_ids，不得发明资源。每个任务从"
+                            f"{list(RESOURCE_TYPES)}中选择2至4个不同的 bundle_types。"
                             "返回 {\"ordered_task_keys\":[\"...\"],\"rationales\":{\"task_key\":\"简短理由\"},"
-                            "\"resource_rankings\":{\"task_key\":[1,2]}}。"
+                            "\"resource_rankings\":{\"task_key\":[1,2]},"
+                            "\"bundle_types\":{\"task_key\":[\"doc\",\"quiz\"]}}。"
                         ),
                     },
                 ],
@@ -454,6 +463,7 @@ class PathPlanningGraphRunner:
         ordered_keys.extend(key for key in by_key if key not in ordered_keys)
         rationales = payload.get("rationales") if isinstance(payload.get("rationales"), dict) else {}
         resource_rankings = payload.get("resource_rankings") if isinstance(payload.get("resource_rankings"), dict) else {}
+        bundle_types = payload.get("bundle_types") if isinstance(payload.get("bundle_types"), dict) else {}
         ordered: list[PlannedTask] = []
         for index, key in enumerate(ordered_keys):
             task = by_key[key]
@@ -463,11 +473,24 @@ class PathPlanningGraphRunner:
             if len(ranked) != len(set(ranked)) or any(item not in task.resource_ids or item not in resources for item in ranked):
                 ranked = []
             resource_ids = [*ranked, *(item for item in task.resource_ids if item not in ranked)]
+            selected_types_raw = bundle_types.get(key)
+            selected_types = (
+                tuple(str(item) for item in selected_types_raw)
+                if isinstance(selected_types_raw, list)
+                else ()
+            )
+            if not (
+                2 <= len(selected_types) <= 4
+                and len(selected_types) == len(set(selected_types))
+                and all(item in RESOURCE_TYPES for item in selected_types)
+            ):
+                selected_types = task.bundle_types
             ordered.append(
                 replace(
                     task,
                     reason=rationale or task.reason,
                     resource_ids=resource_ids,
+                    bundle_types=selected_types,
                     status="doing" if index == 0 else "todo",
                 )
             )
@@ -485,6 +508,8 @@ class PathPlanningGraphRunner:
                 risks.append("sensitive_output")
             if any(resource_id not in valid_resources for resource_id in task.resource_ids):
                 risks.append("invalid_resource_reference")
+            if not (2 <= len(task.bundle_types) <= 4) or any(item not in RESOURCE_TYPES for item in task.bundle_types):
+                risks.append("invalid_bundle_types")
             if task.status != "completed":
                 open_keys.append(self._task_key(task))
         if len(open_keys) != len(set(open_keys)):
@@ -503,12 +528,20 @@ class PathPlanningGraphRunner:
         retained_open: list[PlannedTask] = []
         used: set[str] = set()
         for task in previous_tasks:
+            previous_bundle = task.learning_bundle_json if isinstance(task.learning_bundle_json, dict) else {}
+            previous_items = previous_bundle.get("items") if isinstance(previous_bundle.get("items"), list) else []
+            previous_types = tuple(
+                str(item.get("resource_type"))
+                for item in previous_items
+                if isinstance(item, dict) and str(item.get("resource_type")) in RESOURCE_TYPES
+            )
             planned = PlannedTask(
                 title=task.title,
                 task_type=task.task_type,
                 knowledge_point_id=task.knowledge_point_id,
                 reason=task.reason or "保留自上一版路径",
                 resource_ids=[int(item) for item in (task.recommended_resource_ids or []) if str(item).isdigit()],
+                bundle_types=previous_types or deterministic_bundle_types(None),
                 status="completed" if task.status == "completed" else "todo",
             )
             key = cls._task_key(planned)
@@ -542,12 +575,16 @@ class PathPlanningGraphRunner:
     def _personalize_tasks(self, tasks: list[PlannedTask], state: PathPlanningState) -> list[PlannedTask]:
         profile = state.get("profile_summary", {})
         preference = safe_text(profile.get("learning_preference"), limit=80)
+        feedback = profile.get("resource_feedback") if isinstance(profile.get("resource_feedback"), dict) else {}
+        fallback_types = deterministic_bundle_types(feedback)
         personalized: list[PlannedTask] = []
         for task in tasks:
             reason = task.reason
             if preference:
                 reason = f"{reason}；学习偏好将由规划模型结合真实资源判断：{preference}"
-            personalized.append(replace(task, resource_ids=sorted(task.resource_ids), reason=reason))
+            personalized.append(
+                replace(task, resource_ids=sorted(task.resource_ids), bundle_types=fallback_types, reason=reason)
+            )
         return personalized
 
     @staticmethod
@@ -557,33 +594,42 @@ class PathPlanningGraphRunner:
         profile: dict[str, Any],
     ) -> dict[str, Any]:
         resources_by_id = {resource.id: resource for resource in resources if resource.status == "completed"}
-        items = [
-            {
-                "resource_type": resources_by_id[resource_id].resource_type,
-                "resource_id": resource_id,
-                "role": "按当前路径顺序完成该学习资源",
-                "status": "available",
-            }
-            for resource_id in task.resource_ids
-            if resource_id in resources_by_id
-        ]
-        existing_types = {str(item["resource_type"]) for item in items}
-        for resource_type, role in (
-            ("doc", "建立证据型概念框架"),
-            ("video", "使用外部视频形成直观理解"),
-            ("quiz", "检查本知识点是否掌握"),
-        ):
-            if resource_type not in existing_types:
-                items.append({"resource_type": resource_type, "resource_id": None, "role": role, "status": "recommended"})
+        feedback = profile.get("resource_feedback") if isinstance(profile.get("resource_feedback"), dict) else {}
+        selected_types = task.bundle_types or deterministic_bundle_types(feedback)
+        selected_types = tuple(rank_resource_types(selected_types, feedback))
+        role_labels = {
+            "doc": "建立证据型概念框架",
+            "mindmap": "梳理概念关系与复习线索",
+            "quiz": "检查本知识点是否掌握",
+            "code": "通过可运行实验验证结论",
+            "slide": "按讲授顺序完成结构化复述",
+            "animation": "观察状态与过程变化",
+            "video": "使用外部视频形成直观理解",
+        }
+        preferred_resources = [resources_by_id[item] for item in task.resource_ids if item in resources_by_id]
+        items: list[dict[str, Any]] = []
+        for resource_type in selected_types:
+            available = next(
+                (item for item in preferred_resources if item.resource_type == resource_type),
+                next((item for item in resources_by_id.values() if item.resource_type == resource_type), None),
+            )
+            items.append(
+                {
+                    "resource_type": resource_type,
+                    "resource_id": available.id if available is not None else None,
+                    "role": role_labels[resource_type],
+                    "status": "available" if available is not None else "recommended",
+                }
+            )
         factors = [
             str(profile.get(key) or "").strip()
             for key in ("major_background", "knowledge_foundation", "learning_preference", "cognitive_style")
             if str(profile.get(key) or "").strip()
         ]
         return {
-            "strategy": "证据讲解、直观理解与掌握检查相结合",
-            "rationale": f"结合当前课程进度与{len(factors)}项可信个性化因素安排。",
-            "items": items[:7],
+            "strategy": "根据可信画像、学习状态与资源反馈组合多模态学习活动",
+            "rationale": f"结合当前课程进度、{len(factors)}项可信个性化因素和课程级资源反馈安排。",
+            "items": items,
         }
 
     @staticmethod

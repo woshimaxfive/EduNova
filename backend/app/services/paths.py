@@ -159,6 +159,7 @@ class PlannedTask:
     knowledge_point_id: int | None
     reason: str
     resource_ids: list[int]
+    bundle_types: tuple[str, ...] = ()
     status: str = "todo"
 
 

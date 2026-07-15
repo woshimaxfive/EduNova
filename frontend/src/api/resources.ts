@@ -127,7 +127,7 @@ export type ResourceExternalVideoArtifact = {
   summary?: string;
   topic?: string;
   fit_reason: string;
-  embed_status: "available" | "external_only" | string;
+  embed_status: "unknown" | "available" | "unavailable";
   external_supplement: true;
   citation_refs: [];
 };

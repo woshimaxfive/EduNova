@@ -32,6 +32,16 @@ function scoreLabel(score: number | null | undefined) {
   return typeof score === "number" ? `${Math.round(score)} 分` : "暂无";
 }
 
+const RESOURCE_LABELS: Record<string, string> = {
+  doc: "文档",
+  mindmap: "导图",
+  quiz: "练习",
+  code: "代码",
+  slide: "幻灯片",
+  animation: "动画",
+  video: "外部视频"
+};
+
 export function ReportDashboard({
   report,
   masteryMap,
@@ -163,6 +173,28 @@ export function ReportDashboard({
           <p>{snapshotSummary}</p>
         </div>
         <small>{freshness === "unavailable" ? "报告读取失败，未判定为空报告" : report?.created_at ? `生成于 ${new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(report.created_at))}` : "等待真实练习证据"}</small>
+      </section>
+
+      <section className="report-resource-usage" aria-labelledby="report-resource-usage-heading">
+        <header>
+          <div><span>课程级反馈</span><h2 id="report-resource-usage-heading">资源使用概览</h2></div>
+          <small>只影响本课程后续资源与路径策略，不写入长期画像</small>
+        </header>
+        {Object.entries(report?.report.resource_usage_summary ?? {}).length > 0 ? (
+          <ul>
+            {Object.entries(report?.report.resource_usage_summary ?? {}).map(([resourceType, counts]) => (
+              <li key={resourceType}>
+                <strong>{RESOURCE_LABELS[resourceType] ?? resourceType}</strong>
+                <span>打开 {counts?.opened ?? 0}</span>
+                <span>完成 {counts?.completed ?? 0}</span>
+                <span>有帮助 {counts?.helpful ?? 0}</span>
+                <span>偏难 {counts?.too_hard ?? 0}</span>
+                <span>偏简单 {counts?.too_easy ?? 0}</span>
+                <span>没帮助 {counts?.not_helpful ?? 0}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p>完成资源学习并提交反馈后，这里会显示按模态去重的真实使用情况。</p>}
       </section>
 
       <section className="report-lower-grid">

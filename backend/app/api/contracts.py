@@ -20,6 +20,7 @@ from backend.app.schemas.courses import (
     CreateCourseFromMaterialsResult,
 )
 from backend.app.schemas.dashboard import DashboardSummary
+from backend.app.schemas.learning import LearningNextAction
 from backend.app.schemas.exports import ExportJobResponse, LearningDossierExport
 from backend.app.schemas.materials import (
     AttachCourseMaterialsResult,
@@ -140,6 +141,7 @@ RESPONSE_MODELS: dict[str, Any] = {
     "create_course_from_materials": ApiEnvelope[CreateCourseFromMaterialsResult],
     "create_course_from_materials_job": ApiEnvelope[AiJobResponse],
     "summary": ApiEnvelope[DashboardSummary],
+    "get_learning_next_action": ApiEnvelope[LearningNextAction],
     "export_learning_dossier": ApiEnvelope[LearningDossierExport],
     "create_learning_dossier_export_job": ApiEnvelope[ExportJobResponse],
     "get_export_job": ApiEnvelope[ExportJobResponse],

@@ -8,6 +8,7 @@ from backend.app.api.v1.auth import router as auth_router
 from backend.app.api.v1.courses import router as courses_router
 from backend.app.api.v1.dashboard import router as dashboard_router
 from backend.app.api.v1.exports import router as exports_router
+from backend.app.api.v1.learning import router as learning_router
 from backend.app.api.v1.materials import router as materials_router
 from backend.app.api.v1.paths import router as paths_router
 from backend.app.api.v1.practice import router as practice_router
@@ -26,6 +27,7 @@ api_router.include_router(auth_router)
 api_router.include_router(courses_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(exports_router)
+api_router.include_router(learning_router)
 api_router.include_router(materials_router)
 api_router.include_router(paths_router)
 api_router.include_router(practice_router)

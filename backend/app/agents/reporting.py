@@ -16,6 +16,7 @@ from backend.app.schemas.reports import ReportEnvelope, report_to_api
 from backend.app.services.reports import ReportNotFoundError, ReportService
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
+from backend.app.services.content_locale import china_first_content_policy
 
 
 REPORT_PROMPT_VERSION = "report-v3.1"
@@ -207,6 +208,7 @@ class ReportGraphRunner:
                 "prompt_version": REPORT_PROMPT_VERSION,
                 "review_prompt_version": REPORT_REVIEW_PROMPT_VERSION,
                 "statistics_locked": True,
+                **china_first_content_policy.metadata(),
             }
             learner_context = state.get("learner_context")
             if learner_context is not None:
@@ -294,7 +296,7 @@ class ReportGraphRunner:
             raw = self.service.model_service.chat_completion(
                 state["user"],
                 [
-                    {"role": "system", "content": "你是 ReportGraph 的 ReviewAgent。只输出 JSON，不得修改统计数据。"},
+                    {"role": "system", "content": "你是 ReportGraph 的 ReviewAgent。只输出 JSON，不得修改统计数据。" + china_first_content_policy.prompt_instruction()},
                     {"role": "user", "content": f"审核协议={REPORT_REVIEW_PROMPT_VERSION}。审核这份安全报告是否与不可变统计一致：{json.dumps(report, ensure_ascii=False)[:10000]}。返回 {{\"review_status\":\"passed|revise\",\"confidence\":0.0,\"risk_flags\":[],\"safety_summary\":\"\"}}。"},
                 ],
             )
@@ -360,7 +362,7 @@ class ReportGraphRunner:
             raw = self.service.model_service.chat_completion(
                 state["user"],
                 [
-                    {"role": "system", "content": "你是 ReportGraph 报告 Agent。不得修改数字、编造练习或输出隐私，只输出 JSON。"},
+                    {"role": "system", "content": "你是 ReportGraph 报告 Agent。不得修改数字、编造练习或输出隐私，只输出 JSON。" + china_first_content_policy.prompt_instruction()},
                     {"role": "user", "content": f"协议={REPORT_PROMPT_VERSION}。{instruction} 可信课程画像提示={personalization}。不可变证据={json.dumps(evidence, ensure_ascii=False)}。数字必须逐字遵守，不得把练习次数、题目数量、正确题数、知识点数或任务数混为一谈。返回 {{\"summary\":\"\",\"next_step_suggestions\":[]}}。"},
                 ],
             )

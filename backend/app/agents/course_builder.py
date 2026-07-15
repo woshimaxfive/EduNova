@@ -18,6 +18,7 @@ from backend.app.models import Course, CourseEnrollment, CourseMaterialLink, Kno
 from backend.app.schemas.courses import CreateCourseFromMaterialsResult
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
+from backend.app.services.content_locale import china_first_content_policy
 
 
 class CourseBuilderState(TypedDict, total=False):
@@ -420,6 +421,7 @@ class CourseBuilderGraphRunner:
                 "quality": quality,
                 "source_coverage": {"source_chunk_count": len(state["source_chunks"]), "mapped_source_count": quality["mapped_source_count"]},
                 "prompt_version": self.prompt_version,
+                **china_first_content_policy.metadata(),
                 "warnings": list(dict.fromkeys(state.get("warnings", []))),
                 "profile_applied_version": context.profile_applied_version if context is not None else 0,
             }
@@ -565,7 +567,7 @@ class CourseBuilderGraphRunner:
         }
         try:
             raw = self.service.model_service.chat_completion(state["user"], [
-                {"role": "system", "content": "你是 CourseBuilderGraph 的章节概念 Agent。只输出 JSON；不得创建证据中不存在的概念、公式或算法。"},
+                {"role": "system", "content": "你是 CourseBuilderGraph 的章节概念 Agent。只输出 JSON；不得创建证据中不存在的概念、公式或算法。" + china_first_content_policy.prompt_instruction()},
                 {"role": "user", "content": f"章节={chapter['title']}，目标知识点数约 {chapter['target_count']}。可信画像提示={profile_hint}。\n证据：\n{evidence}\n返回 points 数组，每项含 title、summary、difficulty、source_keys。"},
             ])
         except Exception:
@@ -604,7 +606,7 @@ class CourseBuilderGraphRunner:
         evidence = [safe_text(chunk.content, limit=100) for chunk in state["source_chunks"][:60]]
         try:
             raw = self.service.model_service.chat_completion(state["user"], [
-                {"role": "system", "content": "你是 CourseBuilderGraph ReviewAgent。审核完整候选与证据，只输出 JSON，不得新增事实。"},
+                {"role": "system", "content": "你是 CourseBuilderGraph ReviewAgent。审核完整候选与证据，只输出 JSON，不得新增事实。" + china_first_content_policy.prompt_instruction()},
                 {"role": "user", "content": f"质量指标={quality}\n完整候选={candidate}\n证据短摘录={evidence}\n返回 review_status、confidence、risk_flags、safety_summary。"},
             ])
         except Exception:

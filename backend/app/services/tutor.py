@@ -35,6 +35,7 @@ from backend.app.services.course_answers import (
     HOME_MODEL_NOT_CONFIGURED_MESSAGE,
     HomeAnswerReview,
 )
+from backend.app.services.content_locale import china_first_content_policy
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.providers.openai_compatible import ModelProviderError
@@ -1769,6 +1770,7 @@ class HomeTutorGraphRunner:
             "deep_thinking": deep_thinking,
             "search_required": decision.search_required,
             "reasoning_mode": decision.reasoning_mode,
+            "source_scope": decision.source_scope,
             "tool_reason_codes": list(decision.reason_codes),
             "tool_reason_summary": decision.reason_summary,
             "selected_material_ids": list(dict.fromkeys(selected_material_ids))[:10],
@@ -1870,6 +1872,7 @@ class HomeTutorGraphRunner:
                 "requires_fresh_info": decision.intent in {"current_information", "verification"},
                 "search_required": decision.search_required,
                 "reasoning_mode": decision.reasoning_mode,
+                "source_scope": getattr(decision, "source_scope", "mainland_preferred"),
                 "tool_reason_codes": list(decision.reason_codes),
                 "tool_reason_summary": decision.reason_summary,
                 "semantic_search_query": decision.search_query,
@@ -1893,6 +1896,7 @@ class HomeTutorGraphRunner:
                 "tool_reason_summary": decision.reason_summary,
                 "semantic_decision_mode": decision.decision_mode,
                 "semantic_decision_confidence": decision.confidence,
+                "source_scope": getattr(decision, "source_scope", "mainland_preferred"),
                 "semantic_intent": intent,
                 "uses_history": bool(getattr(decision, "uses_history", False)),
                 "referenced_turn_count": len(getattr(decision, "referenced_turn_ids", ())),
@@ -1985,6 +1989,10 @@ class HomeTutorGraphRunner:
                 user=state["user"],
                 reasoning_mode=str(state.get("reasoning_mode") or "auto"),
                 force=bool(state.get("use_web_search")),
+            )
+            web_citations = china_first_content_policy.decorate_and_rank_citations(
+                web_citations,
+                str(state.get("source_scope") or "mainland_preferred"),
             )
             citations.extend(web_citations)
             search_backend = str(web_citations[0].get("search_backend") or "external") if web_citations else "none"
@@ -2655,6 +2663,7 @@ class CourseTutorGraphRunner:
             "deep_thinking": force_deep,
             "search_required": decision.search_required,
             "reasoning_mode": decision.reasoning_mode,
+            "source_scope": decision.source_scope,
             "tool_reason_codes": list(decision.reason_codes),
             "tool_reason_summary": decision.reason_summary,
             "course_related": False,
@@ -2710,6 +2719,7 @@ class CourseTutorGraphRunner:
                 "intent": decision.intent,
                 "search_required": decision.search_required,
                 "reasoning_mode": decision.reasoning_mode,
+                "source_scope": getattr(decision, "source_scope", "mainland_preferred"),
                 "tool_reason_codes": list(decision.reason_codes),
                 "tool_reason_summary": decision.reason_summary,
                 "semantic_search_query": decision.search_query,
@@ -2736,6 +2746,7 @@ class CourseTutorGraphRunner:
                 "tool_reason_summary": decision.reason_summary,
                 "semantic_decision_mode": decision.decision_mode,
                 "semantic_decision_confidence": decision.confidence,
+                "source_scope": getattr(decision, "source_scope", "mainland_preferred"),
                 "semantic_intent": decision.intent,
                 "profile_signal_count": len(decision.profile_updates),
             }
@@ -2853,6 +2864,10 @@ class CourseTutorGraphRunner:
                 user=state["user"],
                 reasoning_mode=str(state.get("reasoning_mode") or "auto"),
                 force=bool(state.get("use_web_search")),
+            )
+            web_citations = china_first_content_policy.decorate_and_rank_citations(
+                web_citations,
+                str(state.get("source_scope") or "mainland_preferred"),
             )
             supplements = [{**item, "evidence_role": "external_supplement"} for item in web_citations]
             citations.extend(supplements)

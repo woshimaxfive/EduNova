@@ -39,6 +39,7 @@ from backend.app.schemas.resources import (
 )
 from backend.app.schemas.personalization import PersonalizationFreshnessResponse
 from backend.app.services.learner_context import context_service_from_repository
+from backend.app.services.content_locale import china_first_content_policy
 from backend.app.services.model_settings import ModelNotConfiguredError
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.code_verifier import CodeVerifier
@@ -820,7 +821,10 @@ class ResourceGenerationService:
         messages = [
             {
                 "role": "system",
-                "content": "你是 EduNova 的资源增强 Agent，只能基于课程短摘录和学生画像摘要改写学习资源。必须输出 JSON。",
+                "content": (
+                    "你是 EduNova 的资源增强 Agent，只能基于课程短摘录和学生画像摘要改写学习资源。必须输出 JSON。"
+                    + china_first_content_policy.prompt_instruction()
+                ),
             },
             {
                 "role": "user",
@@ -882,7 +886,10 @@ class ResourceGenerationService:
         messages = [
             {
                 "role": "system",
-                "content": f"你是 EduNova 的 {resource_type} 资源 Worker。基于证据生成可直接渲染的结构化学习资源，只返回 JSON。",
+                "content": (
+                    f"你是 EduNova 的 {resource_type} 资源 Worker。基于证据生成可直接渲染的结构化学习资源，只返回 JSON。"
+                    + china_first_content_policy.prompt_instruction()
+                ),
             },
             {
                 "role": "user",
@@ -1039,7 +1046,10 @@ class ResourceGenerationService:
         messages = [
             {
                 "role": "system",
-                "content": "你是 EduNova ReviewAgent。逐项审核候选 artifact 是否与学习目标和资料证据一致，只返回 JSON。",
+                "content": (
+                    "你是 EduNova ReviewAgent。逐项审核候选 artifact 是否与学习目标和资料证据一致，只返回 JSON。"
+                    + china_first_content_policy.prompt_instruction()
+                ),
             },
             {
                 "role": "user",
@@ -1057,7 +1067,7 @@ class ResourceGenerationService:
                             "同时审核真实性、个性化、与旧版本差异、同批资源分工和教学可用性。"
                             "risk_flags 只能使用 off_topic、citation_mismatch、malformed_content、sensitive_output、"
                             "unsafe_code、personalization_mismatch、excessive_sentence_overlap、low_novelty、"
-                            "insufficient_strategy_change、intent_drift。"
+                            "insufficient_strategy_change、intent_drift、language_mismatch、mainland_access_mismatch。"
                         ),
                     ]
                 ),
@@ -1079,7 +1089,10 @@ class ResourceGenerationService:
         messages = [
             {
                 "role": "system",
-                "content": "你是 EduNova 资源修订 Agent。根据安全审核标记修订资源，只返回 JSON。",
+                "content": (
+                    "你是 EduNova 资源修订 Agent。根据安全审核标记修订资源，只返回 JSON。"
+                    + china_first_content_policy.prompt_instruction()
+                ),
             },
             {
                 "role": "user",
@@ -1320,6 +1333,8 @@ class ResourceGenerationService:
             "low_novelty",
             "insufficient_strategy_change",
             "intent_drift",
+            "language_mismatch",
+            "mainland_access_mismatch",
         }
         result: dict[str, dict[str, Any]] = {}
         for resource_type in requested_types:
@@ -1797,6 +1812,7 @@ class ResourceGenerationGraphRunner:
                             "你是 EduNova 资源教学策略规划器。只输出 JSON，不输出思维链。"
                             "只能调整给定资源的 teaching_strategy、cognitive_level、example_direction、"
                             "interaction_structure 和 learning_need，不得新增资源类型或引用。"
+                            + china_first_content_policy.prompt_instruction()
                         ),
                     },
                     {
@@ -2521,6 +2537,7 @@ class ResourceGenerationGraphRunner:
                     "generation_action": generation_action,
                     "generation_batch_id": str(state.get("generation_batch_id") or ""),
                     "source_resource_id": source_locked.id if source_locked is not None else None,
+                    **china_first_content_policy.metadata(),
                 },
             }
             resource_family_id = version_family_id or str(uuid4())

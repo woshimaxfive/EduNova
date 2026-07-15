@@ -61,6 +61,7 @@ class AgentState(TypedDict, total=False):
     semantic_decision_confidence: float
     semantic_warning: str | None
     semantic_search_query: str
+    source_scope: str
     profile_signal_updates: dict[str, Any]
     profile_signal_confidence: dict[str, float]
     course_related: bool

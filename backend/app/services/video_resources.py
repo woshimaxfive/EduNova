@@ -7,6 +7,7 @@ from typing import Any, Protocol
 from urllib.parse import parse_qs, urlparse
 
 from backend.app.services.web_search import WebSearchService
+from backend.app.services.content_locale import china_first_content_policy
 
 
 YOUTUBE_ID = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
@@ -30,6 +31,7 @@ class CuratedVideo:
     embed_url: str
     snippet: str
     retrieved_at: str
+    access_scope: str
 
     def artifact(self, *, topic: str, fit_reason: str) -> dict[str, Any]:
         return {
@@ -44,6 +46,7 @@ class CuratedVideo:
             "fit_reason": fit_reason,
             "embed_status": "unknown",
             "external_supplement": True,
+            "access_scope": self.access_scope,
             "citation_refs": [],
         }
 
@@ -57,6 +60,7 @@ class CuratedVideo:
             "evidence_role": "external_supplement",
             "platform": self.platform,
             "retrieved_at": self.retrieved_at,
+            "access_scope": self.access_scope,
         }
 
 
@@ -65,17 +69,21 @@ class VideoCurationService:
         self.search_service = search_service or WebSearchService()
 
     def curate(self, *, topic: str, profile_summary: dict[str, Any]) -> CuratedVideo:
-        query = self._search_query(topic, profile_summary)
-        result = self.search_service.search(query, max_results=8)
-        for item in list(getattr(result, "citations", []) or []):
-            candidate = normalize_video(item)
-            if candidate is not None:
-                return candidate
-        warning = str(getattr(result, "warning", "") or "没有找到合格的教学视频")
-        raise VideoCurationError(warning)
+        warnings: list[str] = []
+        for platform in ("bilibili", "youtube"):
+            query = self._search_query(topic, profile_summary, platform=platform)
+            result = self.search_service.search(query, max_results=8)
+            for item in list(getattr(result, "citations", []) or []):
+                candidate = normalize_video(item)
+                if candidate is not None and candidate.platform == platform:
+                    return candidate
+            warning = str(getattr(result, "warning", "") or "").strip()
+            if warning:
+                warnings.append(warning)
+        raise VideoCurationError(warnings[-1] if warnings else "没有找到合格的教学视频")
 
     @staticmethod
-    def _search_query(topic: str, profile_summary: dict[str, Any]) -> str:
+    def _search_query(topic: str, profile_summary: dict[str, Any], *, platform: str = "bilibili") -> str:
         safe_topic = " ".join(str(topic or "课程知识点").split())[:120]
         foundation = " ".join(
             str(
@@ -86,7 +94,8 @@ class VideoCurationService:
         )[:40]
         goal = " ".join(str(profile_summary.get("goal") or "").split())[:40]
         qualifiers = " ".join(item for item in (foundation, goal) if item)
-        return f"{safe_topic} {qualifiers} 教学讲解 site:bilibili.com/video OR site:youtube.com/watch".strip()
+        site = "site:bilibili.com/video" if platform == "bilibili" else "site:youtube.com/watch"
+        return f"{safe_topic} {qualifiers} 教学讲解 {site}".strip()
 
 
 def normalize_video(item: dict[str, Any]) -> CuratedVideo | None:
@@ -136,4 +145,5 @@ def normalize_video(item: dict[str, Any]) -> CuratedVideo | None:
         embed_url=embed_url,
         snippet=snippet,
         retrieved_at=str(item.get("retrieved_at") or datetime.now(UTC).isoformat()),
+        access_scope=china_first_content_policy.classify_access_scope(watch_url),
     )

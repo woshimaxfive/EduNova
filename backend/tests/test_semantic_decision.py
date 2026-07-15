@@ -35,6 +35,22 @@ def test_resource_recommendation_is_decided_by_model_semantics() -> None:
     assert decision.search_query == "Java 初学者 官方视频教程"
     assert decision.intent == "external_resource_recommendation"
     assert decision.decision_mode == "model"
+    assert decision.source_scope == "mainland_preferred"
+
+
+def test_model_can_request_global_original_sources_without_keyword_fallback() -> None:
+    model = FakeModel(
+        '{"intent":"verification","search_required":true,"search_query":"RFC 9110 original",'
+        '"reasoning_mode":"deep","source_scope":"global_required","course_related":false,'
+        '"confidence":0.96,"reason_codes":["international_primary_source"],'
+        '"reason_summary":"需要核对国际原始规范。","profile_signals":[]}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="请按 RFC 9110 原文核实这个 HTTP 结论", scope="home"
+    )
+
+    assert decision.source_scope == "global_required"
 
 
 def test_complex_question_uses_deep_without_forcing_search() -> None:

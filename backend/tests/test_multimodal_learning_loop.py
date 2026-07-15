@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from backend.app.models import GeneratedResource, LearningTask, ResourceInteraction, User
 from backend.app.schemas.resources import ResourceInteractionRequest
@@ -10,7 +11,7 @@ from backend.app.services.resource_feedback import (
     deterministic_bundle_types,
     rank_resource_types,
 )
-from backend.app.services.video_resources import normalize_video
+from backend.app.services.video_resources import VideoCurationService, normalize_video
 
 
 def test_video_normalization_accepts_only_supported_canonical_ids() -> None:
@@ -23,6 +24,50 @@ def test_video_normalization_accepts_only_supported_canonical_ids() -> None:
     assert bilibili is not None
     assert bilibili.embed_url == "https://player.bilibili.com/player.html?bvid=BV1xx411c7mD"
     assert youtube.artifact(topic="A*", fit_reason="补充讲解")["embed_status"] == "unknown"
+    assert youtube.access_scope == "external_fallback"
+    assert bilibili.access_scope == "mainland_preferred"
+
+
+class FakeVideoSearch:
+    def __init__(self, results: list[object]) -> None:
+        self.results = list(results)
+        self.queries: list[str] = []
+
+    def search(self, query: str, max_results: int | None = None) -> object:
+        self.queries.append(query)
+        return self.results.pop(0)
+
+
+def test_video_curation_stops_after_a_valid_bilibili_result() -> None:
+    search = FakeVideoSearch([
+        SimpleNamespace(citations=[{
+            "title": "二叉树遍历",
+            "url": "https://www.bilibili.com/video/BV1xx411c7mD",
+        }], warning=None),
+    ])
+
+    result = VideoCurationService(search).curate(topic="二叉树遍历", profile_summary={})
+
+    assert result.platform == "bilibili"
+    assert len(search.queries) == 1
+    assert "site:bilibili.com/video" in search.queries[0]
+
+
+def test_video_curation_uses_youtube_only_as_second_stage_fallback() -> None:
+    search = FakeVideoSearch([
+        SimpleNamespace(citations=[], warning=None),
+        SimpleNamespace(citations=[{
+            "title": "Binary tree traversal",
+            "url": "https://youtu.be/abcDEF_1234",
+        }], warning=None),
+    ])
+
+    result = VideoCurationService(search).curate(topic="二叉树遍历", profile_summary={})
+
+    assert result.platform == "youtube"
+    assert result.access_scope == "external_fallback"
+    assert len(search.queries) == 2
+    assert "site:youtube.com/watch" in search.queries[1]
 
 
 def test_video_normalization_rejects_dangerous_or_unverified_urls() -> None:

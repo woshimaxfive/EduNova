@@ -1170,6 +1170,7 @@ def test_append_home_message_with_tools_persists_material_web_citations_and_trac
                     "title": "A* search overview",
                     "url": "https://example.com/a-star",
                     "snippet": "A* search combines path cost and a heuristic estimate.",
+                    "access_scope": "global_source",
                 },
             ],
             "use_web_search": True,

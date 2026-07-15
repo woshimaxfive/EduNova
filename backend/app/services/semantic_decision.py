@@ -39,6 +39,7 @@ class SemanticDecisionPayload(BaseModel):
     search_required: bool
     search_query: str = Field(default="", max_length=300)
     reasoning_mode: Literal["auto", "deep"]
+    source_scope: Literal["mainland_preferred", "global_required"] = "mainland_preferred"
     course_related: bool = False
     confidence: float = Field(ge=0, le=1)
     reason_codes: list[str] = Field(default_factory=list, max_length=6)
@@ -166,6 +167,7 @@ class SemanticDecisionService:
             profile_confidence=profile_confidence,
             summary=str(parsed["reason_summary"])[:160],
             warning=None,
+            source_scope=str(parsed.get("source_scope") or "mainland_preferred"),
         )
 
     def assess_course_evidence(
@@ -250,7 +252,8 @@ class SemanticDecisionService:
             "学习偏好、学习目标或已有基础时才输出 profile_signals，explicit 必须为 true。"
             "profile_signals 只允许 weak_points、learning_preference、learning_goal、knowledge_foundation。"
             "reason_codes 使用简短英文标识，reason_summary 只给安全原因摘要。"
-            "输出字段固定为 intent、search_required、search_query、reasoning_mode、course_related、"
+            "source_scope 默认 mainland_preferred；只有用户明确要求国外平台、国际原始论文/标准，或问题必须依赖国际原始来源时"
+            "才输出 global_required。输出字段固定为 intent、search_required、search_query、reasoning_mode、source_scope、course_related、"
             "confidence、reason_codes、reason_summary、profile_signals、standalone_query、uses_history、"
             "referenced_turn_ids。需要结合历史时，把当前问题改写成可独立理解的 standalone_query；"
             "referenced_turn_ids 只引用输入中存在的 turn_id。intent 优先使用 general_learning、"

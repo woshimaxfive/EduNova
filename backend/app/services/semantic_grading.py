@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.agents.learning_review import contains_sensitive_text, parse_json_object, safe_text
 from backend.app.models import User
+from backend.app.services.content_locale import china_first_content_policy
 
 
 class GradingModelService(Protocol):
@@ -57,6 +58,7 @@ class SemanticShortAnswerGrader:
                         "content": (
                             "你是 EduNova 简答题评分器。依据题目、参考答案、明确量规和课程证据进行语义评分，"
                             "不能用关键词出现次数代替理解判断。只输出 JSON，不得修改题目、课程证据或客观题结果。"
+                            + china_first_content_policy.prompt_instruction()
                         ),
                     },
                     {

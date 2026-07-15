@@ -15,6 +15,7 @@ from backend.app.schemas.profiles import normalize_profile_json
 from backend.app.services.paths import PathReplanResult, PathService, PlannedTask
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
+from backend.app.services.content_locale import china_first_content_policy
 from backend.app.services.resource_feedback import (
     RESOURCE_TYPES,
     deterministic_bundle_types,
@@ -327,6 +328,7 @@ class PathPlanningGraphRunner:
                             if state.get("learner_context") is not None
                             else "legacy"
                         ),
+                        **china_first_content_policy.metadata(),
                         "personalization": {
                             code: safe_text(profile.get(code), limit=80)
                             for code in self._trusted_factor_codes(state)
@@ -452,6 +454,7 @@ class PathPlanningGraphRunner:
                         "content": (
                             "你是 PathPlanningGraph 的规划 Agent。只能从候选任务中选择最多8个近期优先任务，"
                             "不能新增知识点、资源、画像因素或任务。只输出合法 JSON，不输出解释或思维链。"
+                            + china_first_content_policy.prompt_instruction()
                         ),
                     },
                     {

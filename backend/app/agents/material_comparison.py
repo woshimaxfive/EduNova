@@ -11,6 +11,7 @@ from backend.app.models import Course, KnowledgePoint, Material, MaterialCompari
 from backend.app.schemas.materials import MaterialComparisonPoint, MaterialComparisonResult
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
+from backend.app.services.content_locale import china_first_content_policy
 
 
 class MaterialComparisonState(TypedDict, total=False):
@@ -177,7 +178,7 @@ class MaterialComparisonGraphRunner:
                         [
                             {
                                 "role": "system",
-                                "content": "你是 MaterialComparisonGraph 的 ReviewAgent。只审核结构、引用一致性和安全性，只输出 JSON。",
+                                "content": "你是 MaterialComparisonGraph 的 ReviewAgent。只审核结构、引用一致性和安全性，只输出 JSON。" + china_first_content_policy.prompt_instruction(),
                             },
                             {
                                 "role": "user",
@@ -256,6 +257,7 @@ class MaterialComparisonGraphRunner:
             learner_context.global_context.profile_applied_version if learner_context is not None else 0
         )
         payload["course_context_hash"] = learner_context.context_hash if learner_context is not None else "legacy"
+        payload.update(china_first_content_policy.metadata())
         try:
             run = self.service.repository.add_comparison_run(
                 MaterialComparisonRun(
@@ -304,7 +306,7 @@ class MaterialComparisonGraphRunner:
                 [
                     {
                         "role": "system",
-                        "content": "你是资料对比 Agent。只能使用给定标题，禁止新增资料、知识点、引用或考点，只输出 JSON。",
+                        "content": "你是资料对比 Agent。只能使用给定标题，禁止新增资料、知识点、引用或考点，只输出 JSON。" + china_first_content_policy.prompt_instruction(),
                     },
                     {
                         "role": "user",

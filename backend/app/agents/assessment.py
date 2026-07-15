@@ -24,6 +24,7 @@ from backend.app.services.practice import EvaluatedAnswer, PracticeService, Prac
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.semantic_grading import SemanticShortAnswerGrader
+from backend.app.services.content_locale import china_first_content_policy
 
 
 ASSESSMENT_PROMPT_VERSION = "assessment-v3.1"
@@ -323,6 +324,7 @@ class AssessmentGraphRunner:
             assessment_json={
                 "requested_difficulty": state.get("requested_difficulty", state.get("difficulty", "medium")),
                 "effective_difficulty": state.get("difficulty", "medium"),
+                **china_first_content_policy.metadata(),
             },
             created_at=now,
             updated_at=now,
@@ -566,7 +568,7 @@ class AssessmentGraphRunner:
             raw = self.service.model_service.chat_completion(
                 state["user"],
                 [
-                    {"role": "system", "content": "你是 AssessmentGraph 的 ReviewAgent。只输出 JSON，不得修改客观分数。"},
+                    {"role": "system", "content": "你是 AssessmentGraph 的 ReviewAgent。只输出 JSON，不得修改客观分数。" + china_first_content_policy.prompt_instruction()},
                     {
                         "role": "user",
                         "content": (
@@ -613,7 +615,7 @@ class AssessmentGraphRunner:
             raw = self.service.model_service.chat_completion(
                 state["user"],
                 [
-                    {"role": "system", "content": "你是 AssessmentGraph 出题 Agent。依据课程证据生成各不相同、可回答且干扰项合理的题目，只输出 JSON。"},
+                    {"role": "system", "content": "你是 AssessmentGraph 出题 Agent。依据课程证据生成各不相同、可回答且干扰项合理的题目，只输出 JSON。" + china_first_content_policy.prompt_instruction()},
                     {"role": "user", "content": f"协议={ASSESSMENT_PROMPT_VERSION}。{instruction} 可信课程画像提示={personalization}。题目蓝图={json.dumps(prompt_rows, ensure_ascii=False)}。选择题必须保留正确答案原文并生成四个互不重复的合理选项；不同题目不得复用题面。返回 {{\"questions\":[{{\"id\":\"q1\",\"prompt\":\"\",\"options\":[],\"explanation\":\"\"}}]}}。"},
                 ],
             )
@@ -778,7 +780,7 @@ class AssessmentGraphRunner:
             raw = self.service.model_service.chat_completion(
                 state["user"],
                 [
-                    {"role": "system", "content": "你是 AssessmentGraph 错因诊断 Agent。逐题对照题干、正确答案、学生答案和课程证据诊断，不得修改分数，只输出 JSON。"},
+                    {"role": "system", "content": "你是 AssessmentGraph 错因诊断 Agent。逐题对照题干、正确答案、学生答案和课程证据诊断，不得修改分数，只输出 JSON。" + china_first_content_policy.prompt_instruction()},
                     {"role": "user", "content": f"协议={DIAGNOSIS_PROMPT_VERSION}。可信课程画像提示={personalization}。低分题={json.dumps(rows, ensure_ascii=False)}。每道题必须给出与本题直接相关且不重复套用的错因。返回 {{\"diagnoses\":[{{\"question_id\":\"q1\",\"misconception\":\"\",\"missing_concepts\":[],\"recommended_action\":\"\",\"confidence\":0.0}}]}}。"},
                 ],
             )

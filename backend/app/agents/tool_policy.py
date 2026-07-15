@@ -6,6 +6,7 @@ from typing import Literal
 
 
 ReasoningMode = Literal["auto", "deep"]
+SourceScope = Literal["mainland_preferred", "global_required"]
 DecisionMode = Literal["model", "forced", "model_forced", "degraded"]
 
 
@@ -34,6 +35,7 @@ class ToolDecision:
     profile_confidence: dict[str, float] = field(default_factory=dict)
     summary: str = "语义决策模型不可用，已采用保守降级。"
     warning: str | None = "语义能力暂时降级，未自动推断联网、深度推理或学习画像。"
+    source_scope: SourceScope = "mainland_preferred"
 
     @property
     def reason_summary(self) -> str:

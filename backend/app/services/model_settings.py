@@ -17,7 +17,9 @@ from backend.app.providers.openai_compatible import (
     OpenAICompatibleChatProvider,
     OpenAICompatibleConfig,
     OpenAICompatibleEmbeddingConfig,
+    NativeWebSearchResult,
 )
+from backend.app.providers.capabilities import provider_capabilities
 from backend.app.providers.retrieval import (
     EmbeddingRequestConfig,
     HttpRerankProvider,
@@ -93,6 +95,17 @@ class ModelChatProvider(Protocol):
         timeout_seconds: float,
         dimensions: int | None = None,
     ) -> list[list[float]]: ...
+
+    def native_web_search(
+        self,
+        config: OpenAICompatibleConfig,
+        *,
+        query: str,
+        timeout_seconds: float,
+        native_kind: str,
+        deep: bool = False,
+        force: bool = False,
+    ) -> NativeWebSearchResult: ...
 
 
 class SaveModelSettingsRequest(BaseModel):
@@ -827,6 +840,45 @@ class ModelSettingsService:
                 config=config,
                 messages=messages,
                 timeout_seconds=self.settings.model_request_timeout_seconds,
+            ),
+            timeout_seconds=self.settings.model_request_timeout_seconds,
+        )
+
+    def native_web_search(
+        self,
+        user: User,
+        query: str,
+        *,
+        reasoning_mode: str = "auto",
+        force: bool = False,
+    ) -> NativeWebSearchResult:
+        runtime = self.resolve_runtime_config(user)
+        if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
+            return NativeWebSearchResult([], "none", "当前未配置可用模型。")
+        capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
+        if capabilities.native_search == "none":
+            return NativeWebSearchResult([], "none", "当前模型不提供厂商原生联网搜索。")
+        config = OpenAICompatibleConfig(
+            base_url=runtime.base_url,
+            api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+            chat_model=runtime.chat_model,
+            thinking_type=("enabled" if reasoning_mode == "deep" else "auto")
+            if capabilities.supports_thinking_control
+            else None,
+        )
+        return self.execution_runtime.execute(
+            user_id=user.id,
+            provider_source=runtime.source,
+            model_config_id=runtime.config_id,
+            model_name=runtime.chat_model,
+            operation="web_search",
+            call=lambda: self.provider.native_web_search(
+                config,
+                query=query,
+                timeout_seconds=self.settings.model_request_timeout_seconds,
+                native_kind=capabilities.native_search,
+                deep=reasoning_mode == "deep",
+                force=force,
             ),
             timeout_seconds=self.settings.model_request_timeout_seconds,
         )

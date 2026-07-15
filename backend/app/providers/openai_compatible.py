@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 import json
+import re
 from typing import Any, Iterator
 
 import httpx
@@ -47,6 +49,13 @@ class OpenAICompatibleEmbeddingConfig:
     base_url: str
     api_key: str
     embedding_model: str
+
+
+@dataclass(frozen=True)
+class NativeWebSearchResult:
+    citations: list[dict[str, Any]]
+    backend: str
+    warning: str | None = None
 
 
 class OpenAICompatibleChatProvider:
@@ -148,6 +157,61 @@ class OpenAICompatibleChatProvider:
             raise ModelProviderError("模型服务返回了不匹配的向量维度。", code="invalid_response", retryable=True)
         return vectors
 
+    def native_web_search(
+        self,
+        config: OpenAICompatibleConfig,
+        *,
+        query: str,
+        timeout_seconds: float,
+        native_kind: str,
+        deep: bool = False,
+        force: bool = False,
+    ) -> NativeWebSearchResult:
+        cleaned_query = " ".join(query.split())[:300]
+        if not cleaned_query:
+            return NativeWebSearchResult([], f"native_{native_kind}", "联网搜索问题为空。")
+        try:
+            with self._client(config.base_url, config.api_key, timeout_seconds) as client:
+                if native_kind == "openai":
+                    response = client.responses.create(
+                        model=config.chat_model,
+                        input=cleaned_query,
+                        tools=[{"type": "web_search"}],  # type: ignore[list-item]
+                        tool_choice="required" if force else "auto",
+                        include=["web_search_call.action.sources"],
+                    )
+                elif native_kind == "spark":
+                    response = client.chat.completions.create(
+                        model=config.chat_model,
+                        messages=[{"role": "user", "content": cleaned_query}],
+                        temperature=0.2,
+                        extra_body={
+                            "tools": [
+                                {
+                                    "type": "web_search",
+                                    "web_search": {"enable": True, "search_mode": "deep" if deep else "normal"},
+                                }
+                            ],
+                            "tool_choice": "required" if force else "auto",
+                            **(self._thinking_body(config) or {}),
+                        },
+                    )
+                else:
+                    return NativeWebSearchResult([], "none", "当前模型不支持厂商原生联网搜索。")
+        except APIError as exc:
+            error = self._sdk_error(exc)
+            return NativeWebSearchResult([], f"native_{native_kind}", str(error))
+
+        payload = response.model_dump(mode="json") if hasattr(response, "model_dump") else {}
+        citations = self._native_search_citations(payload, backend=f"native_{native_kind}")
+        if not citations:
+            return NativeWebSearchResult(
+                [],
+                f"native_{native_kind}",
+                "厂商原生搜索未返回可验证来源，已尝试外部搜索回退。",
+            )
+        return NativeWebSearchResult(citations, f"native_{native_kind}")
+
     def _client(self, base_url: str, api_key: str, timeout_seconds: float) -> OpenAI:
         http_client = httpx.Client(transport=self.transport, timeout=timeout_seconds)
         return OpenAI(
@@ -157,6 +221,57 @@ class OpenAICompatibleChatProvider:
             max_retries=0,
             http_client=http_client,
         )
+
+    @classmethod
+    def _native_search_citations(cls, payload: Any, *, backend: str) -> list[dict[str, Any]]:
+        candidates: list[dict[str, Any]] = []
+
+        def visit(value: Any) -> None:
+            if isinstance(value, dict):
+                url = value.get("url") or value.get("source_url")
+                if isinstance(url, str) and cls._is_http_url(url):
+                    candidates.append(value)
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+
+        visit(payload)
+        seen: set[str] = set()
+        citations: list[dict[str, Any]] = []
+        for item in candidates:
+            url = str(item.get("url") or item.get("source_url") or "").strip()
+            if url in seen:
+                continue
+            seen.add(url)
+            title = cls._clean_source_text(item.get("title") or item.get("name") or "联网来源", 120)
+            snippet = cls._clean_source_text(
+                item.get("snippet") or item.get("description") or item.get("text") or "",
+                240,
+            )
+            citations.append(
+                {
+                    "source_type": "web",
+                    "title": title,
+                    "url": url[:500],
+                    "snippet": snippet,
+                    "search_backend": backend,
+                    "evidence_role": "external_supplement",
+                    "retrieved_at": datetime.now(UTC).isoformat(),
+                }
+            )
+            if len(citations) >= 8:
+                break
+        return citations
+
+    @staticmethod
+    def _is_http_url(value: str) -> bool:
+        return bool(re.match(r"^https?://[^\s]+$", value.strip(), flags=re.IGNORECASE))
+
+    @staticmethod
+    def _clean_source_text(value: Any, limit: int) -> str:
+        return " ".join(str(value or "").split())[:limit]
 
     @staticmethod
     def _thinking_body(config: OpenAICompatibleConfig) -> dict[str, Any] | None:

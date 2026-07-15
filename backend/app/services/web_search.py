@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -10,7 +11,7 @@ from backend.app.core.config import Settings, get_settings
 
 @dataclass(frozen=True)
 class WebSearchResult:
-    citations: list[dict[str, str]] = field(default_factory=list)
+    citations: list[dict[str, Any]] = field(default_factory=list)
     warning: str | None = None
 
 
@@ -75,6 +76,9 @@ class WebSearchService:
                     "title": title or url or "联网来源",
                     "url": url,
                     "snippet": snippet,
+                    "search_backend": "external",
+                    "evidence_role": "external_supplement",
+                    "retrieved_at": datetime.now(UTC).isoformat(),
                 }
             )
         return citations

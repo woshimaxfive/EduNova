@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Protocol
@@ -20,8 +19,6 @@ from backend.app.schemas.profiles import (
 )
 from backend.app.services.model_settings import ModelSettingsService
 
-
-PROFILE_SIGNAL_WORDS = ("不懂", "不会", "困惑", "卡住", "薄弱", "最担心", "为什么", "怎么复习", "难")
 
 PROFILE_QUESTION_ORDER = (
     "learning_goal",
@@ -173,6 +170,7 @@ class ProfileService:
         source_ref_type: str,
         source_ref_id: int,
         suggested_updates: dict[str, Any],
+        suggested_confidence: dict[str, float] | None = None,
         course_id: int | None = None,
         parent_trace_id: str | None = None,
     ) -> ProfileEvent | None:
@@ -184,6 +182,7 @@ class ProfileService:
             source_ref_type=source_ref_type,
             source_ref_id=source_ref_id,
             suggested_updates=suggested_updates,
+            suggested_confidence=suggested_confidence or {},
             course_id=course_id,
             parent_trace_id=parent_trace_id,
         )
@@ -197,249 +196,27 @@ class ProfileService:
         message_text: str,
         citation_json: list[dict[str, Any]],
         trace_id: str | None,
+        suggested_updates: dict[str, Any] | None = None,
+        suggested_confidence: dict[str, float] | None = None,
     ) -> ProfileEvent | None:
-        if session.scope != "course" or not self._has_profile_signal(message_text):
+        if session.scope != "course" or not suggested_updates:
             return None
         citations = self._safe_citations(citation_json)
-        title = next(
-            (
-                str(item.get("section_title") or item.get("source_title") or "").strip()
-                for item in citations
-                if item.get("section_title") or item.get("source_title")
-            ),
-            "",
-        )
-        if not title:
+        if not citations:
             return None
         return self.ingest_learning_signal(
             user=user,
             source_type="course_question",
             source_ref_type="chat_message",
             source_ref_id=user_message.id,
-            suggested_updates={"weak_points": [title]},
+            suggested_updates=suggested_updates,
+            suggested_confidence=suggested_confidence or {},
             course_id=session.course_id,
             parent_trace_id=trace_id,
         )
 
     def list_events(self, user: User, limit: int = 20) -> list[ProfileEventResponse]:
         return [event_to_api(event) for event in self.repository.list_events(user.id, limit=limit)]
-
-    def record_course_question_event(
-        self,
-        *,
-        user: User,
-        session: ChatSession,
-        user_message: ChatMessage,
-        assistant_message: ChatMessage,
-        message_text: str,
-        citation_json: list[dict[str, Any]],
-        trace_id: str | None,
-    ) -> ProfileEvent | None:
-        if session.scope != "course" or not self._has_profile_signal(message_text):
-            return None
-
-        profile = self.repository.get_profile(user.id)
-        event = ProfileEvent(
-            user_id=user.id,
-            profile_id=profile.id if profile is not None else None,
-            dimension="weak_points",
-            change_summary="课程问答提示可能存在薄弱点",
-            evidence_json={
-                "source_type": "course_question",
-                "course_id": session.course_id,
-                "session_id": session.id,
-                "user_message_id": user_message.id,
-                "assistant_message_id": assistant_message.id,
-                "trace_id": trace_id,
-                "citations": self._safe_citations(citation_json),
-            },
-            agent_trace_id=trace_id,
-            source_type="course_question",
-            source_ref_type="chat_message",
-            source_ref_id=user_message.id,
-            status="candidate",
-            confidence_score=Decimal("0.60"),
-            proposal_json={"weak_points": [self._safe_citations(citation_json)[0].get("section_title")]} if self._safe_citations(citation_json) and self._safe_citations(citation_json)[0].get("section_title") else {},
-        )
-        self.repository.add_event(event)
-        return event
-
-    def _extract_profile_updates(self, message_text: str) -> dict[str, Any]:
-        updates: dict[str, Any] = {}
-        major_background = self._find_first(
-            message_text,
-            [
-                r"我是([^，。；,;]*专业[^，。；,;]*学生)",
-                r"([^，。；,;]*专业[^，。；,;]*学生)",
-            ],
-        )
-        if major_background:
-            updates["major_background"] = major_background
-
-        knowledge_foundation = self._find_first(
-            message_text,
-            [
-                r"([^，。；,;]*刚入门)",
-                r"([^，。；,;]*基础较稳)",
-                r"([^，。；,;]*基础一般)",
-                r"((?:已经|曾经)?学过[^，。；,;]{1,40})",
-                r"((?:已经)?(?:熟悉|了解|掌握)[^，。；,;]{1,40}(?:基础|知识|概念))",
-                r"(零基础)",
-            ],
-        )
-        if knowledge_foundation and "数学基础一般" not in knowledge_foundation:
-            updates["knowledge_foundation"] = knowledge_foundation
-
-        learning_goal = self._find_first(
-            message_text,
-            [
-                r"(?:我的)?目标(?:是|改为|改成)([^，。；,;]{2,80})",
-                r"(?:想|希望|目标是)([^，。；,;]*掌握[^，。；,;]*)",
-                r"(?:想|希望|目标是)([^，。；,;]*复习[^，。；,;]*)",
-                r"(?:想|希望)(成为[^，。；,;]{2,80})",
-                r"(?:想|希望)(完成[^，。；,;]{2,80})",
-                r"(?:想|希望)(解决[^，。；,;]{2,80})",
-            ],
-        )
-        if learning_goal:
-            updates["learning_goal"] = learning_goal
-
-        preferences = sorted(
-            [
-                term
-                for term in ("图解", "案例", "代码", "视频", "练习")
-                if self._positive_preference(message_text, term)
-            ],
-            key=message_text.index,
-        )
-        if preferences:
-            updates["learning_preference"] = "、".join(preferences)
-
-        cognitive_styles: list[str] = []
-        if "案例" in preferences:
-            cognitive_styles.append("案例驱动")
-        if any(marker in message_text for marker in ("先看结构", "先看框架", "先看大纲", "整体框架")):
-            cognitive_styles.append("结构化理解")
-        if any(marker in message_text for marker in ("一步一步", "分步骤", "逐步推导")):
-            cognitive_styles.append("渐进推导")
-        if cognitive_styles:
-            updates["cognitive_style"] = "、".join(dict.fromkeys(cognitive_styles))
-
-        learning_pace = self._find_first(
-            message_text,
-            [
-                r"((?:每天|每日)[^，。；,;]{0,14}[0-9零一二两三四五六七八九十百半]+\s*(?:个)?\s*(?:分钟|小时))",
-                r"((?:每周|一周)[^，。；,;]{0,14}[0-9零一二两三四五六七八九十百半]+\s*次)",
-            ],
-        )
-        if learning_pace:
-            updates["learning_pace"] = re.sub(r"\s+", " ", learning_pace)
-
-        weak_points = self._extract_weak_points(message_text)
-        if weak_points:
-            updates["weak_points"] = weak_points
-
-        motivation_markers = (
-            "感兴趣",
-            "热爱",
-            "动力",
-            "理想",
-            "职业",
-            "想成为",
-            "想进入",
-            "想从事",
-            "做贡献",
-            "贡献",
-            "帮助别人",
-            "解决真实问题",
-        )
-        if ("提升" in message_text and "能力" in message_text) or any(
-            marker in message_text for marker in motivation_markers
-        ):
-            updates["motivation_interest"] = self._clip_sentence(message_text)
-
-        return updates
-
-    @staticmethod
-    def _positive_preference(message_text: str, term: str) -> bool:
-        if term not in message_text:
-            return False
-        negative_patterns = (
-            rf"不(?:太)?喜欢[^，。；,;]{{0,8}}{re.escape(term)}",
-            rf"不想[^，。；,;]{{0,8}}{re.escape(term)}",
-            rf"不适合[^，。；,;]{{0,8}}{re.escape(term)}",
-        )
-        return not any(re.search(pattern, message_text) for pattern in negative_patterns)
-
-    @staticmethod
-    def _find_first(message_text: str, patterns: list[str]) -> str:
-        for pattern in patterns:
-            match = re.search(pattern, message_text)
-            if match:
-                return match.group(1).strip()
-        return ""
-
-    @staticmethod
-    def _extract_weak_points(message_text: str) -> list[str]:
-        weak_points: list[str] = []
-        if "数学基础一般" in message_text:
-            weak_points.append("数学基础一般")
-        worry = re.search(r"(?:最担心|担心)([^，。；,;]*)", message_text)
-        if worry:
-            weak_point = worry.group(1).strip()
-            if weak_point:
-                weak_points.append(weak_point)
-        if "链式法则" in message_text and "链式法则" not in weak_points:
-            weak_points.append("链式法则")
-        for segment in re.split(r"[，。；,;！!?？]", message_text):
-            normalized = segment.strip()
-            if not normalized or any(
-                marker in normalized
-                for marker in ("并不薄弱", "不是薄弱", "没有卡住", "没有困难", "不是不会", "并不难")
-            ):
-                continue
-            topic_match = re.search(
-                r"(?P<topic>[^，。；,;]{1,48}?)(?:比较|有点|很|特别)?(?:薄弱|不熟|容易错|没理解|比较难|很难|卡住)$",
-                normalized,
-            )
-            reverse_match = re.search(r"(?:不会|不熟|没理解)(?P<topic>[^，。；,;]{1,40})$", normalized)
-            match = topic_match or reverse_match
-            if match:
-                topic = re.sub(r"^(?:我(?:在|对|觉得)?|目前|最近|但是|但|而且|同时|也)", "", match.group("topic")).strip()
-                if topic and topic not in weak_points:
-                    weak_points.append(topic)
-        return weak_points
-
-    @staticmethod
-    def _uncertain_profile_dimensions(message_text: str, updates: dict[str, Any]) -> list[str]:
-        uncertain: list[str] = []
-        markers = ("可能", "也许", "好像", "似乎", "不确定", "说不准")
-        for segment in re.split(r"[，。；,;！!?？]", message_text):
-            if not any(marker in segment for marker in markers):
-                continue
-            for key, value in updates.items():
-                values = value if isinstance(value, list) else re.split(r"[、/]", str(value))
-                if any(str(item).strip() and str(item).strip() in segment for item in values):
-                    uncertain.append(key)
-        return list(dict.fromkeys(uncertain))
-
-    @staticmethod
-    def _profile_dimension_hints(message_text: str) -> list[str]:
-        hints: list[str] = []
-        markers = {
-            "major_background": ("专业", "年级", "学生", "工作"),
-            "knowledge_foundation": ("基础", "学过", "熟悉", "了解", "零基础"),
-            "learning_goal": ("目标", "希望", "想掌握", "想学会", "想成为", "想完成", "想解决", "复习"),
-            "cognitive_style": ("理解", "推导", "结构", "框架", "步骤"),
-            "learning_preference": ("喜欢", "图解", "案例", "代码", "视频", "练习"),
-            "weak_points": ("薄弱", "不熟", "不会", "卡住", "容易错", "没理解", "难"),
-            "learning_pace": ("每天", "每周", "分钟", "小时", "学习时间"),
-            "motivation_interest": ("兴趣", "动力", "为了", "提升", "项目", "想成为", "职业", "理想", "贡献", "方向"),
-        }
-        for key, values in markers.items():
-            if any(marker in message_text for marker in values):
-                hints.append(key)
-        return hints
 
     @staticmethod
     def _merge_profile_json(current: dict[str, Any] | None, updates: dict[str, Any]) -> dict[str, Any]:
@@ -482,10 +259,6 @@ class ProfileService:
             base = Decimal("60")
         increment = Decimal(len(changed_labels) * 4)
         return min(base + increment, Decimal("94"))
-
-    @staticmethod
-    def _has_profile_signal(message_text: str) -> bool:
-        return any(word in message_text for word in PROFILE_SIGNAL_WORDS)
 
     @staticmethod
     def _safe_citations(citation_json: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -27,6 +27,7 @@ class ProfileState(TypedDict, total=False):
     source_ref_id: int | None
     parent_trace_id: str | None
     suggested_updates: dict[str, Any]
+    suggested_confidence: dict[str, float]
     profile: StudentProfile
     deterministic_updates: dict[str, Any]
     proposed_updates: dict[str, Any]
@@ -78,6 +79,7 @@ class ProfileGraphRunner:
         source_ref_type: str,
         source_ref_id: int,
         suggested_updates: dict[str, Any],
+        suggested_confidence: dict[str, float] | None = None,
         course_id: int | None = None,
         parent_trace_id: str | None = None,
     ) -> ProfileEvent | None:
@@ -95,6 +97,7 @@ class ProfileGraphRunner:
             "source_ref_id": source_ref_id,
             "parent_trace_id": parent_trace_id,
             "suggested_updates": suggested_updates,
+            "suggested_confidence": suggested_confidence or {},
             "repair_count": 0,
         }
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, purpose="learning_signal")):
@@ -160,7 +163,11 @@ class ProfileGraphRunner:
         def work():
             if state.get("operation") == "learning_signal":
                 deterministic = self._sanitize_updates(state.get("suggested_updates", {}))
-                confidence = {key: 0.60 for key in deterministic}
+                supplied_confidence = state.get("suggested_confidence", {})
+                confidence = {
+                    key: min(0.95, max(0.0, float(supplied_confidence.get(key, 0.60))))
+                    for key in deterministic
+                }
                 return {
                     "deterministic_updates": deterministic,
                     "proposed_updates": deterministic,
@@ -172,12 +179,11 @@ class ProfileGraphRunner:
                     "generation_mode": "deterministic_source",
                 }, f"已形成 {len(deterministic)} 个学习行为画像提案。", "completed", {"candidate_count": len(deterministic)}
 
-            message = str(state.get("message") or "")
-            deterministic = self._sanitize_updates(self.service._extract_profile_updates(message))
-            proposed = dict(deterministic)
-            confidence = {key: 0.70 for key in proposed}
-            uncertain_dimensions = self.service._uncertain_profile_dimensions(message, deterministic)
-            hints = self.service._profile_dimension_hints(message)
+            deterministic: dict[str, Any] = {}
+            proposed: dict[str, Any] = {}
+            confidence: dict[str, float] = {}
+            uncertain_dimensions: list[str] = []
+            hints: list[str] = []
             model_used = False
             parse_status = "not_configured"
             extraction_repair_count = 0

@@ -3778,6 +3778,8 @@ export interface components {
         SendTutorMessageRequest: {
             /**
              * Deep Thinking
+             * @deprecated
+             * @description 兼容旧客户端；true 强制深度推理，false 或缺省由系统自动判断。
              * @default false
              */
             deep_thinking: boolean;
@@ -3787,6 +3789,8 @@ export interface components {
             selected_material_ids?: number[] | null;
             /**
              * Use Web Search
+             * @deprecated
+             * @description 兼容旧客户端；true 强制联网，false 或缺省由系统自动判断。
              * @default false
              */
             use_web_search: boolean;

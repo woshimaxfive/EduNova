@@ -944,7 +944,7 @@ describe("LearningSpacePage", () => {
     expect(screen.queryByRole("heading", { name: /准备好一起学习了吗/ })).not.toBeInTheDocument();
   });
 
-  it("keeps selected material state inside the composer without web search copy", async () => {
+  it("keeps selected material state and removes manual capability toggles", async () => {
     const user = userEvent.setup();
 
     renderWithDashboardSummary(starterSummary);
@@ -952,14 +952,12 @@ describe("LearningSpacePage", () => {
     await user.click(screen.getByRole("button", { name: "打开资料库" }));
     await user.click(screen.getByRole("button", { name: /真实资料讲义.md/ }));
     await user.click(screen.getByRole("button", { name: "作为本次对话参考" }));
-    await user.click(screen.getByRole("button", { name: "联网搜索" }));
-
     const composer = screen.getByRole("region", { name: "学习输入区" });
 
     expect(within(composer).getByText("真实资料讲义.md")).toBeInTheDocument();
     expect(within(composer).getByText("共 1 份")).toBeInTheDocument();
-    expect(screen.queryByText(/联网搜索已开/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "联网搜索" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "联网搜索" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "深度思考" })).not.toBeInTheDocument();
   });
 
   it("restores a material selected from the library navigation state", async () => {
@@ -1021,25 +1019,19 @@ describe("LearningSpacePage", () => {
     expect(composer.queryByText("期末复习题 2025.pdf")).not.toBeInTheDocument();
   });
 
-  it("sends selected materials with web search and deep thinking, then shows citations and graph trace", async () => {
+  it("sends no manual tool flags and shows automatically selected sources and graph trace", async () => {
     const user = userEvent.setup();
     const { calls } = renderWithDashboardSummary(materialRichSummary);
 
     await user.click(screen.getByRole("button", { name: "打开资料库" }));
     await user.click(screen.getByRole("button", { name: /期末复习题 2025/ }));
     await user.click(screen.getByRole("button", { name: "作为本次对话参考" }));
-    await user.click(screen.getByRole("button", { name: "联网搜索" }));
-    await user.click(screen.getByRole("button", { name: "深度思考" }));
     await user.type(screen.getByRole("textbox", { name: "学习问题输入" }), "结合资料和最新趋势怎么复习？");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
     const messageCall = calls.find((call) => call.method === "post" && call.url === TUTOR_ENDPOINTS.stream(501));
 
-    expect(messageCall?.payload).toMatchObject({
-      message: "结合资料和最新趋势怎么复习？",
-      use_web_search: true,
-      deep_thinking: true
-    });
+    expect(messageCall?.payload).toEqual({ message: "结合资料和最新趋势怎么复习？" });
     expect(messageCall?.payload).not.toHaveProperty("selected_material_ids");
     expect(calls).toContainEqual(expect.objectContaining({
       method: "post",

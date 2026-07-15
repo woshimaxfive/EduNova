@@ -64,7 +64,7 @@ Docker Compose 为 PostgreSQL、Redis 和导出文件分别使用固定命名卷
 
 - 初始态展示中心输入框和最近学习。
 - 发送后进入对话态，输入区固定到下方。
-- 输入区支持上传、资料库、生成课程、搜索、思考、语音。
+- 输入区支持上传、资料库、生成课程和语音；联网搜索与推理强度由后端自动决策，不展示手动开关。
 - Enter 发送，Shift+Enter 换行。
 
 资料库 `/app/library` 是文件库式资料管理页：
@@ -89,7 +89,7 @@ Docker Compose 为 PostgreSQL、Redis 和导出文件分别使用固定命名卷
 - TXT/Markdown/PDF/DOCX/PPTX 已解析资料生成课程。
 - 课程详情、知识点、课程会话、RAG 引用和流式回答。
 - 多模型配置管理、回答/向量独立默认和连接测试。
-- 主页已选资料、联网搜索、深度回答指令、`home_tutor` trace、浏览器语音输入和朗读。
+- 主页与课程空间内置联网搜索和自适应推理、`home_tutor/course_tutor` trace、浏览器语音输入和朗读。
 - 资源工坊、画像、持续学习路径、练习、报告、资料对比和学习档案导出。
 
 当前仍需继续打磨的区域：
@@ -99,7 +99,7 @@ Docker Compose 为 PostgreSQL、Redis 和导出文件分别使用固定命名卷
 - 资料对比结果持久化与独立恢复；对比结果不隐式进入路径或练习。
 - 导出文件版式细节。
 
-深度思考和联网搜索只属于对话输入区的运行期工具，不属于模型连接设置。
+联网搜索和推理属于主页与课程 Graph 的内置运行期能力，不属于模型连接设置，也不由前端按钮控制。
 
 目录规划：
 
@@ -121,7 +121,7 @@ frontend/src/
 贴左边缘主页侧栏：主页历史对话、新建对话、资料库、资源工坊、个人资料、设置、退出登录，可收起
 中央：轻量输入框，支持文件上传、选择资料、生成课程
 发送后：主页对话流 + 下方固定输入区
-输入区：上传资料文件 / 打开资料库 / 生成课程 / 联网搜索激活态 / 深度思考激活态 / 语音 / Enter 发送
+输入区：上传资料文件 / 打开资料库 / 生成课程 / 语音 / Enter 发送；自动联网与推理状态只在实际执行时通过 SSE 和 trace 披露
 下方：最近学习轻量列表 / 最近课程入口
 回答下方：引用来源、学习路径建议、Agent 过程，可展开
 ```
@@ -212,7 +212,7 @@ frontend/src/
 - `materials.ts`：上传、列表、详情、进度和课程关联。
 - `courses.ts`：课程列表、详情、v2 概览、知识点先修关系和智能建课。
 - `rag.ts`：课程知识库检索和混合检索字段。
-- `tutor.ts`：主页/课程会话、消息、引用、主页联网/深思/资料参数，以及 home/course 共用 SSE 的状态、来源、token、Review 替换和完成事件。
+- `tutor.ts`：主页/课程会话、消息、引用和资料参数，以及 home/course 共用 SSE 的状态、来源、token、Review 替换和完成事件；旧联网/深思字段仅作向后兼容。
 - `exports.ts`：旧同步 Markdown 学习档案导出和 Markdown/PDF/DOCX 异步导出任务。
 - `settings.ts`：回答、向量和重排序连接读取、保存、独立测试、默认用途与向量重建任务。
 
@@ -225,7 +225,7 @@ frontend/src/
 - Phase 22 起 PDF/DOCX/PPTX 由 `DocumentStructureExtractor` 适配 Docling，继续输出 EduNova 的页、块和目录合同；TXT/Markdown 保留轻量解析。旧版 DOC/PPT、图片和扫描件不伪装解析完成。
 - Phase 5.2 已完成受保护的 `/rag/search` 课程知识库检索；Phase 6.4 后检索会优先融合关键词分数和向量分数，并把真实资料、章节、切片引用和检索状态保存到 assistant 消息。
 - Phase 5.3 已完成课程空间 `scope=course` 会话持久化；课程侧栏历史来自 `/tutor/sessions?scope=course&course_id=...`，点击历史会恢复真实 messages 和 `citation_json`。
-- 当前主页 assistant 由 `HomeTutorGraph` 接管并使用流式输出。主页允许模型通用知识，已选资料通过独立 `material_chunks` 做资料级混合检索，联网结果作为可追溯证据；未配置搜索 Key 时 warning 只进入来源/轨迹区，不伪造网页来源。课程空间继续使用严格课程 RAG，两者不混用证据边界。
+- 当前主页 assistant 由 `HomeTutorGraph` 接管并使用流式输出。主页允许模型通用知识，已选资料通过独立 `material_chunks` 做资料级混合检索，自动联网结果作为可追溯证据；未配置搜索 Key 时 warning 只进入来源/轨迹区。`CourseTutorGraph` 先检索严格课程 RAG，只在时效、显式核实或已确认课程相关且无课程命中时加入 `external_supplement`；外部来源不进入画像、弱点、掌握度或课程证据。
 - 主页资料范围属于 `chat_sessions`，只有用户确认后保存；发送请求省略资料字段时复用会话范围。生成课程使用独立选料状态，AI Job 恢复只恢复建课请求摘要，不覆盖主页会话资料。
 - 当前 `/app/courses/:courseId` 的课程标题、知识点、课程历史、课程消息和课程引用来自真实接口。
 - 命中引用且模型可用时，课程 assistant 内容来自 OpenAI-compatible 模型回答。
@@ -277,6 +277,7 @@ backend/app/
 | `backend/app/services/materials.py` | 个人资料库服务，负责上传保存、解析、列表、详情、进度和课程资料关联 |
 | `backend/app/services/material_retrieval.py` | 共享资料分块和主页资料级 RAG，负责上传后切片、既有资料惰性补齐、当前用户选中资料限制、关键词/pgvector 混合排序和安全引用 |
 | `backend/app/services/web_search.py` | Tavily-compatible 联网搜索服务，未配置 Key 时返回 warning，不生成假来源 |
+| `backend/app/agents/tool_policy.py` | 确定性能力路由，根据问题时效性、显式检索意图、复杂度和课程证据状态输出联网与推理决策 |
 | `backend/app/services/courses.py` | 课程 API 边界和依赖装配；`CourseBuilderGraphRunner` 接管来源大纲、课程结构、知识点、切片、embedding、审核/修订与事务持久化 |
 | `backend/app/services/exports.py` | 学习档案导出服务，负责旧同步 Markdown 兼容接口和 Markdown/PDF/DOCX 异步 job 渲染 |
 | `backend/app/workers/export_jobs.py` | Redis/RQ 导出 worker 入口 |
@@ -660,3 +661,11 @@ flowchart LR
 - OpenTelemetry 只记录 HTTP、SQL、Redis、队列和任务边界的安全元数据；学生可见 Agent trace 继续保存 EduNova 特有的协作证据。
 - `StorageAdapter` 隔离 Local 与 S3-compatible 实现，数据库继续保存字符串对象键并兼容旧本地路径。
 - LangChain、LlamaIndex、Haystack、Dify 与 RAGFlow 未进入当前生产链路。`docs/superpowers` 中的 LangChain 方案是历史规划，不代表当前依赖或架构。
+
+## 18. Phase 23 内置能力策略
+
+- `ToolDecision` 是纯确定性策略，不额外调用模型；输出 `search_required`、`reasoning_mode=auto|deep` 和白名单原因摘要。
+- 主页普通解释不联网，时效信息或明确检索/核实请求自动联网；复杂比较、推导、诊断和规划进入 deep。
+- 课程 Graph 节点为 `profile -> route -> retriever -> web_search -> planner -> tutor -> weakness -> review -> next_action`。课程来源始终优先，网页只作为 `external_supplement`。
+- Spark X2-Flash 的 auto/deep 分别映射为 `thinking.auto/enabled`；其他 Provider 不发送未验证私有参数。Provider 自带网页搜索保持关闭，来源继续由 EduNova 统一审计。
+- 旧 `use_web_search/deep_thinking=true` 只用于兼容客户端强制启用；false 或缺省均由策略自动判断。

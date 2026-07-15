@@ -53,6 +53,13 @@ class AgentState(TypedDict, total=False):
     pending_traces: list[Any]
     use_web_search: bool
     deep_thinking: bool
+    search_required: bool
+    reasoning_mode: str
+    tool_reason_codes: list[str]
+    tool_reason_summary: str
+    course_related: bool
+    course_citation_count: int
+    web_citation_count: int
     selected_material_ids: list[int]
     streaming: bool
     requires_fresh_info: bool

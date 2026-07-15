@@ -5,8 +5,8 @@
 EduNova 的主页资料问答与课程问答共用同一套检索底座，但保持不同证据边界：
 
 - 主页只检索当前用户在该会话中确认选择的资料，并允许模型使用通用知识。
-- 课程空间只检索当前用户课程内的知识切片，回答必须受课程证据约束。
-- 联网搜索仍由 `HomeTutorGraph.web_search` 调用 Tavily-compatible 服务，模型 Provider 不接管网页搜索。
+- 课程空间优先检索当前用户课程内的知识切片；只有时效问题、明确外部核实，或已确认课程相关但没有课程命中时才补充网页来源。
+- 联网搜索由 `HomeTutorGraph.web_search` 和 `CourseTutorGraph.web_search` 调用同一个 Tavily-compatible 服务，模型 Provider 不接管网页搜索。
 - 引用只返回安全短片段、来源、章节、页码和检索状态，不返回完整资料、向量或模型输入。
 
 ## 2. 向量能力
@@ -88,7 +88,7 @@ base_url = https://spark-api-open.xf-yun.com/agent/v1/
 model = spark-x
 ```
 
-主页普通回答发送 `thinking.disabled`，开启深思时发送 `thinking.enabled`；其他 Graph 默认关闭 Provider 深度思考。Provider 只消费最终 `content`，忽略 `reasoning_content`。星火内置 `web_search` 不启用，保证网页来源继续由 EduNova 的 Tavily 节点、引用协议和 Agent trace 统一管理。
+主页和课程普通问题发送 `thinking.auto`，复杂比较、推导、诊断、规划与多证据综合发送 `thinking.enabled`。Provider 只消费最终 `content`，忽略 `reasoning_content`。星火内置 `web_search` 不启用，保证网页来源继续由 EduNova 的 Tavily 节点、引用协议和 Agent trace 统一管理；其他 Provider 不接收未经验证的私有 thinking 参数。
 
 ## 7. 验收边界
 
@@ -116,3 +116,10 @@ model = spark-x
 ## 10. Phase 22 解析与检索边界
 
 Docling 只替换 PDF、DOCX、PPTX 的通用结构提取，仍输出 EduNova 的 `ParsedDocument / ParsedPage / ParsedBlock`。目录确认、章节内切片、质量门禁、配置指纹、课程与用户隔离、混合召回、重排序和证据引用均不交给第三方框架。LangChain Loader 目录只作为生态参考，本阶段没有引入 LangChain、LlamaIndex 或 Haystack 生产依赖。
+
+## 11. Phase 23 外部补充边界
+
+- 自动联网只由确定性能力策略触发，不因模型自由工具调用而绕过用户、课程和来源边界。
+- 课程切片继续使用原有 `chunk_id/material_id/knowledge_point_id` 证据合同；网页引用使用 `source_type=web` 与 `evidence_role=external_supplement`。
+- 外部补充可以参与当次回答，但不得写入课程画像、弱点候选、掌握度、客观评分或教材证据绑定。
+- 未配置搜索、超时、限流、空结果均返回 warning 并保留课程或通用回答降级，不生成假 URL 或假来源。

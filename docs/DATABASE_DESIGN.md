@@ -697,7 +697,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 | `rerank_api_key_ciphertext` | text | 可空重排序 Key 密文 |
 | `rerank_model` | varchar | 可空重排序模型 |
 | `rerank_workspace_id` | varchar | 百炼 Workspace ID，可空 |
-| `tool_flags_json` | jsonb | 预留工具标记，当前设置页不管理联网搜索或深度思考 |
+| `tool_flags_json` | jsonb | 兼容预留字段；联网与推理由每次 Graph 自动决策，设置页和前端不保存开关 |
 | `is_default` | boolean | 是否为当前用户回答默认配置，保留旧字段名兼容 |
 | `is_embedding_default` | boolean | 是否为当前用户向量默认配置 |
 | `is_rerank_default` | boolean | 是否为当前用户重排序默认配置 |
@@ -989,3 +989,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 ## 12. Phase 22 数据兼容边界
 
 Phase 22 不新增数据库迁移。资料原文件与导出文件字段继续保存字符串；新数据保存 `StorageAdapter` 对象键，旧的根目录内相对路径和绝对路径按兼容规则读取，不批量搬迁。既有已确认资料、切片和证据不因解析器切换自动重建；主动重解析只有候选版本全部通过后才替换，失败继续保留旧版本。
+
+## 13. Phase 23 数据边界
+
+Phase 23 不新增数据库迁移。自动能力决策只写入既有 `agent_run_logs.metadata_json` 白名单字段；网页引用继续存入当次 assistant 的 `citation_json`，使用 `source_type=web` 和 `evidence_role=external_supplement`。画像、弱点、掌握度和客观评分只消费非网页课程证据。

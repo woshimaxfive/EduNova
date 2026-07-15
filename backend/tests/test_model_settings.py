@@ -559,6 +559,58 @@ def test_one_config_can_combine_different_chat_and_embedding_providers() -> None
     assert provider.calls[1]["config"].api_key == "qwen-embedding-secret"
 
 
+def test_thinking_parameter_is_only_forwarded_to_spark_chat_configs() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+
+    spark_provider = FakeProvider()
+    spark_service = module.ModelSettingsService(
+        repository=FakeModelSettingsRepository(settings_by_user={}),
+        settings=make_settings(),
+        provider=spark_provider,
+        execution_runtime=ImmediateExecutionRuntime(),
+    )
+    spark_service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="星火回答",
+            preset_id="spark",
+            provider="openai_compatible",
+            base_url="https://spark-api-open.xf-yun.com/v1",
+            api_key="spark-secret",
+            chat_model="x2-flash",
+            make_default=True,
+        ),
+    )
+    spark_service.chat_completion(user, [{"role": "user", "content": "复杂分析"}], thinking_type="enabled")
+
+    custom_provider = FakeProvider()
+    custom_service = module.ModelSettingsService(
+        repository=FakeModelSettingsRepository(settings_by_user={}),
+        settings=make_settings(),
+        provider=custom_provider,
+        execution_runtime=ImmediateExecutionRuntime(),
+    )
+    custom_service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="兼容回答",
+            preset_id="custom",
+            provider="openai_compatible",
+            base_url="https://model.example.local/v1",
+            api_key="custom-secret",
+            chat_model="chat-model",
+            make_default=True,
+        ),
+    )
+    custom_service.chat_completion(user, [{"role": "user", "content": "复杂分析"}], thinking_type="enabled")
+
+    assert spark_provider.calls is not None
+    assert spark_provider.calls[0]["config"].thinking_type == "enabled"
+    assert custom_provider.calls is not None
+    assert custom_provider.calls[0]["config"].thinking_type is None
+
+
 def test_setting_default_requires_matching_capability() -> None:
     module = load_model_settings_module()
     user = make_user()

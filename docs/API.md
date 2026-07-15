@@ -1633,15 +1633,13 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 ### POST `/tutor/sessions/{session_id}/messages`
 
-用途：发送问题并获取完整回答。主页和课程会话都复用当前路径；前端默认使用下方流式接口，本接口保留为兼容和自动化测试路径。`scope=home` 由真实 `HomeTutorGraph` 处理通用知识、已选资料检索、按需联网、深度规划、回答、Review/Repair 和持久化；`scope=course` 继续由 `CourseTutorGraph` 执行严格课程 RAG，不允许用通用知识补造课程依据。
+用途：发送问题并获取完整回答。主页和课程会话都复用当前路径；前端默认使用下方流式接口，本接口保留为兼容和自动化测试路径。`scope=home` 由真实 `HomeTutorGraph` 处理通用知识、已选资料检索、自动联网、自适应规划、回答、Review/Repair 和持久化；`scope=course` 由 `CourseTutorGraph` 优先执行严格课程 RAG，并只在策略允许时加入明确标注的外部补充。
 
 请求：
 
 ```json
 {
   "message": "为什么反向传播要用链式法则？",
-  "use_web_search": true,
-  "deep_thinking": true,
   "selected_material_ids": [12, 15]
 }
 ```
@@ -1652,11 +1650,12 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 - assistant 内容来自模型通用知识和本次可用证据；无可用模型配置时保存清晰提示。
 - `selected_material_ids` 只允许当前用户资料，最多 10 个。省略时沿用会话已保存范围，显式数组替换范围，空数组清空。历史资料失效时只忽略失效项并返回安全 warning，不泄露资料归属。后端从 `material_chunks` 检索与上下文化 query 相关的最多 5 个片段，不再固定截取资料开头；无相关片段时返回空资料引用。
-- `use_web_search=true` 时调用 `WebSearchService`。未配置 `WEB_SEARCH_API_KEY` 时返回“联网搜索未配置” warning，不生成假网页来源。
-- `deep_thinking=true` 会执行安全 `planner` 节点，只保存目标、证据需求和回答结构摘要，不展示原始思维链、系统提示词或完整模型输入。
+- 前端不再发送 `use_web_search` 或 `deep_thinking`。两个字段已废弃但继续接收：`true` 为旧客户端强制启用，`false` 或缺省均由 `ToolDecision` 自动判断。
+- 时效信息、明确检索/核实请求自动调用 `WebSearchService`；复杂比较、推导、诊断、规划与多证据综合进入 deep。未配置 `WEB_SEARCH_API_KEY` 时返回 warning，不生成假网页来源。
+- `planner` 只保存目标、证据需求和回答结构摘要，不展示原始思维链、系统提示词或完整模型输入。
 - `citation_json` 允许课程、资料、网页三类真实来源。资料来源可包含 `source_type`、`material_id`、`title`、`section_title`、`page_number`、`snippet`、`score`、`retrieval_source`、`embedding_status`、`embedding_provider`、`embedding_dimension`、`rerank_score` 和 `rerank_status`；网页来源可包含 `title`、`url`、`snippet`。
 - 回答使用 `<final_answer>` 边界隔离内部输入。ReviewAgent 检查 `prompt_echo`、`off_topic`、`malformed_markdown`、`citation_mismatch`、`fake_web_source`、`sensitive_output`；不通过时最多修订一次，第二次仍不通过时返回安全降级回答。
-- 成功时 assistant `trace_id` 写入真实 `HomeTutorGraph` trace，正常节点为 `context -> route -> material_retriever -> web_search -> planner -> answer -> review -> persist`；需要修订时在 `review` 和 `persist` 之间执行一次 `repair -> review`。
+- 成功时 assistant `trace_id` 写入真实 Graph trace。主页正常节点为 `context -> route -> material_retriever -> web_search -> planner -> answer -> review -> persist`；课程节点为 `profile -> route -> retriever -> web_search -> planner -> tutor -> weakness -> review -> next_action`。
 - 模型调用失败时返回可恢复错误，不写入半截 assistant 消息。
 - 同一 `session_id` 内默认启用多轮上下文。后端会读取最近 12 条 user/assistant 消息，单条最多 1200 字，总历史上下文最多 6000 字；更早历史只生成最多 1500 字的安全摘要。请求体不新增字段，前端不展示历史原文。
 
@@ -1674,7 +1673,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 ### POST `/tutor/sessions/{session_id}/messages/stream`
 
-用途：SSE 流式返回主页或课程空间回答。必须携带 JWT，请求体沿用普通消息接口；主页会完整消费 `use_web_search`、`deep_thinking` 和 `selected_material_ids`，课程会话忽略这些主页工具参数并保持严格课程 RAG。
+用途：SSE 流式返回主页或课程空间回答。必须携带 JWT，请求体沿用普通消息接口；主页和课程空间都由后端自动能力策略决定联网和推理强度，前端只发送问题及可选资料范围。旧 true 工具字段在两种 scope 下都只表示强制启用兼容。
 
 ```json
 {

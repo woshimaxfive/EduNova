@@ -1,6 +1,6 @@
 # EduNova Agent 设计说明
 
-更新时间：2026-07-14
+更新时间：2026-07-15
 
 ## 1. 定位
 
@@ -15,8 +15,8 @@ EduNova 的 Agent 设计服务于学生学习闭环，不是为了展示“多�
 | `ProfileGraph` | 已真接管：显式画像回答和学习行为信号的抽取、证据门控、审核/修订、应用与事件持久化；Lite 输出经过白名单 Schema、容错 JSON 解析和单次结构修复 | collect_context、extract、evidence_gate、review、repair、apply、persist_event |
 | `CourseBuilderGraph` | 已真接管：资料读取、来源大纲、课程结构、知识点、切片、embedding、审核/修订和事务持久化 | read_materials、source_outline、structure_course、knowledge_points、chunk、embed、review、repair、persist |
 | `MaterialComparisonGraph` | 已真接管：范围校验、真实分块证据收集、概念别名归并、规则对比、模型解释增强、审核/修订和不可变版本持久化 | validate_scope、collect_evidence、deterministic_compare、model_compare、review、repair、persist |
-| `HomeTutorGraph` | 已真接管：安全上下文、问题路由、选中资料检索、按需联网、深度规划、回答、审核/修订和消息持久化 | context、route、material_retriever、web_search、planner、answer、review、repair、persist |
-| `CourseTutorGraph` | 已真接管：画像/上下文读取、课程检索、导师回答、弱点候选、审核、下一步动作、消息持久化 | profile、retriever、tutor、weakness、review、next_action |
+| `HomeTutorGraph` | 已真接管：安全上下文、自动能力路由、选中资料检索、按需联网、自适应规划、回答、审核/修订和消息持久化 | context、route、material_retriever、web_search、planner、answer、review、repair、persist |
+| `CourseTutorGraph` | 已真接管：画像/上下文读取、自动能力路由、课程检索、外部补充、规划、导师回答、弱点候选、审核、下一步动作和消息持久化 | profile、route、retriever、web_search、planner、tutor、weakness、review、next_action |
 | `ResourceGenerationGraph` | 已真接管：画像、检索、诊断、逐类型教学意图规划、六 Worker 并行生成 v3 artifact、真实性/个性化/差异审核、结构/内容修订、代码运行验证和版本化持久化 | profile、retrieve、diagnosis、planner、resource_worker、aggregate、review、repair、persist |
 | `PathPlanningGraph` | 已真接管：画像与证据收集、确定性排序、模型排序理由、审核/修订、事务持久化 | profile、collect_evidence、deterministic_rank、model_plan、review、repair、persist |
 | `AssessmentGraph` | 已真接管：资料证据型题目蓝图、模型增强、确定性题目门禁和评分、逐题错因诊断、弱点同步和路径回流 | context/question_plan/generate_questions/review/repair/persist；load/deterministic_score/diagnose_errors/sync_weaknesses/review/repair/persist/path_replan |
@@ -55,6 +55,9 @@ selected_material_ids
 conversation_context
 retrieval_query
 plan_summary
+search_required
+reasoning_mode
+tool_reason_codes
 repair_count
 ```
 
@@ -95,6 +98,7 @@ repair_count
 - 质量分、审核状态、生成模式、错误类型、风险标记和 warning 数量。
 - 资源教学意图数量、生成动作、历史摘要数量、差异风险、版本号和版本族安全标识；不记录完整画像或历史成果正文。
 - 会话上下文只记录安全计数和模式：`context_message_count`、`context_summary_used`、`retrieval_query_mode`，不记录历史消息原文。
+- 自动能力只记录 `search_required`、`reasoning_mode`、预定义原因码和课程/网页来源数量，不记录用户问题原文或模型思维链。
 
 禁止记录：
 
@@ -124,13 +128,13 @@ EduNova 的第一版坚持确定性可用稿优先：
 
 ## 7. 前端呈现
 
-- 课程空间把回答下方“思考过程”改为“课堂协作轨迹”，展示 Profile、Retriever、Tutor、Weakness、Review、NextAction。
+- 课程空间“课堂协作轨迹”展示 Profile、Route、Retriever、WebSearch、Planner、Tutor、Weakness、Review、NextAction；跳过节点仍说明安全决策，不展示原始思维链。
 - 课程空间顶部用 A3 个性化学习闭环摘要和固定步骤流解释画像、检索、辅导、弱点、资源、路径、评估、报告的协作关系；这是面向用户的过程证据，不是原始思维链。
 - 课程回答展示层和生成层都必须过滤 `学生问题`、`课程引用`、`匹配度`、资料片段等模型输入字段；引用证据只进入来源面板，不作为回答正文泄露。
 - 主页会话和课程空间会话默认使用同一 `session_id` 内最近 12 条消息作为多轮上下文；更早历史只生成确定性安全摘要。课程 RAG、主页资料上下文和联网搜索会用最近用户问题 + 当前问题做上下文化查询，前端只展示“已参考最近 N 条会话”等安全提示。
 - 资源工坊和课程空间共用结构化资源渲染器，展示 Markmap、交互练习、浏览器 Python、PPT、动画图解和 `ResourceGenerationGraph` 全链路；资源工坊额外按版本族提供切换、比较、换教法和优化版本，并展示安全的“为什么为你这样生成”。旧 Markdown/Mermaid 资源继续降级可读。
 - 学习路径、练习和报告页面通过共享 `AgentTraceDisclosure` 展开真实 PathPlanning、Assessment、Report 节点轨迹；局部轨迹失败不阻断主流程。
-- 主页发送后通过 SSE 展示安全 Graph 状态、真实来源、Markdown token 和可选 Review 替换；`done` 后用持久化消息校准。深度思考只展示规划和处理摘要，不展示原始思维链。
+- 主页和课程空间不显示联网/思考开关。发送后通过 SSE 展示实际发生的安全 Graph 状态、真实来源、Markdown token 和可选 Review 替换；规划只展示安全摘要，不展示原始思维链。
 - 所有 trace 读取失败都只影响局部轨迹区，不阻断学习主流程。
 
 ## 8. 答辩解释口径

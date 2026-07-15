@@ -20,6 +20,30 @@ class FakeModelSettingsService:
         return iter([self.content[:middle], self.content[middle:]])
 
 
+class ThinkingAwareModelSettingsService(FakeModelSettingsService):
+    def __init__(self, content: str) -> None:
+        super().__init__(content)
+        self.thinking_types: list[str] = []
+
+    def chat_completion(
+        self,
+        user: Any,
+        messages: list[dict[str, str]],
+        thinking_type: str = "disabled",
+    ) -> str:
+        self.thinking_types.append(thinking_type)
+        return super().chat_completion(user, messages)
+
+    def chat_completion_stream(
+        self,
+        user: Any,
+        messages: list[dict[str, str]],
+        thinking_type: str = "disabled",
+    ):
+        self.thinking_types.append(thinking_type)
+        return super().chat_completion_stream(user, messages)
+
+
 def test_course_answer_removes_echoed_model_context() -> None:
     service = CourseAnswerService(FakeModelSettingsService(_echoed_context_answer()))
 
@@ -200,6 +224,19 @@ def test_course_answer_stream_includes_conversation_context() -> None:
     assert sent_messages[1] == {"role": "user", "content": "上一问是什么？"}
     assert sent_messages[2] == {"role": "assistant", "content": "上一答。"}
     assert "学生问题：继续解释。" in sent_messages[-1]["content"]
+
+
+def test_home_and_course_answers_map_adaptive_reasoning_to_provider_thinking() -> None:
+    model = ThinkingAwareModelSettingsService("回答。")
+    service = CourseAnswerService(model)
+
+    service.generate_home(user=object(), question="简单解释", deep_thinking=False)
+    service.generate_home(user=object(), question="复杂分析", deep_thinking=True)
+    service.generate(user=object(), question="简单解释", citations=[_citation()], reasoning_mode="auto")
+    stream = service.stream(user=object(), question="复杂分析", citations=[_citation()], reasoning_mode="deep")
+    "".join(stream.tokens)
+
+    assert model.thinking_types == ["auto", "enabled", "auto", "enabled"]
 
 
 def _citation() -> dict[str, object]:

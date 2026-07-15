@@ -1,6 +1,6 @@
 # EduNova 项目看板
 
-更新时间：2026-07-14
+更新时间：2026-07-15
 
 ## 1. 看板定位
 
@@ -31,12 +31,12 @@ EduNova 坚持“基础不牢，地动山摇”的开发原则。
 
 | 项目 | 状态 |
 | --- | --- |
-| 最新完成阶段 | Phase 22 |
+| 最新完成阶段 | Phase 23 |
 | 当前主链路 | 精细资料解析、动态画像、智能建课、主页/课程问答、资源、持续路径、练习评估、报告和资料对比已由十条真实 LangGraph 接管 |
-| 当前主要缺口 | OCR、旧版 Office、扫描件解析，以及 Docling 真实教材质量基准仍需持续扩充 |
-| 下一步建议 | 以无版权夹具和本地脱敏教材持续记录 Docling 质量、性能与失败分类，不扩张产品范围 |
+| 当前主要缺口 | 学习闭环的跨页面恢复、异常提示和高质量真实样例仍需持续打磨；OCR、旧版 Office 和扫描件仍不支持 |
+| 下一步建议 | 以截止日期交付质量为优先，集中做真实学习闭环验收、异常恢复和展示证据，不扩张基础设施范围 |
 
-Phase 13.2 已完成基础资料解析、主页工具和异步导出增强；Phase 14 已完成路径、评估、报告三条真实 Graph；Phase 15 已完成 ProfileGraph、CourseBuilderGraph、个性化策略、练习恢复和 React Flow/ECharts 可视化；Phase 16 完成过资料对比与冲刺，当前冲刺已退役；Phase 21 新增 MaterialIngestionGraph，当前为十条生产 Graph；Phase 22 已将通用基础设施迁移到成熟工具并保留领域边界。后续继续做真实证据、移动体验和异常恢复。
+Phase 13.2 已完成基础资料解析、主页工具和异步导出增强；Phase 14 已完成路径、评估、报告三条真实 Graph；Phase 15 已完成 ProfileGraph、CourseBuilderGraph、个性化策略、练习恢复和 React Flow/ECharts 可视化；Phase 16 完成过资料对比与冲刺，当前冲刺已退役；Phase 21 新增 MaterialIngestionGraph，当前为十条生产 Graph；Phase 22 已将通用基础设施迁移到成熟工具；Phase 23 已把主页和课程空间的联网与推理改为内置自动能力。
 
 Phase 17 已新增统一 `AIJobRuntime`，智能建课和资源生成进入独立后台队列；四个前端入口共用持久化进度、SSE/轮询恢复、取消和重试。
 
@@ -295,3 +295,11 @@ Phase 20 已把资源个性化从 Prompt 附加字段升级为逐类型 `Artifac
 - [x] 官方 OpenAI SDK、统一结构化输出、OpenTelemetry 与 HTTPX 已收口。
 - [x] Local/S3-compatible 存储、文件类型检查和可选 ClamAV 已接入。
 - [x] 离线评测、供应链审计、许可证清单和文档同步纳入交付门禁。
+
+## 12. Phase 23 内置联网搜索与自适应推理
+
+- [x] 删除主页联网搜索与深度思考按钮，前端发送不再携带手动工具状态。
+- [x] `ToolDecision` 按时效、显式检索和问题复杂度输出联网决策、推理模式和安全原因摘要。
+- [x] `HomeTutorGraph` 与 `CourseTutorGraph` 共用自动能力策略；旧 API true 字段只保留强制启用兼容。
+- [x] 课程网页来源标记为外部补充，不进入画像、弱点、掌握度或课程证据。
+- [x] Spark X2-Flash 使用 `thinking.auto/enabled`，其他 Provider 不发送未验证私有参数。

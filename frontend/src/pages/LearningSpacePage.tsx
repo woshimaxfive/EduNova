@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   BookOpen,
-  ChatCircleText,
   CheckCircle,
   FileArrowUp,
   LinkSimple,
@@ -153,8 +152,6 @@ export function LearningSpacePage() {
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
   const [courseJobId, setCourseJobId] = useState<string | null>(null);
   const [isLibraryOpen, setIsLibraryOpen] = useState(() => selectedMaterialIdsFromNavigation.length > 0);
-  const [isDeepThinkingEnabled, setIsDeepThinkingEnabled] = useState(false);
-  const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>("sources");
   const [expandedAnswerId, setExpandedAnswerId] = useState<string | null>(null);
@@ -486,9 +483,7 @@ export function LearningSpacePage() {
       const detail = await streamTutorMessage(
         sessionId,
         {
-          message: question,
-          use_web_search: isWebSearchEnabled,
-          deep_thinking: isDeepThinkingEnabled
+          message: question
         },
         {
           onMetadata: (metadata) => {
@@ -652,8 +647,6 @@ export function LearningSpacePage() {
     setIsHistoryCollapsed(isCompactWorkspaceViewport());
     setIsLibraryOpen(false);
     setIsCourseDialogOpen(false);
-    setIsDeepThinkingEnabled(false);
-    setIsWebSearchEnabled(false);
     setIsListening(false);
     setActiveAnswerPanel("sources");
     setExpandedAnswerId(null);
@@ -805,7 +798,6 @@ export function LearningSpacePage() {
                       activePanel={activeAnswerPanel}
                       expandedAnswerId={expandedAnswerId}
                       selectedMaterialCount={effectiveConversationMaterialIds.length}
-                      isWebSearchEnabled={isWebSearchEnabled}
                       warnings={answerWarnings[message.id] ?? []}
                       onChangePanel={setActiveAnswerPanel}
                       onSetExpandedAnswer={setExpandedAnswerId}
@@ -860,30 +852,6 @@ export function LearningSpacePage() {
                   <button type="button" onClick={openCourseGeneration}>
                     <Sparkle size={18} weight="duotone" aria-hidden="true" />
                     <span>生成课程</span>
-                  </button>
-                  <button
-                    className={isWebSearchEnabled ? "active" : ""}
-                    type="button"
-                    aria-label="联网搜索"
-                    aria-pressed={isWebSearchEnabled}
-                    onClick={() => {
-                      setIsWebSearchEnabled((enabled) => !enabled);
-                    }}
-                  >
-                    <MagnifyingGlass size={18} weight="duotone" aria-hidden="true" />
-                    <span>搜索</span>
-                  </button>
-                  <button
-                    className={isDeepThinkingEnabled ? "active" : ""}
-                    type="button"
-                    aria-label="深度思考"
-                    aria-pressed={isDeepThinkingEnabled}
-                    onClick={() => {
-                      setIsDeepThinkingEnabled((enabled) => !enabled);
-                    }}
-                  >
-                    <ChatCircleText size={18} weight="duotone" aria-hidden="true" />
-                    <span>思考</span>
                   </button>
                 </div>
                 <div className="composer-submit-row">
@@ -1010,7 +978,6 @@ type HomeAnswerInsightsProps = {
   activePanel: HomeAnswerPanel;
   expandedAnswerId: string | null;
   selectedMaterialCount: number;
-  isWebSearchEnabled: boolean;
   warnings: string[];
   onChangePanel: (panel: HomeAnswerPanel) => void;
   onSetExpandedAnswer: (messageId: string | null) => void;
@@ -1021,7 +988,6 @@ function HomeAnswerInsights({
   activePanel,
   expandedAnswerId,
   selectedMaterialCount,
-  isWebSearchEnabled,
   warnings,
   onChangePanel,
   onSetExpandedAnswer
@@ -1050,10 +1016,8 @@ function HomeAnswerInsights({
     hasCitations
       ? `本次回答返回 ${citations.length} 条真实来源。`
       : selectedMaterialCount > 0
-        ? `本次回答请求了 ${selectedMaterialCount} 份已选资料${isWebSearchEnabled ? "和联网搜索" : ""}，但没有返回可展示来源。`
-        : isWebSearchEnabled
-          ? "联网搜索已请求，但没有返回可展示网页来源。"
-          : "本次回答没有绑定资料或网页来源。";
+        ? `系统已检索 ${selectedMaterialCount} 份已选资料，但没有返回可展示来源。`
+        : "系统没有找到需要展示的资料或网页来源。";
 
   return (
     <section className="home-answer-insights" aria-label="回答附加信息">

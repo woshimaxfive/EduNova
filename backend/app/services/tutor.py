@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.errors import make_trace_id
 from backend.app.agents.runtime import PendingAgentTrace, agent_log_from_pending_trace
 from backend.app.agents.schemas import AgentState
+from backend.app.agents.tool_policy import decide_tool_capabilities
 from backend.app.models import AgentRunLog, ChatMessage, ChatSession, Course, CourseEnrollment, Material, User
 from backend.app.schemas.tutor import (
     TutorSessionDetail,
@@ -39,7 +40,17 @@ from backend.app.providers.openai_compatible import ModelProviderError
 COURSE_ASSISTANT_REPLY_WITH_CITATIONS = "我先从课程资料里找到了相关依据。下面保留真实引用片段，后续接入大模型后会基于这些来源生成完整回答。"
 COURSE_ASSISTANT_REPLY_WITHOUT_CITATIONS = "我先检查了课程资料，但还没有足够依据支撑这个问题。"
 COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED = "已找到资料依据，但当前未配置可用模型。"
-COURSE_TUTOR_GRAPH_STEPS = ["profile", "retriever", "tutor", "weakness", "review", "next_action"]
+COURSE_TUTOR_GRAPH_STEPS = [
+    "profile",
+    "route",
+    "retriever",
+    "web_search",
+    "planner",
+    "tutor",
+    "weakness",
+    "review",
+    "next_action",
+]
 HOME_TUTOR_GRAPH_STEPS = [
     "context",
     "route",
@@ -88,6 +99,9 @@ class TutorSessionRepository(Protocol):
         ...
 
     def user_can_access_course(self, user_id: int, course_id: int) -> bool:
+        ...
+
+    def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         ...
 
     def list_messages(self, session_id: int) -> list[ChatMessage]:
@@ -150,6 +164,7 @@ class CourseAnswerGenerator(Protocol):
         citations: list[dict[str, Any]],
         conversation_context: ConversationContext | None = None,
         learner_context: dict[str, Any] | None = None,
+        reasoning_mode: str = "auto",
     ) -> Any:
         ...
 
@@ -160,6 +175,7 @@ class CourseAnswerGenerator(Protocol):
         citations: list[dict[str, Any]],
         conversation_context: ConversationContext | None = None,
         learner_context: dict[str, Any] | None = None,
+        reasoning_mode: str = "auto",
     ) -> Any:
         ...
 
@@ -210,6 +226,26 @@ def _supported_context_kwargs(callable_value: Any, learner_context: dict[str, An
     except (TypeError, ValueError):
         return {}
     return {}
+
+
+def _supported_reasoning_kwargs(callable_value: Any, reasoning_mode: str) -> dict[str, Any]:
+    try:
+        if "reasoning_mode" in signature(callable_value).parameters:
+            return {"reasoning_mode": reasoning_mode}
+    except (TypeError, ValueError):
+        pass
+    return {}
+
+
+def _supported_course_answer_kwargs(callable_value: Any, state: AgentState) -> dict[str, Any]:
+    kwargs = _supported_context_kwargs(callable_value, state.get("learner_context"))
+    kwargs.update(_supported_reasoning_kwargs(callable_value, str(state.get("reasoning_mode") or "auto")))
+    try:
+        if "plan_summary" in signature(callable_value).parameters:
+            kwargs["plan_summary"] = str(state.get("plan_summary") or "")
+    except (TypeError, ValueError):
+        pass
+    return kwargs
 
 
 class ProfileEventRecorder(Protocol):
@@ -332,6 +368,11 @@ class SqlAlchemyTutorSessionRepository:
             )
         )
         return enrollment is not None
+
+    def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
+        if not self.user_can_access_course(user_id, course_id):
+            return None
+        return self.db.scalar(select(Course).where(Course.id == course_id))
 
     def list_messages(self, session_id: int) -> list[ChatMessage]:
         return list(
@@ -530,6 +571,8 @@ class TutorSessionService:
                 user=user,
                 session=session,
                 message_text=message_text,
+                force_search=use_web_search,
+                force_deep=deep_thinking,
             )
         material_ids, material_warnings = self._material_context_for_message(user, session, selected_material_ids)
         return HomeTutorGraphRunner(self).append(
@@ -561,6 +604,8 @@ class TutorSessionService:
                 user=user,
                 session=session,
                 message_text=message_text,
+                force_search=use_web_search,
+                force_deep=deep_thinking,
             )
         material_ids, material_warnings = self._material_context_for_message(user, session, selected_material_ids)
         return HomeTutorGraphRunner(self).stream(
@@ -851,7 +896,8 @@ class TutorSessionService:
             self.repository.rollback()
             raise
 
-        if self.profile_event_recorder is not None and session.scope == "course":
+        course_evidence = [item for item in citation_json if item.get("source_type") != "web"]
+        if self.profile_event_recorder is not None and session.scope == "course" and course_evidence:
             try:
                 ingest = getattr(self.profile_event_recorder, "ingest_course_question_signal", None)
                 if callable(ingest):
@@ -860,7 +906,7 @@ class TutorSessionService:
                         session=session,
                         user_message=user_message,
                         message_text=message_text,
-                        citation_json=citation_json,
+                        citation_json=course_evidence,
                         trace_id=trace_id,
                     )
                 else:
@@ -870,7 +916,7 @@ class TutorSessionService:
                         user_message=user_message,
                         assistant_message=assistant_message,
                         message_text=message_text,
-                        citation_json=citation_json,
+                        citation_json=course_evidence,
                         trace_id=trace_id,
                     )
                     self.repository.commit()
@@ -1538,6 +1584,11 @@ class HomeTutorGraphRunner:
         initial_warnings: list[str] | None,
         streaming: bool,
     ) -> AgentState:
+        decision = decide_tool_capabilities(
+            message_text,
+            force_search=use_web_search,
+            force_deep=deep_thinking,
+        )
         return {
             "trace_id": make_trace_id(),
             "workflow": self.workflow,
@@ -1549,6 +1600,10 @@ class HomeTutorGraphRunner:
             "message_text": message_text,
             "use_web_search": use_web_search,
             "deep_thinking": deep_thinking,
+            "search_required": decision.search_required,
+            "reasoning_mode": decision.reasoning_mode,
+            "tool_reason_codes": list(decision.reason_codes),
+            "tool_reason_summary": decision.reason_summary,
             "selected_material_ids": list(dict.fromkeys(selected_material_ids))[:10],
             "streaming": streaming,
             "pending_traces": [],
@@ -1587,7 +1642,7 @@ class HomeTutorGraphRunner:
             conversation_context,
             retrieval_query,
             str(state["message_text"]),
-            retrieval_active=bool(state.get("selected_material_ids")) or bool(state.get("use_web_search")),
+            retrieval_active=bool(state.get("selected_material_ids")) or bool(state.get("search_required")),
         )
         self._write(
             state,
@@ -1626,8 +1681,12 @@ class HomeTutorGraphRunner:
 
     def _route_node(self, state: AgentState) -> dict[str, Any]:
         message = str(state["message_text"])
-        fresh_keywords = ("最新", "今天", "现在", "新闻", "价格", "政策", "发布", "本周", "近期")
-        requires_fresh_info = any(keyword in message for keyword in fresh_keywords)
+        decision = decide_tool_capabilities(
+            message,
+            force_search=bool(state.get("use_web_search")),
+            force_deep=bool(state.get("deep_thinking")),
+        )
+        requires_fresh_info = "fresh_information" in decision.reason_codes
         if state.get("selected_material_ids"):
             intent = "material_question"
         elif requires_fresh_info:
@@ -1641,10 +1700,22 @@ class HomeTutorGraphRunner:
             input_summary="判断问题类型与工具需求",
             status_label="正在理解问题",
             work=lambda: (
-                {"intent": intent, "requires_fresh_info": requires_fresh_info},
-                f"已识别为 {intent}。",
+                {
+                    "intent": intent,
+                    "requires_fresh_info": requires_fresh_info,
+                    "search_required": decision.search_required,
+                    "reasoning_mode": decision.reasoning_mode,
+                    "tool_reason_codes": list(decision.reason_codes),
+                    "tool_reason_summary": decision.reason_summary,
+                },
+                f"已识别为 {intent}，{decision.reason_summary}。",
                 "completed",
-                {"generation_mode": "deep" if state.get("deep_thinking") else "standard"},
+                {
+                    "search_required": decision.search_required,
+                    "reasoning_mode": decision.reasoning_mode,
+                    "tool_reason_codes": list(decision.reason_codes),
+                    "tool_reason_summary": decision.reason_summary,
+                },
             ),
         )
 
@@ -1706,11 +1777,11 @@ class HomeTutorGraphRunner:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             citations = list(state.get("citation_json", []))
             warnings = list(state.get("warnings", []))
-            if not state.get("use_web_search"):
+            if not state.get("search_required"):
                 self._write(state, "sources", {"citations": citations, "warnings": warnings})
                 return (
                     {"citation_json": citations, "warnings": warnings},
-                    "本次未启用联网搜索。",
+                    "当前问题不需要联网搜索。",
                     "skipped",
                     {"citation_count": len(citations), "warning_count": len(warnings)},
                 )
@@ -1721,7 +1792,7 @@ class HomeTutorGraphRunner:
             citations.extend(web_citations)
             self._write(state, "sources", {"citations": citations, "warnings": warnings})
             return (
-                {"citation_json": citations, "warnings": warnings},
+                {"citation_json": citations, "warnings": warnings, "web_citation_count": len(web_citations)},
                 f"返回 {len(web_citations)} 条联网来源。" if web_citations else (warnings[-1] if warnings else "未返回联网来源。"),
                 "completed" if web_citations else "warning",
                 {
@@ -1736,14 +1807,14 @@ class HomeTutorGraphRunner:
             agent_name="web_search",
             step_index=4,
             input_summary="按需执行联网检索",
-            status_label="正在联网搜索" if state.get("use_web_search") else "正在确认来源",
+            status_label="正在联网搜索" if state.get("search_required") else "正在确认来源",
             work=work,
         )
 
     def _planner_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
-            if not state.get("deep_thinking"):
-                return ({"plan_summary": ""}, "本次使用标准回答模式。", "skipped", {"generation_mode": "standard"})
+            if state.get("reasoning_mode") != "deep":
+                return ({"plan_summary": ""}, "模型将自适应处理当前问题。", "skipped", {"reasoning_mode": "auto"})
             planner = getattr(self.service.course_answer_generator, "plan_home", None)
             plan_summary = ""
             if callable(planner):
@@ -1759,7 +1830,7 @@ class HomeTutorGraphRunner:
                 {"plan_summary": plan_summary},
                 "已生成安全回答规划摘要。" if plan_summary else "规划模型不可用，继续使用结构化回答。",
                 "completed" if plan_summary else "warning",
-                {"generation_mode": "deep"},
+                {"reasoning_mode": "deep"},
             )
 
         return self._run_node(
@@ -1767,7 +1838,7 @@ class HomeTutorGraphRunner:
             agent_name="planner",
             step_index=5,
             input_summary="生成安全回答规划",
-            status_label="正在规划回答" if state.get("deep_thinking") else "正在组织回答",
+            status_label="正在规划回答" if state.get("reasoning_mode") == "deep" else "正在组织回答",
             work=work,
         )
 
@@ -1793,8 +1864,8 @@ class HomeTutorGraphRunner:
                     user=state["user"],
                     question=str(state["message_text"]),
                     citations=list(state.get("citation_json", [])),
-                    use_web_search=bool(state.get("use_web_search")),
-                    deep_thinking=bool(state.get("deep_thinking")),
+                    use_web_search=bool(state.get("search_required")),
+                    deep_thinking=state.get("reasoning_mode") == "deep",
                     warnings=list(state.get("warnings", [])),
                     conversation_context=state.get("conversation_context"),
                     plan_summary=str(state.get("plan_summary") or ""),
@@ -1807,8 +1878,8 @@ class HomeTutorGraphRunner:
                     user=state["user"],
                     question=str(state["message_text"]),
                     citations=list(state.get("citation_json", [])),
-                    use_web_search=bool(state.get("use_web_search")),
-                    deep_thinking=bool(state.get("deep_thinking")),
+                    use_web_search=bool(state.get("search_required")),
+                    deep_thinking=state.get("reasoning_mode") == "deep",
                     warnings=list(state.get("warnings", [])),
                     conversation_context=state.get("conversation_context"),
                     plan_summary=str(state.get("plan_summary") or ""),
@@ -2175,10 +2246,16 @@ class HomeTutorGraphRunner:
         get_stream_writer()({"event": event, "data": data})
 
     def _base_metadata(self, state: AgentState) -> dict[str, Any]:
+        citations = list(state.get("citation_json", []))
         return {
-            "citation_count": len(state.get("citation_json", [])),
+            "citation_count": len(citations),
+            "course_citation_count": sum(1 for item in citations if item.get("source_type") != "web"),
+            "web_citation_count": sum(1 for item in citations if item.get("source_type") == "web"),
             "warning_count": len(state.get("warnings", [])),
-            "generation_mode": "deep" if state.get("deep_thinking") else "standard",
+            "search_required": bool(state.get("search_required")),
+            "reasoning_mode": str(state.get("reasoning_mode") or "auto"),
+            "tool_reason_codes": list(state.get("tool_reason_codes", [])),
+            "tool_reason_summary": str(state.get("tool_reason_summary") or "")[:240],
             **self.service._safe_trace_context_metadata(state.get("context_metadata")),
         }
 
@@ -2191,8 +2268,22 @@ class CourseTutorGraphRunner:
         self.service = service
         self.graph = self._build_graph()
 
-    def append(self, *, user: User, session: ChatSession, message_text: str) -> TutorSessionDetail:
-        state = self._initial_state(user=user, session=session, message_text=message_text)
+    def append(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        message_text: str,
+        force_search: bool = False,
+        force_deep: bool = False,
+    ) -> TutorSessionDetail:
+        state = self._initial_state(
+            user=user,
+            session=session,
+            message_text=message_text,
+            force_search=force_search,
+            force_deep=force_deep,
+        )
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
             result = self.graph.invoke(state)
         return self.service._persist_message_pair(
@@ -2207,11 +2298,28 @@ class CourseTutorGraphRunner:
             course_trace_records=list(result.get("pending_traces", [])),
         )
 
-    def stream(self, *, user: User, session: ChatSession, message_text: str) -> Iterator[dict[str, Any]]:
-        state = self._initial_state(user=user, session=session, message_text=message_text)
+    def stream(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        message_text: str,
+        force_search: bool = False,
+        force_deep: bool = False,
+    ) -> Iterator[dict[str, Any]]:
+        state = self._initial_state(
+            user=user,
+            session=session,
+            message_text=message_text,
+            force_search=force_search,
+            force_deep=force_deep,
+        )
         try:
             state.update(self._profile_node(state))
+            state.update(self._route_node(state))
             state.update(self._retriever_node(state))
+            state.update(self._web_search_node(state))
+            state.update(self._planner_node(state))
             citation_json = list(state.get("citation_json", []))
             stream_state = self._prepare_stream_tutor_node(state)
             state.update(stream_state)
@@ -2263,21 +2371,35 @@ class CourseTutorGraphRunner:
     def _build_graph(self):
         graph = StateGraph(AgentState)
         graph.add_node("profile", self._profile_node)
+        graph.add_node("route", self._route_node)
         graph.add_node("retriever", self._retriever_node)
+        graph.add_node("web_search", self._web_search_node)
+        graph.add_node("planner", self._planner_node)
         graph.add_node("tutor", self._tutor_node)
         graph.add_node("weakness", self._weakness_node)
         graph.add_node("review", self._review_node)
         graph.add_node("next_action", self._next_action_node)
         graph.add_edge(START, "profile")
-        graph.add_edge("profile", "retriever")
-        graph.add_edge("retriever", "tutor")
+        graph.add_edge("profile", "route")
+        graph.add_edge("route", "retriever")
+        graph.add_edge("retriever", "web_search")
+        graph.add_edge("web_search", "planner")
+        graph.add_edge("planner", "tutor")
         graph.add_edge("tutor", "weakness")
         graph.add_edge("weakness", "review")
         graph.add_edge("review", "next_action")
         graph.add_edge("next_action", END)
         return graph.compile()
 
-    def _initial_state(self, *, user: User, session: ChatSession, message_text: str) -> AgentState:
+    def _initial_state(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        message_text: str,
+        force_search: bool,
+        force_deep: bool,
+    ) -> AgentState:
         conversation_context = self.service._build_conversation_context(session)
         retrieval_query = self.service._build_contextual_query(message_text, conversation_context)
         context_metadata = self.service._context_metadata(
@@ -2286,6 +2408,8 @@ class CourseTutorGraphRunner:
             message_text,
             retrieval_active=True,
         )
+        decision = decide_tool_capabilities(message_text, force_search=force_search, force_deep=force_deep)
+        course_related = self._course_title_matches(user.id, session.course_id, retrieval_query)
         return {
             "trace_id": make_trace_id(),
             "workflow": self.workflow,
@@ -2295,6 +2419,13 @@ class CourseTutorGraphRunner:
             "user": user,
             "session": session,
             "message_text": message_text,
+            "use_web_search": force_search,
+            "deep_thinking": force_deep,
+            "search_required": decision.search_required,
+            "reasoning_mode": decision.reasoning_mode,
+            "tool_reason_codes": list(decision.reason_codes),
+            "tool_reason_summary": decision.reason_summary,
+            "course_related": course_related,
             "conversation_context": conversation_context if conversation_context.has_context else None,
             "retrieval_query": retrieval_query,
             "context_metadata": context_metadata,
@@ -2302,6 +2433,25 @@ class CourseTutorGraphRunner:
             "warnings": [],
             "errors": [],
         }
+
+    def _course_title_matches(self, user_id: int, course_id: int | None, query: str) -> bool:
+        if course_id is None:
+            return False
+        getter = getattr(self.service.repository, "get_course_for_user", None)
+        if not callable(getter):
+            return False
+        course = getter(user_id, course_id)
+        title = str(getattr(course, "title", "") or "").lower()
+        normalized_query = query.lower()
+        ignored = {"课程", "导论", "基础", "学习", "教程", "复习"}
+        title_parts = re.split(r"[与和、/·\s]+", title)
+        terms = [
+            term
+            for part in title_parts
+            for term in re.findall(r"[一-龥]{2,}|[a-z0-9+#.]{2,}", part)
+            if term not in ignored
+        ]
+        return any(term in normalized_query for term in terms)
 
     def _profile_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
@@ -2330,6 +2480,35 @@ class CourseTutorGraphRunner:
             work=work,
         )
 
+    def _route_node(self, state: AgentState) -> dict[str, Any]:
+        decision = decide_tool_capabilities(
+            str(state["message_text"]),
+            force_search=bool(state.get("use_web_search")),
+            force_deep=bool(state.get("deep_thinking")),
+        )
+        return self._run_node(
+            state,
+            agent_name="route",
+            step_index=2,
+            input_summary="判断课程问题的工具与推理需求",
+            work=lambda: (
+                {
+                    "search_required": decision.search_required,
+                    "reasoning_mode": decision.reasoning_mode,
+                    "tool_reason_codes": list(decision.reason_codes),
+                    "tool_reason_summary": decision.reason_summary,
+                },
+                decision.reason_summary,
+                "completed",
+                {
+                    "search_required": decision.search_required,
+                    "reasoning_mode": decision.reasoning_mode,
+                    "tool_reason_codes": list(decision.reason_codes),
+                    "tool_reason_summary": decision.reason_summary,
+                },
+            ),
+        )
+
     def _retriever_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             citations = self.service._search_course_citations(
@@ -2348,8 +2527,104 @@ class CourseTutorGraphRunner:
         return self._run_node(
             state,
             agent_name="retriever",
-            step_index=2,
+            step_index=3,
             input_summary="检索当前课程知识切片",
+            work=work,
+        )
+
+    def _web_search_node(self, state: AgentState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            citations = list(state.get("citation_json", []))
+            course_citation_count = sum(1 for item in citations if item.get("source_type") != "web")
+            decision = decide_tool_capabilities(
+                str(state["message_text"]),
+                force_search=bool(state.get("use_web_search")),
+                force_deep=bool(state.get("deep_thinking")),
+                has_course_evidence=course_citation_count > 0,
+                course_related=bool(state.get("course_related")),
+            )
+            updates: dict[str, Any] = {
+                "search_required": decision.search_required,
+                "reasoning_mode": decision.reasoning_mode,
+                "tool_reason_codes": list(decision.reason_codes),
+                "tool_reason_summary": decision.reason_summary,
+                "course_citation_count": course_citation_count,
+            }
+            if not decision.search_required:
+                return (
+                    {**updates, "citation_json": citations, "web_citation_count": 0},
+                    "课程资料足以处理当前问题，无需联网补充。",
+                    "skipped",
+                    {
+                        "search_required": False,
+                        "reasoning_mode": decision.reasoning_mode,
+                        "tool_reason_codes": list(decision.reason_codes),
+                        "tool_reason_summary": decision.reason_summary,
+                        "course_citation_count": course_citation_count,
+                        "web_citation_count": 0,
+                    },
+                )
+
+            warnings = list(state.get("warnings", []))
+            web_citations = self.service._web_search_citations(str(state["retrieval_query"]), warnings)
+            supplements = [{**item, "evidence_role": "external_supplement"} for item in web_citations]
+            citations.extend(supplements)
+            return (
+                {
+                    **updates,
+                    "citation_json": citations,
+                    "citations": citations,
+                    "warnings": warnings,
+                    "web_citation_count": len(supplements),
+                },
+                f"返回 {len(supplements)} 条外部补充来源。" if supplements else (warnings[-1] if warnings else "未返回外部来源。"),
+                "completed" if supplements else "warning",
+                {
+                    "search_required": True,
+                    "reasoning_mode": decision.reasoning_mode,
+                    "tool_reason_codes": list(decision.reason_codes),
+                    "tool_reason_summary": decision.reason_summary,
+                    "course_citation_count": course_citation_count,
+                    "web_citation_count": len(supplements),
+                    "warning_count": len(warnings),
+                },
+            )
+
+        return self._run_node(
+            state,
+            agent_name="web_search",
+            step_index=4,
+            input_summary="按需检索课程外部补充来源",
+            work=work,
+        )
+
+    def _planner_node(self, state: AgentState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            if state.get("reasoning_mode") != "deep":
+                return ({"plan_summary": ""}, "模型将自适应处理当前问题。", "skipped", {"reasoning_mode": "auto"})
+            planner = getattr(self.service.course_answer_generator, "plan_course", None)
+            plan_summary = ""
+            if callable(planner):
+                plan_summary = str(
+                    planner(
+                        user=state["user"],
+                        question=str(state["message_text"]),
+                        citations=list(state.get("citation_json", [])),
+                    )
+                    or ""
+                )
+            return (
+                {"plan_summary": plan_summary},
+                "已生成安全课程回答规划摘要。" if plan_summary else "规划模型不可用，继续按深度模式回答。",
+                "completed" if plan_summary else "warning",
+                {"reasoning_mode": "deep"},
+            )
+
+        return self._run_node(
+            state,
+            agent_name="planner",
+            step_index=5,
+            input_summary="生成安全课程回答规划",
             work=work,
         )
 
@@ -2367,9 +2642,10 @@ class CourseTutorGraphRunner:
                     {"citation_count": 0, "risk_flags": ["low_evidence"]},
                 )
             if self.service.course_answer_generator is None:
+                course_count = sum(1 for item in citations if item.get("source_type") != "web")
                 return (
                     {
-                        "assistant_reply": COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED,
+                        "assistant_reply": COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED if course_count else HOME_MODEL_NOT_CONFIGURED_MESSAGE,
                         "used_model": False,
                     },
                     "当前未配置课程回答模型，已返回清晰提示。",
@@ -2381,7 +2657,7 @@ class CourseTutorGraphRunner:
                 question=str(state["message_text"]),
                 citations=citations,
                 conversation_context=state.get("conversation_context"),
-                **_supported_context_kwargs(self.service.course_answer_generator.generate, state.get("learner_context")),
+                **_supported_course_answer_kwargs(self.service.course_answer_generator.generate, state),
             )
             trace_id = getattr(answer, "trace_id", None) or state["trace_id"]
             return (
@@ -2398,7 +2674,7 @@ class CourseTutorGraphRunner:
         return self._run_node(
             state,
             agent_name="tutor",
-            step_index=3,
+            step_index=6,
             input_summary="生成课程导师回答",
             work=work,
         )
@@ -2417,9 +2693,10 @@ class CourseTutorGraphRunner:
                     {"citation_count": 0, "risk_flags": ["low_evidence"]},
                 )
             if self.service.course_answer_generator is None:
+                course_count = sum(1 for item in citations if item.get("source_type") != "web")
                 return (
                     {
-                        "tokens": [COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED],
+                        "tokens": [COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED if course_count else HOME_MODEL_NOT_CONFIGURED_MESSAGE],
                         "used_model": False,
                     },
                     "当前未配置课程回答模型，已返回清晰提示。",
@@ -2431,7 +2708,7 @@ class CourseTutorGraphRunner:
                 question=str(state["message_text"]),
                 citations=citations,
                 conversation_context=state.get("conversation_context"),
-                **_supported_context_kwargs(self.service.course_answer_generator.stream, state.get("learner_context")),
+                **_supported_course_answer_kwargs(self.service.course_answer_generator.stream, state),
             )
             trace_id = getattr(stream_result, "trace_id", None) or state["trace_id"]
             return (
@@ -2448,24 +2725,26 @@ class CourseTutorGraphRunner:
         return self._run_node(
             state,
             agent_name="tutor",
-            step_index=3,
+            step_index=6,
             input_summary="生成课程导师回答",
             work=work,
         )
 
     def _weakness_node(self, state: AgentState) -> dict[str, Any]:
-        citation_count = len(state.get("citation_json", []))
+        citation_count = sum(1 for item in state.get("citation_json", []) if item.get("source_type") != "web")
         output = "已同步课程问答弱点候选。" if citation_count else "依据不足，未生成新的弱点候选。"
         return self._run_node(
             state,
             agent_name="weakness",
-            step_index=4,
+            step_index=7,
             input_summary="识别弱点候选",
             work=lambda: ({}, output, "completed", {"citation_count": citation_count}),
         )
 
     def _review_node(self, state: AgentState) -> dict[str, Any]:
         citations = list(state.get("citation_json", []))
+        course_citation_count = sum(1 for item in citations if item.get("source_type") != "web")
+        web_citation_count = sum(1 for item in citations if item.get("source_type") == "web")
         used_model = bool(state.get("used_model"))
         risk_flags: list[str] = []
         if not citations:
@@ -2479,11 +2758,14 @@ class CourseTutorGraphRunner:
             "risk_flags": risk_flags,
             "safety_summary": "已完成课程回答依据、隐私和下一步动作审核。",
             "citation_count": len(citations),
+            "course_citation_count": course_citation_count,
+            "web_citation_count": web_citation_count,
+            "external_only": course_citation_count == 0 and web_citation_count > 0,
         }
         return self._run_node(
             state,
             agent_name="review",
-            step_index=5,
+            step_index=8,
             input_summary="审核回答依据与安全边界",
             work=lambda: ({"review_result": metadata}, f"ReviewAgent 审核结果：{review_status}", review_status, metadata),
         )
@@ -2494,7 +2776,7 @@ class CourseTutorGraphRunner:
         return self._run_node(
             state,
             agent_name="next_action",
-            step_index=6,
+            step_index=9,
             input_summary="生成下一步学习动作",
             work=lambda: ({}, output, "completed", {"citation_count": len(citations)}),
         )
@@ -2567,7 +2849,14 @@ class CourseTutorGraphRunner:
             self.service.repository.rollback()
 
     def _base_metadata(self, state: AgentState) -> dict[str, Any]:
+        citations = list(state.get("citation_json", []))
         return {
-            "citation_count": len(state.get("citation_json", [])),
+            "citation_count": len(citations),
+            "course_citation_count": sum(1 for item in citations if item.get("source_type") != "web"),
+            "web_citation_count": sum(1 for item in citations if item.get("source_type") == "web"),
+            "search_required": bool(state.get("search_required")),
+            "reasoning_mode": str(state.get("reasoning_mode") or "auto"),
+            "tool_reason_codes": list(state.get("tool_reason_codes", [])),
+            "tool_reason_summary": str(state.get("tool_reason_summary") or "")[:240],
             **self.service._safe_trace_context_metadata(state.get("context_metadata")),
         }

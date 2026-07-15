@@ -41,6 +41,7 @@ class FakeTutorRepository:
     agent_logs: list[Any] = field(default_factory=list)
     materials: list[Material] = field(default_factory=list)
     allowed_course_ids: set[int] = field(default_factory=set)
+    course_titles: dict[int, str] = field(default_factory=dict)
     next_session_id: int = 1
     next_message_id: int = 1
     committed: bool = False
@@ -96,6 +97,11 @@ class FakeTutorRepository:
 
     def user_can_access_course(self, user_id: int, course_id: int) -> bool:
         return course_id in self.allowed_course_ids
+
+    def get_course_for_user(self, user_id: int, course_id: int) -> SimpleNamespace | None:
+        if not self.user_can_access_course(user_id, course_id):
+            return None
+        return SimpleNamespace(id=course_id, title=self.course_titles.get(course_id, ""))
 
     def list_messages(self, session_id: int) -> list[ChatMessage]:
         return sorted(
@@ -683,6 +689,9 @@ def test_append_message_writes_user_and_model_assistant_messages_in_order() -> N
             "user_id": 1,
             "question": "为什么反向传播要用链式法则？",
             "citations": [],
+            "use_web_search": False,
+            "deep_thinking": True,
+            "warnings": [],
         }
     ]
     assert detail["session"]["updated_at"] > detail["session"]["created_at"]
@@ -806,7 +815,10 @@ def test_append_course_message_persists_real_citations_from_course_knowledge() -
     assert detail["messages"][1]["trace_id"] == "trace_model_test"
     assert [log.agent_name for log in repo.agent_logs] == [
         "profile",
+        "route",
         "retriever",
+        "web_search",
+        "planner",
         "tutor",
         "weakness",
         "review",
@@ -816,8 +828,8 @@ def test_append_course_message_persists_real_citations_from_course_knowledge() -
     assert repo.agent_logs[0].metadata_json["workflow"] == "course_tutor"
     assert repo.agent_logs[0].metadata_json["artifact_type"] == "chat_message"
     assert repo.agent_logs[0].metadata_json["artifact_id"] == str(repo.messages[1].id)
-    assert repo.agent_logs[1].metadata_json["citation_count"] == 1
-    assert repo.agent_logs[4].metadata_json["review_status"] == "passed"
+    assert repo.agent_logs[2].metadata_json["citation_count"] == 1
+    assert repo.agent_logs[7].metadata_json["review_status"] == "passed"
 
 
 def test_append_course_message_uses_recent_user_questions_for_retrieval_and_model_context() -> None:
@@ -945,6 +957,55 @@ def test_append_course_message_records_insufficient_evidence_without_fabricated_
     assert answer_generator.calls == []
     assert "还没有足够依据" in detail["messages"][1]["content"]
     assert detail["messages"][1]["citation_json"] == []
+
+
+def test_course_message_automatically_uses_external_supplement_without_profile_evidence() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7}, course_titles={7: "数据结构与算法"})
+    web_searcher = FakeWebSearchService()
+    profile_recorder = FakeProfileEventRecorder()
+    answer_generator = FakeCourseAnswerGenerator(content="模型回答：这是课程主题的最新外部补充。")
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=FakeCourseCitationSearcher(results=[]),
+        course_answer_generator=answer_generator,
+        web_search_service=web_searcher,
+        profile_event_recorder=profile_recorder,
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+
+    detail = as_dict(service.append_message(user=user, session_id=session.id, content="数据结构有哪些应用？"))
+
+    assistant = detail["messages"][1]
+    assert web_searcher.calls == [{"query": "数据结构有哪些应用？", "max_results": 5}]
+    assert assistant["citation_json"][0]["source_type"] == "web"
+    assert assistant["citation_json"][0]["evidence_role"] == "external_supplement"
+    assert profile_recorder.calls == []
+    assert repo.agent_logs[3].metadata_json["course_citation_count"] == 0
+    assert repo.agent_logs[3].metadata_json["web_citation_count"] == 1
+    assert "course_evidence_fallback" in repo.agent_logs[3].metadata_json["tool_reason_codes"]
+
+
+def test_home_message_automatically_searches_fresh_information_without_legacy_flags() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    web_searcher = FakeWebSearchService()
+    answer_generator = FakeCourseAnswerGenerator(content="模型回答：这是核实后的最新信息。")
+    service = module.TutorSessionService(
+        repo,
+        course_answer_generator=answer_generator,
+        web_search_service=web_searcher,
+    )
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="主页答疑")
+
+    service.append_message(user=user, session_id=session.id, content="请核实这个算法今年的最新应用")
+
+    assert web_searcher.calls == [{"query": "请核实这个算法今年的最新应用", "max_results": 5}]
+    assert answer_generator.calls[0]["use_web_search"] is True
+    assert repo.agent_logs[1].metadata_json["search_required"] is True
+    assert "fresh_information" in repo.agent_logs[1].metadata_json["tool_reason_codes"]
 
 
 def test_append_home_message_uses_model_reply_but_does_not_call_course_searcher() -> None:
@@ -1321,7 +1382,7 @@ def test_append_course_message_with_citations_and_missing_model_config_saves_cle
     assert "当前未配置可用模型" in detail["messages"][1]["content"]
     assert detail["messages"][1]["citation_json"][0]["chunk_id"] == 501
     assert detail["messages"][1]["trace_id"].startswith("trace_")
-    assert repo.agent_logs[4].metadata_json["risk_flags"] == ["model_not_configured"]
+    assert repo.agent_logs[7].metadata_json["risk_flags"] == ["model_not_configured"]
 
 
 def test_append_course_message_model_failure_rolls_back_without_half_messages() -> None:
@@ -1359,7 +1420,7 @@ def test_append_course_message_model_failure_rolls_back_without_half_messages() 
 
     assert repo.messages == []
     assert repo.rolled_back is False
-    assert [log.agent_name for log in repo.agent_logs] == ["profile", "retriever", "tutor"]
+    assert [log.agent_name for log in repo.agent_logs] == ["profile", "route", "retriever", "web_search", "planner", "tutor"]
     assert repo.agent_logs[-1].status == "failed"
     assert repo.agent_logs[-1].metadata_json["workflow"] == "course_tutor"
     assert repo.agent_logs[-1].metadata_json["error_code"] == "CourseAnswerGenerationError"
@@ -1402,7 +1463,7 @@ def test_stream_course_message_emits_tokens_and_persists_final_messages() -> Non
         "artifact_type": "chat_message",
         "citation_count": 1,
         "used_model": True,
-        "steps": ["profile", "retriever", "tutor", "weakness", "review", "next_action"],
+        "steps": ["profile", "route", "retriever", "web_search", "planner", "tutor", "weakness", "review", "next_action"],
     }
     assert "".join(event["data"]["content"] for event in events if event["event"] == "token") == "模型回答：先看启发函数，再练 A*。"
     assert [message.role for message in repo.messages] == ["user", "assistant"]
@@ -1412,14 +1473,17 @@ def test_stream_course_message_emits_tokens_and_persists_final_messages() -> Non
     assert events[-1]["data"]["messages"][1]["content"] == repo.messages[1].content
     assert [log.agent_name for log in repo.agent_logs] == [
         "profile",
+        "route",
         "retriever",
+        "web_search",
+        "planner",
         "tutor",
         "weakness",
         "review",
         "next_action",
     ]
     assert repo.agent_logs[0].metadata_json["artifact_id"] == str(repo.messages[1].id)
-    assert repo.agent_logs[4].metadata_json["risk_flags"] == []
+    assert repo.agent_logs[7].metadata_json["risk_flags"] == []
 
 
 def test_stream_course_message_passes_context_to_retrieval_model_and_metadata() -> None:
@@ -1642,7 +1706,7 @@ def test_stream_course_message_model_failure_emits_error_without_half_messages()
     assert [event["event"] for event in events if event["event"] in {"done", "error", "cancelled"}] == ["error"]
     assert events[-1]["data"]["code"] == "MODEL_PROVIDER_ERROR"
     assert repo.messages == []
-    assert [log.agent_name for log in repo.agent_logs] == ["profile", "retriever", "tutor"]
+    assert [log.agent_name for log in repo.agent_logs] == ["profile", "route", "retriever", "web_search", "planner", "tutor"]
     assert repo.agent_logs[-1].status == "failed"
     assert repo.agent_logs[-1].metadata_json["error_code"] == "CourseAnswerGenerationError"
 

@@ -73,7 +73,7 @@ describe("student interaction affordances", () => {
     useAuthStore.getState().clearSession();
   });
 
-  it("turns the home composer buttons into visible demo-state feedback", async () => {
+  it("keeps search and reasoning built in without manual composer toggles", async () => {
     const user = userEvent.setup();
     const session = {
       id: "701",
@@ -309,12 +309,10 @@ describe("student interaction affordances", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: "学习问题输入" }), "监督学习怎么复习？");
-    await user.click(screen.getByRole("button", { name: "联网搜索" }));
-    await user.click(screen.getByRole("button", { name: "深度思考" }));
     await user.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(screen.getByRole("button", { name: "联网搜索" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "深度思考" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "联网搜索" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "深度思考" })).not.toBeInTheDocument();
     expect(screen.queryByText(/联网搜索已开/)).not.toBeInTheDocument();
     expect(screen.queryByText("已生成回答。")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "主页对话" })).toHaveTextContent("监督学习怎么复习？");

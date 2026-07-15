@@ -10,8 +10,9 @@ OUTPUT = ROOT / "backend" / "openapi.json"
 sys.path.insert(0, str(ROOT))
 
 candidates = (
-    ROOT / ".venv" / "Scripts" / "python.exe",
-    ROOT / ".venv" / "bin" / "python",
+    (ROOT / ".venv" / "Scripts" / "python.exe",)
+    if os.name == "nt"
+    else (ROOT / ".venv" / "bin" / "python",)
 )
 interpreter = next((path.resolve() for path in candidates if path.exists()), None)
 if interpreter is not None and Path(sys.executable).resolve() != interpreter:

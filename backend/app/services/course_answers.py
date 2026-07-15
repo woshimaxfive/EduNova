@@ -129,6 +129,36 @@ class CourseAnswerService:
 
         return CourseAnswerStream(tokens=guarded_tokens(), trace_id=trace_id, used_model=True)
 
+    def _course_chat_completion(
+        self,
+        user: User,
+        messages: list[dict[str, str]],
+        reasoning_mode: str,
+    ) -> str:
+        try:
+            return self.model_settings_service.chat_completion(
+                user=user,
+                messages=messages,
+                thinking_type="enabled" if reasoning_mode == "deep" else "auto",
+            )
+        except TypeError:
+            return self.model_settings_service.chat_completion(user=user, messages=messages)
+
+    def _course_chat_completion_stream(
+        self,
+        user: User,
+        messages: list[dict[str, str]],
+        reasoning_mode: str,
+    ) -> Iterator[str]:
+        try:
+            return self.model_settings_service.chat_completion_stream(
+                user=user,
+                messages=messages,
+                thinking_type="enabled" if reasoning_mode == "deep" else "auto",
+            )
+        except TypeError:
+            return self.model_settings_service.chat_completion_stream(user=user, messages=messages)
+
     def _home_chat_completion(
         self,
         user: User,
@@ -139,7 +169,7 @@ class CourseAnswerService:
             return self.model_settings_service.chat_completion(
                 user=user,
                 messages=messages,
-                thinking_type="enabled" if deep_thinking else "disabled",
+                thinking_type="enabled" if deep_thinking else "auto",
             )
         except TypeError:
             return self.model_settings_service.chat_completion(user=user, messages=messages)
@@ -154,7 +184,7 @@ class CourseAnswerService:
             return self.model_settings_service.chat_completion_stream(
                 user=user,
                 messages=messages,
-                thinking_type="enabled" if deep_thinking else "disabled",
+                thinking_type="enabled" if deep_thinking else "auto",
             )
         except TypeError:
             return self.model_settings_service.chat_completion_stream(user=user, messages=messages)
@@ -187,6 +217,9 @@ class CourseAnswerService:
             f"回答结构：{self._safe_short_text(data.get('answer_outline'), 360)}",
         ]
         return "\n".join(part for part in parts if not part.endswith("："))[:1000]
+
+    def plan_course(self, user: User, question: str, citations: list[dict[str, Any]]) -> str:
+        return self.plan_home(user=user, question=question, citations=citations)
 
     def review_home(
         self,
@@ -301,6 +334,8 @@ class CourseAnswerService:
         citations: list[dict[str, Any]],
         conversation_context: ConversationContext | None = None,
         learner_context: dict[str, Any] | None = None,
+        reasoning_mode: str = "auto",
+        plan_summary: str | None = None,
     ) -> CourseAnswerGeneration:
         if not citations:
             return CourseAnswerGeneration(content="我先检查了课程资料，但还没有足够依据支撑这个问题。", trace_id=None)
@@ -311,9 +346,10 @@ class CourseAnswerService:
             citations=citations,
             conversation_context=conversation_context,
             learner_context=learner_context,
+            plan_summary=plan_summary,
         )
         try:
-            content = self.model_settings_service.chat_completion(user=user, messages=messages)
+            content = self._course_chat_completion(user, messages, reasoning_mode)
         except ModelNotConfiguredError:
             return CourseAnswerGeneration(content=MODEL_NOT_CONFIGURED_MESSAGE, trace_id=None)
         except ModelProviderError as exc:
@@ -328,6 +364,8 @@ class CourseAnswerService:
         citations: list[dict[str, Any]],
         conversation_context: ConversationContext | None = None,
         learner_context: dict[str, Any] | None = None,
+        reasoning_mode: str = "auto",
+        plan_summary: str | None = None,
     ) -> CourseAnswerStream:
         if not citations:
             return CourseAnswerStream(
@@ -342,9 +380,10 @@ class CourseAnswerService:
             citations=citations,
             conversation_context=conversation_context,
             learner_context=learner_context,
+            plan_summary=plan_summary,
         )
         try:
-            tokens = self.model_settings_service.chat_completion_stream(user=user, messages=messages)
+            tokens = self._course_chat_completion_stream(user, messages, reasoning_mode)
         except ModelNotConfiguredError:
             return CourseAnswerStream(
                 tokens=iter([MODEL_NOT_CONFIGURED_MESSAGE]),
@@ -441,29 +480,33 @@ class CourseAnswerService:
         citations: list[dict[str, Any]],
         conversation_context: ConversationContext | None = None,
         learner_context: dict[str, Any] | None = None,
+        plan_summary: str | None = None,
     ) -> list[dict[str, str]]:
-        citation_blocks = []
+        course_blocks: list[str] = []
+        web_blocks: list[str] = []
         for index, citation in enumerate(citations[:5], start=1):
-            source_title = str(citation.get("source_title") or "课程资料")
+            is_web = citation.get("source_type") == "web"
+            source_title = str(citation.get("source_title") or citation.get("title") or ("外部补充" if is_web else "课程资料"))
             section_title = str(citation.get("section_title") or "未命名章节")
             score = citation.get("score")
-            content = str(citation.get("content") or "")[:800]
-            citation_blocks.append(
+            content = str(citation.get("content") or citation.get("snippet") or "")[:800]
+            block = (
                 "\n".join(
                     [
-                        f"[{index}] 来源：{source_title}",
+                        f"[{index}] {'外部补充' if is_web else '课程来源'}：{source_title}",
                         f"章节：{section_title}",
-                        f"匹配度：{score}",
+                        f"匹配度：{score}" if not is_web else f"链接：{str(citation.get('url') or '')[:300]}",
                         f"片段：{content}",
                     ]
                 )
             )
+            (web_blocks if is_web else course_blocks).append(block)
 
         system_content = CourseAnswerService._system_content_with_summary(
             (
-                "你是 EduNova 的课程学习助手。只能依据用户课程资料引用回答。"
-                "如果引用不足以支持结论，必须明确说明依据不足。"
-                "回答要面向学生复习，结构清晰，避免编造资料外事实。"
+                "你是 EduNova 的课程学习助手。课程资料是第一依据，外部网页只能作为明确标注的补充。"
+                "不得把外部来源说成课程教材依据；如果所有来源仍不足以支持结论，必须明确说明依据不足。"
+                "回答要面向学生复习，结构清晰，避免编造来源外事实。"
                 "不要原样输出学生问题、课程引用、匹配度、片段或完整模型输入；来源细节由前端来源面板展示。"
             ),
             conversation_context,
@@ -482,10 +525,14 @@ class CourseAnswerService:
                     [
                         f"学生问题：{question}",
                         "课程引用：",
-                        "\n\n".join(citation_blocks),
+                        "\n\n".join(course_blocks) if course_blocks else "本次没有命中课程资料。",
+                        "外部补充：",
+                        "\n\n".join(web_blocks) if web_blocks else "本次没有使用外部网页。",
+                        "安全规划摘要：",
+                        str(plan_summary or "模型自适应处理。")[:1000],
                         "可信课程画像摘要：",
                         CourseAnswerService._learner_context_text(learner_context),
-                        "请基于上述引用生成学习回答；不要在正文列出来源编号、匹配度或片段，来源证据由前端来源面板展示。",
+                        "请基于上述来源生成学习回答；如果只有外部来源，必须明确称为外部补充。不要在正文列出来源编号、匹配度或片段，来源证据由前端来源面板展示。",
                     ]
                 ),
             },

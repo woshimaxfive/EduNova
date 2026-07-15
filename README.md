@@ -11,7 +11,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前已完成 **Phase 22 通用基础设施迁移**。十条生产主链路仍由真实 LangGraph 编排；文档解析、模态交互、SSE、API 合同、OpenAI-compatible 协议、观测、存储和上传安全改由成熟工具承载，EduNova 的学习闭环、质量门禁、证据和用户隔离语义保持不变。
+当前已完成 **Phase 23 内置联网搜索与自适应推理**。主页和课程空间不再提供手动搜索/思考开关；能力策略会按时效性、显式核实需求和问题复杂度自动决定联网与推理强度。课程资料仍是课程回答第一证据，网页只作为明确标注的外部补充，不进入掌握度、弱点或画像证据。
 
 当前十条真实生产 Graph 为 `MaterialIngestionGraph`、`ProfileGraph`、`CourseBuilderGraph`、`HomeTutorGraph`、`CourseTutorGraph`、`ResourceGenerationGraph`、`PathPlanningGraph`、`AssessmentGraph`、`ReportGraph` 和 `MaterialComparisonGraph`。学习档案导出明确保持确定性 Service + Redis/RQ Worker，不包装成 Agent；认证、设置、Dashboard 等非学习能力同样保持普通服务。
 
@@ -43,7 +43,7 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 - Docker Compose 新增仅内部网络可访问的 `code-verifier`。生成代码在非 root、只读文件系统、无外网和资源限制下由 Pyodide 独立 Worker 运行，只有安全策略、运行结果和预期输出全部一致时才允许保存。
 - Phase 12.2 已补交付基线文档、测试报告、用户指南、开源说明、答辩问答、AI 辅助开发说明和 MIT 许可证。
 
-主页回答已由 `HomeTutorGraph` 接管，按需检索当前用户选中资料的相关切片、Tavily-compatible 联网结果和安全深度规划，并通过 SSE 展示状态、真实来源、增量 Markdown、Review/Repair 和九节点安全 trace；未配置搜索 Key 时 warning 只进入来源/轨迹区，不伪造网页来源。主页语音输入和朗读使用浏览器 Web Speech API，不上传音频。课程空间继续使用严格课程引用、混合检索和流式 RAG。课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件，并通过课程学习状态同步为待确认复习项；这仍是“待确认/待复习”，不是已完成正式诊断。学生确认后才进入待复习、复习中或已完成语义，Phase 9 路径生成只消费已确认/复习中的弱点，不直接消费 `pending` 候选项。后续不会为每门课复制完整画像，而是通过课程级学习状态聚合目标、薄弱点、掌握度、复习队列和路径依据。
+主页回答已由 `HomeTutorGraph` 接管，自动判断是否检索当前用户选中资料、Tavily-compatible 网页和安全深度规划，并通过 SSE 展示状态、真实来源、增量 Markdown、Review/Repair 和九节点安全 trace；未配置搜索 Key 时 warning 只进入来源/轨迹区，不伪造网页来源。主页语音输入和朗读使用浏览器 Web Speech API，不上传音频。`CourseTutorGraph` 同样具备自动能力路由，课程资料优先，只有时效问题、明确外部核实或已确认课程相关但无课程命中时才补充网页来源。课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件，但外部网页不进入画像、弱点或掌握度证据。学生确认后才进入待复习、复习中或已完成语义，Phase 9 路径生成只消费已确认/复习中的弱点，不直接消费 `pending` 候选项。
 
 主页侧栏通过 `/tutor/sessions/history` 首批读取 30 条未归档主页会话并按需继续加载，服务端搜索覆盖标题和消息正文。主页会话保存最多 10 份已解析参考资料；确认后刷新或通过 `session_id` 恢复会话时自动恢复，建课资料选择使用独立状态，不会反向改写对话资料范围。
 

@@ -66,8 +66,16 @@ class DeleteTutorSessionResponse(BaseModel):
 
 class SendTutorMessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
-    use_web_search: bool = False
-    deep_thinking: bool = False
+    use_web_search: bool = Field(
+        default=False,
+        json_schema_extra={"deprecated": True},
+        description="兼容旧客户端；true 强制联网，false 或缺省由系统自动判断。",
+    )
+    deep_thinking: bool = Field(
+        default=False,
+        json_schema_extra={"deprecated": True},
+        description="兼容旧客户端；true 强制深度推理，false 或缺省由系统自动判断。",
+    )
     selected_material_ids: list[int] | None = None
 
     @field_validator("message")

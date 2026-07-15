@@ -7273,6 +7273,8 @@
         "properties": {
           "deep_thinking": {
             "default": false,
+            "deprecated": true,
+            "description": "兼容旧客户端；true 强制深度推理，false 或缺省由系统自动判断。",
             "title": "Deep Thinking",
             "type": "boolean"
           },
@@ -7298,6 +7300,8 @@
           },
           "use_web_search": {
             "default": false,
+            "deprecated": true,
+            "description": "兼容旧客户端；true 强制联网，false 或缺省由系统自动判断。",
             "title": "Use Web Search",
             "type": "boolean"
           }

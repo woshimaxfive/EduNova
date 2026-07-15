@@ -389,19 +389,21 @@ class PracticeService:
             for row in rows
         ]
         questions: list[dict] = []
-        question_types = ["single_choice", "multiple_choice", "short_answer"]
+        question_types = (
+            ["short_answer"]
+            if question_count == 1
+            else ["single_choice", "multiple_choice", "short_answer"]
+        )
         for index in range(question_count):
             point = points[index % len(points)]
             evidence = evidence_by_point[point.id]
             target_statements = [row["text"] for row in evidence]
             distractors = [text for point_id, text in all_statements if point_id != point.id and text not in target_statements]
             requested_type = question_types[index % len(question_types)]
-            if requested_type == "single_choice" and len(distractors) < 3:
-                question_type = "short_answer"
-            elif requested_type == "multiple_choice" and (len(target_statements) < 2 or len(distractors) < 2):
-                question_type = "short_answer"
-            else:
-                question_type = requested_type
+            question_type = requested_type
+            if question_type in {"single_choice", "multiple_choice"} and len(distractors) < 3:
+                distractors = [*distractors, *self._safe_distractors(point, target_statements)]
+                distractors = list(dict.fromkeys(distractors))
             keywords = self._keywords_for_evidence(point, " ".join(target_statements))
             question_id = f"q{index + 1}"
             focus = ("概念含义", "关键关系", "应用条件", "推导思路", "常见误区", "实际应用")[index % 6]
@@ -437,7 +439,7 @@ class PracticeService:
                 )
             elif question_type == "multiple_choice":
                 correct = target_statements[:2]
-                options = [*correct, *distractors[:2]]
+                options = [*correct, *distractors[: max(0, 4 - len(correct))]]
                 rotation = index % len(options)
                 options = options[rotation:] + options[:rotation]
                 questions.append(
@@ -459,6 +461,16 @@ class PracticeService:
                     }
                 )
         return questions
+
+    @staticmethod
+    def _safe_distractors(point: KnowledgePoint, statements: list[str]) -> list[str]:
+        topic = point.title
+        anchor = statements[0] if statements else topic
+        return [
+            f"教材认为“{topic}”与计算机部件之间没有任何关系。",
+            f"只要记住“{anchor[:36]}”就能推出所有结构与性能结论。",
+            f"“{topic}”只是一种软件界面，不涉及课程资料描述的硬件关系。",
+        ]
 
     @staticmethod
     def _keywords_for_evidence(point: KnowledgePoint, evidence: str) -> list[str]:

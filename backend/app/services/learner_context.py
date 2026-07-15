@@ -82,6 +82,7 @@ class CourseLearnerContext:
             "learning_goal": self.course_goal,
             "knowledge_foundation": self.foundation_summary,
             "weak_points": list(self.active_weaknesses),
+            "profile_weak_points": list(global_context.trusted_value("weak_points", [])),
             "mastery_average": self.mastery_average,
             "current_task_title": self.current_task_title,
             "major_background": global_context.trusted_value("major_background"),
@@ -96,7 +97,7 @@ class CourseLearnerContext:
         summary = self.prompt_summary()
         factor_codes = [
             key
-            for key in ("major_background", "knowledge_foundation", "learning_goal", "learning_preference", "cognitive_style", "learning_pace", "motivation_interest")
+            for key in ("major_background", "knowledge_foundation", "learning_goal", "learning_preference", "cognitive_style", "learning_pace", "motivation_interest", "profile_weak_points")
             if summary.get(key)
         ]
         if self.active_weaknesses:

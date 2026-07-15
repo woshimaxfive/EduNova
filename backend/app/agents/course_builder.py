@@ -14,6 +14,7 @@ from langgraph.types import Send
 
 from backend.app.agents.learning_review import contains_sensitive_text, parse_json_object, review_contract, safe_text
 from backend.app.api.errors import make_trace_id
+from backend.app.core.config import get_settings
 from backend.app.models import Course, CourseEnrollment, CourseMaterialLink, KnowledgeChunk, KnowledgePoint, Material, MaterialChunk, User
 from backend.app.schemas.courses import CreateCourseFromMaterialsResult
 from backend.app.services.learner_context import context_service_from_repository
@@ -91,7 +92,8 @@ class CourseBuilderGraphRunner:
             "job_context": job_context,
         }
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
-            return self.graph.invoke(state)["result"]
+            max_concurrency = max(1, min(2, get_settings().model_max_concurrent_per_user))
+            return self.graph.invoke(state, config={"max_concurrency": max_concurrency})["result"]
 
     def _build_graph(self):
         graph = StateGraph(CourseBuilderState)
@@ -233,6 +235,7 @@ class CourseBuilderGraphRunner:
                     point = dict(point)
                     point["key"] = f"kp-{len(points) + 1}"
                     points.append(point)
+            self._ensure_unique_point_titles(points)
             if not points or len(points) > 120:
                 raise self.service.generation_error("课程知识点数量不合理，未创建课程。")
             structure = {
@@ -335,6 +338,7 @@ class CourseBuilderGraphRunner:
                 current_chapter = point["chapter"]
                 previous_chapter_tail = point["key"]
                 points.append(point)
+        self._ensure_unique_point_titles(points)
         return {
             "title": state.get("requested_title") or Path(state["materials"][0].filename).stem,
             "subject": "智能资料课程",
@@ -343,6 +347,30 @@ class CourseBuilderGraphRunner:
             "knowledge_points": points[:120],
             "generation_mode": "deterministic_source",
         }
+
+    @classmethod
+    def _ensure_unique_point_titles(cls, points: list[dict[str, Any]]) -> None:
+        """Disambiguate valid chapter-local titles without another model call."""
+        used: set[str] = set()
+        for point in points:
+            title = cls._clean_title(point.get("title"))
+            normalized = cls._normalize(title)
+            if normalized not in used:
+                point["title"] = title
+                used.add(normalized)
+                continue
+
+            chapter = cls._clean_title(point.get("chapter"))[:16]
+            prefix = f"{chapter}：" if chapter else ""
+            base = title[: max(2, 40 - len(prefix))]
+            candidate = f"{prefix}{base}"
+            sequence = 2
+            while cls._normalize(candidate) in used:
+                suffix = f"（{sequence}）"
+                candidate = f"{prefix}{base[: max(2, 42 - len(prefix) - len(suffix))]}{suffix}"
+                sequence += 1
+            point["title"] = candidate
+            used.add(cls._normalize(candidate))
 
     def _build_bound_entities(self, state: CourseBuilderState) -> tuple[list[KnowledgePoint], list[KnowledgeChunk]]:
         points: list[KnowledgePoint] = []
@@ -517,6 +545,12 @@ class CourseBuilderGraphRunner:
                 title = chapter_title
             if not title:
                 title = self._title_from_content(group[0].content, len(points) + 1)
+                if title.startswith("核心概念"):
+                    repeated_base = next(
+                        (item for item in titles if self._normalize(item) != self._normalize(chapter_title)),
+                        chapter_title,
+                    )
+                    title = f"{repeated_base[:28]}：专题 {len(points) + 1}"
             title = self._clean_title(title)
             normalized_title = self._normalize(title)
             if not self._is_knowledge_title(title) or not normalized_title or normalized_title in used_titles:

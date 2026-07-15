@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import replace
 from time import perf_counter
 from typing import Any, Callable, TypedDict
@@ -21,6 +22,9 @@ from backend.app.services.resource_feedback import (
     deterministic_bundle_types,
     rank_resource_types,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class PathPlanningChoice(BaseModel):
@@ -203,7 +207,7 @@ class PathPlanningGraphRunner:
             base = [replace(task, status="doing" if index == 0 else "todo") for index, task in enumerate(base)]
             planned = base
             preserved = 0
-            if state.get("trigger") == "assessment":
+            if state.get("previous_path") is not None:
                 planned, preserved = self._merge_previous_progress(list(state.get("previous_tasks", [])), base)
             return (
                 {
@@ -416,7 +420,31 @@ class PathPlanningGraphRunner:
         open_tasks = [task for task in tasks if task.status != "completed"]
         if not open_tasks:
             return tasks
-        candidate_tasks = open_tasks[:24]
+        profile = state.get("profile_summary", {})
+        profile_weak_points = [
+            safe_text(item, limit=120).casefold()
+            for item in profile.get("profile_weak_points", [])
+            if safe_text(item, limit=120)
+        ]
+        profile_priority = [
+            task
+            for task in open_tasks
+            if any(
+                weak_point in safe_text(task.title, limit=160).casefold().removeprefix("学习").removeprefix("复习")
+                or safe_text(task.title, limit=160).casefold().removeprefix("学习").removeprefix("复习") in weak_point
+                for weak_point in profile_weak_points
+            )
+        ]
+        candidate_tasks: list[PlannedTask] = []
+        candidate_keys: set[str] = set()
+        for task in [*profile_priority, *open_tasks]:
+            key = self._task_key(task)
+            if key in candidate_keys:
+                continue
+            candidate_tasks.append(task)
+            candidate_keys.add(key)
+            if len(candidate_tasks) == 24:
+                break
         candidates = [
             {
                 "task_key": self._task_key(task),
@@ -439,7 +467,6 @@ class PathPlanningGraphRunner:
             if resource.status == "completed"
         }
         allowed_factor_codes = self._trusted_factor_codes(state)
-        profile = state.get("profile_summary", {})
         trusted_profile = {
             code: profile.get(code)
             for code in allowed_factor_codes
@@ -493,14 +520,32 @@ class PathPlanningGraphRunner:
                 ],
             )
         except Exception:
+            logger.warning("path_planning_model_degraded reason=provider_error")
             return None
-        payload = parse_json_object(raw, PathPlanningDecision)
+        payload = parse_json_object(raw)
         if payload is None:
+            logger.warning("path_planning_model_degraded reason=invalid_json")
             return None
+        if set(payload) == {"output"} and isinstance(payload.get("output"), dict):
+            payload = payload["output"]
+        try:
+            decision = PathPlanningDecision.model_validate(payload)
+        except ValueError as exc:
+            errors = getattr(exc, "errors", lambda: [])()
+            error_codes = sorted(
+                {
+                    f"{'.'.join(str(part) for part in error.get('loc') or ())}:{error.get('type') or 'validation_error'}"
+                    for error in errors
+                }
+            )
+            logger.warning("path_planning_model_degraded reason=schema_invalid:%s", ",".join(error_codes[:4]))
+            return None
+        payload = decision.model_dump(mode="json")
         by_key = {self._task_key(task): task for task in candidate_tasks}
         choices = list(payload.get("priority_tasks", []))
         selected_keys = [safe_text(item.get("task_key"), limit=160) for item in choices]
         if any(key not in by_key for key in selected_keys) or len(selected_keys) != len(set(selected_keys)):
+            logger.warning("path_planning_model_degraded reason=task_key_mismatch")
             return None
         prioritized: list[PlannedTask] = []
         for index, choice in enumerate(choices):
@@ -508,13 +553,16 @@ class PathPlanningGraphRunner:
             task = by_key[key]
             selected_types = tuple(str(item) for item in choice.get("bundle_types", []))
             selected_resources = [int(item) for item in choice.get("resource_ids", [])]
-            used_factors = tuple(str(item) for item in choice.get("used_profile_factor_codes", []))
+            returned_factors = tuple(str(item) for item in choice.get("used_profile_factor_codes", []))
+            used_factors = tuple(item for item in returned_factors if item in allowed_factor_codes)
             if any(item not in RESOURCE_TYPES for item in selected_types):
+                logger.warning("path_planning_model_degraded reason=invalid_bundle_type")
                 return None
             if any(item not in task.resource_ids or item not in resources for item in selected_resources):
+                logger.warning("path_planning_model_degraded reason=invalid_resource_id")
                 return None
-            if any(item not in allowed_factor_codes for item in used_factors):
-                return None
+            if len(used_factors) != len(returned_factors):
+                logger.info("path_planning_profile_factors_normalized removed_count=%s", len(returned_factors) - len(used_factors))
             ranked_resources = [*selected_resources, *(item for item in task.resource_ids if item not in selected_resources)]
             prioritized.append(
                 replace(
@@ -696,7 +744,7 @@ class PathPlanningGraphRunner:
             "rationale": (
                 task.reason
                 if model_enhanced
-                else "模型规划未生效，使用课程证据、学习进度和资源反馈生成安全默认组合。"
+                else "该任务未列入本次近期优先规划，按课程证据、学习进度和资源反馈保留安全基础安排。"
             ),
             "items": items,
         }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -8,6 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.app.agents.learning_review import contains_sensitive_text, parse_json_object, safe_text
 from backend.app.models import User
 from backend.app.services.content_locale import china_first_content_policy
+
+
+logger = logging.getLogger(__name__)
 
 
 class GradingModelService(Protocol):
@@ -19,7 +23,7 @@ class ShortAnswerGrade(BaseModel):
 
     question_id: str = Field(min_length=1, max_length=80)
     score: int = Field(ge=0, le=100)
-    is_correct: bool
+    is_correct: bool | None = None
     matched_concepts: list[str] = Field(default_factory=list, max_length=8)
     missing_concepts: list[str] = Field(default_factory=list, max_length=8)
     misconception: str = Field(default="", max_length=300)
@@ -39,6 +43,7 @@ class SemanticShortAnswerGrader:
 
     def __init__(self, model_service: GradingModelService | None) -> None:
         self.model_service = model_service
+        self.failure_reason: str | None = None
 
     def grade(
         self,
@@ -46,7 +51,9 @@ class SemanticShortAnswerGrader:
         user: User,
         items: list[dict[str, Any]],
     ) -> dict[str, dict[str, Any]] | None:
+        self.failure_reason = None
         if self.model_service is None or not items:
+            self.failure_reason = "model_unavailable" if self.model_service is None else "empty_batch"
             return None
         safe_items = [self._safe_item(item) for item in items]
         try:
@@ -76,33 +83,61 @@ class SemanticShortAnswerGrader:
                 ],
             )
         except Exception:
+            self.failure_reason = "provider_error"
+            logger.warning("semantic_short_answer_grading_failed reason=%s", self.failure_reason)
             return None
         payload = parse_json_object(raw)
         if payload is None:
+            self.failure_reason = "invalid_json"
+            logger.warning("semantic_short_answer_grading_failed reason=%s", self.failure_reason)
             return None
         try:
             batch = ShortAnswerGradeBatch.model_validate(payload)
-        except ValueError:
+        except ValueError as exc:
+            errors = getattr(exc, "errors", lambda: [])()
+            error_codes = sorted(
+                {
+                    f"{'.'.join(str(part) for part in error.get('loc') or ())}:{error.get('type') or 'validation_error'}"
+                    for error in errors
+                }
+            )
+            self.failure_reason = "schema_invalid:" + ",".join(error_codes[:4])
+            logger.warning("semantic_short_answer_grading_failed reason=%s", self.failure_reason)
             return None
         expected = {str(item["question_id"]): item for item in safe_items}
         if len(batch.grades) != len(expected):
+            self.failure_reason = "grade_count_mismatch"
+            logger.warning("semantic_short_answer_grading_failed reason=%s", self.failure_reason)
             return None
         result: dict[str, dict[str, Any]] = {}
         for grade in batch.grades:
             if grade.question_id not in expected or grade.question_id in result:
+                self.failure_reason = "question_id_mismatch"
+                logger.warning("semantic_short_answer_grading_failed reason=%s", self.failure_reason)
                 return None
             allowed_refs = set(expected[grade.question_id]["allowed_evidence_refs"])
             if any(ref not in allowed_refs for ref in grade.evidence_refs):
-                return None
-            if grade.is_correct != (grade.score >= 60):
+                self.failure_reason = "invalid_evidence_ref"
+                logger.warning("semantic_short_answer_grading_failed reason=%s", self.failure_reason)
                 return None
             if any(len(value) > 120 for value in [*grade.matched_concepts, *grade.missing_concepts]):
+                self.failure_reason = "concept_too_long"
+                logger.warning("semantic_short_answer_grading_failed reason=%s", self.failure_reason)
                 return None
             value = grade.model_dump()
+            if grade.is_correct != (grade.score >= 60):
+                logger.info("semantic_short_answer_correctness_normalized question_id=%s", grade.question_id)
+            value["is_correct"] = grade.score >= 60
             if contains_sensitive_text(value):
+                self.failure_reason = "sensitive_output"
+                logger.warning("semantic_short_answer_grading_failed reason=%s", self.failure_reason)
                 return None
             result[grade.question_id] = value
-        return result if set(result) == set(expected) else None
+        if set(result) != set(expected):
+            self.failure_reason = "question_id_set_mismatch"
+            logger.warning("semantic_short_answer_grading_failed reason=%s", self.failure_reason)
+            return None
+        return result
 
     @staticmethod
     def _safe_item(item: dict[str, Any]) -> dict[str, Any]:

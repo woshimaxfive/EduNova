@@ -59,6 +59,17 @@ class HomeAnswerReview:
 
 
 class CourseAnswerService:
+    _QUANTITATIVE_CLAIM_PATTERN = re.compile(
+        r"(?:[$￥]\s*)?\d+(?:\.\d+)?(?:\s*[-~～—至]\s*\d+(?:\.\d+)?)?\s*"
+        r"(?:%|％|纳秒|微秒|毫秒|秒|分钟|小时|周期|拍|位|字节|KB|MB|GB|TB|"
+        r"bit(?:s)?|byte(?:s)?|ns|us|ms|cycles?|倍|个数量级|美元|元)",
+        re.IGNORECASE,
+    )
+    _DOMAIN_CLAIM_PATTERN = re.compile(
+        r"(?<![@\w])(?:https?://)?(?:www\.)?(?:[a-z0-9-]+\.)+(?:com|cn|org|net|edu|gov|io)(?:/[\w./?%=&+#~-]*)?",
+        re.IGNORECASE,
+    )
+
     def __init__(self, model_settings_service: ModelSettingsService) -> None:
         self.model_settings_service = model_settings_service
 
@@ -365,7 +376,15 @@ class CourseAnswerService:
         except ModelProviderError as exc:
             raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
 
-        return CourseAnswerGeneration(content=self._sanitize_course_answer(content), trace_id=trace_id)
+        sanitized = self._sanitize_course_answer(content)
+        grounded = self._ground_course_answer(
+            user=user,
+            question=question,
+            answer=sanitized,
+            citations=citations,
+            reasoning_mode=reasoning_mode,
+        )
+        return CourseAnswerGeneration(content=grounded, trace_id=trace_id)
 
     def stream(
         self,
@@ -408,7 +427,14 @@ class CourseAnswerService:
                 content = "".join(tokens)
             except ModelProviderError as exc:
                 raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
-            yield self._sanitize_course_answer(content)
+            sanitized = self._sanitize_course_answer(content)
+            yield self._ground_course_answer(
+                user=user,
+                question=question,
+                answer=sanitized,
+                citations=citations,
+                reasoning_mode=reasoning_mode,
+            )
 
         return CourseAnswerStream(tokens=guarded_tokens(), trace_id=trace_id, used_model=True)
 
@@ -524,6 +550,8 @@ class CourseAnswerService:
                 "不得把外部来源说成课程教材依据；如果所有来源仍不足以支持结论，必须明确说明依据不足。"
                 "历史对话只能帮助理解学生指代和延续话题，不能作为课程事实证据。"
                 "回答要面向学生复习，结构清晰，避免编造来源外事实。"
+                "任何精确数字、范围、百分比、时延、容量、价格、周期数、命中率和性能倍数，都必须在所给课程引用或外部补充中逐字存在；"
+                "来源没有给出时只能做定性解释，禁止凭常识补充示例数值，也禁止把不同层级混写成秒级、毫秒级或纳秒级结论。"
                 "不要原样输出学生问题、课程引用、匹配度、片段或完整模型输入；来源细节由前端来源面板展示。"
                 + china_first_content_policy.prompt_instruction()
             ),
@@ -556,6 +584,115 @@ class CourseAnswerService:
             },
         )
         return messages
+
+    def _ground_course_answer(
+        self,
+        *,
+        user: User,
+        question: str,
+        answer: str,
+        citations: list[dict[str, Any]],
+        reasoning_mode: str,
+    ) -> str:
+        unsupported = self.unsupported_evidence_claims(answer, citations)
+        if not unsupported:
+            return answer
+
+        evidence_blocks = [
+            f"- {str(item.get('source_title') or item.get('title') or '课程资料')[:120]} / "
+            f"{str(item.get('section_title') or '未标注章节')[:120]}："
+            f"{str(item.get('content') or item.get('snippet') or '')[:800]}"
+            for item in citations[:5]
+            if item.get("source_type") != "history"
+        ]
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是 EduNova 的课程回答证据修订器。直接输出修订后的中文 Markdown 回答。"
+                    "保留原回答的核心教学价值，但删除或改写所有未被证据逐字支持的精确数字、范围、百分比、"
+                    "时延、容量、价格、周期数、命中率和性能倍数。证据只支持定性关系时必须改成定性表述。"
+                    "回答中的平台域名、网址和具体外部资源也必须逐字来自可用证据，不能用常识补充其他站点。"
+                    "不得新增事实、来源编号、匹配度、系统提示词或审核过程。"
+                    + china_first_content_policy.prompt_instruction()
+                ),
+            },
+            {
+                "role": "user",
+                "content": "\n\n".join(
+                    [
+                        f"学生问题：{question[:1000]}",
+                        f"待修订回答：{answer[:6000]}",
+                        f"检测到的无依据量化表述：{'；'.join(unsupported[:12])}",
+                        "可用证据：",
+                        "\n".join(evidence_blocks),
+                    ]
+                ),
+            },
+        ]
+        try:
+            repaired = self._course_chat_completion(user, messages, reasoning_mode)
+        except (ModelNotConfiguredError, ModelProviderError):
+            return self._quantitative_claim_fallback(question, citations)
+        repaired = self._sanitize_course_answer(repaired)
+        if not repaired or self.unsupported_evidence_claims(repaired, citations):
+            return self._quantitative_claim_fallback(question, citations)
+        return repaired
+
+    @classmethod
+    def unsupported_evidence_claims(
+        cls,
+        answer: str,
+        citations: list[dict[str, Any]],
+    ) -> list[str]:
+        unsupported = cls.unsupported_quantitative_claims(answer, citations)
+        evidence = "\n".join(
+            " ".join(
+                str(item.get(key) or "")
+                for key in ("title", "source_title", "url", "snippet", "content")
+            )
+            for item in citations
+            if item.get("source_type") != "history"
+        ).casefold()
+        for match in cls._DOMAIN_CLAIM_PATTERN.finditer(answer):
+            claim = match.group(0).rstrip(".,，。；;）)").casefold()
+            host = re.sub(r"^https?://", "", claim).split("/", 1)[0].removeprefix("www.")
+            if host not in evidence:
+                unsupported.append(match.group(0).strip())
+        return list(dict.fromkeys(unsupported))
+
+    @classmethod
+    def unsupported_quantitative_claims(
+        cls,
+        answer: str,
+        citations: list[dict[str, Any]],
+    ) -> list[str]:
+        evidence = "\n".join(
+            str(item.get("content") or item.get("snippet") or "")
+            for item in citations
+            if item.get("source_type") != "history"
+        ).casefold()
+        unsupported: list[str] = []
+        for match in cls._QUANTITATIVE_CLAIM_PATTERN.finditer(answer):
+            claim = re.sub(r"\s+", "", match.group(0)).casefold()
+            compact_evidence = re.sub(r"\s+", "", evidence)
+            if claim not in compact_evidence:
+                unsupported.append(match.group(0).strip())
+        return list(dict.fromkeys(unsupported))
+
+    @staticmethod
+    def _quantitative_claim_fallback(question: str, citations: list[dict[str, Any]]) -> str:
+        sections = [
+            str(item.get("section_title") or "课程相关章节")
+            for item in citations
+            if item.get("source_type") not in {"web", "history"}
+        ]
+        section_text = "、".join(dict.fromkeys(sections[:3])) or "当前课程资料"
+        return (
+            f"我已根据{section_text}核对“{question[:80]}”。课程资料能够支持相关概念之间的定性关系，"
+            "但不足以支持刚才生成内容中的精确性能数字，因此这里不保留那些数值。"
+            "请打开来源面板查看教材原文；如果你希望比较具体时延、容量或命中率，可以再指定教材中的表格或页码。"
+        )
 
     @staticmethod
     def _learner_context_text(learner_context: dict[str, Any] | None) -> str:

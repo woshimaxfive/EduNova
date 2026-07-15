@@ -332,6 +332,24 @@ def test_generate_path_archives_previous_active_path_and_prioritizes_confirmed_r
     assert "API Key" not in serialized
 
 
+def test_manual_path_update_preserves_completed_and_current_progress() -> None:
+    repo = make_repo()
+    service = PathService(repo)
+    first = service.generate_path(make_user(), 101)
+    assert first.path is not None
+    old_tasks = repo.list_tasks_for_path(int(first.path.id))
+    old_tasks[0].status = "completed"
+    old_tasks[1].status = "doing"
+
+    updated = service.generate_path(make_user(), 101)
+
+    assert updated.path is not None
+    assert updated.path.plan_json["trigger"] == "manual"
+    assert updated.path.plan_json["preserved_task_count"] == 1
+    assert updated.tasks[0].status == "completed"
+    assert sum(task.status == "doing" for task in updated.tasks) == 1
+
+
 def test_get_current_path_returns_empty_state_and_scopes_course() -> None:
     repo = make_repo()
     service = PathService(repo)
@@ -351,6 +369,7 @@ def test_get_current_path_returns_empty_state_and_scopes_course() -> None:
 
 def test_learning_bundle_status_comes_from_scoped_resource_interactions() -> None:
     repo = make_repo()
+    next(resource for resource in repo.resources if resource.id == 801).resource_type = "mindmap"
     service = PathService(repo)
     generated = as_dict(service.generate_path(make_user(), course_id=101))
     task = repo.tasks[0]
@@ -428,6 +447,25 @@ def test_learning_bundle_status_comes_from_scoped_resource_interactions() -> Non
     ]
 
 
+def test_learning_bundle_recovers_resource_links_from_recommended_ids_for_legacy_data() -> None:
+    repo = make_repo()
+    service = PathService(repo)
+    service.generate_path(make_user(), course_id=101)
+    task = repo.tasks[0]
+    task.recommended_resource_ids = [802]
+    task.learning_bundle_json = {
+        **task.learning_bundle_json,
+        "items": [{"resource_type": "doc", "resource_id": None, "status": "recommended"}],
+    }
+
+    current = as_dict(service.get_current_path(make_user(), 101))
+    bundle = current["tasks"][0]["learning_bundle"]
+
+    assert bundle["ready_count"] == 1
+    assert bundle["items"][0]["resource_id"] == "802"
+    assert bundle["items"][0]["status"] == "available"
+
+
 def test_update_task_status_is_user_scoped_and_validated() -> None:
     repo = make_repo()
     service = PathService(repo)
@@ -494,7 +532,7 @@ def test_path_planning_graph_uses_one_structured_model_call_and_rules_review() -
     repo = make_repo()
     logs: list[Any] = []
     model = FakeModelService(
-        responses=['{"priority_tasks":['
+        responses=['{"output":{"priority_tasks":['
             '{"task_key":"knowledge:401","rationale":"先处理确认弱点",'
             '"bundle_types":["code","doc","quiz"],"resource_ids":[801],'
             '"teaching_strategy":"先代码实验再概念复盘","difficulty":"medium",'
@@ -502,7 +540,7 @@ def test_path_planning_graph_uses_one_structured_model_call_and_rules_review() -
             '{"task_key":"knowledge:402","rationale":"再巩固复习中弱点",'
             '"bundle_types":["mindmap","doc"],"resource_ids":[802],'
             '"teaching_strategy":"先图解再检索练习","difficulty":"hard",'
-            '"used_profile_factor_codes":[]}]}']
+            '"used_profile_factor_codes":[]}]}}']
     )
     service = PathService(repo, model_service=model, trace_recorder=make_trace_recorder(logs))
 
@@ -554,6 +592,52 @@ def test_invalid_structured_path_decision_falls_back_without_using_untrusted_pro
     assert all(task["learning_bundle"]["generation_mode"] == "deterministic_source" for task in detail["tasks"])
     assert all(task["learning_bundle"]["used_profile_factor_codes"] == [] for task in detail["tasks"])
     assert all(task["learning_bundle"]["strategy"] == "安全默认组合" for task in detail["tasks"])
+
+
+def test_path_planning_drops_unknown_factor_codes_without_discarding_safe_model_plan() -> None:
+    repo = make_repo()
+    model = FakeModelService(
+        responses=['{"priority_tasks":[{"task_key":"knowledge:401",'
+            '"rationale":"先用合法候选完成学习","bundle_types":["doc","quiz"],"resource_ids":[801],'
+            '"teaching_strategy":"先讲解再练习","difficulty":"medium",'
+            '"used_profile_factor_codes":["untrusted_private_factor"]}]}']
+    )
+
+    detail = as_dict(PathService(repo, model_service=model).generate_path(make_user(), 101))
+
+    assert detail["path"]["plan_json"]["generation_mode"] == "model_enhanced"
+    assert detail["tasks"][0]["learning_bundle"]["used_profile_factor_codes"] == []
+    assert len(model.calls) == 1
+
+
+def test_trusted_profile_weak_point_is_included_in_model_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = make_repo()
+    model = FakeModelService(
+        responses=['{"priority_tasks":[{"task_key":"knowledge:403",'
+            '"rationale":"针对画像中的明确难点优先复习","bundle_types":["mindmap","quiz"],'
+            '"resource_ids":[],"teaching_strategy":"先图解再练习","difficulty":"easy",'
+            '"used_profile_factor_codes":["profile_weak_points"]}]}']
+    )
+    learner_context = SimpleNamespace(
+        global_context=SimpleNamespace(profile_applied_version=1),
+        context_hash="profile-weak-point",
+        prompt_summary=lambda: {"profile_weak_points": ["局部搜索需要结合案例加强"], "learning_goal": "期末复习"},
+        trace_metadata=lambda: {
+            "profile_applied_version": 1,
+            "personalization_factors": ["profile_weak_points"],
+            "profile_context_used": True,
+        },
+    )
+    monkeypatch.setattr(
+        "backend.app.agents.path_planning.context_service_from_repository",
+        lambda _repository: SimpleNamespace(course_context=lambda _user_id, _course_id: learner_context),
+    )
+
+    detail = as_dict(PathService(repo, model_service=model).generate_path(make_user(), 101))
+
+    assert detail["tasks"][0]["knowledge_point_id"] == "403"
+    assert detail["tasks"][0]["learning_bundle"]["used_profile_factor_codes"] == ["profile_weak_points"]
+    assert "knowledge:403" in model.calls[0][1]["content"]
 
 
 def test_assessment_replan_preserves_completed_progress_and_does_not_create_missing_path() -> None:

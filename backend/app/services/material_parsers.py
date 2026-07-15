@@ -33,6 +33,7 @@ class ParsedDocument:
     pages: list[ParsedPage]
     blocks: list[ParsedBlock]
     parser: str
+    source_page_count: int | None = None
 
     @property
     def text(self) -> str:
@@ -190,16 +191,20 @@ class DoclingDocumentExtractor:
     """Adapt Docling output to EduNova's stable, page-aware document contract."""
 
     supported_extensions = {".pdf", ".docx", ".pptx"}
+    large_pdf_threshold_bytes = 10 * 1024 * 1024
+    large_pdf_seconds_per_mib = 25.0
 
     def __init__(
         self,
         *,
         artifacts_path: str | Path,
         timeout_seconds: float = 120.0,
+        max_timeout_seconds: float | None = None,
         converter: Any | None = None,
     ) -> None:
         self.artifacts_path = Path(artifacts_path)
         self.timeout_seconds = timeout_seconds
+        self.max_timeout_seconds = max(timeout_seconds, max_timeout_seconds or timeout_seconds)
         self._converter = converter
 
     def parse_document(self, extension: str, content: bytes) -> ParsedDocument:
@@ -209,11 +214,23 @@ class DoclingDocumentExtractor:
             raise DocumentParseError("document is empty")
         if extension == ".pdf" and self._converter is None and not self.artifacts_path.is_dir():
             raise DocumentParseError("docling model artifacts are unavailable")
+        source_page_count = self._pdf_page_count(content) if extension == ".pdf" else None
         try:
-            converter = self._converter or self._build_converter()
+            is_large_textbook = (
+                extension == ".pdf"
+                and len(content) > self.large_pdf_threshold_bytes
+                and bool(source_page_count and source_page_count >= 200)
+            )
+            converter = self._converter or self._build_converter(
+                self.effective_timeout_seconds(extension, content),
+                do_table_structure=not is_large_textbook,
+            )
             result = converter.convert(self._document_stream(extension, content), raises_on_error=True)
+            status = getattr(getattr(result, "status", None), "value", getattr(result, "status", None))
+            if status not in {None, "success"}:
+                raise DocumentParseError("docling conversion did not complete")
             document = result.document
-            parsed = self._adapt_document(document)
+            parsed = self._adapt_document(document, source_page_count=source_page_count)
         except DocumentParseError:
             raise
         except Exception as exc:
@@ -222,7 +239,13 @@ class DoclingDocumentExtractor:
             raise DocumentParseError("docling returned no extractable content")
         return parsed
 
-    def _build_converter(self) -> Any:
+    def effective_timeout_seconds(self, extension: str, content: bytes) -> float:
+        if extension != ".pdf" or len(content) <= self.large_pdf_threshold_bytes:
+            return self.timeout_seconds
+        size_mib = len(content) / (1024 * 1024)
+        return min(self.max_timeout_seconds, max(self.timeout_seconds, size_mib * self.large_pdf_seconds_per_mib))
+
+    def _build_converter(self, timeout_seconds: float, *, do_table_structure: bool = True) -> Any:
         try:
             from docling.datamodel.base_models import InputFormat
             from docling.datamodel.pipeline_options import PdfPipelineOptions
@@ -232,17 +255,16 @@ class DoclingDocumentExtractor:
 
         pdf_options = PdfPipelineOptions(
             artifacts_path=self.artifacts_path,
-            document_timeout=self.timeout_seconds,
+            document_timeout=timeout_seconds,
             do_ocr=False,
-            do_table_structure=True,
+            do_table_structure=do_table_structure,
             enable_remote_services=False,
             allow_external_plugins=False,
         )
-        self._converter = DocumentConverter(
+        return DocumentConverter(
             allowed_formats=[InputFormat.PDF, InputFormat.DOCX, InputFormat.PPTX],
             format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pdf_options)},
         )
-        return self._converter
 
     @staticmethod
     def _document_stream(extension: str, content: bytes) -> Any:
@@ -253,7 +275,7 @@ class DoclingDocumentExtractor:
         return DocumentStream(name=f"material{extension}", stream=BytesIO(content))
 
     @classmethod
-    def _adapt_document(cls, document: Any) -> ParsedDocument:
+    def _adapt_document(cls, document: Any, *, source_page_count: int | None = None) -> ParsedDocument:
         blocks: list[ParsedBlock] = []
         page_blocks: dict[int, list[ParsedBlock]] = {}
         for item, _level in document.iterate_items():
@@ -285,7 +307,21 @@ class DoclingDocumentExtractor:
             docling_version = version("docling-slim")
         except (ImportError, ModuleNotFoundError):
             docling_version = "unknown"
-        return ParsedDocument(pages=pages, blocks=blocks, parser=f"docling:{docling_version}")
+        return ParsedDocument(
+            pages=pages,
+            blocks=blocks,
+            parser=f"docling:{docling_version}",
+            source_page_count=source_page_count,
+        )
+
+    @staticmethod
+    def _pdf_page_count(content: bytes) -> int:
+        try:
+            from pypdf import PdfReader
+
+            return len(PdfReader(BytesIO(content)).pages)
+        except Exception as exc:
+            raise DocumentParseError("pdf page count unavailable") from exc
 
     @classmethod
     def _item_text(cls, item: Any, document: Any) -> str:
@@ -299,6 +335,7 @@ class DoclingDocumentExtractor:
             except TypeError:
                 value = export()
             if isinstance(value, str):
+                value = re.sub(r"<!--.*?-->", "", value, flags=re.DOTALL)
                 return DocumentParser._clean_block_text(value)
         return ""
 
@@ -330,6 +367,7 @@ def create_document_structure_extractor(
     parser_name: str,
     artifacts_path: str | Path,
     timeout_seconds: float,
+    max_timeout_seconds: float | None = None,
 ) -> DocumentStructureExtractor:
     if parser_name == "legacy":
         return DocumentParser()
@@ -338,6 +376,7 @@ def create_document_structure_extractor(
             DoclingDocumentExtractor(
                 artifacts_path=artifacts_path,
                 timeout_seconds=timeout_seconds,
+                max_timeout_seconds=max_timeout_seconds,
             )
         )
     raise ValueError(f"unsupported document parser: {parser_name}")

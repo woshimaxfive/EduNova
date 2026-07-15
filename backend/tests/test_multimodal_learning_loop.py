@@ -143,7 +143,7 @@ class FakeInteractionDb:
         raise AssertionError("valid interaction should not roll back")
 
 
-def test_manual_resource_completion_completes_only_the_linked_path_task() -> None:
+def test_manual_resource_completion_does_not_complete_the_linked_path_task() -> None:
     user = User(id=1, account="student001", display_name="学生", hashed_password="hash")
     resource = GeneratedResource(id=8, user_id=1, course_id=3, resource_type="doc", title="讲解")
     task = LearningTask(
@@ -166,6 +166,6 @@ def test_manual_resource_completion_completes_only_the_linked_path_task() -> Non
     )
 
     assert db.committed is True
-    assert task.status == "completed"
+    assert task.status == "doing"
     assert state.completed is True
     assert state.progress_percent == 100

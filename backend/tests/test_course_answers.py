@@ -44,6 +44,21 @@ class ThinkingAwareModelSettingsService(FakeModelSettingsService):
         return super().chat_completion_stream(user, messages)
 
 
+class SequentialModelSettingsService(FakeModelSettingsService):
+    def __init__(self, contents: list[str]) -> None:
+        super().__init__(contents[0])
+        self.contents = iter(contents)
+
+    def chat_completion(self, user: Any, messages: list[dict[str, str]], **_: Any) -> str:
+        self.calls.append(messages)
+        return next(self.contents)
+
+    def chat_completion_stream(self, user: Any, messages: list[dict[str, str]], **_: Any):
+        self.calls.append(messages)
+        content = next(self.contents)
+        return iter([content])
+
+
 def test_course_answer_removes_echoed_model_context() -> None:
     service = CourseAnswerService(FakeModelSettingsService(_echoed_context_answer()))
 
@@ -67,6 +82,73 @@ def test_course_answer_stream_removes_echoed_model_context() -> None:
     assert "课程引用：" not in content
     assert "匹配度：" not in content
     assert "片段：" not in content
+
+
+def test_course_answer_repairs_quantitative_claims_missing_from_citations() -> None:
+    model = SequentialModelSettingsService(
+        [
+            "L1 命中率通常达到 90%，访问只需 2 个周期。",
+            "Cache 保存近期常用数据，未命中时再访问主存，因此能在速度与容量之间取得平衡。",
+        ]
+    )
+    service = CourseAnswerService(model)
+
+    result = service.generate(user=object(), question="为什么存储层次有效？", citations=[_citation()])
+
+    assert "90%" not in result.content
+    assert "2 个周期" not in result.content
+    assert "速度与容量" in result.content
+    assert len(model.calls) == 2
+    assert "未被证据逐字支持" in model.calls[1][0]["content"]
+
+
+def test_course_answer_keeps_quantitative_claims_present_in_citations() -> None:
+    model = FakeModelSettingsService("教材示例说明命中率为 80%。")
+    service = CourseAnswerService(model)
+    citation = {**_citation(), "content": "在该教材示例中，命中率为80%。"}
+
+    result = service.generate(user=object(), question="教材示例的命中率是多少？", citations=[citation])
+
+    assert "80%" in result.content
+    assert len(model.calls) == 1
+
+
+def test_course_answer_stream_falls_back_when_repair_still_invents_numbers() -> None:
+    model = SequentialModelSettingsService(
+        [
+            "主存访问需要 100 纳秒。",
+            "修订后仍声称主存访问需要 80 纳秒。",
+        ]
+    )
+    service = CourseAnswerService(model)
+
+    content = "".join(service.stream(user=object(), question="解释主存访问。", citations=[_citation()]).tokens)
+
+    assert "100 纳秒" not in content
+    assert "80 纳秒" not in content
+    assert "不足以支持刚才生成内容中的精确性能数字" in content
+
+
+def test_course_answer_repairs_external_domains_missing_from_sources() -> None:
+    model = SequentialModelSettingsService(
+        [
+            "可以访问 icourse163.org，也推荐未检索到的 example.com。",
+            "可以访问本次检索到的 icourse163.org 课程。",
+        ]
+    )
+    service = CourseAnswerService(model)
+    citation = {
+        **_citation(),
+        "source_type": "web",
+        "title": "中国大学 MOOC 课程",
+        "url": "https://www.icourse163.org/course/example",
+    }
+
+    result = service.generate(user=object(), question="有哪些在线课程？", citations=[citation])
+
+    assert "icourse163.org" in result.content
+    assert "example.com" not in result.content
+    assert len(model.calls) == 2
 
 
 def test_course_answer_removes_inline_source_metadata() -> None:

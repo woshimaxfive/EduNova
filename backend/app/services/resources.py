@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import operator
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 from time import perf_counter
@@ -506,8 +507,25 @@ class ResourceGenerationService:
         point_by_id = {point.id: point for point in context_points}
         if knowledge_point is not None:
             point_by_id[knowledge_point.id] = knowledge_point
+        selected_chunks = list(chunks)
+        if knowledge_point is not None:
+            point_key = ResourceGenerationService._context_label_key(knowledge_point.title)
+            direct_matches = [
+                chunk
+                for chunk in selected_chunks
+                if point_key
+                and (
+                    point_key in ResourceGenerationService._context_label_key(chunk.section_title)
+                    or ResourceGenerationService._context_label_key(chunk.section_title) in point_key
+                )
+            ]
+            # Course construction may retain broad chapter coverage on a nearby
+            # point.  When exact section evidence exists, do not let those
+            # coverage-only chunks dilute a resource for the current concept.
+            if direct_matches:
+                selected_chunks = direct_matches
         contexts: list[ResourceContext] = []
-        for chunk in chunks[:5]:
+        for chunk in selected_chunks[:5]:
             metadata = chunk.metadata_json or {}
             source_title = ResourceGenerationService._safe_title(metadata.get("source_filename") or "课程资料")
             section_title = ResourceGenerationService._safe_title(chunk.section_title)
@@ -528,6 +546,11 @@ class ResourceGenerationService:
                 )
             )
         return contexts
+
+    @staticmethod
+    def _context_label_key(value: object) -> str:
+        cleaned = re.sub(r"^\s*(?:第\s*)?\d+(?:\.\d+)*(?:\s*[章节])?\s*", "", str(value or ""))
+        return "".join(character for character in cleaned.casefold() if character.isalnum())
 
     @staticmethod
     def _profile_summary(profile: StudentProfile | None) -> dict[str, Any]:
@@ -2589,7 +2612,10 @@ class ResourceGenerationGraphRunner:
             resource_ids = list(dict.fromkeys([*list(task.recommended_resource_ids or []), *[item.id for item in resources]]))
             task.recommended_resource_ids = resource_ids
             bundle = dict(task.learning_bundle_json or {})
-            bundle_items = list(bundle.get("items") or [])
+            # JSON columns do not notice mutations made to nested dictionaries in
+            # place.  Build fresh item objects so SQLAlchemy can compare the new
+            # value with the persisted bundle and actually write the association.
+            bundle_items = [dict(item) if isinstance(item, dict) else item for item in list(bundle.get("items") or [])]
             by_type = {item.resource_type: item for item in resources}
             for item in bundle_items:
                 generated = by_type.get(str(item.get("resource_type") or "")) if isinstance(item, dict) else None

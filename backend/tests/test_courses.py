@@ -636,6 +636,7 @@ def test_long_markdown_section_keeps_all_chunks_across_adaptive_knowledge_points
 
     assert len(result["knowledge_points"]) > 1
     assert result["knowledge_points"][0]["title"] == "长章节"
+    assert all("核心概念" not in point["title"] for point in result["knowledge_points"])
     assert len(repo.knowledge_chunks) > 1
     assert len({chunk.knowledge_point_id for chunk in repo.knowledge_chunks}) == len(result["knowledge_points"])
 
@@ -672,6 +673,22 @@ def test_course_builder_rejects_sentence_like_ocr_titles_and_repairs_common_nois
     assert "8.1 插入排序" in titles
     assert "8.6 归并排序" in titles
     assert all("所示" not in title and "至此" not in title for title in titles)
+    assert all(runner._is_knowledge_title(title) for title in titles)
+
+
+def test_course_builder_disambiguates_chapter_local_duplicate_titles() -> None:
+    runner = CourseBuilderGraphRunner.__new__(CourseBuilderGraphRunner)
+    points = [
+        {"title": "概述", "chapter": "第4章"},
+        {"title": "概述", "chapter": "第5章"},
+        {"title": "概述", "chapter": "第5章"},
+    ]
+
+    runner._ensure_unique_point_titles(points)
+
+    titles = [point["title"] for point in points]
+    assert titles == ["概述", "第5章：概述", "第5章：概述（2）"]
+    assert len({runner._normalize(title) for title in titles}) == len(titles)
     assert all(runner._is_knowledge_title(title) for title in titles)
 
 

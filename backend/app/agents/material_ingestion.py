@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
 import re
+from threading import Event, Thread
 from time import perf_counter
 from typing import Any, TypedDict
 
@@ -91,6 +92,10 @@ class MaterialIngestionGraphRunner:
             parser_name=self.settings.edunova_document_parser,
             artifacts_path=self.settings.docling_artifacts_path,
             timeout_seconds=self.settings.docling_document_timeout_seconds,
+            max_timeout_seconds=max(
+                self.settings.docling_document_timeout_seconds,
+                self.settings.ai_job_timeout_seconds - 60,
+            ),
         )
         self.model_service = model_service
         self.trace_recorder = trace_recorder or AgentTraceRecorder()
@@ -147,10 +152,40 @@ class MaterialIngestionGraphRunner:
 
     def _extract_pages(self, state: MaterialIngestionState) -> dict[str, Any]:
         def work() -> dict[str, Any]:
+            context = state.get("job_context")
+            is_large_pdf = state["extension"] == ".pdf" and len(state["content"]) > 10 * 1024 * 1024
+            heartbeat_stop = Event()
+            heartbeat_thread: Thread | None = None
+            parse_started = perf_counter()
+            if context is not None and is_large_pdf:
+                def heartbeat() -> None:
+                    while not heartbeat_stop.wait(15):
+                        elapsed = max(1, int(perf_counter() - parse_started))
+                        context.after_node(
+                            name="extract_pages",
+                            label=f"正在解析大型教材 · 已等待 {elapsed} 秒",
+                            progress_percent=7,
+                            status="running",
+                        )
+
+                context.after_node(
+                    name="extract_pages",
+                    label="正在解析大型教材 · 已等待 0 秒",
+                    progress_percent=7,
+                    status="running",
+                )
+                heartbeat_thread = Thread(target=heartbeat, name="material-parse-heartbeat", daemon=True)
+                heartbeat_thread.start()
             try:
                 document = self.parser.parse_document(state["extension"], state["content"])
             except DocumentParseError as exc:
-                raise MaterialIngestionError("资料无法提取可读文本；扫描件暂不支持 OCR。") from exc
+                raise MaterialIngestionError("资料无法完整提取；原文件已保留，请稍后重试。") from exc
+            finally:
+                heartbeat_stop.set()
+                if heartbeat_thread is not None:
+                    heartbeat_thread.join(timeout=1)
+            if context is not None:
+                context.check_cancelled()
             return {"document": document}
 
         return self._node(state, "extract_pages", 2, work)
@@ -190,14 +225,37 @@ class MaterialIngestionGraphRunner:
             current: dict[str, Any] | None = None
             stack: list[str] = []
             seen_chapters: set[str] = set()
+            is_docling = state["document"].parser.startswith("docling:")
+            toc_anchor_pages = [
+                int(block["page_number"])
+                for block in state["normalized_blocks"]
+                if isinstance(block.get("page_number"), int)
+                and any(self._line(line) == "目录" for line in block["text"].splitlines())
+            ]
+            toc_page_range: range | None = None
+            if toc_anchor_pages:
+                toc_start = max(1, min(toc_anchor_pages) - 1)
+                toc_page_range = range(toc_start, min(toc_anchor_pages) + 5)
             for block in state["normalized_blocks"]:
                 parts = block["text"].splitlines()
                 for part in parts:
-                    level = block.get("heading_level") if block.get("kind") == "heading" else self._heading_level(part)
+                    heuristic_level = self._heading_level(part)
+                    level = (
+                        heuristic_level
+                        if is_docling and block.get("kind") == "heading"
+                        else block.get("heading_level") if block.get("kind") == "heading" else heuristic_level
+                    )
+                    if toc_page_range is not None and block.get("page_number") in toc_page_range:
+                        level = None
                     if level is not None and current and not self._chapter_number(part):
                         current_chapter = self._chapter_number(current["path"][0] if current["path"] else current["title"])
                         section_chapter = self._section_chapter_number(part)
-                        if current_chapter and section_chapter and current_chapter != section_chapter:
+                        if (
+                            current_chapter
+                            and section_chapter
+                            and current_chapter != section_chapter
+                            and section_chapter in seen_chapters
+                        ):
                             level = None
                     if level is None and current and (chapter_number := self._chapter_number(current["path"][0] if current["path"] else current["title"])):
                         repaired_heading = self._repair_missing_chapter_heading(part, chapter_number)
@@ -209,6 +267,36 @@ class MaterialIngestionGraphRunner:
                         if not title:
                             continue
                         chapter_number = self._chapter_number(title)
+                        section_chapter = self._section_chapter_number(title)
+                        if (
+                            level > 1
+                            and section_chapter
+                            and section_chapter not in seen_chapters
+                            and section_chapter.isdigit()
+                            and 1 <= int(section_chapter) <= 20
+                        ):
+                            if not seen_chapters:
+                                for existing in sections:
+                                    existing["included"] = False
+                                    if existing["title"] == "正文":
+                                        existing["title"] = "前置内容"
+                                        existing["path"] = ["前置内容"]
+                            synthetic_title = f"第{section_chapter}章"
+                            seen_chapters.add(section_chapter)
+                            stack = [synthetic_title]
+                            current = {
+                                "id": f"section-{len(sections) + 1}",
+                                "title": synthetic_title,
+                                "level": 1,
+                                "path": list(stack),
+                                "start_page": block.get("page_number"),
+                                "end_page": block.get("page_number"),
+                                "confidence": 0.68,
+                                "included": True,
+                                "_title_merged": False,
+                                "blocks": [],
+                            }
+                            sections.append(current)
                         if chapter_number and chapter_number in seen_chapters:
                             continue
                         if chapter_number:
@@ -368,7 +456,7 @@ class MaterialIngestionGraphRunner:
         def work() -> dict[str, Any]:
             document = state["document"]
             chunks = state["chunks"]
-            page_count = len(document.pages) or max((item.get("end_page") or 1 for item in chunks), default=1)
+            page_count = document.source_page_count or len(document.pages) or max((item.get("end_page") or 1 for item in chunks), default=1)
             readable_pages = sum(1 for page in document.pages if len(re.sub(r"\s+", "", page.text)) >= 20) if document.pages else page_count
             readable_ratio = readable_pages / page_count if page_count else 0.0
             combined = "".join(item["content"] for item in chunks)
@@ -378,8 +466,25 @@ class MaterialIngestionGraphRunner:
             duplicate_ratio = 1 - len(set(hashes)) / max(1, len(hashes))
             meaningful = [section for section in state["sections"] if section.get("included") and section.get("title") not in {"正文", "未命名章节"}]
             top_level = [section for section in meaningful if section.get("level") == 1]
-            empty_section_ratio = sum(1 for section in meaningful if not section.get("chunk_indexes")) / max(1, len(meaningful))
+
+            def section_has_content(section: dict[str, Any]) -> bool:
+                if section.get("chunk_indexes"):
+                    return True
+                path = list(section.get("path") or [])
+                if not path:
+                    return False
+                return any(
+                    candidate is not section
+                    and candidate.get("chunk_indexes")
+                    and list(candidate.get("path") or [])[: len(path)] == path
+                    for candidate in meaningful
+                )
+
+            empty_section_ratio = sum(1 for section in meaningful if not section_has_content(section)) / max(1, len(meaningful))
             section_density = len(meaningful) / max(1, page_count)
+            heuristic_section_ratio = sum(
+                1 for section in meaningful if 0.80 <= float(section.get("confidence") or 0) <= 0.83
+            ) / max(1, len(meaningful))
             page_aware_required = state["extension"] in {".pdf", ".pptx"}
             missing_pages = page_aware_required and any(item.get("start_page") is None for item in chunks)
             risks: list[str] = []
@@ -392,6 +497,13 @@ class MaterialIngestionGraphRunner:
             if page_count >= 20 and len(meaningful) <= 1:
                 risks.append("missing_meaningful_outline")
             if page_count >= 20 and (section_density > 0.75 or empty_section_ratio > 0.20):
+                risks.append("noisy_outline")
+            if (
+                "noisy_outline" not in risks
+                and document.parser.startswith("docling:")
+                and len(meaningful) >= 10
+                and heuristic_section_ratio > 0.20
+            ):
                 risks.append("noisy_outline")
             if page_count >= 20 and len(top_level) > max(20, round(page_count * 0.12)):
                 risks.append("too_many_top_level_sections")
@@ -411,6 +523,7 @@ class MaterialIngestionGraphRunner:
                 "chunk_count": len(chunks),
                 "section_density": round(section_density, 4),
                 "empty_section_ratio": round(empty_section_ratio, 4),
+                "heuristic_section_ratio": round(heuristic_section_ratio, 4),
                 "abnormal_character_ratio": round(abnormal_ratio, 6),
                 "duplicate_chunk_ratio": round(duplicate_ratio, 4),
                 "risk_flags": risks,
@@ -621,18 +734,38 @@ class MaterialIngestionGraphRunner:
     @classmethod
     def _heading_level(cls, text: str) -> int | None:
         compact = cls._line(text)
+        compact = re.sub(r"(?<=\d)[。．](?=\d)", ".", compact)
         if not compact or len(compact) > 80:
             return None
         if cls._chapter_number(compact):
             return 1
-        match = re.match(r"^[|Il1i!！,，._·•\-—–\s]{0,4}(\d{1,2})\s*\.\s*(\d{1,2})(?:\s*\.\s*(\d{1,2}))?\s+(.+)$", compact)
+        match = re.match(r"^[|Ili!！,，._·•\-—–\s]{0,4}(\d{1,2})\s*\.\s*(\d{1,2})(?:\s*\.\s*(\d{1,2}))?\s+(.+)$", compact)
         if match:
+            if not 1 <= int(match.group(1)) <= 20:
+                return None
             title = match.group(4).strip()
             noisy = re.search(
-                r"(?:所示|参见|见图|见表|小节中|都属于|这种情况|至此|如下所述|试设计|可以看成|指的是)",
+                r"(?:所示|参见|见图|见表|小节中|都属于|这种情况|至此|如下所述|试设计|可以看成|指的是|MHz|GHz|GB|MB|英寸|晶体管|估计)",
                 title,
+                re.IGNORECASE,
             )
-            if 2 <= len(title) <= 48 and not noisy and not re.match(r"^(?:的|所示|中|为|给出|可见|时|后|前)", title):
+            is_question = bool(
+                re.search(r"[？?]", title)
+                or re.match(
+                    r"^(?:什么|为什么|如何|怎样|试|举(?:例|出)|说明|简述|比较|计算(?!机)|证明|画|设(?:计|想)?|已知|写出|结合|根据|用|若|假设|按|解释|列出|以|将|求|指出|讨论|分析)",
+                    title,
+                )
+            )
+            is_sentence = bool(re.search(r"[，,。；;：:]", title))
+            is_numeric_payload = bool(re.fullmatch(r"[01.\s（）()]+", title))
+            if (
+                2 <= len(title) <= 48
+                and not noisy
+                and not is_question
+                and not is_sentence
+                and not is_numeric_payload
+                and not re.match(r"^(?:的|所示|中|为|给出|可见|时|后|前)", title)
+            ):
                 return 3 if match.group(3) else 2
         if re.fullmatch(r"(?:目录|参考文献|附录(?:\s*[A-Z一二三四五六七八九十])?)", compact, re.IGNORECASE):
             return 1
@@ -641,9 +774,10 @@ class MaterialIngestionGraphRunner:
     @classmethod
     def _normalize_heading(cls, text: str) -> str:
         compact = re.sub(r"\s+", " ", text).strip(" |·•")
+        compact = re.sub(r"(?<=\d)[。．](?=\d)", ".", compact)
         match = cls._chapter_match(compact)
         if not match:
-            normalized = re.sub(r"^[|Il1i!！,，_·•\-—–\s]{1,4}(?=\d{1,2}\s*\.)", "", compact)
+            normalized = re.sub(r"^[|Ili!！,，_·•\-—–\s]{1,4}(?=\d{1,2}\s*\.)", "", compact)
             return cls._repair_heading_ocr(normalized)
         number = cls._canonical_chapter_number(match.group(1))
         remainder = re.sub(r"^[|Il1!！J户b,卢仁＝习二勹\s]+", "", compact[match.end():]).strip(" |·•")
@@ -672,7 +806,7 @@ class MaterialIngestionGraphRunner:
 
     @staticmethod
     def _section_chapter_number(text: str) -> str | None:
-        match = re.match(r"^[|Il1i!！,，._·•\-—–\s]{0,4}(\d{1,2})\s*\.", text.strip())
+        match = re.match(r"^[|Ili!！,，._·•\-—–\s]{0,4}(\d{1,2})\s*\.", text.strip())
         return str(int(match.group(1))) if match else None
 
     @classmethod

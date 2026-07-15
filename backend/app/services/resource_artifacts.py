@@ -210,21 +210,44 @@ def _evidence_concepts(source: ArtifactBuildInput, *, limit: int = 3) -> list[st
     return concepts
 
 
+def _evidence_statements(source: ArtifactBuildInput, *, limit: int = 5) -> list[str]:
+    statements: list[str] = []
+    for line in source.excerpt_lines:
+        cleaned = line.removeprefix("- ").strip()
+        if "：" in cleaned:
+            cleaned = cleaned.split("：", 1)[1].strip()
+        for sentence in cleaned.replace("...", "。 ").split("。"):
+            compact = " ".join(sentence.split()).strip("；：，、 ")
+            if len(compact) < 10:
+                continue
+            compact = compact[:160]
+            if compact not in statements:
+                statements.append(compact)
+            if len(statements) >= limit:
+                return statements
+    return statements
+
+
 def _build_document(source: ArtifactBuildInput) -> dict[str, Any]:
     evidence_concepts = _evidence_concepts(source)
-    evidence = "；".join(evidence_concepts)
-    lead_concept = evidence_concepts[0] if evidence_concepts else source.topic
+    statements = _evidence_statements(source)
+    evidence = "；".join(statements or evidence_concepts)
+    lead_concept = statements[0] if statements else (evidence_concepts[0] if evidence_concepts else source.topic)
+    relationship = "；".join(statements[1:4]) or evidence
     return {
         "kind": "document",
         "sections": [
             {
                 "heading": "概念解释",
-                "body": f"围绕 {source.topic}，先抓住课程中的真实结论：{lead_concept}。再区分它的输入、条件、过程和输出。",
+                "body": f"教材对“{source.topic}”的核心表述是：{lead_concept}。本节先以这条原文结论为中心建立概念边界。",
             },
             {"heading": "课程依据", "body": evidence},
             {
                 "heading": "关键步骤",
-                "body": f"先识别 {source.topic} 的条件，再拆解处理步骤，最后通过例题或反例验证结论。",
+                "body": (
+                    f"先复述“{lead_concept}”；再说明它与下列教材结论的关系：{relationship}；"
+                    "最后合上资料，用自己的话画出关系或流程并回看原文核对。"
+                ),
             },
             {
                 "heading": "易错点",
@@ -244,11 +267,12 @@ def _build_document(source: ArtifactBuildInput) -> dict[str, Any]:
 
 def _build_mindmap(source: ArtifactBuildInput) -> dict[str, Any]:
     evidence_concepts = _evidence_concepts(source)
+    statements = _evidence_statements(source, limit=4)
     evidence_titles = [line.removeprefix("- ").split("（", 1)[0] for line in source.citation_lines[:3]] or ["课程知识点"]
     markmap_lines = [
         f"# {source.topic}",
         "## 真实概念",
-        *[f"- {concept}" for concept in evidence_concepts],
+        *[f"- {concept}" for concept in (statements or evidence_concepts)],
         "## 课程依据",
         *[f"- {title}" for title in evidence_titles],
         "## 概念关系",
@@ -294,45 +318,47 @@ def _build_mindmap(source: ArtifactBuildInput) -> dict[str, Any]:
 
 
 def _build_quiz(source: ArtifactBuildInput) -> dict[str, Any]:
-    evidence = source.excerpt_lines[0].removeprefix("- ")
+    statements = _evidence_statements(source, limit=4)
+    evidence = statements[0] if statements else source.excerpt_lines[0].removeprefix("- ")
+    related = statements[1] if len(statements) > 1 else evidence
     return {
         "kind": "quiz",
         "questions": [
             {
                 "id": "q1",
                 "type": "single_choice",
-                "prompt": f"学习 {source.topic} 时，哪一种方法最能验证自己是否真正理解？",
+                "prompt": f"根据教材，关于“{source.topic}”的表述哪一项正确？",
                 "options": [
-                    {"key": "A", "text": "只背结论"},
-                    {"key": "B", "text": "说明条件、步骤并用例题验证"},
-                    {"key": "C", "text": "跳过课程依据"},
-                    {"key": "D", "text": "只记录关键词"},
+                    {"key": "A", "text": evidence},
+                    {"key": "B", "text": "该概念与教材中的硬件、软件或工作过程没有关系"},
+                    {"key": "C", "text": "只要记住标题即可推出所有组成关系"},
+                    {"key": "D", "text": "教材没有给出任何可核对的定义或关系"},
                 ],
-                "answer": "B",
-                "explanation": f"课程依据“{evidence}”要求把概念、条件和验证过程联系起来。",
+                "answer": "A",
+                "explanation": f"A 直接来自本节课程依据：“{evidence}”。其他选项扩大或否定了教材结论。",
                 "citation_refs": _citation_ref(source),
             },
             {
                 "id": "q2",
                 "type": "multiple_choice",
-                "prompt": f"复习 {source.topic} 时应同时检查哪些内容？",
+                "prompt": f"复习“{source.topic}”时，哪些内容属于本节教材依据？",
                 "options": [
-                    {"key": "A", "text": "适用条件"},
-                    {"key": "B", "text": "关键步骤"},
-                    {"key": "C", "text": "验证结果"},
-                    {"key": "D", "text": "与知识点无关的记忆"},
+                    {"key": "A", "text": evidence},
+                    {"key": "B", "text": related},
+                    {"key": "C", "text": "脱离课程资料的任意网络结论"},
+                    {"key": "D", "text": "与本知识点无关的章节习题"},
                 ],
-                "answer": ["A", "B", "C"],
-                "explanation": "完整掌握需要能够说明条件、执行步骤和验证方式。",
+                "answer": ["A", "B"],
+                "explanation": "A、B 来自当前知识点的课程短摘；C、D 不属于本节证据。",
                 "citation_refs": _citation_ref(source),
             },
             {
                 "id": "q3",
                 "type": "short_answer",
-                "prompt": f"用三句话解释 {source.topic}，并指出一个容易混淆的点。",
+                "prompt": f"用教材依据解释“{source.topic}”，并说明“{evidence}”与“{related}”之间的关系。",
                 "options": [],
-                "answer": "说明用途、关键步骤和限制条件。",
-                "explanation": f"回答应覆盖用途、步骤与边界，并结合薄弱点“{source.weak_points}”自查。",
+                "answer": f"回答应准确复述“{evidence}”，再结合“{related}”说明概念之间的组成、层次或工作关系。",
+                "explanation": f"评分重点是教材事实、关系解释和概念边界；并结合薄弱点“{source.weak_points}”自查。",
                 "citation_refs": _citation_ref(source),
             },
         ],

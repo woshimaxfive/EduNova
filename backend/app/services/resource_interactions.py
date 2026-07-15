@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -52,9 +50,6 @@ class ResourceInteractionService:
             feedback=payload.feedback,
         )
         self.db.add(interaction)
-        if payload.event_type == "completed" and task is not None:
-            task.status = "completed"
-            task.updated_at = datetime.now(UTC)
         try:
             self.db.commit()
         except Exception:

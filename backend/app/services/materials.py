@@ -325,7 +325,8 @@ class MaterialService:
     def get_material(self, user: User, material_id: int) -> MaterialDetail:
         material = self._require_material(user, material_id)
         item = self._build_list_item(material)
-        preview = material.extracted_text[:500] if material.extracted_text else None
+        preview_text = re.sub(r"<!--.*?-->", "", material.extracted_text, flags=re.DOTALL).strip() if material.extracted_text else ""
+        preview = preview_text[:500] or None
         chunks = self.repository.list_material_chunks(user.id, material.id)
         linked_courses = self.repository.list_material_course_links(user.id, material.id)
         sections = self._build_section_summaries(chunks)
@@ -460,6 +461,8 @@ class MaterialService:
 
     def confirm_outline(self, user: User, material_id: int, version: int) -> MaterialOutlineResponse:
         material = self._require_material(user, material_id)
+        if material.parse_status != "completed" or material.ingestion_status != "awaiting_confirmation":
+            raise MaterialValidationError("资料正在解析或目录尚未就绪，请等待完成后再确认。")
         if int(material.outline_version or 0) != version:
             raise MaterialValidationError("目录版本已变化，请刷新后重新确认。")
         if not bool((material.quality_json or {}).get("passed")):

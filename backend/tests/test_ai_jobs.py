@@ -283,6 +283,36 @@ def test_path_task_resource_job_uses_only_missing_bundle_types_and_reuses_active
     assert queue.enqueued == [1]
 
 
+def test_path_task_resource_job_reuses_recommended_resource_when_legacy_bundle_id_is_missing() -> None:
+    user = make_user()
+    ready = GeneratedResource(
+        id=71,
+        user_id=1,
+        course_id=21,
+        resource_type="doc",
+        title="二叉树讲解",
+        content_json={},
+        citation_json=[],
+        status="completed",
+    )
+    task = make_task(items=[
+        {"resource_type": "doc", "resource_id": None, "status": "recommended"},
+        {"resource_type": "quiz", "resource_id": None, "status": "recommended"},
+    ])
+    task.recommended_resource_ids = [71]
+    repository = FakeRepository(
+        users=[user], courses=[make_course()], paths=[make_path()], tasks=[task], resources=[ready]
+    )
+
+    job = make_service(repository, FakeQueue()).create_path_task_resource_job(
+        user,
+        task_id=task.id,
+        idempotency_key="legacy-bundle",
+    )
+
+    assert job.request["resource_types"] == ["quiz"]
+
+
 def test_path_task_resource_job_rejects_archived_completed_empty_and_ready_bundles() -> None:
     user = make_user()
     service = make_service(FakeRepository(users=[user], courses=[make_course()], paths=[make_path(status="archived")], tasks=[make_task()]), FakeQueue())

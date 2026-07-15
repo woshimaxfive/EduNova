@@ -479,6 +479,11 @@ def test_outline_edits_are_versioned_and_confirmation_controls_included_chunks(t
             ),
         )
 
+    material.parse_status = "pending"
+    material.ingestion_status = "running"
+    with pytest.raises(MaterialValidationError, match="正在解析"):
+        service.confirm_outline(make_user(), 1, version=3)
+
 
 def test_course_upload_and_attach_materials_create_unique_links(tmp_path: Path) -> None:
     repo = FakeMaterialRepository(courses=[Course(id=101, owner_id=1, title="AI", source_type="generated")])

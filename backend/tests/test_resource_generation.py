@@ -20,6 +20,7 @@ from backend.app.models import (
     GeneratedResource,
     KnowledgeChunk,
     KnowledgePoint,
+    LearningTask,
     ResourceQualityScore,
     StudentProfile,
     User,
@@ -29,7 +30,7 @@ from backend.app.services.auth import AuthService
 from backend.app.services.model_settings import ModelNotConfiguredError
 from backend.app.services.code_verifier import CodeVerificationResult
 from backend.app.services.resource_intent import intent_difference_count
-from backend.app.services.resources import ResourceNotFoundError, ResourceValidationError
+from backend.app.services.resources import ResourceGenerationService, ResourceNotFoundError, ResourceValidationError
 
 
 NOW = datetime(2026, 7, 5, 14, 0, tzinfo=UTC)
@@ -52,6 +53,7 @@ class FakeResourceRepository:
     resources: list[GeneratedResource] = field(default_factory=list)
     quality_scores: list[ResourceQualityScore] = field(default_factory=list)
     agent_logs: list[AgentRunLog] = field(default_factory=list)
+    learning_tasks: list[LearningTask] = field(default_factory=list)
     next_resource_id: int = 1001
     next_quality_id: int = 2001
     next_log_id: int = 3001
@@ -85,6 +87,12 @@ class FakeResourceRepository:
 
     def get_profile(self, user_id: int) -> StudentProfile | None:
         return self.profiles.get(user_id)
+
+    def get_learning_task_for_user(self, user_id: int, task_id: int) -> LearningTask | None:
+        return next(
+            (task for task in self.learning_tasks if task.id == task_id and task.user_id == user_id),
+            None,
+        )
 
     def add_resource(self, resource: GeneratedResource) -> GeneratedResource:
         resource.id = self.next_resource_id
@@ -436,6 +444,42 @@ def test_semantic_similarity_uses_configured_embedding_service() -> None:
     assert similarity > 0.99
 
 
+def test_resource_context_prefers_exact_section_and_fallback_content_uses_textbook_facts() -> None:
+    point = make_point()
+    chunks = [
+        make_chunk(701, content="A* 搜索使用 f(n)=g(n)+h(n) 评价候选状态。"),
+        make_chunk(702, content="A* 搜索在满足条件时保持最优性。"),
+        KnowledgeChunk(
+            id=703,
+            course_id=101,
+            material_id=301,
+            knowledge_point_id=501,
+            content="这是邻近章节的无关习题。",
+            page_number=9,
+            section_title="本章习题",
+            metadata_json={"source_filename": "人工智能导论讲义.md"},
+        ),
+    ]
+    chunks[0].section_title = point.title
+    chunks[1].section_title = point.title
+
+    contexts = ResourceGenerationService._safe_resource_contexts(chunks, point, [point])
+    draft = ResourceGenerationService._build_draft(
+        resource_type="doc",
+        course=make_course(),
+        knowledge_point=point,
+        context_points=[point],
+        contexts=contexts,
+        profile_summary={"learning_goal": "期末复习", "knowledge_foundation": "基础一般", "weak_points": [], "learning_preference": "图解"},
+        difficulty="medium",
+    )
+
+    assert len(contexts) == 2
+    assert all("无关习题" not in context.excerpt for context in contexts)
+    assert "f(n)=g(n)+h(n)" in draft.markdown
+    assert "教材对“启发式搜索”的核心表述" in draft.markdown
+
+
 def assert_usable_resource_content(resources: list[GeneratedResource]) -> None:
     content_by_type = {resource.resource_type: resource.content_json["markdown"] for resource in resources}
     assert "f(n)=g(n)+h(n)" in content_by_type["doc"]
@@ -562,6 +606,46 @@ def test_generate_six_resource_types_persists_v3_artifacts_quality_scores_and_pa
     assert "不得使用 numpy" in code_prompt
     assert_usable_resource_content(repo.resources)
     assert repo.committed is True
+
+
+def test_path_task_resource_generation_replaces_nested_bundle_items_before_persisting() -> None:
+    repo = make_repo()
+    task = LearningTask(
+        id=61,
+        path_id=51,
+        user_id=1,
+        course_id=101,
+        knowledge_point_id=501,
+        title="学习 A* 搜索",
+        task_type="learn",
+        reason="先理解搜索过程",
+        recommended_resource_ids=[],
+        status="doing",
+        learning_bundle_json={
+            "items": [
+                {"resource_type": "doc", "resource_id": None, "status": "recommended", "role": "概念框架"},
+                {"resource_type": "mindmap", "resource_id": None, "status": "recommended", "role": "关系梳理"},
+            ]
+        },
+    )
+    repo.learning_tasks.append(task)
+    original_items = task.learning_bundle_json["items"]
+
+    result = as_dict(
+        make_service(repo).generate_resources(
+            make_user(),
+            course_id=101,
+            knowledge_point_id=501,
+            resource_types=["doc", "mindmap"],
+            path_task_id=61,
+        )
+    )
+
+    updated_items = task.learning_bundle_json["items"]
+    assert updated_items is not original_items
+    assert [item["resource_id"] for item in updated_items] == [int(item["id"]) for item in result["resources"]]
+    assert [item["status"] for item in updated_items] == ["ready", "ready"]
+    assert task.recommended_resource_ids == [int(item["id"]) for item in result["resources"]]
 
 
 def test_alternative_and_refine_keep_history_in_one_version_family() -> None:

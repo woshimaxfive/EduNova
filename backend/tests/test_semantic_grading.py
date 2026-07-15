@@ -48,7 +48,7 @@ def test_semantic_grader_accepts_semantically_equivalent_answer_result() -> None
     assert len(model.calls) == 1
 
 
-def test_semantic_grader_rejects_missing_items_forged_refs_and_inconsistent_correctness() -> None:
+def test_semantic_grader_rejects_missing_items_and_forged_refs_but_derives_correctness_from_score() -> None:
     missing = FakeModelService('{"grades":[]}')
     forged = FakeModelService(
         '{"grades":[{"question_id":"q1","score":80,"is_correct":true,'
@@ -63,4 +63,7 @@ def test_semantic_grader_rejects_missing_items_forged_refs_and_inconsistent_corr
 
     assert SemanticShortAnswerGrader(missing).grade(user=make_user(), items=[make_item()]) is None
     assert SemanticShortAnswerGrader(forged).grade(user=make_user(), items=[make_item()]) is None
-    assert SemanticShortAnswerGrader(inconsistent).grade(user=make_user(), items=[make_item()]) is None
+    normalized = SemanticShortAnswerGrader(inconsistent).grade(user=make_user(), items=[make_item()])
+    assert normalized is not None
+    assert normalized["q1"]["score"] == 35
+    assert normalized["q1"]["is_correct"] is False

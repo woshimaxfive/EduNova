@@ -315,6 +315,28 @@ def test_create_practice_session_generates_deterministic_questions_and_validates
         service.create_session(make_user(), course_id=101, knowledge_point_ids=[401], question_count=0, difficulty="medium")
 
 
+def test_single_point_practice_still_contains_objective_and_short_answer_types() -> None:
+    from backend.app.services.practice import PracticeService
+
+    detail = as_dict(
+        PracticeService(make_repo()).create_session(
+            make_user(),
+            course_id=101,
+            knowledge_point_ids=[402],
+            question_count=5,
+            difficulty="medium",
+        )
+    )
+
+    assert [question["question_type"] for question in detail["questions"]] == [
+        "single_choice",
+        "multiple_choice",
+        "short_answer",
+        "single_choice",
+        "multiple_choice",
+    ]
+    assert all(len(question["options"]) == 4 for question in detail["questions"] if question["question_type"] != "short_answer")
+
 def test_adaptive_practice_uses_profile_and_restores_saved_draft() -> None:
     from backend.app.services.practice import PracticeService
 

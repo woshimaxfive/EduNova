@@ -160,6 +160,7 @@ RESPONSE_MODELS: dict[str, Any] = {
     "attach_course_materials": ApiEnvelope[AttachCourseMaterialsResult],
     "generate_path": ApiEnvelope[LearningPathDetail],
     "create_path_generation_job": ApiEnvelope[AiJobResponse],
+    "create_path_task_resource_job": ApiEnvelope[AiJobResponse],
     "get_current_path": ApiEnvelope[LearningPathDetail],
     "update_path_task": ApiEnvelope[LearningPathTaskResponse],
     "create_practice_session": ApiEnvelope[PracticeSessionDetail],

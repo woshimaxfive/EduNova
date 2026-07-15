@@ -2439,6 +2439,14 @@ OpenRouter 不再作为可见预设。
 
 Phase 29 起 `AiJobWorkflow` 增加 `path_planning`。来源引用可携带 `access_scope=mainland_preferred|mainland_community|global_source|external_fallback`；该字段是策略分层，不表示实时网络可达性。
 
+### POST `/paths/tasks/{task_id}/resource-jobs`
+
+用途：为当前用户有效路径中的进行中任务生成“本节学习安排”尚未就绪的资源。无请求体，必须携带 `Idempotency-Key`，成功返回既有 `AiJobResponse` 和 HTTP 202。
+
+服务端从任务中读取知识点、难度、教学策略、学习目标和有序资源类型；已完成且可访问的资源不会重复生成。同一任务已有 `queued/running/cancelling` 的资源任务时返回该任务。已完成任务、归档路径、空安排或全部资源就绪分别返回 409/400。结果中的 `path_task_id` 用于任务托盘返回资源工坊并恢复本节上下文。
+
+`LearningBundle.items[*].learning_status` 为 `not_started|in_progress|completed`，`ready_count` 和 `completed_count` 由当前用户、当前路径任务的 `resource_interactions` 聚合；它们不改变资源本身或路径任务状态。
+
 ### GET `/ai-jobs?status=active&limit=20`
 
 用途：恢复当前用户排队、运行、取消中和失败任务。`limit` 范围 1 至 50。

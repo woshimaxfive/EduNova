@@ -791,6 +791,23 @@ export interface paths {
         patch: operations["update_path_task_api_v1_paths_tasks__task_id__patch"];
         trace?: never;
     };
+    "/api/v1/paths/tasks/{task_id}/resource-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Path Task Resource Job */
+        post: operations["create_path_task_resource_job_api_v1_paths_tasks__task_id__resource_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/practice/sessions": {
         parameters: {
             query?: never;
@@ -2670,6 +2687,11 @@ export interface components {
         /** LearningBundle */
         LearningBundle: {
             /**
+             * Completed Count
+             * @default 0
+             */
+            completed_count: number;
+            /**
              * Difficulty
              * @default medium
              * @enum {string}
@@ -2688,6 +2710,11 @@ export interface components {
              */
             rationale: string;
             /**
+             * Ready Count
+             * @default 0
+             */
+            ready_count: number;
+            /**
              * Strategy
              * @default
              */
@@ -2702,6 +2729,12 @@ export interface components {
         };
         /** LearningBundleItem */
         LearningBundleItem: {
+            /**
+             * Learning Status
+             * @default not_started
+             * @enum {string}
+             */
+            learning_status: "not_started" | "in_progress" | "completed";
             /** Resource Id */
             resource_id?: string | null;
             /** Resource Type */
@@ -9350,6 +9383,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_LearningPathTaskResponse_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    create_path_task_resource_job_api_v1_paths_tasks__task_id__resource_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_AiJobResponse_"];
                 };
             };
             /** @description Bad Request */

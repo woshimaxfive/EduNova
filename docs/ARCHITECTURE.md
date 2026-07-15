@@ -719,3 +719,9 @@ OpenAPI 漂移检查在临时目录生成 JSON/TypeScript 后与跟踪文件比�
 `PathPlanningGraph` 继续拥有课程路径领域状态，但入口统一迁入现有 `AIJobRuntime -> RQ edunova_ai`。手动生成和练习后重排共享同一执行器、进度节点、取消边界与原子持久化；旧同步接口只作兼容。模型仅在 `model_plan` 调用一次，输入最多 24 个合法候选，输出最多 8 个近期优先任务；Review/Repair 不调用模型，只检查任务、资源、模态、可信因素、隐私与最多一个进行中任务。
 
 `ChinaFirstContentPolicy` 是学生可见内容的集中策略适配层，不是新的 Agent。它为问答、资源、路径、练习、报告、资料对比和建课提供统一 `zh-CN/mainland_college_student` Prompt 与元数据；`SemanticDecisionService` 在既有一次路由调用中输出 `mainland_preferred/global_required`。来源访问范围与权威性分开表达，服务端可请求不等于向学生承诺国内可访问。
+
+## 23. Phase 30 本节学习资源闭环
+
+路径任务的 `learning_bundle_json` 是资源工坊之上的编排层，不是第二套资源系统。`POST /paths/tasks/{task_id}/resource-jobs` 从当前用户的有效路径任务派生知识点、难度、教学策略和缺失资源类型，复用既有 `resource_generation` AIJob、RQ 与 ResourceGenerationGraph；已完成且可访问的资源直接复用，同一任务只保留一个活动资源任务。
+
+`LearningBundleItem.learning_status` 以及 `ready_count/completed_count` 均由现有 `resource_interactions` 聚合，不新增表。打开或播放结束不会完成整节；资源工坊按 bundle 顺序提供下一项，用户回到路径页后才手动确认完成本节。未完成资源可经 Radix AlertDialog 明确确认后跳过，生成失败只影响对应资源类型。

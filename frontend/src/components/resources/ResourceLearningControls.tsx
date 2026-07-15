@@ -35,27 +35,33 @@ export function ResourceLearningControls({ resource }: { resource: GeneratedReso
     queryFn: () => getResourceLearningState(resourceId),
     enabled: Number.isFinite(resourceId)
   });
-  const mutation = useMutation({
-    mutationFn: (input: { eventType: "opened" | "started" | "completed" | "feedback"; feedback?: ResourceFeedback }) =>
-      recordResourceInteraction(resourceId, {
-        event_id: eventId(),
-        event_type: input.eventType,
-        path_task_id: pathTaskId,
-        feedback: input.feedback
-      }),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["resources", "learning-state", resource.id] }),
-        queryClient.invalidateQueries({ queryKey: ["learning", "next-action"] }),
-        queryClient.invalidateQueries({ queryKey: ["paths"] })
-      ]);
-    }
+  const recordInteraction = (input: { eventType: "opened" | "started" | "completed" | "feedback"; feedback?: ResourceFeedback }) =>
+    recordResourceInteraction(resourceId, {
+      event_id: eventId(),
+      event_type: input.eventType,
+      path_task_id: pathTaskId,
+      feedback: input.feedback
+    });
+  const refreshLearningState = () => {
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["resources", "learning-state", resource.id] }),
+      queryClient.invalidateQueries({ queryKey: ["learning", "next-action"] }),
+      queryClient.invalidateQueries({ queryKey: ["paths"] })
+    ]);
+  };
+  const openedMutation = useMutation({
+    mutationFn: recordInteraction,
+    onSuccess: refreshLearningState
+  });
+  const actionMutation = useMutation({
+    mutationFn: recordInteraction,
+    onSuccess: refreshLearningState
   });
 
   useEffect(() => {
     if (!Number.isFinite(resourceId) || openedResource.current === resource.id) return;
     openedResource.current = resource.id;
-    mutation.mutate({ eventType: "opened" });
+    openedMutation.mutate({ eventType: "opened" });
   // The mutation is intentionally excluded so one visible resource produces one opened event.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resource.id, resourceId]);
@@ -69,22 +75,22 @@ export function ResourceLearningControls({ resource }: { resource: GeneratedReso
       </div>
       <div className="resource-learning-actions">
         {!state?.started && !state?.completed ? (
-          <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate({ eventType: "started" })}>开始学习</button>
+          <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ eventType: "started" })}>开始学习</button>
         ) : null}
         {!state?.completed ? (
-          <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate({ eventType: "completed" })}>完成学习</button>
+          <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ eventType: "completed" })}>完成学习</button>
         ) : null}
         {feedbackOptions.map((option) => (
           <button
             type="button"
             key={option.value}
             aria-pressed={state?.feedback === option.value}
-            disabled={mutation.isPending}
-            onClick={() => mutation.mutate({ eventType: "feedback", feedback: option.value })}
+            disabled={actionMutation.isPending}
+            onClick={() => actionMutation.mutate({ eventType: "feedback", feedback: option.value })}
           >{option.label}</button>
         ))}
       </div>
-      {mutation.isError ? <p className="form-error">学习状态未保存，请重试。</p> : null}
+      {actionMutation.isError || openedMutation.isError ? <p className="form-error">学习状态未保存，请重试。</p> : null}
     </section>
   );
 }

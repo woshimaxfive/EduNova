@@ -765,6 +765,10 @@ describe("StudioPage resource generation", () => {
       }
       if (url === RESOURCE_ENDPOINTS.interactions(901) && method === "post") {
         const payload = parsePayload(config.data) as { event_type?: string };
+        if (payload.event_type === "opened") {
+          // Auto-recording an open may still be in flight; it must not lock explicit learning actions.
+          return new Promise(() => undefined);
+        }
         if (payload.event_type === "completed") docCompleted = true;
         return { data: { data: { resource_id: "901", opened: true, started: true, completed: docCompleted, progress_percent: docCompleted ? 100 : null, feedback: null, updated_at: null } }, status: 200, statusText: "OK", headers: {}, config };
       }

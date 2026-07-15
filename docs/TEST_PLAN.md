@@ -1011,7 +1011,7 @@ docker compose down
 - 两组“二叉树遍历”画像至少在讲解角度、难度、模态或顺序中的两项不同；低可信画像不得驱动差异。
 - 最终阶段只运行一次完整门禁、一次 Docker E2E、一次供应链门禁和一次 agent-browser 桌面/390px验收；真实模型与搜索调用总量不超过 20 次，只保存聚合指标。
 
-2026-07-15 Phase 28 实际验收：`scripts/test.ps1` 通过后端 393 项、前端 233 项和离线 AI 评测 10 项，同时通过编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、build 与 Compose。隔离 Docker E2E 通过八服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例。真实调用共 19 次模型和 1 次搜索；`contest_readiness --require-live` 的引用、数字、泄漏与全部规定性能阈值通过。供应链脚本仅运行一次，依赖与 Trivy 漏洞、密钥及 Dockerfile 配置均为 0 命中。`agent-browser` 在桌面和 390px 验证路径学习包、YouTube 安全 iframe、始终可见的原平台链接、报告资源聚合和无水平溢出。临时账号及数据已清理。同步路径规划 53–62 秒及一次 nginx 504、画像对照中一组模型回退，作为未解决风险保留。
+2026-07-15 Phase 28 实际验收：`scripts/test.ps1` 通过后端 393 项、前端 233 项和离线 AI 评测 10 项，同时通过编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、build 与 Compose。隔离 Docker E2E 通过八服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例。真实调用共 19 次模型和 1 次搜索；`contest_readiness --require-live` 的引用、数字、泄漏与全部规定性能阈值通过。供应链脚本仅运行一次，依赖与 Trivy 漏洞、密钥及 Dockerfile 配置均为 0 命中。`agent-browser` 在桌面和 390px 验证路径学习包、YouTube 安全 iframe、始终可见的原平台链接、报告资源聚合和无水平溢出。临时账号及数据已清理。同步路径规划 53–62 秒及一次 nginx 504 在本阶段作为风险记录，后由 Phase 29 异步路径 AIJob 解决；画像对照中一组模型回退仍保留为稳定性风险。
 
 ## Phase 29 异步路径与国内策略验收
 
@@ -1022,3 +1022,14 @@ docker compose down
 - 前端覆盖任务托盘、刷新恢复、失败重试、学习包模式/难度/因素、国内/境外标签、桌面和 390px 无横向溢出。
 
 2026-07-15 Phase 29 实际验收：`scripts/test.ps1` 通过后端 401 项、前端 233 项和离线 AI 评测 10 项，同时通过编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、build 与 Compose；隔离 Docker E2E 通过服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例并自动清理。`agent-browser` 单一会话验证路径 AIJob 立即返回、托盘进度、刷新恢复、完成后读取 `/paths/current`、fallback 诚实标记，以及 1440px/390px 无水平溢出和无控制台错误。真实调用共 4 次路径模型和 1 次搜索：计算机/代码实践画像得到 `model_enhanced` 并在顺序、难度、策略、模态上变化；非计算机/图解备考一次返回触发严格合同 fallback，低可信画像与无画像均保持安全默认组合。B站首次检索命中合法 BV 视频并标记 `mainland_preferred`，未调用 YouTube。临时账号及数据已删除；不把单次 fallback 写成双画像稳定通过。
+
+## Phase 30 本节学习资源闭环验收
+
+- 后端覆盖用户/课程隔离、有效路径、完成任务、空安排、全部就绪、只生成缺失类型、活动任务复用、失败重试和资源互动聚合隔离。
+- 前端覆盖“本节学习安排”文案、生成/补齐、局部进度、任务托盘回跳参数、按规划顺序打开、单项完成后下一项、未完成整节确认和普通资源工坊兼容。
+- 打开资源不等于完成资源，播放器结束不等于完成整节；只有用户在路径页确认后才更新路径任务状态。
+- 阶段收口运行完整工程门禁、一次隔离 Docker E2E 和一次 `agent-browser` 桌面/390px验收，不制作交付材料。
+
+2026-07-15 Phase 30 工程门禁：`scripts/test.ps1` 通过后端 404 项、前端 236 项、离线 AI 评测 10 项，以及编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、production build 与 Compose 配置检查。`contest_readiness` 因本轮未提供新的真实 Provider 性能样本输出 `evidence_gap`，该状态不影响代码正确性门禁，也不记录成真实性能通过。
+
+2026-07-15 Phase 30 实际验收：同一次隔离 Docker E2E 通过八服务健康、pgvector 排序/隔离、代码验证隔离与 2 条 Playwright 用例，结束后删除临时容器、网络和卷。`agent-browser` 单一会话在桌面与 390px 验证当前任务的“本节学习安排”、部分待补齐、Radix 未完成确认、第一项未完成资源选择、单项完成后的“学习下一项”和第二项顺序跳转；页面无横向溢出，控制台无应用错误。真实浏览器发现自动 `opened` 记录与用户操作共用 mutation 会持续禁用按钮，修复为两个独立 mutation 后完成组件定向回归。验收账号及其课程、路径、资源和互动级联数据已精确清理。

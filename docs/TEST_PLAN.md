@@ -1033,3 +1033,13 @@ docker compose down
 2026-07-15 Phase 30 工程门禁：`scripts/test.ps1` 通过后端 404 项、前端 236 项、离线 AI 评测 10 项，以及编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、production build 与 Compose 配置检查。`contest_readiness` 因本轮未提供新的真实 Provider 性能样本输出 `evidence_gap`，该状态不影响代码正确性门禁，也不记录成真实性能通过。
 
 2026-07-15 Phase 30 实际验收：同一次隔离 Docker E2E 通过八服务健康、pgvector 排序/隔离、代码验证隔离与 2 条 Playwright 用例，结束后删除临时容器、网络和卷。`agent-browser` 单一会话在桌面与 390px 验证当前任务的“本节学习安排”、部分待补齐、Radix 未完成确认、第一项未完成资源选择、单项完成后的“学习下一项”和第二项顺序跳转；页面无横向溢出，控制台无应用错误。真实浏览器发现自动 `opened` 记录与用户操作共用 mutation 会持续禁用按钮，修复为两个独立 mutation 后完成组件定向回归。验收账号及其课程、路径、资源和互动级联数据已精确清理。
+
+## Phase 31 大型真实教材闭环验收
+
+自动化不得包含用户教材，使用程序化大型 PDF 替身覆盖大小感知时限、源页数不符、真实心跳、取消、目录异常、失败不覆盖和原子持久化。每个真实复现缺陷必须先补定向回归，再改实现。完整收口只运行一次 `scripts/test.ps1`、一次隔离 Docker E2E 和一次最终 `agent-browser` 桌面/390px 复核。
+
+2026-07-15 真实主链主体已完成：整本 437 页、25,628,230 字节 PDF 经页面上传和 Docling 解析，得到约 98% 可读页、10 个顶层章、51 个目录条目、479 个切片；目录确认后建课生成 51 个知识点。问答、追问、联网、路径、本节资源、反馈、混合练习、语义重评、弱点、报告、Word 打开和首页恢复均有浏览器可见证据。三个临时账号累计 140 次 Provider 尝试，未超过 180 次硬上限。
+
+两组内置课程画像均由普通用户页面创建并达到可信阈值，路径均为 `model_enhanced` 且无 fallback。同一“二叉树遍历”任务：图解备考使用图解/练习策略与 `doc+mindmap+quiz`，工程实践使用递归调用栈/可运行代码策略与 `code+doc+quiz`，满足策略和模态两项可观察差异。
+
+2026-07-16 Phase 31 实际验收：`scripts/test.ps1` 通过后端 425 项、前端 238 项和离线 AI 评测 10 项，以及编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、build 与 Compose。隔离 Docker E2E 通过八服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例，并自动清理容器、网络与卷。`agent-browser` 完成 1440px/390px 练习主动作、Radix 弹窗、焦点恢复和无水平溢出复核；真实主链累计 140 次 Provider 尝试。三个临时账号及上传副本、导出、RQ 任务和派生数据精确删除，原始教材 SHA-256 不变。本轮无新增真实性能样本，`contest_readiness` 的实时性能部分保持 `evidence_gap`。

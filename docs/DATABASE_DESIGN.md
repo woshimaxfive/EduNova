@@ -1032,3 +1032,7 @@ Phase 28 不新增迁移。报告的 `resource_usage_summary` 继续保存在既
 ## Phase 29 数据兼容
 
 Phase 29 不新增表或迁移。`ai_jobs.workflow` 的既有字符串字段新增 `path_planning` 值；请求和结果 JSON 保存课程、路径、触发方式、保留任务数、warning 与安全 trace。`learning_bundle_json` 增加 `teaching_strategy`、`difficulty`、`used_profile_factor_codes` 和 `generation_mode`，旧 JSON 缺少这些字段时按 `legacy/medium` 安全默认读取。来源的 `access_scope` 继续存放在既有引用 JSON 中，不改变教材证据关系。
+
+## Phase 31 数据兼容
+
+Phase 31 不新增表或迁移。大型资料仍使用现有资料、解析版本、目录、切片和向量关系；源页数与解析质量作为现有解析 metadata/质量结果保存。路径更新继续创建新版本并归档旧 active 路径，但会把旧路径已完成任务合并到新版本；可信画像难点仅进入当次路径候选和安全因素代码，不创建 `weakness_review_items`。练习未评分、报告资源聚合和 DOCX 导出均沿用现有可空字段与 JSON 合同。

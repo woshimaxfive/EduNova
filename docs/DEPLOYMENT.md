@@ -438,3 +438,9 @@ Phase 28 不新增服务、端口、环境变量或数据库迁移。OpenAPI 检
 ## 14. Phase 29 部署影响
 
 Phase 29 不新增服务、端口、环境变量、依赖或数据库迁移。`ai-worker` 必须与 backend 同版本部署以识别 `path_planning`；滚动更新时先发布兼容 Worker/backend，再发布前端。路径请求进入既有 `edunova_ai` 队列，nginx 不再维持 60 秒同步连接。国内内容策略只改变 Prompt、来源排序与前端标签，不改变 Provider 地址；B站成功后不会再消耗 YouTube 搜索调用。
+
+## 15. Phase 31 大型教材部署影响
+
+Phase 31 不新增服务、端口、依赖或环境变量。`ai-worker` 与 backend 必须同版本发布，以同时具备源页数质量门禁和大小感知 Docling 时限。小文件仍保持 120 秒；大于 10 MiB 的 PDF 按文件大小增加解析窗口，最终不超过 AIJob 时限减 60 秒。该策略只延长有持续真实心跳的大教材解析，不放宽无心跳卡死、取消或 Worker 失联判定。
+
+生产部署应为 AI Worker 预留足够 CPU、内存和临时磁盘。437 页、约 24.4 MiB 文本层 PDF 的本机 Docker 实测解析约 11 分 45 秒，该值是单机样本而非 SLA；监控应区分 Docling 本地耗时与 Provider 外部耗时。教材文件、切片、Prompt 和模型原始响应不得进入通用 trace 或构建产物。

@@ -189,3 +189,10 @@ validate_confirmed_materials -> coherence_gate -> load_outlines
 - VideoCuratorWorker 是受限工具 Worker：最小化查询、严格平台白名单、无下载、无内容观看声明；失败只产生该模态 warning，不阻断其他资源。
 - ReviewAgent 继续审核课程自产资源。`external_video` 只做 URL、平台、证据角色和敏感输出规则审核，不冒充课程生成内容。
 - 学生看到的是“理解问题、参考上下文、课程检索、联网核实、个性化规划、回答、安全审核”等执行摘要，不是模型原始思维链。
+
+# Phase 31 大型教材与路径合同加固
+
+- MaterialIngestionGraph 以源 PDF 页数校验 Docling 输出；大型教材只显示真实心跳，不把固定进度冒充页级进度。部分解析或页数严重不符直接失败，目录确认和建课仍由 EduNova 领域门禁控制。
+- PathPlanningGraph 继续每次最多一次模型调用。Provider 返回单层 `output` 包装时可确定性解包，但仍必须通过 Pydantic 和任务/资源/权限白名单；未知因素代码被剔除，不能进入学习包说明。
+- 可信总画像中的明确难点只用于把相关真实知识点加入模型候选，不自动创建课程弱点。课程弱点、掌握度和评分仍只接受课程内确认或练习证据。
+- 手动更新与练习触发重排都合并旧路径已完成任务；Review/Repair 不调用模型，失败继续原子保留旧有效路径。

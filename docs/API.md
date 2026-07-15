@@ -2625,3 +2625,7 @@ Phase 29 起 `AiJobWorkflow` 增加 `path_planning`。来源引用可携带 `acc
 - `AssessmentReportContent.resource_usage_summary` 为按资源类型索引的明确结构，计数包含 `opened/started/completed/helpful/too_easy/too_hard/not_helpful`。
 - 打开、开始和完成按唯一资源计数；反馈只取每个资源最近一次值，因此用户切换反馈不会制造多份证据。
 - `external_video.embed_status` 使用 `unknown|available|unavailable`。后端发现合法 URL 后仍为 `unknown`，前端播放器加载结果只能更新本地展示，原平台链接始终保留。
+
+## 25. Phase 31 行为兼容
+
+Phase 31 不新增接口路径或数据库迁移。现有资料解析进度对大型 PDF 使用真实心跳与“正在解析大型教材”标签；练习 `score=null` 和 `grading_status` 语义保持兼容；路径更新仍返回既有 AIJob 合同，但手动更新也保留已完成任务。历史失败的 `course_builder` AIJob 仍可在任务托盘查看，前端只自动恢复非终态任务，不再强制打开旧失败弹窗。

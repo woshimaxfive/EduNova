@@ -725,3 +725,11 @@ OpenAPI 漂移检查在临时目录生成 JSON/TypeScript 后与跟踪文件比�
 路径任务的 `learning_bundle_json` 是资源工坊之上的编排层，不是第二套资源系统。`POST /paths/tasks/{task_id}/resource-jobs` 从当前用户的有效路径任务派生知识点、难度、教学策略和缺失资源类型，复用既有 `resource_generation` AIJob、RQ 与 ResourceGenerationGraph；已完成且可访问的资源直接复用，同一任务只保留一个活动资源任务。
 
 `LearningBundleItem.learning_status` 以及 `ready_count/completed_count` 均由现有 `resource_interactions` 聚合，不新增表。打开或播放结束不会完成整节；资源工坊按 bundle 顺序提供下一项，用户回到路径页后才手动确认完成本节。未完成资源可经 Radix AlertDialog 明确确认后跳过，生成失败只影响对应资源类型。
+
+## 24. Phase 31 大型教材与真实闭环加固
+
+大型 PDF 继续由 Docling 适配层输出既有解析合同，第三方类型不进入 Graph 或数据库。解析器使用源页数交叉核验；大于 10 MiB 的 PDF 时限按 `max(120 秒, 文件 MiB × 25 秒)` 推导，并受 AIJob 总时限减 60 秒约束。长任务只发送真实心跳和已等待时间，不伪造页级百分比；部分页结果、页数严重不符或质量异常必须失败，旧已确认版本保持不变。
+
+真实闭环加固不新增 Graph、表或基础设施。课程回答增加证据域和数值一致性门禁；资源生成优先使用当前知识点的精确章节证据；资源完成与整节完成严格分离；路径手动更新与练习重排统一保留已完成进度。可信总画像中的明确难点只用于扩大路径模型候选，不直接成为课程弱点、掌握度、评分或教材证据。
+
+PathPlanningGraph 接受 Provider 常见的单层 `output` 协议包装，解包后仍执行同一 Pydantic 严格校验。未知画像因素代码被白名单剔除；伪造任务、资源、模态或权限越界仍使整体方案回退。该兼容层不记录模型原文，也不增加第二次模型调用。

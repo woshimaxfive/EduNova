@@ -225,6 +225,19 @@ export function PathTaskCanvas({
                   </div>
                   <h3>{task.title}</h3>
                   <p>{task.reason}</p>
+                  {task.learning_bundle?.items.length ? (
+                    <section className="path-learning-bundle" aria-label="个性化学习包">
+                      <strong>推荐学习包</strong>
+                      <p>{task.learning_bundle.rationale}</p>
+                      <div>
+                        {task.learning_bundle.items.map((item, itemIndex) => (
+                          <span key={`${item.resource_type}-${itemIndex}`}>
+                            {item.resource_type} · {item.role}{item.resource_id ? " · 已就绪" : " · 待生成"}
+                          </span>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
                   {task.recommended_resources.length > 0 ? (
                     <div className="path-task-resources" aria-label="推荐资源">
                       {task.recommended_resources.map((resource) => (

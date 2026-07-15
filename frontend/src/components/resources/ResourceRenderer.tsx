@@ -3,6 +3,7 @@ import { lazy, Suspense } from "react";
 import { type GeneratedResource } from "../../api/resources";
 import { MarkdownMessage } from "../feedback/MarkdownMessage";
 import { AnimationResource } from "./AnimationResource";
+import { ExternalVideoResource } from "./ExternalVideoResource";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { MindmapResource } from "./MindmapResource";
 import { QuizResource } from "./QuizResource";
@@ -49,6 +50,9 @@ export function ResourceRenderer({ resource }: { resource: GeneratedResource }) 
   }
   if (artifact?.kind === "animation") {
     return <AnimationResource key={resource.id} artifact={artifact} />;
+  }
+  if (artifact?.kind === "external_video") {
+    return <ExternalVideoResource key={resource.id} artifact={artifact} />;
   }
 
   const markdown = content.markdown || "资源内容已生成。";

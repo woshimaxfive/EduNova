@@ -42,6 +42,16 @@ export type LearningPathTask = {
   reason: string;
   recommended_resource_ids: string[];
   recommended_resources: CourseResourceBrief[];
+  learning_bundle?: {
+    strategy: string;
+    rationale: string;
+    items: Array<{
+      resource_type: string;
+      role: string;
+      resource_id: string | null;
+      status: "available" | "recommended" | "generating" | "failed" | string;
+    }>;
+  } | null;
   status: PathTaskStatus;
   created_at: string;
   updated_at: string;

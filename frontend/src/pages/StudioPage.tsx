@@ -238,7 +238,8 @@ export function StudioPage() {
           learning_goal: source ? sourceIntent?.learning_goal ?? learningGoal : learningGoal,
           difficulty: sourceDifficulty ?? difficulty,
           generation_action: action,
-          source_resource_id: source ? Number(source.id) : null
+          source_resource_id: source ? Number(source.id) : null,
+          ...(pathTaskId && /^\d+$/.test(pathTaskId) ? { path_task_id: Number.parseInt(pathTaskId, 10) } : {})
         },
         createIdempotencyKey("studio-resource")
       );

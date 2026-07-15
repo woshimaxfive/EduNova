@@ -7,7 +7,8 @@ export const resourceTypeLabels: Record<ResourceType, string> = {
   quiz: "练习题",
   code: "代码实操",
   slide: "PPT",
-  animation: "动画图解"
+  animation: "动画图解",
+  video: "外部视频"
 };
 
 export const studyStepStatusLabels: Record<StudyStepStatus, string> = {

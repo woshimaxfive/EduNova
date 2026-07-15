@@ -7,7 +7,7 @@ import { AiJobProgress } from "../feedback/AiJobProgress";
 import { ResourceRenderer } from "../resources/ResourceRenderer";
 import { resourceTypeLabels } from "./courseSpaceLabels";
 
-const orderedResourceTypes: ResourceType[] = ["doc", "mindmap", "quiz", "code", "slide", "animation"];
+const orderedResourceTypes: ResourceType[] = ["doc", "mindmap", "quiz", "code", "slide", "animation", "video"];
 
 type CourseInlineResourcePanelProps = {
   selectedTypes: ResourceType[];

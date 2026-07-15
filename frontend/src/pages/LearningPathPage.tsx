@@ -90,8 +90,9 @@ export function LearningPathPage() {
       setFeedback(null);
       if (effectiveCourseId) void invalidateCourseLearningLoop(queryClient, effectiveCourseId);
       if (variables.status !== "doing" || !effectiveCourseId) return;
-      const resourceId = variables.task.recommended_resources[0]?.id ?? variables.task.recommended_resource_ids[0];
-      if (variables.task.task_type === "resource" && resourceId) {
+      const bundleResourceId = variables.task.learning_bundle?.items.find((item) => item.resource_id)?.resource_id;
+      const resourceId = bundleResourceId ?? variables.task.recommended_resources[0]?.id ?? variables.task.recommended_resource_ids[0];
+      if (resourceId) {
         navigate(`${PATHS.studio}?course_id=${effectiveCourseId}&resource_id=${resourceId}&path_task_id=${variables.task.id}`);
         return;
       }

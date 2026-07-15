@@ -5,6 +5,7 @@ import { type GeneratedResource } from "../../api/resources";
 import { PATHS } from "../../app/routePaths";
 import { InlineFeedback } from "../feedback/InlineFeedback";
 import { ResourceRenderer } from "../resources/ResourceRenderer";
+import { ResourceLearningControls } from "../resources/ResourceLearningControls";
 import { generationModeLabel, isLowEvidenceResource, resourceTypeMeta } from "./studioResourceMeta";
 import { versionLabel } from "./studioResourceVersions";
 
@@ -130,6 +131,7 @@ export function StudioArtifactCanvas({
         <div className="studio-artifact-content">
           <ResourceRenderer resource={resource} />
         </div>
+        <ResourceLearningControls resource={resource} />
       </article>
     </main>
   );

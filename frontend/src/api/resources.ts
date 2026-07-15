@@ -9,10 +9,12 @@ export const RESOURCE_ENDPOINTS = {
   list: "/resources",
   detail: (resourceId: number) => `/resources/${resourceId}`,
   quality: (resourceId: number) => `/resources/${resourceId}/quality`,
-  exports: (resourceId: number) => `/resources/${resourceId}/exports`
+  exports: (resourceId: number) => `/resources/${resourceId}/exports`,
+  interactions: (resourceId: number) => `/resources/${resourceId}/interactions`,
+  learningState: (resourceId: number) => `/resources/${resourceId}/learning-state`
 } as const;
 
-export type ResourceType = "doc" | "mindmap" | "quiz" | "code" | "slide" | "animation";
+export type ResourceType = "doc" | "mindmap" | "quiz" | "code" | "slide" | "animation" | "video";
 export type ResourceDifficulty = "easy" | "medium" | "hard";
 export type ResourceGenerationAction = "new" | "alternative" | "refine";
 export type ResourceReviewStatus = "passed" | "low_evidence" | "pending" | "failed" | string;
@@ -26,6 +28,7 @@ export type GenerateResourcesRequest = {
   difficulty?: ResourceDifficulty;
   generation_action?: ResourceGenerationAction;
   source_resource_id?: number | null;
+  path_task_id?: number | null;
 };
 
 export type GeneratedResourceCitation = {
@@ -114,13 +117,29 @@ export type ResourceAnimationArtifact = {
   citation_refs: number[];
 };
 
+export type ResourceExternalVideoArtifact = {
+  kind: "external_video";
+  platform: "youtube" | "bilibili";
+  video_id: string;
+  title: string;
+  watch_url: string;
+  embed_url?: string;
+  summary?: string;
+  topic?: string;
+  fit_reason: string;
+  embed_status: "available" | "external_only" | string;
+  external_supplement: true;
+  citation_refs: [];
+};
+
 export type ResourceArtifact =
   | ResourceDocumentArtifact
   | ResourceMindmapArtifact
   | ResourceQuizArtifact
   | ResourceCodeArtifact
   | ResourceSlideArtifact
-  | ResourceAnimationArtifact;
+  | ResourceAnimationArtifact
+  | ResourceExternalVideoArtifact;
 
 export type GeneratedResourceContent = {
   schema_version?: 1 | 2 | 3;
@@ -200,6 +219,7 @@ export type GeneratedResourceContent = {
     generation_action?: ResourceGenerationAction;
     generation_batch_id?: string;
     source_resource_id?: number | null;
+    external_supplement?: boolean;
   };
   [key: string]: unknown;
 };
@@ -245,6 +265,20 @@ export type GenerateResourcesResult = {
   failed_resource_types: ResourceType[];
 };
 
+export type ResourceInteractionType = "opened" | "started" | "progress" | "completed" | "feedback";
+export type ResourceFeedback = "helpful" | "too_easy" | "too_hard" | "not_helpful";
+export type ResourceLearningState = {
+  resource_id: string;
+  path_task_id: string | null;
+  opened: boolean;
+  started: boolean;
+  completed: boolean;
+  progress_percent: number;
+  feedback: ResourceFeedback | null;
+  event_count: number;
+  updated_at: string | null;
+};
+
 export async function generateResources(payload: GenerateResourcesRequest) {
   const response = await apiClient.post<ApiEnvelope<GenerateResourcesResult>>(RESOURCE_ENDPOINTS.generate, payload);
   return response.data;
@@ -284,5 +318,24 @@ export async function createResourceExportJob(resourceId: number, format: "pptx"
 
 export async function listResourceExportJobs(resourceId: number) {
   const response = await apiClient.get<ApiEnvelope<Array<ExportJob<"pptx">>>>(RESOURCE_ENDPOINTS.exports(resourceId));
+  return response.data;
+}
+
+export async function recordResourceInteraction(
+  resourceId: number,
+  payload: {
+    event_id: string;
+    event_type: ResourceInteractionType;
+    path_task_id?: number | null;
+    progress_percent?: number | null;
+    feedback?: ResourceFeedback | null;
+  }
+) {
+  const response = await apiClient.post<ApiEnvelope<ResourceLearningState>>(RESOURCE_ENDPOINTS.interactions(resourceId), payload);
+  return response.data;
+}
+
+export async function getResourceLearningState(resourceId: number) {
+  const response = await apiClient.get<ApiEnvelope<ResourceLearningState>>(RESOURCE_ENDPOINTS.learningState(resourceId));
   return response.data;
 }

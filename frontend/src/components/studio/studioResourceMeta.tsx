@@ -16,7 +16,8 @@ export const resourceTypeMeta: Record<ResourceType, { label: string; Icon: Compo
   quiz: { label: "练习", Icon: ListChecks },
   code: { label: "代码实操", Icon: Code },
   slide: { label: "PPT", Icon: PresentationChart },
-  animation: { label: "动画图解", Icon: PlayCircle }
+  animation: { label: "动画图解", Icon: PlayCircle },
+  video: { label: "外部视频", Icon: PlayCircle }
 };
 
 export function isLowEvidenceResource(resource: GeneratedResource) {
@@ -29,6 +30,7 @@ export function generationModeLabel(resource: GeneratedResource) {
   if (isLowEvidenceResource(resource)) return "低依据";
   if (generationMode === "model_enhanced") return "模型增强";
   if (generationMode === "deterministic_source") return "本地可用稿";
+  if (generationMode === "curated_external") return "联网精选";
   if (resource.review_status === "failed") return "生成失败";
   if (resource.review_status === "passed") return "可使用";
   return "待审核";

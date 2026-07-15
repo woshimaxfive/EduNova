@@ -2591,3 +2591,10 @@ OpenRouter 不再作为可见预设。
 - `AgentTraceResponse.summary` 返回安全派生的耗时、课程/网页/历史来源数、个性化因素代码、推理模式、搜索后端、审核状态和安全摘要。
 
 完成事件只有在资源与路径任务同属当前用户和课程且已建立关联时才推进任务；视频进度或播放器结束不会自动写完成。
+
+## 24. Phase 28 合同收口
+
+- `GenerateResourcesRequest.resource_types` 的 OpenAPI 枚举正式包含 `video`；前端生成类型与后端 JSON 必须通过 `scripts/check_openapi.py` 的非破坏性比较。
+- `AssessmentReportContent.resource_usage_summary` 为按资源类型索引的明确结构，计数包含 `opened/started/completed/helpful/too_easy/too_hard/not_helpful`。
+- 打开、开始和完成按唯一资源计数；反馈只取每个资源最近一次值，因此用户切换反馈不会制造多份证据。
+- `external_video.embed_status` 使用 `unknown|available|unavailable`。后端发现合法 URL 后仍为 `unknown`，前端播放器加载结果只能更新本地展示，原平台链接始终保留。

@@ -148,3 +148,5 @@ Docling 只替换 PDF、DOCX、PPTX 的通用结构提取，仍输出 EduNova �
 - `external_video` 引用使用 `source_type=web`、`evidence_role=external_supplement` 与 `generation_mode=curated_external`。
 - 搜索摘要只证明“搜索服务返回了候选”，不能表示系统完整观看或验证了视频内容。
 - 外部视频、观看进度和反馈不得进入课程切片、客观评分、掌握度、弱点或长期画像可信证据；反馈只调整当前课程的资源模态策略。
+
+Phase 28 明确：资源反馈聚合不参与向量召回、RRF、Rerank、引用选择或课程相关性判断。它只作用于 RAG 之后的资源教学策略和路径学习包排序，因此 `helpful/not_helpful/too_hard/too_easy` 不能提高网页或视频成为课程证据的权重。

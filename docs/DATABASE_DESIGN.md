@@ -1026,3 +1026,5 @@ Phase 26 不新增迁移或通用事件表。`LearningNextActionService` 只读�
 - `resource_interactions`：追加式保存 `event_id`、用户、课程、资源、可选路径任务、事件类型、进度、反馈与时间。
 - `(user_id,event_id)` 唯一，保证客户端重试幂等；资源、课程与路径任务均通过外键和服务层用户隔离校验。
 - 不保存页面正文、音频、鼠标轨迹、搜索原文或画像原文。删除资源级联删除互动，删除路径任务只将关联置空。
+
+Phase 28 不新增迁移。报告的 `resource_usage_summary` 继续保存在既有 `assessment_reports.report_json`；它是生成报告时的课程级聚合快照。互动事实不改写历史行，最新反馈与唯一资源计数在读取时派生。`learning_bundle_json` 继续保存模型校验后的 2–4 类有序模态，非法模型输出不会进入数据库。

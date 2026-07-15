@@ -1,116 +1,109 @@
 # EduNova 开发报告
 
-更新时间：2026-07-10
+更新时间：2026-07-15（Phase 28）
 
-## 1. 项目概述
+## 1. 项目定位
 
-EduNova 是面向高校学生的 AI 个性化学习空间，对应第十五届中国软件杯 A3 赛题“基于大模型的个性化资源生成与学习多智能体系统开发”。
+EduNova 面向高校学生，围绕“上传资料建课—个性化学习—练习评估—持续调整”构建可运行的学生端闭环，对应第十五届中国软件杯 A3 赛题“基于大模型的个性化资源生成与学习多智能体系统开发”。
 
-第一版目标是跑通学生学习闭环：
+项目不把普通聊天、模型输出或技术栈数量当作成果。课程事实必须回到资料证据，个性化必须来自可信画像和课程学习状态，练习与报告的确定性数字不能由模型改写。
+
+## 2. 用户学习闭环
 
 ```text
-注册登录 -> 示例课程或上传资料 -> 课程 RAG 问答 -> 学习画像
--> 弱点追踪 -> 资源生成 -> 学习路径 -> 练习评估
--> 学习报告 -> Markdown/PDF/DOCX 学习档案导出
+自然语言构建八维画像
+  -> 上传 PDF/DOCX/PPTX/TXT/Markdown
+  -> 结构解析、目录确认、证据切片与建课
+  -> 课程问答与引用
+  -> 个性化学习路径和多模态学习包
+  -> 资源学习、轻量反馈与针对练习
+  -> 弱点、掌握度和路径回流
+  -> 学习报告与下一最佳行动
 ```
 
-## 2. 系统设计
+系统自动判断下一步，但上传、确认目录、生成课程/路径/资源/练习/报告以及完成任务都由用户主动触发，避免隐式费用和状态变化。
 
-EduNova 采用前后端分离和 Docker Compose 部署：
+## 3. 技术架构
 
-- 前端：React、TypeScript、Vite、React Router、React Query。
-- 后端：FastAPI、SQLAlchemy、Alembic、Pydantic。
-- 数据：PostgreSQL、pgvector、Redis、本地文件存储。
-- AI：OpenAI-compatible Chat Completions、SSE、OpenAI-compatible Embeddings、pgvector SQL 候选与关键词 fallback。
-- Agent 编排：LangGraph 学习闭环生产编排，Service 层作为 API 边界和依赖装配层。
-- 部署：backend、export-worker、frontend、postgres、redis、nginx 六服务。
+- 前端：React、TypeScript、Vite、React Router、React Query、Radix UI。
+- 后端：FastAPI、Pydantic、SQLAlchemy、Alembic。
+- 数据：PostgreSQL、pgvector、Redis；Local/S3-compatible 存储适配。
+- 异步：RQ、AIJobRuntime、独立 AI Worker 和导出 Worker。
+- AI：讯飞星火与 OpenAI-compatible Provider 适配、结构化输出、混合检索与可选重排序。
+- 编排：LangGraph 承载显式生产流程；LangChain 只使用消息裁剪和受控工具接口。
+- 文档：Docling 接管 PDF/DOCX/PPTX 通用结构提取，EduNova 保留目录确认、质量门禁、切片、页码和证据绑定。
+- 可观测：OpenTelemetry 承载通用 trace，Agent trace 只展示学生可理解的协作证据。
+- 部署：Docker Compose 运行前端、后端、Worker、PostgreSQL、Redis、代码验证与安全组件。
 
-核心设计原则：
+## 4. 多智能体与核心职责
 
-- 当前用户数据强隔离。
-- 课程资料和引用优先。
-- 确定性可用稿优先，模型增强可选。
-- Agent trace 只记录安全摘要。
-- 文档和实现同步演进。
+当前十条生产 Graph：
 
-## 3. 阶段成果
+1. `MaterialIngestionGraph`：结构规范化、目录候选和解析质量审核。
+2. `ProfileGraph`：画像语义提案、可信度审核和隐私门禁。
+3. `CourseBuilderGraph`：课程结构、知识点、证据绑定和建课审核。
+4. `HomeTutorGraph`：上下文、联网工具、回答与 Review/Repair。
+5. `CourseTutorGraph`：课程证据优先的问答和课程边界审核。
+6. `ResourceGenerationGraph`：资源意图、并行生成、真实性和差异性审核。
+7. `PathPlanningGraph`：弱点、掌握度、资源反馈和任务学习包规划。
+8. `AssessmentGraph`：证据型题目、客观判分和简答模型评分。
+9. `ReportGraph`：锁定确定性统计后增强解释和建议。
+10. `MaterialComparisonGraph`：资料概念归并、差异对比和引用审核。
 
-| 阶段 | 成果 |
-| --- | --- |
-| Phase 0-2 | 项目文档、工程骨架、数据库迁移、核心表和内置课程包 |
-| Phase 3 | 学生端主页、资料库、课程空间和核心页面 |
-| Phase 4 | 注册登录、首页 summary、主页会话和真实资料库 |
-| Phase 5 | TXT/Markdown 规则建课、课程 RAG 检索和课程会话引用 |
-| Phase 6 | 模型配置、流式课程回答、embedding 和课程空间双模式 |
-| Phase 7 | 用户级画像、画像事件、课程级弱点队列和状态流转 |
-| Phase 8/13 增强 | Agent trace、六类结构化资源、并行 Worker、交互渲染和真实 PPTX |
-| Phase 9 | 课程级学习路径、规则掌握度图和复习时间 |
-| Phase 10 | 练习生成、确定性批改、弱点反哺和学习报告 |
-| Phase 11 | 期末冲刺计划和资料对比第一刀 |
-| Phase 12.1 | Markdown 学习档案导出 |
-| Phase 12.2 | 交付基线、开源准备和验收证据 |
-| Phase 13.1 | 全学习闭环 LangGraph 生产编排、学习产物 trace 字段和前端轨迹入口 |
-| Phase 13.2 | PDF/DOCX/PPTX 资料解析、主页联网/深思/浏览器语音、Markdown/PDF/DOCX 异步导出 |
-| Phase 14 | PathPlanningGraph、AssessmentGraph、ReportGraph，错题证据、路径回流、报告趋势、课程 pgvector SQL 和隔离 E2E |
+认证、设置、Dashboard、下一行动和学习档案导出不因“展示多智能体”被强行包装成 Graph。学习档案导出保持确定性 Service + RQ Worker。
 
-## 4. 核心创新
+## 5. 个性化与多模态
 
-### 4.1 课程证据驱动
+### 5.1 可信学习上下文
 
-课程问答、资源、路径、练习和报告都尽量引用当前用户课程资料、知识点、章节和安全摘录。资料不足时不编造结论。
+`CourseLearnerContext` 统一读取专业背景、基础、目标、认知风格、学习偏好、节奏、兴趣、掌握度、确认弱点和课程级资源反馈。低可信或候选画像不得直接驱动资源和路径。
 
-### 4.2 用户级画像 + 课程级状态
+个性化可改变讲解深度、案例领域、资源模态、任务顺序和难度，但不能改变课程事实、引用、客观答案和确定性统计。
 
-用户级画像只保留一份，课程差异通过课程学习状态表达，包括弱点、掌握度、复习队列、路径和资源推荐。
+### 5.2 资源与学习包
 
-### 4.3 模型无关可用资源
+EduNova 自主生成六类结构化资源：文档、思维导图、练习、代码实操、PPT 和动画。外部视频是第七类联网精选补充，不是 AI 生成 MP4。
 
-资源生成不依赖强模型。系统先构造确定性可用稿，再让模型做可选增强；模型失败时仍保留可读、可练、可复用的资源。
+每个路径任务保存 2–4 类有序学习包。模型只能从七类合法类型和当前用户真实资源中选择；非法或不可用时回退 `doc + mindmap + quiz`。用户反馈按唯一资源和最新反馈聚合：完成/有帮助提高优先级，两份独立资源“没帮助”才降低模态，偏难增加脚手架，偏简单提高应用或分析层级，任何模态都不会永久屏蔽。
 
-### 4.4 LangGraph 可观测编排
+### 5.3 视频边界
 
-当前六条生产主链路由真实 LangGraph runner 接管：主页问答、课程问答、资源生成、路径、练习评估和报告。画像、资料建课/对比、冲刺和导出仍保留服务逻辑与兼容 trace。前端通过共享披露组件展示真实节点轨迹；trace 不记录系统提示词、完整模型输入、API Key、完整资料原文或完整用户画像原文。
+视频只通过现有 `WebSearchService` 发现 B 站和 YouTube URL，后端校验域名、协议和视频 ID，前端只从平台与 ID 构造安全 iframe。播放状态使用 `unknown/available/unavailable`；原平台链接始终提供。视频不下载、不转存、不冒充教材证据，也不参与评分、掌握度或画像可信证据。
 
-### 4.5 练习和报告反哺
+## 6. 防幻觉、安全和隐私
 
-练习结果会精确绑定到作答证据，更新课程级弱点与掌握度，并用独立路径 Graph 重排已有路径；报告确定性聚合最近 5 次练习、趋势和证据，模型只增强解释。
+- 课程回答、资源、题目和报告引用当前用户课程证据；网页只标记“外部补充”。
+- Pydantic Schema、引用白名单、数值锁定、Review/Repair 和确定性 fallback 共同约束模型输出。
+- 个人模型 Key 加密保存，日志与 trace 不记录 Prompt、回答原文、资料原文、完整画像、JWT 和密钥。
+- 跨会话记忆只保存当前用户的脱敏摘要、消息引用、向量和模型指纹，可关闭和清除派生索引。
+- 代码资源在无网络、非 root、只读文件系统和资源限制下验证。
+- 外部搜索只发送必要问题或知识点和最小化学习摘要。
 
-## 5. 当前能力
+## 7. 非功能实现
 
-当前已具备：
+- SSE 流式回答和标准分包解析，回答过程无长时间白屏。
+- AIJob 记录排队、执行、进度、完成、失败、取消和刷新恢复。
+- OpenAPI 生成前端传输类型；非破坏性漂移检查在临时目录比较，不修改工作区。
+- 桌面和 390px 响应式工作台，支持键盘焦点、抽屉、Toast、Markdown 和结构化内容卡片。
+- 浏览器 Web Speech API 提供语音输入与朗读；不支持时明确降级，识别文本不自动发送。
+- 本地、Docker、编码、迁移、供应链和真实浏览器分层验收。
 
-- 真实用户认证和受保护路由。
-- 注册时选择示例课程。
-- 资料上传、列表和 TXT/Markdown/PDF/DOCX/PPTX 建课。
-- 课程 RAG 问答、SSE 流式回答和引用持久化。
-- 8 维学习画像和画像事件。
-- 课程级弱点队列和状态流转。
-- 六类结构化课程资源生成与审核。
-- 学习路径和掌握度图。
-- 练习评估和学习报告。
-- 期末冲刺计划。
-- 同课程资料对比。
-- Markdown/PDF/DOCX 学习档案异步导出，旧 Markdown 同步接口保留兼容。
-- 学习闭环 LangGraph 生产编排和安全 trace 查询。
-- Docker Compose 一键启动。
+## 8. 需求与证据口径
 
-## 6. 当前限制
+项目使用三组可复现场景验证专业、基础、偏好和资源反馈如何改变学习方案，但不把这些案例写成真实问卷、访谈或学习效果数据。逐句赛题状态见 `docs/CONTEST_REQUIREMENT_MATRIX.md`。
 
-当前没有实现：
+`python -m backend.evals.contest_readiness` 生成隐私安全聚合结果：引用合法率、客观数字一致率、敏感信息泄漏和真实性能指标。未测到的首 Token、RAG 或资源批次耗时保持 `not_measured`，不以离线结果代替。
 
-- OCR 和图片题目识别。
-- 旧版 DOC/PPT 和扫描件解析。
-- 异步资源任务队列。
-- 资料对比结果持久化和期末冲刺联动。
-- Profile、CourseBuilder、MaterialComparison、ExamSprint 和 ExportDossier 的真实 Graph 接管。
-- 完整教师端、家长端、支付和移动端 App。
+## 9. 开源与 AI Coding
 
-## 7. 后续计划
+第三方固定版本、来源、声明许可证和用途由 `scripts/generate_dependency_licenses.py` 生成。Docling、Radix、SSE、OpenAPI、OpenAI SDK、OpenTelemetry 等只替换通用基础设施，学习闭环和证据规则继续由 EduNova 维护。
 
-Phase 14 后进入 Verification and Hardening / 产品打磨：
+开发过程中实际使用 OpenAI Codex 辅助仓库审计、实现、测试和文档同步；人工控制范围、产品语义、真实密钥、提交和验收。运行时可使用讯飞星火与讯飞 Embedding。赛题“其他 AI 辅助工具需选用科大讯飞相关工具”的适用范围在主办方确认前保持显式风险，不通过删除记录规避。
 
-- 扩展隔离 Docker E2E 的失败分支和六 Graph 跨页面覆盖。
-- 汇总并修复 Phase 12.2 验收发现的问题。
-- 打磨资源质量、路径排序、练习题质量和报告表达。
-- 优化移动端和交互细节。
-- 打磨导出版式、Graph 轨迹视觉和浏览器验收证据。
+## 10. 当前限制
+
+- 不支持图片视觉问答、OCR、扫描件和旧版 DOC/PPT 解析。
+- 不生成或托管 AI 视频文件，外部视频受平台可用性和嵌入策略影响。
+- 没有教师端、家长端、支付、运营后台或原生移动 App。
+- 场景案例不能证明真实学生学习效果提升；真实调研若成为硬性要求需另行开展。
+- PPT、7分钟演示视频和提交压缩包属于封盘后的交付阶段，本 Phase 未开始制作。

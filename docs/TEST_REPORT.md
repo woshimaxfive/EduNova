@@ -94,4 +94,17 @@ Phase 12.2 主流程：
 - 资料对比结果与期末冲刺联动。
 - 剩余 Profile/CourseBuilder/MaterialComparison/ExamSprint/ExportDossier Graph 生产接管。
 
-这些限制不阻塞当前 Phase 14。错题证据、已有路径重排、报告趋势、课程 pgvector SQL 候选和隔离 Docker E2E 已进入自动化验证范围。
+这些条目是 Phase 14 的历史限制，不再代表当前实现；当前状态以 `STATUS.md` 和下述 Phase 28 记录为准。
+
+## 7. Phase 28 赛题合规与真实证据收口
+
+2026-07-15 实际结果：
+
+- `scripts/test.ps1`：后端 393 项、前端 233 项、离线 AI 评测 10 项通过；编码、Ruff、Alembic `20260715_0025`、OpenAPI 漂移、lint、build 和 Compose 均通过。
+- 隔离 Docker E2E：八服务健康，pgvector 与代码执行隔离通过，Playwright 2 项通过，临时容器和卷已清理。
+- 真实调用：19 次模型加 1 次搜索；发现 1 条合格 YouTube 视频。SSE 首状态 44.2ms、首 Token 5269ms、AIJob 创建 38.2ms、进度 1053.6ms、三类资源批次 85837.3ms；`contest_readiness --require-live` 通过。
+- 供应链：仅运行一次；Python、pnpm/npm 审计无已知漏洞，Trivy 漏洞、密钥和 Dockerfile 配置均为 0 命中。Trivy 未从容器外 Python 环境自动解析许可证，直接依赖许可证由项目脚本独立生成并纳入文档。
+- 浏览器：`agent-browser` 验证桌面和 390px 的学习包、真实外部视频 iframe、原平台链接、报告资源使用概览，均无水平溢出。
+- 隐私清理：两个临时账号及级联课程、资源、互动和报告数据已删除，仓库只保留聚合指标。
+
+未通过夸大口径消除的风险：同步路径生成实测约 53–62 秒并出现一次 nginx 60 秒 504；画像对照虽出现模态/顺序差异，但一组使用确定性回退，模型稳定达到两项差异的实证仍不足。

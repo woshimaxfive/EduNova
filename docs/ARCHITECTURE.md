@@ -705,3 +705,11 @@ flowchart LR
 - `resource_interactions` 是课程级轻量行为事实，不是通用埋点平台；它不保存正文、音频、鼠标轨迹或隐私原文。
 - 浏览器 Web Speech 只作为渐进增强。语音识别只回填输入框，不自动发送；朗读前清理 Markdown、URL、引用标号和代码块。
 - 学生可见“协作过程”来自白名单 Agent trace，禁止展示 Provider 原始思维链、系统提示词、完整模型输入、画像原文和资料原文。
+
+## 21. Phase 28 反馈决策与合同门禁
+
+`resource_interactions` 保持追加式事实表，但下游通过 `aggregate_resource_interactions` 派生“每个资源一次状态 + 最新反馈”，避免切换反馈导致重复累计。`PathPlanningGraph` 在既有一次模型调用中输出每项任务的 2–4 个 `bundle_types`；规则限制合法类型、数量、真实资源和权限。模型失败使用 `doc + mindmap + quiz`，再按课程级反馈稳定排序。
+
+反馈只改变当前课程内的模态优先级和教学策略：`too_hard` 使用基础脚手架，`too_easy` 提高应用/分析层级，至少两份独立资源 `not_helpful` 才触发替代策略。任何模态都保留为候选，不形成长期画像或教材证据。
+
+OpenAPI 漂移检查在临时目录生成 JSON/TypeScript 后与跟踪文件比较，不先改工作区。该门禁因此可以在存在无关未提交改动时仍准确判断合同是否漂移。

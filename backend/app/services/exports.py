@@ -238,7 +238,11 @@ class ExportService:
         resources = self.repository.list_generated_resources(user.id, course.id)
         answers = self.repository.list_practice_answers(user.id, course.id)
         report = self.repository.get_latest_report(user.id, course.id)
-        report_body = report.report_json if report is not None else empty_report(course.id).report
+        report_body = (
+            report.report_json
+            if report is not None
+            else empty_report(course.id).report.model_dump(mode="json")
+        )
         agent_trace_id = make_trace_id()
 
         source_summary = LearningDossierSourceSummary(

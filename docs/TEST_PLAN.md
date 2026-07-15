@@ -1002,3 +1002,13 @@ docker compose down
 - 阶段完成前运行后端全量、前端 lint/test/build、OpenAPI 幂等、Alembic、编码、Compose，并只执行一次 Docker E2E 与桌面/390px 浏览器验收。
 
 2026-07-15 Phase 27 实际验收：`scripts/test.ps1` 通过后端 387 项、前端 231 项和离线 AI 评测 10 项，同时通过编码、Ruff、Alembic head、OpenAPI、lint、build 与 Compose。Docker 29.6.1 隔离 E2E 通过 pgvector、代码执行隔离和 2 条 Playwright 学习闭环用例，并自动删除临时容器与卷。`agent-browser` 单一会话验证空白账号和内置课程账号：1440px/390px 主页与课程空间均无水平溢出；无语音识别能力时显示键盘降级；真实课程回答可见来源、为什么这样回答、真实协作轨迹，以及朗读暂停、停止和语速控制。外部视频 URL、恶意地址、幂等互动和路径手动完成由自动化测试覆盖；未把无真实搜索结果的情况记录成视频浏览器验收成功。
+
+## Phase 28 赛题就绪评测
+
+- `python -m backend.evals.contest_readiness` 输出到被忽略的 `output/contest-readiness`，固定检查引用合法率、客观数字一致率和敏感信息/提示词泄漏命中数。
+- 性能样本通过 `--measurements` 传入毫秒数组；缺少真实样本时写 `not_measured`，设置 `--require-live` 后证据不全或超阈值都会失败。
+- 目标：非 AI API P95 < 2 秒、RAG P95 < 3 秒、SSE 首状态 < 2 秒、真实模型首 Token < 15 秒、AIJob 创建 < 2 秒、3 秒内可见进度、三类资源批次 < 180 秒。
+- 两组“二叉树遍历”画像至少在讲解角度、难度、模态或顺序中的两项不同；低可信画像不得驱动差异。
+- 最终阶段只运行一次完整门禁、一次 Docker E2E、一次供应链门禁和一次 agent-browser 桌面/390px验收；真实模型与搜索调用总量不超过 20 次，只保存聚合指标。
+
+2026-07-15 Phase 28 实际验收：`scripts/test.ps1` 通过后端 393 项、前端 233 项和离线 AI 评测 10 项，同时通过编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、build 与 Compose。隔离 Docker E2E 通过八服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例。真实调用共 19 次模型和 1 次搜索；`contest_readiness --require-live` 的引用、数字、泄漏与全部规定性能阈值通过。供应链脚本仅运行一次，依赖与 Trivy 漏洞、密钥及 Dockerfile 配置均为 0 命中。`agent-browser` 在桌面和 390px 验证路径学习包、YouTube 安全 iframe、始终可见的原平台链接、报告资源聚合和无水平溢出。临时账号及数据已清理。同步路径规划 53–62 秒及一次 nginx 504、画像对照中一组模型回退，作为未解决风险保留。

@@ -428,3 +428,9 @@ AI Worker 默认从 PyTorch 官方 CPU index 安装固定 `torch`/`torchvision` 
 ## 12. Phase 26 部署影响
 
 Phase 26 只新增 backend JSON 路由和 frontend 静态代码，不新增环境变量、镜像依赖、Worker 队列、数据卷或 Alembic 迁移。滚动更新 backend 与 frontend/nginx 即可；旧客户端和 `DashboardSummary.empty_state.action_label` 保持兼容。发布后可用已登录账号请求 `/api/v1/learning/next-action` 验证用户隔离与响应 Schema。
+
+## 13. Phase 28 部署与性能注意事项
+
+Phase 28 不新增服务、端口、环境变量或数据库迁移。OpenAPI 检查在临时目录生成并比较，供应链门禁独立生成直接依赖来源、版本、许可证和用途清单。
+
+真实验收发现同步路径规划可能需要 53–62 秒，并在默认 nginx 请求窗口出现过一次 504。发布环境不得简单提高代理超时后宣称问题消失；在路径规划迁移到既有 AIJob/RQ 可恢复异步链路前，应明确前端等待/失败提示、代理超时和重试的幂等边界。SSE、AIJob、RAG 和三类资源批次的 Phase 28 指标单独达标，不能用来替代路径规划长尾风险。

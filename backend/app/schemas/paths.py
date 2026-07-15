@@ -32,6 +32,7 @@ class LearningBundleItem(BaseModel):
     role: str
     resource_id: str | None = None
     status: str = "recommended"
+    learning_status: Literal["not_started", "in_progress", "completed"] = "not_started"
 
 
 class LearningBundle(BaseModel):
@@ -42,6 +43,8 @@ class LearningBundle(BaseModel):
     generation_mode: str = "legacy"
     rationale: str = ""
     items: list[LearningBundleItem] = Field(default_factory=list)
+    ready_count: int = 0
+    completed_count: int = 0
 
 
 class LearningPathTaskResponse(BaseModel):
@@ -125,20 +128,30 @@ def path_to_api(
     )
 
 
-def task_to_api(task: LearningTask, resources_by_id: dict[int, GeneratedResource]) -> LearningPathTaskResponse:
+def task_to_api(
+    task: LearningTask,
+    resources_by_id: dict[int, GeneratedResource],
+    learning_states: dict[int, Literal["not_started", "in_progress", "completed"]] | None = None,
+) -> LearningPathTaskResponse:
     resource_ids = [int(item) for item in (task.recommended_resource_ids or []) if str(item).isdigit()]
     raw_bundle = task.learning_bundle_json or {}
+    states = learning_states or {}
     bundle_items = []
     for item in raw_bundle.get("items", []) if isinstance(raw_bundle.get("items"), list) else []:
         if not isinstance(item, dict):
             continue
-        resource_id = item.get("resource_id")
+        raw_resource_id = item.get("resource_id")
+        resource = resources_by_id.get(int(raw_resource_id)) if str(raw_resource_id).isdigit() else None
+        resource_id = resource.id if resource is not None and resource.status == "completed" else None
         bundle_items.append(LearningBundleItem(
             resource_type=str(item.get("resource_type") or "doc"),
             role=str(item.get("role") or "辅助当前学习目标"),
             resource_id=str(resource_id) if resource_id is not None else None,
             status=str(item.get("status") or ("available" if resource_id is not None else "recommended")),
+            learning_status=states.get(int(resource_id), "not_started") if str(resource_id).isdigit() else "not_started",
         ))
+    ready_count = sum(1 for item in bundle_items if item.resource_id is not None)
+    completed_count = sum(1 for item in bundle_items if item.learning_status == "completed")
     return LearningPathTaskResponse(
         id=str(task.id),
         path_id=str(task.path_id),
@@ -163,6 +176,8 @@ def task_to_api(task: LearningTask, resources_by_id: dict[int, GeneratedResource
             generation_mode=str(raw_bundle.get("generation_mode") or "legacy"),
             rationale=str(raw_bundle.get("rationale") or ""),
             items=bundle_items,
+            ready_count=ready_count,
+            completed_count=completed_count,
         ),
         status=task.status,
         created_at=iso_timestamp(task.created_at) or "",

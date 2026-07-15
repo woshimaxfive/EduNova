@@ -67,6 +67,21 @@ def create_path_generation_job(
     return api_response(result.model_dump(mode="json"))
 
 
+@router.post("/tasks/{task_id}/resource-jobs", status_code=202)
+def create_path_task_resource_job(
+    task_id: int,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    current_user: User = Depends(get_current_user),
+    service: AiJobService = Depends(get_ai_job_service),
+) -> dict:
+    result = service.create_path_task_resource_job(
+        current_user,
+        task_id=task_id,
+        idempotency_key=idempotency_key,
+    )
+    return api_response(result.model_dump(mode="json"))
+
+
 @router.get("/current")
 def get_current_path(
     course_id: int = Query(...),

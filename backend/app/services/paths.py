@@ -14,6 +14,7 @@ from backend.app.models import (
     KnowledgePoint,
     LearningPath,
     LearningTask,
+    ResourceInteraction,
     StudentProfile,
     User,
     WeaknessReviewItem,
@@ -63,6 +64,8 @@ class PathRepository(Protocol):
     def add_task(self, task: LearningTask) -> LearningTask: ...
 
     def get_task_for_user(self, user_id: int, task_id: int) -> LearningTask | None: ...
+
+    def list_resource_interactions_for_path(self, user_id: int, path_id: int) -> list[ResourceInteraction]: ...
 
     def commit(self) -> None: ...
 
@@ -141,6 +144,19 @@ class SqlAlchemyPathRepository:
 
     def get_task_for_user(self, user_id: int, task_id: int) -> LearningTask | None:
         return self.db.scalar(select(LearningTask).where(LearningTask.id == task_id, LearningTask.user_id == user_id))
+
+    def list_resource_interactions_for_path(self, user_id: int, path_id: int) -> list[ResourceInteraction]:
+        return list(
+            self.db.scalars(
+                select(ResourceInteraction)
+                .join(LearningTask, LearningTask.id == ResourceInteraction.path_task_id)
+                .where(
+                    ResourceInteraction.user_id == user_id,
+                    LearningTask.path_id == path_id,
+                )
+                .order_by(ResourceInteraction.created_at, ResourceInteraction.id)
+            )
+        )
 
     def commit(self) -> None:
         self.db.commit()
@@ -246,7 +262,8 @@ class PathService:
         except Exception:
             self.repository.rollback()
             raise
-        return task_to_api(task, resources_by_id)
+        learning_states = self._learning_states(user.id, task.path_id).get(task.id, {})
+        return task_to_api(task, resources_by_id, learning_states)
 
     def _require_course(self, user: User, course_id: int) -> Course:
         course = self.repository.get_course_for_user(user.id, course_id)
@@ -314,6 +331,7 @@ class PathService:
         weakness_items: list[WeaknessReviewItem],
     ) -> LearningPathDetail:
         resources_by_id = {resource.id: resource for resource in resources}
+        learning_states = self._learning_states(user.id, path.id)
         trigger = str((path.plan_json or {}).get("trigger") or "manual")
         return LearningPathDetail(
             course_id=str(course.id),
@@ -325,9 +343,26 @@ class PathService:
             ),
             agent_trace_id=getattr(path, "agent_trace_id", None),
             path=path_to_api(path, self._path_freshness(user.id, path)),
-            tasks=[task_to_api(task, resources_by_id) for task in tasks],
+            tasks=[task_to_api(task, resources_by_id, learning_states.get(task.id, {})) for task in tasks],
             evidence_summary=self._build_evidence(knowledge_points, weakness_items, resources),
         )
+
+    def _learning_states(self, user_id: int, path_id: int) -> dict[int, dict[int, str]]:
+        loader = getattr(self.repository, "list_resource_interactions_for_path", None)
+        if not callable(loader):
+            return {}
+        states: dict[int, dict[int, str]] = {}
+        for interaction in loader(user_id, path_id):
+            if interaction.path_task_id is None:
+                continue
+            task_states = states.setdefault(int(interaction.path_task_id), {})
+            resource_id = int(interaction.resource_id)
+            current = task_states.get(resource_id, "not_started")
+            if interaction.event_type == "completed":
+                task_states[resource_id] = "completed"
+            elif current != "completed" and interaction.event_type in {"opened", "started", "progress"}:
+                task_states[resource_id] = "in_progress"
+        return states
 
     def _path_freshness(
         self,

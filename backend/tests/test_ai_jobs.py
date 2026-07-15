@@ -6,11 +6,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from backend.app.core.config import Settings
-from backend.app.models import AiJob, Course, GeneratedResource, KnowledgePoint, Material, User
+from backend.app.models import AiJob, Course, GeneratedResource, KnowledgePoint, LearningPath, LearningTask, Material, User
 from backend.app.services.ai_jobs import (
     AiJobConflictError,
     AiJobNotFoundError,
     AiJobService,
+    AiJobValidationError,
 )
 
 
@@ -47,6 +48,8 @@ class FakeRepository:
     courses: list[Course] = field(default_factory=list)
     points: list[KnowledgePoint] = field(default_factory=list)
     resources: list[GeneratedResource] = field(default_factory=list)
+    paths: list[LearningPath] = field(default_factory=list)
+    tasks: list[LearningTask] = field(default_factory=list)
     jobs: list[AiJob] = field(default_factory=list)
     next_id: int = 1
 
@@ -88,6 +91,29 @@ class FakeRepository:
             None,
         )
 
+    def get_active_resource_job_for_path_task(self, user_id: int, path_task_id: int) -> AiJob | None:
+        return next(
+            (
+                item
+                for item in reversed(self.jobs)
+                if item.user_id == user_id
+                and item.workflow == "resource_generation"
+                and item.status in {"queued", "running", "cancelling"}
+                and int((item.request_json or {}).get("path_task_id") or 0) == path_task_id
+            ),
+            None,
+        )
+
+    def get_active_learning_path(self, user_id: int, course_id: int) -> LearningPath | None:
+        return next(
+            (
+                item
+                for item in reversed(self.paths)
+                if item.user_id == user_id and item.course_id == course_id and item.status == "active"
+            ),
+            None,
+        )
+
     def get_materials_for_user(self, user_id: int, ids: list[int]) -> list[Material]:
         return [item for item in self.materials if item.user_id == user_id and item.id in ids]
 
@@ -96,6 +122,9 @@ class FakeRepository:
 
     def get_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None:
         return next((item for item in self.resources if item.user_id == user_id and item.id == resource_id), None)
+
+    def get_learning_task_for_user(self, user_id: int, task_id: int) -> LearningTask | None:
+        return next((item for item in self.tasks if item.user_id == user_id and item.id == task_id), None)
 
     def add(self, job: AiJob) -> AiJob:
         job.id = self.next_id
@@ -137,6 +166,41 @@ def make_material(material_id: int = 11, *, user_id: int = 1, status: str = "com
 
 def make_course(course_id: int = 21, *, owner_id: int = 1) -> Course:
     return Course(id=course_id, owner_id=owner_id, title="人工智能", source_type="uploaded", visibility="private", status="ready")
+
+
+def make_path(path_id: int = 51, *, user_id: int = 1, course_id: int = 21, status: str = "active") -> LearningPath:
+    return LearningPath(id=path_id, user_id=user_id, course_id=course_id, title="学习路径", status=status, plan_json={})
+
+
+def make_task(
+    task_id: int = 61,
+    *,
+    user_id: int = 1,
+    course_id: int = 21,
+    path_id: int = 51,
+    status: str = "doing",
+    items: list[dict] | None = None,
+) -> LearningTask:
+    return LearningTask(
+        id=task_id,
+        path_id=path_id,
+        user_id=user_id,
+        course_id=course_id,
+        knowledge_point_id=None,
+        title="学习二叉树遍历",
+        task_type="learn",
+        reason="完成本节学习",
+        recommended_resource_ids=[],
+        learning_bundle_json={
+            "difficulty": "easy",
+            "rationale": "先图解再练习",
+            "items": items or [
+                {"resource_type": "doc", "resource_id": None, "status": "recommended"},
+                {"resource_type": "quiz", "resource_id": None, "status": "recommended"},
+            ],
+        },
+        status=status,
+    )
 
 
 def make_service(repository: FakeRepository, queue: FakeQueue | None = None, *, maximum: int = 2) -> AiJobService:
@@ -184,6 +248,67 @@ def test_path_job_reuses_active_course_job_and_rejects_cross_user_course() -> No
 
     with pytest.raises(AiJobNotFoundError, match="课程"):
         service.create_path_planning_job(make_user(2), course_id=21, idempotency_key="other-user")
+
+
+def test_path_task_resource_job_uses_only_missing_bundle_types_and_reuses_active_job() -> None:
+    user = make_user()
+    ready = GeneratedResource(
+        id=71,
+        user_id=1,
+        course_id=21,
+        resource_type="doc",
+        title="二叉树讲解",
+        content_json={},
+        citation_json=[],
+        status="completed",
+    )
+    task = make_task(items=[
+        {"resource_type": "doc", "resource_id": 71, "status": "ready"},
+        {"resource_type": "quiz", "resource_id": None, "status": "recommended"},
+        {"resource_type": "video", "resource_id": None, "status": "recommended"},
+    ])
+    repository = FakeRepository(
+        users=[user], courses=[make_course()], paths=[make_path()], tasks=[task], resources=[ready]
+    )
+    queue = FakeQueue()
+    service = make_service(repository, queue)
+
+    first = service.create_path_task_resource_job(user, task_id=task.id, idempotency_key="bundle-one")
+    second = service.create_path_task_resource_job(user, task_id=task.id, idempotency_key="bundle-two")
+
+    assert first.job_id == second.job_id
+    assert first.request["resource_types"] == ["quiz", "video"]
+    assert first.request["path_task_id"] == task.id
+    assert first.request["difficulty"] == "easy"
+    assert queue.enqueued == [1]
+
+
+def test_path_task_resource_job_rejects_archived_completed_empty_and_ready_bundles() -> None:
+    user = make_user()
+    service = make_service(FakeRepository(users=[user], courses=[make_course()], paths=[make_path(status="archived")], tasks=[make_task()]), FakeQueue())
+    with pytest.raises(AiJobConflictError, match="当前有效"):
+        service.create_path_task_resource_job(user, task_id=61, idempotency_key="archived")
+
+    completed = make_task(status="completed")
+    repository = FakeRepository(users=[user], courses=[make_course()], paths=[make_path()], tasks=[completed])
+    with pytest.raises(AiJobConflictError, match="已经完成"):
+        make_service(repository, FakeQueue()).create_path_task_resource_job(user, task_id=61, idempotency_key="completed")
+
+    empty = make_task(items=[])
+    empty.learning_bundle_json = {"items": []}
+    repository = FakeRepository(users=[user], courses=[make_course()], paths=[make_path()], tasks=[empty])
+    with pytest.raises(AiJobValidationError, match="没有可生成"):
+        make_service(repository, FakeQueue()).create_path_task_resource_job(user, task_id=61, idempotency_key="empty")
+
+    ready_resource = GeneratedResource(
+        id=72, user_id=1, course_id=21, resource_type="doc", title="已就绪", content_json={}, citation_json=[], status="completed"
+    )
+    ready_task = make_task(items=[{"resource_type": "doc", "resource_id": 72, "status": "ready"}])
+    repository = FakeRepository(
+        users=[user], courses=[make_course()], paths=[make_path()], tasks=[ready_task], resources=[ready_resource]
+    )
+    with pytest.raises(AiJobConflictError, match="全部就绪"):
+        make_service(repository, FakeQueue()).create_path_task_resource_job(user, task_id=61, idempotency_key="ready")
 
 
 def test_invalid_material_and_resource_ownership_are_rejected() -> None:

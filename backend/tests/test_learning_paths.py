@@ -20,6 +20,7 @@ from backend.app.models import (
     KnowledgePoint,
     LearningPath,
     LearningTask,
+    ResourceInteraction,
     StudentProfile,
     User,
     WeaknessReviewItem,
@@ -58,6 +59,7 @@ class FakePathRepository:
     resources: list[GeneratedResource] = field(default_factory=list)
     paths: list[LearningPath] = field(default_factory=list)
     tasks: list[LearningTask] = field(default_factory=list)
+    interactions: list[ResourceInteraction] = field(default_factory=list)
     next_path_id: int = 901
     next_task_id: int = 1001
 
@@ -120,6 +122,13 @@ class FakePathRepository:
 
     def get_task_for_user(self, user_id: int, task_id: int) -> LearningTask | None:
         return next((task for task in self.tasks if task.user_id == user_id and task.id == task_id), None)
+
+    def list_resource_interactions_for_path(self, user_id: int, path_id: int) -> list[ResourceInteraction]:
+        task_ids = {task.id for task in self.tasks if task.path_id == path_id and task.user_id == user_id}
+        return [
+            item for item in self.interactions
+            if item.user_id == user_id and item.path_task_id in task_ids
+        ]
 
     def commit(self) -> None:
         return None
@@ -338,6 +347,85 @@ def test_get_current_path_returns_empty_state_and_scopes_course() -> None:
 
     with pytest.raises(PathNotFoundError):
         service.get_current_path(make_user(1), 202)
+
+
+def test_learning_bundle_status_comes_from_scoped_resource_interactions() -> None:
+    repo = make_repo()
+    service = PathService(repo)
+    generated = as_dict(service.generate_path(make_user(), course_id=101))
+    task = repo.tasks[0]
+    task.learning_bundle_json = {
+        **task.learning_bundle_json,
+        "items": [
+            {"resource_type": "doc", "resource_id": 802, "status": "ready"},
+            {"resource_type": "mindmap", "resource_id": 801, "status": "ready"},
+            {"resource_type": "quiz", "status": "missing"},
+        ],
+    }
+    repo.interactions.extend(
+        [
+            ResourceInteraction(
+                id=1101,
+                event_id="opened-doc",
+                user_id=1,
+                course_id=101,
+                resource_id=802,
+                path_task_id=task.id,
+                event_type="opened",
+                progress_percent=None,
+                feedback=None,
+                created_at=NOW,
+            ),
+            ResourceInteraction(
+                id=1102,
+                event_id="completed-doc",
+                user_id=1,
+                course_id=101,
+                resource_id=802,
+                path_task_id=task.id,
+                event_type="completed",
+                progress_percent=100,
+                feedback=None,
+                created_at=NOW,
+            ),
+            ResourceInteraction(
+                id=1103,
+                event_id="started-mindmap",
+                user_id=1,
+                course_id=101,
+                resource_id=801,
+                path_task_id=task.id,
+                event_type="started",
+                progress_percent=10,
+                feedback=None,
+                created_at=NOW,
+            ),
+            ResourceInteraction(
+                id=1104,
+                event_id="other-user-completed",
+                user_id=2,
+                course_id=101,
+                resource_id=801,
+                path_task_id=task.id,
+                event_type="completed",
+                progress_percent=100,
+                feedback=None,
+                created_at=NOW,
+            ),
+        ]
+    )
+
+    current = as_dict(service.get_current_path(make_user(), 101))
+    bundle = current["tasks"][0]["learning_bundle"]
+
+    assert generated["tasks"][0]["learning_bundle"]["completed_count"] == 0
+    assert bundle["ready_count"] == 2
+    assert bundle["completed_count"] == 1
+    assert [item["learning_status"] for item in bundle["items"]] == [
+        "completed",
+        "in_progress",
+        "not_started",
+    ]
 
 
 def test_update_task_status_is_user_scoped_and_validated() -> None:

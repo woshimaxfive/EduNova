@@ -163,6 +163,18 @@ class SqlAlchemyAiJobRepository:
             .order_by(AiJob.updated_at.desc(), AiJob.id.desc())
         )
 
+    def get_active_resource_job_for_path_task(self, user_id: int, path_task_id: int) -> AiJob | None:
+        return self.db.scalar(
+            select(AiJob)
+            .where(
+                AiJob.user_id == user_id,
+                AiJob.workflow == "resource_generation",
+                AiJob.status.in_(ACTIVE_STATUSES),
+                AiJob.request_json["path_task_id"].as_integer() == path_task_id,
+            )
+            .order_by(AiJob.updated_at.desc(), AiJob.id.desc())
+        )
+
     def get_active_learning_path(self, user_id: int, course_id: int) -> LearningPath | None:
         return self.db.scalar(
             select(LearningPath)
@@ -193,6 +205,11 @@ class SqlAlchemyAiJobRepository:
                 GeneratedResource.id == resource_id,
                 GeneratedResource.user_id == user_id,
             )
+        )
+
+    def get_learning_task_for_user(self, user_id: int, task_id: int) -> LearningTask | None:
+        return self.db.scalar(
+            select(LearningTask).where(LearningTask.id == task_id, LearningTask.user_id == user_id)
         )
 
     def add(self, job: AiJob) -> AiJob:
@@ -384,9 +401,7 @@ class AiJobService:
         if difficulty not in {"easy", "medium", "hard"}:
             raise AiJobValidationError("不支持的资源难度。")
         if path_task_id is not None:
-            task = self.repository.db.scalar(
-                select(LearningTask).where(LearningTask.id == path_task_id, LearningTask.user_id == user.id)
-            )
+            task = self.repository.get_learning_task_for_user(user.id, path_task_id)
             if task is None or task.course_id != course_id:
                 raise AiJobNotFoundError("学习路径任务不存在或无权访问。")
         if generation_action not in {"new", "alternative", "refine"}:
@@ -429,6 +444,72 @@ class AiJobService:
                 "source_resource_id": source_resource_id,
                 "path_task_id": path_task_id,
             },
+            idempotency_key=idempotency_key,
+        )
+
+    def create_path_task_resource_job(
+        self,
+        user: User,
+        *,
+        task_id: int,
+        idempotency_key: str | None,
+    ) -> AiJobResponse:
+        task = self.repository.get_learning_task_for_user(user.id, task_id)
+        if task is None or task.course_id is None:
+            raise AiJobNotFoundError("学习路径任务不存在或无权访问。")
+        active_path = self.repository.get_active_learning_path(user.id, int(task.course_id))
+        if active_path is None or int(task.path_id) != int(active_path.id):
+            raise AiJobConflictError("只能为当前有效学习路径生成本节资源。")
+        if task.status == "completed":
+            raise AiJobConflictError("该学习任务已经完成。")
+        active_job = self.repository.get_active_resource_job_for_path_task(user.id, task.id)
+        if active_job is not None:
+            return ai_job_to_api(active_job, max_retries=self.max_retries)
+
+        bundle = task.learning_bundle_json if isinstance(task.learning_bundle_json, dict) else {}
+        raw_items = bundle.get("items") if isinstance(bundle.get("items"), list) else []
+        if not raw_items:
+            raise AiJobValidationError("当前任务没有可生成的本节学习安排。")
+        missing_types: list[str] = []
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            resource_type = str(item.get("resource_type") or "")
+            if resource_type not in {"doc", "mindmap", "quiz", "code", "slide", "animation", "video"}:
+                raise AiJobValidationError("本节学习安排包含不支持的资源类型。")
+            resource_id = item.get("resource_id")
+            resource = (
+                self.repository.get_resource_for_user(user.id, int(resource_id))
+                if str(resource_id).isdigit()
+                else None
+            )
+            ready = (
+                resource is not None
+                and resource.course_id == task.course_id
+                and resource.status == "completed"
+                and resource.resource_type == resource_type
+            )
+            if not ready and resource_type not in missing_types:
+                missing_types.append(resource_type)
+        if not missing_types:
+            raise AiJobConflictError("本节学习资源已经全部就绪。")
+
+        difficulty = str(bundle.get("difficulty") or "medium")
+        if difficulty not in {"easy", "medium", "hard"}:
+            difficulty = "medium"
+        learning_goal = " ".join(
+            item for item in (str(task.title or "").strip(), str(bundle.get("rationale") or task.reason or "").strip()) if item
+        )[:500]
+        return self.create_resource_generation_job(
+            user,
+            course_id=int(task.course_id),
+            knowledge_point_id=task.knowledge_point_id,
+            resource_types=missing_types,
+            learning_goal=learning_goal,
+            difficulty=difficulty,
+            generation_action="new",
+            source_resource_id=None,
+            path_task_id=task.id,
             idempotency_key=idempotency_key,
         )
 
@@ -942,6 +1023,7 @@ class AiJobService:
         )
         return {
             "course_id": str(course.id),
+            "path_task_id": str(request["path_task_id"]) if request.get("path_task_id") is not None else None,
             "resource_ids": [resource.id for resource in result.resources],
             "failed_resource_types": result.failed_resource_types,
             "warnings": result.warnings,

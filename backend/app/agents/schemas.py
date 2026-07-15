@@ -57,6 +57,12 @@ class AgentState(TypedDict, total=False):
     reasoning_mode: str
     tool_reason_codes: list[str]
     tool_reason_summary: str
+    semantic_decision_mode: str
+    semantic_decision_confidence: float
+    semantic_warning: str | None
+    semantic_search_query: str
+    profile_signal_updates: dict[str, Any]
+    profile_signal_confidence: dict[str, float]
     course_related: bool
     course_citation_count: int
     web_citation_count: int

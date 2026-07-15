@@ -249,19 +249,6 @@ def _supported_course_answer_kwargs(callable_value: Any, state: AgentState) -> d
 
 
 class ProfileEventRecorder(Protocol):
-    def record_course_question_event(
-        self,
-        *,
-        user: User,
-        session: ChatSession,
-        user_message: ChatMessage,
-        assistant_message: ChatMessage,
-        message_text: str,
-        citation_json: list[dict[str, Any]],
-        trace_id: str | None,
-    ) -> Any:
-        ...
-
     def ingest_course_question_signal(
         self,
         *,
@@ -271,12 +258,19 @@ class ProfileEventRecorder(Protocol):
         message_text: str,
         citation_json: list[dict[str, Any]],
         trace_id: str | None,
+        suggested_updates: dict[str, Any] | None = None,
+        suggested_confidence: dict[str, float] | None = None,
     ) -> Any:
         ...
 
 
 class WebSearchProvider(Protocol):
     def search(self, query: str, max_results: int = 5) -> Any:
+        ...
+
+
+class SemanticDecisionProvider(Protocol):
+    def decide(self, **kwargs: Any) -> Any:
         ...
 
 
@@ -430,6 +424,7 @@ class TutorSessionService:
         profile_event_recorder: ProfileEventRecorder | None = None,
         web_search_service: WebSearchProvider | None = None,
         material_citation_searcher: MaterialCitationSearcher | None = None,
+        semantic_decision_service: SemanticDecisionProvider | None = None,
     ) -> None:
         self.repository = repository
         self.course_citation_searcher = course_citation_searcher
@@ -437,6 +432,32 @@ class TutorSessionService:
         self.profile_event_recorder = profile_event_recorder
         self.web_search_service = web_search_service
         self.material_citation_searcher = material_citation_searcher
+        self.semantic_decision_service = semantic_decision_service
+
+    def _semantic_decision(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        question: str,
+        force_search: bool,
+        force_deep: bool,
+    ) -> Any:
+        if self.semantic_decision_service is None:
+            return decide_tool_capabilities(question, force_search=force_search, force_deep=force_deep)
+        course_title = ""
+        if session.course_id is not None:
+            course = self.repository.get_course_for_user(user.id, session.course_id)
+            course_title = str(getattr(course, "title", "") or "")
+        return self.semantic_decision_service.decide(
+            user=user,
+            question=question,
+            scope="course" if session.scope == "course" else "home",
+            course_title=course_title,
+            selected_materials=bool(getattr(session, "selected_material_ids", None)),
+            force_search=force_search,
+            force_deep=force_deep,
+        )
 
     def create_session(
         self,
@@ -834,6 +855,8 @@ class TutorSessionService:
         context_metadata: dict[str, Any] | None = None,
         course_trace_records: list[PendingAgentTrace] | None = None,
         home_trace_records: list[PendingAgentTrace] | None = None,
+        profile_signal_updates: dict[str, Any] | None = None,
+        profile_signal_confidence: dict[str, float] | None = None,
     ) -> TutorSessionDetail:
         user_message = ChatMessage(
             session_id=session.id,
@@ -897,7 +920,12 @@ class TutorSessionService:
             raise
 
         course_evidence = [item for item in citation_json if item.get("source_type") != "web"]
-        if self.profile_event_recorder is not None and session.scope == "course" and course_evidence:
+        if (
+            self.profile_event_recorder is not None
+            and session.scope == "course"
+            and course_evidence
+            and profile_signal_updates
+        ):
             try:
                 ingest = getattr(self.profile_event_recorder, "ingest_course_question_signal", None)
                 if callable(ingest):
@@ -908,18 +936,9 @@ class TutorSessionService:
                         message_text=message_text,
                         citation_json=course_evidence,
                         trace_id=trace_id,
+                        suggested_updates=profile_signal_updates,
+                        suggested_confidence=profile_signal_confidence or {},
                     )
-                else:
-                    self.profile_event_recorder.record_course_question_event(
-                        user=user,
-                        session=session,
-                        user_message=user_message,
-                        assistant_message=assistant_message,
-                        message_text=message_text,
-                        citation_json=course_evidence,
-                        trace_id=trace_id,
-                    )
-                    self.repository.commit()
             except Exception:
                 self.repository.rollback()
 
@@ -1681,18 +1700,23 @@ class HomeTutorGraphRunner:
 
     def _route_node(self, state: AgentState) -> dict[str, Any]:
         message = str(state["message_text"])
-        decision = decide_tool_capabilities(
-            message,
+        decision = self.service._semantic_decision(
+            user=state["user"],
+            session=state["session"],
+            question=message,
             force_search=bool(state.get("use_web_search")),
             force_deep=bool(state.get("deep_thinking")),
         )
-        requires_fresh_info = "fresh_information" in decision.reason_codes
+        requires_fresh_info = decision.intent in {"current_information", "verification"}
         if state.get("selected_material_ids"):
             intent = "material_question"
         elif requires_fresh_info:
-            intent = "fresh_information"
+            intent = decision.intent
         else:
-            intent = "general_learning"
+            intent = decision.intent
+        warnings = list(state.get("warnings", []))
+        if decision.warning and decision.warning not in warnings:
+            warnings.append(decision.warning)
         return self._run_node(
             state,
             agent_name="route",
@@ -1707,6 +1731,11 @@ class HomeTutorGraphRunner:
                     "reasoning_mode": decision.reasoning_mode,
                     "tool_reason_codes": list(decision.reason_codes),
                     "tool_reason_summary": decision.reason_summary,
+                    "semantic_search_query": decision.search_query,
+                    "semantic_decision_mode": decision.decision_mode,
+                    "semantic_decision_confidence": decision.confidence,
+                    "semantic_warning": decision.warning,
+                    "warnings": warnings,
                 },
                 f"已识别为 {intent}，{decision.reason_summary}。",
                 "completed",
@@ -1715,6 +1744,8 @@ class HomeTutorGraphRunner:
                     "reasoning_mode": decision.reasoning_mode,
                     "tool_reason_codes": list(decision.reason_codes),
                     "tool_reason_summary": decision.reason_summary,
+                    "semantic_decision_mode": decision.decision_mode,
+                    "semantic_decision_confidence": decision.confidence,
                 },
             ),
         )
@@ -1786,7 +1817,11 @@ class HomeTutorGraphRunner:
                     {"citation_count": len(citations), "warning_count": len(warnings)},
                 )
             web_citations = self.service._web_search_citations(
-                message_text=str(state["retrieval_query"]),
+                message_text=str(
+                    state.get("semantic_search_query")
+                    if str(state.get("semantic_decision_mode")) in {"model", "model_forced"}
+                    else state["retrieval_query"]
+                ),
                 warnings=warnings,
             )
             citations.extend(web_citations)
@@ -2050,6 +2085,8 @@ class HomeTutorGraphRunner:
             home_tool_metadata=None,
             context_metadata=state.get("context_metadata"),
             home_trace_records=list(state.get("pending_traces", [])),
+            profile_signal_updates=dict(state.get("profile_signal_updates", {})),
+            profile_signal_confidence=dict(state.get("profile_signal_confidence", {})),
         )
         duration_ms = max(1, int((perf_counter() - started) * 1000))
         artifact_id = detail.messages[-1].id if detail.messages else None
@@ -2296,6 +2333,8 @@ class CourseTutorGraphRunner:
             home_tool_metadata=None,
             context_metadata=result.get("context_metadata"),
             course_trace_records=list(result.get("pending_traces", [])),
+            profile_signal_updates=dict(result.get("profile_signal_updates", {})),
+            profile_signal_confidence=dict(result.get("profile_signal_confidence", {})),
         )
 
     def stream(
@@ -2358,6 +2397,8 @@ class CourseTutorGraphRunner:
                 home_tool_metadata=None,
                 context_metadata=state.get("context_metadata"),
                 course_trace_records=list(state.get("pending_traces", [])),
+                profile_signal_updates=dict(state.get("profile_signal_updates", {})),
+                profile_signal_confidence=dict(state.get("profile_signal_confidence", {})),
             )
             yield {"event": "done", "data": detail.model_dump()}
         except Exception as exc:
@@ -2409,7 +2450,6 @@ class CourseTutorGraphRunner:
             retrieval_active=True,
         )
         decision = decide_tool_capabilities(message_text, force_search=force_search, force_deep=force_deep)
-        course_related = self._course_title_matches(user.id, session.course_id, retrieval_query)
         return {
             "trace_id": make_trace_id(),
             "workflow": self.workflow,
@@ -2425,7 +2465,7 @@ class CourseTutorGraphRunner:
             "reasoning_mode": decision.reasoning_mode,
             "tool_reason_codes": list(decision.reason_codes),
             "tool_reason_summary": decision.reason_summary,
-            "course_related": course_related,
+            "course_related": False,
             "conversation_context": conversation_context if conversation_context.has_context else None,
             "retrieval_query": retrieval_query,
             "context_metadata": context_metadata,
@@ -2481,11 +2521,16 @@ class CourseTutorGraphRunner:
         )
 
     def _route_node(self, state: AgentState) -> dict[str, Any]:
-        decision = decide_tool_capabilities(
-            str(state["message_text"]),
+        decision = self.service._semantic_decision(
+            user=state["user"],
+            session=state["session"],
+            question=str(state["message_text"]),
             force_search=bool(state.get("use_web_search")),
             force_deep=bool(state.get("deep_thinking")),
         )
+        warnings = list(state.get("warnings", []))
+        if decision.warning and decision.warning not in warnings:
+            warnings.append(decision.warning)
         return self._run_node(
             state,
             agent_name="route",
@@ -2497,6 +2542,14 @@ class CourseTutorGraphRunner:
                     "reasoning_mode": decision.reasoning_mode,
                     "tool_reason_codes": list(decision.reason_codes),
                     "tool_reason_summary": decision.reason_summary,
+                    "semantic_search_query": decision.search_query,
+                    "semantic_decision_mode": decision.decision_mode,
+                    "semantic_decision_confidence": decision.confidence,
+                    "semantic_warning": decision.warning,
+                    "course_related": decision.course_related,
+                    "profile_signal_updates": dict(decision.profile_updates),
+                    "profile_signal_confidence": dict(decision.profile_confidence),
+                    "warnings": warnings,
                 },
                 decision.reason_summary,
                 "completed",
@@ -2505,6 +2558,9 @@ class CourseTutorGraphRunner:
                     "reasoning_mode": decision.reasoning_mode,
                     "tool_reason_codes": list(decision.reason_codes),
                     "tool_reason_summary": decision.reason_summary,
+                    "semantic_decision_mode": decision.decision_mode,
+                    "semantic_decision_confidence": decision.confidence,
+                    "profile_signal_count": len(decision.profile_updates),
                 },
             ),
         )
@@ -2536,37 +2592,42 @@ class CourseTutorGraphRunner:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             citations = list(state.get("citation_json", []))
             course_citation_count = sum(1 for item in citations if item.get("source_type") != "web")
-            decision = decide_tool_capabilities(
-                str(state["message_text"]),
-                force_search=bool(state.get("use_web_search")),
-                force_deep=bool(state.get("deep_thinking")),
-                has_course_evidence=course_citation_count > 0,
-                course_related=bool(state.get("course_related")),
-            )
+            search_required = bool(state.get("search_required"))
+            reason_codes = list(state.get("tool_reason_codes", []))
+            if course_citation_count == 0 and state.get("course_related") and not search_required:
+                search_required = True
+                reason_codes.append("course_evidence_gap")
             updates: dict[str, Any] = {
-                "search_required": decision.search_required,
-                "reasoning_mode": decision.reasoning_mode,
-                "tool_reason_codes": list(decision.reason_codes),
-                "tool_reason_summary": decision.reason_summary,
+                "search_required": search_required,
+                "reasoning_mode": str(state.get("reasoning_mode") or "auto"),
+                "tool_reason_codes": list(dict.fromkeys(reason_codes)),
+                "tool_reason_summary": str(state.get("tool_reason_summary") or ""),
                 "course_citation_count": course_citation_count,
             }
-            if not decision.search_required:
+            if not search_required:
                 return (
                     {**updates, "citation_json": citations, "web_citation_count": 0},
                     "课程资料足以处理当前问题，无需联网补充。",
                     "skipped",
                     {
                         "search_required": False,
-                        "reasoning_mode": decision.reasoning_mode,
-                        "tool_reason_codes": list(decision.reason_codes),
-                        "tool_reason_summary": decision.reason_summary,
+                        "reasoning_mode": str(state.get("reasoning_mode") or "auto"),
+                        "tool_reason_codes": list(dict.fromkeys(reason_codes)),
+                        "tool_reason_summary": str(state.get("tool_reason_summary") or ""),
                         "course_citation_count": course_citation_count,
                         "web_citation_count": 0,
                     },
                 )
 
             warnings = list(state.get("warnings", []))
-            web_citations = self.service._web_search_citations(str(state["retrieval_query"]), warnings)
+            web_citations = self.service._web_search_citations(
+                str(
+                    state.get("semantic_search_query")
+                    if str(state.get("semantic_decision_mode")) in {"model", "model_forced"}
+                    else state["retrieval_query"]
+                ),
+                warnings,
+            )
             supplements = [{**item, "evidence_role": "external_supplement"} for item in web_citations]
             citations.extend(supplements)
             return (
@@ -2581,9 +2642,9 @@ class CourseTutorGraphRunner:
                 "completed" if supplements else "warning",
                 {
                     "search_required": True,
-                    "reasoning_mode": decision.reasoning_mode,
-                    "tool_reason_codes": list(decision.reason_codes),
-                    "tool_reason_summary": decision.reason_summary,
+                    "reasoning_mode": str(state.get("reasoning_mode") or "auto"),
+                    "tool_reason_codes": list(dict.fromkeys(reason_codes)),
+                    "tool_reason_summary": str(state.get("tool_reason_summary") or ""),
                     "course_citation_count": course_citation_count,
                     "web_citation_count": len(supplements),
                     "warning_count": len(warnings),
@@ -2732,13 +2793,18 @@ class CourseTutorGraphRunner:
 
     def _weakness_node(self, state: AgentState) -> dict[str, Any]:
         citation_count = sum(1 for item in state.get("citation_json", []) if item.get("source_type") != "web")
-        output = "已同步课程问答弱点候选。" if citation_count else "依据不足，未生成新的弱点候选。"
+        signal_count = len(state.get("profile_signal_updates", {}))
+        output = (
+            "已形成课程问答画像候选。"
+            if citation_count and signal_count
+            else "未发现明确画像信号，不更新学习画像。"
+        )
         return self._run_node(
             state,
             agent_name="weakness",
             step_index=7,
             input_summary="识别弱点候选",
-            work=lambda: ({}, output, "completed", {"citation_count": citation_count}),
+            work=lambda: ({}, output, "completed", {"citation_count": citation_count, "profile_signal_count": signal_count}),
         )
 
     def _review_node(self, state: AgentState) -> dict[str, Any]:
@@ -2858,5 +2924,9 @@ class CourseTutorGraphRunner:
             "reasoning_mode": str(state.get("reasoning_mode") or "auto"),
             "tool_reason_codes": list(state.get("tool_reason_codes", [])),
             "tool_reason_summary": str(state.get("tool_reason_summary") or "")[:240],
+            "semantic_decision_mode": str(state.get("semantic_decision_mode") or "degraded"),
+            "semantic_decision_confidence": round(float(state.get("semantic_decision_confidence") or 0), 4),
+            "semantic_intent": str(state.get("intent") or "general_learning")[:64],
+            "profile_signal_count": len(state.get("profile_signal_updates", {})),
             **self.service._safe_trace_context_metadata(state.get("context_metadata")),
         }

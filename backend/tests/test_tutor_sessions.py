@@ -352,6 +352,32 @@ class FakeCourseAnswerGenerator:
 class FakeProfileEventRecorder:
     calls: list[dict[str, Any]] = field(default_factory=list)
 
+    def ingest_course_question_signal(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        user_message: ChatMessage,
+        message_text: str,
+        citation_json: list[dict[str, Any]],
+        trace_id: str | None,
+        suggested_updates: dict[str, Any],
+        suggested_confidence: dict[str, float],
+    ) -> None:
+        self.calls.append(
+            {
+                "user_id": user.id,
+                "scope": session.scope,
+                "course_id": session.course_id,
+                "user_message_id": user_message.id,
+                "message_text": message_text,
+                "citation_count": len(citation_json),
+                "trace_id": trace_id,
+                "suggested_updates": suggested_updates,
+                "suggested_confidence": suggested_confidence,
+            }
+        )
+
     def record_course_question_event(
         self,
         *,
@@ -443,6 +469,37 @@ class FakeWebSearchService:
     def search(self, query: str, max_results: int = 5) -> SimpleNamespace:
         self.calls.append({"query": query, "max_results": max_results})
         return SimpleNamespace(citations=self.results, warning=self.warning)
+
+
+@dataclass
+class FakeSemanticDecisionService:
+    search_required: bool = False
+    reasoning_mode: str = "auto"
+    intent: str = "general_learning"
+    search_query: str = ""
+    course_related: bool = False
+    profile_updates: dict[str, Any] = field(default_factory=dict)
+    profile_confidence: dict[str, float] = field(default_factory=dict)
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def decide(self, **kwargs: Any) -> SimpleNamespace:
+        self.calls.append(kwargs)
+        forced_search = bool(kwargs.get("force_search"))
+        forced_deep = bool(kwargs.get("force_deep"))
+        return SimpleNamespace(
+            search_required=self.search_required or forced_search,
+            reasoning_mode="deep" if self.reasoning_mode == "deep" or forced_deep else "auto",
+            reason_codes=("semantic_test",),
+            reason_summary="模型语义测试决策。",
+            intent=self.intent,
+            search_query=self.search_query or kwargs["question"],
+            confidence=0.92,
+            decision_mode="model_forced" if forced_search or forced_deep else "model",
+            course_related=self.course_related,
+            profile_updates=self.profile_updates,
+            profile_confidence=self.profile_confidence,
+            warning=None,
+        )
 
 
 def as_dict(value: Any) -> dict[str, Any]:
@@ -684,16 +741,7 @@ def test_append_message_writes_user_and_model_assistant_messages_in_order() -> N
     assert detail["messages"][1]["citation_json"] == []
     assert detail["messages"][1]["trace_id"].startswith("trace_")
     assert detail["messages"][1]["trace_id"] != "trace_model_test"
-    assert answer_generator.calls == [
-        {
-            "user_id": 1,
-            "question": "为什么反向传播要用链式法则？",
-            "citations": [],
-            "use_web_search": False,
-            "deep_thinking": True,
-            "warnings": [],
-        }
-    ]
+    assert answer_generator.calls == [{"user_id": 1, "question": "为什么反向传播要用链式法则？", "citations": []}]
     assert detail["session"]["updated_at"] > detail["session"]["created_at"]
     assert repo.committed is True
 
@@ -897,7 +945,7 @@ def test_append_course_message_does_not_pollute_retrieval_after_topic_switch() -
     assert repo.agent_logs[0].metadata_json["retrieval_query_mode"] == "direct"
 
 
-def test_append_course_message_records_profile_candidate_event_after_messages_have_ids() -> None:
+def test_append_course_message_does_not_treat_a_normal_why_question_as_profile_evidence() -> None:
     module = load_tutor_module()
     user = make_user(1)
     repo = FakeTutorRepository(allowed_course_ids={7})
@@ -926,18 +974,7 @@ def test_append_course_message_records_profile_candidate_event_after_messages_ha
 
     service.append_message(user=user, session_id=session.id, content="为什么启发式搜索这么难？")
 
-    assert profile_recorder.calls == [
-        {
-            "user_id": 1,
-            "scope": "course",
-            "course_id": 7,
-            "user_message_id": 1,
-            "assistant_message_id": 2,
-            "message_text": "为什么启发式搜索这么难？",
-            "citation_count": 1,
-            "trace_id": "trace_model_test",
-        }
-    ]
+    assert profile_recorder.calls == []
 
 
 def test_append_course_message_records_insufficient_evidence_without_fabricated_citations() -> None:
@@ -972,6 +1009,7 @@ def test_course_message_automatically_uses_external_supplement_without_profile_e
         course_answer_generator=answer_generator,
         web_search_service=web_searcher,
         profile_event_recorder=profile_recorder,
+        semantic_decision_service=FakeSemanticDecisionService(course_related=True, intent="material_question"),
     )
     session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
 
@@ -984,7 +1022,7 @@ def test_course_message_automatically_uses_external_supplement_without_profile_e
     assert profile_recorder.calls == []
     assert repo.agent_logs[3].metadata_json["course_citation_count"] == 0
     assert repo.agent_logs[3].metadata_json["web_citation_count"] == 1
-    assert "course_evidence_fallback" in repo.agent_logs[3].metadata_json["tool_reason_codes"]
+    assert "course_evidence_gap" in repo.agent_logs[3].metadata_json["tool_reason_codes"]
 
 
 def test_home_message_automatically_searches_fresh_information_without_legacy_flags() -> None:
@@ -1005,7 +1043,7 @@ def test_home_message_automatically_searches_fresh_information_without_legacy_fl
     assert web_searcher.calls == [{"query": "请核实这个算法今年的最新应用", "max_results": 5}]
     assert answer_generator.calls[0]["use_web_search"] is True
     assert repo.agent_logs[1].metadata_json["search_required"] is True
-    assert "fresh_information" in repo.agent_logs[1].metadata_json["tool_reason_codes"]
+    assert "explicit_search" in repo.agent_logs[1].metadata_json["tool_reason_codes"]
 
 
 def test_append_home_message_uses_model_reply_but_does_not_call_course_searcher() -> None:
@@ -1528,7 +1566,7 @@ def test_stream_course_message_passes_context_to_retrieval_model_and_metadata() 
     assert repo.agent_logs[0].metadata_json["retrieval_query_mode"] == "contextual"
 
 
-def test_stream_course_message_records_profile_candidate_event_on_done() -> None:
+def test_stream_course_message_records_only_explicit_model_profile_signal_on_done() -> None:
     module = load_tutor_module()
     user = make_user(1)
     repo = FakeTutorRepository(allowed_course_ids={7})
@@ -1551,7 +1589,13 @@ def test_stream_course_message_records_profile_candidate_event_on_done() -> None
             ]
         ),
         course_answer_generator=FakeCourseAnswerGenerator(tokens=["模型回答：", "先看启发函数。"]),
-        profile_event_recorder=profile_recorder,
+            profile_event_recorder=profile_recorder,
+            semantic_decision_service=FakeSemanticDecisionService(
+                intent="material_question",
+                course_related=True,
+                profile_updates={"weak_points": ["启发式搜索"]},
+                profile_confidence={"weak_points": 0.88},
+            ),
     )
     session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
 
@@ -1564,10 +1608,11 @@ def test_stream_course_message_records_profile_candidate_event_on_done() -> None
             "scope": "course",
             "course_id": 7,
             "user_message_id": 1,
-            "assistant_message_id": 2,
-            "message_text": "启发式搜索怎么复习才不难？",
-            "citation_count": 1,
-            "trace_id": "trace_model_test",
+                "message_text": "启发式搜索怎么复习才不难？",
+                "citation_count": 1,
+                "trace_id": "trace_model_test",
+                "suggested_updates": {"weak_points": ["启发式搜索"]},
+                "suggested_confidence": {"weak_points": 0.88},
         }
     ]
 

@@ -25,6 +25,7 @@ from backend.app.services.model_settings import ModelSettingsService, SqlAlchemy
 from backend.app.services.material_retrieval import MaterialRetrievalService, SqlAlchemyMaterialRetrievalRepository
 from backend.app.services.profiles import ProfileService, SqlAlchemyProfileRepository
 from backend.app.services.rag import RagService, SqlAlchemyRagRepository
+from backend.app.services.semantic_decision import SemanticDecisionService
 from backend.app.services.tutor import (
     EmptyMessageError,
     InvalidMaterialContextError,
@@ -64,6 +65,7 @@ def get_tutor_session_service(db=Depends(get_db_session)) -> TutorSessionService
             embedding_service=EmbeddingService(model_settings_service),
             rerank_service=model_settings_service,
         ),
+        semantic_decision_service=SemanticDecisionService(model_settings_service),
     )
 
 

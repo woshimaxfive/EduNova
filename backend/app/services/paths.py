@@ -160,6 +160,10 @@ class PlannedTask:
     reason: str
     resource_ids: list[int]
     bundle_types: tuple[str, ...] = ()
+    teaching_strategy: str = "safe_default"
+    difficulty: str = "medium"
+    used_profile_factor_codes: tuple[str, ...] = ()
+    generation_mode: str = "deterministic_source"
     status: str = "todo"
 
 

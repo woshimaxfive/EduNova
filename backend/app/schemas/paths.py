@@ -36,6 +36,10 @@ class LearningBundleItem(BaseModel):
 
 class LearningBundle(BaseModel):
     strategy: str = ""
+    teaching_strategy: str = "safe_default"
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    used_profile_factor_codes: list[str] = Field(default_factory=list)
+    generation_mode: str = "legacy"
     rationale: str = ""
     items: list[LearningBundleItem] = Field(default_factory=list)
 
@@ -147,6 +151,16 @@ def task_to_api(task: LearningTask, resources_by_id: dict[int, GeneratedResource
         recommended_resources=[resource_brief(resources_by_id[resource_id]) for resource_id in resource_ids if resource_id in resources_by_id],
         learning_bundle=LearningBundle(
             strategy=str(raw_bundle.get("strategy") or ""),
+            teaching_strategy=str(raw_bundle.get("teaching_strategy") or "safe_default"),
+            difficulty=(
+                str(raw_bundle.get("difficulty"))
+                if str(raw_bundle.get("difficulty")) in {"easy", "medium", "hard"}
+                else "medium"
+            ),
+            used_profile_factor_codes=[
+                str(item) for item in raw_bundle.get("used_profile_factor_codes", []) if str(item).strip()
+            ],
+            generation_mode=str(raw_bundle.get("generation_mode") or "legacy"),
             rationale=str(raw_bundle.get("rationale") or ""),
             items=bundle_items,
         ),

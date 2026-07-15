@@ -301,7 +301,7 @@ def test_generate_path_archives_previous_active_path_and_prioritizes_confirmed_r
     assert result["status"] == "active"
     assert result["path"]["course_id"] == "101"
     assert result["path"]["goal"] == "掌握搜索算法"
-    assert result["path"]["plan_json"]["schema_version"] == 4
+    assert result["path"]["plan_json"]["schema_version"] == 5
     assert result["path"]["plan_json"]["path_mode"] == "ordered"
     assert "daily_task_capacity" not in result["path"]["plan_json"]["personalization"]
     assert result["path"]["plan_json"]["source_counts"]["confirmed_or_reviewing_weaknesses"] == 2
@@ -402,32 +402,36 @@ def test_paths_routes_require_login_and_return_envelopes() -> None:
     assert retired_sprint.status_code == 404
 
 
-def test_path_planning_graph_runs_real_model_review_and_trace_nodes() -> None:
+def test_path_planning_graph_uses_one_structured_model_call_and_rules_review() -> None:
     repo = make_repo()
     logs: list[Any] = []
     model = FakeModelService(
-        responses=[
-            '{"ordered_task_keys":["knowledge:401","knowledge:402","knowledge:403"],'
-            '"rationales":{"knowledge:401":"先处理确认弱点","knowledge:402":"再巩固复习中弱点"},'
-            '"bundle_types":{"knowledge:401":["code","doc","quiz"],'
-            '"knowledge:402":["mindmap","doc"],"knowledge:403":["video","quiz"]}}',
-            '{"review_status":"passed","confidence":0.91,"risk_flags":[],'
-            '"safety_summary":"任务顺序与弱点证据一致。"}',
-        ]
+        responses=['{"priority_tasks":['
+            '{"task_key":"knowledge:401","rationale":"先处理确认弱点",'
+            '"bundle_types":["code","doc","quiz"],"resource_ids":[801],'
+            '"teaching_strategy":"先代码实验再概念复盘","difficulty":"medium",'
+            '"used_profile_factor_codes":[]},'
+            '{"task_key":"knowledge:402","rationale":"再巩固复习中弱点",'
+            '"bundle_types":["mindmap","doc"],"resource_ids":[802],'
+            '"teaching_strategy":"先图解再检索练习","difficulty":"hard",'
+            '"used_profile_factor_codes":[]}]}']
     )
     service = PathService(repo, model_service=model, trace_recorder=make_trace_recorder(logs))
 
     detail = as_dict(service.generate_path(make_user(), 101))
 
-    assert detail["path"]["plan_json"]["schema_version"] == 4
+    assert detail["path"]["plan_json"]["schema_version"] == 5
     assert detail["path"]["plan_json"]["path_mode"] == "ordered"
     assert detail["path"]["plan_json"]["generation_mode"] == "model_enhanced"
-    assert detail["path"]["plan_json"]["review_mode"] == "model_and_rules"
+    assert detail["path"]["plan_json"]["review_mode"] == "rules_only"
     assert [task["knowledge_point_id"] for task in detail["tasks"]] == ["401", "402", "403"]
     assert detail["tasks"][0]["reason"] == "先处理确认弱点"
     assert [item["resource_type"] for item in detail["tasks"][0]["learning_bundle"]["items"]] == [
         "code", "doc", "quiz"
     ]
+    assert detail["tasks"][0]["learning_bundle"]["teaching_strategy"] == "先代码实验再概念复盘"
+    assert detail["tasks"][0]["learning_bundle"]["difficulty"] == "medium"
+    assert detail["tasks"][0]["learning_bundle"]["generation_mode"] == "model_enhanced"
     assert [log.agent_name for log in logs] == [
         "profile",
         "collect_evidence",
@@ -437,7 +441,31 @@ def test_path_planning_graph_runs_real_model_review_and_trace_nodes() -> None:
         "persist",
     ]
     assert all(log.duration_ms is not None and log.duration_ms >= 0 for log in logs)
-    assert len(model.calls) == 2
+    assert len(model.calls) == 1
+
+
+def test_invalid_structured_path_decision_falls_back_without_using_untrusted_profile() -> None:
+    repo = make_repo()
+    repo.profiles[1].profile_json = {
+        "major_background": "计算机专业",
+        "learning_preference": "只看代码",
+        "learning_goal": "掌握搜索算法",
+    }
+    model = FakeModelService(
+        responses=['{"priority_tasks":[{"task_key":"knowledge:999",'
+            '"rationale":"伪造任务","bundle_types":["code","quiz"],"resource_ids":[],'
+            '"teaching_strategy":"代码优先","difficulty":"hard",'
+            '"used_profile_factor_codes":["major_background"]}]}']
+    )
+
+    detail = as_dict(PathService(repo, model_service=model).generate_path(make_user(), 101))
+
+    assert detail["path"]["plan_json"]["generation_mode"] == "deterministic_source"
+    assert detail["path"]["plan_json"]["personalization"] == {}
+    assert len(model.calls) == 1
+    assert all(task["learning_bundle"]["generation_mode"] == "deterministic_source" for task in detail["tasks"])
+    assert all(task["learning_bundle"]["used_profile_factor_codes"] == [] for task in detail["tasks"])
+    assert all(task["learning_bundle"]["strategy"] == "安全默认组合" for task in detail["tasks"])
 
 
 def test_assessment_replan_preserves_completed_progress_and_does_not_create_missing_path() -> None:
@@ -461,7 +489,7 @@ def test_assessment_replan_preserves_completed_progress_and_does_not_create_miss
     assert replanned.detail.path.plan_json["trigger"] == "assessment"
     assert replanned.detail.path.plan_json["revision_of"] == str(old_path_id)
     assert replanned.detail.path.goal == "掌握搜索算法"
-    assert replanned.detail.path.plan_json["schema_version"] == 4
+    assert replanned.detail.path.plan_json["schema_version"] == 5
     assert replanned.detail.tasks[0].status == "completed"
     assert replanned.detail.tasks[0].knowledge_point_id == "402"
     assert any(task.knowledge_point_id == "403" and task.task_type == "review" for task in replanned.detail.tasks)
@@ -513,7 +541,7 @@ def test_legacy_v2_path_upgrades_on_replan_and_sprint_rows_are_not_current_paths
 
     assert replanned.detail is not None
     assert replanned.detail.path is not None
-    assert replanned.detail.path.plan_json["schema_version"] == 4
+    assert replanned.detail.path.plan_json["schema_version"] == 5
     assert replanned.detail.path.plan_json["path_mode"] == "ordered"
     assert "duration_days" not in replanned.detail.path.plan_json
     assert all(task.due_at is None and task.next_review_at is None for task in repo.list_tasks_for_path(int(replanned.detail.path.id)))

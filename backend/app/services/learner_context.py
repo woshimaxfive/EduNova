@@ -85,10 +85,10 @@ class CourseLearnerContext:
             "mastery_average": self.mastery_average,
             "current_task_title": self.current_task_title,
             "major_background": global_context.trusted_value("major_background"),
-            "learning_preference": global_context.advisory_value("learning_preference"),
-            "cognitive_style": global_context.advisory_value("cognitive_style"),
-            "learning_pace": global_context.advisory_value("learning_pace"),
-            "motivation_interest": global_context.advisory_value("motivation_interest"),
+            "learning_preference": global_context.trusted_value("learning_preference"),
+            "cognitive_style": global_context.trusted_value("cognitive_style"),
+            "learning_pace": global_context.trusted_value("learning_pace"),
+            "motivation_interest": global_context.trusted_value("motivation_interest"),
             "resource_feedback": self.resource_feedback_summary,
         }
 
@@ -267,10 +267,10 @@ class LearnerContextService:
                 AssessmentReport.course_id == course_id,
             ).order_by(AssessmentReport.created_at.desc(), AssessmentReport.id.desc())
         ) is not None
-        global_goal = str(global_context.advisory_value("learning_goal") or "").strip()
+        global_goal = str(global_context.trusted_value("learning_goal") or "").strip()
         course_goal = str(active_path.goal or "").strip() if active_path is not None else ""
         course_goal = course_goal or global_goal or f"完成《{course.title}》学习"
-        foundation = str(global_context.advisory_value("knowledge_foundation") or "").strip()
+        foundation = str(global_context.trusted_value("knowledge_foundation") or "").strip()
         foundation_summary = foundation or "尚未形成可信基础判断"
         if knowledge_point_count and mastery_average is not None:
             foundation_summary = f"{foundation_summary}；当前课程掌握度约 {mastery_average}%"

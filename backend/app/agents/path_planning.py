@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from time import perf_counter
 from typing import Any, Callable, TypedDict
 
 from langgraph.graph import END, START, StateGraph
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from backend.app.agents.learning_review import contains_sensitive_text, parse_json_object, review_contract, safe_text
+from backend.app.agents.learning_review import contains_sensitive_text, parse_json_object, safe_text
 from backend.app.api.errors import make_trace_id
 from backend.app.models import GeneratedResource, LearningPath, LearningTask, User
 from backend.app.schemas.profiles import normalize_profile_json
@@ -18,6 +20,31 @@ from backend.app.services.resource_feedback import (
     deterministic_bundle_types,
     rank_resource_types,
 )
+
+
+class PathPlanningChoice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_key: str = Field(min_length=1, max_length=160)
+    rationale: str = Field(min_length=1, max_length=240)
+    bundle_types: list[str] = Field(min_length=2, max_length=4)
+    resource_ids: list[int] = Field(default_factory=list, max_length=6)
+    teaching_strategy: str = Field(min_length=1, max_length=80)
+    difficulty: str = Field(pattern="^(easy|medium|hard)$")
+    used_profile_factor_codes: list[str] = Field(default_factory=list, max_length=8)
+
+    @field_validator("bundle_types", "resource_ids", "used_profile_factor_codes")
+    @classmethod
+    def unique_values(cls, value: list[Any]) -> list[Any]:
+        if len(value) != len(set(value)):
+            raise ValueError("列表项目不能重复。")
+        return value
+
+
+class PathPlanningDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    priority_tasks: list[PathPlanningChoice] = Field(min_length=1, max_length=8)
 
 
 class PathPlanningState(TypedDict, total=False):
@@ -193,7 +220,7 @@ class PathPlanningGraphRunner:
 
     def _model_plan_node(self, state: PathPlanningState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
-            ordered = self._model_order(state, repair=False)
+            ordered = self._model_order(state)
             if ordered is None:
                 warning = "模型不可用或排序输出无效，保留确定性路径。"
                 return (
@@ -214,49 +241,21 @@ class PathPlanningGraphRunner:
     def _review_node(self, state: PathPlanningState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             risks = self._task_risks(state)
-            model_review = None
-            if state.get("generation_mode") == "model_enhanced" and self.service.model_service is not None:
-                try:
-                    raw = self.service.model_service.chat_completion(
-                        state["user"],
-                        [
-                            {"role": "system", "content": "你是 PathPlanningGraph 的 ReviewAgent。只输出 JSON，不得更改任务 ID。"},
-                            {
-                                "role": "user",
-                                "content": (
-                                    "审核任务顺序是否与确认弱点、课程顺序和资源证据一致。"
-                                    f"任务数={len(state.get('planned_tasks', []))}，弱点数="
-                                    f"{sum(1 for item in state.get('weaknesses', []) if item.status in {'confirmed', 'reviewing'})}。"
-                                    "返回 {\"review_status\":\"passed|revise\",\"confidence\":0.0,"
-                                    "\"risk_flags\":[],\"safety_summary\":\"\"}。"
-                                ),
-                            },
-                        ],
-                    )
-                    model_review = review_contract(parse_json_object(raw), default_summary="已完成路径证据与安全审核。")
-                except Exception:
-                    model_review = None
-            if model_review and model_review["review_status"] == "revise":
-                risks.extend(str(item) for item in model_review["risk_flags"])
-            risks = list(dict.fromkeys(risks))
             if risks:
                 review = {
                     "review_status": "revise",
-                    "confidence": model_review["confidence"] if model_review else 0.45,
+                    "confidence": 0.95,
                     "risk_flags": risks,
-                    "safety_summary": model_review["safety_summary"] if model_review else "规则审核发现路径任务需要修订。",
+                    "safety_summary": "确定性审核发现路径任务需要恢复为安全底稿。",
                 }
-                return {"review_result": review, "needs_repair": True, "review_mode": "model_and_rules" if model_review else "rules_only"}, "路径需要修订。", "warning", review
-            if model_review is None:
-                review = {
-                    "review_status": "warning",
-                    "confidence": 0.6,
-                    "risk_flags": [],
-                    "safety_summary": "模型审核不可用，已完成任务 ID、进度、资源和隐私规则审核。",
-                }
-                return {"review_result": review, "needs_repair": False, "review_mode": "rules_only"}, review["safety_summary"], "warning", review
-            review = {**model_review, "review_status": "passed", "risk_flags": []}
-            return {"review_result": review, "needs_repair": False, "review_mode": "model_and_rules"}, "ReviewAgent 审核通过。", "completed", review
+                return {"review_result": review, "needs_repair": True, "review_mode": "rules_only"}, "路径需要恢复安全底稿。", "warning", review
+            review = {
+                "review_status": "passed",
+                "confidence": 1.0,
+                "risk_flags": [],
+                "safety_summary": "已完成任务、权限、资源、画像因素和隐私确定性审核。",
+            }
+            return {"review_result": review, "needs_repair": False, "review_mode": "rules_only"}, review["safety_summary"], "completed", review
 
         return self._run_node(state, "review", 5, "审核路径证据、进度和安全边界", work)
 
@@ -266,21 +265,13 @@ class PathPlanningGraphRunner:
 
     def _repair_node(self, state: PathPlanningState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
-            repaired = self._model_order(state, repair=True)
-            if repaired is None:
-                repaired = list(state.get("deterministic_tasks", []))
-                mode = "deterministic_source"
-            else:
-                mode = "model_enhanced"
-            repaired_state = {**state, "planned_tasks": repaired}
-            if self._task_risks(repaired_state):
-                repaired = list(state.get("deterministic_tasks", []))
-                mode = "deterministic_source"
+            repaired = list(state.get("deterministic_tasks", []))
+            mode = "deterministic_source"
             review = {
                 "review_status": "passed",
-                "confidence": 0.72 if mode == "model_enhanced" else 0.64,
+                "confidence": 1.0,
                 "risk_flags": [],
-                "safety_summary": "已完成一次修订，并通过确定性任务与证据校验。",
+                "safety_summary": "模型方案未通过确定性审核，已恢复安全默认路径。",
             }
             return (
                 {"planned_tasks": repaired, "generation_mode": mode, "review_result": review, "repair_count": 1},
@@ -316,7 +307,7 @@ class PathPlanningGraphRunner:
                     status="active",
                     agent_trace_id=state["trace_id"],
                     plan_json={
-                        "schema_version": 4,
+                        "schema_version": 5,
                         "path_mode": "ordered",
                         "strategy": "reviewing_first_then_confirmed_then_uncovered",
                         "trigger": state.get("trigger", "manual"),
@@ -337,9 +328,10 @@ class PathPlanningGraphRunner:
                             else "legacy"
                         ),
                         "personalization": {
-                            "major_background": safe_text(profile.get("major_background"), limit=80),
-                            "learning_preference": safe_text(profile.get("learning_preference"), limit=80),
-                            "knowledge_foundation": safe_text(profile.get("knowledge_foundation"), limit=80),
+                            code: safe_text(profile.get(code), limit=80)
+                            for code in self._trusted_factor_codes(state)
+                            if code in {"major_background", "learning_preference", "knowledge_foundation"}
+                            and safe_text(profile.get(code), limit=80)
                         },
                         "source_counts": {
                             "knowledge_points": len(points),
@@ -414,7 +406,7 @@ class PathPlanningGraphRunner:
             context.after_node(name="persist", label=self.job_progress["persist"][1], progress_percent=100, status="completed")
         return {"path": path, "detail": detail}
 
-    def _model_order(self, state: PathPlanningState, *, repair: bool) -> list[PlannedTask] | None:
+    def _model_order(self, state: PathPlanningState) -> list[PlannedTask] | None:
         if self.service.model_service is None:
             return None
         tasks = list(state.get("deterministic_tasks", []))
@@ -422,6 +414,7 @@ class PathPlanningGraphRunner:
         open_tasks = [task for task in tasks if task.status != "completed"]
         if not open_tasks:
             return tasks
+        candidate_tasks = open_tasks[:24]
         candidates = [
             {
                 "task_key": self._task_key(task),
@@ -431,7 +424,7 @@ class PathPlanningGraphRunner:
                 "resource_ids": task.resource_ids,
                 "bundle_types": list(task.bundle_types),
             }
-            for task in open_tasks
+            for task in candidate_tasks
         ]
         resources = {
             resource.id: {
@@ -443,84 +436,109 @@ class PathPlanningGraphRunner:
             for resource in state.get("resources", [])
             if resource.status == "completed"
         }
-        system = "你是 PathPlanningGraph 的规划 Agent。只能重排给定 task_key，禁止新增知识点、资源或任务。只输出 JSON。"
-        instruction = "这是审核后的修订机会。" if repair else "根据确认弱点、课程顺序和资源证据优化任务顺序。"
+        allowed_factor_codes = self._trusted_factor_codes(state)
+        profile = state.get("profile_summary", {})
+        trusted_profile = {
+            code: profile.get(code)
+            for code in allowed_factor_codes
+            if code in profile and profile.get(code) not in (None, "", [], {})
+        }
         try:
             raw = self.service.model_service.chat_completion(
                 state["user"],
                 [
-                    {"role": "system", "content": system},
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是 PathPlanningGraph 的规划 Agent。只能从候选任务中选择最多8个近期优先任务，"
+                            "不能新增知识点、资源、画像因素或任务。只输出合法 JSON，不输出解释或思维链。"
+                        ),
+                    },
                     {
                         "role": "user",
-                        "content": (
-                            f"{instruction} 画像目标={safe_text(state.get('profile_summary', {}).get('learning_goal'), limit=120)}；"
-                            f"专业背景={safe_text(state.get('profile_summary', {}).get('major_background'), limit=120)}；"
-                            f"学习基础={safe_text(state.get('profile_summary', {}).get('knowledge_foundation'), limit=120)}；"
-                            f"学习偏好={safe_text(state.get('profile_summary', {}).get('learning_preference'), limit=120)}；"
-                            f"理解习惯={safe_text(state.get('profile_summary', {}).get('cognitive_style'), limit=120)}；"
-                            f"学习节奏={safe_text(state.get('profile_summary', {}).get('learning_pace'), limit=120)}。"
-                            f"课程资源反馈聚合={state.get('profile_summary', {}).get('resource_feedback', {})}。"
-                            f"候选任务={candidates}；可用真实资源={list(resources.values())}。"
-                            "请根据当前知识点、具体误区、掌握度、目标、偏好和已完成资源选择任务顺序与资源组合。"
-                            "只能使用候选 task_key 和各任务原有 resource_ids，不得发明资源。每个任务从"
-                            f"{list(RESOURCE_TYPES)}中选择2至4个不同的 bundle_types。"
-                            "返回 {\"ordered_task_keys\":[\"...\"],\"rationales\":{\"task_key\":\"简短理由\"},"
-                            "\"resource_rankings\":{\"task_key\":[1,2]},"
-                            "\"bundle_types\":{\"task_key\":[\"doc\",\"quiz\"]}}。"
-                        ),
+                        "content": json.dumps(
+                            {
+                                "trusted_profile": trusted_profile,
+                                "allowed_profile_factor_codes": sorted(allowed_factor_codes),
+                                "course_state": {
+                                    "active_weaknesses": profile.get("active_weaknesses", []),
+                                    "mastery_average": profile.get("mastery_average"),
+                                    "current_task_title": profile.get("current_task_title"),
+                                    "resource_feedback": profile.get("resource_feedback", {}),
+                                },
+                                "candidate_tasks": candidates,
+                                "available_resources": list(resources.values()),
+                                "allowed_bundle_types": list(RESOURCE_TYPES),
+                                "output": {
+                                    "priority_tasks": [
+                                        {
+                                            "task_key": "候选task_key",
+                                            "rationale": "面向学生的简短安排理由",
+                                            "bundle_types": ["doc", "quiz"],
+                                            "resource_ids": [],
+                                            "teaching_strategy": "简短教学策略",
+                                            "difficulty": "easy|medium|hard",
+                                            "used_profile_factor_codes": [],
+                                        }
+                                    ]
+                                },
+                            },
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        )[:12000],
                     },
                 ],
             )
         except Exception:
             return None
-        payload = parse_json_object(raw)
-        if payload is None or not isinstance(payload.get("ordered_task_keys"), list):
+        payload = parse_json_object(raw, PathPlanningDecision)
+        if payload is None:
             return None
-        by_key = {self._task_key(task): task for task in open_tasks}
-        ordered_keys = [safe_text(item, limit=160) for item in payload["ordered_task_keys"]]
-        if any(key not in by_key for key in ordered_keys) or len(set(ordered_keys)) != len(ordered_keys):
+        by_key = {self._task_key(task): task for task in candidate_tasks}
+        choices = list(payload.get("priority_tasks", []))
+        selected_keys = [safe_text(item.get("task_key"), limit=160) for item in choices]
+        if any(key not in by_key for key in selected_keys) or len(selected_keys) != len(set(selected_keys)):
             return None
-        ordered_keys.extend(key for key in by_key if key not in ordered_keys)
-        rationales = payload.get("rationales") if isinstance(payload.get("rationales"), dict) else {}
-        resource_rankings = payload.get("resource_rankings") if isinstance(payload.get("resource_rankings"), dict) else {}
-        bundle_types = payload.get("bundle_types") if isinstance(payload.get("bundle_types"), dict) else {}
-        ordered: list[PlannedTask] = []
-        for index, key in enumerate(ordered_keys):
+        prioritized: list[PlannedTask] = []
+        for index, choice in enumerate(choices):
+            key = selected_keys[index]
             task = by_key[key]
-            rationale = safe_text(rationales.get(key), limit=240)
-            ranked_raw = resource_rankings.get(key)
-            ranked = [int(item) for item in ranked_raw if str(item).isdigit()] if isinstance(ranked_raw, list) else []
-            if len(ranked) != len(set(ranked)) or any(item not in task.resource_ids or item not in resources for item in ranked):
-                ranked = []
-            resource_ids = [*ranked, *(item for item in task.resource_ids if item not in ranked)]
-            selected_types_raw = bundle_types.get(key)
-            selected_types = (
-                tuple(str(item) for item in selected_types_raw)
-                if isinstance(selected_types_raw, list)
-                else ()
-            )
-            if not (
-                2 <= len(selected_types) <= 4
-                and len(selected_types) == len(set(selected_types))
-                and all(item in RESOURCE_TYPES for item in selected_types)
-            ):
-                selected_types = task.bundle_types
-            ordered.append(
+            selected_types = tuple(str(item) for item in choice.get("bundle_types", []))
+            selected_resources = [int(item) for item in choice.get("resource_ids", [])]
+            used_factors = tuple(str(item) for item in choice.get("used_profile_factor_codes", []))
+            if any(item not in RESOURCE_TYPES for item in selected_types):
+                return None
+            if any(item not in task.resource_ids or item not in resources for item in selected_resources):
+                return None
+            if any(item not in allowed_factor_codes for item in used_factors):
+                return None
+            ranked_resources = [*selected_resources, *(item for item in task.resource_ids if item not in selected_resources)]
+            prioritized.append(
                 replace(
                     task,
-                    reason=rationale or task.reason,
-                    resource_ids=resource_ids,
+                    reason=safe_text(choice.get("rationale"), limit=240),
+                    resource_ids=ranked_resources,
                     bundle_types=selected_types,
+                    teaching_strategy=safe_text(choice.get("teaching_strategy"), limit=80),
+                    difficulty=str(choice.get("difficulty") or "medium"),
+                    used_profile_factor_codes=used_factors,
+                    generation_mode="model_enhanced",
                     status="doing" if index == 0 else "todo",
                 )
             )
-        return [*completed, *ordered]
+        remaining = [
+            replace(task, status="todo")
+            for task in open_tasks
+            if self._task_key(task) not in set(selected_keys)
+        ]
+        return [*completed, *prioritized, *remaining]
 
     def _task_risks(self, state: PathPlanningState) -> list[str]:
         tasks = list(state.get("planned_tasks", []))
         if not tasks:
             return ["empty_plan"]
         valid_resources = {resource.id for resource in state.get("resources", [])}
+        valid_factor_codes = self._trusted_factor_codes(state)
         risks: list[str] = []
         open_keys: list[str] = []
         for task in tasks:
@@ -530,6 +548,14 @@ class PathPlanningGraphRunner:
                 risks.append("invalid_resource_reference")
             if not (2 <= len(task.bundle_types) <= 4) or any(item not in RESOURCE_TYPES for item in task.bundle_types):
                 risks.append("invalid_bundle_types")
+            if len(task.bundle_types) != len(set(task.bundle_types)):
+                risks.append("duplicate_bundle_type")
+            if task.difficulty not in {"easy", "medium", "hard"}:
+                risks.append("invalid_difficulty")
+            if not safe_text(task.teaching_strategy, limit=80):
+                risks.append("missing_teaching_strategy")
+            if any(code not in valid_factor_codes for code in task.used_profile_factor_codes):
+                risks.append("invalid_profile_factor")
             if task.status != "completed":
                 open_keys.append(self._task_key(task))
         if len(open_keys) != len(set(open_keys)):
@@ -562,6 +588,18 @@ class PathPlanningGraphRunner:
                 reason=task.reason or "保留自上一版路径",
                 resource_ids=[int(item) for item in (task.recommended_resource_ids or []) if str(item).isdigit()],
                 bundle_types=previous_types or deterministic_bundle_types(None),
+                teaching_strategy=safe_text(previous_bundle.get("teaching_strategy"), limit=80) or "safe_default",
+                difficulty=(
+                    str(previous_bundle.get("difficulty"))
+                    if str(previous_bundle.get("difficulty")) in {"easy", "medium", "hard"}
+                    else "medium"
+                ),
+                used_profile_factor_codes=tuple(
+                    str(item)
+                    for item in previous_bundle.get("used_profile_factor_codes", [])
+                    if str(item).strip()
+                ),
+                generation_mode=str(previous_bundle.get("generation_mode") or "legacy"),
                 status="completed" if task.status == "completed" else "todo",
             )
             key = cls._task_key(planned)
@@ -594,16 +632,20 @@ class PathPlanningGraphRunner:
 
     def _personalize_tasks(self, tasks: list[PlannedTask], state: PathPlanningState) -> list[PlannedTask]:
         profile = state.get("profile_summary", {})
-        preference = safe_text(profile.get("learning_preference"), limit=80)
         feedback = profile.get("resource_feedback") if isinstance(profile.get("resource_feedback"), dict) else {}
         fallback_types = deterministic_bundle_types(feedback)
         personalized: list[PlannedTask] = []
         for task in tasks:
-            reason = task.reason
-            if preference:
-                reason = f"{reason}；学习偏好将由规划模型结合真实资源判断：{preference}"
             personalized.append(
-                replace(task, resource_ids=sorted(task.resource_ids), bundle_types=fallback_types, reason=reason)
+                replace(
+                    task,
+                    resource_ids=sorted(task.resource_ids),
+                    bundle_types=fallback_types,
+                    teaching_strategy="safe_default",
+                    difficulty="medium",
+                    used_profile_factor_codes=(),
+                    generation_mode="deterministic_source",
+                )
             )
         return personalized
 
@@ -641,16 +683,29 @@ class PathPlanningGraphRunner:
                     "status": "available" if available is not None else "recommended",
                 }
             )
-        factors = [
-            str(profile.get(key) or "").strip()
-            for key in ("major_background", "knowledge_foundation", "learning_preference", "cognitive_style")
-            if str(profile.get(key) or "").strip()
-        ]
+        model_enhanced = task.generation_mode == "model_enhanced"
         return {
-            "strategy": "根据可信画像、学习状态与资源反馈组合多模态学习活动",
-            "rationale": f"结合当前课程进度、{len(factors)}项可信个性化因素和课程级资源反馈安排。",
+            "strategy": task.teaching_strategy if model_enhanced else "安全默认组合",
+            "teaching_strategy": task.teaching_strategy,
+            "difficulty": task.difficulty if task.difficulty in {"easy", "medium", "hard"} else "medium",
+            "used_profile_factor_codes": list(task.used_profile_factor_codes),
+            "generation_mode": task.generation_mode,
+            "rationale": (
+                task.reason
+                if model_enhanced
+                else "模型规划未生效，使用课程证据、学习进度和资源反馈生成安全默认组合。"
+            ),
             "items": items,
         }
+
+    @staticmethod
+    def _trusted_factor_codes(state: PathPlanningState) -> set[str]:
+        learner_context = state.get("learner_context")
+        if learner_context is None:
+            return set()
+        metadata = learner_context.trace_metadata()
+        values = (metadata.get("personalization_factors") or []) if isinstance(metadata, dict) else []
+        return {str(item) for item in values if str(item).strip()}
 
     @staticmethod
     def _task_key(task: PlannedTask) -> str:

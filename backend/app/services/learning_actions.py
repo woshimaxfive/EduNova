@@ -242,6 +242,15 @@ class LearningNextActionService:
                 status="waiting",
                 course_id=job.course_id,
             )
+        if job.workflow == "path_planning":
+            course_id = self._positive_int((job.request_json or {}).get("course_id")) or job.course_id
+            return self._action(
+                "wait_for_path",
+                job.label or "正在规划学习路径",
+                "路径会在后台继续生成，完成后可直接恢复当前课程的学习任务。",
+                status="waiting",
+                course_id=course_id,
+            )
         return None
 
     def _course_for_user(self, user_id: int, course_id: int) -> Course | None:
@@ -267,7 +276,7 @@ class LearningNextActionService:
             select(AiJob)
             .where(
                 AiJob.user_id == user_id,
-                AiJob.workflow.in_(("material_ingestion", "course_builder")),
+                AiJob.workflow.in_(("material_ingestion", "course_builder", "path_planning")),
                 AiJob.status.in_(("queued", "running", "cancelling")),
             )
             .order_by(AiJob.updated_at.desc(), AiJob.id.desc())

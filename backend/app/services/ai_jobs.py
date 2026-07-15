@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
@@ -14,14 +16,14 @@ from backend.app.core.config import Settings, get_settings
 from backend.app.core.errors import ConflictDomainError, NotFoundDomainError, ValidationDomainError
 from backend.app.core.observability import get_tracer
 from backend.app.db.session import SessionLocal
-from backend.app.models import AiJob, Course, GeneratedResource, KnowledgeChunk, KnowledgePoint, LearningTask, Material, MaterialChunk, ModelSetting, User
+from backend.app.models import AiJob, Course, GeneratedResource, KnowledgeChunk, KnowledgePoint, LearningPath, LearningTask, Material, MaterialChunk, ModelSetting, PracticeAnswer, PracticeSession, User
 from backend.app.schemas.ai_jobs import AiJobListResponse, AiJobResponse, ai_job_to_api, iso_timestamp
 
 
 ACTIVE_STATUSES = {"queued", "running", "cancelling"}
 TERMINAL_STATUSES = {"cancelled", "completed", "failed"}
 RETRYABLE_STATUSES = {"cancelled", "failed"}
-WORKFLOWS = {"course_builder", "resource_generation", "embedding_reindex", "material_ingestion"}
+WORKFLOWS = {"course_builder", "resource_generation", "embedding_reindex", "material_ingestion", "path_planning"}
 
 
 class AiJobNotFoundError(NotFoundDomainError):
@@ -148,6 +150,29 @@ class SqlAlchemyAiJobRepository:
 
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return self.db.scalar(select(Course).where(Course.id == course_id, Course.owner_id == user_id))
+
+    def get_active_path_job(self, user_id: int, course_id: int) -> AiJob | None:
+        return self.db.scalar(
+            select(AiJob)
+            .where(
+                AiJob.user_id == user_id,
+                AiJob.course_id == course_id,
+                AiJob.workflow == "path_planning",
+                AiJob.status.in_(ACTIVE_STATUSES),
+            )
+            .order_by(AiJob.updated_at.desc(), AiJob.id.desc())
+        )
+
+    def get_active_learning_path(self, user_id: int, course_id: int) -> LearningPath | None:
+        return self.db.scalar(
+            select(LearningPath)
+            .where(
+                LearningPath.user_id == user_id,
+                LearningPath.course_id == course_id,
+                LearningPath.status == "active",
+            )
+            .order_by(LearningPath.updated_at.desc(), LearningPath.id.desc())
+        )
 
     def get_materials_for_user(self, user_id: int, material_ids: list[int]) -> list[Material]:
         if not material_ids:
@@ -407,6 +432,76 @@ class AiJobService:
             idempotency_key=idempotency_key,
         )
 
+    def create_path_planning_job(
+        self,
+        user: User,
+        *,
+        course_id: int,
+        idempotency_key: str | None,
+        trigger: str = "manual",
+        assessment_session_id: int | None = None,
+    ) -> AiJobResponse:
+        if self.repository.get_course_for_user(user.id, course_id) is None:
+            raise AiJobNotFoundError("课程不存在或无权访问。")
+        if trigger not in {"manual", "assessment"}:
+            raise AiJobValidationError("不支持的路径规划触发方式。")
+        active = self.repository.get_active_path_job(user.id, course_id)
+        if active is not None:
+            return ai_job_to_api(active, max_retries=self.max_retries)
+        return self._create(
+            user,
+            workflow="path_planning",
+            course_id=course_id,
+            request_json={
+                "course_id": course_id,
+                "trigger": trigger,
+                "assessment_session_id": assessment_session_id,
+            },
+            idempotency_key=idempotency_key,
+        )
+
+    def replan_after_assessment(self, user: User, course_id: int, assessment_session_id: int):
+        from backend.app.services.paths import PathReplanResult
+
+        if self.repository.get_active_learning_path(user.id, course_id) is None:
+            return PathReplanResult(status="not_started", trace_id=None, detail=None)
+        session = self.repository.db.scalar(
+            select(PracticeSession).where(
+                PracticeSession.id == assessment_session_id,
+                PracticeSession.user_id == user.id,
+                PracticeSession.course_id == course_id,
+            )
+        )
+        if session is None:
+            raise AiJobNotFoundError("练习记录不存在或无权访问。")
+        answers = list(
+            self.repository.db.scalars(
+                select(PracticeAnswer)
+                .where(PracticeAnswer.session_id == assessment_session_id, PracticeAnswer.user_id == user.id)
+                .order_by(PracticeAnswer.id)
+            )
+        )
+        evidence = [
+            {
+                "id": int(answer.id),
+                "score": (answer.feedback_json or {}).get("score"),
+                "grading_status": (answer.feedback_json or {}).get("grading_status"),
+            }
+            for answer in answers
+            if (answer.feedback_json or {}).get("score") is not None
+        ]
+        digest = hashlib.sha256(
+            json.dumps(evidence, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()[:20]
+        job = self.create_path_planning_job(
+            user,
+            course_id=course_id,
+            trigger="assessment",
+            assessment_session_id=assessment_session_id,
+            idempotency_key=f"assessment-path-{assessment_session_id}-{digest}",
+        )
+        return PathReplanResult(status="queued", trace_id=job.agent_trace_id, detail=None)
+
     def create_embedding_reindex_job(
         self,
         user: User,
@@ -597,6 +692,19 @@ class AiJobService:
                 retry_of_job_id=original.id,
                 attempt_count=next_attempt,
             )
+        if original.workflow == "path_planning":
+            course_id = int(request.get("course_id") or original.course_id or 0)
+            if self.repository.get_course_for_user(user.id, course_id) is None:
+                raise AiJobNotFoundError("课程不存在或无权访问。")
+            return self._create(
+                user,
+                workflow="path_planning",
+                course_id=course_id,
+                request_json=request,
+                idempotency_key=f"retry-{original.id}-{uuid4().hex}",
+                retry_of_job_id=original.id,
+                attempt_count=next_attempt,
+            )
         course_id = int(request["course_id"])
         if self.repository.get_course_for_user(user.id, course_id) is None:
             raise AiJobNotFoundError("课程不存在或无权访问。")
@@ -650,6 +758,8 @@ class AiJobService:
                 result = self._run_embedding_reindex(user, job, context)
             elif job.workflow == "material_ingestion":
                 result = self._run_material_ingestion(user, job, context)
+            elif job.workflow == "path_planning":
+                result = self._run_path_planning(user, job, context)
             else:
                 raise AiJobValidationError("不支持的 AI 任务类型。")
             refreshed = self.repository.get_job(job_id, for_update=True) or job
@@ -835,6 +945,53 @@ class AiJobService:
             "resource_ids": [resource.id for resource in result.resources],
             "failed_resource_types": result.failed_resource_types,
             "warnings": result.warnings,
+        }
+
+    def _run_path_planning(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:
+        from backend.app.agents.path_planning import PathPlanningGraphRunner
+        from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
+        from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
+        from backend.app.services.paths import PathService, SqlAlchemyPathRepository
+
+        request = dict(job.request_json or {})
+        course_id = int(request.get("course_id") or job.course_id or 0)
+        if self.repository.get_course_for_user(user.id, course_id) is None:
+            raise AiJobNotFoundError("课程不存在或无权访问。")
+        model_service = ModelSettingsService(
+            repository=SqlAlchemyModelSettingsRepository(self.repository.db),
+            settings=self.settings,
+            provider=OpenAICompatibleChatProvider(),
+        )
+        service = PathService(
+            SqlAlchemyPathRepository(self.repository.db),
+            model_service=model_service,
+            trace_recorder=AgentTraceRecorder(),
+        )
+        trigger = str(request.get("trigger") or "manual")
+        previous = service.repository.get_active_path(user.id, course_id)
+        result = PathPlanningGraphRunner(service).run(
+            user=user,
+            course_id=course_id,
+            trigger=trigger,
+            assessment_session_id=(
+                int(request["assessment_session_id"])
+                if request.get("assessment_session_id") is not None
+                else None
+            ),
+            previous_path=previous,
+            trace_id=job.agent_trace_id,
+            job_context=context,
+        )
+        detail = result.detail
+        path = detail.path if detail is not None else None
+        plan = path.plan_json if path is not None else {}
+        return {
+            "course_id": course_id,
+            "path_id": path.id if path is not None else None,
+            "generation_mode": str(plan.get("generation_mode") or "deterministic_source"),
+            "preserved_task_count": result.preserved_task_count,
+            "agent_trace_id": result.trace_id,
+            "warnings": list(plan.get("warnings") or []),
         }
 
     def _run_embedding_reindex(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:

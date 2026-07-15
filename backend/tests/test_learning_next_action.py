@@ -13,6 +13,7 @@ from backend.app.core.config import Settings
 from backend.app.core.security import create_access_token
 from backend.app.main import create_app
 from backend.app.models import (
+    AiJob,
     AssessmentReport,
     Course,
     LearningPath,
@@ -92,6 +93,32 @@ def test_material_actions_cover_upload_wait_review_retry_and_course_creation() -
     material.ingestion_status = "failed"
     assert service._material_action(material).kind == "retry_material"
     assert service._material_action(material).status == "blocked"
+
+
+def test_path_job_is_exposed_as_waiting_next_action() -> None:
+    service = service_with(MagicMock(), mastery())
+    job = AiJob(
+        id=90,
+        user_id=1,
+        course_id=10,
+        workflow="path_planning",
+        status="running",
+        progress_percent=38,
+        stage="deterministic_rank",
+        label="已生成安全路径底稿",
+        agent_trace_id="trace-path",
+        idempotency_key="path-10",
+        request_json={"course_id": 10},
+        progress_json={},
+        result_json={},
+    )
+
+    action = service._job_action(job)
+
+    assert action is not None
+    assert action.kind == "wait_for_path"
+    assert action.status == "waiting"
+    assert action.course_id == "10"
 
 
 def test_course_action_prioritizes_pending_weakness_then_current_path_task() -> None:

@@ -12,7 +12,7 @@ from backend.app.models import User
 from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.practice import CreatePracticeSessionRequest, SavePracticeDraftRequest, SubmitPracticeAnswersRequest
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
-from backend.app.services.paths import PathService, SqlAlchemyPathRepository
+from backend.app.services.ai_jobs import AiJobService, RqAiJobQueue, SqlAlchemyAiJobRepository
 from backend.app.services.profiles import ProfileService, SqlAlchemyProfileRepository
 from backend.app.services.practice import PracticeNotFoundError, PracticeService, PracticeValidationError, SqlAlchemyPracticeRepository
 
@@ -30,10 +30,10 @@ def get_practice_service(db=Depends(get_db_session)) -> PracticeService:
         SqlAlchemyPracticeRepository(db),
         model_service=model_service,
         trace_recorder=AgentTraceRecorder(),
-        path_service=PathService(
-            SqlAlchemyPathRepository(db),
-            model_service=model_service,
-            trace_recorder=AgentTraceRecorder(),
+        path_service=AiJobService(
+            SqlAlchemyAiJobRepository(db),
+            settings=get_settings(),
+            queue=RqAiJobQueue(get_settings()),
         ),
         profile_service=ProfileService(
             SqlAlchemyProfileRepository(db),

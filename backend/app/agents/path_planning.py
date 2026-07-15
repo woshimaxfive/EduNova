@@ -47,10 +47,20 @@ class PathPlanningState(TypedDict, total=False):
     preserved_task_count: int
     path: LearningPath
     detail: Any
+    job_context: Any
 
 
 class PathPlanningGraphRunner:
     workflow = "path_planning"
+    job_progress = {
+        "profile": (12, "已读取可信学习画像"),
+        "collect_evidence": (25, "已聚合课程学习证据"),
+        "deterministic_rank": (38, "已生成安全路径底稿"),
+        "model_plan": (65, "已完成个性化路径规划"),
+        "review": (82, "已审核路径结构与权限"),
+        "repair": (92, "已恢复安全路径方案"),
+        "persist": (100, "学习路径已更新"),
+    }
 
     def __init__(self, service: PathService) -> None:
         self.service = service
@@ -65,10 +75,12 @@ class PathPlanningGraphRunner:
         goal: str = "",
         assessment_session_id: int | None = None,
         previous_path: LearningPath | None = None,
+        trace_id: str | None = None,
+        job_context: Any | None = None,
     ) -> PathReplanResult:
-        trace_id = make_trace_id()
+        effective_trace_id = trace_id or make_trace_id()
         state: PathPlanningState = {
-            "trace_id": trace_id,
+            "trace_id": effective_trace_id,
             "user": user,
             "user_id": user.id,
             "course_id": course_id,
@@ -79,12 +91,13 @@ class PathPlanningGraphRunner:
             "previous_tasks": [],
             "warnings": [],
             "repair_count": 0,
+            "job_context": job_context,
         }
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, purpose=trigger)):
             result = self.graph.invoke(state)
         return PathReplanResult(
             status="replanned" if trigger == "assessment" else "generated",
-            trace_id=trace_id,
+            trace_id=effective_trace_id,
             detail=result.get("detail"),
             preserved_task_count=int(result.get("preserved_task_count") or 0),
         )
@@ -280,6 +293,9 @@ class PathPlanningGraphRunner:
 
     def _persist_node(self, state: PathPlanningState) -> dict[str, Any]:
         started = perf_counter()
+        context = state.get("job_context")
+        if context is not None:
+            context.before_node("persist")
         course = state["course"]
         profile = state.get("profile_summary", {})
         goal = safe_text(state.get("goal"), limit=500) or safe_text(profile.get("learning_goal"), limit=500)
@@ -367,6 +383,8 @@ class PathPlanningGraphRunner:
             )
         except Exception as exc:
             self.service.repository.rollback()
+            if context is not None:
+                context.after_node(name="persist", label="学习路径保存失败", progress_percent=96, status="failed")
             self._record(
                 state,
                 agent_name="persist",
@@ -392,6 +410,8 @@ class PathPlanningGraphRunner:
             },
             started_at=started,
         )
+        if context is not None:
+            context.after_node(name="persist", label=self.job_progress["persist"][1], progress_percent=100, status="completed")
         return {"path": path, "detail": detail}
 
     def _model_order(self, state: PathPlanningState, *, repair: bool) -> list[PlannedTask] | None:
@@ -647,10 +667,21 @@ class PathPlanningGraphRunner:
         work: Callable[[], tuple[dict[str, Any], str, str, dict[str, Any]]],
     ) -> dict[str, Any]:
         started = perf_counter()
+        context = state.get("job_context")
+        if context is not None:
+            context.before_node(agent_name)
         try:
             with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name=agent_name)):
                 result, output_summary, status, metadata = work()
         except Exception as exc:
+            if context is not None:
+                progress, _ = self.job_progress.get(agent_name, (0, agent_name))
+                context.after_node(
+                    name=agent_name,
+                    label="路径规划节点执行失败",
+                    progress_percent=max(0, progress - 1),
+                    status="failed",
+                )
             self._record(
                 state,
                 agent_name=agent_name,
@@ -672,6 +703,14 @@ class PathPlanningGraphRunner:
             metadata=metadata,
             started_at=started,
         )
+        if context is not None:
+            progress, label = self.job_progress.get(agent_name, (0, output_summary))
+            context.after_node(
+                name=agent_name,
+                label=label,
+                progress_percent=progress,
+                status=status,
+            )
         return result
 
     def _record(

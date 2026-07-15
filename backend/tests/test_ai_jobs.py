@@ -75,6 +75,19 @@ class FakeRepository:
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return next((item for item in self.courses if item.id == course_id and item.owner_id == user_id), None)
 
+    def get_active_path_job(self, user_id: int, course_id: int) -> AiJob | None:
+        return next(
+            (
+                item
+                for item in reversed(self.jobs)
+                if item.user_id == user_id
+                and item.course_id == course_id
+                and item.workflow == "path_planning"
+                and item.status in {"queued", "running", "cancelling"}
+            ),
+            None,
+        )
+
     def get_materials_for_user(self, user_id: int, ids: list[int]) -> list[Material]:
         return [item for item in self.materials if item.user_id == user_id and item.id in ids]
 
@@ -153,6 +166,24 @@ def test_active_job_limit_is_enforced_per_user() -> None:
 
     with pytest.raises(AiJobConflictError, match="达到上限"):
         service.create_course_builder_job(user, material_ids=[11], course_title="课程二", idempotency_key="two")
+
+
+def test_path_job_reuses_active_course_job_and_rejects_cross_user_course() -> None:
+    user = make_user()
+    repository = FakeRepository(users=[user], courses=[make_course()])
+    queue = FakeQueue()
+    service = make_service(repository, queue)
+
+    first = service.create_path_planning_job(user, course_id=21, idempotency_key="path-click-one")
+    second = service.create_path_planning_job(user, course_id=21, idempotency_key="path-click-two")
+
+    assert first.job_id == second.job_id
+    assert first.workflow == "path_planning"
+    assert first.request == {"course_id": 21, "trigger": "manual", "assessment_session_id": None}
+    assert queue.enqueued == [1]
+
+    with pytest.raises(AiJobNotFoundError, match="课程"):
+        service.create_path_planning_job(make_user(2), course_id=21, idempotency_key="other-user")
 
 
 def test_invalid_material_and_resource_ownership_are_rejected() -> None:

@@ -1018,3 +1018,11 @@ Phase 26 不新增迁移或通用事件表。`LearningNextActionService` 只读�
 | `embedding_provider/model/dimension/profile_hash` | string/int | 检索兼容与配置指纹 |
 
 关闭或清除记忆只删除 `conversation_memory_entries`；`chat_sessions/chat_messages` 不联动删除。Embedding 不可用时不创建索引，也不退回关键词搜索跨会话历史。同一用户查询只比较当前配置指纹和维度，最多返回 5 条。
+# Phase 27 数据结构
+
+迁移 `20260715_0025`：
+
+- `learning_tasks.learning_bundle_json JSONB NOT NULL DEFAULT {}`：保存教学策略、选择理由、资源类型、教学角色、资源 ID 与生成状态。
+- `resource_interactions`：追加式保存 `event_id`、用户、课程、资源、可选路径任务、事件类型、进度、反馈与时间。
+- `(user_id,event_id)` 唯一，保证客户端重试幂等；资源、课程与路径任务均通过外键和服务层用户隔离校验。
+- 不保存页面正文、音频、鼠标轨迹、搜索原文或画像原文。删除资源级联删除互动，删除路径任务只将关联置空。

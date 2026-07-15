@@ -697,3 +697,11 @@ flowchart LR
 `LearningNextActionService` 位于普通 Service 层，不是新 Agent。它只读取当前用户可见的资料、AI Job、课程、弱点队列、路径任务、掌握度、练习和报告，以固定优先级返回动作语义与安全 ID。后端不返回 URL，前端 `learningActionHref` 是唯一动作路由映射。
 
 全局查询先恢复进行中的资料解析或建课任务，再比较最近未分配资料与最近课程活动；课程级查询强制校验课程归属。React Query 的全局键和当前课程键在资料、课程、画像、资源、路径、练习、重评、报告和 AI Job 完成后统一失效。该层不调用模型、不自动执行写操作、不新增数据库表，也不替代各领域服务的权限与状态机。
+# Phase 27 多模态闭环边界
+
+- `CourseLearnerContext` 是问答、资源、路径、练习和报告共享的可信个性化适配层；个性化只改变深度、案例、模态、顺序和难度，不改变课程事实、引用、客观答案或统计。
+- `learning_bundle_json` 保存路径任务的教学策略、理由和有序资源项。第三方类型不进入领域实体，缺失资源仍由用户确认后通过既有 AIJob 生成。
+- `VideoCurationService` 复用 `WebSearchService`，只归一化 B 站 BV 号和 YouTube 视频 ID。前端不信任任意 `embed_url`，而是从平台与 ID 构造官方播放器地址。
+- `resource_interactions` 是课程级轻量行为事实，不是通用埋点平台；它不保存正文、音频、鼠标轨迹或隐私原文。
+- 浏览器 Web Speech 只作为渐进增强。语音识别只回填输入框，不自动发送；朗读前清理 Markdown、URL、引用标号和代码块。
+- 学生可见“协作过程”来自白名单 Agent trace，禁止展示 Provider 原始思维链、系统提示词、完整模型输入、画像原文和资料原文。

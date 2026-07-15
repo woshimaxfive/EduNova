@@ -183,3 +183,9 @@ validate_confirmed_materials -> coherence_gate -> load_outlines
 ```
 
 `concept_workers` 通过 LangGraph `Send` 按章节并行，每个 Worker 只读取本章节切片。模型负责语义归纳与教学结构，规则负责来源覆盖、知识点密度、标题质量、引用存在性、先修 DAG 和事务门禁。任何知识点没有真实切片证据时，整门课程不得持久化。
+# Phase 27 个性化与协作过程
+
+- ResourceGenerationGraph 与 PathPlanningGraph 读取同一 `CourseLearnerContext`，并把可观察个性化因素、学习包策略和安全理由写入白名单 trace。
+- VideoCuratorWorker 是受限工具 Worker：最小化查询、严格平台白名单、无下载、无内容观看声明；失败只产生该模态 warning，不阻断其他资源。
+- ReviewAgent 继续审核课程自产资源。`external_video` 只做 URL、平台、证据角色和敏感输出规则审核，不冒充课程生成内容。
+- 学生看到的是“理解问题、参考上下文、课程检索、联网核实、个性化规划、回答、安全审核”等执行摘要，不是模型原始思维链。

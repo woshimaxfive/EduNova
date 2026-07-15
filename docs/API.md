@@ -2582,3 +2582,12 @@ OpenRouter 不再作为可见预设。
 ```
 
 `status` 为 `ready|waiting|blocked`。`kind` 表达上传、等待解析、重试、确认目录、建课、确认薄弱点、继续路径、针对练习、生成路径、学习知识点、更新报告或查看报告等动作。接口只返回语义和安全 ID，不返回前端 URL，也不会执行动作。
+# Phase 27 资源学习接口
+
+- `GenerateResourcesRequest` 新增可选 `path_task_id`；`ResourceType` 增加 `video`。
+- `LearningPathTaskResponse.learning_bundle` 返回策略、理由和有序资源项。
+- `POST /api/v1/resources/{resource_id}/interactions` 接收幂等 `event_id`、`opened|started|progress|completed|feedback`、可选 `path_task_id`、0-100 进度和四类反馈。
+- `GET /api/v1/resources/{resource_id}/learning-state` 返回当前用户的聚合打开、开始、完成、进度和最新反馈状态。
+- `AgentTraceResponse.summary` 返回安全派生的耗时、课程/网页/历史来源数、个性化因素代码、推理模式、搜索后端、审核状态和安全摘要。
+
+完成事件只有在资源与路径任务同属当前用户和课程且已建立关联时才推进任务；视频进度或播放器结束不会自动写完成。

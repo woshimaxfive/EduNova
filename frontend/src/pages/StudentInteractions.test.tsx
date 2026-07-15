@@ -1926,6 +1926,14 @@ describe("student interaction affordances", () => {
     expect(within(embeddingProviderPreset).queryByRole("option", { name: "DeepSeek" })).not.toBeInTheDocument();
     expect(within(embeddingProviderPreset).queryByRole("option", { name: "Kimi" })).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "配置图片理解" }));
+    expect(screen.getByRole("region", { name: "图片理解配置编辑器" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "图片理解服务商" })).toHaveValue("spark-vision");
+    expect(screen.getByRole("textbox", { name: "图片 Base URL" })).toHaveValue("https://maas-api.cn-huabei-1.xf-yun.com/v2");
+    expect(screen.getByLabelText("图片 API Key")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "向量服务商" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "回答服务商" })).not.toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: /通义向量/ }));
     await user.click(screen.getByRole("button", { name: "设为向量默认" }));
     await waitFor(() => expect(calls).toContainEqual({

@@ -3,6 +3,7 @@ import {
   CheckCircle,
   Database,
   FloppyDisk,
+  ImageSquare,
   Key,
   LockKey,
   Plus,
@@ -44,7 +45,8 @@ import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { ToastStack } from "../components/feedback/ToastStack";
 import { useToastQueue } from "../components/feedback/useToastQueue";
 import {
-  CHAT_MODEL_PROVIDER_PRESETS,
+  TEXT_CHAT_MODEL_PROVIDER_PRESETS,
+  VISION_MODEL_PROVIDER_PRESETS,
   EMBEDDING_MODEL_PROVIDER_PRESETS,
   RERANK_MODEL_PROVIDER_PRESETS,
   getChatProviderPreset,
@@ -140,10 +142,11 @@ function draftFromConfig(config: ModelConfigSummary): ModelConfigDraft {
 
 function newDraftFromPreset(presetId = "spark"): ModelConfigDraft {
   const preset = getChatProviderPreset(presetId);
-  const embeddingPreset = getEmbeddingProviderPreset("xfyun-embedding");
-  const rerankPreset = getRerankProviderPreset("siliconflow-rerank");
+  const visionOnly = isVisionProviderPreset(preset.id);
+  const embeddingPreset = getEmbeddingProviderPreset(visionOnly ? "none" : "xfyun-embedding");
+  const rerankPreset = getRerankProviderPreset(visionOnly ? "none" : "siliconflow-rerank");
   return {
-    display_name: preset.name.includes("讯飞") ? "星火 X2-Flash 学习组合" : `${preset.name} 配置`,
+    display_name: visionOnly ? `${preset.name}配置` : preset.name.includes("讯飞") ? "星火 X2-Flash 学习组合" : `${preset.name} 配置`,
     preset_id: preset.id,
     base_url: preset.baseUrl,
     api_key: "",
@@ -184,6 +187,12 @@ function draftsMatch(left: ModelConfigDraft, right: ModelConfigDraft) {
 }
 
 function configTestLabel(config: ModelConfigSummary) {
+  if (isVisionProviderPreset(config.preset_id)) {
+    const visionTest = config.connection_tests?.vision;
+    if (visionTest?.ok) return "图片已验证";
+    if (visionTest && !visionTest.ok) return "图片连接异常";
+    return "图片尚未验证";
+  }
   const chatTest = config.connection_tests?.chat;
   const embeddingTest = config.connection_tests?.embedding;
   const rerankTest = config.connection_tests?.rerank;
@@ -284,6 +293,7 @@ export function SettingsPage() {
   const selectedChatPreset = getChatProviderPreset(currentDraft.preset_id);
   const selectedEmbeddingPreset = getEmbeddingProviderPreset(currentDraft.embedding_preset_id);
   const selectedRerankPreset = getRerankProviderPreset(currentDraft.rerank_preset_id);
+  const isVisionConfig = isVisionProviderPreset(currentDraft.preset_id);
   const activeConfigId = typeof selectedConfigId === "number" ? selectedConfigId : selectedConfig?.id ?? null;
   const isCreating = selectedConfigId === "new" || !selectedConfig;
   const isDirty = isCreating || (selectedConfig ? !draftsMatch(currentDraft, draftFromConfig(selectedConfig)) : false);
@@ -565,6 +575,12 @@ export function SettingsPage() {
     setModelFeedback(null);
   }
 
+  function createVisionConfig() {
+    setSelectedConfigId("new");
+    setDraft(newDraftFromPreset("spark-vision"));
+    setModelFeedback(null);
+  }
+
   function selectConfig(config: ModelConfigSummary) {
     setSelectedConfigId(config.id);
     setDraft(draftFromConfig(config));
@@ -686,11 +702,30 @@ export function SettingsPage() {
                     <div>
                       <h2>模型连接</h2>
                     </div>
-                    <button type="button" className="settings-new-button" onClick={createNewConfig}>
-                      <Plus size={16} weight="bold" aria-hidden="true" />
-                      新建配置
-                    </button>
+                    <div className="settings-panel-actions">
+                      <button type="button" className="settings-new-button vision" onClick={createVisionConfig}>
+                        <ImageSquare size={16} weight="duotone" aria-hidden="true" />
+                        配置图片理解
+                      </button>
+                      <button type="button" className="settings-new-button" onClick={createNewConfig}>
+                        <Plus size={16} weight="bold" aria-hidden="true" />
+                        新建配置
+                      </button>
+                    </div>
                   </header>
+
+                  <section className={defaultVisionConfig ? "settings-vision-entry ready" : "settings-vision-entry"} aria-label="图片理解模型配置">
+                    <span aria-hidden="true"><ImageSquare size={22} weight="duotone" /></span>
+                    <div>
+                      <strong>图片理解模型</strong>
+                      <p>{defaultVisionConfig
+                        ? `当前使用 ${defaultVisionConfig.display_name} · ${defaultVisionConfig.chat_model || "模型待填写"}`
+                        : "拍题、流程图和报错截图需要单独的视觉模型，不会复用普通回答模型。"}</p>
+                    </div>
+                    <button type="button" onClick={() => defaultVisionConfig ? selectConfig(defaultVisionConfig) : createVisionConfig()}>
+                      {defaultVisionConfig ? "管理当前配置" : "立即配置"}
+                    </button>
+                  </section>
 
                   {modelConfigsQuery.isPending ? (
                     <div className="settings-query-state" role="status">
@@ -777,7 +812,7 @@ export function SettingsPage() {
                               </span>
                             </span>
                             <span>
-                              {config.chat_model ? `回答 ${config.chat_model}` : "回答未配置"}
+                              {config.chat_model ? `${isVisionProviderPreset(config.preset_id) ? "图片" : "回答"} ${config.chat_model}` : isVisionProviderPreset(config.preset_id) ? "图片模型待填写" : "回答未配置"}
                               {config.embedding_model ? ` · 向量 ${config.embedding_model}` : " · 向量未配置"}
                               {config.rerank_model ? ` · 重排 ${config.rerank_model}` : ""}
                             </span>
@@ -795,7 +830,7 @@ export function SettingsPage() {
                           <button type="button" className="active settings-config-draft">
                             <span className="settings-config-row-title"><strong>新建配置</strong><small>草稿</small></span>
                             <span>
-                              {currentDraft.chat_model ? `回答 ${currentDraft.chat_model}` : "回答未配置"}
+                              {currentDraft.chat_model ? `${isVisionConfig ? "图片" : "回答"} ${currentDraft.chat_model}` : isVisionConfig ? "图片模型待填写" : "回答未配置"}
                               {currentDraft.embedding_model ? ` · 向量 ${currentDraft.embedding_model}` : " · 向量未配置"}
                               {currentDraft.rerank_model ? ` · 重排 ${currentDraft.rerank_model}` : ""}
                             </span>
@@ -805,7 +840,7 @@ export function SettingsPage() {
                       </div>
                     </aside>
 
-                    <section className="settings-config-editor" aria-label="模型配置编辑器">
+                    <section className="settings-config-editor" aria-label={isVisionConfig ? "图片理解配置编辑器" : "模型配置编辑器"}>
                       <header>
                         <div>
                           <span>
@@ -842,7 +877,9 @@ export function SettingsPage() {
                           <span>配置名称</span>
                           <input aria-label="配置名称" value={currentDraft.display_name} onChange={(event) => updateDraft("display_name", event.target.value)} />
                         </label>
-                        <p>一套配置可以组合不同服务商，例如星火负责回答、百炼负责向量检索。</p>
+                        <p>{isVisionConfig
+                          ? "这套配置只负责理解用户上传的图片，密钥、模型和默认角色都与普通回答服务分开。"
+                          : "一套配置可以组合不同服务商，例如星火负责回答、百炼负责向量检索。"}</p>
                       </div>
 
                       <div className="settings-service-groups">
@@ -850,21 +887,21 @@ export function SettingsPage() {
                           <header>
                             <span aria-hidden="true"><Robot size={18} weight="duotone" /></span>
                             <div>
-                              <h4 id="chat-service-title">回答服务</h4>
-                              <p>负责主页问答、课程辅导和各类 Agent 的内容生成。</p>
+                              <h4 id="chat-service-title">{isVisionConfig ? "图片理解服务" : "回答服务"}</h4>
+                              <p>{isVisionConfig ? "负责理解拍题、流程图和报错截图；普通文字回答仍使用回答默认配置。" : "负责主页问答、课程辅导和各类 Agent 的内容生成。"}</p>
                             </div>
                           </header>
                           <div className="settings-service-grid">
                             <label>
-                              <span>回答服务商</span>
-                              <select aria-label="回答服务商" value={currentDraft.preset_id} onChange={(event) => applyChatProviderPreset(event.target.value)}>
-                                {CHAT_MODEL_PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                              <span>{isVisionConfig ? "图片理解服务商" : "回答服务商"}</span>
+                              <select aria-label={isVisionConfig ? "图片理解服务商" : "回答服务商"} value={currentDraft.preset_id} onChange={(event) => applyChatProviderPreset(event.target.value)}>
+                                {(isVisionConfig ? VISION_MODEL_PROVIDER_PRESETS : TEXT_CHAT_MODEL_PROVIDER_PRESETS).map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
                               </select>
                             </label>
                             <label>
-                              <span>回答模型</span>
+                              <span>{isVisionConfig ? "图片模型 / Model ID" : "回答模型"}</span>
                               <input
-                                aria-label="回答模型"
+                                aria-label={isVisionConfig ? "图片模型" : "回答模型"}
                                 value={currentDraft.chat_model}
                                 placeholder="不使用回答服务时可留空"
                                 onChange={(event) => updateDraft("chat_model", event.target.value)}
@@ -876,13 +913,13 @@ export function SettingsPage() {
                               {selectedChatPreset.modelsHint ? <small>{selectedChatPreset.modelsHint}</small> : null}
                             </div>
                             <label className="settings-form-span">
-                              <span>回答 Base URL</span>
-                              <input aria-label="回答 Base URL" value={currentDraft.base_url} onChange={(event) => updateDraft("base_url", event.target.value)} />
+                              <span>{isVisionConfig ? "图片 Base URL" : "回答 Base URL"}</span>
+                              <input aria-label={isVisionConfig ? "图片 Base URL" : "回答 Base URL"} value={currentDraft.base_url} onChange={(event) => updateDraft("base_url", event.target.value)} />
                             </label>
                             <label className="settings-form-span">
-                              <span>回答 {selectedChatPreset.apiKeyLabel}</span>
+                              <span>{isVisionConfig ? "图片" : "回答"} {selectedChatPreset.apiKeyLabel}</span>
                               <input
-                                aria-label="回答 API Key"
+                                aria-label={isVisionConfig ? "图片 API Key" : "回答 API Key"}
                                 type="password"
                                 autoComplete="off"
                                 value={currentDraft.api_key}
@@ -895,7 +932,7 @@ export function SettingsPage() {
                               />
                             </label>
                           </div>
-                          <ConnectionTestCard
+                          {!isVisionConfig ? <ConnectionTestCard
                             operation="chat"
                             model={currentDraft.chat_model || null}
                             missingMessage={defaultChatConfig
@@ -908,8 +945,8 @@ export function SettingsPage() {
                             disabled={isCreating || isDirty || testConnectionMutation.isPending}
                             pending={testPending("chat")}
                             onTest={() => runConnectionTest("chat")}
-                          />
-                          {isVisionProviderPreset(currentDraft.preset_id) ? (
+                          /> : null}
+                          {isVisionConfig ? (
                             <ConnectionTestCard
                               operation="vision"
                               model={currentDraft.chat_model || null}
@@ -923,7 +960,7 @@ export function SettingsPage() {
                           ) : null}
                         </section>
 
-                        <section className="settings-service-group" aria-labelledby="embedding-service-title">
+                        {!isVisionConfig ? <section className="settings-service-group" aria-labelledby="embedding-service-title">
                           <header>
                             <span aria-hidden="true"><Database size={18} weight="duotone" /></span>
                             <div>
@@ -1027,9 +1064,9 @@ export function SettingsPage() {
                             pending={testPending("embedding")}
                             onTest={() => runConnectionTest("embedding")}
                           />
-                        </section>
+                        </section> : null}
 
-                        <section className="settings-service-group" aria-labelledby="rerank-service-title">
+                        {!isVisionConfig ? <section className="settings-service-group" aria-labelledby="rerank-service-title">
                           <header>
                             <span aria-hidden="true"><Database size={18} weight="duotone" /></span>
                             <div>
@@ -1105,7 +1142,7 @@ export function SettingsPage() {
                             pending={testPending("rerank")}
                             onTest={() => runConnectionTest("rerank")}
                           />
-                        </section>
+                        </section> : null}
                       </div>
 
                       <InlineFeedback message={modelFeedback} tone="warning" className="settings-inline-feedback" />
@@ -1125,7 +1162,7 @@ export function SettingsPage() {
                             <Trash size={16} weight="duotone" aria-hidden="true" />
                           </button>
                         ) : null}
-                        {!isCreating && currentDraft.chat_model && !selectedConfig?.is_default ? (
+                        {!isVisionConfig && !isCreating && currentDraft.chat_model && !selectedConfig?.is_default ? (
                           <button type="button" className="secondary-action" onClick={() => activeConfigId && defaultConfigMutation.mutate(activeConfigId)} disabled={defaultConfigMutation.isPending || isDirty}>
                             设为回答默认
                           </button>

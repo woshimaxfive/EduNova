@@ -184,6 +184,14 @@ export const CHAT_MODEL_PROVIDER_PRESETS: ChatModelProviderPreset[] = [
   }
 ];
 
+export const VISION_MODEL_PROVIDER_PRESETS = CHAT_MODEL_PROVIDER_PRESETS.filter((preset) =>
+  ["spark-vision", "openai-vision", "hunyuan-vision", "custom-vision"].includes(preset.id)
+);
+
+export const TEXT_CHAT_MODEL_PROVIDER_PRESETS = CHAT_MODEL_PROVIDER_PRESETS.filter((preset) =>
+  !VISION_MODEL_PROVIDER_PRESETS.some((visionPreset) => visionPreset.id === preset.id)
+);
+
 export const EMBEDDING_MODEL_PROVIDER_PRESETS: EmbeddingModelProviderPreset[] = [
   {
     id: "none",

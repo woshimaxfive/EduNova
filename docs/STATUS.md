@@ -16,6 +16,8 @@
 
 模型设置新增独立图片理解默认角色和真实小图连接测试。能力注册表只把讯飞 MaaS、OpenAI 视觉及经测试的兼容服务视为候选，不假定 spark-x、DeepSeek或普通兼容文本模型支持图片。`VisionUnderstandingService` 每轮最多调用视觉模型一次，输出结构化问题、图片摘要、可见文字、观察、不确定项、联网和推理决策；既有 LangGraph继续负责课程检索、联网、画像边界、回答、引用与审核。连续追问由语义模型的 `referenced_turn_ids` 在当前用户当前会话内定位历史图片，图片不会进入资料库、教材证据、掌握度、长期画像或跨会话记忆。
 
+图片理解配置已从回答服务商下拉框中拆出：设置页固定展示“图片理解模型”入口，视觉配置编辑器只显示图片服务商、Model ID、Base URL、API Key和真实图片连接测试；普通回答配置不再混入视觉候选。桌面与 390px 实测入口和表单均可见、无水平溢出。
+
 2026-07-16 Phase 32 实际验收：`scripts/test.ps1` 通过后端 430 项、前端 238 项和离线 AI 评测 10 项，同时通过编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、production build 与 Compose。新增的图片草稿设置跳转回归另行定向通过。一次隔离 Docker E2E 通过八服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例，并自动清理临时容器、网络与卷。`agent-browser` 单一会话在桌面和 390px 验证图片入口、真实 PNG 上传预览、无视觉配置引导、视觉 Provider 候选、设置连接状态和无水平溢出；验收发现设置跳转会卸载草稿后，已改为新标签打开并补测试。临时账号和附件已精确清理。当前本机未配置独立视觉 Key，因此没有把任何 Provider 预设记录为“真实兼容已验证”。
 
 2026-07-15 Phase 31 已完成真实主链实战主体：通过 Docker 生产入口和普通用户界面上传 437 页、25,628,230 字节整本 PDF。首次盲测发现 Docling 仅返回 5 页却错误通过质量门禁；修复源页数核验、大小感知超时、真实心跳、部分解析拒绝和原子失败保护后，解析得到 437 页、约 98% 可读页、10 个顶层章、51 个目录条目和 479 个切片。目录经页面整理确认，建课约 79 秒并生成 51 个知识点，覆盖教材前、中、后部。
@@ -189,7 +191,7 @@ Phase 14 使用 Alembic `20260710_0011` 增加练习闭环证据字段。`Assess
 | 课程详情 | 课程列表、详情、概览、知识点 | `/api/v1/courses/*` |
 | RAG 检索 | 动态维度 embedding + 关键词/pgvector/RRF + 可选 Rerank；关键词 fallback | `/api/v1/rag/search` |
 | 课程会话 | 课程内历史、消息、引用持久化、历史改名、软删除和刷新恢复 | `/api/v1/tutor/sessions?scope=course` |
-| 模型设置 | 多套个人配置、回答/向量/重排序独立连接与默认、三类测试、向量重建 | `/api/v1/settings/model/configs` |
+| 模型设置 | 多套个人配置、回答/向量/重排序/图片理解独立连接与默认、四类测试、向量重建 | `/api/v1/settings/model/configs` |
 | 账号设置 | 昵称保存、安全换密及旧 JWT 全部失效 | `PATCH /api/v1/auth/me`、`PATCH /api/v1/auth/me/password` |
 | 课程回答 | `CourseTutorGraph` 接管非流式与流式课程 RAG 回答 | `/messages`、`/messages/stream` |
 | Embedding | 讯飞原生 2560 维与 OpenAI-compatible 动态维度；配置指纹隔离 | `EmbeddingService` |

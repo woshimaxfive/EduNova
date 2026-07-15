@@ -276,6 +276,62 @@
   line-height: 1.25;
 }
 
+.settings-panel-heading > .settings-panel-actions {
+  display: flex;
+  align-items: center;
+  grid-auto-flow: column;
+  gap: 8px;
+}
+
+.settings-new-button.vision {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--wide-workspace-divider));
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.settings-vision-entry {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--wide-workspace-divider));
+  border-radius: 8px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--accent-soft) 54%, var(--wide-workspace-control));
+}
+
+.settings-vision-entry > span {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 7px;
+  color: var(--accent-strong);
+  background: var(--wide-workspace-control);
+}
+
+.settings-vision-entry strong,
+.settings-vision-entry p {
+  margin: 0;
+}
+
+.settings-vision-entry strong { color: var(--text-strong); }
+.settings-vision-entry p { margin-top: 3px; color: var(--text-muted); font-size: var(--font-caption); }
+
+.settings-vision-entry > button {
+  min-height: 36px;
+  border: 1px solid var(--accent-strong);
+  border-radius: 6px;
+  padding: 0 13px;
+  color: var(--surface);
+  background: var(--accent-strong);
+  font: inherit;
+  font-size: var(--font-meta);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .settings-query-state {
   display: flex;
   align-items: center;
@@ -1226,6 +1282,10 @@
   .settings-navigation button small { display: none; }
   .settings-panel-heading { align-items: flex-start; gap: 12px; }
   .settings-new-button { min-width: 36px; padding-inline: 8px; font-size: 0; }
+  .settings-panel-heading > .settings-panel-actions { display: flex; }
+  .settings-vision-entry { grid-template-columns: 38px minmax(0, 1fr); }
+  .settings-vision-entry > span { width: 38px; height: 38px; }
+  .settings-vision-entry > button { grid-column: 2; justify-self: start; }
   .settings-new-button svg { width: 17px; height: 17px; }
   .settings-system-fallback > summary { align-items: flex-start; flex-direction: column; gap: 5px; }
   .settings-config-name-row,

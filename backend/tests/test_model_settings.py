@@ -149,6 +149,7 @@ class FakeProvider:
     content: str = "ok"
     should_raise: Exception | None = None
     calls: list[dict[str, Any]] | None = None
+    reasoning_tokens: int | None = 0
 
     def chat_completion(self, config: Any, messages: list[dict[str, str]], timeout_seconds: float) -> str:
         if self.calls is None:
@@ -163,6 +164,17 @@ class FakeProvider:
         if self.should_raise is not None:
             raise self.should_raise
         return self.content
+
+    def chat_completion_result(self, config: Any, messages: list[dict[str, str]], timeout_seconds: float) -> Any:
+        self.chat_completion(config, messages, timeout_seconds)
+        return SimpleNamespace(
+            content=self.content,
+            input_tokens=12,
+            output_tokens=8,
+            reasoning_tokens=self.reasoning_tokens,
+            first_token_ms=None,
+            total_latency_ms=9,
+        )
 
     def vision_completion(
         self,
@@ -975,6 +987,85 @@ def test_connection_tests_persist_chat_and_embedding_independently() -> None:
     assert stored.connection_test_json["embedding"]["ok"] is True
     assert summary["connection_tests"]["chat"]["model"] == "chat-model"
     assert summary["connection_tests"]["embedding"]["model"] == "embedding-model"
+
+
+def test_structured_connection_test_persists_verified_capability_and_disables_qwen_thinking() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    provider = FakeProvider(content='{"status":"ok","items":["课程","练习"]}')
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(
+        repository=repo,
+        settings=make_settings(),
+        provider=provider,
+        execution_runtime=ImmediateExecutionRuntime(),
+    )
+    created = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="百炼千问",
+            preset_id="qwen",
+            provider="openai_compatible",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            api_key="qwen-secret",
+            chat_model="qwen3.7-plus",
+            make_default=True,
+        ),
+    ))
+
+    result = as_dict(service.test_config_connection(user, created["id"], operation="structured"))
+    summary = as_dict(service.list_configs(user))["configs"][0]
+    config = provider.calls[-1]["config"]
+
+    assert result["ok"] is True
+    assert result["operation"] == "structured"
+    assert result["reasoning_tokens"] == 0
+    assert isinstance(result["latency_ms"], int)
+    assert config.task_profile.reasoning == "disabled"
+    assert config.task_profile.output_mode == "json_object"
+    assert summary["structured_output_verified"] is True
+    assert summary["supports_reasoning_control"] is True
+
+
+def test_personal_structured_model_failure_does_not_fall_back_to_system_provider() -> None:
+    module = load_model_settings_module()
+    provider_module = load_openai_provider_module()
+    from backend.app.providers.model_tasks import ModelTaskProfile
+
+    user = make_user()
+    provider = FakeProvider(should_raise=provider_module.ModelProviderError("个人模型失败"))
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(
+        repository=repo,
+        settings=make_settings(),
+        provider=provider,
+        execution_runtime=ImmediateExecutionRuntime(),
+    )
+    created = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="个人结构化模型",
+            preset_id="custom",
+            provider="openai_compatible",
+            base_url="https://personal.example/v1",
+            api_key="personal-secret",
+            chat_model="personal-model",
+            make_default=True,
+        ),
+    ))
+    repo.settings_by_id[created["id"]].connection_test_json = {
+        "structured": {"ok": True, "operation": "structured"}
+    }
+
+    with pytest.raises(provider_module.ModelProviderError, match="个人模型失败"):
+        service.chat_completion_for_task(
+            user,
+            [{"role": "user", "content": "返回 JSON"}],
+            ModelTaskProfile(task_type="path_planning"),
+        )
+
+    assert len(provider.calls or []) == 1
+    assert (provider.calls or [])[0]["config"].base_url == "https://personal.example/v1"
 
 
 def test_embedding_not_configured_does_not_overwrite_chat_test_status() -> None:

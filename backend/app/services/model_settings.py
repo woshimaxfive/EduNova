@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from hashlib import sha256
 from io import BytesIO
+from time import perf_counter
 from typing import Iterator, Literal, Protocol
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -18,12 +19,14 @@ from backend.app.core.config import Settings
 from backend.app.models import ModelSetting, User
 from backend.app.providers.openai_compatible import (
     ModelProviderError,
+    ModelCompletion,
     OpenAICompatibleChatProvider,
     OpenAICompatibleConfig,
     OpenAICompatibleEmbeddingConfig,
     NativeWebSearchResult,
 )
 from backend.app.providers.capabilities import provider_capabilities
+from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.providers.retrieval import (
     EmbeddingRequestConfig,
     HttpRerankProvider,
@@ -36,6 +39,7 @@ from backend.app.providers.xfyun_vision import XfyunVisionConfig, XfyunVisionPro
 from backend.app.services.model_execution import (
     ModelExecutionContext,
     ModelExecutionRuntime,
+    current_model_execution_context,
     model_execution_scope,
 )
 
@@ -62,6 +66,11 @@ class _VisionConnectionContract(BaseModel):
     search_required: bool
     reasoning_mode: Literal["auto", "deep"]
     confidence: float = Field(ge=0, le=1)
+
+
+class _StructuredConnectionContract(BaseModel):
+    status: Literal["ok"]
+    items: list[str] = Field(min_length=2, max_length=2)
 
 
 VISION_CONNECTION_TEST_PROMPT = """请分析图片并只返回 JSON 对象，不要 Markdown。必须包含：
@@ -278,7 +287,7 @@ class UpdateModelConfigRequest(BaseModel):
         return str(value).strip()
 
 
-ModelConnectionOperation = Literal["chat", "embedding", "rerank", "vision"]
+ModelConnectionOperation = Literal["chat", "structured", "embedding", "rerank", "vision"]
 
 
 class ModelConnectionTestRequest(BaseModel):
@@ -298,6 +307,8 @@ class ModelConnectionTestSnapshot(BaseModel):
     retryable: bool = False
     tested_at: datetime
     dimension: int | None = None
+    latency_ms: int | None = None
+    reasoning_tokens: int | None = None
 
 
 class ModelSettingsSummary(BaseModel):
@@ -329,6 +340,8 @@ class ModelSettingsSummary(BaseModel):
     vision_provider: str | None = None
     vision_base_url: str | None = None
     can_use_vision_model: bool = False
+    supports_structured_output: bool = False
+    supports_reasoning_control: bool = False
 
 
 class ModelConfigSummary(BaseModel):
@@ -374,6 +387,9 @@ class ModelConfigSummary(BaseModel):
     last_test_message: str | None
     last_tested_at: datetime | None
     connection_tests: dict[str, ModelConnectionTestSnapshot] = Field(default_factory=dict)
+    supports_structured_output: bool = False
+    supports_reasoning_control: bool = False
+    structured_output_verified: bool = False
 
 
 class ModelSettingsListResponse(BaseModel):
@@ -398,6 +414,8 @@ class ModelConnectionTestResponse(BaseModel):
     retryable: bool = False
     tested_at: datetime
     dimension: int | None = None
+    latency_ms: int | None = None
+    reasoning_tokens: int | None = None
 
 
 @dataclass(frozen=True)
@@ -961,10 +979,20 @@ class ModelSettingsService:
                     timeout_seconds=self.settings.vision_request_timeout_seconds,
                 )
         else:
+            vision_profile = ModelTaskProfile(
+                task_type="vision_understanding",
+                reasoning="disabled",
+                output_mode=("json_object" if capabilities.structured_output == "json_object" else "text"),
+                creativity="stable",
+                timeout_seconds=self.settings.vision_request_timeout_seconds,
+                max_attempts=1,
+            )
             visual_config = OpenAICompatibleConfig(
                 base_url=runtime.base_url,
                 api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
                 chat_model=runtime.chat_model,
+                reasoning_protocol=capabilities.reasoning_protocol,
+                task_profile=vision_profile,
             )
             def call() -> str:
                 return self.provider.vision_completion(
@@ -1018,6 +1046,76 @@ class ModelSettingsService:
             timeout_seconds=self.settings.model_request_timeout_seconds,
             thinking_type=thinking_type,
         )
+
+    def chat_completion_for_task(
+        self,
+        user: User,
+        messages: list[dict[str, str]],
+        profile: ModelTaskProfile,
+        *,
+        require_verified: bool = True,
+    ) -> str:
+        return self.chat_completion_result_for_task(
+            user,
+            messages,
+            profile,
+            require_verified=require_verified,
+        ).content
+
+    def chat_completion_result_for_task(
+        self,
+        user: User,
+        messages: list[dict[str, str]],
+        profile: ModelTaskProfile,
+        *,
+        require_verified: bool = True,
+    ) -> ModelCompletion:
+        runtime = self.resolve_runtime_config(user)
+        if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
+            raise ModelNotConfiguredError(MODEL_NOT_CONFIGURED_MESSAGE)
+        capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
+        if profile.output_mode == "json_object" and runtime.source == "user" and require_verified:
+            setting = self.repository.get_by_id_for_user(int(runtime.config_id or 0), user.id)
+            test = (setting.connection_test_json or {}).get("structured") if setting is not None else None
+            if not isinstance(test, dict) or test.get("ok") is not True:
+                raise ModelNotConfiguredError("当前个人模型尚未通过结构化能力测试，请先在设置中完成测试。")
+        effective_profile = profile
+        if profile.output_mode == "json_object" and capabilities.structured_output != "json_object":
+            effective_profile = replace(profile, output_mode="text")
+        config = OpenAICompatibleConfig(
+            base_url=runtime.base_url,
+            api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+            chat_model=runtime.chat_model,
+            reasoning_protocol=capabilities.reasoning_protocol,
+            task_profile=effective_profile,
+        )
+        completion = self.execution_runtime.execute(
+            user_id=user.id,
+            provider_source=runtime.source,
+            model_config_id=runtime.config_id,
+            model_name=runtime.chat_model,
+            operation=f"chat:{profile.task_type}"[:30],
+            call=lambda: self.provider.chat_completion_result(
+                config=config,
+                messages=messages,
+                timeout_seconds=profile.timeout_seconds,
+            ),
+            timeout_seconds=profile.timeout_seconds,
+            max_attempts=profile.max_attempts,
+        )
+        context = current_model_execution_context()
+        if context.usage_recorder is not None:
+            context.usage_recorder(
+                {
+                    "task_type": profile.task_type,
+                    "input_tokens": completion.input_tokens,
+                    "output_tokens": completion.output_tokens,
+                    "reasoning_tokens": completion.reasoning_tokens,
+                    "first_token_ms": completion.first_token_ms,
+                    "total_latency_ms": completion.total_latency_ms,
+                }
+            )
+        return completion
 
     def chat_completion_stream(
         self,
@@ -1199,6 +1297,8 @@ class ModelSettingsService:
             retryable=result.retryable,
             tested_at=result.tested_at,
             dimension=result.dimension,
+            latency_ms=result.latency_ms,
+            reasoning_tokens=result.reasoning_tokens,
         ).model_dump(mode="json")
         setting.connection_test_json = tests
         if operation == "chat":
@@ -1218,10 +1318,11 @@ class ModelSettingsService:
         operation: ModelConnectionOperation,
     ) -> ModelConnectionTestResponse:
         tested_at = datetime.now(UTC)
-        model = runtime.chat_model if operation in {"chat", "vision"} else runtime.embedding_model
+        model = runtime.chat_model if operation in {"chat", "structured", "vision"} else runtime.embedding_model
         if not runtime.can_use_model or model is None:
             label = {
                 "chat": "回答模型",
+                "structured": "结构化生成模型",
                 "embedding": "向量模型",
                 "rerank": "重排序模型",
                 "vision": "图片理解模型",
@@ -1240,6 +1341,8 @@ class ModelSettingsService:
 
         try:
             actual_dimension: int | None = None
+            reasoning_tokens: int | None = None
+            started = perf_counter()
             with model_execution_scope(ModelExecutionContext(purpose="connection_test")):
                 if operation == "embedding":
                     def test_embedding() -> list[list[float]]:
@@ -1355,6 +1458,46 @@ class ModelSettingsService:
                             "图片理解服务未返回完整的结构化结果。",
                             code="invalid_response",
                         ) from exc
+                elif operation == "structured":
+                    capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
+                    profile = ModelTaskProfile(
+                        task_type="connection_test",
+                        reasoning="disabled",
+                        output_mode="json_object" if capabilities.structured_output == "json_object" else "text",
+                        creativity="stable",
+                        timeout_seconds=min(20.0, self.settings.model_request_timeout_seconds),
+                        max_attempts=1,
+                    )
+                    structured_config = OpenAICompatibleConfig(
+                        base_url=runtime.base_url or "",
+                        api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+                        chat_model=runtime.chat_model or "",
+                        reasoning_protocol=capabilities.reasoning_protocol,
+                        task_profile=profile,
+                    )
+                    completion = self.execution_runtime.execute(
+                        user_id=user_id,
+                        provider_source=runtime.source,
+                        model_config_id=runtime.config_id,
+                        model_name=model,
+                        operation="structured",
+                        call=lambda: self.provider.chat_completion_result(
+                            config=structured_config,
+                            messages=[
+                                {"role": "system", "content": "你是 EduNova 结构化能力检查器，只输出 JSON。"},
+                                {"role": "user", "content": '返回 JSON：{"status":"ok","items":["课程","练习"]}。'},
+                            ],
+                            timeout_seconds=profile.timeout_seconds,
+                        ),
+                        timeout_seconds=profile.timeout_seconds,
+                        max_attempts=1,
+                        bypass_circuit=True,
+                    )
+                    reasoning_tokens = completion.reasoning_tokens
+                    try:
+                        _StructuredConnectionContract.model_validate(repair_json(completion.content))
+                    except (TypeError, ValueError) as exc:
+                        raise ModelProviderError("模型未返回完整的结构化结果。", code="invalid_response") from exc
                 else:
                     chat_config = OpenAICompatibleConfig(
                         base_url=runtime.base_url or "",
@@ -1413,6 +1556,8 @@ class ModelSettingsService:
             message=(
                 "向量服务连接正常。"
                 if operation == "embedding"
+                else "结构化生成能力验证通过。"
+                if operation == "structured"
                 else "图片理解服务连接正常。"
                 if operation == "vision"
                 else "AI 服务连接正常。"
@@ -1422,6 +1567,8 @@ class ModelSettingsService:
             model=model,
             tested_at=tested_at,
             dimension=actual_dimension,
+            latency_ms=max(0, int((perf_counter() - started) * 1000)),
+            reasoning_tokens=reasoning_tokens,
         )
 
     def _runtime_for_operation(self, user: User, operation: ModelConnectionOperation) -> RuntimeModelConfig:
@@ -1498,10 +1645,21 @@ class ModelSettingsService:
 
     def _runtime_from_system_settings(self) -> RuntimeModelConfig:
         api_key = self.settings.system_model_api_key.strip()
+        base_url = self.settings.system_model_base_url.strip()
+        lowered_url = base_url.lower()
+        preset_id = (
+            "spark"
+            if "spark-api-open.xf-yun.com" in lowered_url
+            else "qwen"
+            if "dashscope.aliyuncs.com" in lowered_url
+            else "openai"
+            if "api.openai.com" in lowered_url
+            else None
+        )
         return RuntimeModelConfig(
             source="system",
             provider=self._normalize_provider(self.settings.system_model_provider),
-            base_url=self.settings.system_model_base_url.strip() or None,
+            base_url=base_url or None,
             api_key=api_key or None,
             chat_model=self.settings.system_chat_model.strip() or None,
             embedding_model=self.settings.system_embedding_model.strip() or None,
@@ -1511,7 +1669,7 @@ class ModelSettingsService:
                 api_key=api_key,
                 chat_model=self.settings.system_chat_model,
             ),
-            preset_id="spark" if "spark-api-open.xf-yun.com" in self.settings.system_model_base_url else None,
+            preset_id=preset_id,
         )
 
     def _vision_runtime_from_system_settings(self) -> RuntimeModelConfig:
@@ -1656,6 +1814,7 @@ class ModelSettingsService:
         runtime = self._runtime_from_user_setting(setting)
         vision_runtime = self._vision_runtime_from_user_setting(setting)
         capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
+        connection_tests = self._parse_connection_tests(setting.connection_test_json)
         embedding_runtime = self._embedding_runtime_from_user_setting(setting)
         rerank_runtime = self._rerank_runtime_from_user_setting(setting)
         has_embedding = bool(setting.embedding_model)
@@ -1703,7 +1862,10 @@ class ModelSettingsService:
             last_test_ok=setting.last_test_ok,
             last_test_message=setting.last_test_message,
             last_tested_at=setting.last_tested_at,
-            connection_tests=self._parse_connection_tests(setting.connection_test_json),
+            connection_tests=connection_tests,
+            supports_structured_output=capabilities.structured_output == "json_object",
+            supports_reasoning_control=capabilities.supports_thinking_control,
+            structured_output_verified=bool(connection_tests.get("structured") and connection_tests["structured"].ok),
         )
 
     def _summary_from_runtimes(
@@ -1713,6 +1875,7 @@ class ModelSettingsService:
         rerank_runtime: RuntimeModelConfig,
         source: Literal["user", "system"],
     ) -> ModelSettingsSummary:
+        capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
         return ModelSettingsSummary(
             source=source,
             provider=runtime.provider,
@@ -1738,6 +1901,8 @@ class ModelSettingsService:
             can_use_model=runtime.can_use_model,
             can_use_embedding_model=embedding_runtime.can_use_model,
             can_use_rerank_model=rerank_runtime.can_use_model,
+            supports_structured_output=capabilities.structured_output == "json_object",
+            supports_reasoning_control=capabilities.supports_thinking_control,
         )
 
     def _system_summary(self) -> ModelSettingsSummary:
@@ -1924,6 +2089,7 @@ class ModelSettingsService:
         tests = dict(setting.connection_test_json or {})
         if chat_changed:
             tests.pop("chat", None)
+            tests.pop("structured", None)
             setting.last_test_ok = None
             setting.last_test_message = None
             setting.last_tested_at = None
@@ -1938,7 +2104,7 @@ class ModelSettingsService:
     @staticmethod
     def _parse_connection_tests(raw_tests: dict | None) -> dict[str, ModelConnectionTestSnapshot]:
         parsed: dict[str, ModelConnectionTestSnapshot] = {}
-        for operation in ("chat", "embedding", "rerank", "vision"):
+        for operation in ("chat", "structured", "embedding", "rerank", "vision"):
             value = (raw_tests or {}).get(operation)
             if not isinstance(value, dict):
                 continue

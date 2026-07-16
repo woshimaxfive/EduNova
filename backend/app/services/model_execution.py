@@ -30,6 +30,7 @@ class ModelExecutionContext:
     ai_job_id: int | None = None
     purpose: str = "generation"
     cancel_check: Callable[[], None] | None = None
+    usage_recorder: Callable[[dict[str, Any]], None] | None = None
 
 
 _execution_context: ContextVar[ModelExecutionContext] = ContextVar(
@@ -60,6 +61,7 @@ def execution_context_for_state(
 ) -> ModelExecutionContext:
     job_context = state.get("job_context")
     cancel_check = getattr(job_context, "check_cancelled", None)
+    usage_recorder = getattr(job_context, "record_model_usage", None)
     return ModelExecutionContext(
         trace_id=str(state.get("trace_id")) if state.get("trace_id") else None,
         workflow=workflow,
@@ -67,6 +69,7 @@ def execution_context_for_state(
         ai_job_id=int(getattr(job_context, "job_id", 0)) or None,
         purpose=purpose or str(state.get("operation") or state.get("trigger") or "generation"),
         cancel_check=cancel_check if callable(cancel_check) else None,
+        usage_recorder=usage_recorder if callable(usage_recorder) else None,
     )
 
 

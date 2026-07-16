@@ -289,6 +289,39 @@ class AgentJobContext:
             job.heartbeat_at = datetime.now(UTC)
             db.commit()
 
+    def record_model_usage(self, usage: dict[str, Any]) -> None:
+        """Persist only aggregate model metrics; never persist prompts or model output."""
+        with self.session_factory() as db:
+            job = db.scalar(select(AiJob).where(AiJob.id == self.job_id).with_for_update())
+            if job is None:
+                return
+            progress = dict(job.progress_json or {})
+            summary = dict(progress.get("model_task_summary") or {})
+            task_types = [str(item) for item in summary.get("task_types", []) if str(item)]
+            task_type = str(usage.get("task_type") or "model_task")[:80]
+            if task_type not in task_types:
+                task_types.append(task_type)
+            summary.update(
+                {
+                    "task_types": task_types[:16],
+                    "call_count": int(summary.get("call_count") or 0) + 1,
+                    "revision_count": int(summary.get("revision_count") or 0)
+                    + (1 if "repair" in task_type or "revision" in task_type else 0),
+                }
+            )
+            for key in ("input_tokens", "output_tokens", "reasoning_tokens", "total_latency_ms"):
+                value = usage.get(key)
+                if isinstance(value, int) and value >= 0:
+                    summary[key] = int(summary.get(key) or 0) + value
+            first_token_ms = usage.get("first_token_ms")
+            if isinstance(first_token_ms, int) and first_token_ms >= 0:
+                summary["first_token_ms"] = min(
+                    int(summary.get("first_token_ms") or first_token_ms), first_token_ms
+                )
+            progress["model_task_summary"] = summary
+            job.progress_json = progress
+            db.commit()
+
     def after_node(
         self,
         *,
@@ -982,7 +1015,11 @@ class AiJobService:
             refreshed.progress_percent = 100
             refreshed.stage = "completed"
             refreshed.label = "任务已完成"
-            refreshed.result_json = result
+            model_task_summary = dict((refreshed.progress_json or {}).get("model_task_summary") or {})
+            refreshed.result_json = {
+                **result,
+                "model_task_summary": model_task_summary,
+            }
             refreshed.error_code = None
             refreshed.error_message = None
             refreshed.heartbeat_at = finished

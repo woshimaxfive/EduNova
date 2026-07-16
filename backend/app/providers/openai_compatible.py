@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
 import re
+from time import perf_counter
 from typing import Any, Iterator
 
 import httpx
@@ -17,6 +18,8 @@ from openai import (
     OpenAI,
     RateLimitError,
 )
+
+from backend.app.providers.model_tasks import ModelTaskProfile
 
 
 class ModelProviderError(RuntimeError):
@@ -42,6 +45,18 @@ class OpenAICompatibleConfig:
     api_key: str
     chat_model: str
     thinking_type: str | None = None
+    reasoning_protocol: str = "none"
+    task_profile: ModelTaskProfile | None = None
+
+
+@dataclass(frozen=True)
+class ModelCompletion:
+    content: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    first_token_ms: int | None = None
+    total_latency_ms: int | None = None
 
 
 @dataclass(frozen=True)
@@ -70,13 +85,29 @@ class OpenAICompatibleChatProvider:
         messages: list[dict[str, str]],
         timeout_seconds: float,
     ) -> str:
+        return self.chat_completion_result(config, messages, timeout_seconds).content
+
+    def chat_completion_result(
+        self,
+        config: OpenAICompatibleConfig,
+        messages: list[dict[str, str]],
+        timeout_seconds: float,
+    ) -> ModelCompletion:
+        started = perf_counter()
         try:
             with self._client(config.base_url, config.api_key, timeout_seconds) as client:
+                request: dict[str, Any] = {
+                    "model": config.chat_model,
+                    "messages": messages,
+                    "temperature": config.task_profile.temperature if config.task_profile else 0.2,
+                }
+                extra_body = self._thinking_body(config)
+                if extra_body:
+                    request["extra_body"] = extra_body
+                if config.task_profile and config.task_profile.output_mode == "json_object":
+                    request["response_format"] = {"type": "json_object"}
                 response = client.chat.completions.create(
-                    model=config.chat_model,
-                    messages=messages,  # type: ignore[arg-type]
-                    temperature=0.2,
-                    extra_body=self._thinking_body(config),
+                    **request,  # type: ignore[arg-type]
                 )
         except APIError as exc:
             raise self._sdk_error(exc) from exc
@@ -86,7 +117,23 @@ class OpenAICompatibleChatProvider:
         content = response.choices[0].message.content if response.choices else None
         if not isinstance(content, str) or not content.strip():
             raise ModelProviderError("模型服务没有返回可用内容。", code="invalid_response", retryable=True)
-        return content.strip()
+        usage = getattr(response, "usage", None)
+        details = getattr(usage, "completion_tokens_details", None) if usage is not None else None
+        reasoning_tokens = getattr(details, "reasoning_tokens", None)
+        if (
+            reasoning_tokens is None
+            and config.reasoning_protocol == "qwen_enable_thinking"
+            and config.task_profile is not None
+            and config.task_profile.reasoning == "disabled"
+        ):
+            reasoning_tokens = 0
+        return ModelCompletion(
+            content=content.strip(),
+            input_tokens=getattr(usage, "prompt_tokens", None),
+            output_tokens=getattr(usage, "completion_tokens", None),
+            reasoning_tokens=reasoning_tokens,
+            total_latency_ms=max(0, int((perf_counter() - started) * 1000)),
+        )
 
     def vision_completion(
         self,
@@ -106,11 +153,17 @@ class OpenAICompatibleChatProvider:
         )
         try:
             with self._client(config.base_url, config.api_key, timeout_seconds) as client:
-                response = client.chat.completions.create(
-                    model=config.chat_model,
-                    messages=[{"role": "user", "content": content}],  # type: ignore[list-item]
-                    temperature=0.1,
-                )
+                request: dict[str, Any] = {
+                    "model": config.chat_model,
+                    "messages": [{"role": "user", "content": content}],
+                    "temperature": config.task_profile.temperature if config.task_profile else 0.1,
+                }
+                extra_body = self._thinking_body(config)
+                if extra_body:
+                    request["extra_body"] = extra_body
+                if config.task_profile and config.task_profile.output_mode == "json_object":
+                    request["response_format"] = {"type": "json_object"}
+                response = client.chat.completions.create(**request)  # type: ignore[arg-type]
         except APIError as exc:
             raise self._sdk_error(exc) from exc
         text = response.choices[0].message.content if response.choices else None
@@ -305,6 +358,16 @@ class OpenAICompatibleChatProvider:
 
     @staticmethod
     def _thinking_body(config: OpenAICompatibleConfig) -> dict[str, Any] | None:
+        profile = config.task_profile
+        if config.reasoning_protocol == "qwen_enable_thinking" and profile is not None:
+            if profile.reasoning == "disabled":
+                return {"enable_thinking": False}
+            if profile.reasoning == "deep":
+                return {"enable_thinking": True}
+            return None
+        if config.reasoning_protocol == "spark_thinking" and profile is not None:
+            spark_type = "enabled" if profile.reasoning == "deep" else "disabled" if profile.reasoning == "disabled" else "auto"
+            return {"thinking": {"type": spark_type}}
         if config.thinking_type in {"enabled", "disabled", "auto"}:
             return {"thinking": {"type": config.thinking_type}}
         return None

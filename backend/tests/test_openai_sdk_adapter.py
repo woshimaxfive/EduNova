@@ -4,6 +4,7 @@ import httpx
 import json
 import pytest
 
+from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.providers.openai_compatible import (
     ModelProviderError,
     OpenAICompatibleChatProvider,
@@ -107,3 +108,75 @@ def test_native_search_without_source_url_requires_external_fallback() -> None:
 
     assert result.citations == []
     assert result.warning is not None
+
+
+def test_qwen_structured_task_disables_thinking_and_uses_json_mode() -> None:
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl_task",
+                "object": "chat.completion",
+                "created": 1,
+                "model": "qwen3.7-plus",
+                "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": '{"ok":true}'}}],
+                "usage": {
+                    "prompt_tokens": 12,
+                    "completion_tokens": 5,
+                },
+            },
+        )
+
+    profile = ModelTaskProfile(task_type="path_planning", reasoning="disabled", output_mode="json_object")
+    result = OpenAICompatibleChatProvider(httpx.MockTransport(handler)).chat_completion_result(
+        OpenAICompatibleConfig(
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "test-key",
+            "qwen3.7-plus",
+            reasoning_protocol="qwen_enable_thinking",
+            task_profile=profile,
+        ),
+        [{"role": "user", "content": "输出 JSON"}],
+        3,
+    )
+
+    assert bodies[0]["enable_thinking"] is False
+    assert bodies[0]["response_format"] == {"type": "json_object"}
+    assert bodies[0]["temperature"] == 0.1
+    assert result.reasoning_tokens == 0
+    assert result.total_latency_ms is not None
+
+
+def test_custom_provider_never_receives_unverified_qwen_private_parameter() -> None:
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl_custom",
+                "object": "chat.completion",
+                "created": 1,
+                "model": "custom-model",
+                "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "ok"}}],
+            },
+        )
+
+    OpenAICompatibleChatProvider(httpx.MockTransport(handler)).chat_completion(
+        OpenAICompatibleConfig(
+            "https://custom.example/v1",
+            "test-key",
+            "custom-model",
+            reasoning_protocol="none",
+            task_profile=ModelTaskProfile(task_type="answer", reasoning="deep", output_mode="text"),
+        ),
+        [{"role": "user", "content": "分析"}],
+        3,
+    )
+
+    assert "enable_thinking" not in bodies[0]
+    assert "thinking" not in bodies[0]

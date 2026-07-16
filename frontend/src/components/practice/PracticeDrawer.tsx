@@ -114,10 +114,21 @@ export function PracticeDrawer({
           <div className="practice-drawer-content practice-result-detail">
             <section>
               <span>闭环更新</span>
-              <h3>{closure?.path_update_status === "replanned" ? "学习路径已按本次结果重排" : "本次练习已写入学习状态"}</h3>
+              <h3>
+                {closure?.targeted_weakness_passed
+                  ? `已通过“${session?.targeted_weakness_title ?? "针对性弱点"}”再测`
+                  : closure?.targeted_weakness_id
+                    ? `“${session?.targeted_weakness_title ?? "针对性弱点"}”仍需复习`
+                    : closure?.path_update_status === "replanned"
+                      ? "学习路径已按本次结果重排"
+                      : "本次练习已写入学习状态"}
+              </h3>
               <div className="practice-result-facts">
                 <span><CheckCircle size={17} weight="duotone" aria-hidden="true" />新增弱点 {closure?.weaknesses_added ?? 0}</span>
                 <span><CheckCircle size={17} weight="duotone" aria-hidden="true" />更新弱点 {closure?.weaknesses_updated ?? 0}</span>
+                {closure?.targeted_weakness_improvement !== null && closure?.targeted_weakness_improvement !== undefined ? (
+                  <span><CheckCircle size={17} weight="duotone" aria-hidden="true" />较起点 {closure.targeted_weakness_improvement >= 0 ? "提升" : "变化"} {closure.targeted_weakness_improvement} 分</span>
+                ) : null}
               </div>
               <Link to={`${PATHS.path}?course_id=${session?.course_id ?? ""}`}>{closure?.path_update_status === "replanned" ? "查看更新后的路径" : "前往学习路径"}</Link>
             </section>

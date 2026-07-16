@@ -44,6 +44,7 @@ class AssessmentState(TypedDict, total=False):
     course_id: int
     session_id: int
     knowledge_point_ids: list[int]
+    weakness_item_id: int | None
     question_count: int
     difficulty: str
     requested_difficulty: str
@@ -54,6 +55,7 @@ class AssessmentState(TypedDict, total=False):
     resources: list[Any]
     chunks: list[Any]
     learner_context: Any
+    target_weakness: WeaknessReviewItem | None
     historical_question_summaries: list[dict[str, Any]]
     deterministic_questions: list[dict[str, Any]]
     questions: list[dict[str, Any]]
@@ -63,6 +65,7 @@ class AssessmentState(TypedDict, total=False):
     score: int | None
     diagnoses: dict[str, dict[str, Any]]
     touched_weaknesses: dict[str, WeaknessReviewItem]
+    target_update: dict[str, Any]
     weaknesses_added: int
     weaknesses_updated: int
     recommended_resource_ids: list[int]
@@ -91,6 +94,7 @@ class AssessmentGraphRunner:
         knowledge_point_ids: list[int],
         question_count: int,
         difficulty: str,
+        weakness_item_id: int | None = None,
         trace_id: str | None = None,
         job_context: Any = None,
     ) -> PracticeSessionDetail:
@@ -102,6 +106,7 @@ class AssessmentGraphRunner:
             "user_id": user.id,
             "course_id": course_id,
             "knowledge_point_ids": knowledge_point_ids,
+            "weakness_item_id": weakness_item_id,
             "question_count": question_count,
             "difficulty": difficulty,
             "requested_difficulty": difficulty,
@@ -157,6 +162,16 @@ class AssessmentGraphRunner:
             row.feedback_json = {**item.feedback, "diagnosis": diagnosis}
             row.is_correct = item.is_correct
         course = self.service._require_course(user, int(session.course_id or 0))
+        assessment = session.assessment_json if isinstance(session.assessment_json, dict) else {}
+        target_id = self.service._safe_int(assessment.get("targeted_weakness_id"))
+        target_weakness = next(
+            (
+                item
+                for item in self.service.repository.list_weakness_review_items(user.id, course.id)
+                if target_id is not None and item.id == target_id
+            ),
+            None,
+        )
         state: AssessmentState = {
             "trace_id": make_trace_id(),
             "operation": "answer_regrade",
@@ -167,9 +182,20 @@ class AssessmentGraphRunner:
             "resources": self.service.repository.list_generated_resources(user.id, course.id),
             "evaluated": evaluated,
             "diagnoses": diagnoses,
+            "target_weakness": target_weakness,
         }
         try:
             added, updated, recommended, touched = self._sync_weakness_items(state, by_question)
+            all_evaluated = [
+                EvaluatedAnswer(
+                    question=dict(row.question_json or {}),
+                    answer_text=str(row.answer_text or ""),
+                    is_correct=row.is_correct,
+                    feedback=dict(row.feedback_json or {}),
+                )
+                for row in rows
+            ]
+            target_update = self._apply_targeted_retest(state, all_evaluated, session)
             session.score = self._score_from_rows(rows)
             session.assessment_json = {
                 **(session.assessment_json or {}),
@@ -177,6 +203,7 @@ class AssessmentGraphRunner:
                 "weaknesses_added": int((session.assessment_json or {}).get("weaknesses_added") or 0) + added,
                 "weaknesses_updated": int((session.assessment_json or {}).get("weaknesses_updated") or 0) + updated,
                 "recommended_resource_ids": list(dict.fromkeys([*(session.assessment_json or {}).get("recommended_resource_ids", []), *[str(value) for value in recommended]])),
+                **target_update,
             }
             session.updated_at = datetime.now(UTC)
             self.service.repository.commit()
@@ -239,6 +266,7 @@ class AssessmentGraphRunner:
             context_service = context_service_from_repository(self.service.repository)
             learner_context = context_service.course_context(int(state["user_id"]), course.id) if context_service is not None else None
             selected_ids = {point.id for point in selected}
+            target_weakness = self._targeted_weakness(state, course.id, selected_ids)
             historical_question_summaries = [
                 {
                     "prompt": safe_text((answer.question_json or {}).get("prompt"), limit=320),
@@ -263,6 +291,7 @@ class AssessmentGraphRunner:
                     "chunks": chunks,
                     "difficulty": effective_difficulty,
                     "learner_context": learner_context,
+                    "target_weakness": target_weakness,
                     "historical_question_summaries": historical_question_summaries,
                 },
                 f"已选择 {len(selected)} 个知识点和 {len(resources)} 个课程资源。",
@@ -272,6 +301,7 @@ class AssessmentGraphRunner:
                     "resource_count": len(resources),
                     "requested_difficulty": state.get("requested_difficulty"),
                     "effective_difficulty": effective_difficulty,
+                    "targeted_weakness_id": target_weakness.id if target_weakness is not None else None,
                     **(learner_context.trace_metadata() if learner_context is not None else {"profile_context_used": False}),
                 },
             )
@@ -362,6 +392,8 @@ class AssessmentGraphRunner:
             assessment_json={
                 "requested_difficulty": state.get("requested_difficulty", state.get("difficulty", "medium")),
                 "effective_difficulty": state.get("difficulty", "medium"),
+                "targeted_weakness_id": state["target_weakness"].id if state.get("target_weakness") is not None else None,
+                "targeted_weakness_title": state["target_weakness"].title if state.get("target_weakness") is not None else None,
                 **china_first_content_policy.metadata(),
             },
             created_at=now,
@@ -424,8 +456,20 @@ class AssessmentGraphRunner:
             resources = self.service.repository.list_generated_resources(int(state["user_id"]), course.id)
             context_service = context_service_from_repository(self.service.repository)
             learner_context = context_service.course_context(int(state["user_id"]), course.id) if context_service is not None else None
+            assessment = session.assessment_json if isinstance(session.assessment_json, dict) else {}
+            target_weakness_id = self.service._safe_int(assessment.get("targeted_weakness_id"))
+            target_weakness = None
+            if target_weakness_id is not None:
+                target_weakness = next(
+                    (
+                        item
+                        for item in self.service.repository.list_weakness_review_items(int(state["user_id"]), course.id)
+                        if item.id == target_weakness_id and item.status in {"confirmed", "reviewing", "completed"}
+                    ),
+                    None,
+                )
             return (
-                {"session": session, "course": course, "course_id": course.id, "answer_rows": answer_rows, "questions": questions, "resources": resources, "learner_context": learner_context},
+                {"session": session, "course": course, "course_id": course.id, "answer_rows": answer_rows, "questions": questions, "resources": resources, "learner_context": learner_context, "target_weakness": target_weakness},
                 f"已读取 {len(questions)} 道练习题。",
                 "completed",
                 {"candidate_count": len(questions), **(learner_context.trace_metadata() if learner_context is not None else {"profile_context_used": False})},
@@ -500,7 +544,8 @@ class AssessmentGraphRunner:
                 row.feedback_json = {**evaluated.feedback, "diagnosis": diagnosis or None}
                 row.is_correct = evaluated.is_correct
             added, updated, recommended, touched = self._sync_weakness_items(state, rows_by_question)
-            return {"weaknesses_added": added, "weaknesses_updated": updated, "recommended_resource_ids": recommended, "touched_weaknesses": touched}, f"新增 {added} 个弱点，更新 {updated} 个既有弱点。", "completed", {"weakness_count": added + updated}
+            target_update = self._apply_targeted_retest(state, list(state.get("evaluated", [])), state["session"])
+            return {"weaknesses_added": added, "weaknesses_updated": updated, "recommended_resource_ids": recommended, "touched_weaknesses": touched, "target_update": target_update}, f"新增 {added} 个弱点，更新 {updated} 个既有弱点。", "completed", {"weakness_count": added + updated, "targeted_retest": bool(target_update)}
 
         return self._run_node(state, "sync_weaknesses", 4, "把低分题绑定到课程弱点证据", work)
 
@@ -546,6 +591,7 @@ class AssessmentGraphRunner:
                 "review_mode": state.get("review_mode", "rules_only"),
                 "review_result": state.get("review_result", {}),
                 "grading_status": self._grading_status(state.get("evaluated", [])),
+                **dict(state.get("target_update") or {}),
             }
             self.service.repository.commit()
             self.service.repository.refresh(session)
@@ -695,6 +741,18 @@ class AssessmentGraphRunner:
         ]
         learner_context = state.get("learner_context")
         personalization = learner_context.prompt_summary() if learner_context is not None else {}
+        target_weakness = state.get("target_weakness")
+        target_diagnosis = target_weakness.diagnosis_json if target_weakness is not None and isinstance(target_weakness.diagnosis_json, dict) else {}
+        target_context = (
+            {
+                "title": safe_text(target_weakness.title, limit=120),
+                "misconception": safe_text(target_diagnosis.get("misconception"), limit=300),
+                "missing_concepts": safe_string_list(target_diagnosis.get("missing_concepts"), limit=6, item_limit=100),
+                "recommended_action": safe_text(target_diagnosis.get("recommended_action"), limit=300),
+            }
+            if target_weakness is not None
+            else None
+        )
         instruction = "增强题干、干扰项和解析，但不得改变题目 ID、类型、知识点或规则答案。"
         try:
             messages = [
@@ -704,6 +762,7 @@ class AssessmentGraphRunner:
                         "content": (
                             f"协议={ASSESSMENT_PROMPT_VERSION}，内嵌审核协议={ASSESSMENT_EMBEDDED_REVIEW_PROMPT_VERSION}。"
                             f"{instruction} 可信课程画像提示={personalization}。"
+                            f"针对性复习目标={json.dumps(target_context, ensure_ascii=False, separators=(',', ':')) if target_context else '无'}。"
                             f"题目蓝图={json.dumps(prompt_rows, ensure_ascii=False, separators=(',', ':'))}。"
                             f"近期同知识点题目摘要={json.dumps(state.get('historical_question_summaries', []), ensure_ascii=False, separators=(',', ':'))}。"
                             "选择题必须保留正确答案原文并生成四个互不重复的合理选项；不同题目不得复用题面。"
@@ -711,6 +770,7 @@ class AssessmentGraphRunner:
                             "题干允许的答案范围必须与锁定的 correct_answer 和评分量规完全一致。"
                             "每题必须另外输出 cognitive_level、scenario_type、target_misconception、reasoning_pattern；"
                             "不得复用历史题目的知识关系、场景和目标误区组合，也不得只替换名词。"
+                            "存在针对性复习目标时，每道题必须围绕其错因或缺失概念验证是否真正掌握，不得改成泛化知识回忆。"
                             "生成后在同一次响应中自审重复题面、无效干扰项、证据缺失、隐私和答案合同；"
                             "发现风险时 review_status 必须为 revise。"
                             "返回 {\"questions\":[{\"id\":\"q1\",\"prompt\":\"\",\"options\":[],\"explanation\":\"\","
@@ -1057,6 +1117,13 @@ class AssessmentGraphRunner:
                 item.next_review_at = datetime.now(UTC) + timedelta(days=3)
                 item.recommended_resource_ids = list(dict.fromkeys([*(item.recommended_resource_ids or []), *resource_ids]))[:6]
             self._apply_diagnosis_to_weakness(item, diagnosis, row.id)
+            progress = item.diagnosis_json if isinstance(item.diagnosis_json, dict) else {}
+            score = int(evaluated.feedback["score"])
+            item.diagnosis_json = {
+                **progress,
+                "baseline_score": progress.get("baseline_score") if progress.get("baseline_score") is not None else score,
+                "latest_score": score,
+            }
             touched[question_id] = item
         return added, updated, list(dict.fromkeys(recommended)), touched
 
@@ -1077,6 +1144,87 @@ class AssessmentGraphRunner:
             "confidence": clamp_confidence(diagnosis.get("confidence"), 0.6),
             "evidence_refs": refs[-5:],
             "evidence_count": min(int(previous.get("evidence_count") or 0) + (0 if was_present else 1), 999),
+            "baseline_score": previous.get("baseline_score"),
+            "latest_score": previous.get("latest_score"),
+            "attempt_count": int(previous.get("attempt_count") or 0),
+            "practice_session_ids": list(previous.get("practice_session_ids") or [])[-8:],
+            "last_practice_session_id": previous.get("last_practice_session_id"),
+        }
+
+    def _targeted_weakness(
+        self,
+        state: AssessmentState,
+        course_id: int,
+        selected_point_ids: set[int],
+    ) -> WeaknessReviewItem | None:
+        weakness_item_id = state.get("weakness_item_id")
+        if weakness_item_id is None:
+            return None
+        item = next(
+            (
+                candidate
+                for candidate in self.service.repository.list_weakness_review_items(int(state["user_id"]), course_id)
+                if candidate.id == int(weakness_item_id)
+            ),
+            None,
+        )
+        if item is None:
+            raise PracticeValidationError("待复习弱点不存在或当前用户无权访问。")
+        if item.status not in {"confirmed", "reviewing"}:
+            raise PracticeValidationError("该薄弱点当前不能创建针对性练习。")
+        if item.knowledge_point_id is None or item.knowledge_point_id not in selected_point_ids:
+            raise PracticeValidationError("针对性练习的知识点必须与待复习弱点一致。")
+        return item
+
+    def _apply_targeted_retest(
+        self,
+        state: AssessmentState,
+        evaluated: list[EvaluatedAnswer],
+        session: PracticeSession,
+    ) -> dict[str, Any]:
+        item = state.get("target_weakness")
+        if item is None or item.knowledge_point_id is None:
+            return {}
+        relevant = [
+            answer
+            for answer in evaluated
+            if self.service._safe_int(answer.question.get("knowledge_point_id")) == item.knowledge_point_id
+        ]
+        if not relevant:
+            return {}
+        scores = [int(answer.feedback["score"]) for answer in relevant if answer.feedback.get("score") is not None]
+        all_graded = len(scores) == len(relevant)
+        latest_score = round(sum(scores) / len(scores)) if scores else None
+        previous = item.diagnosis_json if isinstance(item.diagnosis_json, dict) else {}
+        baseline_score = self.service._safe_int(previous.get("baseline_score"))
+        if baseline_score is None:
+            baseline_score = latest_score
+        session_ids = [str(value) for value in previous.get("practice_session_ids") or []]
+        session_id = str(session.id)
+        if session_id not in session_ids:
+            session_ids.append(session_id)
+        passed = bool(all_graded and latest_score is not None and latest_score >= 80)
+        now = datetime.now(UTC)
+        item.status = "completed" if passed else "reviewing"
+        item.next_review_at = now + timedelta(days=7 if passed else 3)
+        item.updated_at = now
+        item.diagnosis_json = {
+            **previous,
+            "baseline_score": baseline_score,
+            "latest_score": latest_score,
+            "attempt_count": len(session_ids),
+            "practice_session_ids": session_ids[-8:],
+            "last_practice_session_id": session_id,
+        }
+        return {
+            "targeted_weakness_id": str(item.id),
+            "targeted_weakness_status": item.status,
+            "targeted_weakness_improvement": (
+                latest_score - baseline_score
+                if latest_score is not None and baseline_score is not None
+                else None
+            ),
+            "targeted_weakness_passed": passed,
         }
 
     @staticmethod

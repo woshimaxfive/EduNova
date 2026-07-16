@@ -1025,6 +1025,18 @@ def test_learning_state_response_does_not_expose_private_prompt_or_source_text()
 def test_learning_state_returns_real_path_mastery_and_resource_recommendations() -> None:
     path = make_learning_path(901)
     reviewing = make_weakness_item(55, 1, 101, knowledge_point_id=401, status="reviewing")
+    reviewing.diagnosis_json = {
+        "misconception": "把启发函数当成真实剩余代价",
+        "missing_concepts": ["估计值", "可采纳性"],
+        "recommended_action": "对照课程证据完成一次针对性再测",
+        "confidence": 0.88,
+        "evidence_count": 2,
+        "baseline_score": 35,
+        "latest_score": 70,
+        "attempt_count": 1,
+        "last_practice_session_id": "501",
+        "raw_answer": "不得返回的学生原始答案",
+    }
     completed = make_weakness_item(56, 1, 101, title="A* 搜索", knowledge_point_id=402, status="completed")
     completed.next_review_at = datetime(2026, 7, 4, 8, 0, tzinfo=UTC)
     repo = FakeCourseRepository(
@@ -1066,6 +1078,19 @@ def test_learning_state_returns_real_path_mastery_and_resource_recommendations()
     assert by_title["启发式搜索"]["recommended_resource_ids"] == ["801"]
     assert by_title["启发式搜索"]["recommended_resources"][0]["title"] == "启发式搜索讲解"
     assert by_title["启发式搜索"]["next_review_at"] is not None
+    assert by_title["启发式搜索"]["diagnosis"] == {
+        "misconception": "把启发函数当成真实剩余代价",
+        "missing_concepts": ["估计值", "可采纳性"],
+        "recommended_action": "对照课程证据完成一次针对性再测",
+        "confidence": 0.88,
+        "evidence_count": 2,
+        "baseline_score": 35,
+        "latest_score": 70,
+        "improvement": 35,
+        "attempt_count": 1,
+        "last_practice_session_id": "501",
+    }
+    assert "不得返回的学生原始答案" not in str(state)
 
 
 def test_mastery_map_maps_weaknesses_tasks_resources_and_scopes_course() -> None:

@@ -250,6 +250,18 @@ const learningStateWithReviewFlow = {
           resource_type: "doc"
         }
       ],
+      diagnosis: {
+        misconception: "把梯度计算方向理解反了",
+        missing_concepts: ["链式法则", "局部梯度"],
+        recommended_action: "先复习链式法则，再完成针对性再测",
+        confidence: 0.91,
+        evidence_count: 2,
+        baseline_score: 35,
+        latest_score: 62,
+        improvement: 27,
+        attempt_count: 1,
+        last_practice_session_id: "501"
+      },
       next_review_at: null,
       created_at: "2026-07-05T08:31:00Z",
       updated_at: "2026-07-05T08:31:00Z"
@@ -1432,19 +1444,25 @@ describe("CourseSpacePage course tutor sessions", () => {
     const user = userEvent.setup();
     renderCoursePage({ learningState: learningStateWithReviewFlow });
 
-    await user.click(await screen.findByRole("button", { name: /学习进度/ }));
+    const progressButton = await screen.findByRole("button", { name: /学习进度/ });
+    await waitFor(() => expect(progressButton).toHaveTextContent("3 项待处理"));
+    await user.click(progressButton);
     const weaknessRegion = await screen.findByRole("region", { name: "待复习弱点" });
     await within(weaknessRegion).findByText("启发式搜索");
 
+    expect(weaknessRegion).toHaveTextContent("3 项待处理");
     expect(weaknessRegion).toHaveTextContent(/待确认\s*1/);
     expect(weaknessRegion).toHaveTextContent(/待复习\s*1/);
     expect(weaknessRegion).toHaveTextContent(/复习中\s*1/);
     expect(weaknessRegion).toHaveTextContent(/已完成\s*1/);
     expect(within(weaknessRegion).getByRole("button", { name: "确认 启发式搜索" })).toBeInTheDocument();
-    expect(within(weaknessRegion).getByRole("button", { name: "开始 启发式搜索" })).toBeInTheDocument();
     expect(within(weaknessRegion).getByRole("button", { name: "忽略 启发式搜索" })).toBeInTheDocument();
-    expect(within(weaknessRegion).getByRole("button", { name: "开始 反向传播" })).toBeInTheDocument();
-    expect(within(weaknessRegion).getByRole("button", { name: "完成 A* 搜索" })).toBeInTheDocument();
+    expect(within(weaknessRegion).getByRole("button", { name: "开始复习 反向传播" })).toBeInTheDocument();
+    expect(within(weaknessRegion).getAllByRole("button", { name: "针对性再测" }).length).toBeGreaterThanOrEqual(2);
+    expect(within(weaknessRegion).queryByRole("button", { name: "完成 A* 搜索" })).not.toBeInTheDocument();
+    expect(weaknessRegion).toHaveTextContent("把梯度计算方向理解反了");
+    expect(weaknessRegion).toHaveTextContent("链式法则、局部梯度");
+    expect(weaknessRegion).toHaveTextContent("提升 27 分");
     expect(within(weaknessRegion).getByRole("button", { name: "移除 搜索复杂度" })).toBeInTheDocument();
     expect(within(weaknessRegion).queryByText("已忽略弱点")).not.toBeInTheDocument();
   });

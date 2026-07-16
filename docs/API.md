@@ -2665,3 +2665,11 @@ Phase 31 不新增接口路径或数据库迁移。现有资料解析进度对�
 - `POST /api/v1/settings/model/configs/{config_id}/vision-default`：设置独立图片理解默认配置；连接测试 `operation=vision` 会发送程序化无版权小图。
 - 讯飞原生图片理解配置使用 `vision_app_id`、`vision_api_key`、`vision_api_secret` 写入字段；读取接口只返回是否已配置及掩码，不回传明文。连接测试必须返回完整结构化结果才判定成功。
 - 模型设置的 `system_summary` 返回 `vision_model`、`vision_provider`、`vision_base_url` 与 `can_use_vision_model`，用于表示服务器级图片理解兜底；不返回服务器凭证明文或掩码。
+
+## Phase 40 薄弱点再测合同
+
+- `GET /api/v1/courses/{course_id}/learning-state` 的 `weakness_review_queue[].diagnosis` 返回 `misconception`、`missing_concepts`、`recommended_action`、`confidence`、`evidence_count`、`baseline_score`、`latest_score`、`improvement`、`attempt_count` 和 `last_practice_session_id`。该结构不返回原始答案、Prompt 或模型响应。
+- `POST /api/v1/practice/sessions/generation-jobs` 与旧同步兼容入口的请求增加可选 `weakness_item_id`。设置后，知识点必须与当前用户当前课程中 `confirmed/reviewing` 的复习项一致。
+- `PracticeSessionDetail` 增加 `targeted_weakness_id`、`targeted_weakness_title`；`closure_update` 增加 `targeted_weakness_status`、`targeted_weakness_improvement` 和 `targeted_weakness_passed`。
+- `GET /api/v1/learning/next-action` 对明确的活动复习项返回可选 `weakness_item_id`；低掌握度但尚未形成复习项时仍只返回知识点 ID。
+- 再测通过门槛为目标知识点全部题目已评分且平均分不低于 80。未评分或未达标时接口如实返回未通过并保留 `reviewing`。

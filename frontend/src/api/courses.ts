@@ -121,6 +121,18 @@ export type CourseWeaknessReviewItem = {
   knowledge_point_id: string | null;
   recommended_resource_ids: string[];
   recommended_resources: CourseResourceBrief[];
+  diagnosis?: {
+    misconception: string;
+    missing_concepts: string[];
+    recommended_action: string;
+    confidence: number;
+    evidence_count: number;
+    baseline_score: number | null;
+    latest_score: number | null;
+    improvement: number | null;
+    attempt_count: number;
+    last_practice_session_id: string | null;
+  };
   next_review_at: string | null;
   created_at: string;
   updated_at: string;

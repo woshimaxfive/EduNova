@@ -14,6 +14,7 @@ export const PRACTICE_ENDPOINTS = {
 export type CreatePracticeSessionRequest = {
   course_id: number;
   knowledge_point_ids: number[];
+  weakness_item_id?: number | null;
   question_count: number;
   difficulty: "adaptive" | "easy" | "medium" | "hard";
 };
@@ -90,7 +91,13 @@ export type PracticeSessionDetail = {
     path_update_status: "not_started" | "replanned" | "unchanged" | "failed";
     path_agent_trace_id?: string | null;
     recommended_resource_ids: string[];
+    targeted_weakness_id?: string | null;
+    targeted_weakness_status?: "confirmed" | "reviewing" | "completed" | null;
+    targeted_weakness_improvement?: number | null;
+    targeted_weakness_passed?: boolean | null;
   } | null;
+  targeted_weakness_id?: string | null;
+  targeted_weakness_title?: string | null;
   created_at: string;
   updated_at: string;
 };

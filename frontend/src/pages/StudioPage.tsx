@@ -45,13 +45,15 @@ export function StudioPage() {
   const queryClient = useQueryClient();
   const initialCourseId = parsePositiveId(searchParams.get("course_id"));
   const initialResourceId = searchParams.get("resource_id");
+  const initialKnowledgePointId = parsePositiveId(searchParams.get("knowledge_point_id"));
+  const initialLearningGoal = searchParams.get("learning_goal") ?? "";
   const pathTaskId = searchParams.get("path_task_id");
   const numericPathTaskId = parsePositiveId(pathTaskId);
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(initialCourseId);
-  const [selectedKnowledgePointId, setSelectedKnowledgePointId] = useState<number | null>(null);
+  const [selectedKnowledgePointId, setSelectedKnowledgePointId] = useState<number | null>(initialKnowledgePointId);
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(initialResourceId);
   const [selectedResourceTypes, setSelectedResourceTypes] = useState<ResourceType[]>(["doc"]);
-  const [learningGoal, setLearningGoal] = useState("");
+  const [learningGoal, setLearningGoal] = useState(initialLearningGoal);
   const [difficulty, setDifficulty] = useState<ResourceDifficulty>("medium");
   const [librarySearch, setLibrarySearch] = useState("");
   const [resourceTypeFilter, setResourceTypeFilter] = useState<"all" | ResourceType>("all");

@@ -5,12 +5,14 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AGENT_ENDPOINTS } from "../api/agents";
-import { AI_JOB_ENDPOINTS } from "../api/aiJobs";
+import { AI_JOB_ENDPOINTS, type AiJob } from "../api/aiJobs";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { PRACTICE_ENDPOINTS } from "../api/practice";
 import { RESOURCE_ENDPOINTS } from "../api/resources";
 import { PATHS } from "../app/routePaths";
+import { courseLoopQueryKeys } from "../features/course-space/courseLoopQueries";
+import { selectResumablePracticeJob } from "../features/practice/practiceJobSelection";
 import { PracticePage } from "./PracticePage";
 
 let previousAdapter = apiClient.defaults.adapter;
@@ -20,8 +22,9 @@ function LocationProbe() {
   return <output data-testid="location">{location.pathname}{location.search}</output>;
 }
 
-function renderWithProviders(initialPath = `${PATHS.practice}?course_id=808&new=1`) {
+function renderWithProviders(initialPath = `${PATHS.practice}?course_id=808&new=1`, seedLatest = false) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  if (seedLatest) queryClient.setQueryData(courseLoopQueryKeys.latestPractice(808), { data: completedSession });
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialPath]}>
@@ -121,6 +124,8 @@ const inProgressSession = {
 
 const completedSession = {
   ...inProgressSession,
+  targeted_weakness_id: "701",
+  targeted_weakness_title: "启发式搜索",
   status: "completed",
   score: 66,
   grading_status: "complete",
@@ -168,7 +173,11 @@ const completedSession = {
     weaknesses_updated: 0,
     path_update_status: "replanned",
     path_agent_trace_id: "trace_path_replan",
-    recommended_resource_ids: ["801"]
+    recommended_resource_ids: ["801"],
+    targeted_weakness_id: "701",
+    targeted_weakness_status: "reviewing",
+    targeted_weakness_improvement: 26,
+    targeted_weakness_passed: false
   }
 };
 
@@ -273,10 +282,57 @@ describe("PracticePage", () => {
     apiClient.defaults.adapter = previousAdapter;
   });
 
+  it("does not restore an old completed practice when opening a targeted weakness retest", () => {
+    const oldCompletedJob = {
+      job_id: "old-practice-job",
+      workflow: "practice_generation",
+      status: "completed",
+      course_id: "808",
+      retry_of_job_id: null,
+      progress_percent: 100,
+      stage: "completed",
+      label: "练习生成完成",
+      request: { course_id: 808 },
+      result: { course_id: 808, session_id: 501 },
+      steps: [],
+      warnings: [],
+      agent_trace_id: "trace_old_practice",
+      error_code: null,
+      error_message: null,
+      attempt_count: 1,
+      can_cancel: false,
+      can_retry: false,
+      created_at: "2026-07-17T01:00:00Z",
+      updated_at: "2026-07-17T01:00:10Z",
+      started_at: "2026-07-17T01:00:01Z",
+      completed_at: "2026-07-17T01:00:10Z"
+    } satisfies AiJob;
+    const targetedRunningJob = {
+      ...oldCompletedJob,
+      job_id: "targeted-practice-job",
+      status: "running",
+      request: { course_id: 808, weakness_item_id: 701 }
+    } satisfies AiJob;
+
+    expect(selectResumablePracticeJob([oldCompletedJob], 808, 701)).toBeUndefined();
+    expect(selectResumablePracticeJob([oldCompletedJob, targetedRunningJob], 808, 701)?.job_id)
+      .toBe("targeted-practice-job");
+    expect(selectResumablePracticeJob([targetedRunningJob], 808, null)).toBeUndefined();
+  });
+
+  it("ignores a cached latest session while a new targeted weakness retest is requested", async () => {
+    installAdapter();
+    renderWithProviders(`${PATHS.practice}?course_id=808&knowledge_point_id=401&weakness_item_id=701&new=1`, true);
+
+    expect(await screen.findByRole("heading", { name: "开始针对性练习" })).toBeInTheDocument();
+    expect(screen.queryByText("本次得分")).not.toBeInTheDocument();
+    expect(screen.getByTestId("location")).not.toHaveTextContent("session_id=501");
+  });
+
   it("starts a targeted practice from the settings drawer and renders one question at a time", async () => {
     const user = userEvent.setup();
     const calls = installAdapter();
-    renderWithProviders();
+    renderWithProviders(`${PATHS.practice}?course_id=808&knowledge_point_id=401&weakness_item_id=701&new=1`);
 
     expect(await screen.findByRole("heading", { name: "开始针对性练习" })).toBeInTheDocument();
     expect(screen.getByText("启发式搜索")).toBeInTheDocument();
@@ -297,7 +353,7 @@ describe("PracticePage", () => {
     expect(calls).toContainEqual(expect.objectContaining({
       method: "post",
       url: AI_JOB_ENDPOINTS.practiceGeneration,
-      payload: { course_id: 808, knowledge_point_ids: [401], question_count: 5, difficulty: "adaptive" }
+      payload: { course_id: 808, knowledge_point_ids: [401], weakness_item_id: 701, question_count: 5, difficulty: "adaptive" }
     }));
   });
 
@@ -376,7 +432,8 @@ describe("PracticePage", () => {
 
     await user.click(within(summary).getByRole("button", { name: "查看学习更新" }));
     const drawer = screen.getByRole("dialog", { name: "学习结果" });
-    expect(within(drawer).getByText("学习路径已按本次结果重排")).toBeInTheDocument();
+    expect(within(drawer).getByText("“启发式搜索”仍需复习")).toBeInTheDocument();
+    expect(drawer).toHaveTextContent(/较起点\s*提升\s*26\s*分/);
     expect(within(drawer).getByText("A* 搜索针对性讲解")).toBeInTheDocument();
     await user.click(within(drawer).getByRole("button", { name: "查看 AssessmentGraph" }));
     expect(await within(drawer).findByText("diagnose_errors")).toBeInTheDocument();

@@ -15,6 +15,7 @@ PracticeQuestionType = Literal["single_choice", "multiple_choice", "short_answer
 class CreatePracticeSessionRequest(BaseModel):
     course_id: int
     knowledge_point_ids: list[int] = Field(default_factory=list)
+    weakness_item_id: int | None = Field(default=None, gt=0)
     question_count: int = Field(default=5, ge=1, le=12)
     difficulty: PracticeDifficulty = "medium"
 
@@ -86,6 +87,10 @@ class PracticeClosureUpdate(BaseModel):
     path_update_status: Literal["not_started", "replanned", "unchanged", "failed"] = "not_started"
     path_agent_trace_id: str | None = None
     recommended_resource_ids: list[str] = Field(default_factory=list)
+    targeted_weakness_id: str | None = None
+    targeted_weakness_status: Literal["confirmed", "reviewing", "completed"] | None = None
+    targeted_weakness_improvement: int | None = Field(default=None, ge=-100, le=100)
+    targeted_weakness_passed: bool | None = None
 
 
 class PracticeAnswerResponse(BaseModel):
@@ -109,6 +114,8 @@ class PracticeSessionDetail(BaseModel):
     questions: list[PracticeQuestion]
     answers: list[PracticeAnswerResponse]
     closure_update: PracticeClosureUpdate | None = None
+    targeted_weakness_id: str | None = None
+    targeted_weakness_title: str | None = None
     created_at: str
     updated_at: str
 
@@ -160,6 +167,8 @@ def session_to_api(session: PracticeSession, answers: list[PracticeAnswer]) -> P
         questions=questions,
         answers=answer_items,
         closure_update=_closure_update(getattr(session, "assessment_json", None)),
+        targeted_weakness_id=(str(assessment["targeted_weakness_id"]) if assessment.get("targeted_weakness_id") else None),
+        targeted_weakness_title=(str(assessment["targeted_weakness_title"]) if assessment.get("targeted_weakness_title") else None),
         created_at=iso_timestamp(session.created_at) or "",
         updated_at=iso_timestamp(session.updated_at) or "",
     )

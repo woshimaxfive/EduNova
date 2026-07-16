@@ -17,6 +17,7 @@ export type LearningNextAction = {
   knowledge_point_id: string | null;
   path_task_id: string | null;
   resource_id: string | null;
+  weakness_item_id?: string | null;
 };
 
 export async function getLearningNextAction(courseId?: number | null) {
@@ -25,4 +26,3 @@ export async function getLearningNextAction(courseId?: number | null) {
   });
   return response.data;
 }
-

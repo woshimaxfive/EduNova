@@ -200,6 +200,29 @@ def test_course_action_uses_mastery_then_generates_missing_path() -> None:
     assert action.kind == "generate_path"
 
 
+def test_active_weakness_next_action_carries_review_item_identity() -> None:
+    weakness = WeaknessReviewItem(
+        id=61,
+        user_id=1,
+        course_id=10,
+        knowledge_point_id=41,
+        title="线性回归",
+        source_type="practice_assessment",
+        status="reviewing",
+        created_at=NOW,
+        updated_at=NOW,
+    )
+    db = MagicMock()
+    db.scalars.side_effect = [[weakness], []]
+    db.scalar.return_value = None
+
+    action = service_with(db, mastery())._course_action(make_user(), make_course())
+
+    assert action.kind == "practice_weakness"
+    assert action.knowledge_point_id == "41"
+    assert action.weakness_item_id == "61"
+
+
 def test_completed_path_with_new_practice_recommends_report() -> None:
     path = make_path()
     task = make_task("completed")

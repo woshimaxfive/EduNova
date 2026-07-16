@@ -790,6 +790,19 @@
   grid-column: 1 / -1;
 }
 
+.course-progress-weaknesses p {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+  line-height: 1.55;
+}
+
+.course-progress-weaknesses p b {
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
 .course-progress-weakness-actions {
   display: flex;
   flex-wrap: wrap;

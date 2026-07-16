@@ -18,4 +18,4 @@ class LearningNextAction(BaseModel):
     knowledge_point_id: str | None = None
     path_task_id: str | None = None
     resource_id: str | None = None
-
+    weakness_item_id: str | None = None

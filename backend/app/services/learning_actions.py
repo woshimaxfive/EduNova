@@ -120,6 +120,7 @@ class LearningNextActionService:
                 "通过自适应练习验证这个薄弱点是否已经掌握。",
                 course_id=course.id,
                 knowledge_point_id=active_weakness.knowledge_point_id,
+                weakness_item_id=active_weakness.id,
             )
 
         mastery = self.course_service.get_mastery_map(user, course.id)
@@ -365,6 +366,7 @@ class LearningNextActionService:
         knowledge_point_id: int | None = None,
         path_task_id: int | None = None,
         resource_id: int | None = None,
+        weakness_item_id: int | None = None,
     ) -> LearningNextAction:
         return LearningNextAction(
             kind=kind,
@@ -376,4 +378,5 @@ class LearningNextActionService:
             knowledge_point_id=str(knowledge_point_id) if knowledge_point_id is not None else None,
             path_task_id=str(path_task_id) if path_task_id is not None else None,
             resource_id=str(resource_id) if resource_id is not None else None,
+            weakness_item_id=str(weakness_item_id) if weakness_item_id is not None else None,
         )

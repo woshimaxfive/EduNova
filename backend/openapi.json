@@ -2510,6 +2510,98 @@
         "title": "CourseSummary",
         "type": "object"
       },
+      "CourseWeaknessDiagnosis": {
+        "properties": {
+          "attempt_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "baseline_score": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Score"
+          },
+          "confidence": {
+            "default": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "evidence_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "improvement": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": -100.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Improvement"
+          },
+          "last_practice_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Practice Session Id"
+          },
+          "latest_score": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Score"
+          },
+          "misconception": {
+            "default": "",
+            "title": "Misconception",
+            "type": "string"
+          },
+          "missing_concepts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Concepts",
+            "type": "array"
+          },
+          "recommended_action": {
+            "default": "",
+            "title": "Recommended Action",
+            "type": "string"
+          }
+        },
+        "title": "CourseWeaknessDiagnosis",
+        "type": "object"
+      },
       "CourseWeaknessReviewItem": {
         "properties": {
           "course_id": {
@@ -2519,6 +2611,9 @@
           "created_at": {
             "title": "Created At",
             "type": "string"
+          },
+          "diagnosis": {
+            "$ref": "#/components/schemas/CourseWeaknessDiagnosis"
           },
           "id": {
             "title": "Id",
@@ -2586,6 +2681,7 @@
           "knowledge_point_id",
           "recommended_resource_ids",
           "recommended_resources",
+          "diagnosis",
           "next_review_at",
           "created_at",
           "updated_at"
@@ -2715,6 +2811,18 @@
             "minimum": 1.0,
             "title": "Question Count",
             "type": "integer"
+          },
+          "weakness_item_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weakness Item Id"
           }
         },
         "required": [
@@ -3902,6 +4010,17 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "weakness_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weakness Item Id"
           }
         },
         "required": [
@@ -6378,6 +6497,57 @@
             "title": "Recommended Resource Ids",
             "type": "array"
           },
+          "targeted_weakness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targeted Weakness Id"
+          },
+          "targeted_weakness_improvement": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": -100.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targeted Weakness Improvement"
+          },
+          "targeted_weakness_passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targeted Weakness Passed"
+          },
+          "targeted_weakness_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirmed",
+                  "reviewing",
+                  "completed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targeted Weakness Status"
+          },
           "weaknesses_added": {
             "default": 0,
             "title": "Weaknesses Added",
@@ -6757,6 +6927,28 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "targeted_weakness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targeted Weakness Id"
+          },
+          "targeted_weakness_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targeted Weakness Title"
           },
           "title": {
             "title": "Title",

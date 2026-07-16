@@ -27,6 +27,7 @@ import {
   isAnswered,
   practiceResultSummary
 } from "../features/practice/practiceViewModel";
+import { selectResumablePracticeJob } from "../features/practice/practiceJobSelection";
 import { useLearningNextAction } from "../features/learning-actions/learningActions";
 import { PageFrame } from "./PageFrame";
 import "../styles/practice.css";
@@ -50,6 +51,7 @@ export function PracticePage() {
   const queryClient = useQueryClient();
   const initialCourseId = searchParams.get("course_id") ?? "";
   const initialKnowledgePointId = searchParams.get("knowledge_point_id") ?? "";
+  const initialWeaknessItemId = Number(searchParams.get("weakness_item_id") ?? "");
   const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
   const [selectedPointId, setSelectedPointId] = useState(initialKnowledgePointId);
   const [questionCount, setQuestionCount] = useState(5);
@@ -109,7 +111,9 @@ export function PracticePage() {
     enabled: canUseCourse,
     staleTime: 10_000
   });
-  const restoredCandidate = hasRequestedSession ? requestedSessionQuery.data?.data : latestSessionQuery.data?.data;
+  const restoredCandidate = hasRequestedSession
+    ? requestedSessionQuery.data?.data
+    : (wantsNewPractice ? null : latestSessionQuery.data?.data);
   const restoredSession = restoredCandidate && Array.isArray(restoredCandidate.questions) ? restoredCandidate : null;
   const activeSession = currentSession ?? restoredSession ?? null;
   const activeQuestion = activeSession?.questions.find((question) => question.id === requestedQuestionId)
@@ -139,12 +143,21 @@ export function PracticePage() {
   const recommendedResources = courseResources.filter((resource) => recommendedResourceIdSet.has(resource.id));
   const selectedCourseTitle = courses.find((course) => course.id === effectiveCourseId)?.title ?? "";
   const selectedPointTitle = knowledgePoints.find((point) => point.id === effectivePointId)?.title ?? "";
-  const practiceJob = jobs.find((job) => job.job_id === practiceJobId)
-    ?? jobs.find((job) => job.workflow === "practice_generation" && Number(job.request.course_id) === numericCourseId);
+  const requestedWeaknessItemId = Number.isFinite(initialWeaknessItemId) && initialWeaknessItemId > 0
+    ? initialWeaknessItemId
+    : null;
+  const resumablePracticeJob = selectResumablePracticeJob(jobs, numericCourseId, requestedWeaknessItemId);
+  const practiceJob = jobs.find((job) => job.job_id === practiceJobId) ?? resumablePracticeJob;
   const practiceJobRunning = practiceJob?.status === "queued" || practiceJob?.status === "running" || practiceJob?.status === "cancelling";
   const practiceJobError = practiceJob?.status === "failed" || practiceJob?.status === "cancelled"
     ? practiceJob.error_message || "练习生成失败，可在任务托盘中重试。"
     : "";
+
+  useEffect(() => {
+    if (practiceJobId || !resumablePracticeJob) return;
+    const timeoutId = window.setTimeout(() => setPracticeJobId(resumablePracticeJob.job_id), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [practiceJobId, resumablePracticeJob]);
 
   useEffect(() => {
     if (!practiceJob || handledPracticeJobRef.current === practiceJob.job_id) return;
@@ -218,6 +231,7 @@ export function PracticePage() {
     mutationFn: () => createPracticeGenerationJob({
       course_id: numericCourseId,
       knowledge_point_ids: selectedPointIds,
+      ...(Number.isFinite(initialWeaknessItemId) && initialWeaknessItemId > 0 ? { weakness_item_id: initialWeaknessItemId } : {}),
       question_count: questionCount,
       difficulty
     }, createIdempotencyKey(`practice-${numericCourseId}`)),
@@ -299,6 +313,7 @@ export function PracticePage() {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("course_id", courseId);
     nextParams.delete("knowledge_point_id");
+    nextParams.delete("weakness_item_id");
     nextParams.delete("session_id");
     nextParams.delete("question_id");
     nextParams.set("new", "1");
@@ -315,6 +330,7 @@ export function PracticePage() {
     nextParams.set("new", "1");
     nextParams.delete("session_id");
     nextParams.delete("question_id");
+    nextParams.delete("weakness_item_id");
     setSearchParams(nextParams, { replace: true });
     setDrawerMode("settings");
   }

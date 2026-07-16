@@ -125,9 +125,23 @@ class CourseWeaknessReviewItem(BaseModel):
     knowledge_point_id: str | None
     recommended_resource_ids: list[str]
     recommended_resources: list["CourseResourceBrief"]
+    diagnosis: "CourseWeaknessDiagnosis"
     next_review_at: str | None
     created_at: str
     updated_at: str
+
+
+class CourseWeaknessDiagnosis(BaseModel):
+    misconception: str = ""
+    missing_concepts: list[str] = Field(default_factory=list)
+    recommended_action: str = ""
+    confidence: float = Field(default=0, ge=0, le=1)
+    evidence_count: int = Field(default=0, ge=0)
+    baseline_score: int | None = Field(default=None, ge=0, le=100)
+    latest_score: int | None = Field(default=None, ge=0, le=100)
+    improvement: int | None = Field(default=None, ge=-100, le=100)
+    attempt_count: int = Field(default=0, ge=0)
+    last_practice_session_id: str | None = None
 
 
 class CourseResourceBrief(BaseModel):
@@ -218,6 +232,9 @@ def weakness_item_to_api(
 ) -> CourseWeaknessReviewItem:
     resources_by_id = resources_by_id or {}
     resource_ids = [int(value) for value in (item.recommended_resource_ids or []) if str(value).isdigit()]
+    diagnosis = item.diagnosis_json if isinstance(item.diagnosis_json, dict) else {}
+    baseline_score = _safe_score(diagnosis.get("baseline_score"))
+    latest_score = _safe_score(diagnosis.get("latest_score"))
     return CourseWeaknessReviewItem(
         id=str(item.id),
         title=item.title,
@@ -227,7 +244,27 @@ def weakness_item_to_api(
         knowledge_point_id=str(item.knowledge_point_id) if item.knowledge_point_id is not None else None,
         recommended_resource_ids=[str(resource_id) for resource_id in resource_ids],
         recommended_resources=[resource_brief(resources_by_id[resource_id]) for resource_id in resource_ids if resource_id in resources_by_id],
+        diagnosis=CourseWeaknessDiagnosis(
+            misconception=str(diagnosis.get("misconception") or "")[:500],
+            missing_concepts=[str(value)[:120] for value in diagnosis.get("missing_concepts", []) if str(value).strip()][:8],
+            recommended_action=str(diagnosis.get("recommended_action") or "")[:500],
+            confidence=max(0.0, min(1.0, float(diagnosis.get("confidence") or 0))),
+            evidence_count=max(0, int(diagnosis.get("evidence_count") or 0)),
+            baseline_score=baseline_score,
+            latest_score=latest_score,
+            improvement=(latest_score - baseline_score) if baseline_score is not None and latest_score is not None else None,
+            attempt_count=max(0, int(diagnosis.get("attempt_count") or 0)),
+            last_practice_session_id=(str(diagnosis["last_practice_session_id"]) if diagnosis.get("last_practice_session_id") else None),
+        ),
         next_review_at=iso_timestamp(item.next_review_at),
         created_at=iso_timestamp(item.created_at) or "",
         updated_at=iso_timestamp(item.updated_at) or "",
     )
+
+
+def _safe_score(value: object) -> int | None:
+    try:
+        score = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return max(0, min(100, score))

@@ -28,6 +28,8 @@ type CourseProgressDrawerProps = {
   onClose: () => void;
   onRefresh: () => void;
   onWeaknessAction: (item: CourseWeaknessReviewItem, action: CourseWeaknessReviewAction) => void;
+  onPracticeWeakness: (item: CourseWeaknessReviewItem) => void;
+  onOpenWeaknessResource: (item: CourseWeaknessReviewItem, resourceId?: string) => void;
 };
 
 export function CourseProgressDrawer({
@@ -45,9 +47,12 @@ export function CourseProgressDrawer({
   refreshWarning,
   onClose,
   onRefresh,
-  onWeaknessAction
+  onWeaknessAction,
+  onPracticeWeakness,
+  onOpenWeaknessResource
 }: CourseProgressDrawerProps) {
   if (!open) return null;
+  const activeWeaknessCount = weaknessItems.filter((item) => ["pending", "confirmed", "reviewing"].includes(item.status)).length;
 
   return (
     <ModalFrame title="学习进度" layerClassName="course-drawer-layer" onClose={onClose}>
@@ -122,7 +127,7 @@ export function CourseProgressDrawer({
         <section className="course-progress-section" aria-label="待复习弱点">
           <div className="course-progress-section-heading">
             <h3>待复习弱点</h3>
-            <span>{weaknessItems.length} 项待处理</span>
+            <span>{activeWeaknessCount} 项待处理</span>
           </div>
           <dl className="course-progress-counts" aria-label="弱点统计">
             <div><dt>待确认</dt><dd>{weaknessSummary?.pending_count ?? 0}</dd></div>
@@ -144,6 +149,16 @@ export function CourseProgressDrawer({
                     <strong>{item.title}</strong>
                     <span>{weaknessStatusLabel(item.status)}</span>
                     {formatReviewDate(item.next_review_at) ? <small>下次复习 {formatReviewDate(item.next_review_at)}</small> : null}
+                    {item.diagnosis?.misconception ? <p><b>当前错因：</b>{item.diagnosis.misconception}</p> : null}
+                    {item.diagnosis?.missing_concepts.length ? <p><b>待补概念：</b>{item.diagnosis.missing_concepts.join("、")}</p> : null}
+                    {item.diagnosis?.recommended_action ? <p><b>复习建议：</b>{item.diagnosis.recommended_action}</p> : null}
+                    {item.diagnosis?.latest_score !== null && item.diagnosis?.latest_score !== undefined ? (
+                      <small>
+                        再测 {item.diagnosis.latest_score} 分
+                        {item.diagnosis.baseline_score !== null ? ` · 起点 ${item.diagnosis.baseline_score} 分` : ""}
+                        {item.diagnosis.improvement !== null ? ` · ${item.diagnosis.improvement >= 0 ? "提升" : "变化"} ${item.diagnosis.improvement} 分` : ""}
+                      </small>
+                    ) : null}
                   </div>
                   <div className="course-progress-weakness-actions" aria-label={`${item.title} 操作`}>
                     {weaknessActions(item).map((action) => (
@@ -158,6 +173,18 @@ export function CourseProgressDrawer({
                         <ArrowRight size={13} weight="bold" aria-hidden="true" />
                       </button>
                     ))}
+                    {item.status === "confirmed" || item.status === "reviewing" || item.status === "completed" ? (
+                      <button type="button" onClick={() => onPracticeWeakness(item)}>
+                        <span>{item.status === "completed" ? "再次巩固" : "针对性再测"}</span>
+                        <ArrowRight size={13} weight="bold" aria-hidden="true" />
+                      </button>
+                    ) : null}
+                    {item.status === "confirmed" || item.status === "reviewing" ? (
+                      <button type="button" onClick={() => onOpenWeaknessResource(item, item.recommended_resources[0]?.id)}>
+                        <span>{item.recommended_resources.length > 0 ? "学习推荐资源" : "生成复习资源"}</span>
+                        <ArrowRight size={13} weight="bold" aria-hidden="true" />
+                      </button>
+                    ) : null}
                   </div>
                 </li>
               ))}
@@ -180,9 +207,9 @@ function weaknessStatusLabel(status: string) {
 }
 
 function weaknessActions(item: CourseWeaknessReviewItem): Array<{ action: CourseWeaknessReviewAction; label: string }> {
-  if (item.status === "pending") return [{ action: "confirm", label: "确认" }, { action: "start", label: "开始" }, { action: "dismiss", label: "忽略" }];
-  if (item.status === "confirmed") return [{ action: "start", label: "开始" }, { action: "complete", label: "完成" }, { action: "dismiss", label: "忽略" }];
-  if (item.status === "reviewing") return [{ action: "complete", label: "完成" }, { action: "dismiss", label: "忽略" }];
+  if (item.status === "pending") return [{ action: "confirm", label: "确认" }, { action: "dismiss", label: "忽略" }];
+  if (item.status === "confirmed") return [{ action: "start", label: "开始复习" }, { action: "dismiss", label: "忽略" }];
+  if (item.status === "reviewing") return [{ action: "dismiss", label: "忽略" }];
   if (item.status === "completed") return [{ action: "dismiss", label: "移除" }];
   return [];
 }

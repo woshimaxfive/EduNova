@@ -843,6 +843,105 @@ def test_ungraded_short_answer_can_be_regraded_once_and_repeated_regrade_is_idem
     assert repo.weakness_items == []
 
 
+def test_targeted_weakness_retest_uses_diagnosis_and_completes_only_after_passing() -> None:
+    from backend.app.services.practice import PracticeService
+
+    repo = make_repo()
+    weakness = WeaknessReviewItem(
+        id=701,
+        user_id=1,
+        course_id=101,
+        knowledge_point_id=401,
+        title="人工智能概述",
+        source_type="practice_assessment",
+        source_ref_type="practice_answer",
+        source_ref_id=600,
+        diagnosis_json={
+            "misconception": "混淆了智能体与普通程序",
+            "missing_concepts": ["环境状态", "行动选择"],
+            "recommended_action": "结合感知、推理和行动链路复习",
+            "confidence": 0.9,
+            "baseline_score": 40,
+            "latest_score": 40,
+        },
+        status="confirmed",
+        recommended_resource_ids=[901],
+        created_at=NOW,
+        updated_at=NOW,
+    )
+    repo.weakness_items.append(weakness)
+    created = as_dict(
+        make_practice_service(repo).create_session(
+            make_user(),
+            101,
+            [401],
+            1,
+            "adaptive",
+            weakness_item_id=701,
+        )
+    )
+
+    assert created["targeted_weakness_id"] == "701"
+    assert created["targeted_weakness_title"] == "人工智能概述"
+
+    grader = FakeModelService(
+        responses=[
+            '{"grades":[{"question_id":"q1","score":90,"is_correct":true,'
+            '"matched_concepts":["环境状态","行动选择"],"missing_concepts":[],"misconception":"",'
+            '"feedback":"已能完整说明智能体链路。","evidence_refs":[],"confidence":0.92}]}'
+        ]
+    )
+    result = as_dict(
+        PracticeService(repo, model_service=grader).submit_answers(
+            make_user(),
+            int(created["id"]),
+            [{"question_id": "q1", "answer_text": "智能体感知环境状态，推理后选择行动。"}],
+        )
+    )
+    assert result["closure_update"]["targeted_weakness_passed"] is True
+    assert result["closure_update"]["targeted_weakness_status"] == "completed"
+    assert result["closure_update"]["targeted_weakness_improvement"] == 50
+    assert weakness.status == "completed"
+    assert weakness.diagnosis_json["attempt_count"] == 1
+    assert weakness.diagnosis_json["last_practice_session_id"] == created["id"]
+
+
+def test_targeted_weakness_retest_rejects_mismatched_point_and_ungraded_does_not_complete() -> None:
+    from backend.app.services.practice import PracticeService, PracticeValidationError
+
+    repo = make_repo()
+    weakness = WeaknessReviewItem(
+        id=701,
+        user_id=1,
+        course_id=101,
+        knowledge_point_id=401,
+        title="人工智能概述",
+        source_type="practice_assessment",
+        diagnosis_json={"baseline_score": 30},
+        status="reviewing",
+        recommended_resource_ids=[],
+        created_at=NOW,
+        updated_at=NOW,
+    )
+    repo.weakness_items.append(weakness)
+
+    with pytest.raises(PracticeValidationError, match="知识点必须与待复习弱点一致"):
+        make_practice_service(repo).create_session(make_user(), 101, [402], 1, "adaptive", weakness_item_id=701)
+
+    created = make_practice_service(repo).create_session(make_user(), 101, [401], 1, "adaptive", weakness_item_id=701)
+    result = as_dict(
+        PracticeService(repo).submit_answers(
+            make_user(),
+            int(created.id),
+            [{"question_id": "q1", "answer_text": "我尝试解释，但当前评分模型不可用。"}],
+        )
+    )
+
+    assert result["grading_status"] == "ungraded"
+    assert result["closure_update"]["targeted_weakness_passed"] is False
+    assert weakness.status == "reviewing"
+
+
 def test_assessment_path_failure_does_not_rollback_completed_practice() -> None:
     from backend.app.services.practice import PracticeService
 

@@ -37,7 +37,7 @@ describe("learning action routes", () => {
   });
 
   it("routes practice, path and report actions deterministically", () => {
-    expect(learningActionHref(action("practice_weakness", { knowledge_point_id: "42" }))).toBe("/app/practice?course_id=8&knowledge_point_id=42&new=1");
+    expect(learningActionHref(action("practice_weakness", { knowledge_point_id: "42", weakness_item_id: "61" }))).toBe("/app/practice?course_id=8&knowledge_point_id=42&weakness_item_id=61&new=1");
     expect(learningActionHref(action("generate_path"))).toBe("/app/path?course_id=8");
     expect(learningActionHref(action("update_report"))).toBe("/app/reports?course_id=8");
     expect(learningActionHref(action("wait_for_practice"))).toBe("/app/practice?course_id=8");

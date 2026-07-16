@@ -2466,12 +2466,51 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** CourseWeaknessDiagnosis */
+        CourseWeaknessDiagnosis: {
+            /**
+             * Attempt Count
+             * @default 0
+             */
+            attempt_count: number;
+            /** Baseline Score */
+            baseline_score?: number | null;
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
+            /**
+             * Evidence Count
+             * @default 0
+             */
+            evidence_count: number;
+            /** Improvement */
+            improvement?: number | null;
+            /** Last Practice Session Id */
+            last_practice_session_id?: string | null;
+            /** Latest Score */
+            latest_score?: number | null;
+            /**
+             * Misconception
+             * @default
+             */
+            misconception: string;
+            /** Missing Concepts */
+            missing_concepts?: string[];
+            /**
+             * Recommended Action
+             * @default
+             */
+            recommended_action: string;
+        };
         /** CourseWeaknessReviewItem */
         CourseWeaknessReviewItem: {
             /** Course Id */
             course_id: string;
             /** Created At */
             created_at: string;
+            diagnosis: components["schemas"]["CourseWeaknessDiagnosis"];
             /** Id */
             id: string;
             /** Knowledge Point Id */
@@ -2541,6 +2580,8 @@ export interface components {
              * @default 5
              */
             question_count: number;
+            /** Weakness Item Id */
+            weakness_item_id?: number | null;
         };
         /** CreateTutorSessionRequest */
         CreateTutorSessionRequest: {
@@ -2969,6 +3010,8 @@ export interface components {
              * @enum {string}
              */
             status: "ready" | "waiting" | "blocked";
+            /** Weakness Item Id */
+            weakness_item_id?: string | null;
         };
         /** LearningPathDetail */
         LearningPathDetail: {
@@ -3826,6 +3869,14 @@ export interface components {
             path_update_status: "not_started" | "replanned" | "unchanged" | "failed";
             /** Recommended Resource Ids */
             recommended_resource_ids?: string[];
+            /** Targeted Weakness Id */
+            targeted_weakness_id?: string | null;
+            /** Targeted Weakness Improvement */
+            targeted_weakness_improvement?: number | null;
+            /** Targeted Weakness Passed */
+            targeted_weakness_passed?: boolean | null;
+            /** Targeted Weakness Status */
+            targeted_weakness_status?: ("confirmed" | "reviewing" | "completed") | null;
             /**
              * Weaknesses Added
              * @default 0
@@ -3966,6 +4017,10 @@ export interface components {
             score: number | null;
             /** Status */
             status: string;
+            /** Targeted Weakness Id */
+            targeted_weakness_id?: string | null;
+            /** Targeted Weakness Title */
+            targeted_weakness_title?: string | null;
             /** Title */
             title: string;
             /** Updated At */

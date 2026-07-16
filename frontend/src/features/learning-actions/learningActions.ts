@@ -56,6 +56,7 @@ export function learningActionHref(action: LearningNextAction) {
     return withParams(PATHS.practice, {
       course_id: action.course_id,
       knowledge_point_id: action.knowledge_point_id,
+      weakness_item_id: action.weakness_item_id,
       new: "1"
     });
   }

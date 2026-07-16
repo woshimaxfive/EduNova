@@ -340,6 +340,7 @@ export function CourseSpacePage() {
   const learningState = learningStateQuery.data?.data;
   const weaknessSummary = learningState?.weakness_summary;
   const weaknessItems = (learningState?.weakness_review_queue ?? []).filter((item) => item.status !== "dismissed");
+  const activeWeaknessCount = weaknessItems.filter((item) => ["pending", "confirmed", "reviewing"].includes(item.status)).length;
   const courseSessions = Array.isArray(courseSessionsQuery.data?.data) ? courseSessionsQuery.data.data : [];
   const latestCourseSessionId = courseSessions[0]?.id ?? null;
   const requestedCourseSessionId = searchParams.get("course_session_id");
@@ -940,7 +941,7 @@ export function CourseSpacePage() {
               progressPercent={courseSummary.progressPercent}
               materialCount={materialCount}
               knowledgePointCount={knowledgePointCount}
-              weaknessCount={weaknessItems.length}
+              weaknessCount={activeWeaknessCount}
               mode={courseMode}
               onModeChange={changeCourseMode}
               onOpenProgress={openCourseProgress}
@@ -1193,6 +1194,24 @@ export function CourseSpacePage() {
               onClose={() => setIsProgressDrawerOpen(false)}
               onRefresh={() => void syncCourseProgress()}
               onWeaknessAction={(item, action) => void updateWeaknessReviewItem(item, action)}
+              onPracticeWeakness={(item) => {
+                const params = new URLSearchParams({
+                  course_id: String(numericCourseId),
+                  knowledge_point_id: item.knowledge_point_id ?? "",
+                  weakness_item_id: item.id,
+                  new: "1"
+                });
+                navigate(`${PATHS.practice}?${params.toString()}`);
+              }}
+              onOpenWeaknessResource={(item, resourceId) => {
+                const params = new URLSearchParams({
+                  course_id: String(numericCourseId),
+                  knowledge_point_id: item.knowledge_point_id ?? "",
+                  learning_goal: item.diagnosis?.recommended_action || `复习并掌握${item.title}`
+                });
+                if (resourceId) params.set("resource_id", resourceId);
+                navigate(`${PATHS.studio}?${params.toString()}`);
+              }}
             />
           </div>
         </section>

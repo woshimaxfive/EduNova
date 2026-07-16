@@ -55,6 +55,7 @@ def create_practice_session(
             current_user,
             course_id=payload.course_id,
             knowledge_point_ids=payload.knowledge_point_ids,
+            weakness_item_id=payload.weakness_item_id,
             question_count=payload.question_count,
             difficulty=payload.difficulty,
         )
@@ -78,6 +79,7 @@ def create_practice_generation_job(
         current_user,
         course_id=payload.course_id,
         knowledge_point_ids=payload.knowledge_point_ids,
+        weakness_item_id=payload.weakness_item_id,
         question_count=payload.question_count,
         difficulty=payload.difficulty,
         idempotency_key=idempotency_key,

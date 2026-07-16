@@ -219,6 +219,7 @@ class PracticeService:
         knowledge_point_ids: list[int],
         question_count: int,
         difficulty: str,
+        weakness_item_id: int | None = None,
     ) -> PracticeSessionDetail:
         if question_count < 1 or question_count > 12:
             raise PracticeValidationError("题目数量必须在 1 到 12 之间。")
@@ -230,6 +231,7 @@ class PracticeService:
             user=user,
             course_id=course_id,
             knowledge_point_ids=knowledge_point_ids,
+            weakness_item_id=weakness_item_id,
             question_count=question_count,
             difficulty=difficulty,
         )

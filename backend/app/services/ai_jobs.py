@@ -16,7 +16,7 @@ from backend.app.core.config import Settings, get_settings
 from backend.app.core.errors import ConflictDomainError, NotFoundDomainError, ValidationDomainError
 from backend.app.core.observability import get_tracer
 from backend.app.db.session import SessionLocal
-from backend.app.models import AiJob, Course, GeneratedResource, KnowledgeChunk, KnowledgePoint, LearningPath, LearningTask, Material, MaterialChunk, ModelSetting, PracticeAnswer, PracticeSession, User
+from backend.app.models import AiJob, Course, GeneratedResource, KnowledgeChunk, KnowledgePoint, LearningPath, LearningTask, Material, MaterialChunk, ModelSetting, PracticeAnswer, PracticeSession, User, WeaknessReviewItem
 from backend.app.schemas.ai_jobs import AiJobListResponse, AiJobResponse, ai_job_to_api, iso_timestamp
 
 
@@ -598,6 +598,7 @@ class AiJobService:
         question_count: int,
         difficulty: str,
         idempotency_key: str | None,
+        weakness_item_id: int | None = None,
     ) -> AiJobResponse:
         if self.repository.get_course_for_user(user.id, course_id) is None:
             raise AiJobNotFoundError("课程不存在或无权访问。")
@@ -608,8 +609,23 @@ class AiJobService:
         point_ids = [item for item in dict.fromkeys(knowledge_point_ids) if item > 0]
         if not point_ids or any(self.repository.get_knowledge_point(course_id, item) is None for item in point_ids):
             raise AiJobNotFoundError("知识点不存在或不属于当前课程。")
+        if weakness_item_id is not None:
+            weakness = self.repository.db.scalar(
+                select(WeaknessReviewItem).where(
+                    WeaknessReviewItem.id == weakness_item_id,
+                    WeaknessReviewItem.user_id == user.id,
+                    WeaknessReviewItem.course_id == course_id,
+                )
+            )
+            if weakness is None or weakness.status not in {"confirmed", "reviewing"}:
+                raise AiJobNotFoundError("待复习弱点不存在、状态不可用或无权访问。")
+            if weakness.knowledge_point_id not in point_ids:
+                raise AiJobValidationError("针对性练习的知识点必须与待复习弱点一致。")
         active = self.repository.get_active_workflow_job(user.id, course_id, "practice_generation")
         if active is not None:
+            active_request = active.request_json if isinstance(active.request_json, dict) else {}
+            if weakness_item_id is not None and int(active_request.get("weakness_item_id") or 0) != weakness_item_id:
+                raise AiJobConflictError("当前课程已有其他练习正在生成，请完成后再开始这次针对性再测。")
             return ai_job_to_api(active, max_retries=self.max_retries)
         return self._create(
             user,
@@ -620,6 +636,7 @@ class AiJobService:
                 "knowledge_point_ids": point_ids,
                 "question_count": question_count,
                 "difficulty": difficulty,
+                **({"weakness_item_id": weakness_item_id} if weakness_item_id is not None else {}),
             },
             idempotency_key=idempotency_key,
         )
@@ -933,6 +950,17 @@ class AiJobService:
                 point_ids = [int(item) for item in request.get("knowledge_point_ids", [])]
                 if not point_ids or any(self.repository.get_knowledge_point(course_id, item) is None for item in point_ids):
                     raise AiJobNotFoundError("知识点不存在或不属于当前课程。")
+                weakness_item_id = request.get("weakness_item_id")
+                if weakness_item_id is not None:
+                    weakness = self.repository.db.scalar(
+                        select(WeaknessReviewItem).where(
+                            WeaknessReviewItem.id == int(weakness_item_id),
+                            WeaknessReviewItem.user_id == user.id,
+                            WeaknessReviewItem.course_id == course_id,
+                        )
+                    )
+                    if weakness is None or weakness.status not in {"confirmed", "reviewing"}:
+                        raise AiJobNotFoundError("待复习弱点不存在、状态不可用或无权访问。")
             elif request.get("practice_session_id") is not None:
                 session = self.repository.get_practice_session_for_user(user.id, int(request["practice_session_id"]))
                 if session is None or int(session.course_id) != course_id:
@@ -1268,6 +1296,7 @@ class AiJobService:
             user=user,
             course_id=course_id,
             knowledge_point_ids=[int(item) for item in request.get("knowledge_point_ids", [])],
+            weakness_item_id=(int(request["weakness_item_id"]) if request.get("weakness_item_id") is not None else None),
             question_count=int(request.get("question_count") or 5),
             difficulty=str(request.get("difficulty") or "adaptive"),
             trace_id=job.agent_trace_id,

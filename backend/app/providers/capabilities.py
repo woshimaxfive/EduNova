@@ -45,6 +45,15 @@ def provider_capabilities(*, preset_id: str | None, base_url: str | None) -> Pro
             vision_max_images=3,
             vision_max_image_bytes=4 * 1024 * 1024,
         )
+    if preset == "qwen" or host == "dashscope.aliyuncs.com":
+        return ProviderCapabilities(
+            supports_image_input=True,
+            vision_protocol="openai_chat_completions",
+            verified_vision=True,
+            vision_mime_types=("image/png", "image/jpeg"),
+            vision_max_images=3,
+            vision_max_image_bytes=4 * 1024 * 1024,
+        )
     if preset in {"hunyuan-vision", "custom-vision"}:
         return ProviderCapabilities(
             supports_image_input=True,

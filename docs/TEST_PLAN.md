@@ -82,7 +82,9 @@ Phase 32 收口验收还必须确认：无独立视觉配置时已上传图片�
 
 2026-07-16 Docker + `agent-browser` 实际验收：桌面主页统一入口上传 56 KB PNG，附件创建、删除、从资料库重新绑定和私有读取分别返回预期状态；资料库显示 PNG“已入库”，下一行动未被图片劫持。390px 下统一入口可见且 `scrollWidth=clientWidth=390`。临时账号、会话、附件、资料记录和对象存储已清理。
 
-服务器视觉兜底回归必须覆盖：没有个人 `default_vision_config_id`、但 `system_summary.can_use_vision_model=true` 时，主页和课程空间允许发送图片；设置页按回答、向量、重排序、图片理解顺序展示四类系统服务。个人视觉配置缺失或不可用时不得遮蔽可用的 `SYSTEM_VISION_*`。
+服务器视觉兜底回归必须覆盖：没有个人 `default_vision_config_id`、但 `system_summary.can_use_vision_model=true` 时，主页和课程空间允许发送图片；百炼 OpenAI-compatible 与讯飞 WebSocket 两种服务器视觉运行时均可被正确识别；设置页按回答、向量、重排序、图片理解顺序展示四类系统服务。个人视觉配置缺失或不可用时不得遮蔽可用的 `SYSTEM_VISION_*`。
+
+视觉请求使用独立的 `VISION_REQUEST_TIMEOUT_SECONDS`，测试必须确认该值传入 OpenAI-compatible 和讯飞视觉适配器，而普通文本请求仍使用 `MODEL_REQUEST_TIMEOUT_SECONDS`。
 
 讯飞原生图片理解连接测试不得以非空文本作为成功条件：程序化小图的响应必须经一次受控修复后通过 `standalone_query/visual_summary/extracted_text/observations/uncertainties/intent/search_required/reasoning_mode/confidence` 完整 Pydantic合同。端到端验收需再用真实截图确认视觉摘要与最终回答均包含可观察图片事实。
 | 视频文件解析 | 第一版暂不支持 |

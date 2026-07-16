@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     system_vision_api_key: str = ""
     system_vision_api_secret: str = ""
     system_vision_model: str = "imagev3"
+    vision_request_timeout_seconds: float = 60.0
     model_settings_encryption_key: str = ""
     model_request_timeout_seconds: float = 20.0
     model_max_attempts: int = 3

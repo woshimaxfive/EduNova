@@ -24,6 +24,13 @@ def test_vision_capabilities_are_explicit_and_do_not_assume_text_models() -> Non
     assert xfyun.supports_image_input is True
     assert xfyun.vision_protocol == "xfyun_websocket"
     assert provider_capabilities(preset_id="openai-vision", base_url=None).verified_vision is True
+    qwen = provider_capabilities(
+        preset_id="qwen",
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+    )
+    assert qwen.supports_image_input is True
+    assert qwen.vision_protocol == "openai_chat_completions"
+    assert qwen.verified_vision is True
     assert provider_capabilities(preset_id="spark", base_url=None).supports_image_input is False
     assert provider_capabilities(preset_id="deepseek", base_url=None).supports_image_input is False
     assert provider_capabilities(preset_id="custom", base_url=None).supports_image_input is False

@@ -958,7 +958,7 @@ class ModelSettingsService:
                     ),
                     prompt=prompt,
                     image_data_urls=image_data_urls[:3],
-                    timeout_seconds=self.settings.model_request_timeout_seconds,
+                    timeout_seconds=self.settings.vision_request_timeout_seconds,
                 )
         else:
             visual_config = OpenAICompatibleConfig(
@@ -971,7 +971,7 @@ class ModelSettingsService:
                     visual_config,
                     prompt=prompt,
                     image_data_urls=image_data_urls[:3],
-                    timeout_seconds=self.settings.model_request_timeout_seconds,
+                    timeout_seconds=self.settings.vision_request_timeout_seconds,
                 )
         return self.execution_runtime.execute(
             user_id=user.id,
@@ -980,7 +980,7 @@ class ModelSettingsService:
             model_name=runtime.chat_model,
             operation="vision",
             call=call,
-            timeout_seconds=self.settings.model_request_timeout_seconds,
+            timeout_seconds=self.settings.vision_request_timeout_seconds,
         )
 
     def chat_completion_with_timeout(
@@ -1513,14 +1513,24 @@ class ModelSettingsService:
         )
 
     def _vision_runtime_from_system_settings(self) -> RuntimeModelConfig:
-        provider = self.settings.system_vision_provider.strip() or "xfyun_vision"
+        provider = self._normalize_provider(self.settings.system_vision_provider.strip() or "xfyun_vision")
         base_url = self.settings.system_vision_base_url.strip()
-        app_id = self.settings.system_vision_app_id.strip() or self.settings.system_embedding_app_id.strip()
-        api_key = self.settings.system_vision_api_key.strip() or self.settings.system_embedding_api_key.strip()
-        api_secret = (
-            self.settings.system_vision_api_secret.strip() or self.settings.system_embedding_api_secret.strip()
-        )
         model = self.settings.system_vision_model.strip() or "imagev3"
+        uses_xfyun_websocket = provider == "xfyun_vision"
+        if uses_xfyun_websocket:
+            app_id = self.settings.system_vision_app_id.strip() or self.settings.system_embedding_app_id.strip()
+            api_key = self.settings.system_vision_api_key.strip() or self.settings.system_embedding_api_key.strip()
+            api_secret = (
+                self.settings.system_vision_api_secret.strip() or self.settings.system_embedding_api_secret.strip()
+            )
+            preset_id = "xfyun-vision"
+            can_use_model = bool(base_url and app_id and api_key and api_secret and model)
+        else:
+            app_id = ""
+            api_key = self.settings.system_vision_api_key.strip()
+            api_secret = ""
+            preset_id = "qwen" if "dashscope.aliyuncs.com" in base_url.lower() else "custom-vision"
+            can_use_model = self._can_use_model(provider, base_url, api_key, model)
         return RuntimeModelConfig(
             source="system",
             provider=provider,
@@ -1528,12 +1538,10 @@ class ModelSettingsService:
             api_key=api_key or None,
             chat_model=model,
             embedding_model=None,
-            can_use_model=bool(
-                provider == "xfyun_vision" and base_url and app_id and api_key and api_secret and model
-            ),
-            preset_id="xfyun-vision" if provider == "xfyun_vision" else None,
-            app_id=app_id or None,
-            api_secret=api_secret or None,
+            can_use_model=can_use_model,
+            preset_id=preset_id,
+            app_id=(app_id or None) if uses_xfyun_websocket else None,
+            api_secret=(api_secret or None) if uses_xfyun_websocket else None,
         )
 
     def _embedding_runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:

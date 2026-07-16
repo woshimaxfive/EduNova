@@ -37,6 +37,11 @@ class LearningNextActionService:
             course = self._course_for_user(user.id, course_id)
             if course is None:
                 raise LearningActionCourseNotFoundError("课程不存在或当前用户无权访问。")
+            active_job = self._latest_active_job(user.id, course.id)
+            if active_job is not None:
+                job_action = self._job_action(active_job)
+                if job_action is not None:
+                    return job_action
             return self._course_action(user, course)
 
         active_job = self._latest_active_job(user.id)
@@ -253,6 +258,24 @@ class LearningNextActionService:
                 status="waiting",
                 course_id=course_id,
             )
+        if job.workflow == "practice_generation":
+            course_id = self._positive_int((job.request_json or {}).get("course_id")) or job.course_id
+            return self._action(
+                "wait_for_practice",
+                job.label or "正在生成针对练习",
+                "练习会在后台继续生成，完成后可直接开始作答。",
+                status="waiting",
+                course_id=course_id,
+            )
+        if job.workflow == "report_generation":
+            course_id = self._positive_int((job.request_json or {}).get("course_id")) or job.course_id
+            return self._action(
+                "wait_for_report",
+                job.label or "正在更新学习报告",
+                "报告会在后台继续生成，完成后可查看最新学习总结。",
+                status="waiting",
+                course_id=course_id,
+            )
         return None
 
     def _course_for_user(self, user_id: int, course_id: int) -> Course | None:
@@ -274,16 +297,23 @@ class LearningNextActionService:
             .order_by(Material.created_at.desc(), Material.id.desc())
         )
 
-    def _latest_active_job(self, user_id: int) -> AiJob | None:
-        return self.db.scalar(
-            select(AiJob)
-            .where(
-                AiJob.user_id == user_id,
-                AiJob.workflow.in_(("material_ingestion", "course_builder", "path_planning")),
-                AiJob.status.in_(("queued", "running", "cancelling")),
-            )
-            .order_by(AiJob.updated_at.desc(), AiJob.id.desc())
+    def _latest_active_job(self, user_id: int, course_id: int | None = None) -> AiJob | None:
+        statement = select(AiJob).where(
+            AiJob.user_id == user_id,
+            AiJob.workflow.in_(
+                (
+                    "material_ingestion",
+                    "course_builder",
+                    "path_planning",
+                    "practice_generation",
+                    "report_generation",
+                )
+            ),
+            AiJob.status.in_(("queued", "running", "cancelling")),
         )
+        if course_id is not None:
+            statement = statement.where(AiJob.course_id == course_id)
+        return self.db.scalar(statement.order_by(AiJob.updated_at.desc(), AiJob.id.desc()))
 
     @staticmethod
     def _first_resource_id(task: LearningTask) -> int | None:

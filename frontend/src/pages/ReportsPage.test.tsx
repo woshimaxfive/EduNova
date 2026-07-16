@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../api/client";
+import { AI_JOB_ENDPOINTS } from "../api/aiJobs";
 import { AGENT_ENDPOINTS } from "../api/agents";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { EXPORT_ENDPOINTS } from "../api/exports";
@@ -268,9 +269,27 @@ describe("ReportsPage", () => {
       if (url === PATH_ENDPOINTS.current) {
         return { data: emptyPathResponse, status: 200, statusText: "OK", headers: {}, config };
       }
-      if (url === REPORT_ENDPOINTS.generate) {
+      if (url === AI_JOB_ENDPOINTS.reportGeneration) {
         generated = true;
-        return { data: { data: readyReport, trace_id: "trace_report" }, status: 200, statusText: "OK", headers: {}, config };
+        return {
+          data: {
+            data: {
+              job_id: "report-job-1",
+              workflow: "report_generation",
+              status: "completed",
+              course_id: "808",
+              request: payload,
+              result: { course_id: 808, report_id: 801 },
+              steps: [],
+              warnings: []
+            },
+            trace_id: "trace_report_job"
+          },
+          status: 202,
+          statusText: "Accepted",
+          headers: {},
+          config
+        };
       }
       if (url === AGENT_ENDPOINTS.trace("trace_report")) {
         return {
@@ -397,7 +416,7 @@ describe("ReportsPage", () => {
     expect(calls).toContainEqual(
       expect.objectContaining({
         method: "post",
-        url: REPORT_ENDPOINTS.generate,
+        url: AI_JOB_ENDPOINTS.reportGeneration,
         payload: { course_id: 808 }
       })
     );

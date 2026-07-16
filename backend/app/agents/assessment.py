@@ -34,6 +34,7 @@ DIAGNOSIS_PROMPT_VERSION = "diagnosis-v3.1"
 
 class AssessmentState(TypedDict, total=False):
     trace_id: str
+    job_context: Any
     operation: str
     user: User
     user_id: int
@@ -85,9 +86,12 @@ class AssessmentGraphRunner:
         knowledge_point_ids: list[int],
         question_count: int,
         difficulty: str,
+        trace_id: str | None = None,
+        job_context: Any = None,
     ) -> PracticeSessionDetail:
         state: AssessmentState = {
-            "trace_id": make_trace_id(),
+            "trace_id": trace_id or make_trace_id(),
+            "job_context": job_context,
             "operation": "question_generation",
             "user": user,
             "user_id": user.id,
@@ -989,13 +993,30 @@ class AssessmentGraphRunner:
         work: Callable[[], tuple[dict[str, Any], str, str, dict[str, Any]]],
     ) -> dict[str, Any]:
         started = perf_counter()
+        job_context = state.get("job_context")
+        if job_context is not None:
+            job_context.before_node(agent_name, input_summary)
         try:
             with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name=agent_name)):
                 result, output_summary, status, metadata = work()
         except Exception as exc:
             self._record_failure(state, agent_name, step_index, input_summary, exc, started)
+            if job_context is not None:
+                job_context.after_node(
+                    name=agent_name,
+                    label="练习生成节点失败",
+                    progress_percent=min(95, step_index * 15),
+                    status="failed",
+                )
             raise
         self._record(state, agent_name, step_index, status, input_summary, output_summary, metadata, started)
+        if job_context is not None:
+            job_context.after_node(
+                name=agent_name,
+                label=input_summary,
+                progress_percent=min(95, step_index * 15),
+                status=status,
+            )
         return result
 
     def _record_failure(self, state: AssessmentState, agent_name: str, step_index: int, input_summary: str, exc: Exception, started: float) -> None:

@@ -1,6 +1,6 @@
 # EduNova
 
-> 当前开发进度：Phase 35 已完成学习闭环响应与状态一致性收口。模型参与的同步原子操作采用独立受控等待窗口，课程问答会即时展示真实 Graph 阶段；稳定课程问题不再重复调用语义证据判断，trace 能记录真实回答耗时。本节资源进度只统计已就绪资源，生成失败项明确列为待补齐。
+> 当前开发进度：Phase 36 已完成练习与报告异步任务收口。练习生成和学习报告生成统一进入现有 AIJob/RQ，支持持久进度、刷新恢复、取消、重试和幂等复用；短时原子操作继续保持同步。
 
 视觉模型在“设置 → AI 服务”中有独立入口；国内默认使用讯飞开放平台原生图片理解，单独填写 APPID、APIKey 和 APISecret，经官方 WebSocket 协议调用。OpenAI-compatible 视觉服务仍可作为可选适配器；连接测试会用程序化小图验证完整结构化视觉合同，而非只检查是否返回文字。
 
@@ -19,11 +19,11 @@ EduNova 是面向高校学生的 AI 个性化学习空间，目标是参加第�
 
 ## 当前阶段
 
-当前已完成 **Phase 35 学习闭环响应与状态一致性收口**。生产 Docker 与 `agent-browser` 继续以普通学生身份完成画像、课程问答、本节资源、练习、简答重评、弱点、路径回流和报告盲测；修复了客户端先报失败而服务端稍后落库、课程回答长时间无节点状态、重复语义调用、trace 漏记回答耗时及资源部分失败后完成分母失真的问题。交付版 PPT、演示视频和提交包仍明确留到产品封盘后。
+当前已完成 **Phase 36 练习与报告异步任务收口**。练习与报告页面不再维持最长数分钟的同步连接，而是复用全局任务托盘恢复真实 Graph 节点、完成结果和失败原因；旧同步接口只保留兼容。交付版 PPT、演示视频和提交包仍明确留到产品封盘后。
 
-Phase 35 将普通 API 的 20 秒超时与模型原子操作的 180 秒窗口分离，服务端单次 Provider 尝试默认 45 秒且继续受既有重试、熔断和取消边界控制。真实稳定课程问题由约 122.5 秒降至 44.5 秒，重复证据判断节点降至 1 毫秒；浏览器发送后 1.5 秒内可见“正在理解问题”。简答重评约 13.6 秒成功，报告生成约 112 秒成功但仍属于后续适合迁入 AIJob 的长同步操作。
+Phase 36 新增 `/practice/sessions/generation-jobs` 与 `/reports/generation-jobs`。同用户同课程同工作流的活动任务会复用，任务完成结果只保存安全 ID、warnings 与 trace；失败或取消不会覆盖已有练习或报告。练习提交、简答重评和画像更新仍是需要立即返回业务结果的短时原子操作，不为表面统一强行异步化。
 
-Phase 35 阶段收口通过后端 444 项、前端全量 242 项及课程空间定向 60 项，并通过 Ruff、ESLint、编码、OpenAPI、Alembic、Compose、production build、受影响 Docker 服务重建和真实浏览器复验。
+Phase 36 阶段收口通过后端 446 项、前端 244 项和离线评测 10 项，并通过 Ruff、ESLint、编码、OpenAPI、Alembic、Compose、production build 与受影响 Docker 服务重建。`agent-browser` 真实验证练习和报告任务创建、节点进度、刷新恢复、完成结果以及桌面/390px 无横向溢出。
 
 Phase 33 阶段门禁通过后端 441 项、前端 241 项和离线 AI 评测 10 项，以及编码、Ruff、Alembic、OpenAPI、lint、production build 与 Compose。网络恢复后，AI Worker 已从空模型层成功下载并预装 Docling Layout 与 TableFormer 制品；模型下载层约 124 秒，紧接着的相同构建全部命中缓存并在约 3 秒内完成。另在 `--network none` 容器中使用程序化无版权两页 PDF 完成实际解析，页码、标题和正文均正确输出，证明新镜像可离线使用预装模型；外部模型仓库可用性仍作为首次构建环境风险保留。
 
@@ -53,8 +53,8 @@ Phase 25 的原生工具与模型主导编排继续保留：主页和课程空�
 - `/resources/generate` 保留同步兼容；新入口 `/resources/generation-jobs` 通过 `AIJobRuntime` 和独立 `edunova_ai` 队列执行六类 v3 结构化资源。Planner 为每类资源制定教学策略、认知层级、案例方向、证据和学习结果，六个 Worker 按互补职责生成；ReviewAgent 同时审核意图、证据、完整内容和历史差异。课程资源支持版本族、版本切换、比较、换教法和优化当前版本，任何失败都不会覆盖旧成果。
 - `/paths/generation-jobs` 是路径规划的新入口，复用 AIJob/RQ 提供排队、节点进度、刷新恢复、取消和失败重试；`/paths/generate` 仅保留旧客户端同步兼容。`PathPlanningGraph` 每次最多一次模型调用，练习评分先保存再异步重排，失败不覆盖原有效路径。
 - `/courses/{course_id}/mastery-map` 只使用有效练习作答和课程弱点等明确证据；未评估知识点返回 `score=null`，不参与课程平均值。路径任务只表达学习进度，不再制造掌握度分数。
-- `/practice/sessions` 和 `/practice/sessions/{session_id}/answers` 已由 `AssessmentGraph` 编排证据型题目和逐题诊断，支持 `adaptive` 难度；题目引用、生成模式、Prompt 版本和质量摘要可追溯，客观分数始终由规则决定。
-- `/reports/generate` 和 `/reports/latest` 已由 `ReportGraph` 聚合最近 5 次练习、掌握度、弱点、路径和资源。练习会话数、已作答题数、正确题数、已评估知识点数和已完成路径任务数分别锁定，模型只能增强叙事和建议，数字矛盾必须修订或退回确定性报告。
+- `/practice/sessions/generation-jobs` 是当前练习生成入口，`/practice/sessions` 仅保留同步兼容；`/practice/sessions/{session_id}/answers` 继续同步返回评分闭环。题目引用、生成模式、Prompt 版本和质量摘要可追溯，客观分数始终由规则决定。
+- `/reports/generation-jobs` 是当前报告生成入口，`/reports/generate` 仅保留同步兼容；`ReportGraph` 聚合最近 5 次练习、掌握度、弱点、路径和资源，模型只能增强叙事和建议，数字矛盾必须修订或退回确定性报告。
 - `/materials/compare` 已由 `MaterialComparisonGraph` 接管；每次对比保存不可变版本，可恢复最近结果、追溯真实资料分块和审核轨迹。资料对比是资料库内的独立辅助工具，不会隐式修改学习路径或练习。
 - AI 辅导直接在 `/app/courses/:courseId` 课程空间内完成；已移除无独立能力的中转页，旧 `/app/tutor` 地址会回到学习主页。
 - 多套个人模型配置；每套配置可组合回答、向量和重排序三个不同服务商，并为三类能力分别保存连接、加密凭证、连接验证和默认用途。新配置推荐 Spark X2-Flash 回答、讯飞 LLM Embedding 和硅基 BGE Reranker，未提供完整凭证的能力保持未启用。

@@ -140,6 +140,34 @@ def test_path_job_is_exposed_as_waiting_next_action() -> None:
     assert action.course_id == "10"
 
 
+def test_practice_and_report_jobs_are_exposed_as_waiting_next_actions() -> None:
+    service = service_with(MagicMock(), mastery())
+    common = {
+        "id": 91,
+        "user_id": 1,
+        "course_id": 10,
+        "status": "running",
+        "progress_percent": 38,
+        "stage": "model_generation",
+        "label": "正在生成",
+        "agent_trace_id": "trace-generation",
+        "idempotency_key": "generation-10",
+        "request_json": {"course_id": 10},
+        "progress_json": {},
+        "result_json": {},
+    }
+
+    practice_action = service._job_action(AiJob(workflow="practice_generation", **common))
+    report_action = service._job_action(AiJob(workflow="report_generation", **{**common, "id": 92}))
+
+    assert practice_action is not None
+    assert practice_action.kind == "wait_for_practice"
+    assert practice_action.course_id == "10"
+    assert report_action is not None
+    assert report_action.kind == "wait_for_report"
+    assert report_action.course_id == "10"
+
+
 def test_course_action_prioritizes_pending_weakness_then_current_path_task() -> None:
     pending = WeaknessReviewItem(id=60, user_id=1, course_id=10, knowledge_point_id=40, title="梯度下降", source_type="tutor", status="pending", updated_at=NOW, created_at=NOW)
     db = MagicMock()

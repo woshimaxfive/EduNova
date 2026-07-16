@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AGENT_ENDPOINTS } from "../api/agents";
+import { AI_JOB_ENDPOINTS } from "../api/aiJobs";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { PRACTICE_ENDPOINTS } from "../api/practice";
@@ -215,9 +216,26 @@ function installAdapter(options: AdapterOptions = {}) {
     if (url === RESOURCE_ENDPOINTS.list) return { data: resourceResponse, status: 200, statusText: "OK", headers: {}, config };
     if (url === PRACTICE_ENDPOINTS.latest) return { data: { data: options.latest ?? null }, status: 200, statusText: "OK", headers: {}, config };
     if (url === PRACTICE_ENDPOINTS.detail(501)) return { data: { data: options.detail ?? inProgressSession }, status: 200, statusText: "OK", headers: {}, config };
-    if (url === PRACTICE_ENDPOINTS.sessions) {
+    if (url === AI_JOB_ENDPOINTS.practiceGeneration) {
       if (options.failCreate) throw new Error("practice failed");
-      return { data: { data: options.created ?? inProgressSession }, status: 200, statusText: "OK", headers: {}, config };
+      return {
+        data: {
+          data: {
+            job_id: "practice-job-1",
+            workflow: "practice_generation",
+            status: "completed",
+            course_id: "808",
+            request: payload,
+            result: { course_id: 808, session_id: 501, question_count: 3 },
+            steps: [],
+            warnings: []
+          }
+        },
+        status: 202,
+        statusText: "Accepted",
+        headers: {},
+        config
+      };
     }
     if (url === PRACTICE_ENDPOINTS.answers(501)) return { data: { data: options.submitted ?? completedSession }, status: 200, statusText: "OK", headers: {}, config };
     if (url === PRACTICE_ENDPOINTS.regrade(501)) return { data: { data: options.regraded ?? completedSession }, status: 200, statusText: "OK", headers: {}, config };
@@ -278,7 +296,7 @@ describe("PracticePage", () => {
     });
     expect(calls).toContainEqual(expect.objectContaining({
       method: "post",
-      url: PRACTICE_ENDPOINTS.sessions,
+      url: AI_JOB_ENDPOINTS.practiceGeneration,
       payload: { course_id: 808, knowledge_point_ids: [401], question_count: 5, difficulty: "adaptive" }
     }));
   });
@@ -437,7 +455,7 @@ describe("PracticePage", () => {
     await user.click(await screen.findByRole("button", { name: "开始针对性练习" }));
     const drawer = screen.getByRole("dialog", { name: "练习设置" });
     await user.click(within(drawer).getByRole("button", { name: "开始针对性练习" }));
-    expect(await within(drawer).findByText("练习生成失败，请稍后重试。")).toBeInTheDocument();
+    expect(await within(drawer).findByText("练习任务创建失败，请稍后重试。")).toBeInTheDocument();
     expect(screen.getByTestId("location")).toHaveTextContent("course_session_id=77");
     expect(screen.getByTestId("location")).toHaveTextContent("course_message_id=88");
   });

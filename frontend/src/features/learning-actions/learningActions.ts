@@ -38,6 +38,7 @@ export function learningActionHref(action: LearningNextAction) {
   }
   if (action.kind === "wait_for_course") return PATHS.app;
   if (["generate_path", "wait_for_path"].includes(action.kind)) return withParams(PATHS.path, { course_id: action.course_id });
+  if (action.kind === "wait_for_practice") return withParams(PATHS.practice, { course_id: action.course_id });
   if (action.kind === "continue_path_task") {
     if (action.resource_id) {
       return withParams(PATHS.studio, {
@@ -63,7 +64,7 @@ export function learningActionHref(action: LearningNextAction) {
       knowledge_point_id: action.knowledge_point_id
     });
   }
-  if (["update_report", "review_report"].includes(action.kind)) {
+  if (["update_report", "review_report", "wait_for_report"].includes(action.kind)) {
     return withParams(PATHS.reports, { course_id: action.course_id });
   }
   if (action.course_id) return buildCoursePath(action.course_id);
@@ -82,8 +83,10 @@ const ACTION_BUTTON_LABELS: Record<string, string> = {
   practice_weakness: "开始练习",
   generate_path: "生成路径",
   wait_for_path: "查看规划进度",
+  wait_for_practice: "查看生成进度",
   study_knowledge_point: "开始学习",
   update_report: "更新报告",
+  wait_for_report: "查看生成进度",
   review_report: "查看报告"
 };
 

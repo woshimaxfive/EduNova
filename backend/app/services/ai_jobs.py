@@ -23,7 +23,15 @@ from backend.app.schemas.ai_jobs import AiJobListResponse, AiJobResponse, ai_job
 ACTIVE_STATUSES = {"queued", "running", "cancelling"}
 TERMINAL_STATUSES = {"cancelled", "completed", "failed"}
 RETRYABLE_STATUSES = {"cancelled", "failed"}
-WORKFLOWS = {"course_builder", "resource_generation", "embedding_reindex", "material_ingestion", "path_planning"}
+WORKFLOWS = {
+    "course_builder",
+    "resource_generation",
+    "embedding_reindex",
+    "material_ingestion",
+    "path_planning",
+    "practice_generation",
+    "report_generation",
+}
 
 
 class AiJobNotFoundError(NotFoundDomainError):
@@ -163,6 +171,26 @@ class SqlAlchemyAiJobRepository:
             .order_by(AiJob.updated_at.desc(), AiJob.id.desc())
         )
 
+    def get_active_workflow_job(self, user_id: int, course_id: int, workflow: str) -> AiJob | None:
+        return self.db.scalar(
+            select(AiJob)
+            .where(
+                AiJob.user_id == user_id,
+                AiJob.course_id == course_id,
+                AiJob.workflow == workflow,
+                AiJob.status.in_(ACTIVE_STATUSES),
+            )
+            .order_by(AiJob.updated_at.desc(), AiJob.id.desc())
+        )
+
+    def get_practice_session_for_user(self, user_id: int, session_id: int) -> PracticeSession | None:
+        return self.db.scalar(
+            select(PracticeSession).where(
+                PracticeSession.id == session_id,
+                PracticeSession.user_id == user_id,
+            )
+        )
+
     def get_active_resource_job_for_path_task(self, user_id: int, path_task_id: int) -> AiJob | None:
         return self.db.scalar(
             select(AiJob)
@@ -232,7 +260,7 @@ class AgentJobContext:
         self.job_id = job_id
         self.session_factory = session_factory
 
-    def before_node(self, stage: str) -> None:
+    def before_node(self, stage: str, label: str | None = None) -> None:
         with self.session_factory() as db:
             job = db.scalar(select(AiJob).where(AiJob.id == self.job_id).with_for_update())
             if job is None:
@@ -249,6 +277,8 @@ class AgentJobContext:
                 raise AiJobCancelled("任务已取消。")
             job.heartbeat_at = datetime.now(UTC)
             job.stage = stage
+            if label:
+                job.label = label
             db.commit()
 
     def check_cancelled(self) -> None:
@@ -526,6 +556,69 @@ class AiJobService:
             idempotency_key=idempotency_key,
         )
 
+    def create_practice_generation_job(
+        self,
+        user: User,
+        *,
+        course_id: int,
+        knowledge_point_ids: list[int],
+        question_count: int,
+        difficulty: str,
+        idempotency_key: str | None,
+    ) -> AiJobResponse:
+        if self.repository.get_course_for_user(user.id, course_id) is None:
+            raise AiJobNotFoundError("课程不存在或无权访问。")
+        if question_count < 1 or question_count > 12:
+            raise AiJobValidationError("题目数量必须在 1 到 12 之间。")
+        if difficulty not in {"adaptive", "easy", "medium", "hard"}:
+            raise AiJobValidationError("练习难度只能是 adaptive、easy、medium 或 hard。")
+        point_ids = [item for item in dict.fromkeys(knowledge_point_ids) if item > 0]
+        if not point_ids or any(self.repository.get_knowledge_point(course_id, item) is None for item in point_ids):
+            raise AiJobNotFoundError("知识点不存在或不属于当前课程。")
+        active = self.repository.get_active_workflow_job(user.id, course_id, "practice_generation")
+        if active is not None:
+            return ai_job_to_api(active, max_retries=self.max_retries)
+        return self._create(
+            user,
+            workflow="practice_generation",
+            course_id=course_id,
+            request_json={
+                "course_id": course_id,
+                "knowledge_point_ids": point_ids,
+                "question_count": question_count,
+                "difficulty": difficulty,
+            },
+            idempotency_key=idempotency_key,
+        )
+
+    def create_report_generation_job(
+        self,
+        user: User,
+        *,
+        course_id: int,
+        practice_session_id: int | None,
+        idempotency_key: str | None,
+    ) -> AiJobResponse:
+        if self.repository.get_course_for_user(user.id, course_id) is None:
+            raise AiJobNotFoundError("课程不存在或无权访问。")
+        if practice_session_id is not None:
+            session = self.repository.get_practice_session_for_user(user.id, practice_session_id)
+            if session is None or int(session.course_id) != course_id:
+                raise AiJobNotFoundError("练习不存在或无权访问。")
+        active = self.repository.get_active_workflow_job(user.id, course_id, "report_generation")
+        if active is not None:
+            return ai_job_to_api(active, max_retries=self.max_retries)
+        return self._create(
+            user,
+            workflow="report_generation",
+            course_id=course_id,
+            request_json={
+                "course_id": course_id,
+                "practice_session_id": practice_session_id,
+            },
+            idempotency_key=idempotency_key,
+        )
+
     def create_path_planning_job(
         self,
         user: User,
@@ -799,6 +892,27 @@ class AiJobService:
                 retry_of_job_id=original.id,
                 attempt_count=next_attempt,
             )
+        if original.workflow in {"practice_generation", "report_generation"}:
+            course_id = int(request.get("course_id") or original.course_id or 0)
+            if self.repository.get_course_for_user(user.id, course_id) is None:
+                raise AiJobNotFoundError("课程不存在或无权访问。")
+            if original.workflow == "practice_generation":
+                point_ids = [int(item) for item in request.get("knowledge_point_ids", [])]
+                if not point_ids or any(self.repository.get_knowledge_point(course_id, item) is None for item in point_ids):
+                    raise AiJobNotFoundError("知识点不存在或不属于当前课程。")
+            elif request.get("practice_session_id") is not None:
+                session = self.repository.get_practice_session_for_user(user.id, int(request["practice_session_id"]))
+                if session is None or int(session.course_id) != course_id:
+                    raise AiJobNotFoundError("练习不存在或无权访问。")
+            return self._create(
+                user,
+                workflow=original.workflow,
+                course_id=course_id,
+                request_json=request,
+                idempotency_key=f"retry-{original.id}-{uuid4().hex}",
+                retry_of_job_id=original.id,
+                attempt_count=next_attempt,
+            )
         course_id = int(request["course_id"])
         if self.repository.get_course_for_user(user.id, course_id) is None:
             raise AiJobNotFoundError("课程不存在或无权访问。")
@@ -854,6 +968,10 @@ class AiJobService:
                 result = self._run_material_ingestion(user, job, context)
             elif job.workflow == "path_planning":
                 result = self._run_path_planning(user, job, context)
+            elif job.workflow == "practice_generation":
+                result = self._run_practice_generation(user, job, context)
+            elif job.workflow == "report_generation":
+                result = self._run_report_generation(user, job, context)
             else:
                 raise AiJobValidationError("不支持的 AI 任务类型。")
             refreshed = self.repository.get_job(job_id, for_update=True) or job
@@ -1087,6 +1205,81 @@ class AiJobService:
             "preserved_task_count": result.preserved_task_count,
             "agent_trace_id": result.trace_id,
             "warnings": list(plan.get("warnings") or []),
+        }
+
+    def _run_practice_generation(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:
+        from backend.app.agents.assessment import AssessmentGraphRunner
+        from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
+        from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
+        from backend.app.services.practice import PracticeService, SqlAlchemyPracticeRepository
+
+        request = dict(job.request_json or {})
+        course_id = int(request.get("course_id") or job.course_id or 0)
+        if self.repository.get_course_for_user(user.id, course_id) is None:
+            raise AiJobNotFoundError("课程不存在或无权访问。")
+        model_service = ModelSettingsService(
+            repository=SqlAlchemyModelSettingsRepository(self.repository.db),
+            settings=self.settings,
+            provider=OpenAICompatibleChatProvider(),
+        )
+        service = PracticeService(
+            SqlAlchemyPracticeRepository(self.repository.db),
+            model_service=model_service,
+            trace_recorder=AgentTraceRecorder(),
+        )
+        detail = AssessmentGraphRunner(service).create_session(
+            user=user,
+            course_id=course_id,
+            knowledge_point_ids=[int(item) for item in request.get("knowledge_point_ids", [])],
+            question_count=int(request.get("question_count") or 5),
+            difficulty=str(request.get("difficulty") or "adaptive"),
+            trace_id=job.agent_trace_id,
+            job_context=context,
+        )
+        return {
+            "course_id": course_id,
+            "session_id": detail.id,
+            "question_count": len(detail.questions),
+            "agent_trace_id": detail.agent_trace_id,
+            "warnings": [],
+        }
+
+    def _run_report_generation(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:
+        from backend.app.agents.reporting import ReportGraphRunner
+        from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
+        from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
+        from backend.app.services.reports import ReportService, SqlAlchemyReportRepository
+
+        request = dict(job.request_json or {})
+        course_id = int(request.get("course_id") or job.course_id or 0)
+        if self.repository.get_course_for_user(user.id, course_id) is None:
+            raise AiJobNotFoundError("课程不存在或无权访问。")
+        model_service = ModelSettingsService(
+            repository=SqlAlchemyModelSettingsRepository(self.repository.db),
+            settings=self.settings,
+            provider=OpenAICompatibleChatProvider(),
+        )
+        service = ReportService(
+            SqlAlchemyReportRepository(self.repository.db),
+            model_service=model_service,
+            trace_recorder=AgentTraceRecorder(),
+        )
+        detail = ReportGraphRunner(service).run(
+            user=user,
+            course_id=course_id,
+            practice_session_id=(
+                int(request["practice_session_id"])
+                if request.get("practice_session_id") is not None
+                else None
+            ),
+            trace_id=job.agent_trace_id,
+            job_context=context,
+        )
+        return {
+            "course_id": course_id,
+            "report_id": detail.id,
+            "agent_trace_id": detail.agent_trace_id,
+            "warnings": [],
         }
 
     def _run_embedding_reindex(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from fastapi import Depends, Query, status
+from fastapi import Depends, Header, Query, status
 
 from backend.app.api.contracts import TypedAPIRouter as APIRouter
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
+from backend.app.api.v1.ai_jobs import get_ai_job_service
 from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.models import User
@@ -43,7 +44,7 @@ def get_practice_service(db=Depends(get_db_session)) -> PracticeService:
     )
 
 
-@router.post("/sessions")
+@router.post("/sessions", deprecated=True)
 def create_practice_session(
     payload: CreatePracticeSessionRequest,
     current_user: User = Depends(get_current_user),
@@ -62,6 +63,24 @@ def create_practice_session(
     except PracticeValidationError as exc:
         raise ApiError(status.HTTP_400_BAD_REQUEST, "VALIDATION_ERROR", str(exc)) from exc
     return api_response(result.model_dump())
+
+
+@router.post("/sessions/generation-jobs", status_code=status.HTTP_202_ACCEPTED)
+def create_practice_generation_job(
+    payload: CreatePracticeSessionRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    current_user: User = Depends(get_current_user),
+    service: AiJobService = Depends(get_ai_job_service),
+) -> dict:
+    result = service.create_practice_generation_job(
+        current_user,
+        course_id=payload.course_id,
+        knowledge_point_ids=payload.knowledge_point_ids,
+        question_count=payload.question_count,
+        difficulty=payload.difficulty,
+        idempotency_key=idempotency_key,
+    )
+    return api_response(result.model_dump(mode="json"))
 
 
 @router.get("/sessions/latest")

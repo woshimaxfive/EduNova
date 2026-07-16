@@ -20,4 +20,37 @@ describe("AiJobProgress", () => {
       "/app/studio?course_id=808&resource_id=901&path_task_id=61"
     );
   });
+
+  it("links completed practice and report jobs to their durable results", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <AiJobProgress job={makeCompletedAiJob({
+          workflow: "practice_generation",
+          request: { course_id: 808 },
+          result: { course_id: 808, session_id: 501 }
+        })} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("练习生成")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看结果" })).toHaveAttribute(
+      "href",
+      "/app/practice?course_id=808&session_id=501"
+    );
+
+    rerender(
+      <MemoryRouter>
+        <AiJobProgress job={makeCompletedAiJob({
+          workflow: "report_generation",
+          request: { course_id: 808 },
+          result: { course_id: 808, report_id: 701 }
+        })} />
+      </MemoryRouter>
+    );
+    expect(screen.getByText("学习报告生成")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看结果" })).toHaveAttribute(
+      "href",
+      "/app/reports?course_id=808"
+    );
+  });
 });

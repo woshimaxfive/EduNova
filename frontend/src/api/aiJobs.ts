@@ -5,8 +5,10 @@ import { type ApiEnvelope } from "../types/api";
 import { type CreateCourseFromMaterialsRequest } from "./courses";
 import { type GenerateResourcesRequest } from "./resources";
 import { type GeneratePathRequest } from "./paths";
+import { type CreatePracticeSessionRequest } from "./practice";
+import { type GenerateReportRequest } from "./reports";
 
-export type AiJobWorkflow = "course_builder" | "resource_generation" | "embedding_reindex" | "material_ingestion" | "path_planning";
+export type AiJobWorkflow = "course_builder" | "resource_generation" | "embedding_reindex" | "material_ingestion" | "path_planning" | "practice_generation" | "report_generation";
 export type AiJobStatus = "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed";
 
 export type AiJobStep = {
@@ -55,7 +57,9 @@ export const AI_JOB_ENDPOINTS = {
   courseBuilder: "/courses/from-materials/jobs",
   resourceGeneration: "/resources/generation-jobs",
   pathPlanning: "/paths/generation-jobs",
-  pathTaskResources: (taskId: number) => `/paths/tasks/${taskId}/resource-jobs`
+  pathTaskResources: (taskId: number) => `/paths/tasks/${taskId}/resource-jobs`,
+  practiceGeneration: "/practice/sessions/generation-jobs",
+  reportGeneration: "/reports/generation-jobs"
 } as const;
 
 export function createIdempotencyKey(prefix: string) {
@@ -86,6 +90,20 @@ export async function createPathPlanningJob(payload: GeneratePathRequest, idempo
 
 export async function createPathTaskResourceJob(taskId: number, idempotencyKey: string) {
   const response = await apiClient.post<ApiEnvelope<AiJob>>(AI_JOB_ENDPOINTS.pathTaskResources(taskId), undefined, {
+    headers: { "Idempotency-Key": idempotencyKey }
+  });
+  return response.data.data;
+}
+
+export async function createPracticeGenerationJob(payload: CreatePracticeSessionRequest, idempotencyKey: string) {
+  const response = await apiClient.post<ApiEnvelope<AiJob>>(AI_JOB_ENDPOINTS.practiceGeneration, payload, {
+    headers: { "Idempotency-Key": idempotencyKey }
+  });
+  return response.data.data;
+}
+
+export async function createReportGenerationJob(payload: GenerateReportRequest, idempotencyKey: string) {
+  const response = await apiClient.post<ApiEnvelope<AiJob>>(AI_JOB_ENDPOINTS.reportGeneration, payload, {
     headers: { "Idempotency-Key": idempotencyKey }
   });
   return response.data.data;

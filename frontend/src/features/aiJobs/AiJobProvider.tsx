@@ -72,6 +72,17 @@ export function AiJobProvider({ children }: PropsWithChildren) {
           }
           if (
             snapshot.status === "completed"
+            && (snapshot.workflow === "practice_generation" || snapshot.workflow === "report_generation")
+            && !invalidatedTerminalJobIds.current.has(snapshot.job_id)
+          ) {
+            const courseId = Number(snapshot.result.course_id ?? snapshot.request.course_id ?? snapshot.course_id);
+            if (Number.isFinite(courseId) && courseId > 0) {
+              invalidatedTerminalJobIds.current.add(snapshot.job_id);
+              void invalidateCourseLearningLoop(queryClient, courseId);
+            }
+          }
+          if (
+            snapshot.status === "completed"
             && snapshot.workflow === "material_ingestion"
             && !invalidatedTerminalJobIds.current.has(snapshot.job_id)
           ) {

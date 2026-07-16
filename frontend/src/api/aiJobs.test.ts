@@ -4,6 +4,8 @@ import {
   AI_JOB_ENDPOINTS,
   createCourseBuilderJob,
   createPathPlanningJob,
+  createPracticeGenerationJob,
+  createReportGenerationJob,
   createResourceGenerationJob,
   streamAiJob
 } from "./aiJobs";
@@ -49,11 +51,15 @@ describe("AI job API contracts", () => {
     await createCourseBuilderJob({ material_ids: [11], course_title: "冲刺课" }, "course-key");
     await createResourceGenerationJob({ course_id: 8, resource_types: ["doc"], difficulty: "medium" }, "resource-key");
     await createPathPlanningJob({ course_id: 8 }, "path-key");
+    await createPracticeGenerationJob({ course_id: 8, knowledge_point_ids: [9], question_count: 5, difficulty: "adaptive" }, "practice-key");
+    await createReportGenerationJob({ course_id: 8, practice_session_id: 81 }, "report-key");
 
     expect(calls).toEqual([
       { url: AI_JOB_ENDPOINTS.courseBuilder, key: "course-key", data: { material_ids: [11], course_title: "冲刺课" } },
       { url: AI_JOB_ENDPOINTS.resourceGeneration, key: "resource-key", data: { course_id: 8, resource_types: ["doc"], difficulty: "medium" } },
-      { url: AI_JOB_ENDPOINTS.pathPlanning, key: "path-key", data: { course_id: 8 } }
+      { url: AI_JOB_ENDPOINTS.pathPlanning, key: "path-key", data: { course_id: 8 } },
+      { url: AI_JOB_ENDPOINTS.practiceGeneration, key: "practice-key", data: { course_id: 8, knowledge_point_ids: [9], question_count: 5, difficulty: "adaptive" } },
+      { url: AI_JOB_ENDPOINTS.reportGeneration, key: "report-key", data: { course_id: 8, practice_session_id: 81 } }
     ]);
   });
 

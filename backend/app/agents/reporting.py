@@ -25,6 +25,7 @@ REPORT_REVIEW_PROMPT_VERSION = "report-review-v3.1"
 
 class ReportState(TypedDict, total=False):
     trace_id: str
+    job_context: Any
     user: User
     user_id: int
     course_id: int
@@ -58,14 +59,23 @@ class ReportGraphRunner:
         self.service = service
         self.graph = self._build_graph()
 
-    def run(self, *, user: User, course_id: int, practice_session_id: int | None) -> ReportEnvelope:
+    def run(
+        self,
+        *,
+        user: User,
+        course_id: int,
+        practice_session_id: int | None,
+        trace_id: str | None = None,
+        job_context: Any = None,
+    ) -> ReportEnvelope:
         self.service._require_course(user, course_id)
         if practice_session_id is None and self.service.repository.get_latest_completed_practice_session(user.id, course_id) is None:
             existing = self.service.repository.get_latest_report(user.id, course_id)
             if existing is not None:
                 return report_to_api(existing, self.service._report_freshness(user.id, existing))
         state: ReportState = {
-            "trace_id": make_trace_id(),
+            "trace_id": trace_id or make_trace_id(),
+            "job_context": job_context,
             "user": user,
             "user_id": user.id,
             "course_id": course_id,
@@ -423,13 +433,30 @@ class ReportGraphRunner:
         work: Callable[[], tuple[dict[str, Any], str, str, dict[str, Any]]],
     ) -> dict[str, Any]:
         started = perf_counter()
+        job_context = state.get("job_context")
+        if job_context is not None:
+            job_context.before_node(agent_name, input_summary)
         try:
             with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name=agent_name)):
                 result, output_summary, status, metadata = work()
         except Exception as exc:
             self._record_failure(state, agent_name, step_index, input_summary, exc, started)
+            if job_context is not None:
+                job_context.after_node(
+                    name=agent_name,
+                    label="学习报告节点失败",
+                    progress_percent=min(95, step_index * 13),
+                    status="failed",
+                )
             raise
         self._record(state, agent_name, step_index, status, input_summary, output_summary, metadata, started)
+        if job_context is not None:
+            job_context.after_node(
+                name=agent_name,
+                label=input_summary,
+                progress_percent=min(95, step_index * 13),
+                status=status,
+            )
         return result
 
     def _record_failure(self, state: ReportState, agent_name: str, step_index: int, input_summary: str, exc: Exception, started: float) -> None:

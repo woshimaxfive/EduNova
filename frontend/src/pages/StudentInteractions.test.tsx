@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PATHS } from "../app/routePaths";
+import { AI_JOB_ENDPOINTS } from "../api/aiJobs";
 import { AUTH_ENDPOINTS } from "../api/auth";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
@@ -551,9 +552,26 @@ describe("student interaction affordances", () => {
         };
       }
 
-      if (url === PRACTICE_ENDPOINTS.sessions && method === "post") {
+      if (url === AI_JOB_ENDPOINTS.practiceGeneration && method === "post") {
         return {
-          data: { data: session, trace_id: "trace_practice_create" },
+          data: {
+            data: makeCompletedAiJob({
+              workflow: "practice_generation",
+              course_id: "808",
+              result: { course_id: "808", session_id: "501", question_count: 1 }
+            }),
+            trace_id: "trace_practice_create"
+          },
+          status: 202,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === PRACTICE_ENDPOINTS.detail(501) && method === "get") {
+        return {
+          data: { data: session, trace_id: "trace_practice_detail" },
           status: 200,
           statusText: "OK",
           headers: {},
@@ -985,30 +1003,18 @@ describe("student interaction affordances", () => {
         };
       }
 
-      if (url === REPORT_ENDPOINTS.generate && method === "post") {
+      if (url === AI_JOB_ENDPOINTS.reportGeneration && method === "post") {
         reportReady = true;
         return {
           data: {
-            data: {
-              id: "901",
+            data: makeCompletedAiJob({
+              workflow: "report_generation",
               course_id: "808",
-              practice_session_id: "501",
-              status: "ready",
-              score: 80,
-              report: {
-                summary: "本次评估得分 80，基于真实练习作答生成。",
-                mastery_update: { weak_count: 1, mastered_count: 2, learning_count: 1 },
-                weakness_list: [{ knowledge_point_id: "401", title: "反向传播", source_type: "practice_assessment" }],
-                evidence_refs: [{ practice_answer_id: "601", knowledge_point_id: "401", score: 50 }],
-                next_step_suggestions: ["优先复习反向传播。"],
-                review_queue_updates: [{ title: "反向传播", status: "confirmed", source_type: "practice_assessment" }],
-                profile_changes: []
-              },
-              created_at: "2026-07-05T10:10:00Z"
-            },
+              result: { course_id: "808", report_id: "901" }
+            }),
             trace_id: "trace_report_generate"
           },
-          status: 200,
+          status: 202,
           statusText: "OK",
           headers: {},
           config

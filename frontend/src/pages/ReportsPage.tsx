@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { getMasteryMap, listCourses } from "../api/courses";
+import { createIdempotencyKey, createReportGenerationJob, type AiJob } from "../api/aiJobs";
 import {
   createLearningDossierExportJob,
   downloadExportJob,
@@ -11,13 +12,14 @@ import {
   type ExportJob
 } from "../api/exports";
 import { listRecentCompletedPracticeSessions } from "../api/practice";
-import { generateReport, getLatestReport } from "../api/reports";
+import { getLatestReport } from "../api/reports";
 import { PATHS } from "../app/routePaths";
 import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
 import { ReportDashboard } from "../components/reports/ReportDashboard";
 import { ReportDrawer, type ReportDetailTab, type ReportDrawerMode } from "../components/reports/ReportDrawer";
 import { ReportWorkspaceToolbar } from "../components/reports/ReportWorkspaceToolbar";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
+import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import {
   buildCurrentTrendScores,
   calculateAverageMastery,
@@ -77,6 +79,9 @@ export function ReportsPage() {
   const [exportError, setExportError] = useState("");
   const [exportMessage, setExportMessage] = useState("");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("markdown");
+  const [reportJobId, setReportJobId] = useState<string | null>(null);
+  const invalidatedReportJobRef = useRef<string | null>(null);
+  const { jobs, trackJob } = useAiJobs();
 
   const coursesQuery = useQuery({ queryKey: ["report-courses"], queryFn: () => listCourses() });
   const courses = coursesQuery.data?.data ?? [];
@@ -100,15 +105,31 @@ export function ReportsPage() {
     enabled: canUseCourse
   });
   const nextActionQuery = useLearningNextAction(canUseCourse ? numericCourseId : null);
+  const reportJob = jobs.find((job) => job.job_id === reportJobId)
+    ?? jobs.find((job) => job.workflow === "report_generation" && Number(job.request.course_id) === numericCourseId);
+  const reportJobRunning = reportJob?.status === "queued" || reportJob?.status === "running" || reportJob?.status === "cancelling";
+  const reportJobError = reportJob?.status === "failed" || reportJob?.status === "cancelled"
+    ? reportJob.error_message || "学习报告生成失败，可在任务托盘中重试。"
+    : "";
+
+  useEffect(() => {
+    if (reportJob?.status !== "completed" || invalidatedReportJobRef.current === reportJob.job_id) return;
+    invalidatedReportJobRef.current = reportJob.job_id;
+    void invalidateCourseLearningLoop(queryClient, numericCourseId);
+  }, [numericCourseId, queryClient, reportJob]);
 
   const generateMutation = useMutation({
-    mutationFn: () => generateReport({ course_id: numericCourseId }),
-    onSuccess: async () => {
+    mutationFn: () => createReportGenerationJob(
+      { course_id: numericCourseId },
+      createIdempotencyKey(`report-${numericCourseId}`)
+    ),
+    onSuccess: (job: AiJob) => {
       setLocalError("");
       setExportMessage("");
-      await invalidateCourseLearningLoop(queryClient, numericCourseId);
+      setReportJobId(job.job_id);
+      trackJob(job);
     },
-    onError: () => setLocalError("学习报告生成失败，请稍后重试。")
+    onError: () => setLocalError("学习报告任务创建失败，请稍后重试。")
   });
 
   const exportMutation = useMutation({
@@ -188,11 +209,11 @@ export function ReportsPage() {
             courseId={effectiveCourseId}
             freshness={freshness}
             createdAt={report?.created_at}
-            isGenerating={generateMutation.isPending}
+            isGenerating={generateMutation.isPending || reportJobRunning}
             isRefreshing={latestReportQuery.isFetching && !latestReportQuery.isPending}
             returnLink={<CourseReturnLink courseId={canUseCourse ? numericCourseId : null} />}
             onCourseChange={handleCourseChange}
-            onGenerate={() => generateMutation.mutate()}
+            onGenerate={() => { if (!reportJobRunning) generateMutation.mutate(); }}
             onRetryRead={() => latestReportQuery.refetch()}
             onOpenDetails={() => setDrawerMode("details")}
             onOpenExport={() => setDrawerMode("export")}
@@ -218,9 +239,9 @@ export function ReportsPage() {
                 new: "1"
               })}
               dataWarning={dataWarning}
-              reportError={readError || localError}
+              reportError={readError || localError || reportJobError}
               isLoading={isLoading}
-              onGenerate={() => generateMutation.mutate()}
+              onGenerate={() => { if (!reportJobRunning) generateMutation.mutate(); }}
               onRetryReport={() => latestReportQuery.refetch()}
             />
           )}

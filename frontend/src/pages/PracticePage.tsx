@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { getKnowledgePoints, listCourses } from "../api/courses";
+import { createIdempotencyKey, createPracticeGenerationJob, type AiJob } from "../api/aiJobs";
 import {
-  createPracticeSession,
   getLatestPracticeSession,
   getPracticeSession,
   regradePracticeAnswers,
@@ -22,6 +22,7 @@ import { PracticeResultSummary } from "../components/practice/PracticeResultSumm
 import { PracticeToolbar } from "../components/practice/PracticeToolbar";
 import { ConfirmDialog } from "../components/primitives/Dialog";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
+import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import {
   isAnswered,
   practiceResultSummary
@@ -60,8 +61,11 @@ export function PracticePage() {
   const [drawerMode, setDrawerMode] = useState<PracticeDrawerMode | null>(null);
   const [confirmIncomplete, setConfirmIncomplete] = useState(false);
   const [reviewExpansionOverrides, setReviewExpansionOverrides] = useState<Record<string, boolean>>({});
+  const [practiceJobId, setPracticeJobId] = useState<string | null>(null);
   const lastSavedDraftRef = useRef("");
   const activeDraftSessionRef = useRef("");
+  const handledPracticeJobRef = useRef<string | null>(null);
+  const { jobs, trackJob } = useAiJobs();
   const requestedSessionId = Number(searchParams.get("session_id") ?? "");
   const hasRequestedSession = Number.isFinite(requestedSessionId) && requestedSessionId > 0;
   const requestedQuestionId = searchParams.get("question_id");
@@ -135,6 +139,39 @@ export function PracticePage() {
   const recommendedResources = courseResources.filter((resource) => recommendedResourceIdSet.has(resource.id));
   const selectedCourseTitle = courses.find((course) => course.id === effectiveCourseId)?.title ?? "";
   const selectedPointTitle = knowledgePoints.find((point) => point.id === effectivePointId)?.title ?? "";
+  const practiceJob = jobs.find((job) => job.job_id === practiceJobId)
+    ?? jobs.find((job) => job.workflow === "practice_generation" && Number(job.request.course_id) === numericCourseId);
+  const practiceJobRunning = practiceJob?.status === "queued" || practiceJob?.status === "running" || practiceJob?.status === "cancelling";
+  const practiceJobError = practiceJob?.status === "failed" || practiceJob?.status === "cancelled"
+    ? practiceJob.error_message || "练习生成失败，可在任务托盘中重试。"
+    : "";
+
+  useEffect(() => {
+    if (!practiceJob || handledPracticeJobRef.current === practiceJob.job_id) return;
+    if (practiceJob.status !== "completed") return;
+    const sessionId = Number(practiceJob.result.session_id);
+    if (!Number.isFinite(sessionId) || sessionId <= 0) {
+      handledPracticeJobRef.current = practiceJob.job_id;
+      return;
+    }
+    handledPracticeJobRef.current = practiceJob.job_id;
+    void getPracticeSession(sessionId).then((response) => {
+      const created = resolvePracticeSession(response.data);
+      if (!created) throw new Error("missing practice session");
+      setLocalError("");
+      setCurrentSession(created);
+      setAnswers({});
+      setReviewExpansionOverrides({});
+      lastSavedDraftRef.current = "{}";
+      setDraftStatus("idle");
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("course_id", created.course_id);
+      nextParams.set("session_id", created.id);
+      if (created.questions[0]) nextParams.set("question_id", created.questions[0].id);
+      nextParams.delete("new");
+      setSearchParams(nextParams, { replace: true });
+    }).catch(() => setLocalError("练习已生成，请刷新页面恢复。"));
+  }, [practiceJob, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!restoredSession || hasRequestedSession) return;
@@ -178,33 +215,20 @@ export function PracticePage() {
   }, [activeSession, effectiveAnswers]);
 
   const createMutation = useMutation({
-    mutationFn: () => createPracticeSession({
+    mutationFn: () => createPracticeGenerationJob({
       course_id: numericCourseId,
       knowledge_point_ids: selectedPointIds,
       question_count: questionCount,
       difficulty
-    }),
-    onSuccess: (response) => {
-      const created = resolvePracticeSession(response);
-      if (!created) {
-        setLocalError("练习生成失败，请稍后重试。");
-        return;
-      }
+    }, createIdempotencyKey(`practice-${numericCourseId}`)),
+    onSuccess: (job: AiJob) => {
       setLocalError("");
-      setCurrentSession(created);
-      setAnswers({});
-      setReviewExpansionOverrides({});
-      lastSavedDraftRef.current = "{}";
-      setDraftStatus("idle");
+      handledPracticeJobRef.current = null;
+      setPracticeJobId(job.job_id);
+      trackJob(job);
       setDrawerMode(null);
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set("course_id", created.course_id);
-      nextParams.set("session_id", created.id);
-      if (created.questions[0]) nextParams.set("question_id", created.questions[0].id);
-      nextParams.delete("new");
-      setSearchParams(nextParams, { replace: true });
     },
-    onError: () => setLocalError("练习生成失败，请稍后重试。")
+    onError: () => setLocalError("练习任务创建失败，请稍后重试。")
   });
 
   const submitMutation = useMutation({
@@ -310,7 +334,7 @@ export function PracticePage() {
 
   const loadingSession = hasRequestedSession
     ? requestedSessionQuery.isPending
-    : canUseCourse && !wantsNewPractice && latestSessionQuery.isPending;
+    : practiceJobRunning || (canUseCourse && !wantsNewPractice && latestSessionQuery.isPending);
   const restoreError = requestedSessionQuery.isError || latestSessionQuery.isError;
 
   return (
@@ -357,7 +381,7 @@ export function PracticePage() {
                   isRegrading={regradeMutation.isPending}
                 />
               ) : null}
-              {localError ? <p className="practice-local-error" role="alert">{localError}</p> : null}
+              {localError || practiceJobError ? <p className="practice-local-error" role="alert">{localError || practiceJobError}</p> : null}
               <PracticeQuestionCanvas
                 question={activeQuestion}
                 index={activeQuestionIndex}
@@ -427,14 +451,14 @@ export function PracticePage() {
             difficulty={difficulty}
             session={activeSession}
             recommendedResources={recommendedResources}
-            isGenerating={createMutation.isPending}
+            isGenerating={createMutation.isPending || practiceJobRunning}
             canGenerate={canUseCourse && selectedPointIds.length > 0}
-            error={localError}
+            error={localError || practiceJobError}
             onCourseChange={changeCourse}
             onPointChange={setSelectedPointId}
             onQuestionCountChange={setQuestionCount}
             onDifficultyChange={setDifficulty}
-            onGenerate={() => createMutation.mutate()}
+            onGenerate={() => { if (!practiceJobRunning) createMutation.mutate(); }}
             onClose={() => setDrawerMode(null)}
           />
         ) : null}

@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from backend.app.core.config import Settings
-from backend.app.models import AiJob, Course, GeneratedResource, KnowledgePoint, LearningPath, LearningTask, Material, User
+from backend.app.models import AiJob, Course, GeneratedResource, KnowledgePoint, LearningPath, LearningTask, Material, PracticeSession, User
 from backend.app.services.ai_jobs import (
     AiJobConflictError,
     AiJobNotFoundError,
@@ -50,6 +50,7 @@ class FakeRepository:
     resources: list[GeneratedResource] = field(default_factory=list)
     paths: list[LearningPath] = field(default_factory=list)
     tasks: list[LearningTask] = field(default_factory=list)
+    practice_sessions: list[PracticeSession] = field(default_factory=list)
     jobs: list[AiJob] = field(default_factory=list)
     next_id: int = 1
 
@@ -88,6 +89,25 @@ class FakeRepository:
                 and item.workflow == "path_planning"
                 and item.status in {"queued", "running", "cancelling"}
             ),
+            None,
+        )
+
+    def get_active_workflow_job(self, user_id: int, course_id: int, workflow: str) -> AiJob | None:
+        return next(
+            (
+                item
+                for item in reversed(self.jobs)
+                if item.user_id == user_id
+                and item.course_id == course_id
+                and item.workflow == workflow
+                and item.status in {"queued", "running", "cancelling"}
+            ),
+            None,
+        )
+
+    def get_practice_session_for_user(self, user_id: int, session_id: int) -> PracticeSession | None:
+        return next(
+            (item for item in self.practice_sessions if item.id == session_id and item.user_id == user_id),
             None,
         )
 
@@ -248,6 +268,77 @@ def test_path_job_reuses_active_course_job_and_rejects_cross_user_course() -> No
 
     with pytest.raises(AiJobNotFoundError, match="课程"):
         service.create_path_planning_job(make_user(2), course_id=21, idempotency_key="other-user")
+
+
+def test_practice_and_report_jobs_reuse_active_course_workflow_and_validate_scope() -> None:
+    user = make_user()
+    point = KnowledgePoint(id=41, course_id=21, title="二叉树", chapter="树", order_index=1)
+    session = PracticeSession(id=81, user_id=1, course_id=21, title="二叉树练习", status="completed")
+    repository = FakeRepository(
+        users=[user],
+        courses=[make_course()],
+        points=[point],
+        practice_sessions=[session],
+    )
+    queue = FakeQueue()
+    service = make_service(repository, queue)
+
+    practice = service.create_practice_generation_job(
+        user,
+        course_id=21,
+        knowledge_point_ids=[41, 41],
+        question_count=5,
+        difficulty="adaptive",
+        idempotency_key="practice-one",
+    )
+    reused_practice = service.create_practice_generation_job(
+        user,
+        course_id=21,
+        knowledge_point_ids=[41],
+        question_count=8,
+        difficulty="hard",
+        idempotency_key="practice-two",
+    )
+    report = service.create_report_generation_job(
+        user,
+        course_id=21,
+        practice_session_id=81,
+        idempotency_key="report-one",
+    )
+    reused_report = service.create_report_generation_job(
+        user,
+        course_id=21,
+        practice_session_id=None,
+        idempotency_key="report-two",
+    )
+
+    assert practice.job_id == reused_practice.job_id
+    assert practice.request == {
+        "course_id": 21,
+        "knowledge_point_ids": [41],
+        "question_count": 5,
+        "difficulty": "adaptive",
+    }
+    assert report.job_id == reused_report.job_id
+    assert report.request == {"course_id": 21, "practice_session_id": 81}
+    assert queue.enqueued == [1, 2]
+
+    with pytest.raises(AiJobNotFoundError, match="知识点"):
+        service.create_practice_generation_job(
+            user,
+            course_id=21,
+            knowledge_point_ids=[999],
+            question_count=5,
+            difficulty="adaptive",
+            idempotency_key="bad-point",
+        )
+    with pytest.raises(AiJobNotFoundError, match="练习"):
+        service.create_report_generation_job(
+            user,
+            course_id=21,
+            practice_session_id=999,
+            idempotency_key="bad-session",
+        )
 
 
 def test_path_task_resource_job_uses_only_missing_bundle_types_and_reuses_active_job() -> None:

@@ -1762,7 +1762,11 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
 
 ### POST `/practice/sessions`
 
-用途：创建当前用户课程练习，并返回题目。题目由真实课程切片和知识点证据形成蓝图，再经模型增强、重复率/选项/答案/引用门禁和 ReviewAgent 审核。
+用途：旧客户端同步兼容入口。当前前端使用 `/practice/sessions/generation-jobs`，本接口仍可同步创建当前用户课程练习并返回题目。
+
+### POST `/practice/sessions/generation-jobs`
+
+用途：异步创建当前用户课程练习。请求体与同步接口相同，必须携带 `Idempotency-Key`，成功返回 HTTP 202 与 `AiJobResponse`。同用户同课程已有活动 `practice_generation` 时复用；完成结果包含 `course_id/session_id/question_count/agent_trace_id/warnings`。失败或取消不留下半个练习会话。
 
 请求：
 
@@ -1906,7 +1910,11 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
 
 ### POST `/reports/generate`
 
-用途：由 `ReportGraph` 聚合当前课程最近 5 次已完成练习、掌握度、弱点、当前路径和资源，写入 `assessment_reports`。练习会话、已作答题、正确题、已评估知识点和已完成路径任务分别统计并锁定；模型只增强总结与建议，数字矛盾必须修订或退回确定性报告。
+用途：旧客户端同步兼容入口。当前前端使用 `/reports/generation-jobs`；本接口仍可由 `ReportGraph` 同步聚合并写入报告。
+
+### POST `/reports/generation-jobs`
+
+用途：异步生成当前用户课程报告。请求体与同步接口相同，必须携带 `Idempotency-Key`，成功返回 HTTP 202 与 `AiJobResponse`。可选练习必须属于当前用户和课程；同用户同课程已有活动 `report_generation` 时复用。完成结果包含 `course_id/report_id/agent_trace_id/warnings`，失败或取消保留旧报告。
 
 请求：
 
@@ -2436,6 +2444,14 @@ OpenRouter 不再作为可见预设。
 ### POST `/paths/generation-jobs`
 
 用途：异步运行 `PathPlanningGraph`。请求体为 `GeneratePathRequest`，必须携带 `Idempotency-Key`，成功返回 HTTP 202。手动生成和练习后重排共用 `workflow=path_planning`；评分接口不等待该任务，排队失败只返回 warning。任务每次最多一次路径模型调用，取消或失败保留原 active 路径。
+
+### POST `/practice/sessions/generation-jobs`
+
+用途：异步运行 `AssessmentGraph` 生成练习，工作流为 `practice_generation`。同用户同课程活动任务复用，完成后任务托盘按 `session_id` 进入练习页。
+
+### POST `/reports/generation-jobs`
+
+用途：异步运行 `ReportGraph` 生成学习报告，工作流为 `report_generation`。同用户同课程活动任务复用，完成后任务托盘进入报告页并读取最新持久化报告。
 
 Phase 29 起 `AiJobWorkflow` 增加 `path_planning`。来源引用可携带 `access_scope=mainland_preferred|mainland_community|global_source|external_fallback`；该字段是策略分层，不表示实时网络可达性。
 

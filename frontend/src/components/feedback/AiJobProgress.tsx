@@ -17,7 +17,9 @@ const workflowLabels = {
   resource_generation: "资源生成",
   embedding_reindex: "向量索引重建",
   material_ingestion: "资料解析",
-  path_planning: "学习路径规划"
+  path_planning: "学习路径规划",
+  practice_generation: "练习生成",
+  report_generation: "学习报告生成"
 } as const;
 
 function resultHref(job: AiJob) {
@@ -32,6 +34,13 @@ function resultHref(job: AiJob) {
   if (job.workflow === "material_ingestion" && job.request.material_id) return `${PATHS.library}?material_id=${job.request.material_id}`;
   if (job.workflow === "path_planning" && (job.result.course_id || job.course_id || job.request.course_id)) {
     return `${PATHS.path}?course_id=${job.result.course_id ?? job.course_id ?? job.request.course_id}`;
+  }
+  if (job.workflow === "practice_generation" && (job.result.session_id || job.course_id || job.request.course_id)) {
+    const session = job.result.session_id ? `&session_id=${job.result.session_id}` : "";
+    return `${PATHS.practice}?course_id=${job.result.course_id ?? job.course_id ?? job.request.course_id}${session}`;
+  }
+  if (job.workflow === "report_generation" && (job.result.course_id || job.course_id || job.request.course_id)) {
+    return `${PATHS.reports}?course_id=${job.result.course_id ?? job.course_id ?? job.request.course_id}`;
   }
   return null;
 }

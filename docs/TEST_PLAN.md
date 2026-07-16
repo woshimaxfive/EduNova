@@ -30,7 +30,7 @@ EduNova 的测试目标不是只证明代码能运行，而是证明系统满足
 
 Phase 34 增加三类防回退门禁：课程引用带页码时，回答 Prompt 必须携带页码且“没有页码/无法标明页码”的矛盾回答必须触发修订；资料目录复选框必须稳定命名为“纳入课程”，零纳入时给出明确提示；课程空间桌面与 390px 的最后回答操作必须位于固定输入区上方并可直接点击。
 
-Phase 35 增加响应一致性门禁：普通 API 继续保持 20 秒默认超时，画像、练习、简答重评和报告等模型原子操作必须使用独立受控窗口；课程流必须在回答正文前依次产生真实安全状态，稳定课程证据不得重复调用语义证据模型，trace 必须覆盖流式 token 消费耗时；资源学习进度只统计已就绪资源，失败或尚未生成项必须单列为待补齐。真实浏览器样本验证状态 1.5 秒内可见，稳定课程回答约 44.5 秒完成，简答重评约 13.6 秒完成。
+Phase 35 增加响应一致性门禁；Phase 36 进一步要求练习生成与报告生成通过 AIJob 立即返回 202，并覆盖幂等复用、真实节点进度、刷新恢复、取消、失败重试、用户/课程隔离和旧结果原子保留。练习提交、简答重评和画像更新继续验证同步原子语义。
 
 测试需要覆盖以下问题：
 
@@ -176,8 +176,8 @@ cd ..
 | `/agents/traces/{trace_id}` | 无 token 401、当前用户 trace 查询、步骤排序、其他用户 404、安全摘要、上下文计数 metadata 和 metadata 白名单 |
 | `/resources/generate`、资源详情/质量、`/resources/{resource_id}/exports` | 无 token 401、用户隔离、六类 v3 证据型资源、并行 Worker、完整 artifact 审核、结构修复、内容修订、严格类型失败、代码实跑验证、部分失败、PPTX 任务和隐私安全 |
 | `/paths/generation-jobs`、`/paths/generate`、`/paths/current`、`/paths/tasks/{task_id}`、`/courses/{course_id}/mastery-map` | 无 token 401、课程/任务用户隔离、异步任务复用、幂等、取消/重试/失联、旧同步兼容、旧路径原子保留、任务状态、掌握度、推荐资源和隐私安全 |
-| `/practice/sessions`、`/practice/sessions/{session_id}`、`/practice/sessions/{session_id}/answers`、`/practice/sessions/{session_id}/regrade` | 无 token 401、课程/练习用户隔离、知识点过滤、客观题确定性批改、简答题批量语义评分、部分评分、幂等重评、空答案校验、弱点队列反哺、掌握度回归、隐私安全 |
-| `/reports/generate`、`/reports/latest` | 无 token 401、课程/练习/报告用户隔离、空报告、报告生成、最新报告读取、掌握度摘要、下一步建议、隐私安全 |
+| `/practice/sessions/generation-jobs`、`/practice/sessions`、`/practice/sessions/{session_id}`、`/practice/sessions/{session_id}/answers`、`/practice/sessions/{session_id}/regrade` | 无 token 401、课程/练习用户隔离、异步生成复用/幂等/取消/重试/恢复、知识点过滤、客观题确定性批改、简答题批量语义评分、部分评分、幂等重评、弱点队列反哺和隐私安全 |
+| `/reports/generation-jobs`、`/reports/generate`、`/reports/latest` | 无 token 401、课程/练习/报告用户隔离、异步生成复用/幂等/取消/重试/恢复、旧报告原子保留、空报告、最新报告读取、掌握度摘要、下一步建议和隐私安全 |
 | `/exports/learning-dossier`、`/exports/learning-dossier/jobs`、`/exports/{job_id}`、`/exports/{job_id}/download` | 无 token 401、课程/任务用户隔离、无报告真实空状态、有报告 Markdown 同步导出、异步 job 创建和状态流转、Markdown/PDF/DOCX 文件下载、失败分支、路径/资源/练习证据摘要、文件名安全、隐私安全 |
 
 ### 3.4 前端组件与页面测试
@@ -1069,3 +1069,5 @@ docker compose down
 - AI Worker 构建记录依赖缓存是否命中、Docling 模型下载重试次数和上游失败分类；首次模型层未构建成功时不得声称完整 Docker 构建通过。
 
 2026-07-16 Phase 33 实际验收：`scripts/test.ps1` 通过后端 441 项、前端 241 项、离线 AI 评测 10 项，以及编码、Ruff、Alembic `20260716_0028`、非破坏性 OpenAPI、lint、production build 与 Compose。`agent-browser` 完成百炼文本/图片、同图追问、刷新恢复、课程 RAG、外部来源和桌面/390px复核；临时账号与 4 个图片对象已精确清理。Docling 依赖缓存命中，但首次模型层因官方接口三次 504 未通过，未记录成完整镜像构建成功。
+
+2026-07-16 Phase 36 实际验收：后端 446 项、前端 244 项、离线 AI 评测 10 项及编码、Ruff、ESLint、OpenAPI、Alembic、Compose、production build 均通过；`contest_readiness` 实时部分据实保留 `evidence_gap`。受影响 Docker 服务重建并健康。`agent-browser` 独立账号验证练习/报告任务创建、30%/52% 真实 Graph 节点、运行中刷新恢复、完成后持久化结果，以及桌面和 390px 无横向溢出。练习生成约 2 分 22 秒，报告生成约 1 分 28 秒，长模型操作期间不再占用浏览器同步连接。两个临时账号及级联数据已删除。

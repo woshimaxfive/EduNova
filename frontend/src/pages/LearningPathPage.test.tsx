@@ -72,7 +72,7 @@ const activePathResponse = {
       path_mode: "ordered",
       trigger: "assessment",
       preserved_task_count: 2,
-      generation_mode: "model_enhanced",
+      generation_mode: "model_generated",
       review_mode: "model_and_rules"
     },
     personalization: {
@@ -99,7 +99,7 @@ const activePathResponse = {
       teaching_strategy: "worked_example",
       difficulty: "medium",
       used_profile_factor_codes: ["confirmed_weaknesses"],
-      generation_mode: "model_enhanced",
+      generation_mode: "model_generated",
       rationale: "先补齐概念，再用导图建立联系。",
       ready_count: 1,
       completed_count: 0,
@@ -209,6 +209,8 @@ describe("LearningPathPage", () => {
     expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
     expect(screen.getByText("个性化学习安排")).toBeInTheDocument();
     expect(screen.queryByText("期末冲刺")).not.toBeInTheDocument();
+    expect(screen.getByText("个性化规划 · 难度 适中")).toBeInTheDocument();
+    expect(screen.queryByText(/安全默认组合/)).not.toBeInTheDocument();
     expect(screen.getByText("由练习结果更新 · 保留 2 个既有任务")).toBeInTheDocument();
     expect(screen.getByText("学习画像已变化，可更新学习路径以应用新的安排依据。")).toBeInTheDocument();
 
@@ -216,7 +218,7 @@ describe("LearningPathPage", () => {
     const drawer = screen.getByRole("dialog", { name: "路径详情" });
     expect(within(drawer).getByText("薄弱 · 35 分")).toBeInTheDocument();
     await user.click(within(drawer).getByRole("tab", { name: "规划依据" }));
-    expect(within(drawer).getByText("模型增强 · 模型与规则审核")).toBeInTheDocument();
+    expect(within(drawer).getByText("模型生成 · 模型与规则审核")).toBeInTheDocument();
     await user.click(within(drawer).getByRole("tab", { name: "协作轨迹" }));
     await user.click(within(drawer).getByRole("button", { name: "查看 PathPlanningGraph" }));
     expect(await screen.findByText("deterministic_rank")).toBeInTheDocument();

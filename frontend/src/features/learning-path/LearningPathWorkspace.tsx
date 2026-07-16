@@ -44,6 +44,16 @@ function difficultyLabel(value: string | undefined) {
   return "适中";
 }
 
+function isModelGeneratedMode(value: string | undefined) {
+  return value === "model_generated" || value === "model_enhanced";
+}
+
+function pathGenerationLabel(value: unknown) {
+  if (value === "model_generated") return "模型生成";
+  if (value === "model_enhanced") return "模型增强";
+  return "规则底稿";
+}
+
 type CourseOption = {
   id: string;
   title: string;
@@ -269,7 +279,7 @@ export function PathTaskCanvas({
                   {task.learning_bundle?.items.length ? (
                     <section className="path-learning-bundle" aria-label="本节学习安排">
                       <strong>本节学习安排</strong>
-                      <span>{task.learning_bundle.generation_mode === "model_enhanced" ? "个性化规划" : "安全默认组合"} · 难度 {difficultyLabel(task.learning_bundle.difficulty)}</span>
+                      <span>{isModelGeneratedMode(task.learning_bundle.generation_mode) ? "个性化规划" : "安全默认组合"} · 难度 {difficultyLabel(task.learning_bundle.difficulty)}</span>
                       <p>{task.learning_bundle.rationale}</p>
                       {task.learning_bundle.used_profile_factor_codes.length > 0 ? (
                         <small>安排依据：{task.learning_bundle.used_profile_factor_codes.map((code) => profileFactorLabels[code] ?? code).join("、")}</small>
@@ -424,7 +434,7 @@ export function LearningPathDrawer({
                 <span>{pathDetail?.path?.goal || "暂无学习路径"}</span>
                 {pathDetail?.path ? (
                   <strong>
-                    {String(pathDetail.path.plan_json.generation_mode ?? "deterministic_source") === "model_enhanced" ? "模型增强" : "规则底稿"}
+                    {pathGenerationLabel(pathDetail.path.plan_json.generation_mode)}
                     {" · "}
                     {String(pathDetail.path.plan_json.review_mode ?? "rules_only") === "model_and_rules" ? "模型与规则审核" : "规则审核"}
                   </strong>

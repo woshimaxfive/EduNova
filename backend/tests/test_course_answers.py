@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from backend.app.services.course_answers import ConversationContext, CourseAnswerService
@@ -350,6 +351,49 @@ def test_home_review_filters_unknown_risk_flags_and_forces_revision() -> None:
     assert result.review_status == "revise"
     assert result.confidence == 1.0
     assert result.risk_flags == ["prompt_echo"]
+
+
+def test_course_review_receives_evidence_text_for_claim_level_grounding() -> None:
+    model = FakeModelSettingsService(
+        '{"review_status":"revise","confidence":0.9,"risk_flags":["citation_mismatch"],'
+        '"safety_summary":"来源不支持：回答增加了课程片段没有出现的历史结论。"}'
+    )
+    service = CourseAnswerService(model)
+    citation = {
+        **_citation(),
+        "section_title": "近代化探索",
+        "content": "辛亥革命推动政治制度发生重大转折，社会改造仍不充分。",
+    }
+
+    result = service.review_home(
+        user=object(),
+        question="辛亥革命的局限是什么？",
+        answer="教材指出革命彻底改变了全部社会结构。",
+        citations=[citation],
+    )
+    payload = json.loads(model.calls[0][-1]["content"])
+
+    assert payload["sources"][0]["excerpt"] == citation["content"]
+    assert result is not None
+    assert result.review_status == "revise"
+    assert result.risk_flags == ["citation_mismatch"]
+    assert "逐条对照" in model.calls[0][0]["content"]
+
+
+def test_course_repair_contract_does_not_hide_facts_present_in_evidence() -> None:
+    model = FakeModelSettingsService("<final_answer>资料明确说明辛亥革命的局限是社会改造仍不充分。</final_answer>")
+    service = CourseAnswerService(model)
+
+    repaired = service.repair_home(
+        user=object(),
+        question="严格按资料说明辛亥革命的局限。",
+        draft="资料未说明。",
+        citations=[{**_citation(), "content": "辛亥革命的局限是社会改造仍不充分。"}],
+        risk_flags=["citation_mismatch"],
+    )
+
+    assert repaired == "资料明确说明辛亥革命的局限是社会改造仍不充分。"
+    assert "不得把证据已明确写出的内容误报" in model.calls[0][0]["content"]
 
 
 def test_course_answer_stream_includes_conversation_context() -> None:

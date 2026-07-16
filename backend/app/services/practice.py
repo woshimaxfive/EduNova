@@ -413,6 +413,7 @@ class PracticeService:
             focus = ("概念含义", "关键关系", "应用条件", "推导思路", "常见误区", "实际应用")[index % 6]
             citation_refs = [str(row["chunk_id"]) for row in evidence if row["chunk_id"] is not None][:3]
             source_excerpt = target_statements[index % len(target_statements)]
+            required_scope_term = self._short_answer_scope_term(source_excerpt)
             base = {
                 "id": question_id,
                 "question_type": question_type,
@@ -423,6 +424,7 @@ class PracticeService:
                 "explanation": f"课程证据指出：{source_excerpt}",
                 "source_summary": source_excerpt,
                 "source_excerpt": source_excerpt,
+                "required_scope_term": required_scope_term,
                 "citation_refs": citation_refs,
                 "prompt_version": "assessment-v3.2",
                 "generation_mode": "deterministic_source",
@@ -455,10 +457,11 @@ class PracticeService:
                     }
                 )
             else:
+                answer_scope = required_scope_term or point.title
                 questions.append(
                     {
                         **base,
-                        "prompt": f"请从{focus}角度，依据课程资料解释“{point.title}”，并说明“{keywords[0]}”与“{keywords[1]}”的作用。",
+                        "prompt": f"请从{focus}角度，依据课程资料解释“{answer_scope}”，并说明其在“{point.title}”中的作用。",
                         "options": [],
                         "correct_answer": source_excerpt,
                         "keywords": keywords[:3],
@@ -467,13 +470,28 @@ class PracticeService:
         return questions
 
     @staticmethod
+    def _short_answer_scope_term(source_excerpt: str) -> str:
+        """提取简答题必须点名的最小作答对象，避免开放题干配合唯一参考答案。"""
+        normalized = " ".join(str(source_excerpt or "").split()).strip("，。；：:、 \t\r\n")
+        if not normalized:
+            return ""
+        prefix = re.split(
+            r"(?:是指|指的是|是|描述|关注|表示|用于|体现|包括|反映|说明|强调|要求|具有|衡量|估计)",
+            normalized,
+            maxsplit=1,
+        )[0].strip("，。；：:、 \t\r\n")
+        if 2 <= len(prefix) <= 24:
+            return prefix
+        return ""
+
+    @staticmethod
     def _safe_distractors(point: KnowledgePoint, statements: list[str]) -> list[str]:
         topic = point.title
         anchor = statements[0] if statements else topic
         return [
-            f"教材认为“{topic}”与计算机部件之间没有任何关系。",
-            f"只要记住“{anchor[:36]}”就能推出所有结构与性能结论。",
-            f"“{topic}”只是一种软件界面，不涉及课程资料描述的硬件关系。",
+            f"只复述“{topic}”的名称，不分析课程资料给出的条件和关系。",
+            f"把“{anchor[:36]}”当作适用于所有情境的结论，忽略其适用范围。",
+            f"用与课程证据无关的单一现象替代对“{topic}”的完整解释。",
         ]
 
     @staticmethod

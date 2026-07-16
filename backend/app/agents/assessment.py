@@ -318,7 +318,11 @@ class AssessmentGraphRunner:
 
     def _question_repair_node(self, state: AssessmentState) -> dict[str, Any]:
         risks = safe_string_list((state.get("review_result") or {}).get("risk_flags"), limit=8, item_limit=60)
-        generated = self._model_questions(state, revision_risks=risks)
+        generated = self._model_questions(
+            state,
+            revision_risks=risks,
+            revision_questions=list(state.get("questions", [])),
+        )
         if generated is None:
             raise PracticeValidationError(
                 f"AI练习题未通过质量审核，单次修订失败，未创建练习。风险：{'、'.join(risks) or '结构不完整'}"
@@ -670,6 +674,7 @@ class AssessmentGraphRunner:
         state: AssessmentState,
         *,
         revision_risks: list[str] | None = None,
+        revision_questions: list[dict[str, Any]] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any] | None] | None:
         if self.service.model_service is None:
             return None
@@ -684,6 +689,7 @@ class AssessmentGraphRunner:
                 "prompt": safe_text(item["prompt"], limit=500),
                 "options": safe_string_list(item["options"], limit=8, item_limit=180),
                 "correct_answer": item.get("correct_answer"),
+                "required_scope_term": safe_text(item.get("required_scope_term"), limit=80),
             }
             for item in drafts
         ]
@@ -701,6 +707,8 @@ class AssessmentGraphRunner:
                             f"题目蓝图={json.dumps(prompt_rows, ensure_ascii=False, separators=(',', ':'))}。"
                             f"近期同知识点题目摘要={json.dumps(state.get('historical_question_summaries', []), ensure_ascii=False, separators=(',', ':'))}。"
                             "选择题必须保留正确答案原文并生成四个互不重复的合理选项；不同题目不得复用题面。"
+                            "简答题题干必须原样点名蓝图中的 required_scope_term，不得改成‘一个维度’‘某个概念’等泛指；"
+                            "题干允许的答案范围必须与锁定的 correct_answer 和评分量规完全一致。"
                             "每题必须另外输出 cognitive_level、scenario_type、target_misconception、reasoning_pattern；"
                             "不得复用历史题目的知识关系、场景和目标误区组合，也不得只替换名词。"
                             "生成后在同一次响应中自审重复题面、无效干扰项、证据缺失、隐私和答案合同；"
@@ -714,12 +722,40 @@ class AssessmentGraphRunner:
                     },
                 ]
             if revision_risks:
+                revision_guidance: list[str] = []
+                for risk in revision_risks:
+                    if risk.startswith("short_answer_answer_leakage"):
+                        revision_guidance.append("删除简答题题干中的参考答案、结论和完整结构化数据，只保留作答对象、角度与任务要求")
+                    elif risk.startswith("short_answer_scope_ambiguous"):
+                        revision_guidance.append("在简答题题干中原样点名 required_scope_term，禁止使用泛指代词")
+                    elif risk.startswith("missing_pedagogical_fingerprint"):
+                        revision_guidance.append("补齐风险码点名的教学指纹字段，并保持其余已通过字段不变")
+                    elif risk.startswith("reused_pedagogical_fingerprint"):
+                        revision_guidance.append("改用不同的认知层级、场景、目标误区或推理方式组合")
+                revision_rows = [
+                    {
+                        "id": item.get("id"),
+                        "prompt": safe_text(item.get("prompt"), limit=800),
+                        "options": safe_string_list(item.get("options"), limit=8, item_limit=240),
+                        "explanation": safe_text(item.get("explanation"), limit=800),
+                        "cognitive_level": safe_text(item.get("cognitive_level"), limit=40),
+                        "scenario_type": safe_text(item.get("scenario_type"), limit=80),
+                        "target_misconception": safe_text(item.get("target_misconception"), limit=120),
+                        "reasoning_pattern": safe_text(item.get("reasoning_pattern"), limit=80),
+                    }
+                    for item in (revision_questions or [])
+                ]
                 messages.append(
                     {
                         "role": "user",
                         "content": (
-                            "上次题目已经生成，但以下字段未通过审核："
-                            f"{','.join(revision_risks[:6])}。只修订失败项并重新输出完整 JSON；"
+                            "上一版题目="
+                            f"{json.dumps(revision_rows, ensure_ascii=False, separators=(',', ':'))}。"
+                            "以下字段未通过审核："
+                            f"{','.join(revision_risks[:6])}。"
+                            f"具体修订要求={'；'.join(dict.fromkeys(revision_guidance)) or '依据风险码修复失败项'}。"
+                            "只修订失败项并重新输出完整 JSON；"
+                            "所有未被点名的已通过字段必须逐字保留；"
                             "不得改变题目 ID、类型、知识点、规则答案和课程引用。"
                         ),
                     }
@@ -1096,6 +1132,16 @@ class AssessmentGraphRunner:
             if any(value in {"无关概念", "跳过资料依据", "只背结论", "无关提示"} for value in options):
                 risks.append("trivial_distractor")
             prompt = "".join(safe_text(question.get("prompt"), limit=800).casefold().split())
+            required_scope = "".join(safe_text(draft.get("required_scope_term"), limit=80).casefold().split())
+            if question.get("question_type") == "short_answer" and required_scope and required_scope not in prompt:
+                risks.append("short_answer_scope_ambiguous")
+            expected_short_answer = "".join(safe_text(draft.get("correct_answer"), limit=800).casefold().split())
+            if (
+                question.get("question_type") == "short_answer"
+                and len(expected_short_answer) >= max(24, len(required_scope) + 8)
+                and expected_short_answer in prompt
+            ):
+                risks.append("short_answer_answer_leakage")
             if len(prompt) < 12:
                 risks.append("question_too_short")
             if any(SequenceMatcher(None, prompt, previous).ratio() >= 0.86 for previous in normalized_prompts):
@@ -1109,14 +1155,31 @@ class AssessmentGraphRunner:
                 safe_text(question.get("target_misconception"), limit=120),
                 safe_text(question.get("reasoning_pattern"), limit=80),
             )
-            if fingerprint[0] not in {"understand", "apply", "analyze", "create"} or not all(fingerprint[1:]):
-                risks.append("missing_pedagogical_fingerprint")
+            missing_fingerprint_fields = [
+                name
+                for name, value in zip(
+                    ("cognitive_level", "scenario_type", "target_misconception", "reasoning_pattern"),
+                    fingerprint,
+                    strict=True,
+                )
+                if not value or (name == "cognitive_level" and value not in {"understand", "apply", "analyze", "create"})
+            ]
+            if missing_fingerprint_fields:
+                risks.append(
+                    f"missing_pedagogical_fingerprint:{question_id}:{','.join(missing_fingerprint_fields)}"
+                )
             elif fingerprint in historical_fingerprints:
                 risks.append("reused_pedagogical_fingerprint")
             source_excerpt = safe_text(question.get("source_excerpt"), limit=500)
             if not source_excerpt:
                 risks.append("missing_evidence")
-            if contains_sensitive_text(question):
+            if contains_sensitive_text(
+                {
+                    "prompt": question.get("prompt"),
+                    "options": question.get("options"),
+                    "explanation": question.get("explanation"),
+                }
+            ):
                 risks.append("sensitive_output")
         return list(dict.fromkeys(risks))
 

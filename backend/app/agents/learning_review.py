@@ -14,8 +14,8 @@ SENSITIVE_MARKERS = (
     "model input",
     "api key",
     "sk-",
-    "资料原文",
-    "source text",
+    "完整资料原文",
+    "full source text",
 )
 
 

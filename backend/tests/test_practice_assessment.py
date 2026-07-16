@@ -373,6 +373,12 @@ def test_create_practice_session_generates_deterministic_questions_and_validates
         for question in stored
         for option in question.get("options", [])
     )
+    assert not any(
+        marker in option
+        for question in stored
+        for option in question.get("options", [])
+        for marker in ("计算机部件", "软件界面", "硬件关系")
+    )
     assert repo.sessions[0].status == "in_progress"
     assert repo.sessions[0].score is None
     assert "系统提示词" not in str(detail)
@@ -429,6 +435,63 @@ def test_practice_generation_embeds_model_review_in_single_call() -> None:
     assert len(model.calls) == 1
 
 
+def test_practice_revision_receives_previous_candidate_and_preserves_valid_fields() -> None:
+    from backend.app.services.practice import PracticeService
+
+    baseline = as_dict(make_practice_service(make_repo()).create_session(make_user(), 101, [401], 1, "easy"))
+    source = baseline["questions"][0]
+    candidate_prompt = source["prompt"] + "请从课程证据判断这项表述。"
+    candidate = {
+        "id": source["id"],
+        "prompt": candidate_prompt,
+        "options": source["options"],
+        "explanation": "根据课程短摘录中的定义关系可以判断。",
+        "cognitive_level": "",
+        "scenario_type": "课程证据辨析",
+        "target_misconception": "忽略定义中的必要条件",
+        "reasoning_pattern": "证据到结论",
+    }
+    repaired = {**candidate, "cognitive_level": "understand"}
+    model = FakeModelService(
+        responses=[
+            json.dumps(
+                {
+                    "questions": [candidate],
+                    "quality_review": {
+                        "review_status": "passed",
+                        "confidence": 0.9,
+                        "risk_flags": [],
+                        "safety_summary": "其余字段已通过。",
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            json.dumps(
+                {
+                    "questions": [repaired],
+                    "quality_review": {
+                        "review_status": "passed",
+                        "confidence": 0.92,
+                        "risk_flags": [],
+                        "safety_summary": "缺失字段已修订。",
+                    },
+                },
+                ensure_ascii=False,
+            ),
+        ]
+    )
+
+    detail = as_dict(PracticeService(make_repo(), model_service=model).create_session(make_user(), 101, [401], 1, "easy"))
+
+    assert detail["questions"][0]["prompt"] == candidate_prompt
+    assert len(model.calls) == 2
+    revision_prompt = "\n".join(message["content"] for message in model.calls[1])
+    assert "上一版题目=" in revision_prompt
+    assert candidate_prompt in revision_prompt
+    assert "missing_pedagogical_fingerprint" in revision_prompt
+    assert "补齐风险码点名的教学指纹字段" in revision_prompt
+
+
 def test_single_point_practice_still_contains_objective_and_short_answer_types() -> None:
 
     detail = as_dict(
@@ -449,6 +512,69 @@ def test_single_point_practice_still_contains_objective_and_short_answer_types()
         "multiple_choice",
     ]
     assert all(len(question["options"]) == 4 for question in detail["questions"] if question["question_type"] != "short_answer")
+
+
+def test_short_answer_scope_cannot_be_replaced_by_an_ambiguous_placeholder() -> None:
+    from backend.app.agents.assessment import AssessmentGraphRunner
+    from backend.app.agents.learning_review import contains_sensitive_text
+    from backend.app.services.practice import PracticeService
+
+    repo = make_repo()
+    service = PracticeService(repo, model_service=DefaultPracticeGenerationModel())
+    drafts = service._build_questions(
+        [repo.knowledge_points[0]],
+        repo.resources,
+        question_count=1,
+        difficulty="medium",
+        chunks=repo.chunks,
+    )
+    draft = drafts[0]
+    assert draft["required_scope_term"] == "人工智能研究感知、推理与行动"
+    assert draft["required_scope_term"] in draft["prompt"]
+
+    ambiguous = {
+        **draft,
+        "prompt": "请解释课程资料中关于资源消耗的一个关键维度，并说明它的作用。",
+        "cognitive_level": "understand",
+        "scenario_type": "课程概念辨析",
+        "target_misconception": "混淆不同评价维度",
+        "reasoning_pattern": "定义到作用",
+    }
+    risks = AssessmentGraphRunner(service)._question_risks(
+        {"deterministic_questions": drafts, "historical_question_summaries": []},
+        [ambiguous],
+    )
+
+    assert "short_answer_scope_ambiguous" in risks
+    assert contains_sensitive_text("请依据资料原文作答") is False
+    assert contains_sensitive_text("请输出完整资料原文") is True
+
+    leaked_draft = {
+        **draft,
+        "correct_answer": f"{draft['correct_answer']}，并结合课程条件说明它与相邻概念之间的完整关系。",
+    }
+    leaked_answer = {
+        **leaked_draft,
+        "prompt": (
+            f"请解释“{draft['required_scope_term']}”，答案必须包含：{leaked_draft['correct_answer']}"
+        ),
+        "cognitive_level": "understand",
+        "scenario_type": "课程概念辨析",
+        "target_misconception": "混淆定义与作用",
+        "reasoning_pattern": "定义到作用",
+    }
+    leakage_risks = AssessmentGraphRunner(service)._question_risks(
+        {"deterministic_questions": [leaked_draft], "historical_question_summaries": []},
+        [leaked_answer],
+    )
+    assert "short_answer_answer_leakage" in leakage_risks
+
+    incomplete_fingerprint = {**draft, "cognitive_level": "", "scenario_type": "课程辨析", "target_misconception": "", "reasoning_pattern": "证据到结论"}
+    fingerprint_risks = AssessmentGraphRunner(service)._question_risks(
+        {"deterministic_questions": drafts, "historical_question_summaries": []},
+        [incomplete_fingerprint],
+    )
+    assert "missing_pedagogical_fingerprint:q1:cognitive_level,target_misconception" in fingerprint_risks
 
 def test_adaptive_practice_uses_profile_and_restores_saved_draft() -> None:
 

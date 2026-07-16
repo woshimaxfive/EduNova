@@ -68,6 +68,16 @@ class DefaultPathModelService:
         return json.dumps({"priority_tasks": choices}, ensure_ascii=False)
 
 
+class TaskProfilePathModelService(DefaultPathModelService):
+    def __init__(self) -> None:
+        super().__init__()
+        self.task_profiles: list[Any] = []
+
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], profile: Any) -> str:
+        self.task_profiles.append(profile)
+        return self.chat_completion(user, messages)
+
+
 def make_path_service(repo: FakePathRepository) -> PathService:
     return PathService(repo, model_service=DefaultPathModelService())
 
@@ -617,6 +627,17 @@ def test_path_planning_graph_uses_one_structured_model_call_and_rules_review() -
     ]
     assert all(log.duration_ms is not None and log.duration_ms >= 0 for log in logs)
     assert len(model.calls) == 1
+
+
+def test_path_planning_reserves_the_declared_45_second_total_budget() -> None:
+    repo = make_repo()
+    model = TaskProfilePathModelService()
+
+    detail = as_dict(PathService(repo, model_service=model).generate_path(make_user(), 101))
+
+    assert detail["path"]["plan_json"]["generation_mode"] == "model_generated"
+    assert len(model.task_profiles) == 1
+    assert model.task_profiles[0].timeout_seconds == 40.0
 
 
 def test_invalid_structured_path_decision_fails_without_persisting_template_path() -> None:

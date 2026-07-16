@@ -1397,6 +1397,7 @@ def test_home_graph_review_summary_does_not_treat_negated_risk_as_support() -> N
     assert module.HomeTutorGraphRunner._review_summary_supports_flag("回答没有回显内部输入。", "prompt_echo") is False
     assert module.HomeTutorGraphRunner._review_summary_supports_flag("回答没有敏感信息或隐私内容。", "sensitive_output") is False
     assert module.HomeTutorGraphRunner._review_summary_supports_flag("回答泄露了系统提示词。", "sensitive_output") is True
+    assert module.HomeTutorGraphRunner._review_summary_supports_flag("来源不支持：新增结论没有教材依据。", "citation_mismatch") is True
 
 
 def test_append_home_message_without_model_config_saves_clear_prompt() -> None:

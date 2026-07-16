@@ -29,6 +29,9 @@ from backend.app.services.paths import PathGenerationError
 
 logger = logging.getLogger(__name__)
 
+PATH_PLANNING_TOTAL_MODEL_BUDGET_SECONDS = 45.0
+PATH_PLANNING_INITIAL_TIMEOUT_SECONDS = 40.0
+
 
 class PathPlanningChoice(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -444,6 +447,7 @@ class PathPlanningGraphRunner:
         return {"path": path, "detail": detail}
 
     def _model_order(self, state: PathPlanningState) -> list[PlannedTask] | None:
+        model_started = perf_counter()
         if self.service.model_service is None:
             return None
         tasks = list(state.get("deterministic_tasks", []))
@@ -568,7 +572,7 @@ class PathPlanningGraphRunner:
                         reasoning="disabled",
                         output_mode="json_object",
                         creativity="balanced",
-                        timeout_seconds=30,
+                        timeout_seconds=PATH_PLANNING_INITIAL_TIMEOUT_SECONDS,
                         max_attempts=1,
                     ),
                 )
@@ -598,6 +602,10 @@ class PathPlanningGraphRunner:
             revision_call = getattr(self.service.model_service, "chat_completion_for_task", None)
             if not callable(revision_call):
                 return None
+            remaining_budget = PATH_PLANNING_TOTAL_MODEL_BUDGET_SECONDS - (perf_counter() - model_started)
+            if remaining_budget < 3.0:
+                logger.warning("path_planning_model_degraded reason=revision_budget_exhausted")
+                return None
             try:
                 revised_raw = revision_call(
                     state["user"],
@@ -617,7 +625,7 @@ class PathPlanningGraphRunner:
                         reasoning="disabled",
                         output_mode="json_object",
                         creativity="stable",
-                        timeout_seconds=15,
+                        timeout_seconds=min(12.0, remaining_budget),
                         max_attempts=1,
                     ),
                 )

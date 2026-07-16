@@ -1693,6 +1693,8 @@ describe("student interaction affordances", () => {
       default_config_id: 1,
       default_chat_config_id: 1,
       default_embedding_config_id: null,
+      default_rerank_config_id: null,
+      default_vision_config_id: null,
       system_summary: {
         source: "system",
         provider: "openai_compatible",
@@ -1706,7 +1708,15 @@ describe("student interaction affordances", () => {
         has_embedding_api_key: true,
         embedding_api_key_masked: "em-s...cret",
         can_use_model: true,
-        can_use_embedding_model: true
+        can_use_embedding_model: true,
+        rerank_provider: "openai_compatible",
+        rerank_base_url: "https://system-rerank.example.local/v1",
+        rerank_model: "system-rerank",
+        can_use_rerank_model: true,
+        vision_provider: "xfyun_vision",
+        vision_base_url: "wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image",
+        vision_model: "imagev3",
+        can_use_vision_model: true
       }
     };
     const calls: Array<{ method: string; url: string; payload: unknown }> = [];
@@ -1915,6 +1925,15 @@ describe("student interaction affordances", () => {
     expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();
     expect(screen.queryByText("OpenRouter")).not.toBeInTheDocument();
     expect(screen.getByText("资料检索继续使用系统默认服务。")).toBeInTheDocument();
+    expect(screen.getByText("当前使用系统默认服务 · imagev3")).toBeInTheDocument();
+    const systemFallback = screen.getByText("系统默认服务").closest("details");
+    expect(systemFallback).not.toBeNull();
+    const systemCards = within(systemFallback as HTMLElement).getAllByLabelText(/服务连接状态$/);
+    expect(systemCards.map((card) => card.getAttribute("aria-label"))).toEqual([
+      "向量服务连接状态",
+      "重排序服务连接状态",
+      "图片理解服务连接状态"
+    ]);
 
     const chatProviderPreset = screen.getByRole("combobox", { name: "回答服务商" });
     expect(within(chatProviderPreset).getAllByRole("option")[0]).toHaveTextContent("讯飞星火 X2-Flash");

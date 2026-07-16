@@ -367,9 +367,9 @@ export function SettingsPage() {
   const effectiveRerankReady = defaultRerankConfig?.can_use_rerank_model
     ?? systemSummary?.can_use_rerank_model
     ?? false;
-  const effectiveVisionReady = defaultVisionConfig?.can_use_model
-    ?? systemSummary?.can_use_vision_model
-    ?? false;
+  const effectiveVisionReady = Boolean(
+    defaultVisionConfig?.can_use_model || systemSummary?.can_use_vision_model
+  );
   const starterModeLabel = authUser?.starterMode === "data_structures" ? "数据结构与算法开始" : "空白开始";
 
   function selectSection(section: SettingsSection) {
@@ -748,16 +748,18 @@ export function SettingsPage() {
                     </div>
                   </header>
 
-                  <section className={defaultVisionConfig ? "settings-vision-entry ready" : "settings-vision-entry"} aria-label="图片理解模型配置">
+                  <section className={effectiveVisionReady ? "settings-vision-entry ready" : "settings-vision-entry"} aria-label="图片理解模型配置">
                     <span aria-hidden="true"><ImageSquare size={22} weight="duotone" /></span>
                     <div>
                       <strong>图片理解模型</strong>
                       <p>{defaultVisionConfig
                         ? `当前使用 ${defaultVisionConfig.display_name} · ${defaultVisionConfig.chat_model || "模型待填写"}`
+                        : systemSummary?.can_use_vision_model
+                          ? `当前使用系统默认服务 · ${systemSummary.vision_model || "图片模型"}`
                         : "拍题、流程图和报错截图需要单独的视觉模型，不会复用普通回答模型。"}</p>
                     </div>
                     <button type="button" onClick={() => defaultVisionConfig ? selectConfig(defaultVisionConfig) : createVisionConfig()}>
-                      {defaultVisionConfig ? "管理当前配置" : "立即配置"}
+                      {defaultVisionConfig ? "管理当前配置" : systemSummary?.can_use_vision_model ? "添加个人配置" : "立即配置"}
                     </button>
                   </section>
 
@@ -775,7 +777,7 @@ export function SettingsPage() {
                     </div>
                   ) : null}
 
-                  {!modelConfigsQuery.isError && (!defaultChatConfig || !defaultEmbeddingConfig || !defaultRerankConfig) ? (
+                  {!modelConfigsQuery.isError && (!defaultChatConfig || !defaultEmbeddingConfig || !defaultRerankConfig || !defaultVisionConfig) ? (
                     <details className="settings-system-fallback">
                       <summary>
                         <div>
@@ -816,6 +818,17 @@ export function SettingsPage() {
                             disabled={testConnectionMutation.isPending}
                             pending={testPending("rerank")}
                             onTest={() => runConnectionTest("rerank", null)}
+                          />
+                        ) : null}
+                        {!defaultVisionConfig ? (
+                          <ConnectionTestCard
+                            operation="vision"
+                            model={systemSummary?.vision_model ?? null}
+                            result={systemTests.vision}
+                            dirty={false}
+                            disabled={testConnectionMutation.isPending}
+                            pending={testPending("vision")}
+                            onTest={() => runConnectionTest("vision", null)}
                           />
                         ) : null}
                       </div>

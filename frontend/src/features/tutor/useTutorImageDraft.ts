@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { listModelConfigs } from "../../api/settings";
+import { listModelConfigs, type ModelSettingsListResponse } from "../../api/settings";
 import { deleteTutorAttachment, uploadTutorAttachment, type TutorImageAttachment } from "../../api/tutor";
 
 export type DraftTutorImage = {
@@ -12,6 +12,12 @@ export type DraftTutorImage = {
   status: "uploading" | "ready" | "failed";
   error?: string;
 };
+
+export function hasUsableVisionModel(settings?: ModelSettingsListResponse): boolean {
+  if (!settings) return false;
+  const defaultVisionConfig = settings.configs?.find((config) => config.id === settings.default_vision_config_id);
+  return Boolean(defaultVisionConfig?.can_use_model || settings.system_summary?.can_use_vision_model);
+}
 
 export function useTutorImageDraft(ensureSession: () => Promise<string>, onNotice: (message: string) => void) {
   const [images, setImages] = useState<DraftTutorImage[]>([]);
@@ -65,6 +71,6 @@ export function useTutorImageDraft(ensureSession: () => Promise<string>, onNotic
     attachmentIds: images.flatMap((image) => image.status === "ready" && image.attachment ? [Number(image.attachment.id)] : []),
     uploading: images.some((image) => image.status === "uploading"),
     hasFailed: images.some((image) => image.status === "failed"),
-    visionReady: Boolean(settingsQuery.data?.data.default_vision_config_id)
+    visionReady: hasUsableVisionModel(settingsQuery.data?.data)
   };
 }

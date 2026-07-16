@@ -19,8 +19,9 @@ from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.content_locale import china_first_content_policy
 
 
-REPORT_PROMPT_VERSION = "report-v3.1"
-REPORT_REVIEW_PROMPT_VERSION = "report-review-v3.1"
+REPORT_PROMPT_VERSION = "report-v3.2"
+REPORT_REVIEW_PROMPT_VERSION = "report-review-v3.2-embedded"
+OPTIONAL_GENERATION_TIMEOUT_SECONDS = 40.0
 
 
 class ReportState(TypedDict, total=False):
@@ -46,6 +47,7 @@ class ReportState(TypedDict, total=False):
     generation_mode: str
     review_mode: str
     review_result: dict[str, Any]
+    generation_review: dict[str, Any] | None
     needs_repair: bool
     repair_count: int
     report: AssessmentReport
@@ -233,29 +235,35 @@ class ReportGraphRunner:
 
     def _generate_node(self, state: ReportState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
-            narrative = self._model_narrative(state, repair=False)
-            if narrative is None:
+            generated = self._model_narrative(state)
+            if generated is None:
                 return {"report_json": dict(state["deterministic_report"]), "generation_mode": "deterministic_source"}, "模型不可用或叙事结构无效，保留规则报告。", "warning", {"model_used": False, "generation_mode": "deterministic_source"}
+            narrative, generation_review = generated
             report = {**state["deterministic_report"], **narrative}
-            return {"report_json": report, "generation_mode": "model_enhanced"}, "模型已生成基于证据的报告总结与建议。", "completed", {"model_used": True, "generation_mode": "model_enhanced"}
+            return (
+                {"report_json": report, "generation_mode": "model_enhanced", "generation_review": generation_review},
+                "模型已生成基于证据的报告总结，并在同一次调用中完成安全自审。",
+                "completed",
+                {"model_used": True, "generation_mode": "model_enhanced", "embedded_review": generation_review is not None, "model_call_budget": 1},
+            )
 
         return self._run_node(state, "generate_narrative", 4, "生成不改写统计数据的报告叙事", work)
 
     def _review_node(self, state: ReportState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             risks = self._report_risks(state)
-            model_review = self._model_review(state, state.get("report_json", {})) if state.get("generation_mode") == "model_enhanced" else None
+            model_review = state.get("generation_review") if state.get("generation_mode") == "model_enhanced" else None
             if model_review and model_review["review_status"] == "revise":
-                risks.extend(str(item) for item in model_review["risk_flags"])
+                risks.extend(str(item) for item in model_review["risk_flags"] or ["model_review_requested_revision"])
             risks = list(dict.fromkeys(risks))
             if risks:
                 review = {"review_status": "revise", "confidence": model_review["confidence"] if model_review else 0.42, "risk_flags": risks, "safety_summary": model_review["safety_summary"] if model_review else "规则审核发现报告需要修订。"}
-                return {"review_result": review, "review_mode": "model_and_rules" if model_review else "rules_only", "needs_repair": True}, "报告需要修订。", "warning", review
+                return {"review_result": review, "review_mode": "embedded_model_and_rules" if model_review else "rules_only", "needs_repair": True}, "报告需要修订。", "warning", review
             if model_review is None:
                 review = {"review_status": "warning", "confidence": 0.62, "risk_flags": [], "safety_summary": "模型审核不可用，已完成统计、证据引用和隐私规则审核。"}
                 return {"review_result": review, "review_mode": "rules_only", "needs_repair": False}, review["safety_summary"], "warning", review
             review = {**model_review, "review_status": "passed", "risk_flags": []}
-            return {"review_result": review, "review_mode": "model_and_rules", "needs_repair": False}, "ReviewAgent 审核通过。", "completed", review
+            return {"review_result": review, "review_mode": "embedded_model_and_rules", "needs_repair": False}, "模型自审与确定性规则审核通过。", "completed", review
 
         return self._run_node(state, "review", 5, "审核报告统计、趋势、来源和隐私", work)
 
@@ -265,54 +273,27 @@ class ReportGraphRunner:
 
     def _repair_node(self, state: ReportState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
-            narrative = self._model_narrative(state, repair=True)
-            report = {**state["deterministic_report"], **narrative} if narrative is not None else dict(state["deterministic_report"])
-            repaired_state = {**state, "report_json": report}
-            rule_risks = self._report_risks(repaired_state)
-            model_review = self._model_review(state, report) if narrative is not None and not rule_risks else None
-            model_rejected = model_review is not None and model_review["review_status"] == "revise"
-            if rule_risks or model_rejected:
-                report = dict(state["deterministic_report"])
-                mode = "deterministic_source"
-                review_mode = "model_and_rules" if model_review is not None else "rules_only"
-                review = {
-                    "review_status": "warning",
-                    "confidence": 0.65,
-                    "risk_flags": [],
-                    "safety_summary": "修订稿仍未通过完整审核，已保留确定性统计报告。",
-                }
-            elif model_review is None:
-                mode = "model_enhanced" if narrative is not None else "deterministic_source"
-                review_mode = "rules_only"
-                review = {
-                    "review_status": "warning",
-                    "confidence": 0.65,
-                    "risk_flags": [],
-                    "safety_summary": "修订稿已通过统计、证据和隐私规则复核，模型审核不可用。",
-                }
-            else:
-                mode = "model_enhanced"
-                review_mode = "model_and_rules"
-                review = {**model_review, "review_status": "passed", "risk_flags": []}
-            node_status = "completed" if review["review_status"] == "passed" else "warning"
-            return {"report_json": report, "generation_mode": mode, "review_mode": review_mode, "review_result": review, "repair_count": 1}, review["safety_summary"], node_status, {**review, "repair_count": 1}
-
-        return self._run_node(state, "repair", 6, "按审核风险修订一次报告叙事", work)
-
-    def _model_review(self, state: ReportState, report: dict[str, Any]) -> dict[str, Any] | None:
-        if self.service.model_service is None:
-            return None
-        try:
-            raw = self.service.model_service.chat_completion(
-                state["user"],
-                [
-                    {"role": "system", "content": "你是 ReportGraph 的 ReviewAgent。只输出 JSON，不得修改统计数据。" + china_first_content_policy.prompt_instruction()},
-                    {"role": "user", "content": f"审核协议={REPORT_REVIEW_PROMPT_VERSION}。审核这份安全报告是否与不可变统计一致：{json.dumps(report, ensure_ascii=False)[:10000]}。返回 {{\"review_status\":\"passed|revise\",\"confidence\":0.0,\"risk_flags\":[],\"safety_summary\":\"\"}}。"},
-                ],
+            report = dict(state["deterministic_report"])
+            review = {
+                "review_status": "warning",
+                "confidence": 0.72,
+                "risk_flags": safe_string_list((state.get("review_result") or {}).get("risk_flags"), limit=8, item_limit=60),
+                "safety_summary": "模型叙事未通过完整审核，已直接保留数字和证据锁定的确定性报告。",
+            }
+            return (
+                {
+                    "report_json": report,
+                    "generation_mode": "deterministic_source",
+                    "review_mode": "rules_only",
+                    "review_result": review,
+                    "repair_count": 1,
+                },
+                review["safety_summary"],
+                "warning",
+                {**review, "repair_count": 1, "model_call_budget": 0},
             )
-            return review_contract(parse_json_object(raw), default_summary="已完成报告证据和隐私审核。")
-        except Exception:
-            return None
+
+        return self._run_node(state, "repair", 6, "按审核风险回退到确定性报告", work)
 
     def _persist_node(self, state: ReportState) -> dict[str, Any]:
         started = perf_counter()
@@ -353,7 +334,10 @@ class ReportGraphRunner:
         self._record(state, "persist", 7, "completed", "保存审核通过的学习报告", "学习报告已保存。", {"artifact_id": str(report.id), "repair_count": int(state.get("repair_count") or 0)}, started)
         return {"report": report, "detail": detail}
 
-    def _model_narrative(self, state: ReportState, *, repair: bool) -> dict[str, Any] | None:
+    def _model_narrative(
+        self,
+        state: ReportState,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None] | None:
         if self.service.model_service is None:
             return None
         deterministic = state["deterministic_report"]
@@ -367,14 +351,35 @@ class ReportGraphRunner:
         }
         learner_context = state.get("learner_context")
         personalization = learner_context.prompt_summary() if learner_context is not None else {}
-        instruction = "这是唯一一次修订机会。" if repair else "根据结构化证据生成简洁学习总结和 2 到 4 条下一步建议。"
+        instruction = "根据结构化证据生成简洁学习总结和 2 到 4 条下一步建议。"
         try:
-            raw = self.service.model_service.chat_completion(
-                state["user"],
-                [
+            messages = [
                     {"role": "system", "content": "你是 ReportGraph 报告 Agent。不得修改数字、编造练习或输出隐私，只输出 JSON。" + china_first_content_policy.prompt_instruction()},
-                    {"role": "user", "content": f"协议={REPORT_PROMPT_VERSION}。{instruction} 可信课程画像提示={personalization}。不可变证据={json.dumps(evidence, ensure_ascii=False)}。数字必须逐字遵守，不得把练习次数、题目数量、正确题数、知识点数或任务数混为一谈。返回 {{\"summary\":\"\",\"next_step_suggestions\":[]}}。"},
-                ],
+                    {
+                        "role": "user",
+                        "content": (
+                            f"协议={REPORT_PROMPT_VERSION}，内嵌审核协议={REPORT_REVIEW_PROMPT_VERSION}。{instruction} "
+                            f"可信课程画像提示={personalization}。不可变证据={json.dumps(evidence, ensure_ascii=False)}。"
+                            "summary 和 next_step_suggestions 不得出现阿拉伯数字、中文数字、百分比、次数或时长；"
+                            "所有统计数字由确定性指标区单独展示，叙事只解释趋势、薄弱点和下一步策略。"
+                            "生成后在同一次响应中自审数字一致性、证据边界、隐私和是否编造学习记录；"
+                            "发现风险时 review_status 必须为 revise。"
+                            "返回 {\"summary\":\"\",\"next_step_suggestions\":[],"
+                            "\"quality_review\":{\"review_status\":\"passed|revise\",\"confidence\":0.0,"
+                            "\"risk_flags\":[],\"safety_summary\":\"\"}}。"
+                        ),
+                    },
+                ]
+            completion_with_timeout = getattr(self.service.model_service, "chat_completion_with_timeout", None)
+            raw = (
+                completion_with_timeout(
+                    state["user"],
+                    messages,
+                    timeout_seconds=OPTIONAL_GENERATION_TIMEOUT_SECONDS,
+                    max_attempts=1,
+                )
+                if callable(completion_with_timeout)
+                else self.service.model_service.chat_completion(state["user"], messages)
             )
         except Exception:
             return None
@@ -385,7 +390,11 @@ class ReportGraphRunner:
         suggestions = safe_string_list(payload.get("next_step_suggestions"), limit=4, item_limit=240)
         if not summary or not suggestions or contains_sensitive_text(payload):
             return None
-        return {"summary": summary, "next_step_suggestions": suggestions}
+        quality_review = review_contract(
+            payload.get("quality_review") if isinstance(payload.get("quality_review"), dict) else None,
+            default_summary="已完成报告数字、证据和隐私自审。",
+        )
+        return {"summary": summary, "next_step_suggestions": suggestions}, quality_review
 
     @staticmethod
     def _report_risks(state: ReportState) -> list[str]:

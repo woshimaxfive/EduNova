@@ -989,6 +989,7 @@ class ModelSettingsService:
         messages: list[dict[str, str]],
         timeout_seconds: float,
         thinking_type: str = "disabled",
+        max_attempts: int | None = None,
     ) -> str:
         runtime = self.resolve_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
@@ -1007,6 +1008,7 @@ class ModelSettingsService:
             operation="chat",
             call=lambda: self.provider.chat_completion(config=config, messages=messages, timeout_seconds=timeout_seconds),
             timeout_seconds=timeout_seconds,
+            max_attempts=max_attempts,
         )
 
     def chat_completion(self, user: User, messages: list[dict[str, str]], thinking_type: str = "disabled") -> str:

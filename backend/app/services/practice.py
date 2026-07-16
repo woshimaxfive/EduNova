@@ -420,7 +420,7 @@ class PracticeService:
                 "source_summary": source_excerpt,
                 "source_excerpt": source_excerpt,
                 "citation_refs": citation_refs,
-                "prompt_version": "assessment-v3.1",
+                "prompt_version": "assessment-v3.2",
                 "generation_mode": "deterministic_source",
                 "quality": {"evidence_bound": bool(citation_refs), "answer_locked": True},
             }

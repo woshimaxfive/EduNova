@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
+import json
 from typing import Any
 
 import pytest
@@ -288,7 +289,7 @@ def test_create_practice_session_generates_deterministic_questions_and_validates
     assert detail["questions"][0]["correct_answer"] is None
     assert detail["questions"][0]["citation_refs"]
     assert detail["questions"][0]["generation_mode"] == "deterministic_source"
-    assert detail["questions"][0]["prompt_version"] == "assessment-v3.1"
+    assert detail["questions"][0]["prompt_version"] == "assessment-v3.2"
     assert detail["questions"][0]["quality"]["evidence_bound"] is True
     assert detail["answers"] == []
     stored = [row.question_json for row in repo.list_answers_for_session(int(detail["id"]))]
@@ -313,6 +314,43 @@ def test_create_practice_session_generates_deterministic_questions_and_validates
 
     with pytest.raises(PracticeValidationError):
         service.create_session(make_user(), course_id=101, knowledge_point_ids=[401], question_count=0, difficulty="medium")
+
+
+def test_practice_generation_embeds_model_review_in_single_call() -> None:
+    from backend.app.services.practice import PracticeService
+
+    baseline = as_dict(PracticeService(make_repo()).create_session(make_user(), 101, [401], 1, "easy"))
+    source = baseline["questions"][0]
+    model = FakeModelService(
+        responses=[
+            json.dumps(
+                {
+                    "questions": [
+                        {
+                            "id": source["id"],
+                            "prompt": source["prompt"] + "请结合课程证据选择最准确的表述。",
+                            "options": source["options"],
+                            "explanation": source["explanation"] + "该结论与课程片段直接对应。",
+                        }
+                    ],
+                    "quality_review": {
+                        "review_status": "passed",
+                        "confidence": 0.91,
+                        "risk_flags": [],
+                        "safety_summary": "题目结构、答案、引用和隐私检查通过。",
+                    },
+                },
+                ensure_ascii=False,
+            )
+        ]
+    )
+
+    detail = as_dict(PracticeService(make_repo(), model_service=model).create_session(make_user(), 101, [401], 1, "easy"))
+
+    assert detail["questions"][0]["generation_mode"] == "model_enhanced"
+    assert detail["questions"][0]["quality"]["review_mode"] == "embedded_model_and_rules"
+    assert detail["questions"][0]["quality"]["review_status"] == "passed"
+    assert len(model.calls) == 1
 
 
 def test_single_point_practice_still_contains_objective_and_short_answer_types() -> None:
@@ -646,9 +684,9 @@ def test_report_graph_aggregates_recent_trend_without_allowing_model_to_change_n
     logs: list[Any] = []
     model = FakeModelService(
         responses=[
-            '{"summary":"近期练习表现明显提升。","next_step_suggestions":["继续巩固课程引用"]}',
-            '{"review_status":"passed","confidence":0.9,"risk_flags":[],'
-            '"safety_summary":"叙事与趋势证据一致。"}',
+            '{"summary":"近期练习表现明显提升。","next_step_suggestions":["继续巩固课程引用"],'
+            '"quality_review":{"review_status":"passed","confidence":0.9,"risk_flags":[],'
+            '"safety_summary":"叙事与趋势证据一致。"}}',
         ]
     )
     report_service = ReportService(repo, model_service=model, trace_recorder=make_trace_recorder(logs))
@@ -665,6 +703,9 @@ def test_report_graph_aggregates_recent_trend_without_allowing_model_to_change_n
     }
     assert report["report"]["evidence_summary"]["practice_count"] == 2
     assert report["report"]["review_result"]["review_status"] == "passed"
+    assert report["report"]["quality"]["review_mode"] == "embedded_model_and_rules"
+    assert len(model.calls) == 1
+    assert "不得出现阿拉伯数字" in model.calls[0][1]["content"]
     assert [log.agent_name for log in logs] == [
         "collect_practice",
         "collect_mastery",
@@ -675,7 +716,7 @@ def test_report_graph_aggregates_recent_trend_without_allowing_model_to_change_n
     ]
 
 
-def test_report_graph_repairs_numeric_inconsistency_and_reviews_the_repair() -> None:
+def test_report_graph_falls_back_without_a_second_model_call_on_numeric_inconsistency() -> None:
     from backend.app.services.practice import PracticeService
     from backend.app.services.reports import ReportService
 
@@ -688,10 +729,8 @@ def test_report_graph_repairs_numeric_inconsistency_and_reviews_the_repair() -> 
     practice.submit_answers(make_user(), int(second.id), [{"question_id": "q1", "answer_text": second_question["correct_answer"]}])
     model = FakeModelService(
         responses=[
-            '{"summary":"完成了 5 次练习并回答了 9 道题。","next_step_suggestions":["继续学习"]}',
-            '{"review_status":"passed","confidence":0.9,"risk_flags":[],"safety_summary":"审核通过。"}',
-            '{"summary":"已完成 2 次练习，后一次表现有所改善。","next_step_suggestions":["继续依据错题复习"]}',
-            '{"review_status":"passed","confidence":0.88,"risk_flags":[],"safety_summary":"修订稿与统计一致。"}',
+            '{"summary":"完成了 5 次练习并回答了 9 道题。","next_step_suggestions":["继续学习"],'
+            '"quality_review":{"review_status":"passed","confidence":0.9,"risk_flags":[],"safety_summary":"审核通过。"}}',
         ]
     )
 
@@ -700,5 +739,7 @@ def test_report_graph_repairs_numeric_inconsistency_and_reviews_the_repair() -> 
     assert "5 次" not in report["report"]["summary"]
     assert "9 道" not in report["report"]["summary"]
     assert report["report"]["deterministic_statistics"]["practice_session_count"] == 2
-    assert report["report"]["review_result"]["review_status"] == "passed"
+    assert report["report"]["review_result"]["review_status"] == "warning"
     assert report["report"]["quality"]["repair_count"] == 1
+    assert report["report"]["quality"]["review_mode"] == "rules_only"
+    assert len(model.calls) == 1

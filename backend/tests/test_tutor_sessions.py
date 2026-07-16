@@ -500,6 +500,7 @@ class FakeSemanticDecisionService:
     profile_updates: dict[str, Any] = field(default_factory=dict)
     profile_confidence: dict[str, float] = field(default_factory=dict)
     calls: list[dict[str, Any]] = field(default_factory=list)
+    evidence_calls: list[dict[str, Any]] = field(default_factory=list)
 
     def decide(self, **kwargs: Any) -> SimpleNamespace:
         self.calls.append(kwargs)
@@ -519,6 +520,10 @@ class FakeSemanticDecisionService:
             profile_confidence=self.profile_confidence,
             warning=None,
         )
+
+    def assess_course_evidence(self, **kwargs: Any) -> None:
+        self.evidence_calls.append(kwargs)
+        return None
 
 
 def as_dict(value: Any) -> dict[str, Any]:
@@ -1044,6 +1049,36 @@ def test_course_message_automatically_uses_external_supplement_without_profile_e
     assert "course_evidence_gap" in repo.agent_logs[3].metadata_json["tool_reason_codes"]
 
 
+def test_course_message_reuses_semantic_route_when_stable_course_evidence_is_already_sufficient() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7}, course_titles={7: "数据结构与算法"})
+    semantic = FakeSemanticDecisionService(course_related=True, intent="material_question")
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=FakeCourseCitationSearcher(results=[{
+            "chunk_id": 501,
+            "course_id": 7,
+            "material_id": 301,
+            "knowledge_point_id": 401,
+            "content": "二叉树遍历按照根结点访问时机分为前序、中序和后序。",
+            "source_title": "数据结构讲义.md",
+            "page_number": 8,
+            "section_title": "二叉树遍历",
+            "score": 9.5,
+        }]),
+        course_answer_generator=FakeCourseAnswerGenerator(),
+        semantic_decision_service=semantic,
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+
+    service.append_message(user=user, session_id=session.id, content="解释二叉树的三种遍历")
+
+    assert semantic.evidence_calls == []
+    assert repo.agent_logs[3].status == "skipped"
+    assert "无需联网补充" in repo.agent_logs[3].output_summary
+
+
 def test_home_message_automatically_searches_fresh_information_without_legacy_flags() -> None:
     module = load_tutor_module()
     user = make_user(1)
@@ -1513,8 +1548,14 @@ def test_stream_course_message_emits_tokens_and_persists_final_messages() -> Non
 
     events = list(service.stream_message(user=user, session_id=session.id, content="启发式搜索怎么复习？"))
 
-    assert [event["event"] for event in events] == ["metadata", "token", "token", "done"]
-    assert events[0]["data"] == {
+    assert [event["event"] for event in events] == [
+        "status", "status", "status", "status", "status", "status",
+        "metadata", "token", "token", "done",
+    ]
+    assert [event["data"]["stage"] for event in events[:6]] == [
+        "profile", "route", "retriever", "web_search", "planner", "tutor",
+    ]
+    assert events[6]["data"] == {
         "session_id": str(session.id),
         "trace_id": "trace_model_test",
         "workflow": "course_tutor",
@@ -1529,6 +1570,7 @@ def test_stream_course_message_emits_tokens_and_persists_final_messages() -> Non
     assert repo.messages[1].citation_json[0]["chunk_id"] == 501
     assert repo.messages[1].trace_id == "trace_model_test"
     assert events[-1]["data"]["messages"][1]["content"] == repo.messages[1].content
+    assert repo.agent_logs[5].duration_ms >= 1
     assert [log.agent_name for log in repo.agent_logs] == [
         "profile",
         "route",
@@ -1579,9 +1621,10 @@ def test_stream_course_message_passes_context_to_retrieval_model_and_metadata() 
     context = answer_generator.calls[0]["conversation_context"]
     assert context.message_count == 2
     assert context.messages[0]["content"] == "A 星算法为什么要估价函数？"
-    assert events[0]["data"]["context_message_count"] == 2
-    assert events[0]["data"]["context_summary_used"] is False
-    assert events[0]["data"]["retrieval_query_mode"] == "contextual"
+    metadata = next(event["data"] for event in events if event["event"] == "metadata")
+    assert metadata["context_message_count"] == 2
+    assert metadata["context_summary_used"] is False
+    assert metadata["retrieval_query_mode"] == "contextual"
     assert repo.agent_logs[0].metadata_json["context_message_count"] == 2
     assert repo.agent_logs[0].metadata_json["retrieval_query_mode"] == "contextual"
 
@@ -1652,12 +1695,15 @@ def test_stream_course_message_without_citations_does_not_call_model_and_persist
     events = list(service.stream_message(user=user, session_id=session.id, content="量子通信怎么复习？"))
 
     assert answer_generator.calls == []
-    assert [event["event"] for event in events] == ["metadata", "token", "done"]
-    assert events[0]["data"]["used_model"] is False
-    assert events[0]["data"]["workflow"] == "course_tutor"
-    assert events[0]["data"]["steps"][-1] == "next_action"
-    assert events[0]["data"]["citation_count"] == 0
-    assert "还没有足够依据" in events[1]["data"]["content"]
+    assert [event["event"] for event in events] == [
+        "status", "status", "status", "status", "status", "status", "metadata", "token", "done",
+    ]
+    metadata = events[6]["data"]
+    assert metadata["used_model"] is False
+    assert metadata["workflow"] == "course_tutor"
+    assert metadata["steps"][-1] == "next_action"
+    assert metadata["citation_count"] == 0
+    assert "还没有足够依据" in events[7]["data"]["content"]
     assert repo.messages[1].citation_json == []
 
 

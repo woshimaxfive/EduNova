@@ -368,7 +368,7 @@ export function StudioPage() {
             <section className="studio-job-strip" aria-label="路径任务">
               <CheckCircle size={17} weight="duotone" aria-hidden="true" />
               <div>
-                <strong>本节已完成 {pathTask?.learning_bundle?.completed_count ?? 0}/{pathTask?.learning_bundle?.items.length ?? 0} 项</strong>
+                <strong>本节已完成 {pathTask?.learning_bundle?.completed_count ?? 0}/{pathTask?.learning_bundle?.ready_count ?? 0} 个可学习资源</strong>
                 <span>逐项学习资源，最后返回路径确认完成本节。</span>
               </div>
               {selectedBundleItem?.learning_status === "completed" && nextBundleItem?.resource_id ? (

@@ -292,6 +292,7 @@ export function CourseSpacePage() {
   const [coursePrompt, setCoursePrompt] = useState("");
   const [courseMessages, setCourseMessages] = useState<CourseMessage[]>([]);
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
+  const [courseGraphStatus, setCourseGraphStatus] = useState<string | null>(null);
   const [isSearchingCourse, setIsSearchingCourse] = useState(false);
   const [courseFeedback, setCourseFeedback] = useState<string | null>(null);
   const imageDraft = useTutorImageDraft(ensureCourseImageSession, setCourseFeedback, handleCourseDocumentFiles);
@@ -813,6 +814,7 @@ export function CourseSpacePage() {
     }
 
     setIsSearchingCourse(true);
+    setCourseGraphStatus("正在准备课程回答");
     setCourseFeedback(null);
     const previousMessages = displayedCourseMessages;
 
@@ -845,6 +847,7 @@ export function CourseSpacePage() {
         message: question,
         ...(imageDraft.attachmentIds.length ? { attachment_ids: imageDraft.attachmentIds } : {})
       }, {
+        onStatus: (status) => setCourseGraphStatus(status.label),
         onToken: (content) => {
           setCourseMessages((current) =>
             current.map((message) =>
@@ -858,6 +861,7 @@ export function CourseSpacePage() {
       setActiveCourseSessionId(detail.session.id);
       setCourseMessages(messages);
       setStreamingSessionId(null);
+      setCourseGraphStatus(null);
       setCoursePrompt("");
       imageDraft.clearAfterSend();
       const persistedAssistant = [...messages].reverse().find((message) => message.role === "assistant");
@@ -871,6 +875,7 @@ export function CourseSpacePage() {
     } catch (error) {
       setCourseMessages(previousMessages);
       setStreamingSessionId(null);
+      setCourseGraphStatus(null);
       setCourseFeedback(error instanceof Error ? error.message : "模型暂不可用，请检查设置或稍后重试。");
     } finally {
       setIsSearchingCourse(false);
@@ -1023,6 +1028,7 @@ export function CourseSpacePage() {
                             key={message.id}
                             messageId={message.id}
                             content={sanitizeCourseAnswerContent(message.content)}
+                            status={!isPersisted ? courseGraphStatus : null}
                             actions={isPersisted && message.content.trim() ? (
                               <CourseClosedLoopActions
                                 recommendation={isLatestAssistant ? recommendation : null}

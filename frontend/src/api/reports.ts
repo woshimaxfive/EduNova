@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, MODEL_OPERATION_TIMEOUT_MS } from "./client";
 import { type ApiEnvelope } from "../types/api";
 import type { PersonalizationFreshness } from "./personalization";
 
@@ -97,7 +97,9 @@ export type AssessmentReport = {
 };
 
 export async function generateReport(payload: GenerateReportRequest) {
-  const response = await apiClient.post<ApiEnvelope<AssessmentReport>>(REPORT_ENDPOINTS.generate, payload);
+  const response = await apiClient.post<ApiEnvelope<AssessmentReport>>(REPORT_ENDPOINTS.generate, payload, {
+    timeout: MODEL_OPERATION_TIMEOUT_MS
+  });
   return response.data;
 }
 

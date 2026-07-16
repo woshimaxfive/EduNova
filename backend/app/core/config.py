@@ -45,7 +45,10 @@ class Settings(BaseSettings):
     system_vision_model: str = "imagev3"
     vision_request_timeout_seconds: float = 60.0
     model_settings_encryption_key: str = ""
-    model_request_timeout_seconds: float = 20.0
+    # Domestic OpenAI-compatible providers commonly need more than 20 seconds
+    # for structured JSON or the first streamed token. A 45-second attempt
+    # avoids three guaranteed timeouts while keeping the bounded retry runtime.
+    model_request_timeout_seconds: float = 45.0
     model_max_attempts: int = 3
     model_retry_base_delay_seconds: float = 0.5
     model_retry_max_delay_seconds: float = 2.0

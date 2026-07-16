@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, MODEL_OPERATION_TIMEOUT_MS } from "./client";
 import { type ApiEnvelope } from "../types/api";
 
 export const PROFILE_ENDPOINTS = {
@@ -77,7 +77,9 @@ export async function getMyProfile() {
 }
 
 export async function updateProfileByChat(payload: ProfileChatRequest) {
-  const response = await apiClient.post<ApiEnvelope<ProfileChatResponse>>(PROFILE_ENDPOINTS.chat, payload);
+  const response = await apiClient.post<ApiEnvelope<ProfileChatResponse>>(PROFILE_ENDPOINTS.chat, payload, {
+    timeout: MODEL_OPERATION_TIMEOUT_MS
+  });
   return response.data;
 }
 

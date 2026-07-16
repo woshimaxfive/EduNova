@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { AGENT_ENDPOINTS, getAgentTrace, mapAgentTraceStepToEvent } from "./agents";
 import { AI_JOB_ENDPOINTS, createPathPlanningJob } from "./aiJobs";
 import { AUTH_ENDPOINTS, changePassword, login } from "./auth";
-import { apiClient } from "./client";
+import { apiClient, MODEL_OPERATION_TIMEOUT_MS } from "./client";
 import { COURSE_ENDPOINTS, getCourseLearningState, getMasteryMap, updateCourseWeaknessReviewItem } from "./courses";
 import { DASHBOARD_ENDPOINTS } from "./dashboard";
 import {
@@ -57,6 +57,26 @@ import {
 describe("frontend API contracts", () => {
   it("uses the documented API v1 base path", () => {
     expect(apiClient.defaults.baseURL).toBe("/api/v1");
+  });
+
+  it("keeps model-backed atomic writes alive longer than ordinary API requests", async () => {
+    const previousAdapter = apiClient.defaults.adapter;
+    const timeouts: Array<number | undefined> = [];
+    apiClient.defaults.adapter = async (config) => {
+      timeouts.push(config.timeout);
+      return { data: { data: {} }, status: 200, statusText: "OK", headers: {}, config };
+    };
+
+    try {
+      await updateProfileByChat({ message: "我希望先看结构图。" });
+      await createPracticeSession({ course_id: 7, knowledge_point_ids: [9], question_count: 5, difficulty: "adaptive" });
+      await submitPracticeAnswers(11, { answers: [{ question_id: "q1", answer_text: "答案" }] });
+      await generateReport({ course_id: 7 });
+      expect(timeouts).toEqual(Array(4).fill(MODEL_OPERATION_TIMEOUT_MS));
+      expect(apiClient.defaults.timeout).toBe(20_000);
+    } finally {
+      apiClient.defaults.adapter = previousAdapter;
+    }
   });
 
   it("keeps material detail summaries typed and backward compatible", async () => {

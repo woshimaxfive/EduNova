@@ -1870,6 +1870,28 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.getByRole("region", { name: "课程闭环行动" })).toBeInTheDocument();
   });
 
+  it("shows the latest real graph status while a course answer is still pending", async () => {
+    const user = userEvent.setup();
+    const { emitStreamEvent, closeStream } = renderCoursePage({ controlledStream: true });
+
+    await screen.findByRole("heading", { name: "AI 搜索复习" });
+    await user.type(screen.getByRole("textbox", { name: "课程问题输入" }), "队列为什么先进先出？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("正在准备课程回答");
+    emitStreamEvent("status", { stage: "retriever", label: "正在检索课程资料" });
+    expect(await screen.findByRole("status")).toHaveTextContent("正在检索课程资料");
+
+    emitStreamEvent(
+      "done",
+      makeDetail(makeSession("901", "队列为什么先进先出？"), "队列为什么先进先出？", "因为入队和出队分别发生在两端。", [citationItem])
+    );
+    closeStream();
+
+    await screen.findByText("因为入队和出队分别发生在两端。");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("loads persisted messages and citations when selecting course history", async () => {
     const user = userEvent.setup();
 

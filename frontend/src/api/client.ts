@@ -8,6 +8,11 @@ export const apiClient = axios.create({
   timeout: 20000
 });
 
+// Model-backed synchronous compatibility endpoints can legitimately span several
+// provider attempts. Keep ordinary APIs fail-fast, while preventing the browser
+// from reporting a failure before the server finishes an atomic write.
+export const MODEL_OPERATION_TIMEOUT_MS = 180000;
+
 apiClient.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
   if (token) {

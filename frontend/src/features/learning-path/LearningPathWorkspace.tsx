@@ -288,7 +288,7 @@ export function PathTaskCanvas({
                           </span>
                         ))}
                       </div>
-                      <small>本节已完成 {completedResourceCount}/{itemCount} 项</small>
+                      <small>本节已完成 {completedResourceCount}/{readyCount} 个可学习资源{itemCount > readyCount ? ` · ${itemCount - readyCount} 项待补齐` : ""}</small>
                       {resourceJobActive && resourceJob ? (
                         <div className="path-bundle-progress" role="status">
                           <span>{resourceJob.label} · {resourceJob.progress_percent}%</span>
@@ -356,7 +356,7 @@ export function PathTaskCanvas({
         open={pendingComplete !== null}
         title="仍有学习资源未完成"
         description={pendingComplete?.learning_bundle
-          ? `本节还有 ${Math.max(0, pendingComplete.learning_bundle.items.length - pendingComplete.learning_bundle.completed_count)} 项资源未完成，仍要跳过并完成本节吗？`
+          ? `本节还有 ${Math.max(0, pendingComplete.learning_bundle.ready_count - pendingComplete.learning_bundle.completed_count)} 个已生成资源未完成，仍要跳过并完成本节吗？`
           : "本节仍有资源未完成，仍要跳过并完成本节吗？"}
         confirmLabel="仍然完成本节"
         cancelLabel="继续学习"

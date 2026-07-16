@@ -158,7 +158,7 @@ SYSTEM_VISION_API_SECRET=
 SYSTEM_VISION_MODEL=qwen3.7-plus
 VISION_REQUEST_TIMEOUT_SECONDS=60
 MODEL_SETTINGS_ENCRYPTION_KEY=replace-with-fernet-key
-MODEL_REQUEST_TIMEOUT_SECONDS=20
+MODEL_REQUEST_TIMEOUT_SECONDS=45
 ```
 
 `SYSTEM_MODEL_*`、`SYSTEM_EMBEDDING_*`、`SYSTEM_RERANK_*` 和 `SYSTEM_VISION_*` 分别是服务器回答、向量、重排序和图片理解兜底配置。个人默认配置优先，未配置时使用对应服务器能力。国内默认推荐百炼 `qwen3.7-plus` 作为回答与图片理解兜底，两类变量可以使用同一百炼 Key，但仍分别配置以便独立轮换。讯飞 `imagev3` 仍受支持：将视觉 Provider、Base URL、Model 改为 `xfyun_vision`、`wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image`、`imagev3`；其 APPID、APIKey、APISecret 留空时，Compose 会复用 `SYSTEM_EMBEDDING_*` 三凭证。

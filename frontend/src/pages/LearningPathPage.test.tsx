@@ -235,7 +235,7 @@ describe("LearningPathPage", () => {
     renderWithProviders(<LearningPathPage />);
 
     expect(await screen.findByText("本节学习安排")).toBeInTheDocument();
-    expect(screen.getByText("本节已完成 0/2 项")).toBeInTheDocument();
+    expect(screen.getByText("本节已完成 0/1 个可学习资源 · 1 项待补齐")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "补齐未生成资源" }));
 
     await waitFor(() => expect(calls).toContainEqual(expect.objectContaining({

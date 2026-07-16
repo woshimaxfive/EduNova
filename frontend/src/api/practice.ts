@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, MODEL_OPERATION_TIMEOUT_MS } from "./client";
 import { type ApiEnvelope } from "../types/api";
 
 export const PRACTICE_ENDPOINTS = {
@@ -101,7 +101,9 @@ export type PracticeSessionSummary = Pick<
 >;
 
 export async function createPracticeSession(payload: CreatePracticeSessionRequest) {
-  const response = await apiClient.post<ApiEnvelope<PracticeSessionDetail>>(PRACTICE_ENDPOINTS.sessions, payload);
+  const response = await apiClient.post<ApiEnvelope<PracticeSessionDetail>>(PRACTICE_ENDPOINTS.sessions, payload, {
+    timeout: MODEL_OPERATION_TIMEOUT_MS
+  });
   return response.data;
 }
 
@@ -132,12 +134,15 @@ export async function savePracticeDraft(sessionId: number, payload: SubmitPracti
 export async function submitPracticeAnswers(sessionId: number, payload: SubmitPracticeAnswersRequest) {
   const response = await apiClient.post<ApiEnvelope<PracticeSessionDetail>>(
     PRACTICE_ENDPOINTS.answers(sessionId),
-    payload
+    payload,
+    { timeout: MODEL_OPERATION_TIMEOUT_MS }
   );
   return response.data;
 }
 
 export async function regradePracticeAnswers(sessionId: number) {
-  const response = await apiClient.post<ApiEnvelope<PracticeSessionDetail>>(PRACTICE_ENDPOINTS.regrade(sessionId));
+  const response = await apiClient.post<ApiEnvelope<PracticeSessionDetail>>(PRACTICE_ENDPOINTS.regrade(sessionId), undefined, {
+    timeout: MODEL_OPERATION_TIMEOUT_MS
+  });
   return response.data;
 }

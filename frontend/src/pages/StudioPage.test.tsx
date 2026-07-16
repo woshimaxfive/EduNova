@@ -781,7 +781,7 @@ describe("StudioPage resource generation", () => {
     renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808&path_task_id=61`);
 
     expect(await screen.findByRole("heading", { name: "第一项讲解" })).toBeInTheDocument();
-    expect(screen.getByText("本节已完成 0/2 项")).toBeInTheDocument();
+    expect(screen.getByText("本节已完成 0/2 个可学习资源")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "学习下一项" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "完成学习" }));
     await user.click(await screen.findByRole("button", { name: "学习下一项" }));

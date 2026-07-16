@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 import logging
 import re
@@ -2815,12 +2815,19 @@ class CourseTutorGraphRunner:
             vision_decision=vision_decision,
         )
         try:
+            yield {"event": "status", "data": {"stage": "profile", "label": "正在读取学习画像"}}
             state.update(self._profile_node(state))
+            yield {"event": "status", "data": {"stage": "route", "label": "正在理解问题"}}
             state.update(self._route_node(state))
+            yield {"event": "status", "data": {"stage": "retriever", "label": "正在检索课程资料"}}
             state.update(self._retriever_node(state))
+            yield {"event": "status", "data": {"stage": "web_search", "label": "正在判断是否需要外部补充"}}
             state.update(self._web_search_node(state))
+            yield {"event": "status", "data": {"stage": "planner", "label": "正在规划回答"}}
             state.update(self._planner_node(state))
             citation_json = list(state.get("citation_json", []))
+            yield {"event": "status", "data": {"stage": "tutor", "label": "正在生成课程回答"}}
+            tutor_started = perf_counter()
             stream_state = self._prepare_stream_tutor_node(state)
             state.update(stream_state)
             trace_id = str(state.get("trace_id") or "")
@@ -2840,6 +2847,12 @@ class CourseTutorGraphRunner:
                     continue
                 answer_parts.append(token)
                 yield {"event": "token", "data": {"content": token}}
+
+            tutor_duration_ms = max(1, int((perf_counter() - tutor_started) * 1000))
+            state["pending_traces"] = [
+                replace(item, duration_ms=tutor_duration_ms) if item.agent_name == "tutor" else item
+                for item in state.get("pending_traces", [])
+            ]
 
             assistant_reply = "".join(answer_parts).strip()
             if not assistant_reply:
@@ -3114,9 +3127,26 @@ class CourseTutorGraphRunner:
     def _web_search_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             citations = list(state.get("citation_json", []))
+            course_citation_count = sum(1 for item in citations if item.get("source_type") not in {"web", "history"})
             assessor = getattr(self.service.semantic_decision_service, "assess_course_evidence", None)
             evidence_decision = None
-            if callable(assessor):
+            if (
+                not bool(state.get("search_required"))
+                and bool(state.get("course_related"))
+                and course_citation_count > 0
+            ):
+                evidence_decision = {
+                    "relation_type": "direct",
+                    "relevant_citation_ids": [
+                        str(item.get("chunk_id") or item.get("id") or "")
+                        for item in citations
+                        if item.get("source_type") not in {"web", "history"}
+                    ],
+                    "course_evidence_sufficient": True,
+                    "external_search_helpful": False,
+                    "confidence": float(state.get("semantic_decision_confidence") or 0),
+                }
+            elif callable(assessor):
                 course = self.service.repository.get_course_for_user(int(state["user_id"]), int(state["course_id"]))
                 evidence_decision = assessor(
                     user=state["user"],
@@ -3136,7 +3166,6 @@ class CourseTutorGraphRunner:
                 state["course_related"] = relation_type in {"direct", "adjacent"}
             else:
                 relation_type = "direct" if state.get("course_related") else "unknown"
-            course_citation_count = sum(1 for item in citations if item.get("source_type") not in {"web", "history"})
             search_required = bool(state.get("search_required"))
             reason_codes = list(state.get("tool_reason_codes", []))
             if isinstance(evidence_decision, dict):

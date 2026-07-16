@@ -38,6 +38,10 @@ class PathValidationError(Exception):
     pass
 
 
+class PathGenerationError(PathValidationError):
+    pass
+
+
 class PathModelService(Protocol):
     def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
 
@@ -177,6 +181,8 @@ class PlannedTask:
     resource_ids: list[int]
     bundle_types: tuple[str, ...] = ()
     teaching_strategy: str = "safe_default"
+    learning_problem: str = ""
+    example_direction: str = ""
     difficulty: str = "medium"
     used_profile_factor_codes: tuple[str, ...] = ()
     generation_mode: str = "deterministic_source"

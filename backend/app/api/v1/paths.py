@@ -14,7 +14,7 @@ from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.paths import GeneratePathRequest, UpdatePathTaskRequest
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 from backend.app.services.ai_jobs import AiJobService
-from backend.app.services.paths import PathNotFoundError, PathService, PathValidationError, SqlAlchemyPathRepository
+from backend.app.services.paths import PathGenerationError, PathNotFoundError, PathService, PathValidationError, SqlAlchemyPathRepository
 
 
 router = APIRouter(prefix="/paths", tags=["paths"])
@@ -48,6 +48,8 @@ def generate_path(
         )
     except PathNotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+    except PathGenerationError as exc:
+        raise ApiError(503, "MODEL_GENERATION_FAILED", str(exc)) from exc
     except PathValidationError as exc:
         raise ApiError(400, "VALIDATION_ERROR", str(exc)) from exc
 

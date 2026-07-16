@@ -47,6 +47,8 @@ export type LearningPathTask = {
   learning_bundle?: {
     strategy: string;
     teaching_strategy: string;
+    learning_problem?: string;
+    example_direction?: string;
     difficulty: "easy" | "medium" | "hard";
     used_profile_factor_codes: string[];
     generation_mode: string;

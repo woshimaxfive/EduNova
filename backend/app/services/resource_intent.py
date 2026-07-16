@@ -447,7 +447,13 @@ def _sentences(value: str) -> set[str]:
 
 def _artifact_sentences(value: object) -> set[str]:
     if isinstance(value, dict):
-        return {sentence for item in value.values() for sentence in _artifact_sentences(item)}
+        structural_keys = {"kind", "citation_refs", "id", "type", "answer", "entry_file"}
+        return {
+            sentence
+            for key, item in value.items()
+            if key not in structural_keys
+            for sentence in _artifact_sentences(item)
+        }
     if isinstance(value, list):
         return {sentence for item in value for sentence in _artifact_sentences(item)}
     if isinstance(value, str):

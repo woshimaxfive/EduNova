@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import replace
@@ -22,6 +23,8 @@ from backend.app.services.resource_feedback import (
     deterministic_bundle_types,
     rank_resource_types,
 )
+from backend.app.providers.model_tasks import ModelTaskProfile
+from backend.app.services.paths import PathGenerationError
 
 
 logger = logging.getLogger(__name__)
@@ -35,6 +38,8 @@ class PathPlanningChoice(BaseModel):
     bundle_types: list[str] = Field(min_length=2, max_length=4)
     resource_ids: list[int] = Field(default_factory=list, max_length=6)
     teaching_strategy: str = Field(min_length=1, max_length=80)
+    learning_problem: str = Field(min_length=1, max_length=160)
+    example_direction: str = Field(min_length=1, max_length=160)
     difficulty: str = Field(pattern="^(easy|medium|hard)$")
     used_profile_factor_codes: list[str] = Field(default_factory=list, max_length=8)
 
@@ -77,6 +82,8 @@ class PathPlanningState(TypedDict, total=False):
     repair_count: int
     warnings: list[str]
     preserved_task_count: int
+    planning_input_hash: str
+    reused_path: bool
     path: LearningPath
     detail: Any
     job_context: Any
@@ -88,6 +95,7 @@ class PathPlanningGraphRunner:
         "profile": (12, "已读取可信学习画像"),
         "collect_evidence": (25, "已聚合课程学习证据"),
         "deterministic_rank": (38, "已生成安全路径底稿"),
+        "reuse": (100, "学习状态未变化，已复用现有路径"),
         "model_plan": (65, "已完成个性化路径规划"),
         "review": (82, "已审核路径结构与权限"),
         "repair": (92, "已恢复安全路径方案"),
@@ -128,7 +136,7 @@ class PathPlanningGraphRunner:
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, purpose=trigger)):
             result = self.graph.invoke(state)
         return PathReplanResult(
-            status="replanned" if trigger == "assessment" else "generated",
+            status="unchanged" if result.get("reused_path") else "replanned" if trigger == "assessment" else "generated",
             trace_id=effective_trace_id,
             detail=result.get("detail"),
             preserved_task_count=int(result.get("preserved_task_count") or 0),
@@ -139,6 +147,7 @@ class PathPlanningGraphRunner:
         graph.add_node("profile", self._profile_node)
         graph.add_node("collect_evidence", self._collect_evidence_node)
         graph.add_node("deterministic_rank", self._deterministic_rank_node)
+        graph.add_node("reuse", self._reuse_node)
         graph.add_node("model_plan", self._model_plan_node)
         graph.add_node("review", self._review_node)
         graph.add_node("repair", self._repair_node)
@@ -146,7 +155,12 @@ class PathPlanningGraphRunner:
         graph.add_edge(START, "profile")
         graph.add_edge("profile", "collect_evidence")
         graph.add_edge("collect_evidence", "deterministic_rank")
-        graph.add_edge("deterministic_rank", "model_plan")
+        graph.add_conditional_edges(
+            "deterministic_rank",
+            lambda state: "reuse" if state.get("reused_path") else "model_plan",
+            {"reuse": "reuse", "model_plan": "model_plan"},
+        )
+        graph.add_edge("reuse", END)
         graph.add_edge("model_plan", "review")
         graph.add_conditional_edges("review", self._review_route, {"repair": "repair", "persist": "persist"})
         graph.add_edge("repair", "persist")
@@ -209,36 +223,64 @@ class PathPlanningGraphRunner:
             preserved = 0
             if state.get("previous_path") is not None:
                 planned, preserved = self._merge_previous_progress(list(state.get("previous_tasks", [])), base)
+            planning_input_hash = self._planning_input_hash(
+                state,
+                list(state.get("previous_tasks", [])) if state.get("previous_path") is not None else planned,
+            )
+            previous_plan = state["previous_path"].plan_json if state.get("previous_path") is not None else {}
+            reused_path = bool(
+                state.get("trigger") == "manual"
+                and state.get("previous_path") is not None
+                and previous_plan.get("generation_mode") == "model_generated"
+                and previous_plan.get("planning_input_hash") == planning_input_hash
+            )
             return (
                 {
                     "deterministic_tasks": planned,
                     "planned_tasks": planned,
                     "preserved_task_count": preserved,
                     "generation_mode": "deterministic_source",
+                    "planning_input_hash": planning_input_hash,
+                    "reused_path": reused_path,
                 },
-                f"规则排序生成 {len(planned)} 个任务，并保留 {preserved} 个既有任务。",
+                (
+                    "学习状态未变化，现有模型路径仍然有效。"
+                    if reused_path
+                    else f"规则排序生成 {len(planned)} 个任务，并保留 {preserved} 个既有任务。"
+                ),
                 "completed",
-                {"preserved_task_count": preserved},
+                {"preserved_task_count": preserved, "reused_path": reused_path},
             )
 
         return self._run_node(state, "deterministic_rank", 3, "按弱点、进度和课程顺序生成可信任务底稿", work)
+
+    def _reuse_node(self, state: PathPlanningState) -> dict[str, Any]:
+        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            detail = self.service.get_current_path(state["user"], int(state["course_id"]))
+            return (
+                {
+                    "detail": detail,
+                    "reused_path": True,
+                    "preserved_task_count": len(detail.tasks),
+                    "generation_mode": "model_generated",
+                },
+                "未发生画像、掌握度、弱点、资源反馈或学习进度变化，复用现有路径。",
+                "completed",
+                {"artifact_id": detail.path.id if detail.path is not None else None, "reused_path": True},
+            )
+
+        return self._run_node(state, "reuse", 4, "检查现有模型路径是否仍然有效", work)
 
     def _model_plan_node(self, state: PathPlanningState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             ordered = self._model_order(state)
             if ordered is None:
-                warning = "模型不可用或排序输出无效，保留确定性路径。"
-                return (
-                    {"planned_tasks": list(state.get("deterministic_tasks", [])), "warnings": [*state.get("warnings", []), warning]},
-                    warning,
-                    "warning",
-                    {"model_used": False, "generation_mode": "deterministic_source"},
-                )
+                raise PathGenerationError("个性化路径生成失败，原有路径未被修改，请重试或检查结构化模型能力。")
             return (
-                {"planned_tasks": ordered, "generation_mode": "model_enhanced"},
+                {"planned_tasks": ordered, "generation_mode": "model_generated"},
                 "模型已在合法任务集合内优化顺序与理由。",
                 "completed",
-                {"model_used": True, "generation_mode": "model_enhanced"},
+                {"model_used": True, "generation_mode": "model_generated"},
             )
 
         return self._run_node(state, "model_plan", 4, "在确定性任务集合内优化学习顺序", work)
@@ -269,23 +311,8 @@ class PathPlanningGraphRunner:
         return "repair" if state.get("needs_repair") else "persist"
 
     def _repair_node(self, state: PathPlanningState) -> dict[str, Any]:
-        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
-            repaired = list(state.get("deterministic_tasks", []))
-            mode = "deterministic_source"
-            review = {
-                "review_status": "passed",
-                "confidence": 1.0,
-                "risk_flags": [],
-                "safety_summary": "模型方案未通过确定性审核，已恢复安全默认路径。",
-            }
-            return (
-                {"planned_tasks": repaired, "generation_mode": mode, "review_result": review, "repair_count": 1},
-                review["safety_summary"],
-                "completed",
-                {**review, "repair_count": 1, "generation_mode": mode},
-            )
-
-        return self._run_node(state, "repair", 6, "按审核风险修订一次路径", work)
+        risks = safe_text((state.get("review_result") or {}).get("risk_flags"), limit=240)
+        raise PathGenerationError(f"个性化路径未通过确定性审核，请重试。风险：{risks or '结构不完整'}")
 
     def _persist_node(self, state: PathPlanningState) -> dict[str, Any]:
         started = perf_counter()
@@ -319,7 +346,7 @@ class PathPlanningGraphRunner:
                         "revision_of": str(previous.id) if previous is not None else None,
                         "assessment_session_id": str(state["assessment_session_id"]) if state.get("assessment_session_id") else None,
                         "preserved_task_count": int(state.get("preserved_task_count") or 0),
-                        "generation_mode": state.get("generation_mode", "deterministic_source"),
+                        "generation_mode": state.get("generation_mode", "model_generated"),
                         "review_mode": state.get("review_mode", "rules_only"),
                         "review_result": state.get("review_result", {}),
                         "profile_applied_version": (
@@ -331,6 +358,10 @@ class PathPlanningGraphRunner:
                             state["learner_context"].context_hash
                             if state.get("learner_context") is not None
                             else "legacy"
+                        ),
+                        "planning_input_hash": self._planning_input_hash(
+                            state,
+                            list(state.get("planned_tasks", [])),
                         ),
                         **china_first_content_policy.metadata(),
                         "personalization": {
@@ -473,14 +504,15 @@ class PathPlanningGraphRunner:
             if code in profile and profile.get(code) not in (None, "", [], {})
         }
         try:
-            raw = self.service.model_service.chat_completion(
-                state["user"],
-                [
+            messages = [
                     {
                         "role": "system",
                         "content": (
                             "你是 PathPlanningGraph 的规划 Agent。只能从候选任务中选择最多8个近期优先任务，"
                             "不能新增知识点、资源、画像因素或任务。只输出合法 JSON，不输出解释或思维链。"
+                            "必须按课程学科选择教学方式：程序设计可使用代码实验，数学优先推导与图像，"
+                            "人文优先时间线与观点对比，语言课程优先语义、听读与表达练习；"
+                            "不得把代码资源强行安排给不适合的学科。"
                             + china_first_content_policy.prompt_instruction()
                         ),
                     },
@@ -491,6 +523,12 @@ class PathPlanningGraphRunner:
                                 "trusted_profile": trusted_profile,
                                 "allowed_profile_factor_codes": sorted(allowed_factor_codes),
                                 "course_state": {
+                                    "course_title": safe_text(state["course"].title, limit=160),
+                                    "subject": safe_text(getattr(state["course"], "subject", None), limit=120),
+                                    "knowledge_point_titles": [
+                                        safe_text(point.title, limit=100)
+                                        for point in state.get("knowledge_points", [])[:24]
+                                    ],
                                     "active_weaknesses": profile.get("active_weaknesses", []),
                                     "mastery_average": profile.get("mastery_average"),
                                     "current_task_title": profile.get("current_task_title"),
@@ -507,6 +545,8 @@ class PathPlanningGraphRunner:
                                             "bundle_types": ["doc", "quiz"],
                                             "resource_ids": [],
                                             "teaching_strategy": "简短教学策略",
+                                            "learning_problem": "本任务要解决的具体学习问题",
+                                            "example_direction": "与课程学科匹配的案例或表达方向",
                                             "difficulty": "easy|medium|hard",
                                             "used_profile_factor_codes": [],
                                         }
@@ -517,7 +557,23 @@ class PathPlanningGraphRunner:
                             separators=(",", ":"),
                         )[:12000],
                     },
-                ],
+                ]
+            task_call = getattr(self.service.model_service, "chat_completion_for_task", None)
+            raw = (
+                task_call(
+                    state["user"],
+                    messages,
+                    ModelTaskProfile(
+                        task_type="path_planning",
+                        reasoning="disabled",
+                        output_mode="json_object",
+                        creativity="balanced",
+                        timeout_seconds=30,
+                        max_attempts=1,
+                    ),
+                )
+                if callable(task_call)
+                else self.service.model_service.chat_completion(state["user"], messages)
             )
         except Exception:
             logger.warning("path_planning_model_degraded reason=provider_error")
@@ -539,7 +595,39 @@ class PathPlanningGraphRunner:
                 }
             )
             logger.warning("path_planning_model_degraded reason=schema_invalid:%s", ",".join(error_codes[:4]))
-            return None
+            revision_call = getattr(self.service.model_service, "chat_completion_for_task", None)
+            if not callable(revision_call):
+                return None
+            try:
+                revised_raw = revision_call(
+                    state["user"],
+                    [
+                        *messages,
+                        {"role": "assistant", "content": raw[:5000]},
+                        {
+                            "role": "user",
+                            "content": (
+                                "上次结果已通过 JSON 语法解析，但未通过结构合同。"
+                                f"错误={','.join(error_codes[:4])}。只修订失败字段，重新输出完整 JSON。"
+                            ),
+                        },
+                    ],
+                    ModelTaskProfile(
+                        task_type="path_planning_revision",
+                        reasoning="disabled",
+                        output_mode="json_object",
+                        creativity="stable",
+                        timeout_seconds=15,
+                        max_attempts=1,
+                    ),
+                )
+                revised_payload = parse_json_object(revised_raw)
+                if set(revised_payload or {}) == {"output"} and isinstance((revised_payload or {}).get("output"), dict):
+                    revised_payload = revised_payload["output"]
+                decision = PathPlanningDecision.model_validate(revised_payload)
+            except Exception:
+                logger.warning("path_planning_model_degraded reason=revision_failed")
+                return None
         payload = decision.model_dump(mode="json")
         by_key = {self._task_key(task): task for task in candidate_tasks}
         choices = list(payload.get("priority_tasks", []))
@@ -571,9 +659,11 @@ class PathPlanningGraphRunner:
                     resource_ids=ranked_resources,
                     bundle_types=selected_types,
                     teaching_strategy=safe_text(choice.get("teaching_strategy"), limit=80),
+                    learning_problem=safe_text(choice.get("learning_problem"), limit=160),
+                    example_direction=safe_text(choice.get("example_direction"), limit=160),
                     difficulty=str(choice.get("difficulty") or "medium"),
                     used_profile_factor_codes=used_factors,
-                    generation_mode="model_enhanced",
+                    generation_mode="model_generated",
                     status="doing" if index == 0 else "todo",
                 )
             )
@@ -605,6 +695,11 @@ class PathPlanningGraphRunner:
                 risks.append("invalid_difficulty")
             if not safe_text(task.teaching_strategy, limit=80):
                 risks.append("missing_teaching_strategy")
+            if task.generation_mode == "model_generated" and (
+                not safe_text(task.learning_problem, limit=160)
+                or not safe_text(task.example_direction, limit=160)
+            ):
+                risks.append("missing_pedagogical_direction")
             if any(code not in valid_factor_codes for code in task.used_profile_factor_codes):
                 risks.append("invalid_profile_factor")
             if task.status != "completed":
@@ -640,6 +735,8 @@ class PathPlanningGraphRunner:
                 resource_ids=[int(item) for item in (task.recommended_resource_ids or []) if str(item).isdigit()],
                 bundle_types=previous_types or deterministic_bundle_types(None),
                 teaching_strategy=safe_text(previous_bundle.get("teaching_strategy"), limit=80) or "safe_default",
+                learning_problem=safe_text(previous_bundle.get("learning_problem"), limit=160),
+                example_direction=safe_text(previous_bundle.get("example_direction"), limit=160),
                 difficulty=(
                     str(previous_bundle.get("difficulty"))
                     if str(previous_bundle.get("difficulty")) in {"easy", "medium", "hard"}
@@ -693,6 +790,8 @@ class PathPlanningGraphRunner:
                     resource_ids=sorted(task.resource_ids),
                     bundle_types=fallback_types,
                     teaching_strategy="safe_default",
+                    learning_problem="",
+                    example_direction="",
                     difficulty="medium",
                     used_profile_factor_codes=(),
                     generation_mode="deterministic_source",
@@ -734,10 +833,12 @@ class PathPlanningGraphRunner:
                     "status": "available" if available is not None else "recommended",
                 }
             )
-        model_enhanced = task.generation_mode == "model_enhanced"
+        model_enhanced = task.generation_mode in {"model_generated", "model_enhanced"}
         return {
             "strategy": task.teaching_strategy if model_enhanced else "安全默认组合",
             "teaching_strategy": task.teaching_strategy,
+            "learning_problem": task.learning_problem,
+            "example_direction": task.example_direction,
             "difficulty": task.difficulty if task.difficulty in {"easy", "medium", "hard"} else "medium",
             "used_profile_factor_codes": list(task.used_profile_factor_codes),
             "generation_mode": task.generation_mode,
@@ -763,6 +864,57 @@ class PathPlanningGraphRunner:
         if task.knowledge_point_id is not None:
             return f"knowledge:{task.knowledge_point_id}"
         return f"title:{safe_text(task.title, limit=120).casefold()}"
+
+    def _planning_input_hash(self, state: PathPlanningState, tasks: list[Any]) -> str:
+        profile = dict(state.get("profile_summary", {}))
+        profile.pop("current_task_title", None)
+        payload = {
+            "course_id": int(state["course_id"]),
+            "goal": safe_text(state.get("goal"), limit=500) or safe_text(profile.get("learning_goal"), limit=500),
+            "profile": profile,
+            "knowledge_points": [
+                {
+                    "id": int(item.id),
+                    "title": safe_text(item.title, limit=160),
+                    "order": int(item.order_index or 0),
+                    "difficulty": safe_text(item.difficulty, limit=40),
+                }
+                for item in state.get("knowledge_points", [])
+            ],
+            "weaknesses": [
+                {
+                    "id": int(item.id),
+                    "knowledge_point_id": int(item.knowledge_point_id) if item.knowledge_point_id is not None else None,
+                    "status": str(item.status),
+                    "title": safe_text(item.title, limit=160),
+                }
+                for item in state.get("weaknesses", [])
+            ],
+            "resources": [
+                {
+                    "id": int(item.id),
+                    "knowledge_point_id": int(item.knowledge_point_id) if item.knowledge_point_id is not None else None,
+                    "type": str(item.resource_type),
+                    "status": str(item.status),
+                    "review_status": str(item.review_status),
+                }
+                for item in state.get("resources", [])
+            ],
+            "task_progress": [
+                {
+                    "key": self._task_key(item) if isinstance(item, PlannedTask) else (
+                        f"knowledge:{item.knowledge_point_id}"
+                        if item.knowledge_point_id is not None
+                        else f"title:{safe_text(item.title, limit=120).casefold()}"
+                    ),
+                    "status": str(item.status),
+                }
+                for item in tasks
+            ],
+        }
+        return hashlib.sha256(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()[:20]
 
     def _run_node(
         self,

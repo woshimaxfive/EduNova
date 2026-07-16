@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
+import json
 from typing import Any
 from types import SimpleNamespace
 
@@ -26,7 +27,7 @@ from backend.app.models import (
     WeaknessReviewItem,
 )
 from backend.app.services.auth import AuthService
-from backend.app.services.paths import PathService
+from backend.app.services.paths import PathService, PathValidationError
 
 
 NOW = datetime(2026, 7, 5, 9, 0, tzinfo=UTC)
@@ -40,6 +41,35 @@ class FakeModelService:
     def chat_completion(self, _user: User, messages: list[dict[str, str]]) -> str:
         self.calls.append(messages)
         return self.responses.pop(0)
+
+
+class DefaultPathModelService:
+    def __init__(self) -> None:
+        self.calls: list[list[dict[str, str]]] = []
+
+    def chat_completion(self, _user: User, messages: list[dict[str, str]]) -> str:
+        self.calls.append(messages)
+        payload = json.loads(messages[-1]["content"])
+        choices = []
+        for item in payload["candidate_tasks"][:8]:
+            choices.append(
+                {
+                    "task_key": item["task_key"],
+                    "rationale": f"优先解决{item['title']}的当前学习问题",
+                    "bundle_types": list(item.get("bundle_types") or ["doc", "quiz"])[:4],
+                    "resource_ids": list(item.get("resource_ids") or [])[:2],
+                    "teaching_strategy": "证据讲解后进行迁移练习",
+                    "learning_problem": f"理解并应用{item['title']}",
+                    "example_direction": "使用当前课程中的典型案例",
+                    "difficulty": "medium",
+                    "used_profile_factor_codes": [],
+                }
+            )
+        return json.dumps({"priority_tasks": choices}, ensure_ascii=False)
+
+
+def make_path_service(repo: FakePathRepository) -> PathService:
+    return PathService(repo, model_service=DefaultPathModelService())
 
 
 @dataclass
@@ -281,7 +311,7 @@ def test_path_graph_persists_the_profile_version_from_learner_context(monkeypatc
         lambda _repository: context_service,
     )
 
-    detail = PathService(repo).generate_path(make_user(), 101)
+    detail = make_path_service(repo).generate_path(make_user(), 101)
 
     assert detail.path is not None
     assert detail.path.plan_json["profile_applied_version"] == 4
@@ -302,7 +332,7 @@ def test_generate_path_archives_previous_active_path_and_prioritizes_confirmed_r
     previous_path.updated_at = NOW
     repo = make_repo()
     repo.paths.append(previous_path)
-    service = PathService(repo)
+    service = make_path_service(repo)
 
     result = as_dict(service.generate_path(make_user(), course_id=101))
 
@@ -334,7 +364,7 @@ def test_generate_path_archives_previous_active_path_and_prioritizes_confirmed_r
 
 def test_manual_path_update_preserves_completed_and_current_progress() -> None:
     repo = make_repo()
-    service = PathService(repo)
+    service = make_path_service(repo)
     first = service.generate_path(make_user(), 101)
     assert first.path is not None
     old_tasks = repo.list_tasks_for_path(int(first.path.id))
@@ -350,9 +380,26 @@ def test_manual_path_update_preserves_completed_and_current_progress() -> None:
     assert sum(task.status == "doing" for task in updated.tasks) == 1
 
 
+def test_manual_path_generation_reuses_model_path_when_learning_state_is_unchanged() -> None:
+    repo = make_repo()
+    model = DefaultPathModelService()
+    service = PathService(repo, model_service=model)
+
+    first = service.generate_path(make_user(), 101)
+    second = service.generate_path(make_user(), 101)
+
+    assert first.path is not None
+    assert second.path is not None
+    assert second.path.id == first.path.id
+    assert second.path.plan_json["generation_mode"] == "model_generated"
+    assert second.path.plan_json["planning_input_hash"]
+    assert len(model.calls) == 1
+    assert len([path for path in repo.paths if path.status == "active"]) == 1
+
+
 def test_get_current_path_returns_empty_state_and_scopes_course() -> None:
     repo = make_repo()
-    service = PathService(repo)
+    service = make_path_service(repo)
 
     empty = as_dict(service.get_current_path(make_user(), 101))
 
@@ -370,7 +417,7 @@ def test_get_current_path_returns_empty_state_and_scopes_course() -> None:
 def test_learning_bundle_status_comes_from_scoped_resource_interactions() -> None:
     repo = make_repo()
     next(resource for resource in repo.resources if resource.id == 801).resource_type = "mindmap"
-    service = PathService(repo)
+    service = make_path_service(repo)
     generated = as_dict(service.generate_path(make_user(), course_id=101))
     task = repo.tasks[0]
     task.learning_bundle_json = {
@@ -449,7 +496,7 @@ def test_learning_bundle_status_comes_from_scoped_resource_interactions() -> Non
 
 def test_learning_bundle_recovers_resource_links_from_recommended_ids_for_legacy_data() -> None:
     repo = make_repo()
-    service = PathService(repo)
+    service = make_path_service(repo)
     service.generate_path(make_user(), course_id=101)
     task = repo.tasks[0]
     task.recommended_resource_ids = [802]
@@ -468,7 +515,7 @@ def test_learning_bundle_recovers_resource_links_from_recommended_ids_for_legacy
 
 def test_update_task_status_is_user_scoped_and_validated() -> None:
     repo = make_repo()
-    service = PathService(repo)
+    service = make_path_service(repo)
     generated = as_dict(service.generate_path(make_user(), course_id=101))
     task_id = int(generated["tasks"][1]["id"])
 
@@ -497,7 +544,7 @@ def test_paths_routes_require_login_and_return_envelopes() -> None:
         repository=TokenAuthRepository(user),
         settings=settings,
     )
-    app.dependency_overrides[get_path_service] = lambda: PathService(repo)
+    app.dependency_overrides[get_path_service] = lambda: make_path_service(repo)
     client = TestClient(app)
     token = create_access_token(str(user.id), settings=settings)
     headers = {"Authorization": f"Bearer {token}"}
@@ -536,10 +583,12 @@ def test_path_planning_graph_uses_one_structured_model_call_and_rules_review() -
             '{"task_key":"knowledge:401","rationale":"先处理确认弱点",'
             '"bundle_types":["code","doc","quiz"],"resource_ids":[801],'
             '"teaching_strategy":"先代码实验再概念复盘","difficulty":"medium",'
+            '"learning_problem":"理解启发式评价","example_direction":"搜索路径代码实验",'
             '"used_profile_factor_codes":[]},'
             '{"task_key":"knowledge:402","rationale":"再巩固复习中弱点",'
             '"bundle_types":["mindmap","doc"],"resource_ids":[802],'
             '"teaching_strategy":"先图解再检索练习","difficulty":"hard",'
+            '"learning_problem":"辨析代价组成","example_direction":"搜索树结构图",'
             '"used_profile_factor_codes":[]}]}}']
     )
     service = PathService(repo, model_service=model, trace_recorder=make_trace_recorder(logs))
@@ -548,7 +597,7 @@ def test_path_planning_graph_uses_one_structured_model_call_and_rules_review() -
 
     assert detail["path"]["plan_json"]["schema_version"] == 5
     assert detail["path"]["plan_json"]["path_mode"] == "ordered"
-    assert detail["path"]["plan_json"]["generation_mode"] == "model_enhanced"
+    assert detail["path"]["plan_json"]["generation_mode"] == "model_generated"
     assert detail["path"]["plan_json"]["review_mode"] == "rules_only"
     assert [task["knowledge_point_id"] for task in detail["tasks"]] == ["401", "402", "403"]
     assert detail["tasks"][0]["reason"] == "先处理确认弱点"
@@ -557,7 +606,7 @@ def test_path_planning_graph_uses_one_structured_model_call_and_rules_review() -
     ]
     assert detail["tasks"][0]["learning_bundle"]["teaching_strategy"] == "先代码实验再概念复盘"
     assert detail["tasks"][0]["learning_bundle"]["difficulty"] == "medium"
-    assert detail["tasks"][0]["learning_bundle"]["generation_mode"] == "model_enhanced"
+    assert detail["tasks"][0]["learning_bundle"]["generation_mode"] == "model_generated"
     assert [log.agent_name for log in logs] == [
         "profile",
         "collect_evidence",
@@ -570,7 +619,7 @@ def test_path_planning_graph_uses_one_structured_model_call_and_rules_review() -
     assert len(model.calls) == 1
 
 
-def test_invalid_structured_path_decision_falls_back_without_using_untrusted_profile() -> None:
+def test_invalid_structured_path_decision_fails_without_persisting_template_path() -> None:
     repo = make_repo()
     repo.profiles[1].profile_json = {
         "major_background": "计算机专业",
@@ -581,17 +630,14 @@ def test_invalid_structured_path_decision_falls_back_without_using_untrusted_pro
         responses=['{"priority_tasks":[{"task_key":"knowledge:999",'
             '"rationale":"伪造任务","bundle_types":["code","quiz"],"resource_ids":[],'
             '"teaching_strategy":"代码优先","difficulty":"hard",'
+            '"learning_problem":"伪造问题","example_direction":"伪造方向",'
             '"used_profile_factor_codes":["major_background"]}]}']
     )
 
-    detail = as_dict(PathService(repo, model_service=model).generate_path(make_user(), 101))
+    with pytest.raises(PathValidationError):
+        PathService(repo, model_service=model).generate_path(make_user(), 101)
 
-    assert detail["path"]["plan_json"]["generation_mode"] == "deterministic_source"
-    assert detail["path"]["plan_json"]["personalization"] == {}
-    assert len(model.calls) == 1
-    assert all(task["learning_bundle"]["generation_mode"] == "deterministic_source" for task in detail["tasks"])
-    assert all(task["learning_bundle"]["used_profile_factor_codes"] == [] for task in detail["tasks"])
-    assert all(task["learning_bundle"]["strategy"] == "安全默认组合" for task in detail["tasks"])
+    assert repo.paths == []
 
 
 def test_path_planning_drops_unknown_factor_codes_without_discarding_safe_model_plan() -> None:
@@ -600,14 +646,69 @@ def test_path_planning_drops_unknown_factor_codes_without_discarding_safe_model_
         responses=['{"priority_tasks":[{"task_key":"knowledge:401",'
             '"rationale":"先用合法候选完成学习","bundle_types":["doc","quiz"],"resource_ids":[801],'
             '"teaching_strategy":"先讲解再练习","difficulty":"medium",'
+            '"learning_problem":"形成可迁移理解","example_direction":"课程中的搜索示例",'
             '"used_profile_factor_codes":["untrusted_private_factor"]}]}']
     )
 
     detail = as_dict(PathService(repo, model_service=model).generate_path(make_user(), 101))
 
-    assert detail["path"]["plan_json"]["generation_mode"] == "model_enhanced"
+    assert detail["path"]["plan_json"]["generation_mode"] == "model_generated"
     assert detail["tasks"][0]["learning_bundle"]["used_profile_factor_codes"] == []
     assert len(model.calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("subject", "course_title", "bundle_types", "strategy", "example_direction"),
+    [
+        ("计算机科学", "算法设计", ["code", "quiz"], "代码实验后分析复杂度", "工程中的算法实现"),
+        ("数学", "线性代数", ["mindmap", "quiz"], "先推导再用图像核对", "向量空间的几何图像"),
+        ("英语", "学术英语表达", ["doc", "quiz"], "语义辨析后完成表达练习", "校园交流语境"),
+        ("历史", "中国近现代史", ["mindmap", "slide"], "按时间线比较不同观点", "历史事件因果链"),
+        ("物理", "用户上传短资料", ["animation", "quiz"], "观察状态变化后解释规律", "无版权力学实验"),
+    ],
+)
+def test_path_planning_uses_current_course_subject_without_builtin_course_assumptions(
+    subject: str,
+    course_title: str,
+    bundle_types: list[str],
+    strategy: str,
+    example_direction: str,
+) -> None:
+    repo = make_repo()
+    repo.courses[0].subject = subject
+    repo.courses[0].title = course_title
+    repo.courses[0].source_type = "uploaded"
+    repo.knowledge_points[0].title = "当前资料知识点"
+    model = FakeModelService(
+        responses=[json.dumps(
+            {
+                "priority_tasks": [
+                    {
+                        "task_key": "knowledge:401",
+                        "rationale": "按当前学科证据安排近期任务",
+                        "bundle_types": bundle_types,
+                        "resource_ids": [],
+                        "teaching_strategy": strategy,
+                        "learning_problem": "理解当前资料中的核心关系",
+                        "example_direction": example_direction,
+                        "difficulty": "medium",
+                        "used_profile_factor_codes": [],
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        )]
+    )
+
+    detail = as_dict(PathService(repo, model_service=model).generate_path(make_user(), 101))
+    prompt = json.loads(model.calls[0][1]["content"])
+
+    assert prompt["course_state"]["subject"] == subject
+    assert prompt["course_state"]["course_title"] == course_title
+    assert detail["tasks"][0]["learning_bundle"]["teaching_strategy"] == strategy
+    assert [item["resource_type"] for item in detail["tasks"][0]["learning_bundle"]["items"]] == bundle_types
+    if subject not in {"计算机科学"}:
+        assert "code" not in bundle_types
 
 
 def test_trusted_profile_weak_point_is_included_in_model_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -616,6 +717,7 @@ def test_trusted_profile_weak_point_is_included_in_model_candidates(monkeypatch:
         responses=['{"priority_tasks":[{"task_key":"knowledge:403",'
             '"rationale":"针对画像中的明确难点优先复习","bundle_types":["mindmap","quiz"],'
             '"resource_ids":[],"teaching_strategy":"先图解再练习","difficulty":"easy",'
+            '"learning_problem":"辨析局部最优","example_direction":"局部搜索轨迹图",'
             '"used_profile_factor_codes":["profile_weak_points"]}]}']
     )
     learner_context = SimpleNamespace(
@@ -642,7 +744,7 @@ def test_trusted_profile_weak_point_is_included_in_model_candidates(monkeypatch:
 
 def test_assessment_replan_preserves_completed_progress_and_does_not_create_missing_path() -> None:
     repo = make_repo()
-    service = PathService(repo)
+    service = make_path_service(repo)
     assert service.replan_after_assessment(make_user(), 101, 501).status == "not_started"
 
     first = service.generate_path(make_user(), 101)
@@ -709,7 +811,7 @@ def test_legacy_v2_path_upgrades_on_replan_and_sprint_rows_are_not_current_paths
         )
     )
 
-    replanned = PathService(repo).replan_after_assessment(make_user(), 101, 501)
+    replanned = make_path_service(repo).replan_after_assessment(make_user(), 101, 501)
 
     assert replanned.detail is not None
     assert replanned.detail.path is not None

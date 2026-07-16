@@ -38,6 +38,8 @@ class LearningBundleItem(BaseModel):
 class LearningBundle(BaseModel):
     strategy: str = ""
     teaching_strategy: str = "safe_default"
+    learning_problem: str = ""
+    example_direction: str = ""
     difficulty: Literal["easy", "medium", "hard"] = "medium"
     used_profile_factor_codes: list[str] = Field(default_factory=list)
     generation_mode: str = "legacy"
@@ -181,6 +183,8 @@ def task_to_api(
         learning_bundle=LearningBundle(
             strategy=str(raw_bundle.get("strategy") or ""),
             teaching_strategy=str(raw_bundle.get("teaching_strategy") or "safe_default"),
+            learning_problem=str(raw_bundle.get("learning_problem") or ""),
+            example_direction=str(raw_bundle.get("example_direction") or ""),
             difficulty=(
                 str(raw_bundle.get("difficulty"))
                 if str(raw_bundle.get("difficulty")) in {"easy", "medium", "hard"}

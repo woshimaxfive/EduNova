@@ -205,3 +205,10 @@ validate_confirmed_materials -> coherence_gate -> load_outlines
 PathPlanning、Assessment、Report、Resource、Profile 及语义决策节点通过 `ModelTaskProfile` 声明任务能力，不直接拼接 Provider 私有参数。结构化正常路径一次调用；只有 JSON 可解析但 Pydantic 或差异门禁失败时，允许同一 Provider 定向修订一次。网络超时、认证失败和额度失败不自动重放大请求，也不跨 Provider。
 
 “模型生成成功”要求学生可见正文来自模型并通过确定性门禁。路径的合法任务集合、练习规则答案、报告统计、课程引用、权限和隐私仍由代码控制。模型失败后 Graph 必须明确失败或保留旧成果，不得把底稿、模板或 Review 规则结果标成 `model_generated`。语义路由等非成果节点仍允许保守降级。
+
+## Phase 39 候选修订与证据审核
+
+- AssessmentGraph 的 Repair 节点把上一版候选、失败字段和风险码对应的中文操作要求一并交给同一模型，避免从底稿重写后丢失已通过字段。
+- 简答题必须点名确定的作答对象，但不得把完整参考答案或结构化结论写进题干；答案与课程引用继续由规则锁定。
+- CourseAnswerGraph 的 Review 节点只接收受限课程/网页短摘，执行逐主张支持关系核验。Repair 节点既删除来源不支持的定性事实，也不得把来源已经说明的事实改成“资料未说明”。
+- 路径与练习仍允许一次受预算约束的定向修订；网络超时不重放大请求，任何失败不跨 Provider。

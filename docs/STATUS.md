@@ -16,7 +16,7 @@
 
 盲测发现并修复两项真实缺陷：其一，LangGraph 状态合同遗漏图片附件和原始用户文本，视觉摘要会被误当作用户消息且刷新后附件消失；现已保留 `stored_message_text`、`attachment_ids` 和视觉决策状态并增加真实 Graph 回归。其二，课程回答只把前 5 条课程引用交给模型，后追加的网页引用虽出现在来源面板却不进入回答；现按“课程证据优先且为网页补充保留容量”选择最多 8 条证据，并锁定外部补充语义。
 
-AI Worker 构建已增加 BuildKit 的 pip/Hugging Face 持久缓存和 Docling 模型三次有界重试。实测约 192 MiB Torch wheel 可直接复用缓存；本轮 Hugging Face 官方 `docling-layout-heron` 元数据接口连续返回 504，首次模型制品构建据实未通过，但失败没有覆盖当前健康的 `edunova-ai-worker` 镜像或运行容器。
+AI Worker 构建已增加 BuildKit 的 pip/Hugging Face 持久缓存和 Docling 模型三次有界重试。实测约 192 MiB Torch wheel 可直接复用缓存；网络恢复后，Docling Layout 与 TableFormer 模型制品已成功预装进新 `edunova-ai-worker` 镜像，模型下载层约 124 秒，相同构建随后全部命中缓存并在约 3 秒内完成。使用程序化无版权两页 PDF 的 `--network none` 冒烟解析得到 2 页、5 个内容块和 2 个标题，两页目标正文均命中，确认 Docling 2.113.0 可在新镜像中离线运行。首次构建仍依赖外部模型仓库可用性，有界重试与旧健康镜像保护继续保留。
 
 Phase 33 阶段门禁通过后端 441 项、前端 241 项、离线 AI 评测 10 项、编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、production build 与 Compose。赛题就绪评测因本轮没有新的真实延迟数组保持 `evidence_gap`，未用浏览器功能通过冒充性能实证。
 

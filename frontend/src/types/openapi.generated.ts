@@ -2839,12 +2839,22 @@ export interface components {
              */
             difficulty: "easy" | "medium" | "hard";
             /**
+             * Example Direction
+             * @default
+             */
+            example_direction: string;
+            /**
              * Generation Mode
              * @default legacy
              */
             generation_mode: string;
             /** Items */
             items?: components["schemas"]["LearningBundleItem"][];
+            /**
+             * Learning Problem
+             * @default
+             */
+            learning_problem: string;
             /**
              * Rationale
              * @default
@@ -3544,6 +3554,21 @@ export interface components {
              * @constant
              */
             source: "user";
+            /**
+             * Structured Output Verified
+             * @default false
+             */
+            structured_output_verified: boolean;
+            /**
+             * Supports Reasoning Control
+             * @default false
+             */
+            supports_reasoning_control: boolean;
+            /**
+             * Supports Structured Output
+             * @default false
+             */
+            supports_structured_output: boolean;
             /** Vision Api Key Masked */
             vision_api_key_masked?: string | null;
             /** Vision App Id Masked */
@@ -3556,7 +3581,7 @@ export interface components {
              * @default chat
              * @enum {string}
              */
-            operation: "chat" | "embedding" | "rerank" | "vision";
+            operation: "chat" | "structured" | "embedding" | "rerank" | "vision";
         };
         /** ModelConnectionTestResponse */
         ModelConnectionTestResponse: {
@@ -3568,6 +3593,8 @@ export interface components {
             config_id?: number | null;
             /** Dimension */
             dimension?: number | null;
+            /** Latency Ms */
+            latency_ms?: number | null;
             /** Message */
             message: string;
             /** Model */
@@ -3579,7 +3606,9 @@ export interface components {
              * @default chat
              * @enum {string}
              */
-            operation: "chat" | "embedding" | "rerank" | "vision";
+            operation: "chat" | "structured" | "embedding" | "rerank" | "vision";
+            /** Reasoning Tokens */
+            reasoning_tokens?: number | null;
             /**
              * Retryable
              * @default false
@@ -3602,6 +3631,8 @@ export interface components {
             code?: string | null;
             /** Dimension */
             dimension?: number | null;
+            /** Latency Ms */
+            latency_ms?: number | null;
             /** Message */
             message: string;
             /** Model */
@@ -3612,7 +3643,9 @@ export interface components {
              * Operation
              * @enum {string}
              */
-            operation: "chat" | "embedding" | "rerank" | "vision";
+            operation: "chat" | "structured" | "embedding" | "rerank" | "vision";
+            /** Reasoning Tokens */
+            reasoning_tokens?: number | null;
             /**
              * Retryable
              * @default false
@@ -3713,6 +3746,16 @@ export interface components {
              * @enum {string}
              */
             source: "user" | "system" | "none";
+            /**
+             * Supports Reasoning Control
+             * @default false
+             */
+            supports_reasoning_control: boolean;
+            /**
+             * Supports Structured Output
+             * @default false
+             */
+            supports_structured_output: boolean;
             /** Vision Base Url */
             vision_base_url?: string | null;
             /** Vision Model */

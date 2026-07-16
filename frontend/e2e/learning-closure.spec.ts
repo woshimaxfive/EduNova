@@ -13,36 +13,13 @@ async function confirmUploadedMaterial(page: Page, title: string) {
   await expect(page.getByText("目录已确认", { exact: true }).first()).toBeVisible();
 }
 
-async function createAndSubmitPartiallyGradedPractice(page: Page) {
-  await page.goto("/app/practice");
-  const start = page.getByRole("button", { name: /开始新练习|开始针对性练习/ }).first();
-  await expect(start).toBeVisible();
-  await start.click();
-
-  const settings = page.getByRole("dialog", { name: "练习设置" });
-  await settings.getByRole("button", { name: "3 题" }).click();
-  const generate = settings.getByRole("button", { name: /开始针对性练习|生成新练习/ });
-  await expect(generate).toBeEnabled();
-  await generate.click();
-
-  await expect(page.getByRole("article", { name: "第 1 题" })).toBeVisible();
-  await page.getByRole("button", { name: "提交练习" }).click();
-  const confirm = page.getByRole("alertdialog", { name: /还有 3 题未作答/ });
-  await confirm.getByRole("button", { name: "仍然提交" }).click();
-  await expect(page.getByText("部分评分", { exact: true })).toBeVisible();
-  await expect(page.getByText("已评分 2 / 3", { exact: true })).toBeVisible();
-  await expect(page.getByText("暂未评分", { exact: true }).first()).toBeVisible();
-  await page.getByRole("button", { name: "查看学习更新" }).click();
-  await expect(page.getByText("本次练习已写入学习状态")).toBeVisible();
-}
-
-test("rules-only Docker environment preserves partial-grading boundaries with real traces", async ({ page }) => {
+test("rules-only Docker environment fails honestly instead of persisting generated templates", async ({ page }) => {
   test.setTimeout(240_000);
   await page.goto("/register");
-  await page.getByLabel("昵称").fill("Phase 14 验收账号");
-  await page.getByLabel("账号").fill("phase14_e2e");
-  await page.getByLabel("密码", { exact: true }).fill("Phase14Test2026");
-  await page.getByRole("textbox", { name: "确认密码 显示确认密码" }).fill("Phase14Test2026");
+  await page.getByLabel("昵称").fill("Phase 38 验收账号");
+  await page.getByLabel("账号").fill("phase38_e2e");
+  await page.getByLabel("密码", { exact: true }).fill("Phase38Test2026");
+  await page.getByRole("textbox", { name: "确认密码 显示确认密码" }).fill("Phase38Test2026");
   await page.getByRole("radio", { name: /数据结构与算法/ }).check();
   await page.getByRole("button", { name: "创建并进入" }).click();
   await expect(page).toHaveURL(/\/app$/);
@@ -50,35 +27,15 @@ test("rules-only Docker environment preserves partial-grading boundaries with re
   await page.goto("/app/path");
   await expect(page.getByRole("button", { name: "一键生成学习路径" })).toBeEnabled();
   await page.getByRole("button", { name: "一键生成学习路径" }).click();
-  await page.getByRole("button", { name: "路径详情" }).click();
-  await page.getByRole("tab", { name: "协作轨迹" }).click();
-  await expect(page.getByRole("button", { name: "查看 PathPlanningGraph" })).toBeVisible();
-  await page.getByRole("button", { name: "查看 PathPlanningGraph" }).click();
-  await expect(page.getByText("deterministic_rank")).toBeVisible();
+  const generationFailure = page.getByRole("alert").filter({ hasText: /模型|生成|规划/ }).first();
+  await expect(generationFailure).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText("还没有个性化学习路径")).toBeVisible();
+  await expect(page.getByRole("button", { name: "路径详情" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "一键生成学习路径" })).toBeEnabled();
 
-  await createAndSubmitPartiallyGradedPractice(page);
-  await page.getByRole("button", { name: "查看 AssessmentGraph" }).click();
-  await expect(page.getByText("deterministic_score")).toBeVisible();
-
-  await page.goto("/app/path");
-  await expect(page.getByText(/由练习结果更新 · 保留 \d+ 个既有任务/)).toHaveCount(0);
-  await page.getByRole("button", { name: "路径详情" }).click();
-  await page.getByRole("tab", { name: "规划依据" }).click();
-  await expect(page.getByText(/规则底稿 · 规则审核/)).toBeVisible();
-
-  await createAndSubmitPartiallyGradedPractice(page);
-
-  await page.goto("/app/reports");
-  await expect(page.getByRole("button", { name: "生成学习报告" })).toBeEnabled();
-  await page.getByRole("button", { name: "生成学习报告" }).click();
-  await page.getByRole("button", { name: "报告详情" }).click();
-  const reportDrawer = page.getByRole("dialog", { name: "报告详情" });
-  await reportDrawer.getByRole("tab", { name: "证据与审核" }).click();
-  await expect(reportDrawer.locator(".report-evidence-facts strong").filter({ hasText: "次练习" })).toContainText("2");
-  await reportDrawer.getByRole("tab", { name: "协作轨迹" }).click();
-  await expect(reportDrawer.getByRole("button", { name: "查看 ReportGraph" })).toBeVisible();
-  await reportDrawer.getByRole("button", { name: "查看 ReportGraph" }).click();
-  await expect(page.getByText("aggregate_evidence")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("还没有个性化学习路径")).toBeVisible();
+  await expect(page.getByRole("button", { name: "路径详情" })).toBeDisabled();
 
   await page.setViewportSize({ width: 390, height: 844 });
   for (const route of ["/app/path", "/app/practice", "/app/reports"]) {

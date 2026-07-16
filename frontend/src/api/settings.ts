@@ -21,7 +21,7 @@ export type ModelSettingsSource = "user" | "system" | "none";
 
 export type ModelSettingsProvider = "openai_compatible" | "xfyun_embedding" | "siliconflow_rerank" | "bailian_rerank";
 
-export type ModelConnectionOperation = "chat" | "embedding" | "rerank" | "vision";
+export type ModelConnectionOperation = "chat" | "structured" | "embedding" | "rerank" | "vision";
 
 export type ModelSettingsRequest = {
   provider: ModelSettingsProvider;
@@ -100,6 +100,8 @@ export type ModelSettingsSummary = {
   vision_provider?: string | null;
   vision_base_url?: string | null;
   can_use_vision_model?: boolean;
+  supports_structured_output?: boolean;
+  supports_reasoning_control?: boolean;
 };
 
 export type ModelConfigSummary = ModelSettingsSummary & {
@@ -116,6 +118,7 @@ export type ModelConfigSummary = ModelSettingsSummary & {
   last_test_message: string | null;
   last_tested_at: string | null;
   connection_tests?: Partial<Record<ModelConnectionOperation, ModelConnectionTestSnapshot>>;
+  structured_output_verified?: boolean;
 };
 
 export type ModelConnectionTestSnapshot = {
@@ -127,6 +130,8 @@ export type ModelConnectionTestSnapshot = {
   retryable: boolean;
   tested_at: string;
   dimension?: number | null;
+  latency_ms?: number | null;
+  reasoning_tokens?: number | null;
 };
 
 export type ModelSettingsListResponse = {
@@ -151,6 +156,8 @@ export type ModelConnectionTestResponse = {
   retryable: boolean;
   tested_at: string;
   dimension?: number | null;
+  latency_ms?: number | null;
+  reasoning_tokens?: number | null;
 };
 
 export type PrivacySettings = {

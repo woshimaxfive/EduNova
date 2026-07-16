@@ -39,9 +39,10 @@ export function ConnectionTestCard({
   onTest
 }: ConnectionTestCardProps) {
   const isEmbedding = operation === "embedding";
+  const isStructured = operation === "structured";
   const isRerank = operation === "rerank";
   const isVision = operation === "vision";
-  const label = isEmbedding ? "向量服务" : isRerank ? "重排序服务" : isVision ? "图片理解服务" : "回答服务";
+  const label = isEmbedding ? "向量服务" : isRerank ? "重排序服务" : isVision ? "图片理解服务" : isStructured ? "结构化生成" : "回答服务";
   const testedAt = formatTestTime(result?.tested_at);
   const status = !model
     ? "not-configured"
@@ -62,14 +63,14 @@ export function ConnectionTestCard({
       </span>
       <div className="settings-connection-name">
         <strong>{label}</strong>
-        <span>{model ? `${model}${isEmbedding && result?.dimension ? ` · ${result.dimension} 维` : ""}` : "未配置"}</span>
+        <span>{model ? `${model}${isEmbedding && result?.dimension ? ` · ${result.dimension} 维` : ""}${result?.latency_ms != null ? ` · ${result.latency_ms} ms` : ""}` : "未配置"}</span>
       </div>
       <p>
         {!model
           ? missingMessage ?? (isEmbedding ? "此配置未设置向量模型。" : isRerank ? "此配置未设置重排序模型。" : isVision ? "此配置未设置图片理解模型。" : "此配置未设置回答模型。")
           : dirty
             ? "保存修改后可验证当前连接。"
-            : result?.message || "尚未验证连接。"}
+            : result?.message || (isStructured ? "尚未验证 JSON 合同与思考控制。" : "尚未验证连接。")}
       </p>
       <footer>
         <span>{testedAt ? `最近验证 ${testedAt}` : "暂无验证记录"}</span>

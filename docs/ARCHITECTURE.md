@@ -426,7 +426,7 @@ AssessmentGraph 客观题确定性评分 + 简答题批量语义评分
 - SlideWorker：结构化 PPT 页面与真实 PPTX 源数据。
 - AnimationWorker：可播放的 Mermaid 教学场景，不伪装成视频。
 
-资源内容采用 `schema_version=3`，以 `artifact.kind` 区分 `document`、`mindmap`、`quiz`、`code_lab`、`slide_deck`、`animation`，并保存引用绑定、质量门禁、Prompt 版本和 Markdown fallback。Phase 20 的 planner 在 Worker 前生成逐类型 `ArtifactIntent`，明确教学策略、认知层级、案例方向、证据和学习结果；ReviewAgent 同时读取意图、候选内容和历史摘要。模型直接生成类型化 artifact；无有效结构差异时不得标记 `model_enhanced`。前端 `ResourceRenderer` 继续兼容 v1/v2。
+资源内容采用 `schema_version=3`，以 `artifact.kind` 区分 `document`、`mindmap`、`quiz`、`code_lab`、`slide_deck`、`animation`，并保存引用绑定、质量门禁、Prompt 版本和 Markdown 展示内容。Phase 20 的 planner 在 Worker 前生成逐类型 `ArtifactIntent`，明确教学策略、认知层级、案例方向、证据和学习结果；ReviewAgent 同时读取意图、候选内容和历史摘要。新模型产物使用 `model_generated`；无有效模型内容或差异时不保存该类型，前端继续兼容历史 v1/v2 与 `model_enhanced`。
 
 代码资源在持久化前调用内部 `code-verifier`。该服务位于独立 internal Docker 网络，采用非 root、只读根文件系统、无外网、能力移除和 CPU/内存/PID 限制；每次请求创建独立 Pyodide Worker，执行安全 AST 门禁、5 秒超时、20KB 输出限制和预期输出精确比对。服务不可用或结果不符时，代码 Worker 失败且不保存资源。
 
@@ -560,7 +560,7 @@ Phase 35 将请求等待窗口按语义分层；Phase 36 将练习生成和报�
 
 - 用户 Key 优先。
 - 用户 Key 不可用时可使用系统 Key。
-- 模型不可用时使用明确标记的确定性 fallback，不伪装 Provider 成功。
+- 内部语义判断可使用明确标记的保守降级；学生可见生成成果失败时保留旧成果或显示未生成，不用模板伪装 Provider 成功。
 - 所有 fallback 内容必须显式标记。
 - 课程会话命中引用但模型未配置时保留引用并提示未配置；模型超时、失败或流式中断时不写入半截 assistant 消息。
 
@@ -634,7 +634,7 @@ http://localhost:8080/api/health
 3. RAG 检索能返回引用来源。
 4. Agent 流程能记录 trace。
 5. 大模型 Provider 可替换。
-6. 示例课程和确定性 fallback 能稳定跑通核心链路。
+6. 示例课程和用户上传课程在模型成功时都能跑通核心生成链路；模型失败能诚实恢复、重试且不破坏旧成果。
 7. Docker Compose 能启动核心服务。
 8. 主要设计能在答辩时用图和日志解释清楚。
 
@@ -762,3 +762,11 @@ PathPlanningGraph 接受 Provider 常见的单层 `output` 协议包装，解包
 图片轮次在 LangGraph 状态中显式保留原始用户文本、附件 ID、视觉决策、独立问题和引用轮次。视觉摘要只作为内部路由与回答上下文，不覆盖持久化用户消息；完成节点因此可以原子绑定附件，历史查询和刷新恢复继续返回私有图片。该合同同时避免图片轮次重复调用普通语义路由。
 
 课程回答的证据窗口采用确定性分层选择：优先保留最多 5 条课程引用，再从剩余容量加入网页外部补充，总量最多 8 条。网页仍不能成为教材页码、掌握度、弱点或评分证据；这里仅保证来源面板已展示的有效网页不会因课程引用占满旧的 5 条窗口而从回答模型上下文中消失。
+
+## 27. Phase 38 任务级模型协议与原生生成
+
+`ModelTaskProfile` 是 Graph 与 Provider 之间的项目合同，表达任务类型、推理强度、输出模式、创造性、超时和尝试次数。Provider 能力注册表把百炼 `enable_thinking`、星火 `thinking.type`、JSON Mode、视觉和原生搜索分开协商；未知兼容接口只接收标准字段和 Prompt JSON，不猜测私有参数。Provider 返回内部 `ModelCompletion`，SDK 类型不进入 Graph；AIJob 仅聚合 Token、推理 Token、首包和总耗时。
+
+路径、资源、练习题面和报告叙事采用 `model_generated` 成功语义。确定性底稿只用于限定候选任务、课程事实、正确答案、统计、权限和安全审核，不再作为学生可见的“AI 生成成果”持久化。格式已解析但结构或差异门禁失败时可对失败项定向修订一次；网络超时不连续重放大请求。个人 Provider 一旦开始处理请求，失败不会转发到服务器 Provider。
+
+路径 `plan_json.planning_input_hash` 基于可信画像、课程知识点、弱点、资源、反馈和任务进度计算；手动重复生成且输入不变时复用现有 `model_generated` 路径。历史路径没有该字段时按旧逻辑读取并在下一次成功生成后升级。学科适配由当前课程 `subject`、标题和知识点驱动，不依赖内置课程 ID 或数据结构关键词。

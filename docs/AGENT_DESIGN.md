@@ -199,3 +199,9 @@ validate_confirmed_materials -> coherence_gate -> load_outlines
 # Phase 32 视觉理解边界
 
 `VisionUnderstandingService` 是图片输入适配服务，不是新 Agent。它在每个图片轮次最多调用一次视觉模型并输出 `standalone_query/visual_summary/extracted_text/observations/uncertainties/intent/search_required/reasoning_mode/confidence`。主页和课程 LangGraph继续拥有检索、联网、个性化、回答、引用和审核节点；用户图片不成为课程证据，普通图片提问也不直接形成画像或弱点。安全 trace 只展示结构化协作摘要，不公开 Provider 思维链或原始响应。
+
+## Phase 38 模型原生生成边界
+
+PathPlanning、Assessment、Report、Resource、Profile 及语义决策节点通过 `ModelTaskProfile` 声明任务能力，不直接拼接 Provider 私有参数。结构化正常路径一次调用；只有 JSON 可解析但 Pydantic 或差异门禁失败时，允许同一 Provider 定向修订一次。网络超时、认证失败和额度失败不自动重放大请求，也不跨 Provider。
+
+“模型生成成功”要求学生可见正文来自模型并通过确定性门禁。路径的合法任务集合、练习规则答案、报告统计、课程引用、权限和隐私仍由代码控制。模型失败后 Graph 必须明确失败或保留旧成果，不得把底稿、模板或 Review 规则结果标成 `model_generated`。语义路由等非成果节点仍允许保守降级。

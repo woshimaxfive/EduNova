@@ -3599,6 +3599,11 @@
             "title": "Difficulty",
             "type": "string"
           },
+          "example_direction": {
+            "default": "",
+            "title": "Example Direction",
+            "type": "string"
+          },
           "generation_mode": {
             "default": "legacy",
             "title": "Generation Mode",
@@ -3610,6 +3615,11 @@
             },
             "title": "Items",
             "type": "array"
+          },
+          "learning_problem": {
+            "default": "",
+            "title": "Learning Problem",
+            "type": "string"
           },
           "rationale": {
             "default": "",
@@ -5534,6 +5544,21 @@
             "title": "Source",
             "type": "string"
           },
+          "structured_output_verified": {
+            "default": false,
+            "title": "Structured Output Verified",
+            "type": "boolean"
+          },
+          "supports_reasoning_control": {
+            "default": false,
+            "title": "Supports Reasoning Control",
+            "type": "boolean"
+          },
+          "supports_structured_output": {
+            "default": false,
+            "title": "Supports Structured Output",
+            "type": "boolean"
+          },
           "vision_api_key_masked": {
             "anyOf": [
               {
@@ -5584,6 +5609,7 @@
             "default": "chat",
             "enum": [
               "chat",
+              "structured",
               "embedding",
               "rerank",
               "vision"
@@ -5641,6 +5667,17 @@
             ],
             "title": "Dimension"
           },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -5664,12 +5701,24 @@
             "default": "chat",
             "enum": [
               "chat",
+              "structured",
               "embedding",
               "rerank",
               "vision"
             ],
             "title": "Operation",
             "type": "string"
+          },
+          "reasoning_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Tokens"
           },
           "retryable": {
             "default": false,
@@ -5725,6 +5774,17 @@
             ],
             "title": "Dimension"
           },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -5747,12 +5807,24 @@
           "operation": {
             "enum": [
               "chat",
+              "structured",
               "embedding",
               "rerank",
               "vision"
             ],
             "title": "Operation",
             "type": "string"
+          },
+          "reasoning_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Tokens"
           },
           "retryable": {
             "default": false,
@@ -6063,6 +6135,16 @@
             ],
             "title": "Source",
             "type": "string"
+          },
+          "supports_reasoning_control": {
+            "default": false,
+            "title": "Supports Reasoning Control",
+            "type": "boolean"
+          },
+          "supports_structured_output": {
+            "default": false,
+            "title": "Supports Structured Output",
+            "type": "boolean"
           },
           "vision_base_url": {
             "anyOf": [

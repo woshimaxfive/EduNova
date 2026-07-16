@@ -1045,3 +1045,7 @@ Phase 31 不新增表或迁移。大型资料仍使用现有资料、解析版�
 `model_settings` 另存 `vision_app_id_ciphertext`、`vision_api_key_ciphertext`、`vision_api_secret_ciphertext`，用于讯飞原生图片理解。三项凭证与回答、向量凭证隔离加密，API不返回明文；`is_vision_default` 仍决定当前用户的唯一默认视觉配置。
 
 `chat_message_attachments` 保存 `user_id/session_id/message_id`、可空 `material_id`、兼容旧附件的私有 `storage_key`、原文件名、真实 MIME、重编码后字节数、宽高、SHA-256、`pending|bound|deleted` 状态和待绑定过期时间。新上传图片先作为 `materials.ingestion_status=stored` 的持久资料资产入库，附件通过 `material_id` 引用它；图片不生成切片、目录或解析任务，也不进入知识点、课程证据或跨会话记忆。附件只能绑定同一用户同一会话的用户消息；绑定和消息落库同一事务完成。删除附件不删除仍在资料库中的图片。`model_settings.is_vision_default` 通过部分唯一索引保证每个用户至多一个视觉默认配置。
+
+## Phase 38 兼容说明
+
+Phase 38 不新增数据表或 Alembic 迁移。新生成路径在既有 `learning_paths.plan_json` 保存 `generation_mode=model_generated` 与 `planning_input_hash`；本节学习安排继续在 `learning_tasks.learning_bundle_json` 保存 `learning_problem`、`example_direction`、教学策略、难度和画像因素代码。练习跨批次差异字段写入既有 `practice_answers.question_json`，模型任务聚合写入既有 `ai_jobs.progress_json/result_json`。历史 `model_enhanced`、`deterministic_source`、`legacy` 和缺字段 JSON 保持可读。

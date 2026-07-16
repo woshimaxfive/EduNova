@@ -475,7 +475,7 @@ Authorization: Bearer <token>
         "source_type": "profile_chat",
         "updated_dimensions": ["learning_goal", "weak_points"],
         "candidate_dimensions": [],
-        "generation_mode": "model_enhanced",
+        "generation_mode": "model_generated",
         "parse_status": "valid",
         "repair_count": 0,
         "review_mode": "model_and_rules",
@@ -499,7 +499,7 @@ Authorization: Bearer <token>
 - 只返回当前用户画像事件，默认最近 20 条。
 - 课程问答产生的画像候选事件会使用 `dimension="weak_points"`。
 - 课程问答事件的 `evidence_json` 只保存 `source_type`、`course_id`、`session_id`、消息 ID、`trace_id` 和引用摘要；不保存完整用户问题、系统提示词、模型输入或资料原文。
-- 显式画像事件的 `evidence_json` 可增加 `generation_mode=model_enhanced|rules_only`、`parse_status`、`repair_count` 和 `review_mode`；这些字段只描述安全执行方式，不保存模型原始回答或用户完整输入。
+- 显式画像事件的 `evidence_json` 可包含 `generation_mode=model_generated|model_enhanced|rules_only`、`parse_status`、`repair_count` 和 `review_mode`；`model_enhanced` 仅用于历史兼容，这些字段不保存模型原始回答或用户完整输入。
 - 画像事件是证据流。带 `course_id` 的事件可以作为课程学习状态的候选来源，但不能直接视为已确认弱点或复习队列项。
 - 后续可增加 `course_id` 查询参数过滤某门课相关证据；当前实现仍返回当前用户最近画像事件。
 
@@ -1088,7 +1088,7 @@ Authorization: Bearer <token>
 - `ResourceGenerationGraph` 使用 LangGraph `Send` 为每个请求类型并行派发独立 Worker。每个 Worker 直接生成 v3 类型化 artifact；ReviewAgent 读取安全资料摘录、学习目标和完整候选内容，失败资源最多执行一次结构修复和一次内容修订。
 - `planner` 为每个 Worker 生成结构化 `ArtifactIntent`，包含教学策略、认知层级、案例方向、资源职责、真实证据和可验证学习结果。可信画像不足时必须标记 `context_limited`。
 - 资源按 `version_family_id + version_number` 形成不可覆盖的版本族。`alternative` 必须相对来源版本至少改变教学策略、案例、认知层级、交互结构中的两项；`refine` 必须保持原教学意图。`content_json.diversity` 始终记录本地文字与结构差异；配置可用向量模型时还会记录 `semantic_similarity/semantic_status`，向量服务不可用时安全降级且不伪造语义校验结果。
-- `content_json.schema_version=3` 必须包含 `format=rich`、`artifact.kind`、Markdown fallback、引用绑定、`quality` 和 Prompt 版本。`generation_mode=model_enhanced` 仅在模型结果相对底稿存在有效差异并通过门禁时使用。
+- `content_json.schema_version=3` 必须包含 `format=rich`、`artifact.kind`、Markdown 展示内容、引用绑定、`quality` 和 Prompt 版本。新产物只有模型正文相对安全合同产生有效内容并通过门禁时才使用 `generation_mode=model_generated`；`model_enhanced` 仅作历史兼容。
 - 讲解、导图和 PPT 可保存通过规则门禁的证据型降级稿；练习、代码和动画不合格时进入 `failed_resource_types` 且不持久化。代码还必须通过内部 Pyodide 运行验证，验证服务不可用时不得保存未经运行的代码。
 - 响应、资源内容、质量分和 Agent trace 只保存安全摘要、引用标题和白名单 metadata，不返回系统提示词、完整模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
@@ -1148,7 +1148,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
           },
           "metadata": {
             "agent_trace_id": "trace_20260705_resource_001",
-            "generation_mode": "model_enhanced",
+            "generation_mode": "model_generated",
             "review_mode": "model_and_rules",
             "prompt_version": "resource-doc-v3",
             "repair_count": 0,
@@ -1420,7 +1420,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
           "teaching_strategy": "先代码实验再概念复盘",
           "difficulty": "medium",
           "used_profile_factor_codes": ["major_background", "confirmed_weaknesses"],
-          "generation_mode": "model_enhanced",
+          "generation_mode": "model_generated",
           "rationale": "先处理已确认薄弱点",
           "items": []
         },
@@ -1805,7 +1805,7 @@ data: {"code":"rate_limited","message":"模型服务请求较多，请稍后重�
         "explanation": "课程证据说明 g(n) 是已走代价，h(n) 是剩余代价的启发估计。",
         "difficulty": "medium",
         "citation_refs": ["302"],
-        "generation_mode": "model_enhanced",
+        "generation_mode": "model_generated",
         "prompt_version": "assessment-v3.1",
         "quality": {"evidence_bound": true, "answer_locked": true}
       }
@@ -2645,6 +2645,14 @@ Phase 29 起 `AiJobWorkflow` 增加 `path_planning`。来源引用可携带 `acc
 ## 25. Phase 31 行为兼容
 
 Phase 31 不新增接口路径或数据库迁移。现有资料解析进度对大型 PDF 使用真实心跳与“正在解析大型教材”标签；练习 `score=null` 和 `grading_status` 语义保持兼容；路径更新仍返回既有 AIJob 合同，但手动更新也保留已完成任务。历史失败的 `course_builder` AIJob 仍可在任务托盘查看，前端只自动恢复非终态任务，不再强制打开旧失败弹窗。
+
+## 26. Phase 38 模型任务与生成失败合同
+
+- 模型连接测试 `operation` 增加 `structured`。响应与安全快照可包含 `latency_ms`、`reasoning_tokens`；配置摘要增加 `supports_structured_output`、`supports_reasoning_control` 和 `structured_output_verified`。
+- 个人回答配置只有结构化测试成功后才能承担路径、练习、报告、评分和画像等 JSON 任务；文本连通但结构化失败的配置仍可用于普通问答。
+- `LearningBundle` 增加可选 `learning_problem` 和 `example_direction`。旧路径 JSON 缺少字段时继续读取；新路径 `plan_json` 使用 `generation_mode=model_generated` 和 `planning_input_hash`。
+- 同步兼容接口在模型生成失败时返回 `503 / MODEL_GENERATION_FAILED`：路径不覆盖旧路径，练习不创建会话，资源不保存失败类型，报告保留旧报告。异步入口继续使用现有 AIJob 失败、重试和任务托盘合同。
+- AIJob 完成结果可增加 `model_task_summary`，只包含任务类型、调用数、修订数、Token 和耗时聚合，不包含 Prompt、模型原文或用户资料。
 # Phase 32 图片提问接口
 
 - `POST /api/v1/tutor/sessions/{session_id}/attachments`：上传单张 PNG/JPEG，最大 4 MiB，返回私有附件摘要。

@@ -238,17 +238,21 @@ function testSnapshot(
     retryable?: boolean;
     tested_at?: string;
     dimension?: number | null;
+    latency_ms?: number | null;
+    reasoning_tokens?: number | null;
   }
 ): ModelConnectionTestSnapshot {
   return {
     operation,
     ok: data.ok,
-    model: data.model ?? (operation === "chat" ? data.chat_model ?? null : null),
+    model: data.model ?? (["chat", "structured"].includes(operation) ? data.chat_model ?? null : null),
     message: data.message,
     code: data.code ?? null,
     retryable: data.retryable ?? false,
     tested_at: data.tested_at ?? new Date().toISOString(),
-    dimension: data.dimension ?? null
+    dimension: data.dimension ?? null,
+    latency_ms: data.latency_ms ?? null,
+    reasoning_tokens: data.reasoning_tokens ?? null
   };
 }
 
@@ -798,6 +802,17 @@ export function SettingsPage() {
                             onTest={() => runConnectionTest("chat", null)}
                           />
                         ) : null}
+                        {!defaultChatConfig ? (
+                          <ConnectionTestCard
+                            operation="structured"
+                            model={systemSummary?.chat_model ?? null}
+                            result={systemTests.structured}
+                            dirty={false}
+                            disabled={testConnectionMutation.isPending}
+                            pending={testPending("structured")}
+                            onTest={() => runConnectionTest("structured", null)}
+                          />
+                        ) : null}
                         {!defaultEmbeddingConfig ? (
                           <ConnectionTestCard
                             operation="embedding"
@@ -958,6 +973,17 @@ export function SettingsPage() {
                               <strong>{selectedChatPreset.name}</strong>
                               <span>{selectedChatPreset.description}</span>
                               {selectedChatPreset.modelsHint ? <small>{selectedChatPreset.modelsHint}</small> : null}
+                              {!isVisionConfig ? (
+                                <small>
+                                  能力：文本回答 · 结构化{
+                                    selectedConfig?.structured_output_verified
+                                      ? "已验证"
+                                      : selectedConfig?.supports_structured_output
+                                        ? "原生支持，待验证"
+                                        : "兼容候选，待验证"
+                                  } · 思考控制{selectedConfig?.supports_reasoning_control ? "支持" : "未验证"}
+                                </small>
+                              ) : null}
                             </div>
                             <label className="settings-form-span">
                               <span>{isVisionConfig ? "图片 Base URL" : "回答 Base URL"}</span>
@@ -1009,6 +1035,16 @@ export function SettingsPage() {
                             disabled={isCreating || isDirty || testConnectionMutation.isPending}
                             pending={testPending("chat")}
                             onTest={() => runConnectionTest("chat")}
+                          /> : null}
+                          {!isVisionConfig ? <ConnectionTestCard
+                            operation="structured"
+                            model={currentDraft.chat_model || null}
+                            missingMessage="路径、练习和报告需要结构化生成能力。"
+                            result={selectedConfig?.connection_tests?.structured ?? null}
+                            dirty={isCreating || isDirty}
+                            disabled={isCreating || isDirty || testConnectionMutation.isPending}
+                            pending={testPending("structured")}
+                            onTest={() => runConnectionTest("structured")}
                           /> : null}
                           {isVisionConfig ? (
                             <ConnectionTestCard

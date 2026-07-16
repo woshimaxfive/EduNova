@@ -47,6 +47,8 @@ class LearningNextActionService:
 
         course = self._latest_course(user.id)
         material = self._latest_unassigned_material(user.id)
+        if material is not None and material.ingestion_status == "stored":
+            material = None
         if course is None:
             return self._material_action(material)
         if material is not None and self._material_activity_at(material) > self._course_activity_at(course):
@@ -266,6 +268,7 @@ class LearningNextActionService:
             select(Material)
             .where(
                 Material.user_id == user_id,
+                Material.ingestion_status != "stored",
                 ~select(CourseMaterialLink.id).where(CourseMaterialLink.material_id == Material.id).exists(),
             )
             .order_by(Material.created_at.desc(), Material.id.desc())

@@ -109,6 +109,10 @@ class SendTutorMessageRequest(BaseModel):
         return normalized
 
 
+class AttachTutorMaterialRequest(BaseModel):
+    material_id: int = Field(gt=0)
+
+
 class TutorSessionSummary(BaseModel):
     id: str
     scope: TutorSessionScope
@@ -124,6 +128,7 @@ class TutorSessionSummary(BaseModel):
 class TutorImageAttachment(BaseModel):
     id: str
     message_id: str | None
+    material_id: str | None
     filename: str
     mime_type: str
     size_bytes: int
@@ -188,6 +193,7 @@ def attachment_to_api(attachment: ChatMessageAttachment) -> TutorImageAttachment
     return TutorImageAttachment(
         id=str(attachment.id),
         message_id=str(attachment.message_id) if attachment.message_id is not None else None,
+        material_id=str(attachment.material_id) if getattr(attachment, "material_id", None) is not None else None,
         filename=attachment.original_filename,
         mime_type=attachment.mime_type,
         size_bytes=attachment.size_bytes,

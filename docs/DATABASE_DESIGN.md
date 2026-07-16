@@ -53,6 +53,8 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260713_0019_split_embedding_connection.py`：为同一模型配置增加向量专用 Provider 预设、Base URL 和加密 Key；旧非空向量配置从共享连接兼容复制。
 - `backend/migrations/versions/20260713_0020_dynamic_embedding_and_rerank.py`：把课程/资料向量列升级为动态维度，增加向量配置指纹字段，并为模型配置增加讯飞向量凭证与独立重排序连接。
 - `backend/migrations/versions/20260716_0026_visual_tutor.py`：为模型配置增加独立视觉默认标记，并创建私有聊天图片附件表。
+- `backend/migrations/versions/20260716_0027_xfyun_native_vision.py`：为个人模型配置增加讯飞原生视觉三项加密凭证。
+- `backend/migrations/versions/20260716_0028_link_chat_images_to_materials.py`：允许聊天附件引用资料库中的持久图片资产，兼容旧附件对象键。
 
 Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
@@ -1042,4 +1044,4 @@ Phase 31 不新增表或迁移。大型资料仍使用现有资料、解析版�
 
 `model_settings` 另存 `vision_app_id_ciphertext`、`vision_api_key_ciphertext`、`vision_api_secret_ciphertext`，用于讯飞原生图片理解。三项凭证与回答、向量凭证隔离加密，API不返回明文；`is_vision_default` 仍决定当前用户的唯一默认视觉配置。
 
-`chat_message_attachments` 保存 `user_id/session_id/message_id`、私有 `storage_key`、原文件名、真实 MIME、重编码后字节数、宽高、SHA-256、`pending|bound|deleted` 状态和待绑定过期时间。附件只能绑定同一用户同一会话的用户消息；绑定和消息落库同一事务完成。图片对象不进入资料、切片、知识点或跨会话记忆表。`model_settings.is_vision_default` 通过部分唯一索引保证每个用户至多一个视觉默认配置。
+`chat_message_attachments` 保存 `user_id/session_id/message_id`、可空 `material_id`、兼容旧附件的私有 `storage_key`、原文件名、真实 MIME、重编码后字节数、宽高、SHA-256、`pending|bound|deleted` 状态和待绑定过期时间。新上传图片先作为 `materials.ingestion_status=stored` 的持久资料资产入库，附件通过 `material_id` 引用它；图片不生成切片、目录或解析任务，也不进入知识点、课程证据或跨会话记忆。附件只能绑定同一用户同一会话的用户消息；绑定和消息落库同一事务完成。删除附件不删除仍在资料库中的图片。`model_settings.is_vision_default` 通过部分唯一索引保证每个用户至多一个视觉默认配置。

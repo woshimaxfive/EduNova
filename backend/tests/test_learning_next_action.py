@@ -95,6 +95,25 @@ def test_material_actions_cover_upload_wait_review_retry_and_course_creation() -
     assert service._material_action(material).status == "blocked"
 
 
+def test_stored_chat_image_does_not_hijack_the_global_next_action() -> None:
+    image = Material(
+        id=2,
+        user_id=1,
+        filename="课堂截图.png",
+        content_type="image/png",
+        storage_path="user_1/image.png",
+        parse_status="uploaded",
+        ingestion_status="stored",
+        created_at=NOW,
+    )
+    db = MagicMock()
+    db.scalar.side_effect = [None, None, image]
+
+    action = service_with(db, mastery()).get_next_action(make_user())
+
+    assert action.kind == "upload_material"
+
+
 def test_path_job_is_exposed_as_waiting_next_action() -> None:
     service = service_with(MagicMock(), mastery())
     job = AiJob(

@@ -558,6 +558,12 @@ class ChatMessageAttachment(IdMixin, CreatedAtMixin, Base):
         ForeignKey("chat_messages.id", ondelete="CASCADE"),
         nullable=True,
     )
+    material_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("materials.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(80), nullable=False)

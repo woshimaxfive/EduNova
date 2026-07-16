@@ -272,7 +272,9 @@ def test_image_upload_is_saved_without_ocr(tmp_path: Path) -> None:
     data = as_dict(result)
 
     assert data["parse_status"] == "uploaded"
-    assert data["detail"] == "仅入库，暂不做 OCR"
+    assert data["ingestion_status"] == "stored"
+    assert data["category"] == "image"
+    assert data["detail"] == "已入库，可用于图片提问"
     assert repo.materials[0].extracted_text is None
 
 

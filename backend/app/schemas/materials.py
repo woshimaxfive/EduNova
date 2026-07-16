@@ -24,6 +24,7 @@ class MaterialUploadResult(BaseModel):
     parse_status: str
     ingestion_job_id: str | None = None
     ingestion_status: str = "legacy"
+    category: str = "document"
     quality_summary: dict = Field(default_factory=dict)
 
 

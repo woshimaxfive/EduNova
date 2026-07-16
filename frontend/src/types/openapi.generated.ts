@@ -1479,6 +1479,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tutor/sessions/{session_id}/attachments/from-material": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Attach Tutor Material */
+        post: operations["attach_tutor_material_api_v1_tutor_sessions__session_id__attachments_from_material_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tutor/sessions/{session_id}/messages": {
         parameters: {
             query?: never;
@@ -2048,6 +2065,11 @@ export interface components {
             course_id: string;
             /** Material Ids */
             material_ids: string[];
+        };
+        /** AttachTutorMaterialRequest */
+        AttachTutorMaterialRequest: {
+            /** Material Id */
+            material_id: number;
         };
         /** Body_upload_material_api_v1_materials_upload_post */
         Body_upload_material_api_v1_materials_upload_post: {
@@ -3327,6 +3349,11 @@ export interface components {
         MaterialUploadResult: {
             /** Agent Trace Id */
             agent_trace_id?: string | null;
+            /**
+             * Category
+             * @default document
+             */
+            category: string;
             /** Course Id */
             course_id: number | null;
             /** Detail */
@@ -4434,6 +4461,8 @@ export interface components {
             height: number;
             /** Id */
             id: string;
+            /** Material Id */
+            material_id: string | null;
             /** Message Id */
             message_id: string | null;
             /** Mime Type */
@@ -14641,6 +14670,115 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": components["schemas"]["Body_upload_tutor_attachment_api_v1_tutor_sessions__session_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_TutorImageAttachment_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    attach_tutor_material_api_v1_tutor_sessions__session_id__attachments_from_material_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachTutorMaterialRequest"];
             };
         };
         responses: {

@@ -169,7 +169,7 @@ export function LibraryPage() {
   const materialOutlineQuery = useQuery({
     queryKey: ["materials", "outline", selectedMaterialId],
     queryFn: () => getMaterialOutline(selectedMaterialId ?? 0),
-    enabled: drawerMode === "detail" && selectedMaterialId !== null && Boolean(materialDetail) && materialDetail?.ingestion_status !== "legacy",
+    enabled: drawerMode === "detail" && selectedMaterialId !== null && materialDetail?.category === "document" && materialDetail.ingestion_status !== "legacy",
     staleTime: 10_000
   });
   const materialOutline = asMaterialOutline(materialOutlineQuery.data?.data);

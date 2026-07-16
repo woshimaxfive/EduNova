@@ -1536,6 +1536,20 @@
         "title": "AttachCourseMaterialsResult",
         "type": "object"
       },
+      "AttachTutorMaterialRequest": {
+        "properties": {
+          "material_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Material Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "material_id"
+        ],
+        "title": "AttachTutorMaterialRequest",
+        "type": "object"
+      },
       "Body_upload_material_api_v1_materials_upload_post": {
         "properties": {
           "course_id": {
@@ -5111,6 +5125,11 @@
             ],
             "title": "Agent Trace Id"
           },
+          "category": {
+            "default": "document",
+            "title": "Category",
+            "type": "string"
+          },
           "course_id": {
             "anyOf": [
               {
@@ -8348,6 +8367,17 @@
             "title": "Id",
             "type": "string"
           },
+          "material_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Id"
+          },
           "message_id": {
             "anyOf": [
               {
@@ -8384,6 +8414,7 @@
         "required": [
           "id",
           "message_id",
+          "material_id",
           "filename",
           "mime_type",
           "size_bytes",
@@ -22543,6 +22574,154 @@
           }
         },
         "summary": "Upload Tutor Attachment",
+        "tags": [
+          "tutor"
+        ]
+      }
+    },
+    "/api/v1/tutor/sessions/{session_id}/attachments/from-material": {
+      "post": {
+        "operationId": "attach_tutor_material_api_v1_tutor_sessions__session_id__attachments_from_material_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachTutorMaterialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_TutorImageAttachment_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Attach Tutor Material",
         "tags": [
           "tutor"
         ]

@@ -12,6 +12,7 @@ export const TUTOR_ENDPOINTS = {
   message: (sessionId: number | string) => `/tutor/sessions/${sessionId}/messages`,
   stream: (sessionId: number | string) => `/tutor/sessions/${sessionId}/messages/stream`,
   attachments: (sessionId: number | string) => `/tutor/sessions/${sessionId}/attachments`,
+  materialAttachments: (sessionId: number | string) => `/tutor/sessions/${sessionId}/attachments/from-material`,
   attachment: (attachmentId: number | string) => `/tutor/attachments/${attachmentId}`,
   attachmentContent: (attachmentId: number | string) => `/tutor/attachments/${attachmentId}/content`
 } as const;
@@ -30,6 +31,7 @@ export type CreateTutorSessionRequest = {
 export type TutorImageAttachment = {
   id: string;
   message_id: string | null;
+  material_id?: string | null;
   filename: string;
   mime_type: "image/png" | "image/jpeg" | string;
   size_bytes: number;
@@ -225,6 +227,14 @@ export async function uploadTutorAttachment(sessionId: number | string, file: Fi
   const response = await apiClient.post<ApiEnvelope<TutorImageAttachment>>(
     TUTOR_ENDPOINTS.attachments(sessionId),
     form
+  );
+  return response.data;
+}
+
+export async function attachTutorMaterial(sessionId: number | string, materialId: number | string) {
+  const response = await apiClient.post<ApiEnvelope<TutorImageAttachment>>(
+    TUTOR_ENDPOINTS.materialAttachments(sessionId),
+    { material_id: Number(materialId) }
   );
   return response.data;
 }

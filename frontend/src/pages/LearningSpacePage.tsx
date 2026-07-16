@@ -2,7 +2,6 @@ import {
   ArrowRight,
   BookOpen,
   CheckCircle,
-  FileArrowUp,
   LinkSimple,
   MagnifyingGlass,
   Microphone,
@@ -11,7 +10,7 @@ import {
   X
 } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { buildCoursePath, PATHS } from "../app/routePaths";
@@ -57,7 +56,8 @@ type LibraryMaterial = {
   detail: string;
   modified: string;
   size: string;
-  ingestion_status?: "legacy" | "pending" | "running" | "awaiting_confirmation" | "confirmed" | "failed";
+  ingestion_status?: "legacy" | "stored" | "pending" | "queued" | "running" | "awaiting_confirmation" | "confirmed" | "failed";
+  category?: "document" | "image";
 };
 
 type HomeMessage = {
@@ -117,7 +117,6 @@ export function LearningSpacePage() {
   const selectedMaterialIdsFromNavigation = Array.isArray(navigationState?.selectedMaterialIds)
     ? navigationState.selectedMaterialIds.filter((materialId): materialId is string => typeof materialId === "string")
     : [];
-  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const homeChatStageRef = useRef<HTMLElement | null>(null);
   const isResettingHomeRef = useRef(false);
   const [prompt, setPrompt] = useState("");
@@ -126,7 +125,6 @@ export function LearningSpacePage() {
   const [historySearch, setHistorySearch] = useState("");
   const [activeHomeThreadId, setActiveHomeThreadId] = useState<string | null>(() => selectedHomeThreadIdFromNavigation);
   const [isSendingQuestion, setIsSendingQuestion] = useState(false);
-  const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
   const [conversationMaterialIds, setConversationMaterialIds] = useState<string[]>([]);
   const [materialDraftIds, setMaterialDraftIds] = useState<string[]>(() => selectedMaterialIdsFromNavigation);
   const [courseMaterialIds, setCourseMaterialIds] = useState<string[]>([]);
@@ -143,7 +141,11 @@ export function LearningSpacePage() {
   const [courseDialogFeedback, setCourseDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [materialDialogFeedback, setMaterialDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [isCourseDrawerOpen, setIsCourseDrawerOpen] = useState(false);
-  const imageDraft = useTutorImageDraft(ensureHomeImageSession, (message) => setComposerFeedback({ message, tone: "warning" }));
+  const imageDraft = useTutorImageDraft(
+    ensureHomeImageSession,
+    (message) => setComposerFeedback({ message, tone: "warning" }),
+    handleTutorDocumentFiles
+  );
   const speech = useBrowserSpeech({
     onTranscript: (transcript) => setPrompt((current) => current.trim() ? `${current.trim()} ${transcript}` : transcript),
     onNotice: (message, tone) => setComposerFeedback({ message, tone })
@@ -204,7 +206,7 @@ export function LearningSpacePage() {
 
   function handleNextLearningAction(action: NonNullable<typeof nextActionQuery.data>["data"]) {
     if (action.kind === "upload_material") {
-      uploadInputRef.current?.click();
+      document.querySelector<HTMLInputElement>('input[aria-label="上传资料文件"]')?.click();
       return;
     }
     navigate(learningActionHref(action));
@@ -274,29 +276,22 @@ export function LearningSpacePage() {
     setIsCourseDialogOpen(true);
   }
 
-  async function handleUploadFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    setIsUploadingMaterial(true);
-
+  async function handleTutorDocumentFiles(files: File[]) {
+    if (files.length === 0) return;
     try {
-      const response = await uploadMaterial({ file });
-      if (response.data.ingestion_job_id) {
-        trackJob(await getAiJob(response.data.ingestion_job_id));
+      for (const file of files) {
+        const response = await uploadMaterial({ file });
+        if (response.data.ingestion_job_id) {
+          trackJob(await getAiJob(response.data.ingestion_job_id));
+        }
       }
+      await queryClient.invalidateQueries({ queryKey: ["materials", "list"] });
       await queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
       await invalidateLearningNextActions(queryClient);
-      setComposerFeedback({ message: "资料已上传，正在后台识别目录和正文切片。完成后可到资料库检查并确认。", tone: "success" });
-      event.target.value = "";
+      setComposerFeedback({ message: `${files.length} 份资料已上传，正在后台识别目录和正文切片。`, tone: "success" });
     } catch (error) {
       void error;
       setComposerFeedback({ message: "资料上传失败，请稍后再试。", tone: "warning" });
-    } finally {
-      setIsUploadingMaterial(false);
     }
   }
 
@@ -808,23 +803,6 @@ export function LearningSpacePage() {
               <TutorImagePicker draft={imageDraft} />
               <div className="composer-actions">
                 <div className="composer-toolbar" aria-label="输入工具">
-                  <input
-                    ref={uploadInputRef}
-                    className="visually-hidden"
-                    type="file"
-                    aria-label="上传资料文件"
-                    accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg"
-                    onChange={(event) => void handleUploadFile(event)}
-                  />
-                  <button
-                    type="button"
-                    aria-label="上传资料"
-                    disabled={isUploadingMaterial}
-                    onClick={() => uploadInputRef.current?.click()}
-                  >
-                    <FileArrowUp size={18} weight="duotone" aria-hidden="true" />
-                    <span>上传</span>
-                  </button>
                   <button type="button" aria-label="打开资料库" onClick={() => openLibrary()}>
                     <BookOpen size={18} weight="duotone" aria-hidden="true" />
                     <span>资料库</span>

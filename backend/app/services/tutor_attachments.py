@@ -11,8 +11,9 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.api.errors import make_trace_id
 from backend.app.core.config import Settings
-from backend.app.models import ChatMessageAttachment, ChatSession, User
+from backend.app.models import ChatMessageAttachment, ChatSession, Material, User
 from backend.app.services.storage import StorageAdapter, StorageError, build_storage
 from backend.app.services.upload_security import (
     MalwareScanner,
@@ -48,7 +49,9 @@ class TutorAttachmentService:
     ) -> None:
         self.db = db
         self.settings = settings
-        self.storage = storage or build_storage(settings, kind="chat-attachments")
+        self.material_storage = storage or build_storage(settings, kind="materials")
+        self.legacy_storage = storage or build_storage(settings, kind="chat-attachments")
+        self.storage = self.material_storage
         self.scanner = scanner or build_malware_scanner(settings)
 
     def upload(
@@ -78,33 +81,102 @@ class TutorAttachmentService:
         normalized, mime_type, width, height = self._normalize_image(content, detected)
         digest = sha256(normalized).hexdigest()
         suffix = ".png" if mime_type == "image/png" else ".jpg"
-        key = f"users/{user.id}/sessions/{session_id}/{uuid4().hex}{suffix}"
+        key = f"user_{user.id}/{uuid4().hex}{suffix}"
         try:
-            stored_key = self.storage.put_bytes(key, normalized, content_type=mime_type)
+            stored_key = self.material_storage.put_bytes(key, normalized, content_type=mime_type)
         except StorageError as exc:
             raise TutorAttachmentError("图片保存失败，请稍后重试。") from exc
-        attachment = ChatMessageAttachment(
+        trace_id = make_trace_id()
+        material = Material(
             user_id=user.id,
-            session_id=session_id,
-            message_id=None,
-            storage_key=stored_key,
-            original_filename=clean_name,
-            mime_type=mime_type,
-            size_bytes=len(normalized),
-            width=width,
-            height=height,
-            sha256=digest,
-            status="pending",
-            expires_at=datetime.now(UTC) + timedelta(hours=24),
+            filename=clean_name,
+            content_type=mime_type,
+            storage_path=stored_key,
+            parse_status="uploaded",
+            agent_trace_id=trace_id,
+            extracted_text=None,
+            metadata_json={
+                "size_bytes": len(normalized),
+                "size_label": self._format_size(len(normalized)),
+                "extension": suffix.lstrip(".").upper(),
+                "detail": "已入库，可用于图片提问",
+                "agent_trace_id": trace_id,
+                "width": width,
+                "height": height,
+            },
+            ingestion_status="stored",
+            outline_version=0,
+            outline_json={},
+            quality_json={},
         )
         try:
+            self.db.add(material)
+            self.db.flush()
+            attachment = ChatMessageAttachment(
+                user_id=user.id,
+                session_id=session_id,
+                message_id=None,
+                material_id=material.id,
+                storage_key=None,
+                original_filename=clean_name,
+                mime_type=mime_type,
+                size_bytes=len(normalized),
+                width=width,
+                height=height,
+                sha256=digest,
+                status="pending",
+                expires_at=datetime.now(UTC) + timedelta(hours=24),
+            )
             self.db.add(attachment)
             self.db.commit()
             self.db.refresh(attachment)
         except Exception:
             self.db.rollback()
-            self.storage.delete(stored_key)
+            self.material_storage.delete(stored_key)
             raise
+        return attachment
+
+    def attach_material(self, *, user: User, session_id: int, material_id: int) -> ChatMessageAttachment:
+        self._session(user.id, session_id)
+        material = self.db.scalar(
+            select(Material).where(Material.id == material_id, Material.user_id == user.id)
+        )
+        if material is None or material.content_type not in ALLOWED_MIME_TYPES:
+            raise TutorAttachmentNotFoundError("图片资料不存在、格式不支持或无权访问。")
+        existing = self.db.scalar(
+            select(ChatMessageAttachment).where(
+                ChatMessageAttachment.user_id == user.id,
+                ChatMessageAttachment.session_id == session_id,
+                ChatMessageAttachment.material_id == material.id,
+                ChatMessageAttachment.message_id.is_(None),
+                ChatMessageAttachment.status == "pending",
+            )
+        )
+        if existing is not None:
+            return existing
+        try:
+            content = self.material_storage.read_bytes(material.storage_path)
+            normalized, mime_type, width, height = self._normalize_image(content, material.content_type)
+        except (StorageError, OSError) as exc:
+            raise TutorAttachmentNotFoundError("图片资料文件不存在。") from exc
+        attachment = ChatMessageAttachment(
+            user_id=user.id,
+            session_id=session_id,
+            message_id=None,
+            material_id=material.id,
+            storage_key=None,
+            original_filename=material.filename,
+            mime_type=mime_type,
+            size_bytes=len(normalized),
+            width=width,
+            height=height,
+            sha256=sha256(normalized).hexdigest(),
+            status="pending",
+            expires_at=datetime.now(UTC) + timedelta(hours=24),
+        )
+        self.db.add(attachment)
+        self.db.commit()
+        self.db.refresh(attachment)
         return attachment
 
     def get(self, *, user: User, attachment_id: int) -> ChatMessageAttachment:
@@ -120,18 +192,30 @@ class TutorAttachmentService:
 
     def read(self, *, user: User, attachment_id: int) -> tuple[ChatMessageAttachment, bytes]:
         attachment = self.get(user=user, attachment_id=attachment_id)
+        if attachment.material_id is not None:
+            material = self.db.scalar(
+                select(Material).where(Material.id == attachment.material_id, Material.user_id == user.id)
+            )
+            if material is None:
+                raise TutorAttachmentNotFoundError("图片资料不存在或已删除。")
+            try:
+                content = self.material_storage.read_bytes(material.storage_path)
+                normalized, _, _, _ = self._normalize_image(content, material.content_type)
+                return attachment, normalized
+            except (StorageError, OSError) as exc:
+                raise TutorAttachmentNotFoundError("图片资料文件不存在。") from exc
         if not attachment.storage_key:
             raise TutorAttachmentNotFoundError("图片不存在或已删除。")
         try:
-            return attachment, self.storage.read_bytes(attachment.storage_key)
+            return attachment, self.legacy_storage.read_bytes(attachment.storage_key)
         except (StorageError, OSError) as exc:
             raise TutorAttachmentNotFoundError("图片文件不存在。") from exc
 
     def delete(self, *, user: User, attachment_id: int) -> ChatMessageAttachment:
         attachment = self.get(user=user, attachment_id=attachment_id)
-        if attachment.storage_key:
+        if attachment.material_id is None and attachment.storage_key:
             try:
-                self.storage.delete(attachment.storage_key)
+                self.legacy_storage.delete(attachment.storage_key)
             except (StorageError, OSError):
                 pass
         attachment.storage_key = None
@@ -155,9 +239,9 @@ class TutorAttachmentService:
             )
         )
         for attachment in attachments:
-            if attachment.storage_key:
+            if attachment.material_id is None and attachment.storage_key:
                 try:
-                    self.storage.delete(attachment.storage_key)
+                    self.legacy_storage.delete(attachment.storage_key)
                 except (StorageError, OSError):
                     pass
             self.db.delete(attachment)
@@ -176,6 +260,14 @@ class TutorAttachmentService:
         if session is None:
             raise TutorAttachmentNotFoundError("会话不存在或无权访问。")
         return session
+
+    @staticmethod
+    def _format_size(size: int) -> str:
+        if size >= 1024 * 1024:
+            return f"{size / 1024 / 1024:.1f} MB"
+        if size >= 1024:
+            return f"{(size + 1023) // 1024} KB"
+        return f"{size} B"
 
     @staticmethod
     def _normalize_image(content: bytes, detected_mime: str) -> tuple[bytes, str, int, int]:

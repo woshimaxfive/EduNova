@@ -11,7 +11,8 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 
 import { PATHS } from "../app/routePaths";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
-import { createIdempotencyKey, createResourceGenerationJob } from "../api/aiJobs";
+import { createIdempotencyKey, createResourceGenerationJob, getAiJob } from "../api/aiJobs";
+import { uploadMaterial } from "../api/materials";
 import {
   getCourse,
   getCourseLearningState,
@@ -293,7 +294,7 @@ export function CourseSpacePage() {
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [isSearchingCourse, setIsSearchingCourse] = useState(false);
   const [courseFeedback, setCourseFeedback] = useState<string | null>(null);
-  const imageDraft = useTutorImageDraft(ensureCourseImageSession, setCourseFeedback);
+  const imageDraft = useTutorImageDraft(ensureCourseImageSession, setCourseFeedback, handleCourseDocumentFiles);
   const [weaknessFeedback, setWeaknessFeedback] = useState<string | null>(null);
   const [courseResourceFeedback, setCourseResourceFeedback] = useState<string | null>(null);
   const [latestGeneratedResources, setLatestGeneratedResources] = useState<GeneratedResource[]>([]);
@@ -882,6 +883,23 @@ export function CourseSpacePage() {
     const created = await createTutorSession({ scope: "course", course_id: numericCourseId, mode: "chat", title: "图片提问" });
     setActiveCourseSessionId(created.data.id);
     return created.data.id;
+  }
+
+  async function handleCourseDocumentFiles(files: File[]) {
+    if (!hasRealCourseId || files.length === 0) return;
+    try {
+      for (const file of files) {
+        const response = await uploadMaterial({ file, courseId: numericCourseId });
+        if (response.data.ingestion_job_id) trackJob(await getAiJob(response.data.ingestion_job_id));
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["courses", "overview", numericCourseId] })
+      ]);
+      setCourseFeedback(`${files.length} 份资料已上传，解析完成并确认目录后会成为课程参考。`);
+    } catch {
+      setCourseFeedback("资料上传失败，请稍后再试。");
+    }
   }
 
   function handleCourseComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {

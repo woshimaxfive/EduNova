@@ -1,4 +1,4 @@
-import { ImageSquare, SpinnerGap, Trash, X } from "@phosphor-icons/react";
+import { FileArrowUp, ImageSquare, Paperclip, SpinnerGap, Trash, X } from "@phosphor-icons/react";
 import { type ChangeEvent, type ClipboardEvent, type DragEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -18,6 +18,7 @@ export function TutorImagePicker({
   function select(event: ChangeEvent<HTMLInputElement>) {
     void draft.addFiles(Array.from(event.target.files ?? []));
     event.target.value = "";
+    setOpen(false);
   }
   function paste(event: ClipboardEvent<HTMLDivElement>) {
     const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
@@ -27,29 +28,50 @@ export function TutorImagePicker({
     event.preventDefault();
     void draft.addFiles(Array.from(event.dataTransfer.files));
   }
+  const [open, setOpen] = useState(false);
   return (
     <div className={compact ? "tutor-image-picker compact" : "tutor-image-picker"} onPaste={paste} onDrop={drop} onDragOver={(event) => event.preventDefault()}>
-      <input ref={inputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg" multiple onChange={select} />
+      <input ref={inputRef} className="visually-hidden" type="file" aria-label="上传资料文件" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg" multiple onChange={select} />
       {draft.images.length ? (
         <div className="tutor-image-drafts" aria-label="待发送图片">
           {draft.images.map((image) => (
             <figure key={image.key} className={image.status}>
-              <img src={image.previewUrl} alt={image.file.name} />
+              {image.previewUrl ? <img src={image.previewUrl} alt={image.filename} /> : <ImageSquare size={24} aria-hidden="true" />}
               {image.status === "uploading" ? <SpinnerGap className="spin" size={18} aria-label="正在上传" /> : null}
               {image.status === "failed" ? <span>{image.error}</span> : null}
-              <button type="button" onClick={() => void draft.removeImage(image.key)} aria-label={`移除 ${image.file.name}`}><Trash size={14} /></button>
+              <button type="button" onClick={() => void draft.removeImage(image.key)} aria-label={`移除 ${image.filename}`}><Trash size={14} /></button>
             </figure>
           ))}
         </div>
       ) : null}
-      <button type="button" className="tutor-image-add" onClick={() => inputRef.current?.click()} disabled={draft.images.length >= 3}>
-        <ImageSquare size={18} weight="duotone" /><span>图片提问</span>
+      <button type="button" className="tutor-image-add" onClick={() => setOpen(true)}>
+        <Paperclip size={18} weight="duotone" /><span>添加资料</span>
       </button>
-      <small>可选择、粘贴或拖入 PNG/JPEG，最多 3 张</small>
       {!draft.visionReady ? (
         <Link to={`${PATHS.settings}?section=model`} target="_blank" rel="noreferrer">
           配置图片理解模型
         </Link>
+      ) : null}
+      {open ? (
+        <ModalFrame title="添加资料" layerClassName="tutor-attachment-dialog" onClose={() => setOpen(false)}>
+          <section className="tutor-attachment-panel" aria-label="添加资料">
+            <header><h2>添加资料</h2><button type="button" onClick={() => setOpen(false)} aria-label="关闭添加资料"><X size={19} /></button></header>
+            <button className="tutor-attachment-upload" type="button" onClick={() => inputRef.current?.click()}>
+              <FileArrowUp size={20} weight="duotone" /><span>上传文件或图片</span>
+            </button>
+            <div className="tutor-library-images" role="list" aria-label="资料库图片">
+              {draft.libraryImages.length === 0 ? <p>资料库中还没有图片。</p> : null}
+              {draft.libraryImages.map((material) => {
+                const selected = draft.images.some((image) => image.attachment?.material_id === material.id);
+                return (
+                  <button key={material.id} type="button" disabled={selected || draft.images.length >= 3} onClick={() => { void draft.addMaterial(material); setOpen(false); }}>
+                    <ImageSquare size={20} weight="duotone" /><span><strong>{material.title}</strong><small>{material.size}</small></span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </ModalFrame>
       ) : null}
     </div>
   );

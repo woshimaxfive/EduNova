@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -64,5 +65,22 @@ describe("TutorImagePicker", () => {
     const link = screen.getByRole("link", { name: "配置图片理解模型" });
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noreferrer");
+  });
+
+  it("用一个入口上传资料并选择资料库图片", async () => {
+    const user = userEvent.setup();
+    const addMaterial = vi.fn();
+    const draft = {
+      images: [], addFiles: vi.fn(), addMaterial, removeImage: vi.fn(), clearAfterSend: vi.fn(), discardAll: vi.fn(),
+      libraryImages: [{ id: "41", title: "课堂截图.png", size: "18 KB", category: "image" }],
+      attachmentIds: [], uploading: false, hasFailed: false, visionReady: true
+    } as unknown as ReturnType<typeof useTutorImageDraft>;
+    render(<MemoryRouter><TutorImagePicker draft={draft} /></MemoryRouter>);
+
+    expect(screen.getAllByRole("button", { name: "添加资料" })).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "添加资料" }));
+    expect(screen.getByRole("button", { name: "上传文件或图片" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /课堂截图.png/ }));
+    expect(addMaterial).toHaveBeenCalledWith(expect.objectContaining({ id: "41" }));
   });
 });

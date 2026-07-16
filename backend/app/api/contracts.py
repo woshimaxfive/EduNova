@@ -210,6 +210,7 @@ RESPONSE_MODELS: dict[str, Any] = {
     "delete_session": ApiEnvelope[DeleteTutorSessionResponse],
     "send_message": ApiEnvelope[TutorSessionDetail],
     "upload_tutor_attachment": ApiEnvelope[TutorImageAttachment],
+    "attach_tutor_material": ApiEnvelope[TutorImageAttachment],
     "delete_tutor_attachment": ApiEnvelope[TutorImageAttachment],
 }
 

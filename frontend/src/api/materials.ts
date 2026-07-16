@@ -35,10 +35,11 @@ export type UploadMaterialResult = {
   parse_status: MaterialProgressStatus;
   ingestion_job_id?: string | null;
   ingestion_status: MaterialIngestionStatus;
+  category?: "document" | "image";
   quality_summary?: MaterialQualitySummary;
 };
 
-export type MaterialIngestionStatus = "legacy" | "pending" | "running" | "awaiting_confirmation" | "confirmed" | "failed";
+export type MaterialIngestionStatus = "legacy" | "stored" | "pending" | "queued" | "running" | "awaiting_confirmation" | "confirmed" | "failed";
 
 export type MaterialQualitySummary = {
   passed?: boolean;

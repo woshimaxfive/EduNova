@@ -14,6 +14,7 @@ from backend.app.db.session import get_db_session
 from backend.app.models import User
 from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.tutor import (
+    AttachTutorMaterialRequest,
     CreateTutorSessionRequest,
     DeleteTutorSessionResponse,
     SendTutorMessageRequest,
@@ -348,6 +349,27 @@ def upload_tutor_attachment(
             filename=file.filename or "image.png",
             declared_mime=file.content_type or "application/octet-stream",
             content=content,
+        )
+    except TutorAttachmentNotFoundError as exc:
+        raise ApiError(status_code=status.HTTP_404_NOT_FOUND, code="NOT_FOUND", message=str(exc)) from exc
+    except TutorAttachmentError as exc:
+        raise ApiError(status_code=status.HTTP_400_BAD_REQUEST, code="IMAGE_UPLOAD_INVALID", message=str(exc)) from exc
+    return api_response(attachment_to_api(attachment).model_dump())
+
+
+@router.post("/sessions/{session_id}/attachments/from-material", status_code=status.HTTP_201_CREATED)
+def attach_tutor_material(
+    session_id: int,
+    payload: AttachTutorMaterialRequest,
+    current_user: User = Depends(get_current_user),
+    service: TutorAttachmentService = Depends(get_tutor_attachment_service),
+) -> dict:
+    try:
+        service.cleanup_expired_pending(limit=20)
+        attachment = service.attach_material(
+            user=current_user,
+            session_id=session_id,
+            material_id=payload.material_id,
         )
     except TutorAttachmentNotFoundError as exc:
         raise ApiError(status_code=status.HTTP_404_NOT_FOUND, code="NOT_FOUND", message=str(exc)) from exc

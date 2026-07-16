@@ -2632,10 +2632,12 @@ Phase 31 不新增接口路径或数据库迁移。现有资料解析进度对�
 # Phase 32 图片提问接口
 
 - `POST /api/v1/tutor/sessions/{session_id}/attachments`：上传单张 PNG/JPEG，最大 4 MiB，返回私有附件摘要。
+- `POST /api/v1/tutor/sessions/{session_id}/attachments/from-material`：把当前用户资料库中的 PNG/JPEG 图片绑定为该会话的待发送附件；只接受同用户资料，不复制或解析原图。
 - `GET /api/v1/tutor/attachments/{attachment_id}/content`：当前用户鉴权读取图片内容，响应禁止缓存和 MIME sniff。
 - `DELETE /api/v1/tutor/attachments/{attachment_id}`：待发送附件删除对象；已发送附件保留删除占位。
 - tutor 消息请求增加 `attachment_ids`，最多 3 项；`message` 可为空，但文字和附件不能同时为空。
 - `TutorMessage.attachments` 随历史、非流式响应和 SSE 完成事件返回。
+- `TutorImageAttachment.material_id` 表示附件引用的持久图片资料；旧附件仍兼容原 `storage_key`。
 - `POST /api/v1/settings/model/configs/{config_id}/vision-default`：设置独立图片理解默认配置；连接测试 `operation=vision` 会发送程序化无版权小图。
 - 讯飞原生图片理解配置使用 `vision_app_id`、`vision_api_key`、`vision_api_secret` 写入字段；读取接口只返回是否已配置及掩码，不回传明文。连接测试必须返回完整结构化结果才判定成功。
 - 模型设置的 `system_summary` 返回 `vision_model`、`vision_provider`、`vision_base_url` 与 `can_use_vision_model`，用于表示服务器级图片理解兜底；不返回服务器凭证明文或掩码。

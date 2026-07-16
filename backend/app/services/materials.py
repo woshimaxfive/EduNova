@@ -287,7 +287,11 @@ class MaterialService:
             agent_trace_id=agent_trace_id,
             extracted_text=extracted_text,
             metadata_json=metadata,
-            ingestion_status="pending" if defer_ingestion and extension in self.parsed_text_extensions else "legacy",
+            ingestion_status=(
+                "stored"
+                if extension in self.image_extensions
+                else "pending" if defer_ingestion and extension in self.parsed_text_extensions else "legacy"
+            ),
             outline_version=0,
             outline_json={},
             quality_json={},
@@ -522,6 +526,7 @@ class MaterialService:
     def get_progress(self, user: User, material_id: int) -> MaterialProgress:
         material = self._require_material(user, material_id)
         ingestion_labels = {
+            "stored": (100, "图片已入库，可用于图片提问"),
             "pending": (5, "等待精细解析"),
             "running": (45, "正在精细解析资料结构"),
             "awaiting_confirmation": (90, "解析完成，等待确认目录"),
@@ -958,6 +963,7 @@ class MaterialService:
             size=item.size,
             parse_status=material.parse_status,
             ingestion_status=material.ingestion_status,
+            category=item.category,
             quality_summary=dict(material.quality_json or {}),
         )
 
@@ -985,7 +991,7 @@ class MaterialService:
     @classmethod
     def _detail_for_status(cls, parse_status: str, extension: str) -> str:
         if extension in cls.image_extensions:
-            return "仅入库，暂不做 OCR"
+            return "已入库，可用于图片提问"
         if parse_status == "uploaded" and extension in {".doc", ".ppt"}:
             return "旧版 Office 格式暂不支持深度解析"
         if parse_status == "uploaded" and extension in cls.deep_parse_extensions:

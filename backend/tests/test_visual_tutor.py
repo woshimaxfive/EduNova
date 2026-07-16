@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
+from backend.app.core.config import Settings
 from backend.app.providers.capabilities import provider_capabilities
 from backend.app.services.tutor_attachments import TutorAttachmentError, TutorAttachmentService
 from backend.app.services.vision_understanding import VisionUnderstandingService
@@ -45,6 +46,86 @@ def test_image_normalization_reencodes_and_clears_metadata() -> None:
 def test_image_normalization_rejects_oversized_edge() -> None:
     with pytest.raises(TutorAttachmentError, match="尺寸过大"):
         TutorAttachmentService._normalize_image(_png_bytes((4097, 1)), "image/png")
+
+
+class _MemoryStorage:
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+        self.deleted: list[str] = []
+
+    def put_bytes(self, key, content, *, content_type=None):
+        del content_type
+        self.objects[key] = content
+        return key
+
+    def read_bytes(self, key):
+        return self.objects[key]
+
+    def delete(self, key):
+        self.deleted.append(key)
+        self.objects.pop(key, None)
+
+
+class _NoopScanner:
+    def scan(self, content):
+        del content
+
+
+class _AttachmentDb:
+    def __init__(self) -> None:
+        self.added = []
+        self.next_id = 100
+
+    def add(self, value):
+        if getattr(value, "id", None) is None:
+            self.next_id += 1
+            value.id = self.next_id
+        self.added.append(value)
+
+    def flush(self):
+        return None
+
+    def commit(self):
+        return None
+
+    def refresh(self, value):
+        del value
+
+    def rollback(self):
+        return None
+
+
+class _UploadAttachmentService(TutorAttachmentService):
+    def _session(self, user_id, session_id):
+        return SimpleNamespace(id=session_id, user_id=user_id)
+
+
+def test_chat_image_upload_creates_one_material_asset_and_keeps_it_when_draft_is_removed() -> None:
+    db = _AttachmentDb()
+    storage = _MemoryStorage()
+    service = _UploadAttachmentService(db, Settings(), storage=storage, scanner=_NoopScanner())
+
+    attachment = service.upload(
+        user=SimpleNamespace(id=7),
+        session_id=9,
+        filename="课堂截图.png",
+        declared_mime="image/png",
+        content=_png_bytes(),
+    )
+
+    material = db.added[0]
+    assert attachment.material_id == material.id
+    assert attachment.storage_key is None
+    assert material.ingestion_status == "stored"
+    assert material.storage_path in storage.objects
+    def get_attachment(**kwargs):
+        del kwargs
+        return attachment
+
+    service.get = get_attachment
+    service.delete(user=SimpleNamespace(id=7), attachment_id=attachment.id)
+    assert material.storage_path in storage.objects
+    assert storage.deleted == []
 
 
 class _FakeAttachmentService:

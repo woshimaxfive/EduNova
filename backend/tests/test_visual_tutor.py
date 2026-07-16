@@ -5,7 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
+from langgraph.graph import END, START, StateGraph
 
+from backend.app.agents.schemas import AgentState
 from backend.app.core.config import Settings
 from backend.app.providers.capabilities import provider_capabilities
 from backend.app.services.tutor_attachments import TutorAttachmentError, TutorAttachmentService
@@ -200,3 +202,35 @@ def test_visual_provider_is_not_called_before_session_attachment_scope_is_valida
             question="解释图片",
             attachment_ids=[11],
         )
+
+
+def test_tutor_agent_state_preserves_private_visual_context_and_original_message() -> None:
+    observed: dict[str, object] = {}
+
+    def inspect_state(state: AgentState) -> dict[str, object]:
+        observed.update(state)
+        return {}
+
+    graph = StateGraph(AgentState)
+    graph.add_node("inspect", inspect_state)
+    graph.add_edge(START, "inspect")
+    graph.add_edge("inspect", END)
+
+    graph.compile().invoke(
+        {
+            "message_text": "用户问题\n\n图片理解摘要：内部上下文",
+            "stored_message_text": "用户问题",
+            "attachment_ids": [11],
+            "vision_decision": {"intent": "visual_learning", "confidence": 0.9},
+            "standalone_query": "完整问题",
+            "uses_history": True,
+            "referenced_turn_ids": ["7"],
+        }
+    )
+
+    assert observed["stored_message_text"] == "用户问题"
+    assert observed["attachment_ids"] == [11]
+    assert observed["vision_decision"] == {"intent": "visual_learning", "confidence": 0.9}
+    assert observed["standalone_query"] == "完整问题"
+    assert observed["uses_history"] is True
+    assert observed["referenced_turn_ids"] == ["7"]

@@ -1055,3 +1055,13 @@ docker compose down
 两组内置课程画像均由普通用户页面创建并达到可信阈值，路径均为 `model_enhanced` 且无 fallback。同一“二叉树遍历”任务：图解备考使用图解/练习策略与 `doc+mindmap+quiz`，工程实践使用递归调用栈/可运行代码策略与 `code+doc+quiz`，满足策略和模态两项可观察差异。
 
 2026-07-16 Phase 31 实际验收：`scripts/test.ps1` 通过后端 425 项、前端 238 项和离线 AI 评测 10 项，以及编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、build 与 Compose。隔离 Docker E2E 通过八服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例，并自动清理容器、网络与卷。`agent-browser` 完成 1440px/390px 练习主动作、Radix 弹窗、焦点恢复和无水平溢出复核；真实主链累计 140 次 Provider 尝试。三个临时账号及上传副本、导出、RQ 任务和派生数据精确删除，原始教材 SHA-256 不变。本轮无新增真实性能样本，`contest_readiness` 的实时性能部分保持 `evidence_gap`。
+
+## Phase 33 百炼多模态与证据链验收
+
+- 使用服务器百炼 `qwen3.7-plus` 覆盖普通文本、两张真实截图、同图追问、刷新恢复和无个人视觉配置的系统兜底。
+- Graph 回归必须断言原始用户消息、附件 ID和视觉决策经过编译后的真实状态流仍存在，不能只测试未执行的字典。
+- 课程回答在 5 条课程引用已占满时仍应把有效网页补充交给回答模型，同时保持“外部补充”且不得冒充教材证据。
+- 真实浏览器覆盖主页、课程空间、来源面板和 390px 水平溢出；临时账号与图片对象在验收后精确清理。
+- AI Worker 构建记录依赖缓存是否命中、Docling 模型下载重试次数和上游失败分类；首次模型层未构建成功时不得声称完整 Docker 构建通过。
+
+2026-07-16 Phase 33 实际验收：`scripts/test.ps1` 通过后端 441 项、前端 241 项、离线 AI 评测 10 项，以及编码、Ruff、Alembic `20260716_0028`、非破坏性 OpenAPI、lint、production build 与 Compose。`agent-browser` 完成百炼文本/图片、同图追问、刷新恢复、课程 RAG、外部来源和桌面/390px复核；临时账号与 4 个图片对象已精确清理。Docling 依赖缓存命中，但首次模型层因官方接口三次 504 未通过，未记录成完整镜像构建成功。

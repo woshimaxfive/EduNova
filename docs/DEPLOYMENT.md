@@ -456,3 +456,9 @@ Phase 31 不新增服务、端口、依赖或环境变量。`ai-worker` 与 back
 # Phase 32 图片附件存储
 
 Local 模式使用 `CHAT_ATTACHMENT_STORAGE_DIR`（默认 `var/uploads/chat-attachments`）；Compose 通过独立 `chat_attachment_data` volume 持久化。S3-compatible 模式继续使用既有 Storage Adapter。公开部署启用 ClamAV 后，图片扫描失败或扫描服务不可用均拒绝上传。视觉模型是用户独立配置，不在 `.env.example` 预置真实 Key。讯飞原生图片理解需要服务端能够访问 `wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image`。
+
+## 16. Phase 33 AI Worker 构建缓存
+
+AI Worker 的 pip、Torch 与 Hugging Face 下载使用 BuildKit 持久缓存。依赖层和 Docling 模型层只在对应锁定输入变化时重建；模型下载最多重试 3 次，连续失败会终止新镜像构建，不会替换当前已发布镜像。`HF_ENDPOINT` 默认使用官方 `https://huggingface.co`，镜像站只有经过当前网络真实验证后才应覆盖。
+
+缓存解决重复下载，不保证首次访问上游一定成功。2026-07-16 实测约 192 MiB Torch wheel已从缓存复用，但 Hugging Face 官方 `docling-layout-heron` 元数据接口连续返回 504，故本轮首次 Docling 模型层构建据实失败，当前健康 AI Worker 镜像和容器保持运行。上游恢复后只需重跑 `docker compose --progress plain build ai-worker`；成功后再运行一次相同命令，确认依赖与模型步骤显示 `CACHED`，最后才重建 Worker 容器。

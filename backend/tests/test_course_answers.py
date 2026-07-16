@@ -151,6 +151,36 @@ def test_course_answer_repairs_external_domains_missing_from_sources() -> None:
     assert len(model.calls) == 2
 
 
+def test_course_answer_keeps_web_supplements_when_course_citations_fill_primary_limit() -> None:
+    citations = [
+        {
+            **_citation(),
+            "source_title": f"课程资料 {index}",
+            "content": f"课程片段 {index}",
+        }
+        for index in range(5)
+    ]
+    citations.extend(
+        [
+            {
+                "source_type": "web",
+                "source_title": "国内算法可视化资源",
+                "title": "国内算法可视化资源",
+                "url": "https://example.edu.cn/visualization",
+                "snippet": "提供数据结构和算法可视化演示。",
+            }
+        ]
+    )
+
+    messages = CourseAnswerService._build_messages("请联网核实可视化资源", citations)
+    prompt = messages[-1]["content"]
+
+    assert "课程资料 4" in prompt
+    assert "国内算法可视化资源" in prompt
+    assert "https://example.edu.cn/visualization" in prompt
+    assert "本次没有使用外部网页" not in prompt
+
+
 def test_course_answer_removes_inline_source_metadata() -> None:
     service = CourseAnswerService(FakeModelSettingsService(_inline_source_answer()))
 

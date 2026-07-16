@@ -513,6 +513,17 @@ class CourseAnswerService:
         return messages
 
     @staticmethod
+    def _select_answer_citations(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        course_citations = [
+            item for item in citations if str(item.get("source_type") or "course") not in {"web", "history"}
+        ][:5]
+        supplement_limit = max(0, 8 - len(course_citations))
+        supplements = [
+            item for item in citations if str(item.get("source_type") or "") in {"web", "history"}
+        ][:supplement_limit]
+        return [*course_citations, *supplements]
+
+    @staticmethod
     def _build_messages(
         question: str,
         citations: list[dict[str, Any]],
@@ -522,7 +533,8 @@ class CourseAnswerService:
     ) -> list[dict[str, str]]:
         course_blocks: list[str] = []
         web_blocks: list[str] = []
-        for index, citation in enumerate(citations[:5], start=1):
+        selected_citations = CourseAnswerService._select_answer_citations(citations)
+        for index, citation in enumerate(selected_citations, start=1):
             source_type = str(citation.get("source_type") or "course")
             is_web = source_type == "web"
             is_history = source_type == "history"
@@ -602,7 +614,7 @@ class CourseAnswerService:
             f"- {str(item.get('source_title') or item.get('title') or '课程资料')[:120]} / "
             f"{str(item.get('section_title') or '未标注章节')[:120]}："
             f"{str(item.get('content') or item.get('snippet') or '')[:800]}"
-            for item in citations[:5]
+            for item in self._select_answer_citations(citations)
             if item.get("source_type") != "history"
         ]
         messages = [

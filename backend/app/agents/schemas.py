@@ -43,6 +43,9 @@ class AgentState(TypedDict, total=False):
     quality_scores: dict[str, Any]
     generation_warnings: int
     message_text: str
+    stored_message_text: str
+    attachment_ids: list[int]
+    vision_decision: dict[str, Any] | None
     conversation_context: Any
     retrieval_query: str
     context_metadata: dict[str, Any]
@@ -61,6 +64,9 @@ class AgentState(TypedDict, total=False):
     semantic_decision_confidence: float
     semantic_warning: str | None
     semantic_search_query: str
+    standalone_query: str
+    uses_history: bool
+    referenced_turn_ids: list[str]
     source_scope: str
     profile_signal_updates: dict[str, Any]
     profile_signal_confidence: dict[str, float]

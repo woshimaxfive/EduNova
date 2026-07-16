@@ -685,6 +685,9 @@ function MaterialDetailPanel(props: {
                 <span>{props.outline.sections.filter((section) => section.included).length} 个章节纳入课程</span>
                 <span>{props.outline.confirmed ? "已确认" : "修改后需要重新确认"}</span>
               </div>
+              {props.outline.sections.every((section) => !section.included) ? (
+                <InlineFeedback message="当前没有章节纳入课程，请勾选至少一个包含正文的章节。" tone="warning" />
+              ) : null}
               {props.outline.sections.map((section, index) => (
                 <OutlineSectionEditor
                   key={`${props.outline?.material_id}-${props.outline?.version}-${section.id}`}
@@ -740,7 +743,7 @@ function OutlineSectionEditor({ section, previousSection, disabled, onApply }: {
           disabled={disabled}
           onChange={(event) => onApply([{ type: "include", section_id: section.id, included: event.target.checked }])}
         />
-        <span>{section.included ? "纳入" : "排除"}</span>
+        <span>纳入课程</span>
       </label>
       <div className="library-outline-main" style={{ paddingInlineStart: `${Math.min(5, Math.max(0, section.level - 1)) * 14}px` }}>
         <input aria-label={`${section.title}章节名称`} value={title} disabled={disabled} onChange={(event) => setTitle(event.target.value)} />

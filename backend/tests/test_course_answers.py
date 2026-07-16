@@ -113,6 +113,44 @@ def test_course_answer_keeps_quantitative_claims_present_in_citations() -> None:
     assert len(model.calls) == 1
 
 
+def test_course_answer_prompt_includes_available_material_page_number() -> None:
+    messages = CourseAnswerService._build_messages(
+        "请标明教材页码。",
+        [{**_citation(), "page_number": 4}],
+    )
+
+    assert "页码：教材第 4 页" in messages[-1]["content"]
+    assert "不得声称资料没有页码" in messages[0]["content"]
+
+
+def test_course_answer_repairs_false_page_availability_denial() -> None:
+    model = SequentialModelSettingsService(
+        [
+            "当前资料没有具体页码，因此无法标明页码。",
+            "根据教材第 4 页，TCP 通过确认与重传机制提高传输可靠性。",
+        ]
+    )
+    service = CourseAnswerService(model)
+
+    result = service.generate(
+        user=object(),
+        question="请解释 TCP 可靠传输并标明页码。",
+        citations=[
+            {
+                **_citation(),
+                "section_title": "TCP 可靠传输",
+                "page_number": 4,
+                "content": "TCP 通过确认与重传机制提高传输可靠性。",
+            }
+        ],
+    )
+
+    assert "教材第 4 页" in result.content
+    assert "没有具体页码" not in result.content
+    assert len(model.calls) == 2
+    assert "课程证据带有页码" in model.calls[1][0]["content"]
+
+
 def test_course_answer_stream_falls_back_when_repair_still_invents_numbers() -> None:
     model = SequentialModelSettingsService(
         [

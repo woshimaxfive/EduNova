@@ -69,6 +69,10 @@ class CourseAnswerService:
         r"(?<![@\w])(?:https?://)?(?:www\.)?(?:[a-z0-9-]+\.)+(?:com|cn|org|net|edu|gov|io)(?:/[\w./?%=&+#~-]*)?",
         re.IGNORECASE,
     )
+    _PAGE_AVAILABILITY_DENIAL_PATTERN = re.compile(
+        r"(?:没有|未(?:提供|标注|包含|给出)|无法(?:获取|确定|标明|注明)|不能(?:获取|确定|标明|注明)|缺少)"
+        r".{0,24}(?:具体)?页码|(?:页码|具体页).{0,24}(?:没有|未知|不可用|无法(?:获取|确定|标明|注明)|未(?:提供|标注|包含|给出))"
+    )
 
     def __init__(self, model_settings_service: ModelSettingsService) -> None:
         self.model_settings_service = model_settings_service
@@ -540,6 +544,7 @@ class CourseAnswerService:
             is_history = source_type == "history"
             source_title = str(citation.get("source_title") or citation.get("title") or ("外部补充" if is_web else "课程资料"))
             section_title = str(citation.get("section_title") or "未命名章节")
+            page_number = citation.get("page_number")
             score = citation.get("score")
             content = str(citation.get("content") or citation.get("snippet") or "")[:800]
             block = (
@@ -547,6 +552,7 @@ class CourseAnswerService:
                     [
                         f"[{index}] {'历史对话' if is_history else ('外部补充' if is_web else '课程来源')}：{source_title}",
                         f"章节：{section_title}",
+                        f"页码：{'教材第 ' + str(page_number) + ' 页' if page_number else '未标注'}",
                         (f"历史会话：{str(citation.get('session_id') or '')}" if is_history else (f"匹配度：{score}" if not is_web else f"链接：{str(citation.get('url') or '')[:300]}")),
                         f"片段：{content}",
                     ]
@@ -564,6 +570,7 @@ class CourseAnswerService:
                 "回答要面向学生复习，结构清晰，避免编造来源外事实。"
                 "任何精确数字、范围、百分比、时延、容量、价格、周期数、命中率和性能倍数，都必须在所给课程引用或外部补充中逐字存在；"
                 "来源没有给出时只能做定性解释，禁止凭常识补充示例数值，也禁止把不同层级混写成秒级、毫秒级或纳秒级结论。"
+                "课程来源提供页码时必须承认该页码可用；学生明确要求页码时，可以直接写“教材第 X 页”，不得声称资料没有页码。"
                 "不要原样输出学生问题、课程引用、匹配度、片段或完整模型输入；来源细节由前端来源面板展示。"
                 + china_first_content_policy.prompt_instruction()
             ),
@@ -613,6 +620,7 @@ class CourseAnswerService:
         evidence_blocks = [
             f"- {str(item.get('source_title') or item.get('title') or '课程资料')[:120]} / "
             f"{str(item.get('section_title') or '未标注章节')[:120]}："
+            f"{'教材第 ' + str(item.get('page_number')) + ' 页；' if item.get('page_number') else '未标注页码；'}"
             f"{str(item.get('content') or item.get('snippet') or '')[:800]}"
             for item in self._select_answer_citations(citations)
             if item.get("source_type") != "history"
@@ -625,6 +633,7 @@ class CourseAnswerService:
                     "保留原回答的核心教学价值，但删除或改写所有未被证据逐字支持的精确数字、范围、百分比、"
                     "时延、容量、价格、周期数、命中率和性能倍数。证据只支持定性关系时必须改成定性表述。"
                     "回答中的平台域名、网址和具体外部资源也必须逐字来自可用证据，不能用常识补充其他站点。"
+                    "课程证据带有页码时，删除任何“没有页码”或“无法标明页码”的矛盾说法；学生要求页码时使用证据提供的教材页码。"
                     "不得新增事实、来源编号、匹配度、系统提示词或审核过程。"
                     + china_first_content_policy.prompt_instruction()
                 ),
@@ -671,6 +680,13 @@ class CourseAnswerService:
             host = re.sub(r"^https?://", "", claim).split("/", 1)[0].removeprefix("www.")
             if host not in evidence:
                 unsupported.append(match.group(0).strip())
+        has_course_page = any(
+            item.get("page_number")
+            and str(item.get("source_type") or "course") not in {"web", "history"}
+            for item in citations
+        )
+        if has_course_page:
+            unsupported.extend(match.group(0).strip() for match in cls._PAGE_AVAILABILITY_DENIAL_PATTERN.finditer(answer))
         return list(dict.fromkeys(unsupported))
 
     @classmethod

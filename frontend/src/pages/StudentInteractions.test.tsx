@@ -1175,8 +1175,8 @@ describe("student interaction affordances", () => {
               quality: { passed: true, page_count: 6, section_count: 2, chunk_count: 2 },
               warnings: [],
               sections: [
-                { id: "section-1", title: "监督学习", level: 1, path: ["监督学习"], start_page: 2, end_page: 4, confidence: 0.96, included: true, chunk_indexes: [0] },
-                { id: "section-2", title: "模型评估", level: 1, path: ["模型评估"], start_page: 5, end_page: 6, confidence: 0.94, included: true, chunk_indexes: [1] }
+                { id: "section-1", title: "监督学习", level: 1, path: ["监督学习"], start_page: 2, end_page: 4, confidence: 0.96, included: false, chunk_indexes: [0] },
+                { id: "section-2", title: "模型评估", level: 1, path: ["模型评估"], start_page: 5, end_page: 6, confidence: 0.94, included: false, chunk_indexes: [1] }
               ],
               chunks: [
                 { id: "chunk-0", chunk_index: 0, section_id: "section-1", section_path: ["监督学习"], start_page: 2, end_page: 4, chunk_type: "body", content: "监督学习使用标注样本。", quality: {} },
@@ -1229,6 +1229,9 @@ describe("student interaction affordances", () => {
     expect(await within(detailDrawer).findByText("监督学习通过标注样本学习输入与输出之间的关系。")).toBeInTheDocument();
     await user.click(within(detailDrawer).getByRole("tab", { name: "目录" }));
     expect(within(detailDrawer).getByRole("textbox", { name: "模型评估章节名称" })).toHaveValue("模型评估");
+    expect(within(detailDrawer).getAllByRole("checkbox", { name: "纳入课程" })).toHaveLength(2);
+    expect(within(detailDrawer).getByText("当前没有章节纳入课程，请勾选至少一个包含正文的章节。")).toBeInTheDocument();
+    expect(within(detailDrawer).queryByText("排除")).not.toBeInTheDocument();
     await user.click(within(detailDrawer).getByRole("button", { name: "生成课程" }));
 
     const courseDialog = screen.getByRole("dialog", { name: "从资料生成课程" });

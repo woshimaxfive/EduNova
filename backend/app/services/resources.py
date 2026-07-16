@@ -30,6 +30,7 @@ from backend.app.models import (
     StudentProfile,
     User,
 )
+from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.providers.openai_compatible import ModelProviderError
 from backend.app.schemas.resources import (
     GenerateResourcesResult,
@@ -52,7 +53,6 @@ from backend.app.services.resource_artifacts import (
     validate_resource_content,
 )
 from backend.app.services.resource_quality import (
-    EVIDENCE_FALLBACK_TYPES,
     RESOURCE_PROMPT_VERSION,
     RESOURCE_REVIEW_PROMPT_VERSION,
     artifact_text,
@@ -951,7 +951,18 @@ class ResourceGenerationService:
             },
         ]
         try:
-            response = self._call_model_for_resource(user, messages)
+            response = self._call_model_for_resource(
+                user,
+                messages,
+                profile=ModelTaskProfile(
+                    task_type="resource_generation",
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="creative",
+                    timeout_seconds=RESOURCE_MODEL_TIMEOUT_SECONDS,
+                    max_attempts=1,
+                ),
+            )
         except (ModelNotConfiguredError, ModelProviderError):
             return None, True
         candidate = self._parse_worker_content(response, resource_type, draft)
@@ -1097,7 +1108,18 @@ class ResourceGenerationService:
             },
         ]
         try:
-            response = self._call_model_for_resource(user, messages)
+            response = self._call_model_for_resource(
+                user,
+                messages,
+                profile=ModelTaskProfile(
+                    task_type="resource_review",
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="stable",
+                    timeout_seconds=20.0,
+                    max_attempts=1,
+                ),
+            )
         except (ModelNotConfiguredError, ModelProviderError):
             return {}, True
         return self._parse_review_result(response, {payload["resource_type"] for payload in payloads}), False
@@ -1122,11 +1144,24 @@ class ResourceGenerationService:
                 "content": "\n".join(
                     [
                         f"资源类型：{payload['resource_type']}",
+                        f"生成动作：{payload.get('generation_action', 'new')}",
                         f"风险标记：{','.join(payload.get('risk_flags', []))}",
                         "教学意图（修订后仍必须遵守）：",
                         json.dumps(payload["content_json"].get("intent") or {}, ensure_ascii=False)[:3500],
                         "待修订 artifact：",
                         json.dumps(payload["content_json"].get("artifact"), ensure_ascii=False)[:7000],
+                        "差异基线（仅用于避免换皮和重复，不得照抄）：",
+                        json.dumps(
+                            {
+                                "source": (payload.get("source_content") or {}).get("artifact"),
+                                "recent": [
+                                    item.get("artifact")
+                                    for item in list(payload.get("comparison_contents") or [])[:2]
+                                    if isinstance(item, dict)
+                                ],
+                            },
+                            ensure_ascii=False,
+                        )[:3500],
                         "安全课程证据：",
                         *draft.source.excerpt_lines[:3],
                         (
@@ -1142,7 +1177,18 @@ class ResourceGenerationService:
             },
         ]
         try:
-            response = self._call_model_for_resource(user, messages)
+            response = self._call_model_for_resource(
+                user,
+                messages,
+                profile=ModelTaskProfile(
+                    task_type="resource_repair",
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="balanced",
+                    timeout_seconds=20.0,
+                    max_attempts=1,
+                ),
+            )
         except (ModelNotConfiguredError, ModelProviderError):
             return None
         candidate = self._parse_worker_content(response, str(payload["resource_type"]), draft)
@@ -1150,7 +1196,28 @@ class ResourceGenerationService:
             return None
         return candidate
 
-    def _call_model_for_resource(self, user: User, messages: list[dict[str, str]]) -> str:
+    def _call_model_for_resource(
+        self,
+        user: User,
+        messages: list[dict[str, str]],
+        *,
+        profile: ModelTaskProfile | None = None,
+    ) -> str:
+        task_completion = getattr(self.model_settings_service, "chat_completion_for_task", None)
+        if callable(task_completion):
+            return task_completion(
+                user,
+                messages,
+                profile
+                or ModelTaskProfile(
+                    task_type="resource_generation",
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="creative",
+                    timeout_seconds=RESOURCE_MODEL_TIMEOUT_SECONDS,
+                    max_attempts=1,
+                ),
+            )
         completion_with_timeout = getattr(self.model_settings_service, "chat_completion_with_timeout", None)
         if callable(completion_with_timeout):
             return completion_with_timeout(user, messages, timeout_seconds=RESOURCE_MODEL_TIMEOUT_SECONDS)
@@ -1393,7 +1460,7 @@ class ResourceGenerationService:
     ) -> list[ResourceQualityScore]:
         source_match = Decimal("0.86") if context_count >= 2 else Decimal("0.72") if context_count == 1 else Decimal("0.42")
         profile_fit = Decimal("0.80") if any(profile_summary.get(key) for key in ("learning_goal", "knowledge_foundation", "weak_points")) else Decimal("0.62")
-        fact_confidence = Decimal("0.88") if generation_mode == "model_enhanced" and context_count else Decimal("0.78") if context_count else Decimal("0.48")
+        fact_confidence = Decimal("0.88") if generation_mode in {"model_generated", "model_enhanced"} and context_count else Decimal("0.78") if context_count else Decimal("0.48")
         difficulty_fit = Decimal("0.80") if difficulty in markdown else Decimal("0.72")
         is_complete = (
             not validate_resource_content(resource_type, content_json)
@@ -1516,7 +1583,7 @@ class ResourceGenerationService:
     def _confidence_score(review_status: str, generation_mode: str, contexts: list[ResourceContext]) -> Decimal:
         if review_status == "low_evidence":
             return Decimal("0.50")
-        if generation_mode == "model_enhanced":
+        if generation_mode in {"model_generated", "model_enhanced"}:
             return Decimal("0.88")
         return Decimal("0.78") if len(contexts) >= 2 else Decimal("0.72")
 
@@ -1826,7 +1893,7 @@ class ResourceGenerationGraphRunner:
         intents: dict[str, dict[str, Any]],
     ) -> dict[str, dict[str, Any]] | None:
         try:
-            raw = self.service.model_settings_service.chat_completion(
+            raw = self.service._call_model_for_resource(
                 state["user"],
                 [
                     {
@@ -1852,6 +1919,14 @@ class ResourceGenerationGraphRunner:
                         )[:12000],
                     },
                 ],
+                profile=ModelTaskProfile(
+                    task_type="resource_intent_planning",
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="balanced",
+                    timeout_seconds=20.0,
+                    max_attempts=1,
+                ),
             )
         except Exception:
             return None
@@ -2002,7 +2077,11 @@ class ResourceGenerationGraphRunner:
                 )
             warnings: list[str] = []
             model_delta = bool(model_content and meaningful_model_delta(model_content, draft.content_json))
-            candidate_content = model_content if model_content is not None and model_delta else draft.content_json
+            if model_content is None:
+                raise ResourceGenerationError(f"{resource_type} 模型生成失败，未保存规则模板。")
+            if not model_delta:
+                raise ResourceGenerationError(f"{resource_type} 模型产物与结构底稿无有效差异，未保存。")
+            candidate_content = model_content
             semantic_similarity, semantic_status = self._semantic_diversity(
                 state,
                 resource_type=resource_type,
@@ -2010,76 +2089,23 @@ class ResourceGenerationGraphRunner:
                 source_content=source_content,
                 comparison_contents=comparison_contents,
             )
-            if model_content is not None and model_delta:
-                content_json, risks = self.service._quality_gate(
-                    resource_type=resource_type,
-                    content=model_content,
-                    draft=draft,
-                    contexts=contexts,
-                    model_delta=True,
-                    intent=artifact_intent,
-                    comparison_contents=comparison_contents,
-                    source_content=source_content,
-                    source_intent=source_intent,
-                    generation_action=state.get("generation_action", "new"),
-                    semantic_similarity=semantic_similarity,
-                    semantic_status=semantic_status,
-                )
-                generation_mode = "model_enhanced"
-            else:
-                content_json, draft_risks = self.service._quality_gate(
-                    resource_type=resource_type,
-                    content=draft.content_json,
-                    draft=draft,
-                    contexts=contexts,
-                    model_delta=False,
-                    intent=artifact_intent,
-                    comparison_contents=comparison_contents,
-                    source_content=source_content,
-                    source_intent=source_intent,
-                    generation_action=state.get("generation_action", "new"),
-                    semantic_similarity=semantic_similarity,
-                    semantic_status=semantic_status,
-                )
-                fallback_reason = "no_meaningful_model_delta" if model_content is not None else "model_generation_failed"
-                risks = list(dict.fromkeys([fallback_reason, *draft_risks]))
-                generation_mode = self.service._deterministic_generation_mode(contexts)
+            content_json, risks = self.service._quality_gate(
+                resource_type=resource_type,
+                content=model_content,
+                draft=draft,
+                contexts=contexts,
+                model_delta=True,
+                intent=artifact_intent,
+                comparison_contents=comparison_contents,
+                source_content=source_content,
+                source_intent=source_intent,
+                generation_action=state.get("generation_action", "new"),
+                semantic_similarity=semantic_similarity,
+                semantic_status=semantic_status,
+            )
+            generation_mode = "model_generated"
 
-            if risks and resource_type in EVIDENCE_FALLBACK_TYPES:
-                fallback_semantic_similarity, fallback_semantic_status = self._semantic_diversity(
-                    state,
-                    resource_type=resource_type,
-                    content=draft.content_json,
-                    source_content=source_content,
-                    comparison_contents=(
-                        comparison_contents if state.get("generation_action") in {"alternative", "refine"} else []
-                    ),
-                )
-                fallback_content, fallback_risks = self.service._quality_gate(
-                    resource_type=resource_type,
-                    content=draft.content_json,
-                    draft=draft,
-                    contexts=contexts,
-                    model_delta=False,
-                    intent=artifact_intent,
-                    comparison_contents=(
-                        comparison_contents if state.get("generation_action") in {"alternative", "refine"} else []
-                    ),
-                    source_content=source_content,
-                    source_intent=source_intent,
-                    generation_action=state.get("generation_action", "new"),
-                    semantic_similarity=fallback_semantic_similarity,
-                    semantic_status=fallback_semantic_status,
-                )
-                if fallback_risks:
-                    raise ResourceGenerationError(f"{resource_type} 资源未通过证据质量门禁。")
-                content_json = fallback_content
-                generation_mode = self.service._deterministic_generation_mode(contexts)
-                warnings.append(f"{resource_type} 模型产物不可用，已保留通过证据校验的降级稿。")
-                risks = []
-            elif risks:
-                if model_content is None:
-                    raise ResourceGenerationError(f"{resource_type} 资源未通过质量门禁：{','.join(risks[:3])}")
+            if risks:
                 warnings.append(f"{resource_type} 候选产物未通过质量门禁，已进入单次内容修订。")
 
             if model_failed:
@@ -2186,13 +2212,13 @@ class ResourceGenerationGraphRunner:
             )
             combined_risks = list(dict.fromkeys([
                 *quality.get("risk_flags", []),
-                *(batch_risks if payload.get("generation_mode") == "model_enhanced" else []),
+                *(batch_risks if payload.get("generation_mode") == "model_generated" else []),
             ]))
             dimensions = dict(quality.get("dimensions") or {})
             dimensions["diversity"] = {
                 "status": (
                     "passed"
-                    if combined_score >= 0.6 and (not batch_risks or payload.get("generation_mode") != "model_enhanced")
+                    if combined_score >= 0.6 and (not batch_risks or payload.get("generation_mode") != "model_generated")
                     else "failed"
                 ),
                 "score": round(combined_score, 3),
@@ -2207,7 +2233,7 @@ class ResourceGenerationGraphRunner:
                     "batch_comparison_count": len(other_contents),
                     "risk_flags": list(dict.fromkeys([
                         *existing_diversity.get("risk_flags", []),
-                        *(batch_risks if payload.get("generation_mode") == "model_enhanced" else []),
+                        *(batch_risks if payload.get("generation_mode") == "model_generated" else []),
                     ])),
                 },
                 "quality": {
@@ -2377,7 +2403,10 @@ class ResourceGenerationGraphRunner:
                 continue
             resource_type = str(payload["resource_type"])
             with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name="repair")):
-                repaired_content = self.service._repair_resource_with_model(user=state["user"], payload=payload)
+                repaired_content = self.service._repair_resource_with_model(
+                    user=state["user"],
+                    payload={**payload, "generation_action": state.get("generation_action", "new")},
+                )
             draft: ResourceDraft = payload["draft"]
             if repaired_content is not None:
                 repair_semantic_similarity, repair_semantic_status = self._semantic_diversity(
@@ -2409,7 +2438,7 @@ class ResourceGenerationGraphRunner:
                         **payload,
                         "markdown": str(repaired_content.get("markdown") or ""),
                         "content_json": repaired_content,
-                        "generation_mode": "model_enhanced",
+                        "generation_mode": "model_generated",
                         "review_status": "low_evidence" if not contexts else "passed",
                         "review_mode": "model_and_rules",
                         "risk_flags": [],
@@ -2419,53 +2448,9 @@ class ResourceGenerationGraphRunner:
                 repaired_count += 1
                 continue
 
-            fallback_content = {**draft.content_json, "markdown": draft.markdown}
-            fallback_comparisons = (
-                list(payload.get("comparison_contents") or [])
-                if state.get("generation_action") in {"alternative", "refine"}
-                else []
-            )
-            fallback_semantic_similarity, fallback_semantic_status = self._semantic_diversity(
-                state,
-                resource_type=resource_type,
-                content=fallback_content,
-                source_content=payload.get("source_content"),
-                comparison_contents=fallback_comparisons,
-            )
-            fallback_content, fallback_risks = self.service._quality_gate(
-                resource_type=resource_type,
-                content=fallback_content,
-                draft=draft,
-                contexts=contexts,
-                model_delta=False,
-                intent=dict(payload.get("artifact_intent") or fallback_content.get("intent") or {}),
-                comparison_contents=fallback_comparisons,
-                source_content=payload.get("source_content"),
-                source_intent=payload.get("source_intent"),
-                generation_action=state.get("generation_action", "new"),
-                semantic_similarity=fallback_semantic_similarity,
-                semantic_status=fallback_semantic_status,
-            )
-            if resource_type in EVIDENCE_FALLBACK_TYPES and not fallback_risks:
-                repaired_results.append(
-                    {
-                        **payload,
-                        "markdown": draft.markdown,
-                        "content_json": fallback_content,
-                        "generation_mode": self.service._deterministic_generation_mode(contexts),
-                        "review_status": "low_evidence" if not contexts else "passed",
-                        "review_mode": "rules_only",
-                        "risk_flags": [],
-                        "repair_count": 1,
-                    }
-                )
-                repaired_count += 1
-                if payload.get("risk_flags"):
-                    warnings.append(f"{resource_type} 未能完成模型差异修订，已保留通过证据校验的安全版本。")
-            else:
-                failed_types.append(resource_type)
-                reason = ",".join(str(flag) for flag in payload.get("risk_flags", [])[:3]) or "repair_failed"
-                warnings.append(f"{resource_type} 资源未通过质量审核，未保存该产物：{reason}。")
+            failed_types.append(resource_type)
+            reason = ",".join(str(flag) for flag in payload.get("risk_flags", [])[:3]) or "repair_failed"
+            warnings.append(f"{resource_type} 资源未通过质量审核，未保存该产物：{reason}。")
 
         self._record(
             state,

@@ -228,7 +228,7 @@ def test_profile_model_extracts_natural_chinese_profile_signals() -> None:
     assert profile["learning_preference"] == "图解、代码"
     assert profile["weak_points"] == ["反向传播推导"]
     assert profile["learning_pace"] == "每天可以学习四十五分钟"
-    assert result["event"]["evidence_json"]["generation_mode"] == "model_enhanced"
+    assert result["event"]["evidence_json"]["generation_mode"] == "model_generated"
     assert result["event"]["evidence_json"]["parse_status"] == "valid"
 
 
@@ -266,7 +266,7 @@ def test_profile_model_accepts_explanatory_text_and_partial_valid_fields() -> No
     assert result["profile"]["dimension_confidence"]["knowledge_foundation"] == 83
     assert result["profile"]["profile_json"]["weak_points"] == ["反向传播推导"]
     evidence = result["event"]["evidence_json"]
-    assert evidence["generation_mode"] == "model_enhanced"
+    assert evidence["generation_mode"] == "model_generated"
     assert evidence["parse_status"] == "valid"
     assert evidence["repair_count"] == 0
     assert evidence["review_mode"] == "model_and_rules"
@@ -320,7 +320,7 @@ def test_profile_model_accepts_semantic_dimension_without_rule_hint() -> None:
     result = as_dict(service.update_by_chat(user, message))
 
     assert result["profile"]["profile_json"]["motivation_interest"] == "长期深耕可信人工智能，让技术产生长远价值"
-    assert result["event"]["evidence_json"]["generation_mode"] == "model_enhanced"
+    assert result["event"]["evidence_json"]["generation_mode"] == "model_generated"
     assert result["event"]["evidence_json"]["parse_status"] == "valid"
 
 
@@ -386,11 +386,11 @@ def test_profile_model_repairs_invalid_json_once() -> None:
     result = as_dict(service.update_by_chat(user, "我更喜欢图解和代码。"))
 
     evidence = result["event"]["evidence_json"]
-    assert evidence["generation_mode"] == "model_enhanced"
+    assert evidence["generation_mode"] == "model_generated"
     assert evidence["parse_status"] == "repaired"
     assert evidence["repair_count"] == 1
     extract_log = next(log for log in logs if log.agent_name == "extract")
-    assert extract_log.metadata_json["extraction_mode"] == "model_enhanced"
+    assert extract_log.metadata_json["extraction_mode"] == "model_generated"
     assert extract_log.metadata_json["parse_status"] == "repaired"
     assert extract_log.metadata_json["extracted_dimension_count"] == 1
     assert "我更喜欢图解和代码" not in str(extract_log.metadata_json)

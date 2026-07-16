@@ -42,6 +42,78 @@ class FakeModelService:
         return self.responses.pop(0)
 
 
+class DefaultPracticeGenerationModel:
+    def chat_completion(self, _user: User, messages: list[dict[str, str]]) -> str:
+        prompt = "\n".join(message["content"] for message in messages)
+        if "题目蓝图=" not in prompt:
+            raise RuntimeError("该测试模型只承担题面生成")
+        encoded = prompt.split("题目蓝图=", 1)[1].split("。近期同知识点题目摘要=", 1)[0]
+        blueprints = json.loads(encoded)
+        questions = []
+        scenarios = [
+            "课堂概念辨析：先定位定义中的必要条件，再判断结论。",
+            "期末综合应用：结合两个概念之间的关系分析给定现象。",
+            "常见错误诊断：找出推理链中被忽略的课程依据。",
+            "迁移任务设计：把课程结论用于一个新的问题情境。",
+            "反例检验：判断边界条件变化后原结论是否仍成立。",
+        ]
+        for index, item in enumerate(blueprints, start=1):
+            options = list(item.get("options") or [])
+            questions.append(
+                {
+                    "id": item["id"],
+                    "prompt": f"{scenarios[(index - 1) % len(scenarios)]}{item['prompt']}请结合课程证据作答。",
+                    "options": options,
+                    "explanation": "依据课程短摘录判断，并说明关键概念关系。",
+                    "cognitive_level": ["understand", "apply", "analyze", "create"][(index - 1) % 4],
+                    "scenario_type": f"课程情境-{index}",
+                    "target_misconception": f"避免混淆知识关系-{index}",
+                    "reasoning_pattern": f"证据到结论-{index}",
+                }
+            )
+        return json.dumps(
+            {
+                "questions": questions,
+                "quality_review": {
+                    "review_status": "passed",
+                    "confidence": 0.9,
+                    "risk_flags": [],
+                    "safety_summary": "题目合同审核通过。",
+                },
+            },
+            ensure_ascii=False,
+        )
+
+
+class DefaultReportModel:
+    def chat_completion(self, _user: User, _messages: list[dict[str, str]]) -> str:
+        return json.dumps(
+            {
+                "summary": "结合近期学习证据，当前应继续巩固薄弱概念并完成迁移练习。",
+                "next_step_suggestions": ["复习课程引用中的关键关系", "完成一组针对性练习"],
+                "quality_review": {
+                    "review_status": "passed",
+                    "confidence": 0.9,
+                    "risk_flags": [],
+                    "safety_summary": "叙事未改写确定性统计。",
+                },
+            },
+            ensure_ascii=False,
+        )
+
+
+def make_practice_service(repo: FakePracticeRepository, **kwargs: Any):
+    from backend.app.services.practice import PracticeService
+
+    return PracticeService(repo, model_service=DefaultPracticeGenerationModel(), **kwargs)
+
+
+def make_report_service(repo: FakePracticeRepository, **kwargs: Any):
+    from backend.app.services.reports import ReportService
+
+    return ReportService(repo, model_service=DefaultReportModel(), **kwargs)
+
+
 class FailingPathService:
     def replan_after_assessment(self, _user: User, _course_id: int, _assessment_session_id: int):
         raise RuntimeError("path failed")
@@ -265,10 +337,10 @@ def make_trace_recorder(logs: list[Any]) -> AgentTraceRecorder:
 
 
 def test_create_practice_session_generates_deterministic_questions_and_validates_scope() -> None:
-    from backend.app.services.practice import PracticeNotFoundError, PracticeService, PracticeValidationError
+    from backend.app.services.practice import PracticeNotFoundError, PracticeValidationError
 
     repo = make_repo()
-    service = PracticeService(repo)
+    service = make_practice_service(repo)
 
     detail = as_dict(
         service.create_session(
@@ -288,7 +360,7 @@ def test_create_practice_session_generates_deterministic_questions_and_validates
     assert detail["questions"][0]["options"]
     assert detail["questions"][0]["correct_answer"] is None
     assert detail["questions"][0]["citation_refs"]
-    assert detail["questions"][0]["generation_mode"] == "deterministic_source"
+    assert detail["questions"][0]["generation_mode"] == "model_generated"
     assert detail["questions"][0]["prompt_version"] == "assessment-v3.2"
     assert detail["questions"][0]["quality"]["evidence_bound"] is True
     assert detail["answers"] == []
@@ -319,7 +391,7 @@ def test_create_practice_session_generates_deterministic_questions_and_validates
 def test_practice_generation_embeds_model_review_in_single_call() -> None:
     from backend.app.services.practice import PracticeService
 
-    baseline = as_dict(PracticeService(make_repo()).create_session(make_user(), 101, [401], 1, "easy"))
+    baseline = as_dict(make_practice_service(make_repo()).create_session(make_user(), 101, [401], 1, "easy"))
     source = baseline["questions"][0]
     model = FakeModelService(
         responses=[
@@ -331,6 +403,10 @@ def test_practice_generation_embeds_model_review_in_single_call() -> None:
                             "prompt": source["prompt"] + "请结合课程证据选择最准确的表述。",
                             "options": source["options"],
                             "explanation": source["explanation"] + "该结论与课程片段直接对应。",
+                            "cognitive_level": "understand",
+                            "scenario_type": "课程证据辨析",
+                            "target_misconception": "忽略课程依据",
+                            "reasoning_pattern": "证据到结论",
                         }
                     ],
                     "quality_review": {
@@ -347,17 +423,16 @@ def test_practice_generation_embeds_model_review_in_single_call() -> None:
 
     detail = as_dict(PracticeService(make_repo(), model_service=model).create_session(make_user(), 101, [401], 1, "easy"))
 
-    assert detail["questions"][0]["generation_mode"] == "model_enhanced"
+    assert detail["questions"][0]["generation_mode"] == "model_generated"
     assert detail["questions"][0]["quality"]["review_mode"] == "embedded_model_and_rules"
     assert detail["questions"][0]["quality"]["review_status"] == "passed"
     assert len(model.calls) == 1
 
 
 def test_single_point_practice_still_contains_objective_and_short_answer_types() -> None:
-    from backend.app.services.practice import PracticeService
 
     detail = as_dict(
-        PracticeService(make_repo()).create_session(
+        make_practice_service(make_repo()).create_session(
             make_user(),
             course_id=101,
             knowledge_point_ids=[402],
@@ -376,7 +451,6 @@ def test_single_point_practice_still_contains_objective_and_short_answer_types()
     assert all(len(question["options"]) == 4 for question in detail["questions"] if question["question_type"] != "short_answer")
 
 def test_adaptive_practice_uses_profile_and_restores_saved_draft() -> None:
-    from backend.app.services.practice import PracticeService
 
     repo = make_repo()
     repo.profiles[1] = StudentProfile(
@@ -385,7 +459,7 @@ def test_adaptive_practice_uses_profile_and_restores_saved_draft() -> None:
         profile_json={"knowledge_foundation": "机器学习刚入门"},
         confidence_score=Decimal("72"),
     )
-    service = PracticeService(repo)
+    service = make_practice_service(repo)
 
     created = as_dict(service.create_session(make_user(), 101, [401], 1, "adaptive"))
     question_id = created["questions"][0]["id"]
@@ -407,10 +481,9 @@ def test_adaptive_practice_uses_profile_and_restores_saved_draft() -> None:
 
 
 def test_submit_practice_answers_scores_and_writes_confirmed_weakness_items() -> None:
-    from backend.app.services.practice import PracticeService
 
     repo = make_repo()
-    service = PracticeService(repo)
+    service = make_practice_service(repo)
     created = as_dict(service.create_session(make_user(), 101, [401, 402], 3, "medium"))
     session_id = int(created["id"])
     stored_questions = [row.question_json for row in repo.list_answers_for_session(session_id)]
@@ -447,10 +520,10 @@ def test_submit_practice_answers_scores_and_writes_confirmed_weakness_items() ->
 
 
 def test_submit_answers_validates_empty_answers_and_user_scope() -> None:
-    from backend.app.services.practice import PracticeNotFoundError, PracticeService, PracticeValidationError
+    from backend.app.services.practice import PracticeNotFoundError, PracticeValidationError
 
     repo = make_repo()
-    service = PracticeService(repo)
+    service = make_practice_service(repo)
     created = as_dict(service.create_session(make_user(), 101, [401], 1, "easy"))
     session_id = int(created["id"])
 
@@ -465,12 +538,10 @@ def test_submit_answers_validates_empty_answers_and_user_scope() -> None:
 
 
 def test_generate_and_read_latest_report_uses_practice_and_learning_state_evidence() -> None:
-    from backend.app.services.practice import PracticeService
-    from backend.app.services.reports import ReportService
 
     repo = make_repo()
-    practice_service = PracticeService(repo)
-    report_service = ReportService(repo)
+    practice_service = make_practice_service(repo)
+    report_service = make_report_service(repo)
     created = as_dict(practice_service.create_session(make_user(), 101, [401, 402], 3, "medium"))
     stored_questions = [row.question_json for row in repo.list_answers_for_session(int(created["id"]))]
     practice_service.submit_answers(
@@ -508,16 +579,14 @@ def test_generate_and_read_latest_report_uses_practice_and_learning_state_eviden
 def test_latest_report_returns_empty_state_and_routes_require_login() -> None:
     from backend.app.api.v1.practice import get_practice_service
     from backend.app.api.v1.reports import get_report_service
-    from backend.app.services.practice import PracticeService
-    from backend.app.services.reports import ReportService
 
     repo = make_repo()
     user = make_user()
     settings = Settings(_env_file=None, jwt_secret="practice-test-secret-with-32-bytes-long", jwt_expire_minutes=30)
     app = create_app()
     app.dependency_overrides[get_auth_service] = lambda: AuthService(repository=TokenAuthRepository(user), settings=settings)
-    app.dependency_overrides[get_practice_service] = lambda: PracticeService(repo)
-    app.dependency_overrides[get_report_service] = lambda: ReportService(repo)
+    app.dependency_overrides[get_practice_service] = lambda: make_practice_service(repo)
+    app.dependency_overrides[get_report_service] = lambda: make_report_service(repo)
     client = TestClient(app)
     token = create_access_token(str(user.id), settings=settings)
     headers = {"Authorization": f"Bearer {token}"}
@@ -571,7 +640,7 @@ def test_assessment_graph_semantically_grades_short_answer_and_persists_diagnosi
     from backend.app.services.practice import PracticeService
 
     repo = make_repo()
-    created = PracticeService(repo).create_session(make_user(), 101, [401], 1, "medium")
+    created = make_practice_service(repo).create_session(make_user(), 101, [401], 1, "medium")
     logs: list[Any] = []
     model = FakeModelService(
         responses=[
@@ -617,7 +686,7 @@ def test_ungraded_short_answer_can_be_regraded_once_and_repeated_regrade_is_idem
     from backend.app.services.practice import PracticeService
 
     repo = make_repo()
-    created = PracticeService(repo).create_session(make_user(), 101, [401], 1, "medium")
+    created = make_practice_service(repo).create_session(make_user(), 101, [401], 1, "medium")
     ungraded = as_dict(
         PracticeService(repo).submit_answers(
             make_user(),
@@ -652,7 +721,7 @@ def test_assessment_path_failure_does_not_rollback_completed_practice() -> None:
     from backend.app.services.practice import PracticeService
 
     repo = make_repo()
-    created = PracticeService(repo).create_session(make_user(), 101, [401], 1, "easy")
+    created = make_practice_service(repo).create_session(make_user(), 101, [401], 1, "easy")
     service = PracticeService(repo, path_service=FailingPathService())
 
     result = as_dict(
@@ -671,11 +740,10 @@ def test_assessment_path_failure_does_not_rollback_completed_practice() -> None:
 
 
 def test_report_graph_aggregates_recent_trend_without_allowing_model_to_change_numbers() -> None:
-    from backend.app.services.practice import PracticeService
     from backend.app.services.reports import ReportService
 
     repo = make_repo()
-    practice = PracticeService(repo)
+    practice = make_practice_service(repo)
     first = practice.create_session(make_user(), 101, [401], 1, "easy")
     practice.submit_answers(make_user(), int(first.id), [{"question_id": "q1", "answer_text": "错误选项"}])
     second = practice.create_session(make_user(), 101, [401], 1, "easy")
@@ -716,12 +784,11 @@ def test_report_graph_aggregates_recent_trend_without_allowing_model_to_change_n
     ]
 
 
-def test_report_graph_falls_back_without_a_second_model_call_on_numeric_inconsistency() -> None:
-    from backend.app.services.practice import PracticeService
-    from backend.app.services.reports import ReportService
+def test_report_graph_rejects_numeric_inconsistency_without_persisting_template_report() -> None:
+    from backend.app.services.reports import ReportGenerationError, ReportService
 
     repo = make_repo()
-    practice = PracticeService(repo)
+    practice = make_practice_service(repo)
     first = practice.create_session(make_user(), 101, [401], 1, "easy")
     practice.submit_answers(make_user(), int(first.id), [{"question_id": "q1", "answer_text": "错误选项"}])
     second = practice.create_session(make_user(), 101, [401], 1, "easy")
@@ -734,12 +801,8 @@ def test_report_graph_falls_back_without_a_second_model_call_on_numeric_inconsis
         ]
     )
 
-    report = as_dict(ReportService(repo, model_service=model).generate_report(make_user(), 101))
+    with pytest.raises(ReportGenerationError):
+        ReportService(repo, model_service=model).generate_report(make_user(), 101)
 
-    assert "5 次" not in report["report"]["summary"]
-    assert "9 道" not in report["report"]["summary"]
-    assert report["report"]["deterministic_statistics"]["practice_session_count"] == 2
-    assert report["report"]["review_result"]["review_status"] == "warning"
-    assert report["report"]["quality"]["repair_count"] == 1
-    assert report["report"]["quality"]["review_mode"] == "rules_only"
     assert len(model.calls) == 1
+    assert repo.reports == []

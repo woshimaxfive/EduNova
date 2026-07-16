@@ -32,6 +32,10 @@ class PracticeValidationError(Exception):
     pass
 
 
+class PracticeGenerationError(PracticeValidationError):
+    pass
+
+
 class PracticeModelService(Protocol):
     def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
 

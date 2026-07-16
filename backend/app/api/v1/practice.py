@@ -15,7 +15,7 @@ from backend.app.schemas.practice import CreatePracticeSessionRequest, SavePract
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 from backend.app.services.ai_jobs import AiJobService, RqAiJobQueue, SqlAlchemyAiJobRepository
 from backend.app.services.profiles import ProfileService, SqlAlchemyProfileRepository
-from backend.app.services.practice import PracticeNotFoundError, PracticeService, PracticeValidationError, SqlAlchemyPracticeRepository
+from backend.app.services.practice import PracticeGenerationError, PracticeNotFoundError, PracticeService, PracticeValidationError, SqlAlchemyPracticeRepository
 
 
 router = APIRouter(prefix="/practice", tags=["practice"])
@@ -60,6 +60,8 @@ def create_practice_session(
         )
     except PracticeNotFoundError as exc:
         raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc
+    except PracticeGenerationError as exc:
+        raise ApiError(status.HTTP_503_SERVICE_UNAVAILABLE, "MODEL_GENERATION_FAILED", str(exc)) from exc
     except PracticeValidationError as exc:
         raise ApiError(status.HTTP_400_BAD_REQUEST, "VALIDATION_ERROR", str(exc)) from exc
     return api_response(result.model_dump())

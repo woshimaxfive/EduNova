@@ -14,7 +14,7 @@ from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
 from backend.app.schemas.reports import GenerateReportRequest
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 from backend.app.services.ai_jobs import AiJobService
-from backend.app.services.reports import ReportNotFoundError, ReportService, SqlAlchemyReportRepository
+from backend.app.services.reports import ReportGenerationError, ReportNotFoundError, ReportService, SqlAlchemyReportRepository
 
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -43,6 +43,8 @@ def generate_report(
         result = service.generate_report(current_user, payload.course_id, payload.practice_session_id)
     except ReportNotFoundError as exc:
         raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc
+    except ReportGenerationError as exc:
+        raise ApiError(status.HTTP_503_SERVICE_UNAVAILABLE, "MODEL_GENERATION_FAILED", str(exc)) from exc
     return api_response(result.model_dump())
 
 

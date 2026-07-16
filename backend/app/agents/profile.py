@@ -11,6 +11,7 @@ from langgraph.graph import END, START, StateGraph
 from backend.app.agents.learning_review import contains_sensitive_text, parse_json_object, review_contract, safe_text
 from backend.app.api.errors import make_trace_id
 from backend.app.models import ProfileEvent, StudentProfile, User
+from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.schemas.profiles import PROFILE_DIMENSIONS, ProfileChatResponse, event_to_api, profile_to_api
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 
@@ -53,6 +54,30 @@ class ProfileGraphRunner:
     def __init__(self, service: Any) -> None:
         self.service = service
         self.graph = self._build_graph()
+
+    def _structured_completion(
+        self,
+        state: ProfileState,
+        messages: list[dict[str, str]],
+        *,
+        task_type: str,
+        timeout_seconds: float = 15.0,
+    ) -> str:
+        task_call = getattr(self.service.model_service, "chat_completion_for_task", None)
+        if callable(task_call):
+            return task_call(
+                state["user"],
+                messages,
+                ModelTaskProfile(
+                    task_type=task_type,
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="stable",
+                    timeout_seconds=timeout_seconds,
+                    max_attempts=1,
+                ),
+            )
+        return self.service.model_service.chat_completion(state["user"], messages)
 
     def update_by_chat(self, user: User, message: str) -> ProfileChatResponse:
         state: ProfileState = {
@@ -189,17 +214,20 @@ class ProfileGraphRunner:
             extraction_repair_count = 0
             if self.service.model_service is not None:
                 try:
-                    raw = self.service.model_service.chat_completion(
-                        state["user"],
+                    raw = self._structured_completion(
+                        state,
                         self._extraction_messages(state),
+                        task_type="profile_extraction",
                     )
                     parsed = self._parse_extraction_payload(raw)
                     parse_status = "valid" if parsed is not None else "invalid"
                     if parsed is None:
                         extraction_repair_count = 1
-                        repaired_raw = self.service.model_service.chat_completion(
-                            state["user"],
+                        repaired_raw = self._structured_completion(
+                            state,
                             self._extraction_repair_messages(state, raw),
+                            task_type="profile_extraction_revision",
+                            timeout_seconds=10.0,
                         )
                         parsed = self._parse_extraction_payload(repaired_raw)
                         parse_status = "repaired" if parsed is not None else "fallback"
@@ -222,7 +250,7 @@ class ProfileGraphRunner:
                     model_used = False
             uncertain_dimensions = list(dict.fromkeys(key for key in uncertain_dimensions if key in proposed))
             unresolved_hints = [key for key in hints if key not in proposed]
-            extraction_mode = "model_enhanced" if model_used else "rules_only"
+            extraction_mode = "model_generated" if model_used else "rules_only"
             return {
                 "deterministic_updates": deterministic,
                 "proposed_updates": proposed,
@@ -232,7 +260,7 @@ class ProfileGraphRunner:
                 "extraction_mode": extraction_mode,
                 "parse_status": parse_status,
                 "repair_count": extraction_repair_count,
-                "generation_mode": "model_enhanced" if model_used else "deterministic_source",
+                "generation_mode": "model_generated" if model_used else "deterministic_source",
             }, f"已抽取 {len(proposed)} 个画像维度。", "completed" if model_used else "warning", {
                 "model_used": model_used,
                 "candidate_count": len(proposed),
@@ -289,10 +317,10 @@ class ProfileGraphRunner:
         def work():
             risks = self._risks(state.get("proposed_updates", {}))
             model_review = None
-            if state.get("generation_mode") == "model_enhanced" and self.service.model_service is not None:
+            if state.get("generation_mode") in {"model_generated", "model_enhanced"} and self.service.model_service is not None:
                 try:
-                    raw = self.service.model_service.chat_completion(
-                        state["user"],
+                    raw = self._structured_completion(
+                        state,
                         [
                             {
                                 "role": "system",
@@ -311,6 +339,7 @@ class ProfileGraphRunner:
                                 ),
                             },
                         ],
+                        task_type="profile_review",
                     )
                     model_review = review_contract(self._parse_json_candidate(raw), default_summary="画像字段与隐私边界审核完成。")
                 except Exception:
@@ -403,7 +432,13 @@ class ProfileGraphRunner:
                 "source_type": state.get("source_type"),
                 "updated_dimensions": list(applied),
                 "candidate_dimensions": [key for key in proposed if key not in applied],
-                "generation_mode": "model_enhanced" if state.get("generation_mode") == "model_enhanced" else "rules_only",
+                "generation_mode": (
+                    "model_generated"
+                    if state.get("generation_mode") == "model_generated"
+                    else "model_enhanced"
+                    if state.get("generation_mode") == "model_enhanced"
+                    else "rules_only"
+                ),
                 "parse_status": state.get("parse_status", "not_applicable"),
                 "repair_count": int(state.get("repair_count", 0)),
                 "review_mode": state.get("review_mode", "rules_only"),

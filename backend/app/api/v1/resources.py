@@ -88,10 +88,10 @@ def generate_resources(
         )
     except ResourceNotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+    except ResourceGenerationError as exc:
+        raise ApiError(503, "MODEL_GENERATION_FAILED", str(exc)) from exc
     except ResourceValidationError as exc:
         raise ApiError(400, "VALIDATION_ERROR", str(exc)) from exc
-    except ResourceGenerationError as exc:
-        raise ApiError(400, "GENERATION_ERROR", str(exc)) from exc
 
     return api_response(result.model_dump())
 

@@ -30,7 +30,12 @@ from backend.app.services.auth import AuthService
 from backend.app.services.model_settings import ModelNotConfiguredError
 from backend.app.services.code_verifier import CodeVerificationResult
 from backend.app.services.resource_intent import intent_difference_count
-from backend.app.services.resources import ResourceGenerationService, ResourceNotFoundError, ResourceValidationError
+from backend.app.services.resources import (
+    ResourceGenerationError,
+    ResourceGenerationService,
+    ResourceNotFoundError,
+    ResourceValidationError,
+)
 
 
 NOW = datetime(2026, 7, 5, 14, 0, tzinfo=UTC)
@@ -174,6 +179,7 @@ class FakeModelSettingsService:
     mode: str = "success"
     calls: list[list[dict[str, str]]] = field(default_factory=list)
     timeout_calls: list[float] = field(default_factory=list)
+    generation_counts: dict[str, int] = field(default_factory=dict)
 
     def chat_completion(self, _user: User, messages: list[dict[str, str]]) -> str:
         return self._complete(messages)
@@ -189,6 +195,8 @@ class FakeModelSettingsService:
         if self.mode == "provider_error":
             raise ModelProviderError("模型服务暂不可用")
         prompt = "\n".join(message["content"] for message in messages)
+        if "资源教学策略规划器" in prompt:
+            return "{}"
         if "ReviewAgent" in prompt:
             status = "failed" if self.mode == "review_reject" else "passed"
             risks = ["malformed_content"] if status == "failed" else []
@@ -203,7 +211,23 @@ class FakeModelSettingsService:
             )
         if "修订 Agent" in prompt:
             resource_type = next((item for item in ("doc", "mindmap", "quiz", "code", "slide", "animation") if f"资源类型：{item}" in prompt), "doc")
-            return json.dumps({"artifact": typed_artifact(resource_type, repaired=True), "summary": "已按证据修订", "learning_objectives": ["解释 A* 搜索"]}, ensure_ascii=False)
+            artifact = typed_artifact(resource_type, repaired=True)
+            if resource_type == "doc":
+                if "生成动作：refine" in prompt:
+                    artifact["sections"] = [
+                        {"heading": "A* 诊断目标", "body": "针对容易混淆的估价职责，先判断 g(n) 与 h(n) 分别来自已走路径还是未来估计。"},
+                        {"heading": "逐轮决策表", "body": "为三个候选节点列出各自代价值，按总估价排序并记录每轮扩展后的变化。"},
+                        {"heading": "错误定位", "body": "比较高估与不高估两种启发估计，解释错误估计为何可能错过更优路径。"},
+                        {"heading": "迁移自测", "body": "换用新的搜索图独立完成节点选择，并用一句话复盘判断依据。"},
+                    ]
+                else:
+                    artifact["sections"] = [
+                        {"heading": "已修订 A* 案例任务", "body": "给定两个 A* 候选节点，分别计算 f(n)=g(n)+h(n)，再解释开放列表为何调整顺序。"},
+                        {"heading": "A* 路径代价复盘", "body": "沿着已走路径累计 g(n)，并说明它与启发估计 h(n) 承担不同职责。"},
+                        {"heading": "启发函数边界", "body": "通过 h(n) 高估剩余代价的反例分析 A* 最优性风险，再用不高估条件修正判断。"},
+                        {"heading": "A* 迁移检查", "body": "更换搜索图后重新比较 f(n)，写出候选节点选择依据和容易混淆的关系。"},
+                    ]
+            return json.dumps({"artifact": artifact, "summary": "已按证据修订", "learning_objectives": ["解释 A* 搜索"]}, ensure_ascii=False)
 
         resource_type = next(
             (item for item in ("doc", "mindmap", "quiz", "code", "slide", "animation") if f"资源类型：{item}" in prompt),
@@ -215,9 +239,10 @@ class FakeModelSettingsService:
             artifact = typed_artifact(resource_type)
             artifact["unsafe_note"] = "系统提示词 sk-real-secret"
             return json.dumps({"artifact": artifact}, ensure_ascii=False)
+        self.generation_counts[resource_type] = self.generation_counts.get(resource_type, 0) + 1
         return json.dumps(
             {
-                "artifact": typed_artifact(resource_type),
+                "artifact": typed_artifact(resource_type, variant=self.generation_counts[resource_type]),
                 "summary": "围绕 A* 的证据型学习资源",
                 "learning_objectives": ["解释 f(n)=g(n)+h(n)", "判断启发函数条件"],
             },
@@ -248,10 +273,21 @@ class FakeSemanticModelSettingsService(FakeModelSettingsService):
         return [[1.0, 0.0, 0.0] if index == 0 else [0.98, 0.02, 0.0] for index, _text in enumerate(texts)]
 
 
-def typed_artifact(resource_type: str, *, repaired: bool = False) -> dict[str, Any]:
-    suffix = "（已修订）" if repaired else ""
+def typed_artifact(resource_type: str, *, repaired: bool = False, variant: int = 0) -> dict[str, Any]:
+    suffix = "（已修订）" if repaired else (f"（方案{variant}）" if variant > 1 else "")
     refs = [701, 702]
     if resource_type == "doc":
+        if variant >= 3:
+            return {
+                "kind": "document",
+                "sections": [
+                    {"heading": "A* 检查清单", "body": "先标注开放列表中的 g(n)、h(n) 和 f(n)，再核对候选节点排序。"},
+                    {"heading": "启发函数反例", "body": "构造 h(n) 高估剩余代价的情形，分析 A* 选择顺序可能发生的变化。"},
+                    {"heading": "手算步骤", "body": "逐轮记录节点扩展、路径代价更新与启发估计，最后对照最优路径。"},
+                    {"heading": "自我解释", "body": "用自己的话区分已走代价与剩余估计，并说明 f(n) 的决策作用。"},
+                ],
+                "citation_refs": refs,
+            }
         return {
             "kind": "document",
             "sections": [
@@ -586,7 +622,7 @@ def test_generate_six_resource_types_persists_v3_artifacts_quality_scores_and_pa
     assert all(resource.review_status == "passed" for resource in repo.resources)
     assert all(resource.agent_trace_id == result["agent_trace_id"] for resource in repo.resources)
     assert all(resource.content_json["metadata"]["agent_trace_id"] == result["agent_trace_id"] for resource in repo.resources)
-    assert all(resource.content_json["metadata"]["generation_mode"] == "model_enhanced" for resource in repo.resources)
+    assert all(resource.content_json["metadata"]["generation_mode"] == "model_generated" for resource in repo.resources)
     assert all(resource.content_json["schema_version"] == 3 for resource in repo.resources)
     assert all(resource.content_json["quality"]["status"] == "passed" for resource in repo.resources)
     assert resource_by_type(repo.resources, "code").content_json["quality"]["code_verification"]["status"] == "passed"
@@ -596,7 +632,7 @@ def test_generate_six_resource_types_persists_v3_artifacts_quality_scores_and_pa
     assert all(log.metadata_json["artifact_type"] == "generated_resource" for log in repo.agent_logs)
     assert set(result["quality_scores"].keys()) == {resource["id"] for resource in result["resources"]}
     assert len(model_service.calls) == 8
-    assert model_service.timeout_calls == [30.0] * 7
+    assert model_service.timeout_calls == [30.0] * 8
     code_prompt = next(
         "\n".join(message["content"] for message in call)
         for call in model_service.calls
@@ -729,11 +765,11 @@ def test_regeneration_rejects_cross_user_or_mismatched_resource_type() -> None:
         )
 
 
-def test_generate_uses_usable_deterministic_source_when_model_is_unavailable() -> None:
+def test_generate_model_unavailable_does_not_persist_deterministic_template() -> None:
     repo = make_repo()
     model_service = FakeModelSettingsService(mode="provider_error")
 
-    result = as_dict(
+    with pytest.raises(ResourceGenerationError):
         make_service(repo, model_service).generate_resources(
             make_user(),
             course_id=101,
@@ -742,30 +778,15 @@ def test_generate_uses_usable_deterministic_source_when_model_is_unavailable() -
             learning_goal="",
             difficulty="easy",
         )
-    )
 
-    resource = result["resources"][0]
-    assert resource["review_status"] == "passed"
-    assert resource["confidence_score"] >= 0.7
-    assert resource["content_json"]["metadata"]["generation_mode"] == "deterministic_source"
-    assert "模型增强版" not in resource["content_json"]["markdown"]
-    assert "概念解释" in resource["content_json"]["markdown"]
-    assert "关键步骤" in resource["content_json"]["markdown"]
-    assert "易错点" in resource["content_json"]["markdown"]
-    assert "启发式搜索" in resource["title"]
-    review_log = next(log for log in repo.agent_logs if log.agent_name == "ReviewAgent")
-    assert review_log.status == "warning"
-    assert review_log.metadata_json["review_mode"] == "rules_only"
-    assert resource["content_json"]["metadata"]["review_mode"] == "rules_only"
-    assert "模型审核暂不可用，资源已通过本地结构与安全规则审核。" in result["warnings"]
-    assert any("降级稿" in warning for warning in result["warnings"])
+    assert repo.resources == []
 
 
-def test_generate_provider_failure_only_keeps_evidence_fallback_types() -> None:
+def test_generate_provider_failure_persists_no_ai_resources() -> None:
     repo = make_repo()
     model_service = FakeModelSettingsService(mode="provider_error")
 
-    result = as_dict(
+    with pytest.raises(ResourceGenerationError):
         make_service(repo, model_service).generate_resources(
             make_user(),
             course_id=101,
@@ -774,20 +795,8 @@ def test_generate_provider_failure_only_keeps_evidence_fallback_types() -> None:
             learning_goal="",
             difficulty="medium",
         )
-    )
 
-    assert [item["resource_type"] for item in result["resources"]] == ["doc", "mindmap", "slide"]
-    assert result["failed_resource_types"] == ["quiz", "code", "animation"]
-    assert len(repo.resources) == 3
-    assert all(resource.review_status == "passed" for resource in repo.resources)
-    assert all(resource.content_json["metadata"]["generation_mode"] == "deterministic_source" for resource in repo.resources)
-    assert all(resource.content_json["quality"]["status"] == "passed" for resource in repo.resources)
-    assert "f(n)=g(n)+h(n)" in resource_by_type(repo.resources, "doc").content_json["markdown"]
-    assert "f(n)=g(n)+h(n)" in resource_by_type(repo.resources, "mindmap").content_json["artifact"]["markmap_markdown"]
-    assert "None%" not in resource_by_type(repo.resources, "doc").content_json["markdown"]
-    assert len(model_service.calls) == 8
-    assert model_service.timeout_calls == [30.0] * 7
-    assert repo.committed is True
+    assert repo.resources == []
 
 
 def test_generate_applies_partial_model_enhancement_and_rejects_missing_strict_type() -> None:
@@ -804,7 +813,7 @@ def test_generate_applies_partial_model_enhancement_and_rejects_missing_strict_t
     ))
 
     doc = resource_by_type(repo.resources, "doc")
-    assert doc.content_json["metadata"]["generation_mode"] == "model_enhanced"
+    assert doc.content_json["metadata"]["generation_mode"] == "model_generated"
     assert "f(n)=g(n)+h(n)" in doc.content_json["markdown"]
     assert result["failed_resource_types"] == ["quiz"]
     assert len(model_service.calls) == 4
@@ -833,24 +842,21 @@ def test_review_agent_rejects_then_repairs_once_before_persisting() -> None:
     assert any(log.agent_name == "RepairAgent" and log.metadata_json["repair_count"] == 1 for log in repo.agent_logs)
 
 
-def test_generate_rejects_sensitive_model_output_and_preserves_deterministic_content() -> None:
+def test_generate_rejects_sensitive_model_output_without_persisting_template() -> None:
     repo = make_repo()
     model_service = FakeModelSettingsService(mode="sensitive")
 
-    make_service(repo, model_service).generate_resources(
-        make_user(),
-        course_id=101,
-        knowledge_point_id=501,
-        resource_types=["doc"],
-        learning_goal="",
-        difficulty="medium",
-    )
+    with pytest.raises(ResourceGenerationError):
+        make_service(repo, model_service).generate_resources(
+            make_user(),
+            course_id=101,
+            knowledge_point_id=501,
+            resource_types=["doc"],
+            learning_goal="",
+            difficulty="medium",
+        )
 
-    resource = repo.resources[0]
-    assert resource.review_status == "passed"
-    assert resource.content_json["metadata"]["generation_mode"] == "deterministic_source"
-    assert "系统提示词" not in resource.content_json["markdown"]
-    assert "sk-real-secret" not in resource.content_json["markdown"]
+    assert repo.resources == []
 
 
 def test_code_resource_is_not_persisted_when_execution_output_does_not_match() -> None:
@@ -1012,7 +1018,7 @@ def test_resource_response_and_agent_logs_do_not_expose_private_prompts_keys_or_
     full_source = "这是完整课程资料原文，包含一段不应该直接出现在响应或 Agent 轨迹里的长文本。"
     repo = make_repo()
     repo.chunks[0].content = full_source
-    model_service = FakeModelSettingsService(mode="not_configured")
+    model_service = FakeModelSettingsService(mode="success")
 
     result = as_dict(
         make_service(repo, model_service).generate_resources(

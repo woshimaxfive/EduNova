@@ -27,6 +27,10 @@ class ReportNotFoundError(Exception):
     pass
 
 
+class ReportGenerationError(Exception):
+    """Raised when no model-generated report narrative can be safely persisted."""
+
+
 class ReportModelService(Protocol):
     def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
 

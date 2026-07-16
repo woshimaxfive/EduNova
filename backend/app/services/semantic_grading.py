@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.agents.learning_review import contains_sensitive_text, parse_json_object, safe_text
 from backend.app.models import User
+from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.services.content_locale import china_first_content_policy
 
 
@@ -57,9 +58,7 @@ class SemanticShortAnswerGrader:
             return None
         safe_items = [self._safe_item(item) for item in items]
         try:
-            raw = self.model_service.chat_completion(
-                user,
-                [
+            messages = [
                     {
                         "role": "system",
                         "content": (
@@ -80,7 +79,23 @@ class SemanticShortAnswerGrader:
                             "\"misconception\":\"\",\"feedback\":\"\",\"evidence_refs\":[],\"confidence\":0.0}]}。"
                         ),
                     },
-                ],
+                ]
+            task_call = getattr(self.model_service, "chat_completion_for_task", None)
+            raw = (
+                task_call(
+                    user,
+                    messages,
+                    ModelTaskProfile(
+                        task_type="short_answer_grading",
+                        reasoning="disabled",
+                        output_mode="json_object",
+                        creativity="stable",
+                        timeout_seconds=20.0,
+                        max_attempts=1,
+                    ),
+                )
+                if callable(task_call)
+                else self.model_service.chat_completion(user, messages)
             )
         except Exception:
             self.failure_reason = "provider_error"

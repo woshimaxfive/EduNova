@@ -12,8 +12,9 @@ from langgraph.graph import END, START, StateGraph
 from backend.app.agents.learning_review import contains_sensitive_text, parse_json_object, review_contract, safe_string_list, safe_text
 from backend.app.api.errors import make_trace_id
 from backend.app.models import AssessmentReport, PracticeAnswer, PracticeSession, User
+from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.schemas.reports import ReportEnvelope, report_to_api
-from backend.app.services.reports import ReportNotFoundError, ReportService
+from backend.app.services.reports import ReportGenerationError, ReportNotFoundError, ReportService
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.content_locale import china_first_content_policy
@@ -21,7 +22,7 @@ from backend.app.services.content_locale import china_first_content_policy
 
 REPORT_PROMPT_VERSION = "report-v3.2"
 REPORT_REVIEW_PROMPT_VERSION = "report-review-v3.2-embedded"
-OPTIONAL_GENERATION_TIMEOUT_SECONDS = 40.0
+OPTIONAL_GENERATION_TIMEOUT_SECONDS = 30.0
 
 
 class ReportState(TypedDict, total=False):
@@ -237,14 +238,14 @@ class ReportGraphRunner:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             generated = self._model_narrative(state)
             if generated is None:
-                return {"report_json": dict(state["deterministic_report"]), "generation_mode": "deterministic_source"}, "模型不可用或叙事结构无效，保留规则报告。", "warning", {"model_used": False, "generation_mode": "deterministic_source"}
+                raise ReportGenerationError("报告叙事未能由模型安全生成，原有报告已保留，请重试。")
             narrative, generation_review = generated
             report = {**state["deterministic_report"], **narrative}
             return (
-                {"report_json": report, "generation_mode": "model_enhanced", "generation_review": generation_review},
+                {"report_json": report, "generation_mode": "model_generated", "generation_review": generation_review},
                 "模型已生成基于证据的报告总结，并在同一次调用中完成安全自审。",
                 "completed",
-                {"model_used": True, "generation_mode": "model_enhanced", "embedded_review": generation_review is not None, "model_call_budget": 1},
+                {"model_used": True, "generation_mode": "model_generated", "embedded_review": generation_review is not None, "model_call_budget": 1},
             )
 
         return self._run_node(state, "generate_narrative", 4, "生成不改写统计数据的报告叙事", work)
@@ -252,7 +253,7 @@ class ReportGraphRunner:
     def _review_node(self, state: ReportState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             risks = self._report_risks(state)
-            model_review = state.get("generation_review") if state.get("generation_mode") == "model_enhanced" else None
+            model_review = state.get("generation_review") if state.get("generation_mode") == "model_generated" else None
             if model_review and model_review["review_status"] == "revise":
                 risks.extend(str(item) for item in model_review["risk_flags"] or ["model_review_requested_revision"])
             risks = list(dict.fromkeys(risks))
@@ -273,24 +274,9 @@ class ReportGraphRunner:
 
     def _repair_node(self, state: ReportState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
-            report = dict(state["deterministic_report"])
-            review = {
-                "review_status": "warning",
-                "confidence": 0.72,
-                "risk_flags": safe_string_list((state.get("review_result") or {}).get("risk_flags"), limit=8, item_limit=60),
-                "safety_summary": "模型叙事未通过完整审核，已直接保留数字和证据锁定的确定性报告。",
-            }
-            return (
-                {
-                    "report_json": report,
-                    "generation_mode": "deterministic_source",
-                    "review_mode": "rules_only",
-                    "review_result": review,
-                    "repair_count": 1,
-                },
-                review["safety_summary"],
-                "warning",
-                {**review, "repair_count": 1, "model_call_budget": 0},
+            risks = safe_string_list((state.get("review_result") or {}).get("risk_flags"), limit=8, item_limit=60)
+            raise ReportGenerationError(
+                f"模型报告未通过安全审核，未保存新报告：{','.join(risks[:3]) or 'quality_review_failed'}。"
             )
 
         return self._run_node(state, "repair", 6, "按审核风险回退到确定性报告", work)
@@ -304,7 +290,7 @@ class ReportGraphRunner:
             "review_result": state.get("review_result", {}),
             "quality": {
                 **dict(state.get("report_json", {}).get("quality", {})),
-                "generation_mode": state.get("generation_mode", "deterministic_source"),
+                "generation_mode": state.get("generation_mode", "model_generated"),
                 "review_mode": state.get("review_mode", "rules_only"),
                 "repair_count": int(state.get("repair_count", 0)),
             },
@@ -370,17 +356,32 @@ class ReportGraphRunner:
                         ),
                     },
                 ]
-            completion_with_timeout = getattr(self.service.model_service, "chat_completion_with_timeout", None)
-            raw = (
-                completion_with_timeout(
+            task_completion = getattr(self.service.model_service, "chat_completion_for_task", None)
+            if callable(task_completion):
+                raw = task_completion(
                     state["user"],
                     messages,
-                    timeout_seconds=OPTIONAL_GENERATION_TIMEOUT_SECONDS,
-                    max_attempts=1,
+                    ModelTaskProfile(
+                        task_type="report_generation",
+                        reasoning="disabled",
+                        output_mode="json_object",
+                        creativity="stable",
+                        timeout_seconds=OPTIONAL_GENERATION_TIMEOUT_SECONDS,
+                        max_attempts=1,
+                    ),
                 )
-                if callable(completion_with_timeout)
-                else self.service.model_service.chat_completion(state["user"], messages)
-            )
+            else:
+                completion_with_timeout = getattr(self.service.model_service, "chat_completion_with_timeout", None)
+                raw = (
+                    completion_with_timeout(
+                        state["user"],
+                        messages,
+                        timeout_seconds=OPTIONAL_GENERATION_TIMEOUT_SECONDS,
+                        max_attempts=1,
+                    )
+                    if callable(completion_with_timeout)
+                    else self.service.model_service.chat_completion(state["user"], messages)
+                )
         except Exception:
             return None
         payload = parse_json_object(raw)

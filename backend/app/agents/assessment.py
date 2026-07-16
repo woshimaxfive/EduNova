@@ -20,18 +20,19 @@ from backend.app.agents.learning_review import (
 from backend.app.api.errors import make_trace_id
 from backend.app.models import PracticeAnswer, PracticeSession, User, WeaknessReviewItem
 from backend.app.schemas.practice import PracticeSessionDetail, SubmitPracticeAnswerItem, session_to_api
-from backend.app.services.practice import EvaluatedAnswer, PracticeService, PracticeValidationError
+from backend.app.services.practice import EvaluatedAnswer, PracticeGenerationError, PracticeService, PracticeValidationError
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.semantic_grading import SemanticShortAnswerGrader
 from backend.app.services.content_locale import china_first_content_policy
+from backend.app.providers.model_tasks import ModelTaskProfile
 
 
 ASSESSMENT_PROMPT_VERSION = "assessment-v3.2"
 ASSESSMENT_REVIEW_PROMPT_VERSION = "assessment-review-v3.1"
 ASSESSMENT_EMBEDDED_REVIEW_PROMPT_VERSION = "assessment-review-v3.2-embedded"
 DIAGNOSIS_PROMPT_VERSION = "diagnosis-v3.1"
-OPTIONAL_GENERATION_TIMEOUT_SECONDS = 50.0
+OPTIONAL_GENERATION_TIMEOUT_SECONDS = 30.0
 
 
 class AssessmentState(TypedDict, total=False):
@@ -53,6 +54,7 @@ class AssessmentState(TypedDict, total=False):
     resources: list[Any]
     chunks: list[Any]
     learner_context: Any
+    historical_question_summaries: list[dict[str, Any]]
     deterministic_questions: list[dict[str, Any]]
     questions: list[dict[str, Any]]
     session: PracticeSession
@@ -236,8 +238,33 @@ class AssessmentGraphRunner:
             effective_difficulty = self.service.resolve_difficulty(state["user"], course.id, selected, str(state.get("requested_difficulty") or state["difficulty"]))
             context_service = context_service_from_repository(self.service.repository)
             learner_context = context_service.course_context(int(state["user_id"]), course.id) if context_service is not None else None
+            selected_ids = {point.id for point in selected}
+            historical_question_summaries = [
+                {
+                    "prompt": safe_text((answer.question_json or {}).get("prompt"), limit=320),
+                    "knowledge_point_id": (answer.question_json or {}).get("knowledge_point_id"),
+                    "cognitive_level": safe_text((answer.question_json or {}).get("cognitive_level"), limit=40),
+                    "scenario_type": safe_text((answer.question_json or {}).get("scenario_type"), limit=80),
+                    "target_misconception": safe_text(
+                        (answer.question_json or {}).get("target_misconception"), limit=120
+                    ),
+                    "reasoning_pattern": safe_text((answer.question_json or {}).get("reasoning_pattern"), limit=80),
+                }
+                for answer in self.service.repository.list_answers_for_course(int(state["user_id"]), course.id)
+                if (answer.question_json or {}).get("knowledge_point_id") in selected_ids
+                and (answer.question_json or {}).get("prompt")
+            ][:20]
             return (
-                {"course": course, "points": points, "selected_points": selected, "resources": resources, "chunks": chunks, "difficulty": effective_difficulty, "learner_context": learner_context},
+                {
+                    "course": course,
+                    "points": points,
+                    "selected_points": selected,
+                    "resources": resources,
+                    "chunks": chunks,
+                    "difficulty": effective_difficulty,
+                    "learner_context": learner_context,
+                    "historical_question_summaries": historical_question_summaries,
+                },
                 f"已选择 {len(selected)} 个知识点和 {len(resources)} 个课程资源。",
                 "completed",
                 {
@@ -270,20 +297,15 @@ class AssessmentGraphRunner:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             generated = self._model_questions(state)
             if generated is None:
-                return (
-                    {"questions": list(state.get("deterministic_questions", [])), "generation_mode": "deterministic_source"},
-                    "模型不可用或题目结构无效，保留规则题稿。",
-                    "warning",
-                    {"model_used": False, "generation_mode": "deterministic_source"},
-                )
+                raise PracticeGenerationError("AI练习题生成失败，未创建练习，请重试或检查结构化模型能力。")
             questions, generation_review = generated
             return (
-                {"questions": questions, "generation_mode": "model_enhanced", "generation_review": generation_review},
+                {"questions": questions, "generation_mode": "model_generated", "generation_review": generation_review},
                 "模型已增强题干和解析，并在同一次调用中完成安全自审。",
                 "completed",
                 {
                     "model_used": True,
-                    "generation_mode": "model_enhanced",
+                    "generation_mode": "model_generated",
                     "embedded_review": generation_review is not None,
                     "model_call_budget": 1,
                 },
@@ -295,28 +317,32 @@ class AssessmentGraphRunner:
         return self._review_questions_or_answers(state, question_mode=True, step_index=4)
 
     def _question_repair_node(self, state: AssessmentState) -> dict[str, Any]:
-        def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
-            repaired = list(state.get("deterministic_questions", []))
-            review = {
-                "review_status": "warning",
-                "confidence": 0.72,
-                "risk_flags": safe_string_list((state.get("review_result") or {}).get("risk_flags"), limit=8, item_limit=60),
-                "safety_summary": "模型增强稿未通过完整审核，已直接保留通过规则校验的证据型题稿。",
-            }
-            return (
-                {
-                    "questions": repaired,
-                    "generation_mode": "deterministic_source",
-                    "review_mode": "rules_only",
-                    "review_result": review,
-                    "repair_count": 1,
-                },
-                review["safety_summary"],
-                "warning",
-                {**review, "repair_count": 1, "model_call_budget": 0},
+        risks = safe_string_list((state.get("review_result") or {}).get("risk_flags"), limit=8, item_limit=60)
+        generated = self._model_questions(state, revision_risks=risks)
+        if generated is None:
+            raise PracticeValidationError(
+                f"AI练习题未通过质量审核，单次修订失败，未创建练习。风险：{'、'.join(risks) or '结构不完整'}"
             )
-
-        return self._run_node(state, "repair", 5, "按审核结果回退到安全题稿", work)
+        questions, generation_review = generated
+        remaining_risks = self._question_risks(state, questions)
+        if remaining_risks:
+            raise PracticeValidationError(
+                f"AI练习题单次修订后仍未通过质量审核，未创建练习。风险：{'、'.join(remaining_risks[:4])}"
+            )
+        return {
+            "questions": questions,
+            "generation_mode": "model_generated",
+            "generation_review": generation_review,
+            "review_result": {
+                "review_status": "passed",
+                "confidence": 0.78,
+                "risk_flags": [],
+                "safety_summary": "模型已定向修订失败字段，并通过确定性题目合同审核。",
+            },
+            "review_mode": "embedded_model_and_rules",
+            "needs_repair": False,
+            "repair_count": 1,
+        }
 
     def _create_persist_node(self, state: AssessmentState) -> dict[str, Any]:
         started = perf_counter()
@@ -570,9 +596,9 @@ class AssessmentGraphRunner:
             risks = self._question_risks(state, list(state.get("questions", []))) if question_mode else self._answer_risks(state)
             model_review = (
                 state.get("generation_review")
-                if question_mode and state.get("generation_mode") == "model_enhanced"
+                if question_mode and state.get("generation_mode") == "model_generated"
                 else self._model_review(state, question_mode=question_mode)
-                if state.get("generation_mode") == "model_enhanced"
+                if state.get("generation_mode") in {"model_generated", "model_enhanced"}
                 else None
             )
             if model_review and model_review["review_status"] == "revise":
@@ -601,9 +627,7 @@ class AssessmentGraphRunner:
             return None
         payload_state = {**state, "questions": candidate} if question_mode and candidate is not None else state
         try:
-            raw = self.service.model_service.chat_completion(
-                state["user"],
-                [
+            messages = [
                     {"role": "system", "content": "你是 AssessmentGraph 的 ReviewAgent。只输出 JSON，不得修改客观分数。" + china_first_content_policy.prompt_instruction()},
                     {
                         "role": "user",
@@ -615,7 +639,23 @@ class AssessmentGraphRunner:
                             "\"risk_flags\":[],\"safety_summary\":\"\"}。"
                         ),
                     },
-                ],
+                ]
+            task_call = getattr(self.service.model_service, "chat_completion_for_task", None)
+            raw = (
+                task_call(
+                    state["user"],
+                    messages,
+                    ModelTaskProfile(
+                        task_type="practice_review" if question_mode else "answer_review",
+                        reasoning="disabled",
+                        output_mode="json_object",
+                        creativity="stable",
+                        timeout_seconds=15.0,
+                        max_attempts=1,
+                    ),
+                )
+                if callable(task_call)
+                else self.service.model_service.chat_completion(state["user"], messages)
             )
             return review_contract(parse_json_object(raw), default_summary="已完成练习结构、分数与隐私审核。")
         except Exception:
@@ -628,6 +668,8 @@ class AssessmentGraphRunner:
     def _model_questions(
         self,
         state: AssessmentState,
+        *,
+        revision_risks: list[str] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any] | None] | None:
         if self.service.model_service is None:
             return None
@@ -657,18 +699,48 @@ class AssessmentGraphRunner:
                             f"协议={ASSESSMENT_PROMPT_VERSION}，内嵌审核协议={ASSESSMENT_EMBEDDED_REVIEW_PROMPT_VERSION}。"
                             f"{instruction} 可信课程画像提示={personalization}。"
                             f"题目蓝图={json.dumps(prompt_rows, ensure_ascii=False, separators=(',', ':'))}。"
+                            f"近期同知识点题目摘要={json.dumps(state.get('historical_question_summaries', []), ensure_ascii=False, separators=(',', ':'))}。"
                             "选择题必须保留正确答案原文并生成四个互不重复的合理选项；不同题目不得复用题面。"
+                            "每题必须另外输出 cognitive_level、scenario_type、target_misconception、reasoning_pattern；"
+                            "不得复用历史题目的知识关系、场景和目标误区组合，也不得只替换名词。"
                             "生成后在同一次响应中自审重复题面、无效干扰项、证据缺失、隐私和答案合同；"
                             "发现风险时 review_status 必须为 revise。"
-                            "返回 {\"questions\":[{\"id\":\"q1\",\"prompt\":\"\",\"options\":[],\"explanation\":\"\"}],"
+                            "返回 {\"questions\":[{\"id\":\"q1\",\"prompt\":\"\",\"options\":[],\"explanation\":\"\","
+                            "\"cognitive_level\":\"understand|apply|analyze|create\",\"scenario_type\":\"\","
+                            "\"target_misconception\":\"\",\"reasoning_pattern\":\"\"}],"
                             "\"quality_review\":{\"review_status\":\"passed|revise\",\"confidence\":0.0,"
                             "\"risk_flags\":[],\"safety_summary\":\"\"}}。"
                         ),
                     },
                 ]
+            if revision_risks:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "上次题目已经生成，但以下字段未通过审核："
+                            f"{','.join(revision_risks[:6])}。只修订失败项并重新输出完整 JSON；"
+                            "不得改变题目 ID、类型、知识点、规则答案和课程引用。"
+                        ),
+                    }
+                )
+            task_call = getattr(self.service.model_service, "chat_completion_for_task", None)
             completion_with_timeout = getattr(self.service.model_service, "chat_completion_with_timeout", None)
             raw = (
-                completion_with_timeout(
+                task_call(
+                    state["user"],
+                    messages,
+                    ModelTaskProfile(
+                        task_type="practice_revision" if revision_risks else "practice_generation",
+                        reasoning="disabled",
+                        output_mode="json_object",
+                        creativity="creative",
+                        timeout_seconds=15.0 if revision_risks else OPTIONAL_GENERATION_TIMEOUT_SECONDS,
+                        max_attempts=1,
+                    ),
+                )
+                if callable(task_call)
+                else completion_with_timeout(
                     state["user"],
                     messages,
                     timeout_seconds=OPTIONAL_GENERATION_TIMEOUT_SECONDS,
@@ -691,6 +763,14 @@ class AssessmentGraphRunner:
             prompt = safe_text(model_item.get("prompt"), limit=800)
             explanation = safe_text(model_item.get("explanation"), limit=800)
             candidate = {**draft, "prompt": prompt or draft["prompt"], "explanation": explanation or draft["explanation"]}
+            candidate.update(
+                {
+                    "cognitive_level": safe_text(model_item.get("cognitive_level"), limit=40),
+                    "scenario_type": safe_text(model_item.get("scenario_type"), limit=80),
+                    "target_misconception": safe_text(model_item.get("target_misconception"), limit=120),
+                    "reasoning_pattern": safe_text(model_item.get("reasoning_pattern"), limit=80),
+                }
+            )
             options = safe_string_list(model_item.get("options"), limit=8, item_limit=240)
             if draft["question_type"] != "short_answer" and options:
                 correct = draft.get("correct_answer")
@@ -841,12 +921,26 @@ class AssessmentGraphRunner:
         learner_context = state.get("learner_context")
         personalization = learner_context.prompt_summary() if learner_context is not None else {}
         try:
-            raw = self.service.model_service.chat_completion(
-                state["user"],
-                [
+            messages = [
                     {"role": "system", "content": "你是 AssessmentGraph 错因诊断 Agent。逐题对照题干、正确答案、学生答案和课程证据诊断，不得修改分数，只输出 JSON。" + china_first_content_policy.prompt_instruction()},
                     {"role": "user", "content": f"协议={DIAGNOSIS_PROMPT_VERSION}。可信课程画像提示={personalization}。低分题={json.dumps(rows, ensure_ascii=False)}。每道题必须给出与本题直接相关且不重复套用的错因。返回 {{\"diagnoses\":[{{\"question_id\":\"q1\",\"misconception\":\"\",\"missing_concepts\":[],\"recommended_action\":\"\",\"confidence\":0.0}}]}}。"},
-                ],
+                ]
+            task_call = getattr(self.service.model_service, "chat_completion_for_task", None)
+            raw = (
+                task_call(
+                    state["user"],
+                    messages,
+                    ModelTaskProfile(
+                        task_type="misconception_diagnosis",
+                        reasoning="disabled",
+                        output_mode="json_object",
+                        creativity="stable",
+                        timeout_seconds=20.0,
+                        max_attempts=1,
+                    ),
+                )
+                if callable(task_call)
+                else self.service.model_service.chat_completion(state["user"], messages)
             )
         except Exception:
             return None
@@ -967,6 +1061,21 @@ class AssessmentGraphRunner:
         draft_by_id = {str(item["id"]): item for item in drafts}
         risks: list[str] = []
         normalized_prompts: list[str] = []
+        historical = list(state.get("historical_question_summaries", []))
+        historical_prompts = [
+            "".join(safe_text(item.get("prompt"), limit=320).casefold().split())
+            for item in historical
+            if item.get("prompt")
+        ]
+        historical_fingerprints = {
+            (
+                safe_text(item.get("cognitive_level"), limit=40),
+                safe_text(item.get("scenario_type"), limit=80),
+                safe_text(item.get("target_misconception"), limit=120),
+                safe_text(item.get("reasoning_pattern"), limit=80),
+            )
+            for item in historical
+        }
         for question in questions:
             question_id = str(question.get("id"))
             draft = draft_by_id.get(question_id)
@@ -991,7 +1100,19 @@ class AssessmentGraphRunner:
                 risks.append("question_too_short")
             if any(SequenceMatcher(None, prompt, previous).ratio() >= 0.86 for previous in normalized_prompts):
                 risks.append("duplicate_question")
+            if any(SequenceMatcher(None, prompt, previous).ratio() >= 0.82 for previous in historical_prompts):
+                risks.append("cross_batch_duplicate_question")
             normalized_prompts.append(prompt)
+            fingerprint = (
+                safe_text(question.get("cognitive_level"), limit=40),
+                safe_text(question.get("scenario_type"), limit=80),
+                safe_text(question.get("target_misconception"), limit=120),
+                safe_text(question.get("reasoning_pattern"), limit=80),
+            )
+            if fingerprint[0] not in {"understand", "apply", "analyze", "create"} or not all(fingerprint[1:]):
+                risks.append("missing_pedagogical_fingerprint")
+            elif fingerprint in historical_fingerprints:
+                risks.append("reused_pedagogical_fingerprint")
             source_excerpt = safe_text(question.get("source_excerpt"), limit=500)
             if not source_excerpt:
                 risks.append("missing_evidence")

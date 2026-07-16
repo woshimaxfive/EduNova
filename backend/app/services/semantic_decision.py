@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from backend.app.agents.tool_policy import ToolDecision, decide_tool_capabilities, explicitly_requests_search
 from backend.app.models import User
+from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.services.structured_output import parse_json_object
 
 
@@ -80,6 +81,29 @@ class SemanticDecisionService:
     def __init__(self, model_service: SemanticModelService) -> None:
         self.model_service = model_service
 
+    def _structured_completion(
+        self,
+        user: User,
+        messages: list[dict[str, str]],
+        *,
+        task_type: str,
+    ) -> str:
+        task_call = getattr(self.model_service, "chat_completion_for_task", None)
+        if callable(task_call):
+            return task_call(
+                user,
+                messages,
+                ModelTaskProfile(
+                    task_type=task_type,
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="stable",
+                    timeout_seconds=12.0,
+                    max_attempts=1,
+                ),
+            )
+        return self.model_service.chat_completion(user, messages)
+
     def decide(
         self,
         *,
@@ -98,7 +122,7 @@ class SemanticDecisionService:
             force_deep=force_deep,
         )
         try:
-            raw = self.model_service.chat_completion(
+            raw = self._structured_completion(
                 user,
                 self._messages(
                     question=question,
@@ -107,6 +131,7 @@ class SemanticDecisionService:
                     selected_materials=selected_materials,
                     conversation_messages=conversation_messages or [],
                 ),
+                task_type="semantic_routing",
             )
         except Exception:
             return replace(fallback, warning="语义能力暂时降级，未自动推断联网、深度推理或学习画像。")
@@ -189,7 +214,7 @@ class SemanticDecisionService:
             if item.get("source_type") not in {"web", "history"}
         ][:8]
         try:
-            raw = self.model_service.chat_completion(
+            raw = self._structured_completion(
                 user,
                 [
                     {
@@ -222,6 +247,7 @@ class SemanticDecisionService:
                         ),
                     },
                 ],
+                task_type="course_evidence_decision",
             )
         except Exception:
             return None

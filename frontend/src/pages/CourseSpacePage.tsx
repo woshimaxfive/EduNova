@@ -1,8 +1,8 @@
 import {
   ArrowRight,
   ChartLineUp,
-  ChatCircleText,
   ListChecks,
+  MapTrifold,
   Microphone
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1141,16 +1141,10 @@ export function CourseSpacePage() {
                     <>
                       <NextLearningAction action={recommendation} compact />
                       <nav className="course-action-links" aria-label="课程辅助入口">
-                        <a
-                          href="#course-question-input"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            courseQuestionInputRef.current?.focus();
-                          }}
-                        >
-                          <ChatCircleText size={17} weight="duotone" aria-hidden="true" />
-                          <span>开始提问</span>
-                        </a>
+                        <Link to={buildCoursePathWorkspacePath(numericCourseId)}>
+                          <MapTrifold size={17} weight="duotone" aria-hidden="true" />
+                          <span>学习路径</span>
+                        </Link>
                         <Link to={buildCoursePracticeWorkspacePath(numericCourseId)}>
                           <ListChecks size={17} weight="duotone" aria-hidden="true" />
                           <span>自由练习</span>

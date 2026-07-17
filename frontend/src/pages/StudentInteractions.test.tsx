@@ -424,9 +424,7 @@ describe("student interaction affordances", () => {
     expect(studyMode).toHaveTextContent("模型评估");
   });
 
-  it("keeps question practice and reports as course-context actions", async () => {
-    const user = userEvent.setup();
-
+  it("keeps path, practice, and reports as course-context actions", async () => {
     renderWithProviders(
       <MemoryRouter initialEntries={["/app/courses/808"]}>
         <Routes>
@@ -437,6 +435,7 @@ describe("student interaction affordances", () => {
 
     const courseActions = screen.getByRole("navigation", { name: "课程辅助入口" });
     const expectedActions = [
+      ["学习路径", "/app/courses/808/path"],
       ["自由练习", "/app/courses/808/practice"],
       ["查看报告", "/app/courses/808/reports"]
     ] as const;
@@ -444,9 +443,6 @@ describe("student interaction affordances", () => {
     for (const [label, path] of expectedActions) {
       expect(within(courseActions).getByRole("link", { name: label })).toHaveAttribute("href", path);
     }
-
-    await user.click(within(courseActions).getByRole("link", { name: "开始提问" }));
-    expect(screen.getByRole("textbox", { name: "课程问题输入" })).toHaveFocus();
   });
 
   it("keeps invalid course questions in the input instead of adding fake history", async () => {

@@ -1409,10 +1409,14 @@ describe("CourseSpacePage course tutor sessions", () => {
     });
   });
 
-  it("links practice and reports entries with the current course preselected", async () => {
+  it("links path, practice, and reports entries with the current course preselected", async () => {
     renderCoursePage();
 
     const actionLinks = await screen.findByRole("navigation", { name: "课程辅助入口" });
+    expect(within(actionLinks).getByRole("link", { name: "学习路径" })).toHaveAttribute(
+      "href",
+      "/app/courses/808/path"
+    );
     expect(within(actionLinks).getByRole("link", { name: "自由练习" })).toHaveAttribute(
       "href",
       "/app/courses/808/practice"

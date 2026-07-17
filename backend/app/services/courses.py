@@ -120,6 +120,8 @@ class CourseRepository(Protocol):
 
     def list_weakness_review_items(self, user_id: int, course_id: int) -> list[WeaknessReviewItem]: ...
 
+    def list_weakness_review_items_for_update(self, user_id: int, course_id: int) -> list[WeaknessReviewItem]: ...
+
     def get_weakness_review_item(self, user_id: int, course_id: int, item_id: int) -> WeaknessReviewItem | None: ...
 
     def add_weakness_review_item(self, item: WeaknessReviewItem) -> None: ...
@@ -273,6 +275,17 @@ class SqlAlchemyCourseRepository:
             self.db.scalars(
                 select(WeaknessReviewItem)
                 .where(WeaknessReviewItem.user_id == user_id, WeaknessReviewItem.course_id == course_id)
+                .order_by(WeaknessReviewItem.created_at.desc(), WeaknessReviewItem.id.desc())
+            )
+        )
+
+    def list_weakness_review_items_for_update(self, user_id: int, course_id: int) -> list[WeaknessReviewItem]:
+        """Lock weakness rows for the user+course to prevent duplicate inserts under concurrency."""
+        return list(
+            self.db.scalars(
+                select(WeaknessReviewItem)
+                .where(WeaknessReviewItem.user_id == user_id, WeaknessReviewItem.course_id == course_id)
+                .with_for_update()
                 .order_by(WeaknessReviewItem.created_at.desc(), WeaknessReviewItem.id.desc())
             )
         )
@@ -579,7 +592,7 @@ class CourseService:
         return weakness_item_to_api(item)
 
     def _sync_weakness_review_queue(self, user: User, course_id: int, candidate_events: list[ProfileEvent]) -> None:
-        existing_items = self.repository.list_weakness_review_items(user.id, course_id)
+        existing_items = self.repository.list_weakness_review_items_for_update(user.id, course_id)
         existing_knowledge_point_ids = {item.knowledge_point_id for item in existing_items if item.knowledge_point_id is not None}
         existing_titles = {self._normalize_weakness_title(item.title) for item in existing_items if item.title.strip()}
         created_any = False

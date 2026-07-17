@@ -197,6 +197,9 @@ class FakeCourseRepository:
         result = [item for item in self.weakness_items if item.user_id == user_id and item.course_id == course_id]
         return sorted(result, key=lambda item: (item.created_at, item.id), reverse=True)
 
+    def list_weakness_review_items_for_update(self, user_id: int, course_id: int) -> list[WeaknessReviewItem]:
+        return self.list_weakness_review_items(user_id, course_id)
+
     def get_weakness_review_item(self, user_id: int, course_id: int, item_id: int) -> WeaknessReviewItem | None:
         return next(
             (

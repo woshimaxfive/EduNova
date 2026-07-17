@@ -2912,14 +2912,14 @@ a {
 .tutor-image-dialog img { max-width: 100%; max-height: 88vh; object-fit: contain; border-radius: 0.8rem; background: white; }
 .tutor-image-dialog button { position: absolute; right: 0.6rem; top: 0.6rem; z-index: 1; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; color: white; background: rgba(15, 23, 42, 0.8); }
 .tutor-attachment-dialog { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1rem; background: rgba(7, 16, 28, 0.58); }
-.tutor-attachment-panel { width: min(520px, calc(100vw - 2rem)); max-height: min(680px, calc(100vh - 2rem)); overflow: auto; padding: 1.1rem; border: 1px solid var(--border-soft); border-radius: 0.5rem; background: var(--surface-primary); box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22); }
+.tutor-attachment-panel { width: min(520px, calc(100vw - 2rem)); max-height: min(680px, calc(100vh - 2rem)); overflow: auto; padding: 1.1rem; border: 1px solid var(--line); border-radius: 0.5rem; background: var(--surface-strong); box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22); }
 .tutor-attachment-panel > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
 .tutor-attachment-panel > header h2 { margin: 0; font-size: 1.05rem; }
 .tutor-attachment-panel > header button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; background: transparent; color: var(--text-muted); }
 .tutor-attachment-upload { width: 100%; min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 0.55rem; border: 1px dashed var(--accent-strong); border-radius: 0.4rem; background: rgba(15, 118, 110, 0.06); color: var(--accent-strong); font-weight: 700; }
 .tutor-library-images { display: grid; gap: 0.45rem; margin-top: 1rem; }
 .tutor-library-images > p { margin: 0; padding: 1rem 0; color: var(--text-muted); text-align: center; }
-.tutor-library-images > button { min-width: 0; display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 0.7rem; padding: 0.7rem 0.8rem; border: 1px solid var(--border-soft); border-radius: 0.35rem; background: transparent; color: var(--text-primary); text-align: left; }
+.tutor-library-images > button { min-width: 0; display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 0.7rem; padding: 0.7rem 0.8rem; border: 1px solid var(--line); border-radius: 0.35rem; background: transparent; color: var(--text); text-align: left; }
 .tutor-library-images > button:not(:disabled):hover { border-color: var(--accent-strong); background: rgba(15, 118, 110, 0.05); }
 .tutor-library-images > button > span { min-width: 0; display: flex; justify-content: space-between; gap: 0.75rem; }
 .tutor-library-images strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

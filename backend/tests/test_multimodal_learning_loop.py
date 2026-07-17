@@ -53,12 +53,35 @@ def test_video_curation_stops_after_a_valid_bilibili_result() -> None:
     assert "site:bilibili.com/video" in search.queries[0]
 
 
+def test_video_curation_skips_popular_but_unrelated_search_result() -> None:
+    search = FakeVideoSearch([
+        SimpleNamespace(citations=[
+            {
+                "title": "Java 架构全套课程免费分享",
+                "url": "https://www.bilibili.com/video/BV1nF411u7Xe",
+                "snippet": "面向 Java 工程师的完整架构课程。",
+            },
+            {
+                "title": "冒泡排序可视化：相邻比较与交换",
+                "url": "https://www.bilibili.com/video/BV1xx411c7mD",
+                "snippet": "逐轮演示冒泡排序。",
+            },
+        ], warning=None),
+    ])
+
+    result = VideoCurationService(search).curate(topic="冒泡排序", profile_summary={})
+
+    assert result.video_id == "BV1xx411c7mD"
+    assert result.title.startswith("冒泡排序")
+
+
 def test_video_curation_uses_youtube_only_as_second_stage_fallback() -> None:
     search = FakeVideoSearch([
         SimpleNamespace(citations=[], warning=None),
         SimpleNamespace(citations=[{
             "title": "Binary tree traversal",
             "url": "https://youtu.be/abcDEF_1234",
+            "snippet": "二叉树遍历的英文动画讲解。",
         }], warning=None),
     ])
 

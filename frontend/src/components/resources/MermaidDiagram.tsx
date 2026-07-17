@@ -53,7 +53,15 @@ export function MermaidDiagram({ source, label }: MermaidDiagramProps) {
   }, [reactId, source]);
 
   if (error) {
-    return <pre className="resource-diagram-fallback">{source}</pre>;
+    return (
+      <div className="resource-diagram-fallback" role="status">
+        <p>这幅过程图暂时无法渲染，文字讲解仍可继续使用。</p>
+        <details>
+          <summary>查看图解源码</summary>
+          <pre>{source}</pre>
+        </details>
+      </div>
+    );
   }
 
   return <div className="resource-mermaid-canvas" ref={hostRef} role="img" aria-label={label} />;

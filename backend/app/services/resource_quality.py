@@ -8,7 +8,7 @@ from typing import Any, Iterable
 from backend.app.services.resource_artifacts import validate_resource_content
 
 
-RESOURCE_PROMPT_VERSION = "resource-v4.0"
+RESOURCE_PROMPT_VERSION = "resource-v4.1"
 RESOURCE_REVIEW_PROMPT_VERSION = "resource-review-v4.0"
 STRICT_MODEL_TYPES = {"quiz", "code", "animation"}
 EVIDENCE_FALLBACK_TYPES = {"doc", "mindmap", "slide"}
@@ -63,7 +63,7 @@ def quality_risks(
 ) -> list[str]:
     risks = list(validate_resource_content(resource_type, content))
     artifact = content.get("artifact")
-    text = artifact_text(artifact)
+    text = f"{content.get('markdown') or ''}\n{artifact_text(artifact)}"
     lowered = text.casefold()
     if any(marker.casefold() in lowered for marker in FORBIDDEN_OUTPUT_MARKERS):
         risks.append("sensitive_output")
@@ -74,11 +74,20 @@ def quality_risks(
     normalized_candidate = normalized_text(text)
     if topic_tokens and not _matches_semantics(topic, text, topic_tokens, normalized_candidate):
         risks.append("off_topic")
-    if evidence_tokens and not _matches_semantics(" ".join(evidence_rows), text, evidence_tokens, normalized_candidate):
-        risks.append("citation_mismatch")
 
     refs = _citation_refs(artifact)
     if valid_citation_refs and (not refs or any(ref not in valid_citation_refs for ref in refs)):
+        risks.append("citation_mismatch")
+    # Exact wording overlap is not a sound citation test for model-generated teaching
+    # material: a correct paraphrase can share no long substring with the excerpt. When
+    # references are present and belong to the retrieved evidence set, semantic support is
+    # reviewed by ReviewAgent. Retain the lexical fallback only when there is no verifiable
+    # citation binding at all.
+    if (
+        evidence_tokens
+        and not valid_citation_refs
+        and not _matches_semantics(" ".join(evidence_rows), text, evidence_tokens, normalized_candidate)
+    ):
         risks.append("citation_mismatch")
 
     if resource_type == "quiz" and isinstance(artifact, dict):
@@ -112,15 +121,20 @@ def _semantic_terms(value: object) -> set[str]:
     text = str(value or "")
     terms = {
         item.casefold()
-        for item in re.findall(r"[A-Za-z][A-Za-z0-9*+_.-]{1,24}|[一-龥]{2,10}", text)
+        for item in re.findall(r"[A-Za-z][A-Za-z0-9*+_.-]{1,24}", text)
         if len(item.strip()) >= 2
     }
+    for segment in re.findall(r"[一-龥]{2,16}", text):
+        terms.add(segment.casefold())
+        for size in range(2, min(4, len(segment)) + 1):
+            terms.update(segment[index : index + size].casefold() for index in range(len(segment) - size + 1))
     stop = {"课程", "学习", "知识", "内容", "资料", "当前", "理解", "步骤", "问题", "相关", "进行", "需要"}
     return {item for item in terms if item not in stop}
 
 
 def _matches_semantics(source: object, candidate: object, terms: set[str], normalized_candidate: str) -> bool:
-    if any(normalized_text(token) in normalized_candidate for token in terms):
+    matched_terms = {token for token in terms if normalized_text(token) in normalized_candidate}
+    if len(matched_terms) >= min(2, len(terms)):
         return True
     source_text = str(source or "").casefold()
     candidate_text = str(candidate or "").casefold()
@@ -194,14 +208,18 @@ def _code_risks(artifact: dict[str, Any], *, topic: str, evidence_terms: list[st
     code = next((str(item.get("content") or "") for item in files if isinstance(item, dict) and item.get("path") == entry), "")
     if len(code.strip()) < 40 or not str(artifact.get("expected_output") or "").strip():
         return ["incomplete_code"]
-    code_semantics = f"{entry}\n{code}"
+    code_semantics = "\n".join(
+        [
+            entry,
+            code,
+            *[str(item) for item in artifact.get("instructions", []) if str(item).strip()],
+            *[str(item) for item in artifact.get("tasks", []) if str(item).strip()],
+        ]
+    )
     topic_terms = _semantic_terms(topic)
     normalized_code = normalized_text(code_semantics)
     if topic_terms and not _matches_semantics(topic, code_semantics, topic_terms, normalized_code):
         return ["off_topic_code"]
-    evidence_terms_set = {token for evidence in evidence_terms for token in _semantic_terms(evidence)}
-    if evidence_terms_set and not _matches_semantics(" ".join(evidence_terms), code_semantics, evidence_terms_set, normalized_code):
-        return ["citation_mismatch"]
     return []
 
 
@@ -212,4 +230,31 @@ def _animation_risks(artifact: dict[str, Any]) -> list[str]:
     titles = [normalized_text(scene.get("title")) for scene in scenes if isinstance(scene, dict)]
     if len(titles) != len(scenes) or len(set(titles)) != len(titles):
         return ["duplicate_scenes"]
+    if any(
+        not isinstance(scene, dict) or not _is_safe_mermaid_flowchart(str(scene.get("diagram") or ""))
+        for scene in scenes
+    ):
+        return ["invalid_animation_diagram"]
     return []
+
+
+def _is_safe_mermaid_flowchart(source: str) -> bool:
+    """Validate the small Mermaid subset accepted by the student renderer.
+
+    Full Mermaid parsing stays in the existing frontend dependency. This backend gate
+    catches malformed or active syntax before persistence and sends the candidate through
+    the existing one-shot model repair path.
+    """
+    text = source.strip()
+    if not re.match(r"^flowchart\s+(?:TB|TD|BT|RL|LR)\b", text, re.IGNORECASE):
+        return False
+    if len(text) > 4000 or re.search(r"%%\{|\b(?:click|href|linkStyle)\b|<\/?(?:script|iframe)", text, re.IGNORECASE):
+        return False
+    pairs = (("[", "]"), ("{", "}"), ("(", ")"))
+    if any(text.count(opening) != text.count(closing) for opening, closing in pairs):
+        return False
+    # A vertical bar inside a node label (for example `[3, 5, |8|]`) is parsed as
+    # edge-label syntax by Mermaid and is the concrete failure seen in production.
+    if re.search(r"\[[^\]\n]*\|[^\]\n]*\]", text):
+        return False
+    return True

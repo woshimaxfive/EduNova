@@ -26,7 +26,7 @@ export function ResourceRenderer({ resource }: { resource: GeneratedResource }) 
         {artifact.sections.map((section) => (
           <section key={section.heading}>
             <h3>{section.heading}</h3>
-            <p>{section.body}</p>
+            <MarkdownMessage content={section.body} className="resource-document-section-body" />
           </section>
         ))}
       </div>

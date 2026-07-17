@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import mermaid from "mermaid";
 import { type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -118,7 +119,10 @@ describe("ResourceRenderer", () => {
     const user = userEvent.setup();
     const documentResource = makeResource("doc", {
       kind: "document",
-      sections: [{ heading: "概念解释", body: "A* 会结合已走代价和估计代价。" }],
+      sections: [{
+        heading: "概念解释",
+        body: "**A-star** 会结合已走代价和估计代价。\n\n1. 计算 `g(n)`\n2. 估计 `h(n)`\n\n```python\nscore = g + h\n```"
+      }],
       citation_refs: [701]
     });
     const quizResource = makeResource("quiz", {
@@ -139,6 +143,9 @@ describe("ResourceRenderer", () => {
     const { rerender } = renderWithQuery(<ResourceRenderer resource={documentResource} />);
 
     expect(screen.getByRole("heading", { name: "概念解释" })).toBeInTheDocument();
+    expect(screen.getByText("A-star", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText(/计算/).closest("ol")).toBeInTheDocument();
+    expect(screen.getByText("score = g + h").closest("pre")).toBeInTheDocument();
     rerender(
       <QueryClientProvider client={new QueryClient()}>
         <ResourceRenderer resource={quizResource} />
@@ -180,6 +187,25 @@ describe("ResourceRenderer", () => {
     await user.click(screen.getByRole("button", { name: "下一个动画场景" }));
     expect(screen.getByRole("heading", { name: "验证结果" })).toBeInTheDocument();
     expect(await screen.findByRole("img", { name: "验证结果过程图解" })).toBeInTheDocument();
+  });
+
+  it("shows a student-friendly fallback instead of raw Mermaid source", async () => {
+    vi.mocked(mermaid.render).mockRejectedValueOnce(new Error("parse error"));
+    const animation = makeResource("animation", {
+      kind: "animation",
+      scenes: [
+        { id: "s1", title: "错误图解", narration: "文字讲解仍然可用。", duration_ms: 3000, diagram: "flowchart LR\n A[3, |8|] --> B" }
+      ],
+      default_scene_duration_ms: 3000,
+      citation_refs: [701]
+    });
+
+    renderWithQuery(<ResourceRenderer resource={animation} />);
+
+    expect(await screen.findByText("这幅过程图暂时无法渲染，文字讲解仍可继续使用。")).toBeInTheDocument();
+    const summary = screen.getByText("查看图解源码");
+    expect(summary).toBeInTheDocument();
+    expect(summary.closest("details")).not.toHaveAttribute("open");
   });
 
   it("runs reviewed Python in a browser worker and exposes expected output", async () => {

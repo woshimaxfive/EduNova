@@ -75,7 +75,11 @@ class VideoCurationService:
             result = self.search_service.search(query, max_results=8)
             for item in list(getattr(result, "citations", []) or []):
                 candidate = normalize_video(item)
-                if candidate is not None and candidate.platform == platform:
+                if (
+                    candidate is not None
+                    and candidate.platform == platform
+                    and video_matches_topic(candidate, topic)
+                ):
                     return candidate
             warning = str(getattr(result, "warning", "") or "").strip()
             if warning:
@@ -147,3 +151,35 @@ def normalize_video(item: dict[str, Any]) -> CuratedVideo | None:
         retrieved_at=str(item.get("retrieved_at") or datetime.now(UTC).isoformat()),
         access_scope=china_first_content_policy.classify_access_scope(watch_url),
     )
+
+
+def video_matches_topic(candidate: CuratedVideo, topic: str) -> bool:
+    """Require visible search metadata to substantiate topic relevance.
+
+    Search providers can return popular but unrelated videos for narrow queries. We do not
+    claim to have watched the video; this gate only accepts a candidate when its title or
+    snippet visibly covers the requested knowledge point.
+    """
+    normalized_topic = _normalized_search_text(topic)
+    normalized_metadata = _normalized_search_text(f"{candidate.title} {candidate.snippet}")
+    if not normalized_topic or not normalized_metadata:
+        return False
+    if normalized_topic in normalized_metadata:
+        return True
+
+    chinese = "".join(re.findall(r"[一-龥]", str(topic or "")))
+    if len(chinese) >= 3:
+        bigrams = {chinese[index : index + 2] for index in range(len(chinese) - 1)}
+        matched = sum(1 for token in bigrams if token in normalized_metadata)
+        if matched >= max(2, (len(bigrams) + 1) // 2):
+            return True
+
+    ascii_terms = {
+        token.casefold()
+        for token in re.findall(r"[A-Za-z][A-Za-z0-9+#*_.-]{1,24}", str(topic or ""))
+    }
+    return bool(ascii_terms) and all(_normalized_search_text(token) in normalized_metadata for token in ascii_terms)
+
+
+def _normalized_search_text(value: object) -> str:
+    return re.sub(r"[^0-9a-zA-Z一-龥]+", "", str(value or "").casefold())

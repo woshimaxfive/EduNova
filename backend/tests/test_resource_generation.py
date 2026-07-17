@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -632,7 +633,7 @@ def test_generate_six_resource_types_persists_v3_artifacts_quality_scores_and_pa
     assert all(log.metadata_json["artifact_type"] == "generated_resource" for log in repo.agent_logs)
     assert set(result["quality_scores"].keys()) == {resource["id"] for resource in result["resources"]}
     assert len(model_service.calls) == 8
-    assert model_service.timeout_calls == [30.0] * 8
+    assert model_service.timeout_calls == [45.0] * 8
     code_prompt = next(
         "\n".join(message["content"] for message in call)
         for call in model_service.calls
@@ -951,6 +952,123 @@ def test_code_quality_gate_recognizes_backpropagation_identifiers() -> None:
 
     assert "off_topic_code" not in risks
     assert "citation_mismatch" not in risks
+
+
+def test_quality_gate_accepts_evidence_bound_semantic_paraphrase() -> None:
+    from backend.app.services.resource_quality import quality_risks
+
+    content = {
+        "schema_version": 3,
+        "format": "rich",
+        "markdown": "# 冒泡排序练习\n\n请结合每轮扫描的边界变化，判断元素最终所在的位置并说明理由。",
+        "artifact": {
+            "kind": "quiz",
+            "questions": [
+                {
+                    "id": f"q{index}",
+                    "type": "short_answer",
+                    "prompt": ("第一轮结束后应观察什么？", "未排序边界如何缩小？", "何时可以提前结束？")[index - 1],
+                    "options": [],
+                    "answer": "观察未排序区间末端是否已经放置当前最大元素。",
+                    "explanation": "相邻元素逆序时交换，一轮后当前最大元素移动到区间末端。",
+                    "citation_refs": [701],
+                }
+                for index in range(1, 4)
+            ],
+            "citation_refs": [701],
+        },
+    }
+
+    risks = quality_risks(
+        "quiz",
+        content,
+        topic="冒泡排序",
+        evidence_terms=["按从左到右的顺序反复比较相邻记录，若次序错误则互换位置。"],
+        valid_citation_refs={701},
+    )
+
+    assert "off_topic" not in risks
+    assert "citation_mismatch" not in risks
+
+
+def test_animation_quality_gate_rejects_unrenderable_mermaid_node_label() -> None:
+    from backend.app.services.resource_quality import quality_risks
+
+    content = {
+        "schema_version": 3,
+        "format": "rich",
+        "markdown": "# 冒泡排序动画图解\n\n逐轮展示相邻比较与交换。",
+        "artifact": {
+            "kind": "animation",
+            "scenes": [
+                {
+                    "id": f"scene-{index}",
+                    "title": f"第 {index} 轮",
+                    "narration": "观察当前最大元素移动到右侧。",
+                    "duration_ms": 3000,
+                    "diagram": "flowchart LR\n A[3, 5, 2, |8|] --> B[3, 5, 2, 8]",
+                }
+                for index in range(1, 4)
+            ],
+            "default_scene_duration_ms": 3000,
+            "citation_refs": [701],
+        },
+    }
+
+    risks = quality_risks(
+        "animation",
+        content,
+        topic="冒泡排序",
+        evidence_terms=["冒泡排序通过相邻比较和交换完成排序。"],
+        valid_citation_refs={701},
+    )
+
+    assert "invalid_animation_diagram" in risks
+
+
+def test_resource_graph_bounds_worker_concurrency_to_model_runtime_limit() -> None:
+    from backend.app.services.resources import ResourceGenerationGraphRunner
+
+    repo = make_repo()
+    runner = ResourceGenerationGraphRunner(make_service(repo))
+
+    class CapturingGraph:
+        config: dict[str, Any] | None = None
+
+        def invoke(self, state: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
+            self.config = config
+            return {
+                **state,
+                "resource_objects": [],
+                "quality_scores": {},
+                "result_warnings": [],
+                "failed_resource_types": [],
+            }
+
+    graph = CapturingGraph()
+    runner.graph = graph  # type: ignore[assignment]
+    runner.generate(
+        user=make_user(),
+        course=make_course(),
+        knowledge_point=make_point(),
+        resource_types=["doc", "mindmap", "quiz", "code", "slide", "animation", "video"],
+        learning_goal="掌握启发式搜索",
+        difficulty="medium",
+    )
+
+    assert graph.config == {"max_concurrency": 3}
+
+
+def test_code_generation_prompts_match_verifier_dunder_policy() -> None:
+    generation_source = inspect.getsource(ResourceGenerationService._enhance_resource_with_model)
+    repair_source = inspect.getsource(ResourceGenerationService._repair_resource_with_model)
+
+    assert "不得使用任何双下划线名称或属性" in generation_source
+    assert "if __name__ == '__main__'" in generation_source
+    assert "不定义 class、不写类型注解" in generation_source
+    assert "不得出现任何" in repair_source
+    assert "if __name__ == '__main__'" in repair_source
+    assert "不要定义 class，不写类型注解" in repair_source
 
 
 def test_generate_scopes_course_and_knowledge_point_to_current_user() -> None:

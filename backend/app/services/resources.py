@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.errors import make_trace_id
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.agents.schemas import AgentState
+from backend.app.core.config import get_settings
 from backend.app.core.errors import NotFoundDomainError, ValidationDomainError
 from backend.app.models import (
     AgentRunLog,
@@ -86,7 +87,7 @@ QUALITY_SCORE_NAMES = (
     "pedagogical_utility",
     "type_correctness",
 )
-RESOURCE_MODEL_TIMEOUT_SECONDS = 30.0
+RESOURCE_MODEL_TIMEOUT_SECONDS = 45.0
 RESOURCE_EXCERPT_LIMIT = 96
 SENSITIVE_MARKERS = (
     "系统提示词",
@@ -900,7 +901,11 @@ class ResourceGenerationService:
             "code": (
                 "输出 code_lab artifact，Python 必须直接演示当前知识点并给出精确预期输出。"
                 "只能使用 collections、dataclasses、functools、heapq、itertools、math、random、statistics、typing，"
-                "不得使用 numpy、文件、网络、动态执行或 JS 互操作。使用固定常量，避免随机行为；"
+                "能不用 import 时优先不用；不得使用 numpy、文件、网络、动态执行或 JS 互操作。"
+                "不得使用任何双下划线名称或属性，包括常见的 if __name__ == '__main__' 启动写法；"
+                "为保证浏览器沙箱稳定运行，不定义 class、不写类型注解，只使用 Python 内置的列表、字典、元组、"
+                "字符串、数值、循环、条件和纯函数；代码应在文件顶层直接调用纯函数完成演示。"
+                "使用固定常量，避免随机行为；"
                 "expected_output 必须按每个 print 逐行手算，并与实际输出逐字一致。"
             ),
             "slide": "输出 slide_deck artifact，至少五页，每页包含具体要点、讲稿和引用。",
@@ -1166,7 +1171,10 @@ class ResourceGenerationService:
                         *draft.source.excerpt_lines[:3],
                         (
                             "代码资源只能使用 collections、dataclasses、functools、heapq、itertools、math、random、statistics、typing；"
-                            "不得使用 numpy、文件、网络、动态执行或 JS 互操作。请改成使用固定常量的最小可运行示例，"
+                            "能不用 import 时优先不用；不得使用 numpy、文件、网络、动态执行或 JS 互操作，也不得出现任何"
+                            "双下划线名称、属性或字符串，包括 if __name__ == '__main__'。请从头改成在文件顶层直接调用"
+                            "纯函数、使用固定常量的最小可运行示例；不要定义 class，不写类型注解，只使用内置列表、字典、"
+                            "元组、字符串、数值、循环、条件和纯函数，"
                             "避免随机行为；重新逐行核对每个 print，并让 expected_output 与实际输出逐字一致。"
                             if payload["resource_type"] == "code"
                             else "保持 artifact.kind 与字段结构不变。"
@@ -1185,7 +1193,7 @@ class ResourceGenerationService:
                     reasoning="disabled",
                     output_mode="json_object",
                     creativity="balanced",
-                    timeout_seconds=20.0,
+                    timeout_seconds=30.0,
                     max_attempts=1,
                 ),
             )
@@ -1673,7 +1681,12 @@ class ResourceGenerationGraphRunner:
         persist_started = perf_counter()
         try:
             with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
-                result = self.graph.invoke(state)
+                # Resource workers all use the same per-user model runtime. Dispatching more
+                # graph tasks than the runtime permits makes workers race its short semaphore
+                # wait and randomly drops otherwise valid resources. Run in bounded waves that
+                # never exceed the configured per-user limit.
+                max_concurrency = max(1, min(3, get_settings().model_max_concurrent_per_user))
+                result = self.graph.invoke(state, config={"max_concurrency": max_concurrency})
             self._job_before(result, "persist")
             self.service.repository.commit()
             resources = list(result.get("resource_objects", []))
@@ -2002,7 +2015,10 @@ class ResourceGenerationGraphRunner:
             if resource_type == "video":
                 topic = knowledge_point.title if knowledge_point is not None else course.title
                 curated = self.service.video_curator.curate(topic=topic, profile_summary=profile_summary)
-                fit_reason = str(artifact_intent.get("learning_need") or f"补充“{topic}”的外部讲解")[:240]
+                learning_goal = str(state.get("learning_goal") or "").strip()
+                fit_reason = f"作为“{topic}”的外部补充讲解"
+                if learning_goal:
+                    fit_reason += f"，用于支持学习目标：{learning_goal[:120]}"
                 artifact = curated.artifact(topic=topic, fit_reason=fit_reason)
                 markdown = f"# {curated.title}\n\n外部教学视频（{curated.platform}）：[{curated.title}]({curated.watch_url})\n\n{fit_reason}"
                 source = ArtifactBuildInput(

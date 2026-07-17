@@ -933,7 +933,7 @@ class CourseService:
             if score is None:
                 score = 0
             if active_weaknesses or score < 60:
-                return "weak", min(score, 59), evidence_count, confidence, last_assessed_at
+                return "weak", score, evidence_count, confidence, last_assessed_at
             if any(is_review_due(item, now) for item in completed_weaknesses):
                 return "recommended_review", score, evidence_count, confidence, last_assessed_at
             return ("mastered" if score >= 80 else "learning"), score, evidence_count, confidence, last_assessed_at

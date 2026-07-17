@@ -251,7 +251,11 @@ class ReportService:
             "summary": f"本次评估得分 {score if score is not None else '暂无'}，基于真实练习作答生成。",
             "mastery_update": {
                 "weak_count": len(weakness_rows),
-                "mastered_count": sum(1 for answer in answered if answer.is_correct is True),
+                "mastered_count": len({
+                    str((answer.question_json or {}).get("knowledge_point_id") or "")
+                    for answer in answered
+                    if answer.is_correct is True and (answer.question_json or {}).get("knowledge_point_id") is not None
+                }),
                 "learning_count": max(len(points) - len(weakness_rows), 0),
             },
             "weakness_list": weakness_rows,

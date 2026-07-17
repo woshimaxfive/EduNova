@@ -17,10 +17,12 @@ def test_all_json_operations_have_bounded_response_schemas() -> None:
             if path.endswith(STREAM_OR_DOWNLOAD_SUFFIXES):
                 continue
             responses = operation.get("responses", {})
-            success = next(
-                (response for code, response in responses.items() if str(code).isdigit() and 200 <= int(code) < 300),
-                None,
+            success_code, success = next(
+                ((code, response) for code, response in responses.items() if str(code).isdigit() and 200 <= int(code) < 300),
+                (None, None),
             )
+            if success_code == "204":
+                continue
             content = (success or {}).get("content", {})
             if content and "application/json" not in content:
                 continue

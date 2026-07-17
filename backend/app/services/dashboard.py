@@ -262,7 +262,6 @@ class DashboardService:
         kp_counts: dict[int, int],
         practiced: dict[int, set[int]],
     ) -> list[DashboardCourse]:
-        enrollment_by_course_id = {enrollment.course_id: enrollment for enrollment in enrollments}
         result: list[DashboardCourse] = []
 
         for course in courses:
@@ -284,6 +283,8 @@ class DashboardService:
                     title=course.title,
                     source_type=course.source_type,
                     progress_label=DashboardService._progress_label(progress),
+                    practiced_knowledge_point_count=len(practiced_kps),
+                    knowledge_point_count=total_kps,
                     focus=focus,
                     next="继续学习" if progress > 0 else "开始学习",
                 )

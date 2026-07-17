@@ -11,7 +11,8 @@ const baseProps = {
   isLoading: false,
   isError: false,
   onOpenMaterial: vi.fn(),
-  onToggleCompare: vi.fn()
+  onToggleCompare: vi.fn(),
+  onRequestDelete: vi.fn()
 };
 
 it("资料库真正为空时引导上传第一份资料", () => {

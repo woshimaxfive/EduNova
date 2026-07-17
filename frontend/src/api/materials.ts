@@ -245,6 +245,10 @@ export async function getMaterial(materialId: number) {
   return response.data;
 }
 
+export async function deleteMaterial(materialId: number) {
+  await apiClient.delete(MATERIAL_ENDPOINTS.detail(materialId));
+}
+
 export async function getMaterialProgress(materialId: number) {
   const response = await apiClient.get<ApiEnvelope<MaterialProgress>>(MATERIAL_ENDPOINTS.progress(materialId));
   return response.data;

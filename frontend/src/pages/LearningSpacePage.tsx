@@ -6,10 +6,11 @@ import {
   MagnifyingGlass,
   Microphone,
   SpeakerHigh,
+  Stop,
   Sparkle,
   X
 } from "@phosphor-icons/react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
@@ -18,6 +19,7 @@ import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import { createCourseBuilderJob, createIdempotencyKey, getAiJob, type AiJob } from "../api/aiJobs";
 import { getDashboardSummary } from "../api/dashboard";
 import { getApiErrorMessage } from "../api/errors";
+import { getLearningNextAction } from "../api/learning";
 import { listMaterials, uploadMaterial } from "../api/materials";
 import {
   createTutorSession,
@@ -43,8 +45,7 @@ import { useAuthStore } from "../features/auth/authStore";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import { isRestorableCourseBuilderJob } from "../features/aiJobs/jobRestoration";
 import { useHomeConversationHistory } from "../features/home/useHomeConversationHistory";
-import { invalidateLearningNextActions, learningActionHref, useLearningNextAction } from "../features/learning-actions/learningActions";
-import { SpeechPlaybackControls } from "../features/speech/SpeechPlaybackControls";
+import { invalidateLearningNextActions, learningActionButtonLabel, learningActionHref, learningActionKeys, useLearningNextAction } from "../features/learning-actions/learningActions";
 import { useBrowserSpeech } from "../features/speech/useBrowserSpeech";
 import { SecureTutorImages, TutorImagePicker } from "../features/tutor/TutorImageAttachments";
 import { useTutorImageDraft } from "../features/tutor/useTutorImageDraft";
@@ -77,7 +78,9 @@ type LearningSpaceNavigationState = {
 
 type DashboardSummaryResponse = Awaited<ReturnType<typeof getDashboardSummary>>;
 
-type HomeAnswerPanel = "sources" | "path" | "why" | "thinking";
+type HomeAnswerPanel = "sources" | "why" | "thinking";
+
+const HOME_COMPOSER_MAX_HEIGHT = 154;
 
 function mapTutorMessages(apiMessages: TutorMessage[]) {
   return apiMessages.map((message) => ({
@@ -118,6 +121,7 @@ export function LearningSpacePage() {
     ? navigationState.selectedMaterialIds.filter((materialId): materialId is string => typeof materialId === "string")
     : [];
   const homeChatStageRef = useRef<HTMLElement | null>(null);
+  const homeQuestionInputRef = useRef<HTMLTextAreaElement>(null);
   const isResettingHomeRef = useRef(false);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
@@ -171,7 +175,23 @@ export function LearningSpacePage() {
     enabled: Boolean(token),
     staleTime: 30_000
   });
-  const recentCourses = dashboardSummary?.recent_courses ?? [];
+  const recentCourses = useMemo(() => dashboardSummary?.recent_courses ?? [], [dashboardSummary?.recent_courses]);
+  const recentCourseActionQueries = useQueries({
+    queries: recentCourses.map((course) => ({
+      queryKey: learningActionKeys.detail(Number(course.id)),
+      queryFn: () => getLearningNextAction(Number(course.id)),
+      enabled: Boolean(token) && !hasHomeThread,
+      staleTime: 5_000,
+      retry: false
+    }))
+  });
+  const recentCourseActions = useMemo(
+    () => new Map(recentCourses.map((course, index) => {
+      const action = recentCourseActionQueries[index]?.data?.data;
+      return [course.id, action?.kind ? action : undefined];
+    })),
+    [recentCourseActionQueries, recentCourses]
+  );
   const emptyState = dashboardSummary?.empty_state;
   const learnerName = dashboardSummary?.profile_summary.display_name.trim() || "同学";
   const historyHomeThreads = useMemo(
@@ -211,6 +231,16 @@ export function LearningSpacePage() {
     }
     navigate(learningActionHref(action));
   }
+
+  useEffect(() => {
+    const input = homeQuestionInputRef.current;
+    if (!input) return;
+
+    input.style.height = "auto";
+    const nextHeight = Math.min(input.scrollHeight, HOME_COMPOSER_MAX_HEIGHT);
+    input.style.height = `${nextHeight}px`;
+    input.style.overflowY = input.scrollHeight > HOME_COMPOSER_MAX_HEIGHT ? "auto" : "hidden";
+  }, [prompt]);
 
   useEffect(() => {
     if (courseJobId) return;
@@ -584,8 +614,12 @@ export function LearningSpacePage() {
     speech.toggleListening();
   }
 
-  function handleSpeakMessage(content: string) {
-    speech.speak(content, "home-answer");
+  function toggleReadMessage(message: HomeMessage) {
+    if (speech.activeSpeechId === message.id) {
+      speech.stopSpeaking();
+      return;
+    }
+    speech.speak(message.content, message.id);
   }
 
   function resetHomeEntry() {
@@ -743,9 +777,15 @@ export function LearningSpacePage() {
                   {message.role === "user" ? <SecureTutorImages attachments={message.attachments} /> : null}
                   {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : <p>{message.content}</p>}
                   {message.role === "assistant" && !message.streaming ? (
-                    <button className="message-speak-button" type="button" aria-label="朗读回答" onClick={() => handleSpeakMessage(message.content)}>
-                      <SpeakerHigh size={15} weight="duotone" aria-hidden="true" />
-                      <span>朗读</span>
+                    <button
+                      className="message-speak-button"
+                      type="button"
+                      aria-label={speech.activeSpeechId === message.id ? "停止朗读" : "朗读回答"}
+                      aria-pressed={speech.activeSpeechId === message.id}
+                      onClick={() => toggleReadMessage(message)}
+                    >
+                      {speech.activeSpeechId === message.id ? <Stop size={15} weight="fill" aria-hidden="true" /> : <SpeakerHigh size={15} weight="duotone" aria-hidden="true" />}
+                      <span>{speech.activeSpeechId === message.id ? "停止" : "朗读"}</span>
                     </button>
                   ) : null}
                   {message.role === "assistant" && !message.streaming ? (
@@ -773,17 +813,10 @@ export function LearningSpacePage() {
           )}
 
           <section className={hasHomeThread ? "composer-frame docked" : "composer-frame"} aria-label={hasHomeThread ? "底部学习输入" : "学习输入区"}>
-            <SpeechPlaybackControls
-              active={Boolean(speech.activeSpeechId)}
-              paused={speech.isPaused}
-              rate={speech.rate}
-              onPause={speech.pause}
-              onResume={speech.resume}
-              onStop={speech.stopSpeaking}
-              onRateChange={speech.setRate}
-            />
             <div className="conversation-composer">
+              <TutorImagePicker draft={imageDraft} compact display="previews" />
               <textarea
+                ref={homeQuestionInputRef}
                 aria-label="学习问题输入"
                 value={prompt}
                 rows={2}
@@ -802,7 +835,7 @@ export function LearningSpacePage() {
               />
               <div className="composer-actions">
                 <div className="composer-toolbar" aria-label="输入工具">
-                  <TutorImagePicker draft={imageDraft} compact />
+                  <TutorImagePicker draft={imageDraft} compact display="controls" />
                   <button type="button" aria-label="打开资料库" title="资料库" onClick={() => openLibrary()}>
                     <BookOpen size={18} weight="duotone" aria-hidden="true" />
                   </button>
@@ -843,6 +876,7 @@ export function LearningSpacePage() {
               action={nextActionQuery.data?.data}
               isLoading={nextActionQuery.isPending}
               error={nextActionQuery.isError}
+              presentation="home"
               onAction={handleNextLearningAction}
             />
           ) : null}
@@ -875,19 +909,33 @@ export function LearningSpacePage() {
                 </button>
               </div>
               <ul className="recent-course-list" aria-label="最近学习列表">
-                {recentCourses.map((course) => (
+                {recentCourses.map((course) => {
+                  const action = recentCourseActions.get(course.id);
+                  const progress = course.knowledge_point_count > 0
+                    ? `${course.practiced_knowledge_point_count} / ${course.knowledge_point_count}`
+                    : course.progress_label;
+                  return (
                   <li key={course.id}>
-                    <Link className="recent-course" to={buildCoursePath(course.id)}>
+                    <article className="recent-course">
                       <BookOpen size={18} weight="duotone" aria-hidden="true" />
                       <span className="recent-course-copy">
-                        <strong>{course.title}</strong>
-                        <small><b>当前重点</b>{course.focus}</small>
+                        <Link to={buildCoursePath(course.id)}>{course.title}</Link>
+                        <small><b>当前重点</b>{action?.label ?? course.focus}</small>
                       </span>
-                      <span className="recent-course-progress"><small>进度</small><em>{course.progress_label}</em></span>
-                      <span className="course-next"><small>下一步</small><strong>{course.next}</strong></span>
-                    </Link>
+                      <span className="recent-course-progress"><small>学习覆盖</small><em>{progress}</em></span>
+                      {action ? (
+                        <Link className="course-next" to={learningActionHref(action)} aria-label={`下一步：${action.label}`}>
+                          <small>下一步</small><strong>{learningActionButtonLabel(action)}</strong>
+                        </Link>
+                      ) : (
+                        <Link className="course-next" to={buildCoursePath(course.id)}>
+                          <small>下一步</small><strong>{course.next}</strong>
+                        </Link>
+                      )}
+                    </article>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </section>
           ) : null}
@@ -977,12 +1025,11 @@ function HomeAnswerInsights({
   };
   const citations = message.citation_json ?? [];
   const hasCitations = citations.length > 0;
-  const sourceText =
-    hasCitations
-      ? `本次回答返回 ${citations.length} 条真实来源。`
-      : selectedMaterialCount > 0
-        ? `系统已检索 ${selectedMaterialCount} 份已选资料，但没有返回可展示来源。`
-        : "系统没有找到需要展示的资料或网页来源。";
+  const sourceText = hasCitations
+    ? `本次回答返回 ${citations.length} 条真实来源。`
+    : selectedMaterialCount > 0
+      ? `系统已检索 ${selectedMaterialCount} 份已选资料，但没有返回可展示来源。`
+      : "系统没有找到需要展示的资料或网页来源。";
 
   return (
     <section className="home-answer-insights" aria-label="回答附加信息">
@@ -1006,16 +1053,6 @@ function HomeAnswerInsights({
         >
           <LinkSimple size={16} weight="duotone" aria-hidden="true" />
           <span>来源</span>
-        </button>
-        <button
-          className={isExpanded && activePanel === "path" ? "active" : ""}
-          type="button"
-          aria-expanded={isExpanded && activePanel === "path"}
-          aria-pressed={isExpanded && activePanel === "path"}
-          onClick={() => handleInsightClick("path")}
-        >
-          <BookOpen size={16} weight="duotone" aria-hidden="true" />
-          <span>学习路径</span>
         </button>
         <button
           className={isExpanded && activePanel === "thinking" ? "active" : ""}
@@ -1063,15 +1100,6 @@ function HomeAnswerInsights({
                   ))}
                 </ul>
               ) : null}
-            </>
-          ) : null}
-          {activePanel === "path" ? (
-            <>
-              <span className="insight-mark">
-                <BookOpen size={16} weight="fill" aria-hidden="true" />
-                下一步
-              </span>
-              <p>先用 10 分钟补概念，再做 3 道同类题，最后把错因写回画像和复习队列。</p>
             </>
           ) : null}
           {activePanel === "thinking" ? (

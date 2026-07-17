@@ -21,6 +21,7 @@ class CourseSummary(BaseModel):
     status: str
     agent_trace_id: str | None = None
     progress_percent: int
+    practiced_knowledge_point_count: int = 0
     material_count: int
     knowledge_point_count: int
     chunk_count: int

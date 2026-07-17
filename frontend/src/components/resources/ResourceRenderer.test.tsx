@@ -38,6 +38,7 @@ it("normalizes common LaTeX arrows before Markmap rendering", () => {
 vi.mock("mermaid", () => ({
   default: {
     initialize: vi.fn(),
+    parse: vi.fn().mockResolvedValue({ diagramType: "flowchart" }),
     render: vi.fn().mockResolvedValue({ svg: '<svg aria-label="diagram"><text>过程图</text></svg>' })
   }
 }));
@@ -190,7 +191,8 @@ describe("ResourceRenderer", () => {
   });
 
   it("shows a student-friendly fallback instead of raw Mermaid source", async () => {
-    vi.mocked(mermaid.render).mockRejectedValueOnce(new Error("parse error"));
+    vi.mocked(mermaid.render).mockClear();
+    vi.mocked(mermaid.parse).mockResolvedValueOnce(false as never);
     const animation = makeResource("animation", {
       kind: "animation",
       scenes: [
@@ -203,6 +205,7 @@ describe("ResourceRenderer", () => {
     renderWithQuery(<ResourceRenderer resource={animation} />);
 
     expect(await screen.findByText("这幅过程图暂时无法渲染，文字讲解仍可继续使用。")).toBeInTheDocument();
+    expect(mermaid.render).not.toHaveBeenCalled();
     const summary = screen.getByText("查看图解源码");
     expect(summary).toBeInTheDocument();
     expect(summary.closest("details")).not.toHaveAttribute("open");

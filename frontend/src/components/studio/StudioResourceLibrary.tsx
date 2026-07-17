@@ -1,6 +1,6 @@
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { MagnifyingGlass, Trash } from "@phosphor-icons/react";
 
-import { type ResourceType } from "../../api/resources";
+import { type GeneratedResource, type ResourceType } from "../../api/resources";
 import { formatResourceDate, generationModeLabel, isLowEvidenceResource, resourceTypeMeta } from "./studioResourceMeta";
 import { type StudioResourceFamily } from "./studioResourceVersions";
 
@@ -14,6 +14,7 @@ type StudioResourceLibraryProps = {
   onSearchChange: (value: string) => void;
   onTypeFilterChange: (value: "all" | ResourceType) => void;
   onSelectResource: (resourceId: string) => void;
+  onRequestDelete: (resource: GeneratedResource) => void;
 };
 
 export function StudioResourceLibrary({
@@ -25,7 +26,8 @@ export function StudioResourceLibrary({
   isLoading,
   onSearchChange,
   onTypeFilterChange,
-  onSelectResource
+  onSelectResource,
+  onRequestDelete
 }: StudioResourceLibraryProps) {
   return (
     <aside className="studio-resource-library" aria-label="成果库">
@@ -70,21 +72,28 @@ export function StudioResourceLibrary({
             const { Icon, label } = resourceTypeMeta[resource.resource_type];
             const selected = family.versions.some((version) => version.id === selectedResourceId);
             return (
-              <button
+              <div
                 className={`studio-resource-row${selected ? " active" : ""}${isLowEvidenceResource(resource) ? " low-evidence" : ""}`}
-                type="button"
                 key={family.key}
-                aria-label={`打开成果 ${resource.title}`}
-                aria-pressed={selected}
-                onClick={() => onSelectResource(resource.id)}
               >
+                <button
+                  className="studio-resource-open"
+                  type="button"
+                  aria-label={`打开成果 ${resource.title}`}
+                  aria-pressed={selected}
+                  onClick={() => onSelectResource(resource.id)}
+                >
                 <span className="studio-resource-row-icon"><Icon size={18} weight="duotone" /></span>
                 <span className="studio-resource-row-copy">
                   <strong>{resource.title}</strong>
                   <small>{label} · {formatResourceDate(resource.created_at)}{family.versions.length > 1 ? ` · ${family.versions.length} 个版本` : ""}</small>
                 </span>
                 <em>{generationModeLabel(resource)}</em>
-              </button>
+                </button>
+                <button className="studio-resource-delete" type="button" aria-label={`删除成果 ${resource.title}`} onClick={() => onRequestDelete(resource)}>
+                  <Trash size={16} weight="duotone" />
+                </button>
+              </div>
             );
           })
         ) : (

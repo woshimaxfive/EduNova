@@ -32,6 +32,10 @@ export function MermaidDiagram({ source, label }: MermaidDiagramProps) {
             tertiaryColor: "#ffffff"
           }
         });
+        const parsed = await mermaid.parse(source, { suppressErrors: true });
+        if (!parsed) {
+          throw new Error("Mermaid diagram is invalid");
+        }
         const result = await mermaid.render(diagramId, source);
         if (!cancelled && host) {
           host.innerHTML = result.svg;

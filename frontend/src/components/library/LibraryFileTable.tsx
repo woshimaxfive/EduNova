@@ -1,4 +1,4 @@
-import { BookOpen, Check, FileText, Image, WarningCircle } from "@phosphor-icons/react";
+import { BookOpen, Check, FileText, Image, Trash, WarningCircle } from "@phosphor-icons/react";
 
 import { type MaterialListItem } from "../../api/materials";
 import { isComparableMaterial, materialUnavailableReason } from "./libraryMaterialState";
@@ -13,6 +13,7 @@ type LibraryFileTableProps = {
   isError: boolean;
   onOpenMaterial: (material: MaterialListItem) => void;
   onToggleCompare: (material: MaterialListItem) => void;
+  onRequestDelete: (material: MaterialListItem) => void;
 };
 
 function statusLabel(material: MaterialListItem) {
@@ -38,6 +39,7 @@ export function LibraryFileTable(props: LibraryFileTableProps) {
         <span>关联课程</span>
         <span>修改时间</span>
         <span>大小</span>
+        <span className="library-action-heading">操作</span>
       </div>
 
       {props.isLoading ? <div className="library-table-state">正在读取资料库。</div> : null}
@@ -91,6 +93,15 @@ export function LibraryFileTable(props: LibraryFileTableProps) {
             </span>
             <span>{material.modified}</span>
             <span>{material.size || "—"}</span>
+            <button
+              className="library-delete-button"
+              type="button"
+              aria-label="删除资料"
+              title={`删除 ${material.title}`}
+              onClick={() => props.onRequestDelete(material)}
+            >
+              <Trash size={17} weight="duotone" />
+            </button>
           </div>
         );
       }) : null}

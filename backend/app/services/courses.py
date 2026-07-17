@@ -1049,6 +1049,7 @@ class CourseService:
         if chunk_count is None:
             chunk_count = len(self.repository.list_knowledge_chunks(course.id))
 
+        practiced_knowledge_point_count = 0
         if user_id is not None and knowledge_point_count > 0:
             answers = self.repository.list_practice_answers(user_id, course.id)
             practiced_kp_ids: set[int] = set()
@@ -1056,7 +1057,8 @@ class CourseService:
                 kp_id = (answer.question_json or {}).get("knowledge_point_id")
                 if kp_id is not None:
                     practiced_kp_ids.add(int(kp_id))
-            progress_percent = round(len(practiced_kp_ids) / knowledge_point_count * 100)
+            practiced_knowledge_point_count = len(practiced_kp_ids)
+            progress_percent = round(practiced_knowledge_point_count / knowledge_point_count * 100)
         else:
             progress_percent = 0
 
@@ -1069,6 +1071,7 @@ class CourseService:
             status=course.status or "draft",
             agent_trace_id=getattr(course, "agent_trace_id", None),
             progress_percent=progress_percent,
+            practiced_knowledge_point_count=practiced_knowledge_point_count,
             material_count=material_count,
             knowledge_point_count=knowledge_point_count,
             chunk_count=chunk_count,

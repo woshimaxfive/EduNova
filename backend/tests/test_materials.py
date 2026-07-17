@@ -58,6 +58,11 @@ class FakeMaterialRepository:
     def get_material_for_user(self, user_id: int, material_id: int) -> Material | None:
         return next((material for material in self.materials if material.id == material_id and material.user_id == user_id), None)
 
+    def delete_material(self, material: Material) -> None:
+        self.materials.remove(material)
+        self.chunks[:] = [chunk for chunk in self.chunks if chunk.material_id != material.id]
+        self.links[:] = [link for link in self.links if link.material_id != material.id]
+
     def list_materials(self, user_id: int, course_id: int | None = None, unassigned: bool = False) -> list[Material]:
         result = [material for material in self.materials if material.user_id == user_id]
         if course_id is not None:
@@ -364,6 +369,27 @@ def test_list_detail_progress_and_user_isolation(tmp_path: Path) -> None:
 
     with pytest.raises(MaterialNotFoundError):
         service.get_material(other, int(as_dict(own)["id"]))
+
+
+def test_delete_material_removes_owned_record_links_chunks_and_stored_file(tmp_path: Path) -> None:
+    course = Course(id=101, owner_id=1, title="机器学习", source_type="generated")
+    repo = FakeMaterialRepository(courses=[course])
+    service = make_service(repo, tmp_path)
+    uploaded = upload_bytes(service, make_user(), "delete-me.txt", b"delete", "text/plain", course_id=101)
+    material_id = int(as_dict(uploaded)["id"])
+    storage_path = service.storage.local_path(repo.materials[0].storage_path)
+
+    service.delete_material(make_user(), material_id)
+
+    assert repo.materials == []
+    assert repo.chunks == []
+    assert repo.links == []
+    assert storage_path is not None and not storage_path.exists()
+
+    from backend.app.services.materials import MaterialNotFoundError
+
+    with pytest.raises(MaterialNotFoundError):
+        service.delete_material(make_user(2), material_id)
 
 
 def test_material_detail_summarizes_sections_pages_and_owned_courses(tmp_path: Path) -> None:

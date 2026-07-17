@@ -11,6 +11,7 @@ import {
   compareMaterials,
   confirmMaterialOutline,
   createMaterialIngestionJob,
+  deleteMaterial,
   getLatestMaterialComparison,
   getMaterial,
   getMaterialOutline,
@@ -28,7 +29,7 @@ import {
 import { AgentTraceDisclosure } from "../components/evidence/AgentTraceDisclosure";
 import { AiJobProgress } from "../components/feedback/AiJobProgress";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
-import { ModalFrame } from "../components/primitives/Dialog";
+import { ConfirmDialog, ModalFrame } from "../components/primitives/Dialog";
 import { LibraryDrawer } from "../components/library/LibraryDrawer";
 import { LibraryFileTable } from "../components/library/LibraryFileTable";
 import { isComparableMaterial } from "../components/library/libraryMaterialState";
@@ -138,6 +139,8 @@ export function LibraryPage() {
   const [courseTitleTouched, setCourseTitleTouched] = useState(false);
   const [courseJobId, setCourseJobId] = useState<string | null>(null);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
+  const [materialPendingDeletion, setMaterialPendingDeletion] = useState<MaterialListItem | null>(null);
+  const [isDeletingMaterial, setIsDeletingMaterial] = useState(false);
   const [libraryFeedback, setLibraryFeedback] = useState<string | null>(null);
   const [outlineFeedback, setOutlineFeedback] = useState<string | null>(null);
   const [isUpdatingOutline, setIsUpdatingOutline] = useState(false);
@@ -278,6 +281,32 @@ export function LibraryPage() {
     setDrawerMode("detail");
   }
 
+  async function handleDeleteMaterial() {
+    if (!materialPendingDeletion || isDeletingMaterial) return;
+    const material = materialPendingDeletion;
+    setIsDeletingMaterial(true);
+    try {
+      await deleteMaterial(Number(material.id));
+      setMaterialPendingDeletion(null);
+      setCompareMaterialIds((current) => current.filter((id) => id !== material.id));
+      setCourseMaterialIds((current) => current.filter((id) => id !== material.id));
+      if (selectedMaterialId === Number(material.id)) {
+        setDrawerMode(null);
+        removeMaterialParam();
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["courses", "list"] }),
+        invalidateLearningNextActions(queryClient)
+      ]);
+    } catch (error) {
+      setLibraryFeedback(getApiErrorMessage(error, "资料删除失败，请稍后再试。"));
+    } finally {
+      setIsDeletingMaterial(false);
+    }
+  }
+
   function startCompare(initialIds: string[] = []) {
     removeMaterialParam();
     setCompareMaterialIds(initialIds);
@@ -335,7 +364,7 @@ export function LibraryPage() {
       }, { replace: true });
       setDrawerMode("detail");
       setDetailTab("overview");
-      setLibraryFeedback(uploaded.ingestion_job_id ? "资料已上传，正在后台识别页码、目录和正文切片。" : null);
+      setLibraryFeedback(null);
     } catch (error) {
       setLibraryFeedback(getApiErrorMessage(error, "资料上传失败，请稍后再试。"));
     } finally {
@@ -375,7 +404,7 @@ export function LibraryPage() {
         queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] }),
         invalidateLearningNextActions(queryClient)
       ]);
-      setOutlineFeedback("目录已确认，这份资料现在可以用于问答、对比和智能建课。");
+      setOutlineFeedback(null);
     } catch (error) {
       setOutlineFeedback(getApiErrorMessage(error, "目录确认失败，请检查解析质量后重试。"));
     } finally {
@@ -390,7 +419,7 @@ export function LibraryPage() {
     try {
       const job = await createMaterialIngestionJob(selectedMaterialId, true, createIdempotencyKey("material-ingestion"));
       trackJob(job);
-      setOutlineFeedback("已开始重新解析，任务会在离开页面后继续运行。");
+      setOutlineFeedback(null);
       await queryClient.invalidateQueries({ queryKey: ["materials", "list"] });
     } catch (error) {
       setOutlineFeedback(getApiErrorMessage(error, "重新解析任务创建失败，请稍后重试。"));
@@ -522,6 +551,7 @@ export function LibraryPage() {
             isError={materialsQuery.isError}
             onOpenMaterial={openMaterial}
             onToggleCompare={toggleCompareMaterial}
+            onRequestDelete={setMaterialPendingDeletion}
           />
         </section>
       </PageFrame>
@@ -571,6 +601,25 @@ export function LibraryPage() {
           />
         </LibraryDrawer>
       ) : null}
+
+      <ConfirmDialog
+        open={materialPendingDeletion !== null}
+        title="删除资料"
+        description={`删除“${materialPendingDeletion?.title ?? "这份资料"}”后，关联课程将不再使用它。此操作不可撤销。`}
+        confirmLabel={isDeletingMaterial ? "正在删除" : "删除资料"}
+        layerClassName="destructive-confirm-layer"
+        onOpenChange={(open) => { if (!open && !isDeletingMaterial) setMaterialPendingDeletion(null); }}
+        onConfirm={() => void handleDeleteMaterial()}
+      >
+        <section>
+          <h2>删除资料</h2>
+          <p>删除“{materialPendingDeletion?.title}”后，关联课程将不再使用它。此操作不可撤销。</p>
+          <div>
+            <button type="button" disabled={isDeletingMaterial} onClick={() => setMaterialPendingDeletion(null)}>取消</button>
+            <button className="danger" type="button" disabled={isDeletingMaterial} onClick={() => void handleDeleteMaterial()}>{isDeletingMaterial ? "正在删除" : "删除资料"}</button>
+          </div>
+        </section>
+      </ConfirmDialog>
 
       {drawerMode === "compare" ? (
         <LibraryDrawer

@@ -217,6 +217,18 @@ def get_material(
     return api_response(result.model_dump())
 
 
+@router.delete("/materials/{material_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_material(
+    material_id: int,
+    current_user: User = Depends(get_current_user),
+    service: MaterialService = Depends(get_material_service),
+) -> None:
+    try:
+        service.delete_material(current_user, material_id)
+    except MaterialNotFoundError as exc:
+        raise ApiError(status_code=404, code="NOT_FOUND", message=str(exc)) from exc
+
+
 @router.get("/materials/{material_id}/progress")
 def get_material_progress(
     material_id: int,

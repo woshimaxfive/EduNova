@@ -149,6 +149,18 @@ def get_resource(
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
 
 
+@router.delete("/{resource_id}", status_code=204)
+def delete_resource(
+    resource_id: int,
+    current_user: User = Depends(get_current_user),
+    service: ResourceGenerationService = Depends(get_resource_generation_service),
+) -> None:
+    try:
+        service.delete_resource(current_user, resource_id)
+    except ResourceNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+
+
 @router.get("/{resource_id}/quality")
 def get_resource_quality(
     resource_id: int,

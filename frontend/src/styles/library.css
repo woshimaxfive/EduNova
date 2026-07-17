@@ -173,14 +173,14 @@
 .library-table-head,
 .library-table-row {
   display: grid;
-  grid-template-columns: minmax(280px, 1.55fr) minmax(105px, 0.46fr) minmax(170px, 0.75fr) minmax(100px, 0.44fr) minmax(80px, 0.34fr);
+  grid-template-columns: minmax(280px, 1.55fr) minmax(105px, 0.46fr) minmax(170px, 0.75fr) minmax(100px, 0.44fr) minmax(80px, 0.34fr) 40px;
   align-items: center;
   min-width: 0;
 }
 
 .library-table-head.compare,
 .library-table-row.compare {
-  grid-template-columns: 42px minmax(280px, 1.55fr) minmax(105px, 0.46fr) minmax(170px, 0.75fr) minmax(100px, 0.44fr) minmax(80px, 0.34fr);
+  grid-template-columns: 42px minmax(280px, 1.55fr) minmax(105px, 0.46fr) minmax(170px, 0.75fr) minmax(100px, 0.44fr) minmax(80px, 0.34fr) 40px;
 }
 
 .library-table-head {
@@ -236,6 +236,27 @@
 .library-row-action:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.library-action-heading {
+  text-align: center;
+}
+
+.library-delete-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  justify-self: end;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.library-delete-button:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .library-row-icon {
@@ -939,13 +960,13 @@
 
   .library-table-row,
   .library-table-row.compare {
-    grid-template-columns: 30px minmax(0, 1fr) auto;
+    grid-template-columns: 30px minmax(0, 1fr) auto auto;
     gap: 8px;
     padding: 8px 10px;
   }
 
   .library-table-row:not(.compare) {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
 
   .library-table-row > .library-status-label {

@@ -65,7 +65,6 @@ import { type AgentTraceEvent } from "../types/api";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import { useLearningNextAction } from "../features/learning-actions/learningActions";
 import { type LearningNextAction } from "../api/learning";
-import { SpeechPlaybackControls } from "../features/speech/SpeechPlaybackControls";
 import { useBrowserSpeech } from "../features/speech/useBrowserSpeech";
 import { SecureTutorImages, TutorImagePicker } from "../features/tutor/TutorImageAttachments";
 import { useTutorImageDraft } from "../features/tutor/useTutorImageDraft";
@@ -144,6 +143,8 @@ type CourseMessage = {
   traceId?: string | null;
   attachments?: TutorImageAttachment[];
 };
+
+const COURSE_COMPOSER_MAX_HEIGHT = 154;
 
 function courseQuestionTitle(question: string) {
   const normalized = question.trim();
@@ -329,6 +330,16 @@ export function CourseSpacePage() {
     if (Array.isArray(restored.request.resource_types)) setSelectedCourseResourceTypes(restored.request.resource_types as ResourceType[]);
     setResourceJobId(restored.job_id);
   }, [hasRealCourseId, jobs, numericCourseId, resourceJobId]);
+
+  useEffect(() => {
+    const input = courseQuestionInputRef.current;
+    if (!input) return;
+
+    input.style.height = "auto";
+    const nextHeight = Math.min(input.scrollHeight, COURSE_COMPOSER_MAX_HEIGHT);
+    input.style.height = `${nextHeight}px`;
+    input.style.overflowY = input.scrollHeight > COURSE_COMPOSER_MAX_HEIGHT ? "auto" : "hidden";
+  }, [coursePrompt]);
   const apiCourse = courseQuery.data?.data;
   const overviewCourse = courseOverviewQuery.data?.data.course;
   const fallbackCourse = apiCourse ?? overviewCourse;
@@ -525,7 +536,7 @@ export function CourseSpacePage() {
     const resourceIds = Array.isArray(resourceJob.result.resource_ids)
       ? resourceJob.result.resource_ids.map(String)
       : [];
-    setCourseResourceFeedback(resourceJob.warnings.join(" ") || "资源生成完成，可直接查看，也可在资源工坊继续管理。");
+    setCourseResourceFeedback(resourceJob.warnings.length > 0 ? resourceJob.warnings.join(" ") : null);
     void (async () => {
       await invalidateCourseLearningLoop(queryClient, numericCourseId);
       const refreshed = await courseResourcesQuery.refetch();
@@ -902,7 +913,7 @@ export function CourseSpacePage() {
         queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
         queryClient.invalidateQueries({ queryKey: ["courses", "overview", numericCourseId] })
       ]);
-      setCourseFeedback(`${files.length} 份资料已上传，解析完成并确认目录后会成为课程参考。`);
+      setCourseFeedback(null);
     } catch {
       setCourseFeedback("资料上传失败，请稍后再试。");
     }
@@ -1097,43 +1108,48 @@ export function CourseSpacePage() {
                 </div>
 
                 <div className="course-composer" role="region" aria-label="课程输入区">
-                  <SpeechPlaybackControls
-                    active={Boolean(speech.activeSpeechId)}
-                    paused={speech.isPaused}
-                    rate={speech.rate}
-                    onPause={speech.pause}
-                    onResume={speech.resume}
-                    onStop={speech.stopSpeaking}
-                    onRateChange={speech.setRate}
-                  />
                   <label htmlFor="course-question-input">课程问题输入</label>
-                  <textarea
-                    ref={courseQuestionInputRef}
-                    id="course-question-input"
-                    rows={3}
-                    value={coursePrompt}
-                    onChange={(event) => setCoursePrompt(event.target.value)}
-                    onKeyDown={handleCourseComposerKeyDown}
-                    onPaste={(event) => {
-                      const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
-                      if (files.length) { event.preventDefault(); void imageDraft.addFiles(files); }
-                    }}
-                    onDrop={(event) => {
-                      const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith("image/"));
-                      if (files.length) { event.preventDefault(); void imageDraft.addFiles(files); }
-                    }}
-                    onDragOver={(event) => event.preventDefault()}
-                    placeholder="继续问这门课，例如：给我生成监督学习 10 分钟复习路线"
-                  />
-                  <TutorImagePicker draft={imageDraft} compact />
-                  <button className="course-voice-button" type="button" aria-pressed={speech.isListening} onClick={speech.toggleListening}>
-                    <Microphone size={17} weight={speech.isListening ? "fill" : "regular"} aria-hidden="true" />
-                    <span>{speech.isListening ? "停止聆听" : "语音输入"}</span>
-                  </button>
-                  <button className="course-send-button" type="button" disabled={isSearchingCourse} onClick={() => void sendCourseQuestion()}>
-                    <ArrowRight size={17} weight="bold" aria-hidden="true" />
-                    <span>{isSearchingCourse ? "正在回答" : "发送"}</span>
-                  </button>
+                  <div className="conversation-composer course-conversation-composer">
+                    <TutorImagePicker draft={imageDraft} compact display="previews" />
+                    <textarea
+                      ref={courseQuestionInputRef}
+                      id="course-question-input"
+                      rows={2}
+                      value={coursePrompt}
+                      onChange={(event) => setCoursePrompt(event.target.value)}
+                      onKeyDown={handleCourseComposerKeyDown}
+                      onPaste={(event) => {
+                        const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
+                        if (files.length) { event.preventDefault(); void imageDraft.addFiles(files); }
+                      }}
+                      onDrop={(event) => {
+                        const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith("image/"));
+                        if (files.length) { event.preventDefault(); void imageDraft.addFiles(files); }
+                      }}
+                      onDragOver={(event) => event.preventDefault()}
+                      placeholder="继续问这门课，例如：给我生成监督学习 10 分钟复习路线"
+                    />
+                    <div className="composer-actions">
+                      <div className="composer-toolbar" aria-label="输入工具">
+                        <TutorImagePicker draft={imageDraft} compact display="controls" />
+                      </div>
+                      <div className="composer-submit-row">
+                        <button
+                          className={speech.isListening ? "voice-button active" : "voice-button"}
+                          type="button"
+                          title={speech.isListening ? "停止聆听" : "语音输入"}
+                          aria-label="语音输入"
+                          aria-pressed={speech.isListening}
+                          onClick={speech.toggleListening}
+                        >
+                          <Microphone size={18} weight="duotone" aria-hidden="true" />
+                        </button>
+                        <button className="ask-button" type="button" title={isSearchingCourse ? "正在回答" : "发送"} aria-label="发送" disabled={isSearchingCourse} onClick={() => void sendCourseQuestion()}>
+                          <ArrowRight size={18} weight="bold" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                   <InlineFeedback message={courseFeedback} tone="warning" className="course-inline-feedback" />
                 </div>
               </section>

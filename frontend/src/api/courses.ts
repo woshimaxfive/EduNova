@@ -30,6 +30,7 @@ export type ApiCourseSummary = {
   status: string;
   agent_trace_id?: string | null;
   progress_percent: number;
+  practiced_knowledge_point_count?: number;
   material_count: number;
   knowledge_point_count: number;
   chunk_count: number;

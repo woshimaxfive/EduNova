@@ -170,6 +170,10 @@ class ResourceRepository(Protocol):
         for_update: bool = False,
     ) -> GeneratedResource | None: ...
 
+    def list_learning_tasks_for_user(self, user_id: int) -> list[LearningTask]: ...
+
+    def delete_resource(self, resource: GeneratedResource) -> None: ...
+
     def max_version_number(self, version_family_id: str) -> int: ...
 
     def lock_version_family(self, version_family_id: str) -> None: ...
@@ -262,6 +266,12 @@ class SqlAlchemyResourceRepository:
         if for_update:
             statement = statement.with_for_update()
         return self.db.scalar(statement)
+
+    def list_learning_tasks_for_user(self, user_id: int) -> list[LearningTask]:
+        return list(self.db.scalars(select(LearningTask).where(LearningTask.user_id == user_id)))
+
+    def delete_resource(self, resource: GeneratedResource) -> None:
+        self.db.delete(resource)
 
     def max_version_number(self, version_family_id: str) -> int:
         return int(
@@ -454,6 +464,36 @@ class ResourceGenerationService:
         if resource is None:
             raise ResourceNotFoundError("资源不存在或无权访问。")
         return self._resource_to_api(user.id, resource)
+
+    def delete_resource(self, user: User, resource_id: int) -> None:
+        resource = self.repository.get_resource_for_user(user.id, resource_id, for_update=True)
+        if resource is None:
+            raise ResourceNotFoundError("资源不存在或无权访问。")
+
+        for task in self.repository.list_learning_tasks_for_user(user.id):
+            task.recommended_resource_ids = [
+                value for value in (task.recommended_resource_ids or []) if str(value) != str(resource.id)
+            ]
+            bundle = dict(task.learning_bundle_json or {})
+            items = bundle.get("items")
+            if isinstance(items, list):
+                bundle["items"] = [
+                    item for item in items
+                    if not isinstance(item, dict) or str(item.get("resource_id")) != str(resource.id)
+                ]
+                bundle["ready_count"] = len(bundle["items"])
+                bundle["completed_count"] = sum(
+                    1 for item in bundle["items"]
+                    if isinstance(item, dict) and item.get("learning_status") == "completed"
+                )
+                task.learning_bundle_json = bundle
+
+        try:
+            self.repository.delete_resource(resource)
+            self.repository.commit()
+        except Exception:
+            self.repository.rollback()
+            raise
 
     def _resource_to_api(self, user_id: int, resource: GeneratedResource) -> GeneratedResourceResponse:
         context_service = context_service_from_repository(self.repository)

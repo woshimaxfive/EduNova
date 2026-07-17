@@ -28,6 +28,8 @@ export type DashboardCourse = {
   title: string;
   source_type: string;
   progress_label: string;
+  practiced_knowledge_point_count: number;
+  knowledge_point_count: number;
   focus: string;
   next: string;
 };

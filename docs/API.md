@@ -326,7 +326,7 @@ Authorization: Bearer <token>
 
 - `blank` 注册用户返回空课程、空资料、空主页历史和 `empty_state.kind=blank`。
 - `data_structures` 注册用户返回复制到该用户空间的数据结构与算法课程；资料摘要仍只统计用户上传原文件。
-- 课程进度只显示真实进度；没有进度记录时显示“未开始”，不使用前端写死的演示百分比。
+- `recent_courses` 的 `practiced_knowledge_point_count` 和 `knowledge_point_count` 表示有过作答记录的知识点覆盖数与课程总数；`progress_label` 仅是该覆盖度的辅助文字，不代表掌握度或正确率。没有作答记录时显示“未开始”，不使用前端写死的演示百分比。
 - 本接口不创建会话、不上传资料、不触发 AI/RAG，也不生成课程。
 
 响应示例：
@@ -356,6 +356,8 @@ Authorization: Bearer <token>
         "title": "数据结构与算法",
         "source_type": "builtin",
         "progress_label": "未开始",
+        "practiced_knowledge_point_count": 0,
+        "knowledge_point_count": 56,
         "focus": "计算机科学",
         "next": "开始学习"
       }
@@ -754,6 +756,10 @@ Authorization: Bearer <token>
 ```
 
 详情只返回当前用户可见的安全摘要，并增加 `ingestion_status`、`parser_version`、`outline_version`、`quality_summary` 与 `parsed_at`。`sections` 最多返回 20 个章节，每个预览不超过 180 字；完整目录和切片检查通过下方 outline 接口读取。接口不返回存储路径、向量、原始 metadata 或模型输入。
+
+### DELETE `/materials/{material_id}`
+
+用途：删除当前用户自己的资料。成功返回 HTTP 204；不存在或不属于当前用户时返回 404。删除会级联移除资料切片和课程关联，并在提交后清理用户隔离的原文件，不返回存储路径。
 
 ### GET `/materials`
 
@@ -1271,6 +1277,10 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 ### GET `/resources/{resource_id}`
 
 用途：获取当前用户自己的资源详情。不存在或不属于当前用户时返回 404。
+
+### DELETE `/resources/{resource_id}`
+
+用途：删除当前用户自己的单条资源版本。成功返回 HTTP 204；不存在或不属于当前用户时返回 404。资源质量评分、学习交互和导出任务遵循数据库外键级联；当前用户学习路径中指向该资源的推荐 ID 与学习包项目会同步移除，其他版本不受影响。
 
 ### GET `/resources/{resource_id}/quality`
 

@@ -236,6 +236,8 @@ def test_data_structures_user_summary_uses_internal_course_without_library_mater
             "title": "数据结构与算法",
             "source_type": "builtin",
             "progress_label": "未开始",
+            "practiced_knowledge_point_count": 0,
+            "knowledge_point_count": 0,
             "focus": "计算机科学",
             "next": "开始学习",
         }

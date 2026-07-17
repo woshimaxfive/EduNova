@@ -39,13 +39,10 @@ export function useBrowserSpeech(options: {
   const recognitionRef = useRef<Recognition | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [activeSpeechId, setActiveSpeechId] = useState<string | null>(null);
-  const [isPaused, setIsPaused] = useState(false);
-  const [rate, setRateState] = useState(1);
 
   const stopSpeaking = useCallback(() => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
     setActiveSpeechId(null);
-    setIsPaused(false);
   }, []);
 
   const stopListening = useCallback(() => {
@@ -73,7 +70,6 @@ export function useBrowserSpeech(options: {
       const text = Array.from(event.results).map((result) => result[0]?.transcript ?? "").join("").trim();
       if (text) {
         options.onTranscript(text);
-        options.onNotice("已识别语音输入，确认后再发送。", "success");
       }
     };
     recognition.onerror = () => {
@@ -83,7 +79,6 @@ export function useBrowserSpeech(options: {
     recognition.onend = () => setIsListening(false);
     recognitionRef.current = recognition;
     setIsListening(true);
-    options.onNotice("正在聆听；音频由浏览器语音能力处理，EduNova 后端不接收音频。", "info");
     recognition.start();
   }, [isListening, options, stopListening]);
 
@@ -95,32 +90,16 @@ export function useBrowserSpeech(options: {
     stopSpeaking();
     const utterance = new SpeechSynthesisUtterance(cleanSpeechText(content));
     utterance.lang = "zh-CN";
-    utterance.rate = rate;
     utterance.onend = () => setActiveSpeechId(null);
     utterance.onerror = () => setActiveSpeechId(null);
     setActiveSpeechId(speechId);
     window.speechSynthesis.speak(utterance);
-    options.onNotice("正在朗读回答。", "info");
-  }, [options, rate, stopSpeaking]);
-
-  const pause = useCallback(() => {
-    if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
-      window.speechSynthesis.pause();
-      setIsPaused(true);
-    }
-  }, []);
-  const resume = useCallback(() => {
-    if (typeof window !== "undefined" && window.speechSynthesis?.paused) {
-      window.speechSynthesis.resume();
-      setIsPaused(false);
-    }
-  }, []);
-  const setRate = useCallback((next: number) => setRateState(Math.max(0.7, Math.min(next, 1.5))), []);
+  }, [options, stopSpeaking]);
 
   useEffect(() => () => {
     recognitionRef.current?.stop();
     if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
   }, []);
 
-  return { isListening, activeSpeechId, isPaused, rate, toggleListening, stopListening, speak, pause, resume, stopSpeaking, setRate };
+  return { isListening, activeSpeechId, toggleListening, stopListening, speak, stopSpeaking };
 }

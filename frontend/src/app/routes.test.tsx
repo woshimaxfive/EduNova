@@ -23,6 +23,8 @@ const dashboardSummary: DashboardSummary = {
       title: "人工智能导论",
       source_type: "builtin",
       progress_label: "未开始",
+      practiced_knowledge_point_count: 0,
+      knowledge_point_count: 0,
       focus: "人工智能",
       next: "开始学习"
     }

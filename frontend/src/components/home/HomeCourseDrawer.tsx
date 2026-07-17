@@ -11,12 +11,6 @@ type HomeCourseDrawerProps = {
   onClose: () => void;
 };
 
-const sourceLabels = {
-  builtin: "示例课程",
-  uploaded: "资料课程",
-  generated: "智能建课",
-} as const;
-
 export function HomeCourseDrawer({ onClose }: HomeCourseDrawerProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const coursesQuery = useQuery({
@@ -84,7 +78,18 @@ export function HomeCourseDrawer({ onClose }: HomeCourseDrawerProps) {
 
           {coursesQuery.isSuccess && visibleCourses.length > 0 ? (
             <ul className="home-course-drawer-list" aria-label="全部课程列表">
-              {visibleCourses.map((course) => (
+              {visibleCourses.map((course) => {
+                const practicedCount = course.practiced_knowledge_point_count
+                  ?? Math.round(course.progress_percent * course.knowledge_point_count / 100);
+                const coverage = course.knowledge_point_count > 0
+                  ? `${practicedCount} / ${course.knowledge_point_count} 已练习`
+                  : "正在准备课程内容";
+                const studyStatus = practicedCount === 0
+                  ? "尚未开始"
+                  : practicedCount >= course.knowledge_point_count
+                    ? "已覆盖全部知识点"
+                    : "正在学习";
+                return (
                 <li key={course.id}>
                   <Link to={buildCoursePath(course.id)} aria-label={`打开课程${course.title}`} onClick={onClose}>
                     <span className="home-course-drawer-icon">
@@ -92,16 +97,17 @@ export function HomeCourseDrawer({ onClose }: HomeCourseDrawerProps) {
                     </span>
                     <span className="home-course-drawer-copy">
                       <strong>{course.title}</strong>
-                      <small>{`${course.subject || "未标注学科"} · ${sourceLabels[course.source_type]}`}</small>
-                      <span>{`${course.material_count} 份资料 · ${course.knowledge_point_count} 个知识点`}</span>
+                      <small>{course.subject || "未标注学科"}</small>
+                      <span className="home-course-drawer-status">{studyStatus}</span>
                     </span>
                     <span className="home-course-drawer-progress">
-                      <em>{`${Math.round(course.progress_percent)}%`}</em>
-                      <progress max={100} value={Math.max(0, Math.min(100, course.progress_percent))} aria-label={`${course.title}课程进度`} />
+                      <em>{coverage}</em>
+                      <progress max={100} value={Math.max(0, Math.min(100, course.progress_percent))} aria-label={`${course.title}学习覆盖`} />
                     </span>
                   </Link>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           ) : null}
         </div>

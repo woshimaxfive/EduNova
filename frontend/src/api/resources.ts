@@ -307,6 +307,10 @@ export async function getResource(resourceId: number) {
   return response.data;
 }
 
+export async function deleteResource(resourceId: number) {
+  await apiClient.delete(RESOURCE_ENDPOINTS.detail(resourceId));
+}
+
 export async function getResourceQuality(resourceId: number) {
   const response = await apiClient.get<ApiEnvelope<ResourceQualityScore[]>>(RESOURCE_ENDPOINTS.quality(resourceId));
   return response.data;

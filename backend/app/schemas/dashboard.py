@@ -28,6 +28,8 @@ class DashboardCourse(BaseModel):
     title: str
     source_type: str
     progress_label: str
+    practiced_knowledge_point_count: int
+    knowledge_point_count: int
     focus: str
     next: str
 

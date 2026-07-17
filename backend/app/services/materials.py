@@ -74,6 +74,8 @@ class MaterialRepository(Protocol):
 
     def get_material_for_user(self, user_id: int, material_id: int) -> Material | None: ...
 
+    def delete_material(self, material: Material) -> None: ...
+
     def list_materials(self, user_id: int, course_id: int | None = None, unassigned: bool = False) -> list[Material]: ...
 
     def list_material_chunks(self, user_id: int, material_id: int) -> list[MaterialChunk]: ...
@@ -120,6 +122,9 @@ class SqlAlchemyMaterialRepository:
 
     def get_material_for_user(self, user_id: int, material_id: int) -> Material | None:
         return self.db.scalar(select(Material).where(Material.id == material_id, Material.user_id == user_id))
+
+    def delete_material(self, material: Material) -> None:
+        self.db.delete(material)
 
     def list_materials(self, user_id: int, course_id: int | None = None, unassigned: bool = False) -> list[Material]:
         statement = select(Material).where(Material.user_id == user_id)
@@ -351,6 +356,23 @@ class MaterialService:
             agent_trace_id=material.agent_trace_id,
             parser_version=material.parser_version,
         )
+
+    def delete_material(self, user: User, material_id: int) -> None:
+        material = self._require_material(user, material_id)
+        storage_path = material.storage_path
+        try:
+            self.repository.delete_material(material)
+            self.repository.commit()
+        except Exception:
+            self.repository.rollback()
+            raise
+
+        # The database record is already gone; a storage outage must not make
+        # the user retry a deletion that has actually succeeded.
+        try:
+            self.storage.delete(storage_path)
+        except Exception:
+            pass
 
     def get_outline(self, user: User, material_id: int) -> MaterialOutlineResponse:
         material = self._require_material(user, material_id)

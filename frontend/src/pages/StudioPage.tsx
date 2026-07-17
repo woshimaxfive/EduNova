@@ -9,6 +9,7 @@ import { getKnowledgePoints, listCourses } from "../api/courses";
 import { getCurrentPath } from "../api/paths";
 import {
   getResourceQuality,
+  deleteResource,
   listResources,
   type GeneratedResource,
   type ResourceDifficulty,
@@ -24,6 +25,7 @@ import {
   type StudioDrawerMode
 } from "../components/studio/StudioDrawer";
 import { StudioResourceLibrary } from "../components/studio/StudioResourceLibrary";
+import { ConfirmDialog } from "../components/primitives/Dialog";
 import { StudioWorkspaceToolbar } from "../components/studio/StudioWorkspaceToolbar";
 import { StudioRegenerateDialog, StudioVersionCompareDialog } from "../components/studio/StudioVersionDialogs";
 import { groupResourceVersions } from "../components/studio/studioResourceVersions";
@@ -64,6 +66,8 @@ export function StudioPage() {
   const [resourceJobId, setResourceJobId] = useState<string | null>(null);
   const [regenerateDialogOpen, setRegenerateDialogOpen] = useState(false);
   const [compareDialogOpen, setCompareDialogOpen] = useState(false);
+  const [resourcePendingDeletion, setResourcePendingDeletion] = useState<GeneratedResource | null>(null);
+  const [isDeletingResource, setIsDeletingResource] = useState(false);
   const handledCompletedJobIds = useRef(new Set<string>());
   const { jobs, trackJob, getJob, cancelJob, retryJob, deleteJob } = useAiJobs();
   const resourceJob = getJob(resourceJobId);
@@ -300,6 +304,29 @@ export function StudioPage() {
     setUrlSelection(effectiveCourseId, resourceId);
   }
 
+  async function handleDeleteResource() {
+    if (!resourcePendingDeletion || isDeletingResource) return;
+    const resource = resourcePendingDeletion;
+    setIsDeletingResource(true);
+    try {
+      await deleteResource(Number(resource.id));
+      const remaining = resources.filter((item) => item.id !== resource.id);
+      const nextResource = remaining[0] ?? null;
+      setResourcePendingDeletion(null);
+      setDrawerMode(null);
+      setCompareDialogOpen(false);
+      setSelectedResourceId(nextResource?.id ?? null);
+      setUrlSelection(effectiveCourseId, nextResource?.id ?? null);
+      if (effectiveCourseId !== null) await invalidateCourseLearningLoop(queryClient, effectiveCourseId);
+      await resourcesQuery.refetch();
+    } catch {
+      setFeedbackTone("warning");
+      setFeedback("资源删除失败，请稍后再试。");
+    } finally {
+      setIsDeletingResource(false);
+    }
+  }
+
   function toggleResourceType(type: ResourceType) {
     setSelectedResourceTypes((current) => {
       if (current.includes(type)) return current.length === 1 ? current : current.filter((item) => item !== type);
@@ -402,6 +429,7 @@ export function StudioPage() {
               onSearchChange={setLibrarySearch}
               onTypeFilterChange={setResourceTypeFilter}
               onSelectResource={selectResource}
+              onRequestDelete={setResourcePendingDeletion}
             />
             <StudioArtifactCanvas
               resource={selectedResource}
@@ -474,6 +502,25 @@ export function StudioPage() {
           onClose={() => setCompareDialogOpen(false)}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={resourcePendingDeletion !== null}
+        title="删除资源"
+        description={`删除“${resourcePendingDeletion?.title ?? "这个资源"}”后不可恢复。`}
+        confirmLabel={isDeletingResource ? "正在删除" : "删除资源"}
+        layerClassName="destructive-confirm-layer"
+        onOpenChange={(open) => { if (!open && !isDeletingResource) setResourcePendingDeletion(null); }}
+        onConfirm={() => void handleDeleteResource()}
+      >
+        <section>
+          <h2>删除资源</h2>
+          <p>删除“{resourcePendingDeletion?.title}”后不可恢复。</p>
+          <div>
+            <button type="button" disabled={isDeletingResource} onClick={() => setResourcePendingDeletion(null)}>取消</button>
+            <button className="danger" type="button" disabled={isDeletingResource} onClick={() => void handleDeleteResource()}>{isDeletingResource ? "正在删除" : "删除资源"}</button>
+          </div>
+        </section>
+      </ConfirmDialog>
     </>
   );
 }

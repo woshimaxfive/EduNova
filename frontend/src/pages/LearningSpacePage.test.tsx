@@ -9,6 +9,7 @@ import { AGENT_ENDPOINTS } from "../api/agents";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
+import { LEARNING_ENDPOINTS } from "../api/learning";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
 import { TUTOR_ENDPOINTS } from "../api/tutor";
 import { useAuthStore } from "../features/auth/authStore";
@@ -39,6 +40,8 @@ const starterSummary: DashboardSummary = {
       title: "真实机器学习课",
       source_type: "generated",
       progress_label: "未开始",
+      practiced_knowledge_point_count: 0,
+      knowledge_point_count: 8,
       focus: "监督学习",
       next: "开始学习"
     }
@@ -133,6 +136,7 @@ const allCourseSummaries = [
     source_type: "generated" as const,
     status: "active",
     progress_percent: 34,
+    practiced_knowledge_point_count: 3,
     material_count: 2,
     knowledge_point_count: 8,
     chunk_count: 12,
@@ -145,6 +149,7 @@ const allCourseSummaries = [
     source_type: "uploaded" as const,
     status: "active",
     progress_percent: 72,
+    practiced_knowledge_point_count: 4,
     material_count: 1,
     knowledge_point_count: 6,
     chunk_count: 9,
@@ -369,6 +374,30 @@ function renderWithDashboardSummary(
         statusText: "OK",
         headers: {},
         config,
+      };
+    }
+
+    if (url === LEARNING_ENDPOINTS.nextAction && method === "get") {
+      return {
+        data: {
+          data: {
+            kind: "study_knowledge_point",
+            status: "ready",
+            label: "学习知识点：监督学习",
+            description: "先阅读课程内容，再通过练习形成有效掌握度证据。",
+            course_id: "101",
+            material_id: null,
+            knowledge_point_id: "88",
+            path_task_id: null,
+            resource_id: null,
+            weakness_item_id: null
+          },
+          trace_id: "trace_next_action_test"
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
       };
     }
 
@@ -724,6 +753,9 @@ describe("LearningSpacePage", () => {
     expect(screen.getByRole("textbox", { name: "学习问题输入" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开资料库" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: /真实机器学习课/ })).toHaveAttribute("href", "/app/courses/101");
+    expect((await screen.findAllByText("学习知识点：监督学习")).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("link", { name: "下一步：学习知识点：监督学习" })).toHaveAttribute("href", "/app/courses/101?knowledge_point_id=88");
+    expect(screen.getByText("0 / 8")).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "最近学习列表" })).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.queryByRole("region", { name: "资料库轻入口" })).not.toBeInTheDocument();
@@ -1065,6 +1097,7 @@ describe("LearningSpacePage", () => {
   it("uses browser speech recognition for voice input and browser speech synthesis for read aloud", async () => {
     const user = userEvent.setup();
     const speakSpy = vi.fn();
+    const cancelSpy = vi.fn();
 
     class MockSpeechRecognition {
       lang = "";
@@ -1091,7 +1124,7 @@ describe("LearningSpacePage", () => {
     Object.defineProperty(window, "speechSynthesis", {
       configurable: true,
       value: {
-        cancel: vi.fn(),
+        cancel: cancelSpy,
         speak: speakSpy
       }
     });
@@ -1109,13 +1142,17 @@ describe("LearningSpacePage", () => {
     await user.click(screen.getByRole("button", { name: "语音输入" }));
 
     expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("语音输入的问题");
-    expect(await screen.findByText("已识别语音输入，确认后再发送。")).toBeInTheDocument();
+    expect(screen.queryByText("已识别语音输入，确认后再发送。")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "发送" }));
     await user.click(await screen.findByRole("button", { name: "朗读回答" }));
 
     expect(speakSpy).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("正在朗读回答。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "停止朗读" })).toBeInTheDocument();
+    cancelSpy.mockClear();
+    await user.click(screen.getByRole("button", { name: "停止朗读" }));
+    expect(cancelSpy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("正在朗读回答。")).not.toBeInTheDocument();
   });
 
   it("shows a non-blocking warning when the browser does not support voice input", async () => {
@@ -1346,9 +1383,7 @@ describe("LearningSpacePage", () => {
     expect(input).toHaveValue("把反向传播讲到我能做题");
 
     await user.click(screen.getByRole("button", { name: "发送" }));
-    await user.click(screen.getByRole("button", { name: "学习路径" }));
-
-    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("先用 10 分钟补概念");
+    expect(screen.queryByRole("button", { name: "学习路径" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "协作过程" }));
 

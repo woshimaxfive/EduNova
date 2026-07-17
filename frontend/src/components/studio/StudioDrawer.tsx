@@ -178,7 +178,7 @@ function GeneratePanel(props: StudioDrawerProps) {
       </div>
 
       <footer className="studio-drawer-footer">
-        <p>{props.selectedTypes.length} 类资源 · {selectedLabels || "至少选择一类"}</p>
+        <p title={selectedLabels || "至少选择一类"}>{props.selectedTypes.length} 类资源 · {selectedLabels || "至少选择一类"}</p>
         <button className="primary-action" type="button" disabled={!props.canGenerate} onClick={props.onGenerate}>
           {props.isGenerating ? <ArrowClockwise className="spinning" size={17} /> : null}
           <span>{props.isGenerating ? "生成中" : "开始生成"}</span>

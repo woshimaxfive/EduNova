@@ -149,6 +149,13 @@ class FakeResourceRepository:
             None,
         )
 
+    def list_learning_tasks_for_user(self, user_id: int) -> list[LearningTask]:
+        return [task for task in self.learning_tasks if task.user_id == user_id]
+
+    def delete_resource(self, resource: GeneratedResource) -> None:
+        self.resources.remove(resource)
+        self.quality_scores[:] = [score for score in self.quality_scores if score.resource_id != resource.id]
+
     def max_version_number(self, version_family_id: str) -> int:
         return max(
             (
@@ -1130,6 +1137,44 @@ def test_resource_list_detail_and_quality_are_user_scoped_and_filterable() -> No
 
     with pytest.raises(ResourceNotFoundError):
         service.get_resource(make_user(1), 9999)
+
+
+def test_delete_resource_cleans_path_references_and_keeps_other_versions() -> None:
+    repo = make_repo()
+    service = make_service(repo)
+    service.generate_resources(make_user(), course_id=101, knowledge_point_id=501, resource_types=["doc", "quiz"])
+    deleted = repo.resources[0]
+    retained = repo.resources[1]
+    repo.learning_tasks.append(
+        LearningTask(
+            id=701,
+            path_id=801,
+            user_id=1,
+            course_id=101,
+            title="复习",
+            task_type="study",
+            recommended_resource_ids=[deleted.id, retained.id],
+            learning_bundle_json={
+                "items": [
+                    {"resource_id": str(deleted.id), "learning_status": "pending"},
+                    {"resource_id": str(retained.id), "learning_status": "completed"},
+                ],
+                "ready_count": 2,
+                "completed_count": 1,
+            },
+        )
+    )
+
+    service.delete_resource(make_user(), deleted.id)
+
+    assert [resource.id for resource in repo.resources] == [retained.id]
+    assert repo.learning_tasks[0].recommended_resource_ids == [retained.id]
+    assert repo.learning_tasks[0].learning_bundle_json["ready_count"] == 1
+    assert repo.learning_tasks[0].learning_bundle_json["completed_count"] == 1
+    assert repo.committed is True
+
+    with pytest.raises(ResourceNotFoundError):
+        service.delete_resource(make_user(2), retained.id)
 
 
 def test_resource_response_and_agent_logs_do_not_expose_private_prompts_keys_or_full_source_text() -> None:

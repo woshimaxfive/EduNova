@@ -814,6 +814,7 @@ export function LearningSpacePage() {
                   <button
                     className={isListening ? "voice-button active" : "voice-button"}
                     type="button"
+                    title="语音输入"
                     aria-label="语音输入"
                     aria-pressed={isListening}
                     onClick={handleVoiceInput}

@@ -803,13 +803,11 @@ export function LearningSpacePage() {
               <div className="composer-actions">
                 <div className="composer-toolbar" aria-label="输入工具">
                   <TutorImagePicker draft={imageDraft} compact />
-                  <button type="button" aria-label="打开资料库" onClick={() => openLibrary()}>
+                  <button type="button" aria-label="打开资料库" title="资料库" onClick={() => openLibrary()}>
                     <BookOpen size={18} weight="duotone" aria-hidden="true" />
-                    <span>资料库</span>
                   </button>
-                  <button type="button" onClick={openCourseGeneration}>
+                  <button type="button" title="生成课程" onClick={openCourseGeneration}>
                     <Sparkle size={18} weight="duotone" aria-hidden="true" />
-                    <span>生成课程</span>
                   </button>
                 </div>
                 <div className="composer-submit-row">
@@ -822,9 +820,8 @@ export function LearningSpacePage() {
                   >
                     <Microphone size={18} weight="duotone" aria-hidden="true" />
                   </button>
-                  <button className="ask-button" type="button" disabled={isSendingQuestion} onClick={() => void handleSendQuestion()}>
+                  <button className="ask-button" type="button" title="发送" disabled={isSendingQuestion} onClick={() => void handleSendQuestion()}>
                     <ArrowRight size={18} weight="bold" aria-hidden="true" />
-                    <span>发送</span>
                   </button>
                 </div>
               </div>

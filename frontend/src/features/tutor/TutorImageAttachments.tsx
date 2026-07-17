@@ -44,8 +44,8 @@ export function TutorImagePicker({
           ))}
         </div>
       ) : null}
-      <button type="button" className="tutor-image-add" onClick={() => setOpen(true)}>
-        <Paperclip size={18} weight="duotone" /><span>添加资料</span>
+      <button type="button" className="tutor-image-add" title="添加资料" onClick={() => setOpen(true)}>
+        <Paperclip size={18} weight="duotone" />
       </button>
       {!draft.visionReady ? (
         <Link to={`${PATHS.settings}?section=model`} target="_blank" rel="noreferrer">

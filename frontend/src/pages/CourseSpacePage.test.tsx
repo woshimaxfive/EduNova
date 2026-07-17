@@ -1697,10 +1697,13 @@ describe("CourseSpacePage course tutor sessions", () => {
     const user = userEvent.setup();
 
     renderCoursePage();
+    const courseSurface = document.querySelector<HTMLElement>(".course-route-surface");
+    expect(courseSurface).not.toBeNull();
 
     await screen.findByRole("heading", { name: "AI 搜索复习" });
     expect(screen.getByRole("button", { name: "问答" })).toHaveAttribute("aria-pressed", "true");
 
+    courseSurface!.scrollTop = 320;
     await user.click(screen.getByRole("button", { name: "课程内容" }));
 
     const studyMode = screen.getByRole("region", { name: "课程内容模式" });
@@ -1709,6 +1712,10 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(within(studyMode).getByRole("heading", { name: "启发式搜索", level: 2 })).toBeInTheDocument();
     expect(within(studyMode).getByText("理解启发函数和 A*。")).toBeInTheDocument();
     expect(within(studyMode).getByLabelText("知识点信息")).toHaveTextContent("搜索问题");
+    expect(courseSurface!.scrollTop).toBe(0);
+    courseSurface!.scrollTop = 240;
+    await user.click(within(studyMode).getByRole("button", { name: "启发式搜索基础" }));
+    expect(courseSurface!.scrollTop).toBe(0);
     expect(screen.queryByRole("dialog", { name: "AI 辅导" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "围绕这里提问" }));
     expect(screen.getByRole("dialog", { name: "AI 辅导" })).toBeInTheDocument();

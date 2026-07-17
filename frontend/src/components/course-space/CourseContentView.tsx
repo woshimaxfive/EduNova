@@ -1,5 +1,5 @@
 import { BookOpenText, ChatCircleText, Graph, List, X } from "@phosphor-icons/react";
-import { type KeyboardEvent, useMemo } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 
 import { type ApiCourseKnowledgePoint, type CourseKnowledgePointContent, type CourseMasteryPoint } from "../../api/courses";
@@ -69,12 +69,22 @@ export function CourseContentView({
   onPromptKeyDown,
   onSend
 }: CourseContentViewProps) {
+  const workspaceRef = useRef<HTMLElement>(null);
   const chapters = useMemo(() => groupByChapter(points), [points]);
   const contentSections = content?.sections ?? [];
   const relatedResources = content?.related_resources ?? [];
+  const scrollWorkspaceToTop = useCallback(() => {
+    const scrollContainer = workspaceRef.current?.closest<HTMLElement>(".course-route-surface");
+    if (!scrollContainer) return;
+    scrollContainer.scrollTop = 0;
+  }, []);
+
+  useEffect(() => {
+    scrollWorkspaceToTop();
+  }, [scrollWorkspaceToTop, selectedPoint?.id, view]);
 
   return (
-    <section className="course-content-workspace" role="region" aria-label="课程内容模式">
+    <section ref={workspaceRef} className="course-content-workspace" role="region" aria-label="课程内容模式">
       <aside className="course-content-outline" aria-label="课程目录">
         <div className="course-content-outline-heading">
           <List size={18} weight="duotone" aria-hidden="true" />
@@ -93,7 +103,10 @@ export function CourseContentView({
                   type="button"
                   aria-pressed={selectedPoint?.id === point.id && !selectedCitation}
                   key={point.id}
-                  onClick={() => onSelectPoint(point.id)}
+                  onClick={() => {
+                    scrollWorkspaceToTop();
+                    onSelectPoint(point.id);
+                  }}
                 >
                   <span>{point.title}</span>
                   <small>{point.difficulty ?? "未标注"}</small>

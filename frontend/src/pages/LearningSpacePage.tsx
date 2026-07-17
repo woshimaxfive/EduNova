@@ -800,9 +800,9 @@ export function LearningSpacePage() {
                 onDragOver={(event) => event.preventDefault()}
                 placeholder="问学习问题，或用资料生成课程"
               />
-              <TutorImagePicker draft={imageDraft} />
               <div className="composer-actions">
                 <div className="composer-toolbar" aria-label="输入工具">
+                  <TutorImagePicker draft={imageDraft} compact />
                   <button type="button" aria-label="打开资料库" onClick={() => openLibrary()}>
                     <BookOpen size={18} weight="duotone" aria-hidden="true" />
                     <span>资料库</span>

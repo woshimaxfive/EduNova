@@ -444,10 +444,10 @@ export function AppSidebar({
                 )}
               </div>
             ))
-          ) : (
+          ) : !isCollapsed ? (
             <p className="home-thread-empty">还没有历史对话</p>
-          )}
-          {hasMoreConversations ? (
+          ) : null}
+          {hasMoreConversations && !isCollapsed ? (
             <button
               className="home-thread-load-more"
               type="button"

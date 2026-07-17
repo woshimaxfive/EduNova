@@ -88,6 +88,24 @@ it("历史列表通过明确按钮继续加载", async () => {
   expect(onLoadMore).toHaveBeenCalledTimes(1);
 });
 
+it("桌面侧栏收起时不挤出空历史文案或加载按钮", () => {
+  installCompactViewport(false);
+  render(
+    <MemoryRouter>
+      <AppSidebar
+        isCollapsed
+        conversations={[]}
+        hasMoreConversations
+        onToggleCollapsed={vi.fn()}
+      />
+    </MemoryRouter>
+  );
+
+  expect(screen.queryByText("还没有历史对话")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "加载更多" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "展开侧栏" })).toBeInTheDocument();
+});
+
 it("历史搜索防抖后交给服务端并展示正文匹配片段", async () => {
   installCompactViewport(false);
   const onHistorySearch = vi.fn();

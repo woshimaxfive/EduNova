@@ -514,6 +514,7 @@ export function LibraryPage() {
           ) : null}
           <LibraryFileTable
             materials={filteredFiles}
+            totalMaterialCount={files.length}
             courseTitles={courseTitles}
             compareMode={drawerMode === "compare" && compareView === "setup"}
             selectedMaterialIds={compareMaterialIds}

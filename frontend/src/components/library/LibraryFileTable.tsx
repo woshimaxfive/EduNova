@@ -5,6 +5,7 @@ import { isComparableMaterial, materialUnavailableReason } from "./libraryMateri
 
 type LibraryFileTableProps = {
   materials: MaterialListItem[];
+  totalMaterialCount: number;
   courseTitles: Map<string, string>;
   compareMode: boolean;
   selectedMaterialIds: string[];
@@ -41,7 +42,13 @@ export function LibraryFileTable(props: LibraryFileTableProps) {
 
       {props.isLoading ? <div className="library-table-state">正在读取资料库。</div> : null}
       {!props.isLoading && props.isError ? <div className="library-table-state warning">资料库暂时没有读取成功，请稍后重试。</div> : null}
-      {!props.isLoading && !props.isError && props.materials.length === 0 ? <div className="library-table-state">没有匹配的资料。</div> : null}
+      {!props.isLoading && !props.isError && props.materials.length === 0 ? (
+        <div className="library-table-state">
+          {props.totalMaterialCount === 0
+            ? "还没有资料。使用右上角“上传”添加第一份学习资料。"
+            : "没有符合当前搜索或类型筛选的资料。"}
+        </div>
+      ) : null}
 
       {!props.isLoading && !props.isError ? props.materials.map((material) => {
         const selected = props.selectedMaterialIds.includes(material.id);

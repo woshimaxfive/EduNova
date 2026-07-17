@@ -2,6 +2,7 @@ import { ArrowsOut, MagnifyingGlassMinus, MagnifyingGlassPlus, Scan } from "@pho
 import { useEffect, useRef, useState } from "react";
 
 import { type ResourceMindmapArtifact } from "../../api/resources";
+import { normalizeMindmapMarkdown } from "./mindmapMarkdown";
 
 type MarkmapInstance = {
   fit: (maxScale?: number) => Promise<void>;
@@ -24,7 +25,7 @@ export function MindmapResource({ artifact }: { artifact: ResourceMindmapArtifac
           return;
         }
         const transformer = new Transformer();
-        const { root } = transformer.transform(artifact.markmap_markdown);
+        const { root } = transformer.transform(normalizeMindmapMarkdown(artifact.markmap_markdown));
         instanceRef.current?.destroy();
         instanceRef.current = Markmap.create(
           svgRef.current,

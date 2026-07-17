@@ -12,6 +12,7 @@ import {
   type ResourceType
 } from "../../api/resources";
 import { ResourceRenderer } from "./ResourceRenderer";
+import { normalizeMindmapMarkdown } from "./mindmapMarkdown";
 
 vi.mock("markmap-lib", () => ({
   Transformer: class {
@@ -27,6 +28,11 @@ vi.mock("markmap-view", () => ({
     create: vi.fn(() => ({ fit: markmapFit, rescale: vi.fn(), destroy: vi.fn() }))
   }
 }));
+
+it("normalizes common LaTeX arrows before Markmap rendering", () => {
+  expect(normalizeMindmapMarkdown("相同元素 $\\rightarrow$ 不同结构")).toBe("相同元素 → 不同结构");
+  expect(normalizeMindmapMarkdown("前置 $\\leftarrow$ 当前 $\\leftrightarrow$ 后续")).toBe("前置 ← 当前 ↔ 后续");
+});
 
 vi.mock("mermaid", () => ({
   default: {

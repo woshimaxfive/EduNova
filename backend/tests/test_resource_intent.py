@@ -39,6 +39,21 @@ def test_keyword_preferences_do_not_decide_teaching_strategy_without_model_plann
     assert "worked_example_first" not in summary["teaching_reason"]
 
 
+def test_personalization_summary_does_not_duplicate_terminal_punctuation() -> None:
+    summary = personalization_summary(
+        {
+            "personalization_status": "model_personalized",
+            "learning_need": "通过结构图理解递归层级。",
+            "teaching_strategy": "concept_map_first",
+            "learner_factors": ["偏好的学习方式"],
+            "resource_role": "梳理概念关系",
+        }
+    )
+
+    assert summary["teaching_reason"].endswith("递归层级。")
+    assert "。。" not in summary["teaching_reason"]
+
+
 def test_alternative_changes_at_least_two_intent_dimensions_and_refine_keeps_them() -> None:
     source = build_artifact_intents(
         resource_types=["doc"],

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from difflib import SequenceMatcher
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from time import perf_counter
@@ -29,11 +30,12 @@ from backend.app.services.content_locale import china_first_content_policy
 from backend.app.providers.model_tasks import ModelTaskProfile
 
 
-ASSESSMENT_PROMPT_VERSION = "assessment-v3.2"
+ASSESSMENT_PROMPT_VERSION = "assessment-v3.3"
 ASSESSMENT_REVIEW_PROMPT_VERSION = "assessment-review-v3.1"
 ASSESSMENT_EMBEDDED_REVIEW_PROMPT_VERSION = "assessment-review-v3.2-embedded"
 DIAGNOSIS_PROMPT_VERSION = "diagnosis-v3.1"
-OPTIONAL_GENERATION_TIMEOUT_SECONDS = 30.0
+OPTIONAL_GENERATION_TIMEOUT_SECONDS = 40.0
+PRACTICE_REVISION_TIMEOUT_SECONDS = 5.0
 
 
 class AssessmentState(TypedDict, total=False):
@@ -349,16 +351,38 @@ class AssessmentGraphRunner:
 
     def _question_repair_node(self, state: AssessmentState) -> dict[str, Any]:
         risks = safe_string_list((state.get("review_result") or {}).get("risk_flags"), limit=8, item_limit=60)
-        generated = self._model_questions(
+        redacted_questions = self._redact_revised_short_answer_leakage(
             state,
+            list(state.get("questions", [])),
+        )
+        remaining_after_redaction = self._question_risks(state, redacted_questions)
+        if not remaining_after_redaction:
+            return {
+                "questions": redacted_questions,
+                "generation_mode": "model_generated",
+                "generation_review": state.get("generation_review"),
+                "review_result": {
+                    "review_status": "passed",
+                    "confidence": 0.78,
+                    "risk_flags": [],
+                    "safety_summary": "已对模型题干中的锁定参考答案执行精确脱敏，并通过完整题目合同审核。",
+                },
+                "review_mode": "embedded_model_and_rules",
+                "needs_repair": False,
+                "repair_count": 1,
+            }
+        risks = remaining_after_redaction
+        generated = self._model_questions(
+            {**state, "questions": redacted_questions},
             revision_risks=risks,
-            revision_questions=list(state.get("questions", [])),
+            revision_questions=redacted_questions,
         )
         if generated is None:
             raise PracticeValidationError(
                 f"AI练习题未通过质量审核，单次修订失败，未创建练习。风险：{'、'.join(risks) or '结构不完整'}"
             )
         questions, generation_review = generated
+        questions = self._redact_revised_short_answer_leakage(state, questions)
         remaining_risks = self._question_risks(state, questions)
         if remaining_risks:
             raise PracticeValidationError(
@@ -378,6 +402,95 @@ class AssessmentGraphRunner:
             "needs_repair": False,
             "repair_count": 1,
         }
+
+    @classmethod
+    def _redact_revised_short_answer_leakage(
+        cls,
+        state: AssessmentState,
+        questions: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Remove an exact locked answer copied into a model-authored short-answer prompt.
+
+        This safety redaction runs before an optional model repair and again after it.
+        It is not a deterministic question fallback: all remaining wording stays
+        model-authored and `_question_risks` reviews the complete contract again.
+        """
+        drafts = {
+            str(item.get("id")): item
+            for item in state.get("deterministic_questions", [])
+            if isinstance(item, dict)
+        }
+        redacted: list[dict[str, Any]] = []
+        for question in questions:
+            draft = drafts.get(str(question.get("id")))
+            if draft is None or question.get("question_type") != "short_answer":
+                redacted.append(question)
+                continue
+            expected = safe_text(draft.get("correct_answer"), limit=800)
+            scope = safe_text(draft.get("required_scope_term"), limit=80)
+            prompt = safe_text(question.get("prompt"), limit=800)
+            sanitized = cls._replace_normalized_span(prompt, expected, scope)
+            sanitized = cls._keep_single_normalized_term(sanitized, scope, "该概念")
+            if not scope:
+                sanitized = re.sub(
+                    r"(?:要求回答中必须体现|答案必须包含)\s*[：:]?\s*[‘’“”\"']*\s*[。；;]?",
+                    "",
+                    sanitized,
+                ).strip()
+            if sanitized == prompt:
+                redacted.append(question)
+                continue
+            quality = dict(question.get("quality") or {})
+            quality["answer_leakage_redacted"] = True
+            redacted.append({**question, "prompt": sanitized, "quality": quality})
+        return redacted
+
+    @staticmethod
+    def _replace_normalized_span(text: str, needle: str, replacement: str) -> str:
+        normalized_chars: list[str] = []
+        source_indexes: list[int] = []
+        for index, char in enumerate(text):
+            if char.isspace():
+                continue
+            normalized_chars.append(char.casefold())
+            source_indexes.append(index)
+        normalized_needle = "".join(char.casefold() for char in needle if not char.isspace())
+        if not normalized_needle:
+            return text
+        start = "".join(normalized_chars).find(normalized_needle)
+        if start < 0:
+            return text
+        source_start = source_indexes[start]
+        source_end = source_indexes[start + len(normalized_needle) - 1] + 1
+        return f"{text[:source_start]}{replacement}{text[source_end:]}"
+
+    @classmethod
+    def _keep_single_normalized_term(cls, text: str, term: str, replacement: str) -> str:
+        normalized_term = "".join(char.casefold() for char in term if not char.isspace())
+        if not normalized_term:
+            return text
+        result = text
+        while True:
+            normalized = "".join(char.casefold() for char in result if not char.isspace())
+            first = normalized.find(normalized_term)
+            second = normalized.find(normalized_term, first + len(normalized_term)) if first >= 0 else -1
+            if second < 0:
+                return result
+            prefix_chars = 0
+            source_start = 0
+            for index, char in enumerate(result):
+                if not char.isspace():
+                    if prefix_chars == second:
+                        source_start = index
+                        break
+                    prefix_chars += 1
+            source_end = source_start
+            consumed = 0
+            while source_end < len(result) and consumed < len(normalized_term):
+                if not result[source_end].isspace():
+                    consumed += 1
+                source_end += 1
+            result = f"{result[:source_start]}{replacement}{result[source_end:]}"
 
     def _create_persist_node(self, state: AssessmentState) -> dict[str, Any]:
         started = perf_counter()
@@ -742,6 +855,7 @@ class AssessmentGraphRunner:
                 "options": safe_string_list(item["options"], limit=8, item_limit=180),
                 "correct_answer": item.get("correct_answer"),
                 "required_scope_term": safe_text(item.get("required_scope_term"), limit=80),
+                "replace_distractors": item.get("question_type") != "short_answer",
             }
             for item in drafts
         ]
@@ -772,7 +886,10 @@ class AssessmentGraphRunner:
                             f"题目蓝图={json.dumps(prompt_rows, ensure_ascii=False, separators=(',', ':'))}。"
                             f"近期同知识点题目摘要={json.dumps(state.get('historical_question_summaries', []), ensure_ascii=False, separators=(',', ':'))}。"
                             "选择题必须保留正确答案原文并生成四个互不重复的合理选项；不同题目不得复用题面。"
+                            "蓝图中的非正确选项只是安全占位符，必须全部替换为与当前学科相关、表面合理但能被课程证据排除的真实误区；"
+                            "禁止输出‘只复述’‘与课程证据无关’‘完整解释’‘适用于所有情境’等审核式元话语。"
                             "简答题题干必须原样点名蓝图中的 required_scope_term，不得改成‘一个维度’‘某个概念’等泛指；"
+                            "required_scope_term 在简答题题干中只出现一次，禁止形成‘解释 X 在 X 中的作用’式循环问法；"
                             "题干允许的答案范围必须与锁定的 correct_answer 和评分量规完全一致。"
                             "每题必须另外输出 cognitive_level、scenario_type、target_misconception、reasoning_pattern；"
                             "不得复用历史题目的知识关系、场景和目标误区组合，也不得只替换名词。"
@@ -791,9 +908,16 @@ class AssessmentGraphRunner:
                 revision_guidance: list[str] = []
                 for risk in revision_risks:
                     if risk.startswith("short_answer_answer_leakage"):
-                        revision_guidance.append("删除简答题题干中的参考答案、结论和完整结构化数据，只保留作答对象、角度与任务要求")
+                        revision_guidance.append(
+                            "仅重写风险码冒号后题号对应的简答题题干；只保留一次 required_scope_term、作答角度与任务要求，"
+                            "不得包含 correct_answer 中除 required_scope_term 外连续 12 个以上字符"
+                        )
                     elif risk.startswith("short_answer_scope_ambiguous"):
                         revision_guidance.append("在简答题题干中原样点名 required_scope_term，禁止使用泛指代词")
+                    elif risk.startswith("short_answer_circular_scope"):
+                        revision_guidance.append("让 required_scope_term 只出现一次，改为询问其含义、条件、关系或具体应用")
+                    elif risk.startswith("placeholder_distractor"):
+                        revision_guidance.append("将审核式占位干扰项替换为当前学科中表面合理、但可由课程证据排除的具体误区")
                     elif risk.startswith("missing_pedagogical_fingerprint"):
                         revision_guidance.append("补齐风险码点名的教学指纹字段，并保持其余已通过字段不变")
                     elif risk.startswith("reused_pedagogical_fingerprint"):
@@ -820,8 +944,8 @@ class AssessmentGraphRunner:
                             "以下字段未通过审核："
                             f"{','.join(revision_risks[:6])}。"
                             f"具体修订要求={'；'.join(dict.fromkeys(revision_guidance)) or '依据风险码修复失败项'}。"
-                            "只修订失败项并重新输出完整 JSON；"
-                            "所有未被点名的已通过字段必须逐字保留；"
+                            "风险码冒号后的 qN 是失败题号；只允许改写这些题目的失败字段，其他题目必须逐字保留。"
+                            "只返回失败题目和 quality_review，不要重复输出其他已通过题目；"
                             "不得改变题目 ID、类型、知识点、规则答案和课程引用。"
                         ),
                     }
@@ -837,7 +961,7 @@ class AssessmentGraphRunner:
                         reasoning="disabled",
                         output_mode="json_object",
                         creativity="creative",
-                        timeout_seconds=15.0 if revision_risks else OPTIONAL_GENERATION_TIMEOUT_SECONDS,
+                        timeout_seconds=PRACTICE_REVISION_TIMEOUT_SECONDS if revision_risks else OPTIONAL_GENERATION_TIMEOUT_SECONDS,
                         max_attempts=1,
                     ),
                 )
@@ -857,11 +981,28 @@ class AssessmentGraphRunner:
         if payload is None or not isinstance(payload.get("questions"), list):
             return None
         by_id = {str(item.get("id")): item for item in payload["questions"] if isinstance(item, dict)}
-        if set(by_id) != {str(item["id"]) for item in drafts}:
+        all_ids = {str(item["id"]) for item in drafts}
+        failed_ids = {
+            part
+            for risk in (revision_risks or [])
+            for part in risk.split(":")[1:]
+            if part in all_ids
+        }
+        allowed_response_id_sets = {frozenset(all_ids)}
+        if revision_risks and failed_ids:
+            allowed_response_id_sets.add(frozenset(failed_ids))
+        if frozenset(by_id) not in allowed_response_id_sets:
             return None
+        previous_by_id = {
+            str(item.get("id")): item
+            for item in (revision_questions or [])
+            if isinstance(item, dict) and str(item.get("id")) in all_ids
+        }
         enhanced: list[dict[str, Any]] = []
         for draft in drafts:
-            model_item = by_id[str(draft["id"])]
+            model_item = by_id.get(str(draft["id"])) or previous_by_id.get(str(draft["id"]))
+            if model_item is None:
+                return None
             prompt = safe_text(model_item.get("prompt"), limit=800)
             explanation = safe_text(model_item.get("explanation"), limit=800)
             candidate = {**draft, "prompt": prompt or draft["prompt"], "explanation": explanation or draft["explanation"]}
@@ -1285,17 +1426,25 @@ class AssessmentGraphRunner:
                 risks.append("invalid_options")
             if any(value in {"无关概念", "跳过资料依据", "只背结论", "无关提示"} for value in options):
                 risks.append("trivial_distractor")
-            prompt = "".join(safe_text(question.get("prompt"), limit=800).casefold().split())
+            placeholder_markers = ("只复述", "课程证据无关", "完整解释", "适用于所有情境", "忽略其适用范围")
+            if any(any(marker in value for marker in placeholder_markers) for value in options):
+                risks.append("placeholder_distractor")
+            raw_prompt = safe_text(question.get("prompt"), limit=800)
+            prompt = "".join(raw_prompt.casefold().split())
+            if re.search(r"[：:]\s*[‘’“”\"']{2}\s*[。；;]?", raw_prompt):
+                risks.append(f"empty_required_scope:{question_id}")
             required_scope = "".join(safe_text(draft.get("required_scope_term"), limit=80).casefold().split())
             if question.get("question_type") == "short_answer" and required_scope and required_scope not in prompt:
-                risks.append("short_answer_scope_ambiguous")
+                risks.append(f"short_answer_scope_ambiguous:{question_id}")
+            if question.get("question_type") == "short_answer" and required_scope and prompt.count(required_scope) > 1:
+                risks.append(f"short_answer_circular_scope:{question_id}")
             expected_short_answer = "".join(safe_text(draft.get("correct_answer"), limit=800).casefold().split())
             if (
                 question.get("question_type") == "short_answer"
                 and len(expected_short_answer) >= max(24, len(required_scope) + 8)
                 and expected_short_answer in prompt
             ):
-                risks.append("short_answer_answer_leakage")
+                risks.append(f"short_answer_answer_leakage:{question_id}")
             if len(prompt) < 12:
                 risks.append("question_too_short")
             if any(SequenceMatcher(None, prompt, previous).ratio() >= 0.86 for previous in normalized_prompts):

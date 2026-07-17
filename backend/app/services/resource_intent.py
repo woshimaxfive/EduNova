@@ -383,7 +383,7 @@ def _strategy_for(resource_type: str, profile_summary: dict[str, Any], mastery: 
 
 
 def _personalized_reason(intent: dict[str, Any]) -> str:
-    need = _clean(intent.get("learning_need")) or "建立当前知识点的可验证理解"
+    need = (_clean(intent.get("learning_need")) or "建立当前知识点的可验证理解").rstrip("。！？!?；;")
     strategy = _clean(intent.get("teaching_strategy")) or "evidence_to_concept"
     strategy_label = STRATEGY_LABELS.get(strategy, "按课程证据组织学习")
     raw_factors = intent.get("learner_factors")

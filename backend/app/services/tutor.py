@@ -1525,7 +1525,36 @@ class TutorSessionService:
             query=retrieval_query or message_text,
             top_k=5,
         )
-        return [self._citation_to_dict(item) for item in result.results]
+        citations = [self._citation_to_dict(item) for item in result.results]
+        return self._filter_course_citations(citations)
+
+    @staticmethod
+    def _filter_course_citations(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Remove clearly irrelevant reranker tails from student-visible evidence.
+
+        Rerank scores are only comparable within one query, so the cutoff combines
+        a small absolute floor with a relative floor derived from the best result.
+        Retrievals without a completed rerank keep their existing behavior.
+        """
+        if not citations:
+            return []
+        completed = [
+            item
+            for item in citations
+            if item.get("rerank_status") == "completed" and item.get("rerank_score") is not None
+        ]
+        if not completed:
+            return citations
+        best_score = max(float(item["rerank_score"]) for item in completed)
+        minimum_score = max(0.05, best_score * 0.25)
+        filtered = [
+            item
+            for item in citations
+            if item.get("rerank_status") != "completed"
+            or item.get("rerank_score") is None
+            or float(item["rerank_score"]) >= minimum_score
+        ]
+        return filtered or [max(completed, key=lambda item: float(item["rerank_score"]))]
 
     def _build_conversation_context(
         self,

@@ -904,6 +904,84 @@ def test_append_course_message_persists_real_citations_from_course_knowledge() -
     assert repo.agent_logs[7].metadata_json["review_status"] == "passed"
 
 
+def test_course_citation_search_filters_low_relevance_reranker_tail() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    citation_searcher = FakeCourseCitationSearcher(
+        results=[
+            {
+                "chunk_id": 501,
+                "course_id": 7,
+                "content": "外部排序需要重点考虑外存读写次数。",
+                "source_title": "排序.md",
+                "section_title": "外部排序",
+                "score": 0.28,
+                "rerank_score": 0.28,
+                "rerank_status": "completed",
+            },
+            {
+                "chunk_id": 502,
+                "course_id": 7,
+                "content": "出队后需要更新队首指针。",
+                "source_title": "队列.md",
+                "section_title": "链式队列",
+                "score": 0.008,
+                "rerank_score": 0.008,
+                "rerank_status": "completed",
+            },
+        ]
+    )
+    service = module.TutorSessionService(repo, course_citation_searcher=citation_searcher)
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+
+    citations = service._search_course_citations(
+        user=user,
+        session=session,
+        message_text="外部排序为什么关注 I/O？",
+    )
+
+    assert [item["chunk_id"] for item in citations] == [501]
+
+
+def test_course_citation_search_keeps_best_result_when_all_rerank_scores_are_low() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=FakeCourseCitationSearcher(
+            results=[
+                {
+                    "chunk_id": 601,
+                    "course_id": 7,
+                    "content": "课程中的唯一候选证据。",
+                    "source_title": "讲义.md",
+                    "section_title": "候选章节",
+                    "score": 0.03,
+                    "rerank_score": 0.03,
+                    "rerank_status": "completed",
+                },
+                {
+                    "chunk_id": 602,
+                    "course_id": 7,
+                    "content": "更弱的候选证据。",
+                    "source_title": "讲义.md",
+                    "section_title": "其他章节",
+                    "score": 0.01,
+                    "rerank_score": 0.01,
+                    "rerank_status": "completed",
+                },
+            ]
+        ),
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+
+    citations = service._search_course_citations(user=user, session=session, message_text="解释候选章节。")
+
+    assert [item["chunk_id"] for item in citations] == [601]
+
+
 def test_append_course_message_uses_recent_user_questions_for_retrieval_and_model_context() -> None:
     module = load_tutor_module()
     user = make_user(1)

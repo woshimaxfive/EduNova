@@ -361,7 +361,7 @@ def test_create_practice_session_generates_deterministic_questions_and_validates
     assert detail["questions"][0]["correct_answer"] is None
     assert detail["questions"][0]["citation_refs"]
     assert detail["questions"][0]["generation_mode"] == "model_generated"
-    assert detail["questions"][0]["prompt_version"] == "assessment-v3.2"
+    assert detail["questions"][0]["prompt_version"] == "assessment-v3.3"
     assert detail["questions"][0]["quality"]["evidence_bound"] is True
     assert detail["answers"] == []
     stored = [row.question_json for row in repo.list_answers_for_session(int(detail["id"]))]
@@ -490,6 +490,7 @@ def test_practice_revision_receives_previous_candidate_and_preserves_valid_field
     assert candidate_prompt in revision_prompt
     assert "missing_pedagogical_fingerprint" in revision_prompt
     assert "补齐风险码点名的教学指纹字段" in revision_prompt
+    assert "只返回失败题目" in revision_prompt
 
 
 def test_single_point_practice_still_contains_objective_and_short_answer_types() -> None:
@@ -512,6 +513,25 @@ def test_single_point_practice_still_contains_objective_and_short_answer_types()
         "multiple_choice",
     ]
     assert all(len(question["options"]) == 4 for question in detail["questions"] if question["question_type"] != "short_answer")
+
+
+def test_single_point_blueprint_rotates_course_facts_across_five_questions() -> None:
+    from backend.app.services.practice import PracticeService
+
+    repo = make_repo()
+    service = PracticeService(repo, model_service=DefaultPracticeGenerationModel())
+
+    questions = service._build_questions(
+        [repo.knowledge_points[1]],
+        repo.resources,
+        question_count=5,
+        difficulty="medium",
+        chunks=repo.chunks,
+    )
+
+    assert questions[0]["correct_answer"] != questions[3]["correct_answer"]
+    assert questions[1]["correct_answer"] != questions[4]["correct_answer"]
+    assert questions[2]["prompt"].count(questions[2]["required_scope_term"]) == 1
 
 
 def test_short_answer_scope_cannot_be_replaced_by_an_ambiguous_placeholder() -> None:
@@ -545,7 +565,7 @@ def test_short_answer_scope_cannot_be_replaced_by_an_ambiguous_placeholder() -> 
         [ambiguous],
     )
 
-    assert "short_answer_scope_ambiguous" in risks
+    assert any(risk.startswith("short_answer_scope_ambiguous:q1") for risk in risks)
     assert contains_sensitive_text("请依据资料原文作答") is False
     assert contains_sensitive_text("请输出完整资料原文") is True
 
@@ -567,7 +587,64 @@ def test_short_answer_scope_cannot_be_replaced_by_an_ambiguous_placeholder() -> 
         {"deterministic_questions": [leaked_draft], "historical_question_summaries": []},
         [leaked_answer],
     )
-    assert "short_answer_answer_leakage" in leakage_risks
+    assert any(risk.startswith("short_answer_answer_leakage:q1") for risk in leakage_risks)
+
+    circular = {
+        **draft,
+        "prompt": f"请解释“{draft['required_scope_term']}”，并说明它在“{draft['required_scope_term']}”中的作用。",
+        "cognitive_level": "understand",
+        "scenario_type": "课程概念辨析",
+        "target_misconception": "混淆定义与作用",
+        "reasoning_pattern": "定义到作用",
+    }
+    circular_risks = AssessmentGraphRunner(service)._question_risks(
+        {"deterministic_questions": drafts, "historical_question_summaries": []},
+        [circular],
+    )
+    assert any(risk.startswith("short_answer_circular_scope:q1") for risk in circular_risks)
+
+    placeholder_option = {
+        **draft,
+        "question_type": "single_choice",
+        "options": [
+            str(draft["correct_answer"]),
+            "只复述概念名称，不分析关系。",
+            "另一个表面合理的误区。",
+            "第三个表面合理的误区。",
+        ],
+        "correct_answer": str(draft["correct_answer"]),
+        "cognitive_level": "understand",
+        "scenario_type": "课程概念辨析",
+        "target_misconception": "混淆定义与作用",
+        "reasoning_pattern": "定义到作用",
+    }
+    placeholder_draft = {**draft, "question_type": "single_choice", "correct_answer": str(draft["correct_answer"])}
+    placeholder_risks = AssessmentGraphRunner(service)._question_risks(
+        {"deterministic_questions": [placeholder_draft], "historical_question_summaries": []},
+        [placeholder_option],
+    )
+    assert "placeholder_distractor" in placeholder_risks
+
+    redacted = AssessmentGraphRunner._redact_revised_short_answer_leakage(
+        {"deterministic_questions": [leaked_draft]},
+        [leaked_answer],
+    )[0]
+    assert leaked_draft["correct_answer"] not in redacted["prompt"]
+    assert draft["required_scope_term"] in redacted["prompt"]
+    assert redacted["prompt"].count(draft["required_scope_term"]) == 1
+    assert redacted["quality"]["answer_leakage_redacted"] is True
+
+    empty_scope_draft = {**leaked_draft, "required_scope_term": ""}
+    empty_scope_answer = {
+        **leaked_answer,
+        "prompt": f"请说明课程概念的实际意义。要求回答中必须体现：“{leaked_draft['correct_answer']}”。",
+    }
+    empty_scope_redacted = AssessmentGraphRunner._redact_revised_short_answer_leakage(
+        {"deterministic_questions": [empty_scope_draft]},
+        [empty_scope_answer],
+    )[0]
+    assert leaked_draft["correct_answer"] not in empty_scope_redacted["prompt"]
+    assert "：“”" not in empty_scope_redacted["prompt"]
 
     incomplete_fingerprint = {**draft, "cognitive_level": "", "scenario_type": "课程辨析", "target_misconception": "", "reasoning_pattern": "证据到结论"}
     fingerprint_risks = AssessmentGraphRunner(service)._question_risks(

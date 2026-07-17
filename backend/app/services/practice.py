@@ -414,7 +414,8 @@ class PracticeService:
             question_id = f"q{index + 1}"
             focus = ("概念含义", "关键关系", "应用条件", "推导思路", "常见误区", "实际应用")[index % 6]
             citation_refs = [str(row["chunk_id"]) for row in evidence if row["chunk_id"] is not None][:3]
-            source_excerpt = target_statements[index % len(target_statements)]
+            statement_index = (index + index // len(question_types)) % len(target_statements)
+            source_excerpt = target_statements[statement_index]
             required_scope_term = self._short_answer_scope_term(source_excerpt)
             base = {
                 "id": question_id,
@@ -428,12 +429,12 @@ class PracticeService:
                 "source_excerpt": source_excerpt,
                 "required_scope_term": required_scope_term,
                 "citation_refs": citation_refs,
-                "prompt_version": "assessment-v3.2",
+                "prompt_version": "assessment-v3.3",
                 "generation_mode": "deterministic_source",
                 "quality": {"evidence_bound": bool(citation_refs), "answer_locked": True},
             }
             if question_type == "single_choice":
-                correct = target_statements[index % len(target_statements)]
+                correct = source_excerpt
                 options = [correct, *distractors[:3]]
                 rotation = index % len(options)
                 options = options[rotation:] + options[:rotation]
@@ -446,7 +447,10 @@ class PracticeService:
                     }
                 )
             elif question_type == "multiple_choice":
-                correct = target_statements[:2]
+                correct = [
+                    target_statements[(statement_index + offset) % len(target_statements)]
+                    for offset in range(min(2, len(target_statements)))
+                ]
                 options = [*correct, *distractors[: max(0, 4 - len(correct))]]
                 rotation = index % len(options)
                 options = options[rotation:] + options[:rotation]
@@ -460,10 +464,17 @@ class PracticeService:
                 )
             else:
                 answer_scope = required_scope_term or point.title
+                if answer_scope == point.title:
+                    prompt = (
+                        f"请从{focus}角度说明“{answer_scope}”的核心含义，"
+                        "并结合课程范围内的具体情境解释这一认识为何重要。"
+                    )
+                else:
+                    prompt = f"请从{focus}角度解释“{answer_scope}”，并说明它与“{point.title}”的关系。"
                 questions.append(
                     {
                         **base,
-                        "prompt": f"请从{focus}角度，依据课程资料解释“{answer_scope}”，并说明其在“{point.title}”中的作用。",
+                        "prompt": prompt,
                         "options": [],
                         "correct_answer": source_excerpt,
                         "keywords": keywords[:3],
@@ -489,11 +500,10 @@ class PracticeService:
     @staticmethod
     def _safe_distractors(point: KnowledgePoint, statements: list[str]) -> list[str]:
         topic = point.title
-        anchor = statements[0] if statements else topic
         return [
-            f"只复述“{topic}”的名称，不分析课程资料给出的条件和关系。",
-            f"把“{anchor[:36]}”当作适用于所有情境的结论，忽略其适用范围。",
-            f"用与课程证据无关的单一现象替代对“{topic}”的完整解释。",
+            f"“{topic}”只研究彼此孤立的对象，不考虑对象之间的联系。",
+            f"“{topic}”只关注具体实现细节，不涉及抽象关系或适用条件。",
+            f"“{topic}”与实际问题情境无关，任何场景都应采用同一种处理方式。",
         ]
 
     @staticmethod

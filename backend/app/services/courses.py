@@ -402,12 +402,12 @@ class CourseService:
 
     def list_courses(self, user: User, source_type: str | None = None) -> CourseListResponse:
         courses = self.repository.list_courses_for_user(user.id, source_type)
-        data = [self._build_summary(course) for course in courses]
+        data = [self._build_summary(course, user_id=user.id) for course in courses]
         return CourseListResponse(data=data, page=1, page_size=len(data), total=len(data))
 
     def get_course(self, user: User, course_id: int) -> CourseSummary:
         course = self._require_course(user, course_id)
-        return self._build_summary(course)
+        return self._build_summary(course, user_id=user.id)
 
     def get_overview(self, user: User, course_id: int) -> CourseOverview:
         course = self._require_course(user, course_id)
@@ -1040,6 +1040,7 @@ class CourseService:
         material_count: int | None = None,
         knowledge_point_count: int | None = None,
         chunk_count: int | None = None,
+        user_id: int | None = None,
     ) -> CourseSummary:
         if material_count is None:
             material_count = len(self.repository.list_course_materials(course.id))
@@ -1047,6 +1048,17 @@ class CourseService:
             knowledge_point_count = len(self.repository.list_knowledge_points(course.id))
         if chunk_count is None:
             chunk_count = len(self.repository.list_knowledge_chunks(course.id))
+
+        if user_id is not None and knowledge_point_count > 0:
+            answers = self.repository.list_practice_answers(user_id, course.id)
+            practiced_kp_ids: set[int] = set()
+            for answer in answers:
+                kp_id = (answer.question_json or {}).get("knowledge_point_id")
+                if kp_id is not None:
+                    practiced_kp_ids.add(int(kp_id))
+            progress_percent = round(len(practiced_kp_ids) / knowledge_point_count * 100)
+        else:
+            progress_percent = 0
 
         return CourseSummary(
             id=str(course.id),
@@ -1056,7 +1068,7 @@ class CourseService:
             source_type=course.source_type or "uploaded",
             status=course.status or "draft",
             agent_trace_id=getattr(course, "agent_trace_id", None),
-            progress_percent=0,
+            progress_percent=progress_percent,
             material_count=material_count,
             knowledge_point_count=knowledge_point_count,
             chunk_count=chunk_count,

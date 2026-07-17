@@ -46,6 +46,9 @@ class FakeDashboardRepository:
     conversations: list[ChatSession] = field(default_factory=list)
     resources: list[GeneratedResource] = field(default_factory=list)
     requested_user_ids: list[int] = field(default_factory=list)
+    _kp_counts: dict[int, int] = field(default_factory=dict)
+    _practiced_kps: dict[int, set[int]] = field(default_factory=dict)
+    _latest_practice: dict[int, datetime] = field(default_factory=dict)
 
     def _remember(self, user_id: int) -> None:
         self.requested_user_ids.append(user_id)
@@ -113,6 +116,15 @@ class FakeDashboardRepository:
             key=lambda resource: resource.updated_at,
             reverse=True,
         )[:limit]
+
+    def knowledge_point_counts(self, course_ids: list[int]) -> dict[int, int]:
+        return {cid: self._kp_counts.get(cid, 0) for cid in course_ids}
+
+    def practiced_knowledge_point_ids(self, user_id: int, course_ids: list[int]) -> dict[int, set[int]]:
+        return {cid: self._practiced_kps.get(cid, set()) for cid in course_ids}
+
+    def latest_practice_times(self, user_id: int, course_ids: list[int]) -> dict[int, datetime]:
+        return {cid: self._latest_practice.get(cid) for cid in course_ids if cid in self._latest_practice}
 
 
 @dataclass
@@ -301,6 +313,8 @@ def test_dashboard_summary_uses_real_progress_profile_conversations_and_resource
                 enrollments=[enrollment],
                 conversations=[conversation],
                 resources=[resource],
+                _kp_counts={102: 20},
+                _practiced_kps={102: {1, 2, 3, 4, 5, 6, 7}},
             ),
             now=NOW,
         ).build_summary(user)

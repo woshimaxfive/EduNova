@@ -12,7 +12,10 @@ from backend.app.models import (
     Course,
     CourseEnrollment,
     GeneratedResource,
+    KnowledgePoint,
     Material,
+    PracticeAnswer,
+    PracticeSession,
     StudentProfile,
     User,
 )
@@ -45,6 +48,12 @@ class DashboardRepository(Protocol):
     def list_recent_home_conversations(self, user_id: int, limit: int) -> list[ChatSession]: ...
 
     def list_recent_resources(self, user_id: int, limit: int) -> list[GeneratedResource]: ...
+
+    def knowledge_point_counts(self, course_ids: list[int]) -> dict[int, int]: ...
+
+    def practiced_knowledge_point_ids(self, user_id: int, course_ids: list[int]) -> dict[int, set[int]]: ...
+
+    def latest_practice_times(self, user_id: int, course_ids: list[int]) -> dict[int, datetime]: ...
 
 
 class SqlAlchemyDashboardRepository:
@@ -136,6 +145,50 @@ class SqlAlchemyDashboardRepository:
             )
         )
 
+    def knowledge_point_counts(self, course_ids: list[int]) -> dict[int, int]:
+        if not course_ids:
+            return {}
+        rows = (
+            self.db.execute(
+                select(KnowledgePoint.course_id, func.count(KnowledgePoint.id))
+                .where(KnowledgePoint.course_id.in_(course_ids))
+                .group_by(KnowledgePoint.course_id)
+            )
+            .all()
+        )
+        return {row[0]: row[1] for row in rows}
+
+    def practiced_knowledge_point_ids(self, user_id: int, course_ids: list[int]) -> dict[int, set[int]]:
+        if not course_ids:
+            return {}
+        rows = (
+            self.db.execute(
+                select(PracticeAnswer.question_json["knowledge_point_id"].as_integer(), PracticeSession.course_id)
+                .join(PracticeSession, PracticeSession.id == PracticeAnswer.session_id)
+                .where(PracticeAnswer.user_id == user_id, PracticeSession.course_id.in_(course_ids))
+                .distinct()
+            )
+            .all()
+        )
+        result: dict[int, set[int]] = {cid: set() for cid in course_ids}
+        for kp_id, course_id in rows:
+            if kp_id is not None:
+                result.setdefault(course_id, set()).add(kp_id)
+        return result
+
+    def latest_practice_times(self, user_id: int, course_ids: list[int]) -> dict[int, datetime]:
+        if not course_ids:
+            return {}
+        rows = (
+            self.db.execute(
+                select(PracticeSession.course_id, func.max(PracticeSession.created_at))
+                .where(PracticeSession.user_id == user_id, PracticeSession.course_id.in_(course_ids))
+                .group_by(PracticeSession.course_id)
+            )
+            .all()
+        )
+        return {row[0]: row[1] for row in rows}
+
 
 class DashboardService:
     def __init__(self, repository: DashboardRepository, now: datetime | None = None) -> None:
@@ -145,15 +198,25 @@ class DashboardService:
     def build_summary(self, user: User) -> DashboardSummary:
         profile = self.repository.get_profile(user.id)
         courses = self.repository.list_recent_courses(user.id, limit=3)
-        enrollments = self.repository.list_course_enrollments(
-            user.id,
-            [course.id for course in courses],
-        )
+        if not courses:
+            course_ids: list[int] = []
+        else:
+            course_ids = [course.id for course in courses]
+        enrollments = self.repository.list_course_enrollments(user.id, course_ids)
         materials = self.repository.list_recent_materials(user.id, limit=5)
         conversations = self.repository.list_recent_home_conversations(user.id, limit=12)
         resources = self.repository.list_recent_resources(user.id, limit=3)
 
-        recent_courses = self._build_courses(courses, enrollments)
+        kp_counts = self.repository.knowledge_point_counts(course_ids)
+        practiced = self.repository.practiced_knowledge_point_ids(user.id, course_ids)
+        latest_times = self.repository.latest_practice_times(user.id, course_ids)
+
+        sorted_courses = sorted(
+            courses,
+            key=lambda c: (latest_times.get(c.id) or c.updated_at),
+            reverse=True,
+        )
+        recent_courses = self._build_courses(sorted_courses, enrollments, kp_counts, practiced)
         recent_materials = [self._build_material(material) for material in materials]
         recent_resources = [self._build_resource(resource) for resource in resources]
 
@@ -193,20 +256,35 @@ class DashboardService:
         )
 
     @staticmethod
-    def _build_courses(courses: list[Course], enrollments: list[CourseEnrollment]) -> list[DashboardCourse]:
+    def _build_courses(
+        courses: list[Course],
+        enrollments: list[CourseEnrollment],
+        kp_counts: dict[int, int],
+        practiced: dict[int, set[int]],
+    ) -> list[DashboardCourse]:
         enrollment_by_course_id = {enrollment.course_id: enrollment for enrollment in enrollments}
         result: list[DashboardCourse] = []
 
         for course in courses:
-            enrollment = enrollment_by_course_id.get(course.id)
-            progress = Decimal(enrollment.progress_percent) if enrollment is not None else Decimal("0")
+            total_kps = kp_counts.get(course.id, 0)
+            practiced_kps = practiced.get(course.id, set())
+            if total_kps > 0:
+                progress_pct = round(len(practiced_kps) / total_kps * 100)
+            else:
+                progress_pct = 0
+            progress = Decimal(progress_pct)
+
+            focus = course.subject or course.description or "等待生成学习重点"
+            if practiced_kps:
+                focus = f"{course.subject or '课程'} · 已练习 {len(practiced_kps)}/{total_kps} 个知识点"
+
             result.append(
                 DashboardCourse(
                     id=str(course.id),
                     title=course.title,
                     source_type=course.source_type,
                     progress_label=DashboardService._progress_label(progress),
-                    focus=course.subject or course.description or "等待生成学习重点",
+                    focus=focus,
                     next="继续学习" if progress > 0 else "开始学习",
                 )
             )

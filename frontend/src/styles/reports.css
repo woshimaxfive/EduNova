@@ -40,6 +40,17 @@
   min-width: 0;
 }
 
+.report-toolbar-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.report-toolbar-identity .report-course-select {
+  flex: 1;
+}
+
 .report-course-select > span,
 .report-toolbar-status > span {
   color: var(--text-muted);
@@ -86,17 +97,6 @@
   font-size: var(--font-control);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.report-toolbar-return {
-  min-width: 0;
-}
-
-.report-toolbar-return .course-return-link {
-  width: fit-content;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--font-meta);
 }
 
 .report-toolbar-actions {
@@ -663,7 +663,6 @@
 
 @media (max-width: 1100px) {
   .report-workspace-toolbar { grid-template-columns: minmax(160px, 0.7fr) minmax(150px, 0.5fr) auto; }
-  .report-toolbar-return { display: none; }
   .report-metric-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .report-metric-strip article:nth-child(3) { border-right: 0; }
   .report-metric-strip article:nth-child(n + 4) { border-top: 1px solid var(--wide-workspace-divider); }

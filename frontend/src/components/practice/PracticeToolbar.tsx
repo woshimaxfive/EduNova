@@ -1,4 +1,5 @@
 import { ChartLineUp, GearSix } from "@phosphor-icons/react";
+import type { ReactNode } from "react";
 
 import { type PracticeSessionDetail } from "../../api/practice";
 import { difficultyLabel } from "../../features/practice/practiceViewModel";
@@ -10,6 +11,7 @@ type PracticeToolbarProps = {
   activeIndex: number;
   answeredCount: number;
   draftLabel: string | null;
+  returnLink?: ReactNode;
   onOpenSettings: () => void;
   onOpenResults: () => void;
 };
@@ -21,6 +23,7 @@ export function PracticeToolbar({
   activeIndex,
   answeredCount,
   draftLabel,
+  returnLink,
   onOpenSettings,
   onOpenResults
 }: PracticeToolbarProps) {
@@ -29,9 +32,12 @@ export function PracticeToolbar({
 
   return (
     <header className="practice-workspace-toolbar">
-      <div className="practice-toolbar-context">
-        <span>针对性练习 · {courseTitle || "选择课程"}</span>
-        <strong>{pointTitle || "选择知识点开始练习"}</strong>
+      <div className="practice-toolbar-identity">
+        {returnLink ? <div className="course-toolbar-return">{returnLink}</div> : null}
+        <div className="practice-toolbar-context">
+          <span>针对性练习 · {courseTitle || "选择课程"}</span>
+          <strong>{pointTitle || "选择知识点开始练习"}</strong>
+        </div>
       </div>
       <div className="practice-toolbar-metrics" aria-label="练习进度">
         <span>{session ? difficultyLabel(session.effective_difficulty) : "智能适配"}</span>

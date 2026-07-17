@@ -3,9 +3,9 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { buildCourseReturnHref } from "./courseReturn";
 
-export function CourseReturnLink({ courseId, compact = false }: { courseId: number | null; compact?: boolean }) {
+export function CourseReturnLink({ courseId, compact = false, alwaysShow = false }: { courseId: number | null; compact?: boolean; alwaysShow?: boolean }) {
   const [searchParams] = useSearchParams();
-  const href = buildCourseReturnHref(searchParams, courseId);
+  const href = buildCourseReturnHref(searchParams, courseId, alwaysShow);
   if (!href) return null;
 
   return (

@@ -1,8 +1,9 @@
 import { buildCoursePath } from "../../app/routePaths";
 
-export function buildCourseReturnHref(searchParams: URLSearchParams, courseId: number | null) {
+export function buildCourseReturnHref(searchParams: URLSearchParams, courseId: number | null, alwaysShow = false) {
   const returnCourseId = Number.parseInt(searchParams.get("course_id") ?? "", 10);
-  if (searchParams.get("return_to") !== "course" || !courseId || (Number.isFinite(returnCourseId) && returnCourseId !== courseId)) return null;
+  if (!courseId) return null;
+  if (!alwaysShow && (searchParams.get("return_to") !== "course" || (Number.isFinite(returnCourseId) && returnCourseId !== courseId))) return null;
 
   const params = new URLSearchParams();
   const sessionId = searchParams.get("course_session_id");

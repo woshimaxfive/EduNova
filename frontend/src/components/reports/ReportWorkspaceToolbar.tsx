@@ -65,26 +65,27 @@ export function ReportWorkspaceToolbar({
 
   return (
     <header className="report-workspace-toolbar">
-      {courseLocked ? (
-        <div className="report-course-select" aria-label={`学习报告，当前课程 ${courses.find((course) => course.id === courseId)?.title ?? "未选择课程"}`}>
-          <span>学习报告 · 当前课程</span>
-          <strong>{courses.find((course) => course.id === courseId)?.title ?? "未选择课程"}</strong>
-        </div>
-      ) : (
-        <label className="report-course-select">
-          <span>学习报告 · 当前课程</span>
-          <select aria-label="选择课程" value={courseId} onChange={(event) => onCourseChange(event.target.value)}>
-            {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
-          </select>
-        </label>
-      )}
+      <div className="report-toolbar-identity">
+        {returnLink ? <div className="course-toolbar-return">{returnLink}</div> : null}
+        {courseLocked ? (
+          <div className="report-course-select" aria-label={`学习报告，当前课程 ${courses.find((course) => course.id === courseId)?.title ?? "未选择课程"}`}>
+            <span>学习报告 · 当前课程</span>
+            <strong>{courses.find((course) => course.id === courseId)?.title ?? "未选择课程"}</strong>
+          </div>
+        ) : (
+          <label className="report-course-select">
+            <span>学习报告 · 当前课程</span>
+            <select aria-label="选择课程" value={courseId} onChange={(event) => onCourseChange(event.target.value)}>
+              {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
+            </select>
+          </label>
+        )}
+      </div>
 
       <div className="report-toolbar-status" aria-live="polite">
         <span data-status={freshness}>{statusLabel}</span>
         <strong>{statusDetail}</strong>
       </div>
-
-      <div className="report-toolbar-return">{returnLink}</div>
 
       <div className="report-toolbar-actions">
         <button type="button" onClick={onOpenDetails}>

@@ -31,6 +31,13 @@
   min-width: 0;
 }
 
+.practice-toolbar-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .practice-toolbar-context > span,
 .practice-toolbar-metrics > span {
   overflow: hidden;
@@ -99,14 +106,6 @@
   font-size: var(--font-control);
   font-weight: 800;
   text-decoration: none;
-}
-
-.practice-return-row {
-  min-height: 0;
-}
-
-.practice-return-row:has(.course-return-link) {
-  padding: 9px 18px 0;
 }
 
 .practice-session-layout {
@@ -1048,8 +1047,6 @@
   }
 
   .practice-toolbar-actions button svg { width: 18px; height: 18px; }
-
-  .practice-return-row:has(.course-return-link) { padding: 7px 10px 0; }
 
   .practice-question-rail { top: 57px; }
 

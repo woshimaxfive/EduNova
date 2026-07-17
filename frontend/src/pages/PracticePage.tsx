@@ -367,11 +367,10 @@ export function PracticePage() {
           activeIndex={activeQuestionIndex}
           answeredCount={answeredCount}
           draftLabel={activeSession?.status === "in_progress" ? draftLabel(draftStatus) : null}
+          returnLink={<CourseReturnLink courseId={canUseCourse ? numericCourseId : null} compact alwaysShow={Boolean(lockedCourseId)} />}
           onOpenSettings={() => setDrawerMode("settings")}
           onOpenResults={() => setDrawerMode("results")}
         />
-
-        <div className="practice-return-row"><CourseReturnLink courseId={canUseCourse ? numericCourseId : null} /></div>
 
         {activeSession && activeQuestion ? (
           <div className="practice-session-layout">

@@ -51,11 +51,11 @@
   white-space: nowrap;
 }
 
-.path-toolbar-return {
+.course-toolbar-return {
   flex: 0 0 auto;
 }
 
-.path-toolbar-return .course-return-link-compact {
+.course-toolbar-return .course-return-link-compact {
   display: grid;
   width: 36px;
   height: 36px;
@@ -69,11 +69,11 @@
   background: var(--wide-workspace-control);
 }
 
-.path-toolbar-return .course-return-link-compact:hover {
+.course-toolbar-return .course-return-link-compact:hover {
   color: var(--accent-strong);
 }
 
-.path-toolbar-return .course-return-link-compact span {
+.course-toolbar-return .course-return-link-compact span {
   display: none;
 }
 

@@ -438,7 +438,7 @@ describe("PracticePage", () => {
     await user.click(within(drawer).getByRole("button", { name: "查看 AssessmentGraph" }));
     expect(await within(drawer).findByText("diagnose_errors")).toBeInTheDocument();
     await user.click(within(drawer).getByRole("button", { name: "关闭学习结果" }));
-    expect(screen.getByRole("link", { name: "返回课程空间继续学习" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "返回课程空间" })).toHaveAttribute(
       "href",
       "/app/courses/808?course_session_id=77&course_message_id=88&knowledge_point_id=402"
     );

@@ -93,7 +93,7 @@ export function LearningPathToolbar({
   return (
     <header className="path-workspace-toolbar">
       <div className="path-toolbar-identity">
-        {returnLink ? <div className="path-toolbar-return">{returnLink}</div> : null}
+        {returnLink ? <div className="course-toolbar-return">{returnLink}</div> : null}
         <div>
           <span>学习路径</span>
           <strong>个性化学习安排</strong>

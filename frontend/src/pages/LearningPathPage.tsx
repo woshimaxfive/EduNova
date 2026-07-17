@@ -167,7 +167,7 @@ export function LearningPathPage() {
       <PageFrame title="学习路径" titleMode="sr-only" variant="wide-workspace" courseId={lockedCourseId}>
         <div className="learning-path-workspace">
           <LearningPathToolbar
-            returnLink={<CourseReturnLink courseId={effectiveCourseId} compact />}
+            returnLink={<CourseReturnLink courseId={effectiveCourseId} compact alwaysShow={lockedCourseId !== null} />}
             courses={courses}
             courseId={effectiveCourseId}
             courseTitle={selectedCourse?.title ?? "未选择课程"}

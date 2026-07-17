@@ -43,4 +43,14 @@ describe("CourseReturnLink", () => {
 
     expect(screen.getByRole("link", { name: "返回课程空间" })).toHaveClass("course-return-link-compact");
   });
+
+  it("shows the course return for a course-owned workspace without a source query", () => {
+    render(
+      <MemoryRouter initialEntries={["/app/courses/808/path"]}>
+        <CourseReturnLink courseId={808} compact alwaysShow />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: "返回课程空间" })).toHaveAttribute("href", "/app/courses/808");
+  });
 });

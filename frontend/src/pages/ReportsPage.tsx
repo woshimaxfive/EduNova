@@ -214,7 +214,7 @@ export function ReportsPage() {
             createdAt={report?.created_at}
             isGenerating={generateMutation.isPending || reportJobRunning}
             isRefreshing={latestReportQuery.isFetching && !latestReportQuery.isPending}
-            returnLink={<CourseReturnLink courseId={canUseCourse ? numericCourseId : null} />}
+            returnLink={<CourseReturnLink courseId={canUseCourse ? numericCourseId : null} compact alwaysShow={Boolean(lockedCourseId)} />}
             onCourseChange={handleCourseChange}
             onGenerate={() => { if (!reportJobRunning) generateMutation.mutate(); }}
             onRetryRead={() => latestReportQuery.refetch()}

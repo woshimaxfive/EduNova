@@ -71,7 +71,7 @@ from backend.app.services.resource_intent import (
     safe_history_summary,
 )
 from backend.app.services.structured_output import parse_json_object
-from backend.app.services.video_resources import VideoCurationService
+from backend.app.services.video_resources import VideoCurationError, VideoCurationService
 
 
 RESOURCE_TYPES = ("doc", "mindmap", "quiz", "code", "slide", "animation", "video")
@@ -112,6 +112,32 @@ class ResourceValidationError(ValidationDomainError):
 
 class ResourceGenerationError(ValidationDomainError):
     pass
+
+
+RESOURCE_TYPE_LABELS = {
+    "doc": "讲解文档",
+    "mindmap": "思维导图",
+    "quiz": "练习题",
+    "code": "代码实操",
+    "slide": "PPT",
+    "animation": "动画图解",
+    "video": "教学视频",
+}
+
+
+def resource_failure_message(resource_type: str, error: Exception) -> str:
+    """Return a student-facing outcome without exposing model or validation internals."""
+    label = RESOURCE_TYPE_LABELS.get(resource_type, "该资源")
+    if isinstance(error, VideoCurationError):
+        return "暂未匹配到可靠教学视频，已保留其他资源。可以稍后重新匹配。"
+    if isinstance(error, ResourceGenerationError):
+        return f"{label}本次未生成，未保存不完整内容。可以重新生成。"
+    return f"{label}暂时未生成，其他资源不受影响。可以稍后重试。"
+
+
+def resource_review_failure_message(resource_type: str, _reason: str) -> str:
+    label = RESOURCE_TYPE_LABELS.get(resource_type, "该资源")
+    return f"{label}未通过内容检查，未保存本次产物。可以重新生成。"
 
 
 class ResourceGenerationState(AgentState, total=False):
@@ -949,7 +975,12 @@ class ResourceGenerationService:
                 "expected_output 必须按每个 print 逐行手算，并与实际输出逐字一致。"
             ),
             "slide": "输出 slide_deck artifact，至少五页，每页包含具体要点、讲稿和引用。",
-            "animation": "输出 animation artifact，至少三个不重复场景，旁白和 Mermaid 图必须一致。",
+            "animation": (
+                "输出 animation artifact，至少三个不重复场景，旁白和 Mermaid 图必须一致。"
+                "Mermaid 只能使用 flowchart；节点文字统一写成 ID[\"文字\"]。"
+                "文字含方括号、花括号、圆括号、竖线、逗号、冒号或比较符时必须保留双引号，"
+                "不得输出 ID[含嵌套方括号的文字]。"
+            ),
         }
         messages = [
             {
@@ -1217,7 +1248,12 @@ class ResourceGenerationService:
                             "元组、字符串、数值、循环、条件和纯函数，"
                             "避免随机行为；重新逐行核对每个 print，并让 expected_output 与实际输出逐字一致。"
                             if payload["resource_type"] == "code"
-                            else "保持 artifact.kind 与字段结构不变。"
+                            else (
+                                "动画资源只能使用 Mermaid flowchart；所有节点文字均写为 ID[\"文字\"]，"
+                                "含方括号、花括号、圆括号、竖线、逗号、冒号或比较符时不得省略双引号。"
+                                if payload["resource_type"] == "animation"
+                                else "保持 artifact.kind 与字段结构不变。"
+                            )
                         ),
                         "只返回 {\"artifact\":{...},\"summary\":\"...\",\"learning_objectives\":[\"...\"]}。",
                     ]
@@ -2059,6 +2095,9 @@ class ResourceGenerationGraphRunner:
                 fit_reason = f"作为“{topic}”的外部补充讲解"
                 if learning_goal:
                     fit_reason += f"，用于支持学习目标：{learning_goal[:120]}"
+                match_level = curated.match_level
+                if match_level == "related":
+                    fit_reason = f"与“{topic}”相关的外部补充讲解，不替代该知识点的精确讲解"
                 artifact = curated.artifact(topic=topic, fit_reason=fit_reason)
                 markdown = f"# {curated.title}\n\n外部教学视频（{curated.platform}）：[{curated.title}]({curated.watch_url})\n\n{fit_reason}"
                 source = ArtifactBuildInput(
@@ -2081,7 +2120,8 @@ class ResourceGenerationGraphRunner:
                 return {"worker_results": [{
                     "status": "completed", "resource_type": "video", "draft": draft, "markdown": markdown,
                     "content_json": content_json, "generation_mode": "curated_external", "model_failed": False,
-                    "warnings": [], "comparison_contents": [], "source_content": None, "source_intent": None,
+                    "warnings": (["未匹配到精确视频，已提供相关补充视频。"] if match_level == "related" else []),
+                    "comparison_contents": [], "source_content": None, "source_intent": None,
                     "artifact_intent": artifact_intent,
                 }]}
             source_resource = state.get("source_resource")
@@ -2218,7 +2258,15 @@ class ResourceGenerationGraphRunner:
                 status="failed",
                 input_summary=f"生成 {resource_type} 结构化资源",
                 output_summary="该类型资源生成失败，其他 Worker 继续执行。",
-                metadata={"resource_type": resource_type, "error_code": exc.__class__.__name__},
+                metadata={
+                    "resource_type": resource_type,
+                    "error_code": exc.__class__.__name__,
+                    **(
+                        {"video_curation": dict(exc.diagnostics)}
+                        if isinstance(exc, VideoCurationError)
+                        else {}
+                    ),
+                },
                 started_at=started,
             )
             self._job_after(
@@ -2235,7 +2283,7 @@ class ResourceGenerationGraphRunner:
                         "status": "failed",
                         "resource_type": resource_type,
                         "error_code": exc.__class__.__name__,
-                        "error_message": str(exc)[:160],
+                        "error_message": resource_failure_message(resource_type, exc),
                     }
                 ]
             }
@@ -2506,7 +2554,7 @@ class ResourceGenerationGraphRunner:
 
             failed_types.append(resource_type)
             reason = ",".join(str(flag) for flag in payload.get("risk_flags", [])[:3]) or "repair_failed"
-            warnings.append(f"{resource_type} 资源未通过质量审核，未保存该产物：{reason}。")
+            warnings.append(resource_review_failure_message(resource_type, reason))
 
         self._record(
             state,

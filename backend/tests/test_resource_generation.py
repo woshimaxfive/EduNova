@@ -883,7 +883,7 @@ def test_code_resource_is_not_persisted_when_execution_output_does_not_match() -
     assert [resource["resource_type"] for resource in result["resources"]] == ["doc"]
     assert result["failed_resource_types"] == ["code"]
     assert [resource.resource_type for resource in repo.resources] == ["doc"]
-    assert any("output_mismatch" in warning for warning in result["warnings"])
+    assert "代码实操未通过内容检查，未保存本次产物。可以重新生成。" in result["warnings"]
 
 
 def test_code_quality_gate_rejects_runnable_but_off_topic_code() -> None:
@@ -1027,6 +1027,41 @@ def test_animation_quality_gate_rejects_unrenderable_mermaid_node_label() -> Non
         content,
         topic="冒泡排序",
         evidence_terms=["冒泡排序通过相邻比较和交换完成排序。"],
+        valid_citation_refs={701},
+    )
+
+    assert "invalid_animation_diagram" in risks
+
+
+def test_animation_quality_gate_rejects_unquoted_nested_mermaid_node_label() -> None:
+    from backend.app.services.resource_quality import quality_risks
+
+    content = {
+        "schema_version": 3,
+        "format": "rich",
+        "markdown": "# 广度优先搜索动画图解\n\n展示队列中的节点变化。",
+        "artifact": {
+            "kind": "animation",
+            "scenes": [
+                {
+                    "id": f"scene-{index}",
+                    "title": f"场景 {index}",
+                    "narration": "观察队列状态。",
+                    "duration_ms": 3000,
+                    "diagram": "flowchart LR\n Start --> Q[队列: [S]]",
+                }
+                for index in range(1, 4)
+            ],
+            "default_scene_duration_ms": 3000,
+            "citation_refs": [701],
+        },
+    }
+
+    risks = quality_risks(
+        "animation",
+        content,
+        topic="广度优先搜索",
+        evidence_terms=["广度优先搜索使用队列按层访问节点。"],
         valid_citation_refs={701},
     )
 

@@ -46,4 +46,11 @@ describe("ExternalVideoResource", () => {
       "https://www.youtube.com/watch?v=abcDEF_1234"
     );
   });
+
+  it("labels a related video without presenting it as an exact explanation", () => {
+    render(<ExternalVideoResource artifact={artifact({ match_level: "related" })} />);
+
+    expect(screen.getByText(/相关补充/)).toBeInTheDocument();
+    expect(screen.queryByText(/知识点匹配/)).not.toBeInTheDocument();
+  });
 });

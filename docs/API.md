@@ -1090,12 +1090,12 @@ Authorization: Bearer <token>
 
 - 所有接口必须携带 JWT。
 - 只能生成和读取当前用户自己的课程、知识点、资源和质量分；非本人资源或课程返回 404。
-- `resource_type` 支持 `doc`、`mindmap`、`quiz`、`code`、`slide`、`animation`。
+- `resource_type` 支持 `doc`、`mindmap`、`quiz`、`code`、`slide`、`animation`、`video`。
 - `ResourceGenerationGraph` 使用 LangGraph `Send` 为每个请求类型并行派发独立 Worker。每个 Worker 直接生成 v3 类型化 artifact；ReviewAgent 读取安全资料摘录、学习目标和完整候选内容，失败资源最多执行一次结构修复和一次内容修订。
 - `planner` 为每个 Worker 生成结构化 `ArtifactIntent`，包含教学策略、认知层级、案例方向、资源职责、真实证据和可验证学习结果。可信画像不足时必须标记 `context_limited`。
 - 资源按 `version_family_id + version_number` 形成不可覆盖的版本族。`alternative` 必须相对来源版本至少改变教学策略、案例、认知层级、交互结构中的两项；`refine` 必须保持原教学意图。`content_json.diversity` 始终记录本地文字与结构差异；配置可用向量模型时还会记录 `semantic_similarity/semantic_status`，向量服务不可用时安全降级且不伪造语义校验结果。
 - `content_json.schema_version=3` 必须包含 `format=rich`、`artifact.kind`、Markdown 展示内容、引用绑定、`quality` 和 Prompt 版本。新产物只有模型正文相对安全合同产生有效内容并通过门禁时才使用 `generation_mode=model_generated`；`model_enhanced` 仅作历史兼容。
-- 讲解、导图和 PPT 可保存通过规则门禁的证据型降级稿；练习、代码和动画不合格时进入 `failed_resource_types` 且不持久化。代码还必须通过内部 Pyodide 运行验证，验证服务不可用时不得保存未经运行的代码。
+- 视频只在 URL、平台和知识点可见关联通过校验后保存；精确候选不足时可保存明确标注的“相关补充”，无可靠候选时不伪造视频。讲解、导图和 PPT 可保存通过规则门禁的证据型降级稿；练习、代码和动画不合格时进入 `failed_resource_types` 且不持久化。对学生展示的失败信息不泄露内部风险码，细节仅保留在安全任务日志中。代码还必须通过内部 Pyodide 运行验证，验证服务不可用时不得保存未经运行的代码。
 - 响应、资源内容、质量分和 Agent trace 只保存安全摘要、引用标题和白名单 metadata，不返回系统提示词、完整模型输入、API Key、完整课程资料原文或完整用户画像原文。
 
 ### POST `/resources/generate`

@@ -5,15 +5,16 @@ import { MarkdownMessage } from "../feedback/MarkdownMessage";
 type CourseAssistantTurnProps = {
   messageId?: string;
   content: string;
-  status?: string | null;
+  progress?: ReactNode;
   actions?: ReactNode;
   detail?: ReactNode;
 };
 
-export function CourseAssistantTurn({ messageId, content, status, actions, detail }: CourseAssistantTurnProps) {
+export function CourseAssistantTurn({ messageId, content, progress, actions, detail }: CourseAssistantTurnProps) {
   return (
     <article id={messageId ? `course-message-${messageId}` : undefined} className="course-message assistant course-assistant-turn">
-      {content ? <MarkdownMessage content={content} /> : status ? <span className="message-thinking" role="status" aria-live="polite">{status}</span> : null}
+      {progress}
+      {content ? <MarkdownMessage content={content} /> : null}
       {actions}
       {detail ? <div className="course-turn-detail">{detail}</div> : null}
     </article>

@@ -68,6 +68,8 @@ import { type LearningNextAction } from "../api/learning";
 import { useBrowserSpeech } from "../features/speech/useBrowserSpeech";
 import { SecureTutorImages, TutorImagePicker } from "../features/tutor/TutorImageAttachments";
 import { useTutorImageDraft } from "../features/tutor/useTutorImageDraft";
+import { appendTutorProgressStage, type TutorResponseProgressState } from "../features/tutor/tutorResponseProgress";
+import { TutorResponseProgress } from "../components/tutor/TutorResponseProgress";
 import "../styles/course-space.css";
 
 function retrievalSourceLabel(source?: string | null) {
@@ -293,7 +295,8 @@ export function CourseSpacePage() {
   const [coursePrompt, setCoursePrompt] = useState("");
   const [courseMessages, setCourseMessages] = useState<CourseMessage[]>([]);
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
-  const [courseGraphStatus, setCourseGraphStatus] = useState<string | null>(null);
+  const [courseStreamProgress, setCourseStreamProgress] = useState<TutorResponseProgressState | null>(null);
+  const [courseAnswerProgress, setCourseAnswerProgress] = useState<Record<string, TutorResponseProgressState & { durationMs: number }>>({});
   const [isSearchingCourse, setIsSearchingCourse] = useState(false);
   const [courseFeedback, setCourseFeedback] = useState<string | null>(null);
   const imageDraft = useTutorImageDraft(ensureCourseImageSession, setCourseFeedback, handleCourseDocumentFiles);
@@ -826,7 +829,9 @@ export function CourseSpacePage() {
     }
 
     setIsSearchingCourse(true);
-    setCourseGraphStatus("正在准备课程回答");
+    const startedAt = Date.now();
+    let progressStages = ["正在准备课程回答"];
+    setCourseStreamProgress({ startedAt, stages: progressStages });
     setCourseFeedback(null);
     const previousMessages = displayedCourseMessages;
 
@@ -859,7 +864,10 @@ export function CourseSpacePage() {
         message: question,
         ...(imageDraft.attachmentIds.length ? { attachment_ids: imageDraft.attachmentIds } : {})
       }, {
-        onStatus: (status) => setCourseGraphStatus(status.label),
+        onStatus: (status) => {
+          progressStages = appendTutorProgressStage(progressStages, status.label);
+          setCourseStreamProgress((current) => current ? { ...current, stages: progressStages } : current);
+        },
         onToken: (content) => {
           setCourseMessages((current) =>
             current.map((message) =>
@@ -873,10 +881,16 @@ export function CourseSpacePage() {
       setActiveCourseSessionId(detail.session.id);
       setCourseMessages(messages);
       setStreamingSessionId(null);
-      setCourseGraphStatus(null);
+      setCourseStreamProgress(null);
       setCoursePrompt("");
       imageDraft.clearAfterSend();
       const persistedAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+      if (persistedAssistant) {
+        setCourseAnswerProgress((current) => ({
+          ...current,
+          [persistedAssistant.id]: { startedAt, stages: progressStages, durationMs: Date.now() - startedAt }
+        }));
+      }
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set("course_session_id", detail.session.id);
       if (persistedAssistant) nextParams.set("course_message_id", persistedAssistant.id);
@@ -887,7 +901,7 @@ export function CourseSpacePage() {
     } catch (error) {
       setCourseMessages(previousMessages);
       setStreamingSessionId(null);
-      setCourseGraphStatus(null);
+      setCourseStreamProgress(null);
       setCourseFeedback(error instanceof Error ? error.message : "模型暂不可用，请检查设置或稍后重试。");
     } finally {
       setIsSearchingCourse(false);
@@ -1040,14 +1054,16 @@ export function CourseSpacePage() {
                             key={message.id}
                             messageId={message.id}
                             content={sanitizeCourseAnswerContent(message.content)}
-                            status={!isPersisted ? courseGraphStatus : null}
+                            progress={!isPersisted && courseStreamProgress ? (
+                              <TutorResponseProgress state={courseStreamProgress} />
+                            ) : isPersisted && courseAnswerProgress[message.id] ? (
+                              <TutorResponseProgress state={courseAnswerProgress[message.id]} completed durationMs={courseAnswerProgress[message.id].durationMs} />
+                            ) : undefined}
                             actions={isPersisted && message.content.trim() ? (
                               <CourseClosedLoopActions
                                 recommendation={isLatestAssistant ? recommendation : null}
                                 citationCount={citations.length}
                                 resourceCount={generatedResources.length}
-                                hasActivePath={hasActivePath}
-                                hasTrace={Boolean(effectiveTraceId)}
                                 activePanel={turnPanel}
                                 isSpeaking={speech.activeSpeechId === message.id}
                                 practiceHref={practiceHref}
@@ -1056,9 +1072,7 @@ export function CourseSpacePage() {
                                 onRead={() => toggleReadMessage(message)}
                                 onOpenCitations={() => toggleTurnPanel(message.id, "citations", question, citations)}
                                 onOpenResources={() => toggleTurnPanel(message.id, "resources", question, citations)}
-                                onOpenPath={() => toggleTurnPanel(message.id, "path", question, citations)}
                                 onOpenWhy={() => toggleTurnPanel(message.id, "why", question, citations)}
-                                onOpenTrace={() => toggleTurnPanel(message.id, "thinking", question, citations)}
                               />
                             ) : undefined}
                             detail={detail}

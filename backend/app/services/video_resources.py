@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Protocol
 from urllib.parse import parse_qs, urlparse
@@ -19,7 +19,9 @@ class VideoSearch(Protocol):
 
 
 class VideoCurationError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, diagnostics: dict[str, int] | None = None) -> None:
+        super().__init__(message)
+        self.diagnostics = diagnostics or {}
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,7 @@ class CuratedVideo:
     snippet: str
     retrieved_at: str
     access_scope: str
+    match_level: str = "exact"
 
     def artifact(self, *, topic: str, fit_reason: str) -> dict[str, Any]:
         return {
@@ -47,6 +50,7 @@ class CuratedVideo:
             "embed_status": "unknown",
             "external_supplement": True,
             "access_scope": self.access_scope,
+            "match_level": self.match_level,
             "citation_refs": [],
         }
 
@@ -70,21 +74,30 @@ class VideoCurationService:
 
     def curate(self, *, topic: str, profile_summary: dict[str, Any]) -> CuratedVideo:
         warnings: list[str] = []
+        diagnostics = {"searches": 0, "candidates": 0, "invalid_candidates": 0, "topic_rejections": 0}
+        related_candidates: list[CuratedVideo] = []
         for platform in ("bilibili", "youtube"):
-            query = self._search_query(topic, profile_summary, platform=platform)
-            result = self.search_service.search(query, max_results=8)
-            for item in list(getattr(result, "citations", []) or []):
-                candidate = normalize_video(item)
-                if (
-                    candidate is not None
-                    and candidate.platform == platform
-                    and video_matches_topic(candidate, topic)
-                ):
-                    return candidate
-            warning = str(getattr(result, "warning", "") or "").strip()
-            if warning:
-                warnings.append(warning)
-        raise VideoCurationError(warnings[-1] if warnings else "没有找到合格的教学视频")
+            for query, allow_related in self._search_queries(topic, profile_summary, platform=platform):
+                diagnostics["searches"] += 1
+                result = self.search_service.search(query, max_results=8)
+                for item in list(getattr(result, "citations", []) or []):
+                    diagnostics["candidates"] += 1
+                    candidate = normalize_video(item)
+                    if candidate is None or candidate.platform != platform:
+                        diagnostics["invalid_candidates"] += 1
+                        continue
+                    if video_matches_topic(candidate, topic):
+                        return replace(candidate, match_level="exact")
+                    if allow_related and video_matches_related_topic(candidate, topic):
+                        related_candidates.append(candidate)
+                    else:
+                        diagnostics["topic_rejections"] += 1
+                warning = str(getattr(result, "warning", "") or "").strip()
+                if warning:
+                    warnings.append(warning)
+        if related_candidates:
+            return replace(related_candidates[0], match_level="related")
+        raise VideoCurationError(warnings[-1] if warnings else "没有找到可靠的教学视频", diagnostics=diagnostics)
 
     @staticmethod
     def _search_query(topic: str, profile_summary: dict[str, Any], *, platform: str = "bilibili") -> str:
@@ -100,6 +113,18 @@ class VideoCurationService:
         qualifiers = " ".join(item for item in (foundation, goal) if item)
         site = "site:bilibili.com/video" if platform == "bilibili" else "site:youtube.com/watch"
         return f"{safe_topic} {qualifiers} 教学讲解 {site}".strip()
+
+    @classmethod
+    def _search_queries(cls, topic: str, profile_summary: dict[str, Any], *, platform: str) -> list[tuple[str, bool]]:
+        """Try a focused query first, then a broader but still topic-bound query."""
+        strict = cls._search_query(topic, profile_summary, platform=platform)
+        plain = cls._search_query(topic, {}, platform=platform)
+        broad = plain.replace("教学讲解", "原理 基础教程")
+        queries = [(strict, False)]
+        if plain != strict:
+            queries.append((plain, False))
+        queries.append((broad, True))
+        return queries
 
 
 def normalize_video(item: dict[str, Any]) -> CuratedVideo | None:
@@ -179,6 +204,25 @@ def video_matches_topic(candidate: CuratedVideo, topic: str) -> bool:
         for token in re.findall(r"[A-Za-z][A-Za-z0-9+#*_.-]{1,24}", str(topic or ""))
     }
     return bool(ascii_terms) and all(_normalized_search_text(token) in normalized_metadata for token in ascii_terms)
+
+
+def video_matches_related_topic(candidate: CuratedVideo, topic: str) -> bool:
+    """Accept a clearly related supplement only after exact matching has failed.
+
+    This deliberately remains lexical: a search result is not evidence that an unrelated
+    video teaches the requested concept. The returned artifact is labelled as a related
+    supplement and is never presented as an exact explanation.
+    """
+    chinese = "".join(re.findall(r"[一-龥]", str(topic or "")))
+    metadata = _normalized_search_text(f"{candidate.title} {candidate.snippet}")
+    if len(chinese) >= 4:
+        bigrams = {chinese[index : index + 2] for index in range(len(chinese) - 1)}
+        return sum(1 for token in bigrams if token in metadata) >= 2
+    ascii_terms = {
+        token.casefold()
+        for token in re.findall(r"[A-Za-z][A-Za-z0-9+#*_.-]{1,24}", str(topic or ""))
+    }
+    return len(ascii_terms) >= 2 and any(_normalized_search_text(token) in metadata for token in ascii_terms)
 
 
 def _normalized_search_text(value: object) -> str:

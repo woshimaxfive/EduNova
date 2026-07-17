@@ -1,13 +1,11 @@
 import {
   CaretDown,
   FileText,
-  Graph,
   Lightning,
   ListChecks,
   SpeakerHigh,
   SpeakerSlash,
   Sparkle,
-  Target
 } from "@phosphor-icons/react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -20,8 +18,6 @@ type CourseClosedLoopActionsProps = {
   recommendation: LearningNextAction | null;
   citationCount: number;
   resourceCount: number;
-  hasActivePath: boolean;
-  hasTrace: boolean;
   activePanel: CourseAnswerPanelKind | null;
   isSpeaking: boolean;
   practiceHref: string;
@@ -30,17 +26,13 @@ type CourseClosedLoopActionsProps = {
   onRead: () => void;
   onOpenCitations: () => void;
   onOpenResources: () => void;
-  onOpenPath: () => void;
   onOpenWhy: () => void;
-  onOpenTrace: () => void;
 };
 
 export function CourseClosedLoopActions({
   recommendation,
   citationCount,
   resourceCount,
-  hasActivePath,
-  hasTrace,
   activePanel,
   isSpeaking,
   practiceHref,
@@ -49,9 +41,7 @@ export function CourseClosedLoopActions({
   onRead,
   onOpenCitations,
   onOpenResources,
-  onOpenPath,
-  onOpenWhy,
-  onOpenTrace
+  onOpenWhy
 }: CourseClosedLoopActionsProps) {
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -88,11 +78,6 @@ export function CourseClosedLoopActions({
             <span>生成资源</span>
             <em>{resourceCount} 个</em>
           </button>
-          <button type="button" aria-label="学习路径" aria-pressed={activePanel === "path"} onClick={onOpenPath}>
-            <Target size={17} weight="duotone" aria-hidden="true" />
-            <span>学习路径</span>
-            <em>{hasActivePath ? "已生成" : "可生成"}</em>
-          </button>
           <Link to={practiceHref}>
             <ListChecks size={17} weight="duotone" aria-hidden="true" />
             <span>进入练习</span>
@@ -101,11 +86,6 @@ export function CourseClosedLoopActions({
             <FileText size={17} weight="duotone" aria-hidden="true" />
             <span>学习报告</span>
           </Link>
-          <button type="button" aria-label="课堂协作轨迹" aria-pressed={activePanel === "thinking"} onClick={onOpenTrace}>
-            <Graph size={17} weight="duotone" aria-hidden="true" />
-            <span>课堂协作轨迹</span>
-            <em>{hasTrace ? "真实 trace" : "暂无"}</em>
-          </button>
           <button type="button" aria-label="为什么这样回答" aria-pressed={activePanel === "why"} onClick={onOpenWhy}>
             <Sparkle size={17} weight="duotone" aria-hidden="true" />
             <span>为什么这样回答</span>

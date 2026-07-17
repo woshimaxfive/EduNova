@@ -78,6 +78,7 @@ def test_video_curation_skips_popular_but_unrelated_search_result() -> None:
 def test_video_curation_uses_youtube_only_as_second_stage_fallback() -> None:
     search = FakeVideoSearch([
         SimpleNamespace(citations=[], warning=None),
+        SimpleNamespace(citations=[], warning=None),
         SimpleNamespace(citations=[{
             "title": "Binary tree traversal",
             "url": "https://youtu.be/abcDEF_1234",
@@ -89,8 +90,55 @@ def test_video_curation_uses_youtube_only_as_second_stage_fallback() -> None:
 
     assert result.platform == "youtube"
     assert result.access_scope == "external_fallback"
-    assert len(search.queries) == 2
-    assert "site:youtube.com/watch" in search.queries[1]
+    assert len(search.queries) == 3
+    assert "site:youtube.com/watch" in search.queries[2]
+
+
+def test_video_curation_keeps_a_related_result_only_after_exact_match_fails() -> None:
+    search = FakeVideoSearch([
+        SimpleNamespace(citations=[{
+            "title": "广度优先遍历教程",
+            "url": "https://www.bilibili.com/video/BV1xx411c7mD",
+            "snippet": "使用队列进行图遍历。",
+        }], warning=None),
+        SimpleNamespace(citations=[{
+            "title": "广度优先遍历教程",
+            "url": "https://www.bilibili.com/video/BV1xx411c7mD",
+            "snippet": "使用队列进行图遍历。",
+        }], warning=None),
+        SimpleNamespace(citations=[], warning=None),
+        SimpleNamespace(citations=[], warning=None),
+    ])
+
+    result = VideoCurationService(search).curate(topic="图结构广度优先搜索算法", profile_summary={})
+
+    assert result.match_level == "related"
+    assert len(search.queries) == 4
+
+
+def test_video_curation_prefers_youtube_exact_match_over_bilibili_related_supplement() -> None:
+    search = FakeVideoSearch([
+        SimpleNamespace(citations=[{
+            "title": "广度优先遍历教程",
+            "url": "https://www.bilibili.com/video/BV1xx411c7mD",
+            "snippet": "使用队列进行图遍历。",
+        }], warning=None),
+        SimpleNamespace(citations=[{
+            "title": "广度优先遍历教程",
+            "url": "https://www.bilibili.com/video/BV1xx411c7mD",
+            "snippet": "使用队列进行图遍历。",
+        }], warning=None),
+        SimpleNamespace(citations=[{
+            "title": "图结构广度优先搜索算法讲解",
+            "url": "https://youtu.be/abcDEF_1234",
+            "snippet": "从队列实现到搜索步骤。",
+        }], warning=None),
+    ])
+
+    result = VideoCurationService(search).curate(topic="图结构广度优先搜索算法", profile_summary={})
+
+    assert result.platform == "youtube"
+    assert result.match_level == "exact"
 
 
 def test_video_normalization_rejects_dangerous_or_unverified_urls() -> None:

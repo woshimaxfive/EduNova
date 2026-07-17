@@ -15,7 +15,7 @@ import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState }
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { buildCoursePath, PATHS } from "../app/routePaths";
-import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
+import { getAgentTrace } from "../api/agents";
 import { createCourseBuilderJob, createIdempotencyKey, getAiJob, type AiJob } from "../api/aiJobs";
 import { getDashboardSummary } from "../api/dashboard";
 import { getApiErrorMessage } from "../api/errors";
@@ -49,6 +49,8 @@ import { invalidateLearningNextActions, learningActionButtonLabel, learningActio
 import { useBrowserSpeech } from "../features/speech/useBrowserSpeech";
 import { SecureTutorImages, TutorImagePicker } from "../features/tutor/TutorImageAttachments";
 import { useTutorImageDraft } from "../features/tutor/useTutorImageDraft";
+import { appendTutorProgressStage, type TutorResponseProgressState } from "../features/tutor/tutorResponseProgress";
+import { TutorResponseProgress } from "../components/tutor/TutorResponseProgress";
 
 type LibraryMaterial = {
   id: string;
@@ -78,7 +80,7 @@ type LearningSpaceNavigationState = {
 
 type DashboardSummaryResponse = Awaited<ReturnType<typeof getDashboardSummary>>;
 
-type HomeAnswerPanel = "sources" | "why" | "thinking";
+type HomeAnswerPanel = "sources" | "why";
 
 const HOME_COMPOSER_MAX_HEIGHT = 154;
 
@@ -139,7 +141,8 @@ export function LearningSpacePage() {
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>("sources");
   const [expandedAnswerId, setExpandedAnswerId] = useState<string | null>(null);
   const [streamingAnswerId, setStreamingAnswerId] = useState<string | null>(null);
-  const [graphStatus, setGraphStatus] = useState<string | null>(null);
+  const [streamProgress, setStreamProgress] = useState<TutorResponseProgressState | null>(null);
+  const [answerProgress, setAnswerProgress] = useState<Record<string, TutorResponseProgressState & { durationMs: number }>>({});
   const [answerWarnings, setAnswerWarnings] = useState<Record<string, string[]>>({});
   const [composerFeedback, setComposerFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [courseDialogFeedback, setCourseDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
@@ -466,6 +469,8 @@ export function LearningSpacePage() {
     const messagesBeforeSend = messages;
     let optimisticAssistantId: string | null = null;
     let streamWarnings: string[] = [];
+    const startedAt = Date.now();
+    let progressStages = ["正在读取会话上下文"];
 
     try {
       let sessionId = activeHomeThreadId;
@@ -486,7 +491,7 @@ export function LearningSpacePage() {
       const optimisticUserId = `stream-user-${optimisticKey}`;
       optimisticAssistantId = `stream-assistant-${optimisticKey}`;
       setStreamingAnswerId(optimisticAssistantId);
-      setGraphStatus("正在读取会话上下文");
+      setStreamProgress({ startedAt, stages: progressStages });
       setMessages([
         ...messagesBeforeSend,
         {
@@ -525,7 +530,10 @@ export function LearningSpacePage() {
               )
             );
           },
-          onStatus: (status) => setGraphStatus(status.label),
+          onStatus: (status) => {
+            progressStages = appendTutorProgressStage(progressStages, status.label);
+            setStreamProgress((current) => current ? { ...current, stages: progressStages } : current);
+          },
           onSources: (sources) => {
             streamWarnings = sources.warnings;
             if (!optimisticAssistantId) {
@@ -563,6 +571,12 @@ export function LearningSpacePage() {
 
       const persistedMessages = mapTutorMessages(detail.messages);
       const persistedAssistantId = [...persistedMessages].reverse().find((message) => message.role === "assistant")?.id;
+      if (persistedAssistantId) {
+        setAnswerProgress((current) => ({
+          ...current,
+          [persistedAssistantId]: { startedAt, stages: progressStages, durationMs: Date.now() - startedAt }
+        }));
+      }
       if (persistedAssistantId && streamWarnings.length > 0) {
         setAnswerWarnings((current) => {
           const next = { ...current, [persistedAssistantId]: streamWarnings };
@@ -587,7 +601,7 @@ export function LearningSpacePage() {
       });
     } finally {
       setStreamingAnswerId(null);
-      setGraphStatus(null);
+      setStreamProgress(null);
       setIsSendingQuestion(false);
     }
   }
@@ -639,7 +653,8 @@ export function LearningSpacePage() {
     setActiveAnswerPanel("sources");
     setExpandedAnswerId(null);
     setStreamingAnswerId(null);
-    setGraphStatus(null);
+    setStreamProgress(null);
+    setAnswerProgress({});
     setAnswerWarnings({});
     setComposerFeedback(null);
     setCourseDialogFeedback(null);
@@ -769,12 +784,13 @@ export function LearningSpacePage() {
             <section className="home-thread-stage" aria-label="主页对话">
               {messages.map((message) => (
                 <article className={`home-message ${message.role}`} key={message.id}>
-                  {message.role === "assistant" && message.streaming ? (
-                    <span className="message-thinking" role="status" aria-live="polite">
-                      {message.id === streamingAnswerId ? graphStatus ?? "正在组织回答" : "正在组织回答"}
-                    </span>
+                  {message.role === "assistant" && message.streaming && message.id === streamingAnswerId && streamProgress ? (
+                    <TutorResponseProgress state={streamProgress} />
                   ) : null}
                   {message.role === "user" ? <SecureTutorImages attachments={message.attachments} /> : null}
+                  {message.role === "assistant" && !message.streaming && answerProgress[message.id] ? (
+                    <TutorResponseProgress state={answerProgress[message.id]} completed durationMs={answerProgress[message.id].durationMs} />
+                  ) : null}
                   {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : <p>{message.content}</p>}
                   {message.role === "assistant" && !message.streaming ? (
                     <button
@@ -1010,12 +1026,12 @@ function HomeAnswerInsights({
   const traceQuery = useQuery({
     queryKey: ["agents", "trace", message.trace_id],
     queryFn: () => getAgentTrace(message.trace_id ?? ""),
-    enabled: Boolean(message.trace_id) && isExpanded && (activePanel === "thinking" || activePanel === "why"),
+    enabled: Boolean(message.trace_id) && isExpanded && activePanel === "why",
     staleTime: 10_000
   });
-  const traceEvents = useMemo(
-    () => traceQuery.data?.data.steps.map(mapAgentTraceStepToEvent) ?? [],
-    [traceQuery.data?.data.steps]
+  const personalizationCount = useMemo(
+    () => traceQuery.data?.data.summary?.personalization_factors?.length ?? 0,
+    [traceQuery.data?.data.summary?.personalization_factors]
   );
   const handleInsightClick = (panel: HomeAnswerPanel) => {
     const shouldCollapse = isExpanded && activePanel === panel;
@@ -1053,16 +1069,6 @@ function HomeAnswerInsights({
         >
           <LinkSimple size={16} weight="duotone" aria-hidden="true" />
           <span>来源</span>
-        </button>
-        <button
-          className={isExpanded && activePanel === "thinking" ? "active" : ""}
-          type="button"
-          aria-expanded={isExpanded && activePanel === "thinking"}
-          aria-pressed={isExpanded && activePanel === "thinking"}
-          onClick={() => handleInsightClick("thinking")}
-        >
-          <Sparkle size={16} weight="duotone" aria-hidden="true" />
-          <span>协作过程</span>
         </button>
       </div>
 
@@ -1102,41 +1108,12 @@ function HomeAnswerInsights({
               ) : null}
             </>
           ) : null}
-          {activePanel === "thinking" ? (
-            <>
-              <span className="insight-mark">
-                <Sparkle size={16} weight="fill" aria-hidden="true" />
-                课堂协作轨迹
-              </span>
-              {message.trace_id ? <p>{`Trace ${message.trace_id}`}</p> : <p>当前回答没有返回可追踪 Agent 记录。</p>}
-              {traceQuery.data?.data.summary ? (
-                <p>{`耗时 ${traceQuery.data.data.summary.duration_ms ?? 0} ms，使用 ${traceQuery.data.data.summary.personalization_factors?.length ?? 0} 项可信个性化因素。`}</p>
-              ) : null}
-              {traceQuery.isLoading ? <p>正在读取协作轨迹。</p> : null}
-              {traceQuery.isError ? <p>Agent 轨迹读取失败，请稍后重试。</p> : null}
-              {traceEvents.length > 0 ? (
-                <ol className="insight-trace-list">
-                  {traceEvents.map((event) => (
-                    <li key={event.id}>
-                      <strong>{event.agentName}</strong>
-                      <span>{event.summary}</span>
-                      {event.contextMessageCount ? (
-                        <span className="trace-context-note">
-                          {`已参考最近 ${event.contextMessageCount} 条会话${event.contextSummaryUsed ? "，并使用历史摘要" : ""}`}
-                        </span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ol>
-              ) : null}
-            </>
-          ) : null}
           {activePanel === "why" ? (
             <>
               <span className="insight-mark"><Sparkle size={16} weight="fill" aria-hidden="true" />为什么这样回答</span>
               <p>
-                {traceQuery.data?.data.summary?.personalization_factors?.length
-                  ? `本次讲解依据课程上下文，并使用 ${traceQuery.data.data.summary.personalization_factors.length} 项可信学习因素调整讲解深度、案例和下一步；这些因素不会改变事实或引用。`
+                {personalizationCount
+                  ? `本次讲解依据课程上下文，并使用 ${personalizationCount} 项可信学习因素调整讲解深度、案例和下一步；这些因素不会改变事实或引用。`
                   : "本次主要依据问题、会话上下文和可验证来源组织回答，没有使用低可信画像改变内容。"}
               </p>
             </>

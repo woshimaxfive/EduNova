@@ -29,7 +29,7 @@ export function ExternalVideoResource({ artifact }: { artifact: ResourceExternal
         <strong>{artifact.title}</strong>
         <p>{artifact.fit_reason}</p>
         <span>
-          联网精选 · {artifact.access_scope === "external_fallback" || artifact.platform === "youtube" ? "境外补充" : "国内平台"} · 外部补充，不作为教材或评分证据 ·
+          {artifact.match_level === "related" ? "相关补充" : "知识点匹配"} · 联网精选 · {artifact.access_scope === "external_fallback" || artifact.platform === "youtube" ? "境外补充" : "国内平台"} · 外部补充，不作为教材或评分证据 ·
           {embedStatus === "available" ? " 播放器已载入" : embedStatus === "unavailable" ? " 播放器不可用" : " 正在确认播放器"}
         </span>
         <a href={urls.watch} target="_blank" rel="noreferrer noopener">

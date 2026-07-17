@@ -1060,7 +1060,7 @@ describe("LearningSpacePage", () => {
     expect(composer.queryByText("期末复习题 2025.pdf")).not.toBeInTheDocument();
   });
 
-  it("sends no manual tool flags and shows automatically selected sources and graph trace", async () => {
+  it("sends no manual tool flags and shows automatically selected sources", async () => {
     const user = userEvent.setup();
     const { calls } = renderWithDashboardSummary(materialRichSummary);
 
@@ -1086,12 +1086,7 @@ describe("LearningSpacePage", () => {
     expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("真实资料讲义.md");
     expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("联网搜索结果");
 
-    await user.click(within(thread).getByRole("button", { name: "协作过程" }));
-
-    expect(await within(thread).findByText("context")).toBeInTheDocument();
-    expect(within(thread).getByText("确认不展示原始思维链")).toBeInTheDocument();
-    expect(within(thread).getByText("已参考最近 2 条会话")).toBeInTheDocument();
-    expect(calls).toContainEqual(expect.objectContaining({ method: "get", url: AGENT_ENDPOINTS.trace("trace_home_tutor_test") }));
+    expect(within(thread).queryByRole("button", { name: "协作过程" })).not.toBeInTheDocument();
   });
 
   it("uses browser speech recognition for voice input and browser speech synthesis for read aloud", async () => {
@@ -1372,7 +1367,7 @@ describe("LearningSpacePage", () => {
     expect(historyRail.querySelectorAll("button[aria-pressed]")).toHaveLength(initialThreadCount + 1);
   });
 
-  it("lets the home answer reveal sources, path, and thinking details", async () => {
+  it("keeps the home answer actions focused on sources and explanation", async () => {
     const user = userEvent.setup();
 
     renderWithDashboardSummary(starterSummary);
@@ -1385,10 +1380,8 @@ describe("LearningSpacePage", () => {
     await user.click(screen.getByRole("button", { name: "发送" }));
     expect(screen.queryByRole("button", { name: "学习路径" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "协作过程" }));
-
-    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("课堂协作轨迹");
-    expect(screen.getByRole("region", { name: "回答展开详情" })).toHaveTextContent("确认不展示原始思维链");
+    expect(screen.queryByRole("button", { name: "协作过程" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "为什么这样回答" })).toBeInTheDocument();
   });
 
   it("creates a real course from the library drawer and enters the new course space", async () => {

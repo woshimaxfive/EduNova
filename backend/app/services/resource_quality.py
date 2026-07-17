@@ -8,7 +8,7 @@ from typing import Any, Iterable
 from backend.app.services.resource_artifacts import validate_resource_content
 
 
-RESOURCE_PROMPT_VERSION = "resource-v4.1"
+RESOURCE_PROMPT_VERSION = "resource-v4.2"
 RESOURCE_REVIEW_PROMPT_VERSION = "resource-review-v4.0"
 STRICT_MODEL_TYPES = {"quiz", "code", "animation"}
 EVIDENCE_FALLBACK_TYPES = {"doc", "mindmap", "slide"}
@@ -252,6 +252,10 @@ def _is_safe_mermaid_flowchart(source: str) -> bool:
         return False
     pairs = (("[", "]"), ("{", "}"), ("(", ")"))
     if any(text.count(opening) != text.count(closing) for opening, closing in pairs):
+        return False
+    # Mermaid closes an unquoted node label at the first `]`. Nested brackets such as
+    # `Q[队列: [S]]` therefore pass a count-only check but fail in the browser.
+    if re.search(r"\[(?!\")[^\]\n]*\[", text):
         return False
     # A vertical bar inside a node label (for example `[3, 5, |8|]`) is parsed as
     # edge-label syntax by Mermaid and is the concrete failure seen in production.

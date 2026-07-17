@@ -557,14 +557,10 @@ function renderWithProviders(ui: ReactNode) {
   render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
 }
 
-async function revealSecondaryActions(user: ReturnType<typeof userEvent.setup>, container: HTMLElement = document.body) {
+async function revealSecondaryActions(_user: ReturnType<typeof userEvent.setup>, container: HTMLElement = document.body) {
   await waitFor(() => {
-    expect(within(container).queryAllByRole("button", { name: "更多" }).length).toBeGreaterThan(0);
+    expect(within(container).queryAllByRole("button", { name: /来源/ }).length).toBeGreaterThan(0);
   });
-  const buttons = within(container).getAllByRole("button", { name: "更多" });
-  for (const button of buttons) {
-    if (button.getAttribute("aria-expanded") !== "true") await user.click(button);
-  }
 }
 
 function renderCoursePage(options: CoursePageOptions = {}) {
@@ -1224,7 +1220,9 @@ describe("CourseSpacePage course tutor sessions", () => {
 
     expect(within(loopActions).getByRole("button", { name: /来源/ })).toBeInTheDocument();
     expect(within(loopActions).getByRole("button", { name: /生成资源/ })).toBeInTheDocument();
-    expect(within(loopActions).queryByRole("button", { name: /学习路径/ })).not.toBeInTheDocument();
+    expect(within(loopActions).getByRole("link", { name: /学习路径/ }).getAttribute("href")).toContain(
+      `${PATHS.path}?course_id=808`
+    );
     expect(within(loopActions).getByRole("link", { name: /进入练习/ }).getAttribute("href")).toContain(
       `${PATHS.practice}?course_id=808`
     );

@@ -1076,6 +1076,7 @@ export function CourseSpacePage() {
                                 resourceCount={generatedResources.length}
                                 activePanel={turnPanel}
                                 isSpeaking={speech.activeSpeechId === message.id}
+                                pathHref={pathHref}
                                 practiceHref={practiceHref}
                                 reportHref={reportHref}
                                 onRecommendedAction={() => runRecommendedAction(message.id, citations, recommendation)}

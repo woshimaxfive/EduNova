@@ -133,7 +133,7 @@ export function CourseProgressDrawer({
             <div><dt>待确认</dt><dd>{weaknessSummary?.pending_count ?? 0}</dd></div>
             <div><dt>待复习</dt><dd>{weaknessSummary?.confirmed_count ?? 0}</dd></div>
             <div><dt>复习中</dt><dd>{weaknessSummary?.reviewing_count ?? 0}</dd></div>
-            <div><dt>已完成</dt><dd>{weaknessSummary?.completed_count ?? 0}</dd></div>
+            <div><dt>已攻克</dt><dd>{weaknessSummary?.completed_count ?? 0}</dd></div>
             <div><dt>候选证据</dt><dd>{weaknessSummary?.candidate_event_count ?? 0}</dd></div>
           </dl>
           <InlineFeedback
@@ -143,11 +143,13 @@ export function CourseProgressDrawer({
           />
           {weaknessItems.length > 0 ? (
             <ul className="course-progress-weaknesses">
-              {weaknessItems.map((item) => (
+              {weaknessItems.map((item) => {
+                const due = isReviewDue(item.next_review_at);
+                return (
                 <li key={item.id}>
                   <div>
                     <strong>{item.title}</strong>
-                    <span>{weaknessStatusLabel(item.status)}</span>
+                    <span>{weaknessStatusLabel(item.status, due)}</span>
                     {formatReviewDate(item.next_review_at) ? <small>下次复习 {formatReviewDate(item.next_review_at)}</small> : null}
                     {item.diagnosis?.misconception ? <p><b>当前错因：</b>{item.diagnosis.misconception}</p> : null}
                     {item.diagnosis?.missing_concepts.length ? <p><b>待补概念：</b>{item.diagnosis.missing_concepts.join("、")}</p> : null}
@@ -173,9 +175,9 @@ export function CourseProgressDrawer({
                         <ArrowRight size={13} weight="bold" aria-hidden="true" />
                       </button>
                     ))}
-                    {item.status === "confirmed" || item.status === "reviewing" || item.status === "completed" ? (
+                    {item.status === "confirmed" || item.status === "reviewing" || due ? (
                       <button type="button" onClick={() => onPracticeWeakness(item)}>
-                        <span>{item.status === "completed" ? "再次巩固" : "针对性再测"}</span>
+                        <span>{due ? "到期复习" : "针对性再测"}</span>
                         <ArrowRight size={13} weight="bold" aria-hidden="true" />
                       </button>
                     ) : null}
@@ -187,7 +189,8 @@ export function CourseProgressDrawer({
                     ) : null}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           ) : learningStateError ? null : <p className="course-progress-empty">完成问答或练习后，待确认弱点会出现在这里。</p>}
         </section>
@@ -198,10 +201,10 @@ export function CourseProgressDrawer({
   );
 }
 
-function weaknessStatusLabel(status: string) {
+function weaknessStatusLabel(status: string, due = false) {
   if (status === "confirmed") return "待复习";
   if (status === "reviewing") return "复习中";
-  if (status === "completed") return "已完成";
+  if (status === "completed") return due ? "到期复习" : "已攻克";
   if (status === "dismissed") return "已忽略";
   return "待确认";
 }
@@ -219,4 +222,10 @@ function formatReviewDate(value: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
+}
+
+function isReviewDue(value: string | null) {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) && timestamp <= Date.now();
 }

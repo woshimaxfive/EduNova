@@ -223,6 +223,37 @@ def test_active_weakness_next_action_carries_review_item_identity() -> None:
     assert action.weakness_item_id == "61"
 
 
+def test_completed_weakness_waits_until_review_date_then_becomes_due_review() -> None:
+    weakness = WeaknessReviewItem(
+        id=61,
+        user_id=1,
+        course_id=10,
+        knowledge_point_id=41,
+        title="线性回归",
+        source_type="practice_assessment",
+        status="completed",
+        next_review_at=datetime.now(UTC) + timedelta(days=7),
+        created_at=NOW,
+        updated_at=NOW,
+    )
+    db = MagicMock()
+    db.scalars.side_effect = [[weakness], []]
+    db.scalar.return_value = None
+
+    action = service_with(db, mastery(point(41, "线性回归", 98)))._course_action(make_user(), make_course())
+    assert action.kind == "generate_path"
+
+    weakness.next_review_at = datetime.now(UTC) - timedelta(minutes=1)
+    db = MagicMock()
+    db.scalars.side_effect = [[weakness], []]
+    db.scalar.return_value = None
+    action = service_with(db, mastery(point(41, "线性回归", 98)))._course_action(make_user(), make_course())
+
+    assert action.kind == "practice_weakness"
+    assert action.label == "到期复习：线性回归"
+    assert action.weakness_item_id == "61"
+
+
 def test_completed_path_with_new_practice_recommends_report() -> None:
     path = make_path()
     task = make_task("completed")

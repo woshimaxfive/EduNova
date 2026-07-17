@@ -62,6 +62,7 @@ export function ReportDashboard({
 }: ReportDashboardProps) {
   const summary = masteryMap?.summary;
   const masteryPoints = Array.isArray(masteryMap?.points) ? masteryMap.points : [];
+  const weaknessProgress = report?.report.weakness_progress;
   const snapshotTitle = freshness === "unavailable"
     ? "报告快照暂时无法读取"
     : report?.status === "ready"
@@ -173,6 +174,26 @@ export function ReportDashboard({
           <p>{snapshotSummary}</p>
         </div>
         <small>{freshness === "unavailable" ? "报告读取失败，未判定为空报告" : report?.created_at ? `生成于 ${new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(report.created_at))}` : "等待真实练习证据"}</small>
+      </section>
+
+      <section className="report-resource-usage" aria-labelledby="report-weakness-progress-heading">
+        <header>
+          <div><span>阶段晋级</span><h2 id="report-weakness-progress-heading">薄弱点进展</h2></div>
+          <small>{weaknessProgress?.resolved_count ?? 0} 项已攻克</small>
+        </header>
+        {weaknessProgress?.recent_resolutions?.length ? (
+          <ul>
+            {weaknessProgress.recent_resolutions.map((item) => (
+              <li key={`${item.title}-${item.next_review_at ?? "resolved"}`}>
+                <strong>{item.title}</strong>
+                <span>{item.latest_score === null ? "已通过再测" : `再测 ${item.latest_score} 分`}</span>
+                {item.improvement === null ? null : <span>提升 {item.improvement} 分</span>}
+                <span>{item.next_review_at ? `下次复习 ${new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(new Date(item.next_review_at))}` : "等待复习安排"}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p>完成针对性再测后，这里会展示从发现薄弱点到攻克的真实进展。</p>}
+        {(weaknessProgress?.due_review_count ?? 0) > 0 ? <p>{weaknessProgress?.due_review_count} 项已到间隔复习时间。</p> : null}
       </section>
 
       <section className="report-resource-usage" aria-labelledby="report-resource-usage-heading">

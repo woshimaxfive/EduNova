@@ -1454,7 +1454,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(weaknessRegion).toHaveTextContent(/待确认\s*1/);
     expect(weaknessRegion).toHaveTextContent(/待复习\s*1/);
     expect(weaknessRegion).toHaveTextContent(/复习中\s*1/);
-    expect(weaknessRegion).toHaveTextContent(/已完成\s*1/);
+    expect(weaknessRegion).toHaveTextContent(/已攻克\s*1/);
     expect(within(weaknessRegion).getByRole("button", { name: "确认 启发式搜索" })).toBeInTheDocument();
     expect(within(weaknessRegion).getByRole("button", { name: "忽略 启发式搜索" })).toBeInTheDocument();
     expect(within(weaknessRegion).getByRole("button", { name: "开始复习 反向传播" })).toBeInTheDocument();

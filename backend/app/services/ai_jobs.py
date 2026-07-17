@@ -18,6 +18,7 @@ from backend.app.core.observability import get_tracer
 from backend.app.db.session import SessionLocal
 from backend.app.models import AiJob, Course, GeneratedResource, KnowledgeChunk, KnowledgePoint, LearningPath, LearningTask, Material, MaterialChunk, ModelSetting, PracticeAnswer, PracticeSession, User, WeaknessReviewItem
 from backend.app.schemas.ai_jobs import AiJobListResponse, AiJobResponse, ai_job_to_api, iso_timestamp
+from backend.app.services.mastery_progress import is_review_due
 
 
 ACTIVE_STATUSES = {"queued", "running", "cancelling"}
@@ -617,7 +618,7 @@ class AiJobService:
                     WeaknessReviewItem.course_id == course_id,
                 )
             )
-            if weakness is None or weakness.status not in {"confirmed", "reviewing"}:
+            if weakness is None or (weakness.status not in {"confirmed", "reviewing"} and not is_review_due(weakness)):
                 raise AiJobNotFoundError("待复习弱点不存在、状态不可用或无权访问。")
             if weakness.knowledge_point_id not in point_ids:
                 raise AiJobValidationError("针对性练习的知识点必须与待复习弱点一致。")
@@ -959,7 +960,7 @@ class AiJobService:
                             WeaknessReviewItem.course_id == course_id,
                         )
                     )
-                    if weakness is None or weakness.status not in {"confirmed", "reviewing"}:
+                    if weakness is None or (weakness.status not in {"confirmed", "reviewing"} and not is_review_due(weakness)):
                         raise AiJobNotFoundError("待复习弱点不存在、状态不可用或无权访问。")
             elif request.get("practice_session_id") is not None:
                 session = self.repository.get_practice_session_for_user(user.id, int(request["practice_session_id"]))

@@ -332,6 +332,7 @@ class ReportGraphRunner:
             "mastery_update": deterministic.get("mastery_update"),
             "trend": deterministic.get("trend"),
             "weakness_titles": [safe_text(item.get("title"), limit=120) for item in deterministic.get("weakness_list", [])],
+            "weakness_progress": deterministic.get("weakness_progress"),
             "evidence_summary": deterministic.get("evidence_summary"),
             "deterministic_statistics": deterministic.get("deterministic_statistics"),
         }
@@ -402,7 +403,7 @@ class ReportGraphRunner:
         report = state.get("report_json", {})
         deterministic = state.get("deterministic_report", {})
         risks: list[str] = []
-        for key in ("mastery_update", "weakness_list", "evidence_refs", "trend", "evidence_summary", "deterministic_statistics", "quality"):
+        for key in ("mastery_update", "weakness_list", "weakness_progress", "evidence_refs", "trend", "evidence_summary", "deterministic_statistics", "quality"):
             if report.get(key) != deterministic.get(key):
                 risks.append("deterministic_evidence_changed")
         if contains_sensitive_text(report.get("summary")) or contains_sensitive_text(report.get("next_step_suggestions")):
@@ -414,6 +415,14 @@ class ReportGraphRunner:
                 deterministic.get("trend", {}).get("score_delta"),
                 *deterministic.get("trend", {}).get("scores", []),
                 *deterministic.get("deterministic_statistics", {}).values(),
+                deterministic.get("weakness_progress", {}).get("active_count"),
+                deterministic.get("weakness_progress", {}).get("resolved_count"),
+                deterministic.get("weakness_progress", {}).get("due_review_count"),
+                *[
+                    number
+                    for item in deterministic.get("weakness_progress", {}).get("recent_resolutions", [])
+                    for number in (item.get("baseline_score"), item.get("latest_score"), item.get("improvement"))
+                ],
             ]
             if isinstance(value, (int, float))
         }

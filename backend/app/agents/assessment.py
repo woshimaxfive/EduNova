@@ -22,6 +22,7 @@ from backend.app.models import PracticeAnswer, PracticeSession, User, WeaknessRe
 from backend.app.schemas.practice import PracticeSessionDetail, SubmitPracticeAnswerItem, session_to_api
 from backend.app.services.practice import EvaluatedAnswer, PracticeGenerationError, PracticeService, PracticeValidationError
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
+from backend.app.services.mastery_progress import is_review_due
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.semantic_grading import SemanticShortAnswerGrader
 from backend.app.services.content_locale import china_first_content_policy
@@ -434,6 +435,11 @@ class AssessmentGraphRunner:
                 )
                 for question in persisted_questions
             ]
+            target_weakness = state.get("target_weakness")
+            if target_weakness is not None and target_weakness.status == "completed":
+                target_weakness.status = "reviewing"
+                target_weakness.next_review_at = now + timedelta(days=3)
+                target_weakness.updated_at = now
             self.service.repository.replace_answers_for_session(session.id, placeholders)
             self.service.repository.commit()
             self.service.repository.refresh(session)
@@ -1170,7 +1176,7 @@ class AssessmentGraphRunner:
         )
         if item is None:
             raise PracticeValidationError("待复习弱点不存在或当前用户无权访问。")
-        if item.status not in {"confirmed", "reviewing"}:
+        if item.status not in {"confirmed", "reviewing"} and not is_review_due(item):
             raise PracticeValidationError("该薄弱点当前不能创建针对性练习。")
         if item.knowledge_point_id is None or item.knowledge_point_id not in selected_point_ids:
             raise PracticeValidationError("针对性练习的知识点必须与待复习弱点一致。")

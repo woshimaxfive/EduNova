@@ -19,6 +19,7 @@ from backend.app.models import (
 )
 from backend.app.schemas.learning import LearningNextAction
 from backend.app.services.courses import CourseService
+from backend.app.services.mastery_progress import is_review_due
 
 
 class LearningActionCourseNotFoundError(LookupError):
@@ -121,6 +122,17 @@ class LearningNextActionService:
                 course_id=course.id,
                 knowledge_point_id=active_weakness.knowledge_point_id,
                 weakness_item_id=active_weakness.id,
+            )
+
+        due_review = next((item for item in weaknesses if is_review_due(item)), None)
+        if due_review is not None:
+            return self._action(
+                "practice_weakness",
+                f"到期复习：{due_review.title}",
+                "这个知识点已攻克并到达间隔复习时间，用一次短练习确认掌握仍然稳定。",
+                course_id=course.id,
+                knowledge_point_id=due_review.knowledge_point_id,
+                weakness_item_id=due_review.id,
             )
 
         mastery = self.course_service.get_mastery_map(user, course.id)

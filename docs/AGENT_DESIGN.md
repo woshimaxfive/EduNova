@@ -212,3 +212,9 @@ PathPlanning、Assessment、Report、Resource、Profile 及语义决策节点通
 - 简答题必须点名确定的作答对象，但不得把完整参考答案或结构化结论写进题干；答案与课程引用继续由规则锁定。
 - CourseAnswerGraph 的 Review 节点只接收受限课程/网页短摘，执行逐主张支持关系核验。Repair 节点既删除来源不支持的定性事实，也不得把来源已经说明的事实改成“资料未说明”。
 - 路径与练习仍允许一次受预算约束的定向修订；网络超时不重放大请求，任何失败不跨 Provider。
+
+## Phase 41 学习状态一致性边界
+
+- AssessmentGraph 只负责本次绑定练习的生成、评分和复习项状态转换；当前掌握度由确定性 Service 按最近完整会话派生，模型不能直接写分数。
+- ReportGraph 锁定 `weakness_progress`，模型只能围绕活动、已攻克、到期复习及分数提升生成叙事，不能改写这些统计。
+- 到期复习沿用原 `weakness_item_id`。练习题成功持久化后才从 `completed` 转回 `reviewing`，模型或队列失败不会提前撤销已攻克状态。

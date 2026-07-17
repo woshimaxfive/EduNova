@@ -2673,3 +2673,10 @@ Phase 31 不新增接口路径或数据库迁移。现有资料解析进度对�
 - `PracticeSessionDetail` 增加 `targeted_weakness_id`、`targeted_weakness_title`；`closure_update` 增加 `targeted_weakness_status`、`targeted_weakness_improvement` 和 `targeted_weakness_passed`。
 - `GET /api/v1/learning/next-action` 对明确的活动复习项返回可选 `weakness_item_id`；低掌握度但尚未形成复习项时仍只返回知识点 ID。
 - 再测通过门槛为目标知识点全部题目已评分且平均分不低于 80。未评分或未达标时接口如实返回未通过并保留 `reviewing`。
+
+## Phase 41 学习状态一致性合同
+
+- `GET /api/v1/courses/{course_id}/mastery-map` 按知识点聚合最近一次完整练习会话，返回该次尝试的平均分作为当前 `score`；更早会话不丢失，继续用于报告趋势和证据计数。
+- `completed` 弱点在 `next_review_at` 前不进入下一行动；到期后返回 `practice_weakness`，并携带原 `weakness_item_id` 与“到期复习”语义。
+- 练习生成接口只额外接受已经到期的 `completed` 项。练习成功创建后该项转为 `reviewing`；尚未到期、已忽略或归属不匹配仍拒绝。
+- 报告内容兼容增加 `weakness_progress`：`active_count`、`resolved_count`、`due_review_count` 和最多 5 条 `recent_resolutions`。旧报告缺少该字段时前端按空进展显示。

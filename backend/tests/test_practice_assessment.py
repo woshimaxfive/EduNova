@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import json
 from typing import Any
@@ -904,6 +904,17 @@ def test_targeted_weakness_retest_uses_diagnosis_and_completes_only_after_passin
     assert weakness.status == "completed"
     assert weakness.diagnosis_json["attempt_count"] == 1
     assert weakness.diagnosis_json["last_practice_session_id"] == created["id"]
+    report = make_report_service(repo)._build_report(
+        repo.courses[0],
+        repo.knowledge_points,
+        repo.weakness_items,
+        repo.list_answers_for_session(int(created["id"])),
+        90,
+    )
+    assert report["weakness_progress"]["active_count"] == 0
+    assert report["weakness_progress"]["resolved_count"] == 1
+    assert report["weakness_progress"]["due_review_count"] == 0
+    assert report["weakness_progress"]["recent_resolutions"][0]["improvement"] == 50
 
 
 def test_targeted_weakness_retest_rejects_mismatched_point_and_ungraded_does_not_complete() -> None:
@@ -939,6 +950,31 @@ def test_targeted_weakness_retest_rejects_mismatched_point_and_ungraded_does_not
 
     assert result["grading_status"] == "ungraded"
     assert result["closure_update"]["targeted_weakness_passed"] is False
+
+
+def test_due_completed_weakness_can_start_spaced_retest() -> None:
+    repo = make_repo()
+    weakness = WeaknessReviewItem(
+        id=701,
+        user_id=1,
+        course_id=101,
+        knowledge_point_id=401,
+        title="人工智能概述",
+        source_type="practice_assessment",
+        diagnosis_json={"baseline_score": 40, "latest_score": 90},
+        status="completed",
+        next_review_at=NOW - timedelta(minutes=1),
+        recommended_resource_ids=[],
+        created_at=NOW - timedelta(days=8),
+        updated_at=NOW - timedelta(days=7),
+    )
+    repo.weakness_items.append(weakness)
+
+    created = make_practice_service(repo).create_session(make_user(), 101, [401], 1, "adaptive", weakness_item_id=701)
+
+    assert created.targeted_weakness_id == "701"
+    assert weakness.status == "reviewing"
+    assert weakness.next_review_at > NOW
     assert weakness.status == "reviewing"
 
 

@@ -23,6 +23,21 @@ class ResourceUsageCounts(BaseModel):
     not_helpful: int = 0
 
 
+class WeaknessResolution(BaseModel):
+    title: str
+    baseline_score: int | None = None
+    latest_score: int | None = None
+    improvement: int | None = None
+    next_review_at: str | None = None
+
+
+class WeaknessProgress(BaseModel):
+    active_count: int = 0
+    resolved_count: int = 0
+    due_review_count: int = 0
+    recent_resolutions: list[WeaknessResolution] = Field(default_factory=list)
+
+
 class AssessmentReportContent(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -34,6 +49,7 @@ class AssessmentReportContent(BaseModel):
     review_queue_updates: list[dict] = Field(default_factory=list)
     profile_changes: list[str] = Field(default_factory=list)
     resource_usage_summary: dict[str, ResourceUsageCounts] = Field(default_factory=dict)
+    weakness_progress: WeaknessProgress = Field(default_factory=WeaknessProgress)
 
 
 class ReportEnvelope(BaseModel):

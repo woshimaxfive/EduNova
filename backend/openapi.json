@@ -1491,6 +1491,9 @@
             },
             "title": "Weakness List",
             "type": "array"
+          },
+          "weakness_progress": {
+            "$ref": "#/components/schemas/WeaknessProgress"
           }
         },
         "title": "AssessmentReportContent",
@@ -9413,6 +9416,91 @@
           }
         },
         "title": "UpdateTutorSessionRequest",
+        "type": "object"
+      },
+      "WeaknessProgress": {
+        "properties": {
+          "active_count": {
+            "default": 0,
+            "title": "Active Count",
+            "type": "integer"
+          },
+          "due_review_count": {
+            "default": 0,
+            "title": "Due Review Count",
+            "type": "integer"
+          },
+          "recent_resolutions": {
+            "items": {
+              "$ref": "#/components/schemas/WeaknessResolution"
+            },
+            "title": "Recent Resolutions",
+            "type": "array"
+          },
+          "resolved_count": {
+            "default": 0,
+            "title": "Resolved Count",
+            "type": "integer"
+          }
+        },
+        "title": "WeaknessProgress",
+        "type": "object"
+      },
+      "WeaknessResolution": {
+        "properties": {
+          "baseline_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Score"
+          },
+          "improvement": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Improvement"
+          },
+          "latest_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Score"
+          },
+          "next_review_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Review At"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "WeaknessResolution",
         "type": "object"
       }
     }

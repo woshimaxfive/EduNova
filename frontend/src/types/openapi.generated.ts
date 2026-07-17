@@ -2089,6 +2089,7 @@ export interface components {
             weakness_list?: {
                 [key: string]: unknown;
             }[];
+            weakness_progress?: components["schemas"]["WeaknessProgress"];
         } & {
             [key: string]: unknown;
         };
@@ -4800,6 +4801,39 @@ export interface components {
             selected_material_ids?: number[] | null;
             /** Title */
             title?: string | null;
+        };
+        /** WeaknessProgress */
+        WeaknessProgress: {
+            /**
+             * Active Count
+             * @default 0
+             */
+            active_count: number;
+            /**
+             * Due Review Count
+             * @default 0
+             */
+            due_review_count: number;
+            /** Recent Resolutions */
+            recent_resolutions?: components["schemas"]["WeaknessResolution"][];
+            /**
+             * Resolved Count
+             * @default 0
+             */
+            resolved_count: number;
+        };
+        /** WeaknessResolution */
+        WeaknessResolution: {
+            /** Baseline Score */
+            baseline_score?: number | null;
+            /** Improvement */
+            improvement?: number | null;
+            /** Latest Score */
+            latest_score?: number | null;
+            /** Next Review At */
+            next_review_at?: string | null;
+            /** Title */
+            title: string;
         };
     };
     responses: never;

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Protocol
 
 from sqlalchemy import select
@@ -21,6 +22,7 @@ from backend.app.models import (
 from backend.app.schemas.reports import ReportEnvelope, empty_report, report_to_api
 from backend.app.schemas.personalization import PersonalizationFreshnessResponse
 from backend.app.services.learner_context import context_service_from_repository
+from backend.app.services.mastery_progress import is_review_due
 
 
 class ReportNotFoundError(Exception):
@@ -237,6 +239,8 @@ class ReportService:
             for point_id in sorted(weak_point_ids)
         ]
         active_weaknesses = [item for item in weaknesses if item.status in {"confirmed", "reviewing"}]
+        completed_weaknesses = [item for item in weaknesses if item.status == "completed"]
+        now = datetime.now(UTC)
         suggestions = [
             f"优先复习《{course.title}》中得分较低的知识点。",
             "回到课程空间查看引用，再完成下一轮练习。",
@@ -269,6 +273,28 @@ class ReportService:
                 }
                 for item in active_weaknesses[:5]
             ],
+            "weakness_progress": {
+                "active_count": len(active_weaknesses),
+                "resolved_count": len(completed_weaknesses),
+                "due_review_count": sum(1 for item in completed_weaknesses if is_review_due(item, now)),
+                "recent_resolutions": [
+                    {
+                        "title": item.title,
+                        "baseline_score": (item.diagnosis_json or {}).get("baseline_score"),
+                        "latest_score": (item.diagnosis_json or {}).get("latest_score"),
+                        "improvement": (
+                            int((item.diagnosis_json or {}).get("latest_score")) - int((item.diagnosis_json or {}).get("baseline_score"))
+                            if str((item.diagnosis_json or {}).get("latest_score") or "").isdigit()
+                            and str((item.diagnosis_json or {}).get("baseline_score") or "").isdigit()
+                            else None
+                        ),
+                        "next_review_at": item.next_review_at.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+                        if item.next_review_at is not None
+                        else None,
+                    }
+                    for item in sorted(completed_weaknesses, key=lambda value: (value.updated_at, value.id), reverse=True)[:5]
+                ],
+            },
         }
 
     @staticmethod

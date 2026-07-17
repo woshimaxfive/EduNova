@@ -53,6 +53,7 @@ from backend.app.schemas.courses import (
 from backend.app.schemas.profiles import normalize_profile_json
 from backend.app.services.material_retrieval import MaterialChunkingService
 from backend.app.services.learner_context import context_service_from_repository
+from backend.app.services.mastery_progress import is_review_due, latest_practice_score
 from backend.app.services.model_settings import ModelSettingsService
 from backend.app.core.errors import NotFoundDomainError, ValidationDomainError
 
@@ -915,15 +916,17 @@ class CourseService:
         confidence = min(0.95, 0.55 + max(0, evidence_count - 1) * 0.08) if evidence_count else 0.0
 
         if answered:
-            score = round(sum(CourseService._practice_answer_score(answer) for answer in answered) / len(answered))
+            score = latest_practice_score(answered)
+            if score is None:
+                score = 0
             if active_weaknesses or score < 60:
                 return "weak", min(score, 59), evidence_count, confidence, last_assessed_at
-            if any(item.next_review_at is not None and item.next_review_at <= now for item in completed_weaknesses):
+            if any(is_review_due(item, now) for item in completed_weaknesses):
                 return "recommended_review", score, evidence_count, confidence, last_assessed_at
             return ("mastered" if score >= 80 else "learning"), score, evidence_count, confidence, last_assessed_at
         if active_weaknesses:
             return "weak", 35, evidence_count, confidence, last_assessed_at
-        if any(item.next_review_at is not None and item.next_review_at <= now for item in completed_weaknesses):
+        if any(is_review_due(item, now) for item in completed_weaknesses):
             return "recommended_review", 55, evidence_count, confidence, last_assessed_at
         if completed_weaknesses:
             return "learning", 65, evidence_count, confidence, last_assessed_at

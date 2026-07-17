@@ -26,6 +26,7 @@ from backend.app.models import (
 from backend.app.schemas.profiles import PROFILE_DIMENSIONS, normalize_profile_json
 from backend.app.schemas.personalization import PersonalizationFreshnessResponse
 from backend.app.services.resource_feedback import aggregate_resource_interactions
+from backend.app.services.mastery_progress import latest_practice_score
 
 
 @dataclass(frozen=True)
@@ -326,13 +327,9 @@ class LearnerContextService:
         result: list[int] = []
         for point in knowledge_points:
             point_answers = answers_by_point.get(point.id, [])
-            answer_scores = [
-                int((answer.feedback_json or {})["score"])
-                for answer in point_answers
-                if answer.answer_text is not None and (answer.feedback_json or {}).get("score") is not None
-            ]
-            if answer_scores:
-                result.append(round(sum(answer_scores) / len(answer_scores)))
+            current_score = latest_practice_score(point_answers)
+            if current_score is not None:
+                result.append(current_score)
             elif point.id in weakness_ids:
                 result.append(35)
         return result

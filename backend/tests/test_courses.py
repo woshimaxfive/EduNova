@@ -404,10 +404,18 @@ def make_weakness_item(
     return item
 
 
-def make_practice_answer(answer_id: int, point_id: int, score: int, is_correct: bool) -> PracticeAnswer:
+def make_practice_answer(
+    answer_id: int,
+    point_id: int,
+    score: int,
+    is_correct: bool,
+    *,
+    session_id: int = 900,
+    created_at: datetime | None = None,
+) -> PracticeAnswer:
     return PracticeAnswer(
         id=answer_id,
-        session_id=900,
+        session_id=session_id,
         user_id=1,
         question_json={
             "id": f"q-{answer_id}",
@@ -419,7 +427,7 @@ def make_practice_answer(answer_id: int, point_id: int, score: int, is_correct: 
         answer_text="学生作答",
         feedback_json={"score": score, "message": "规则批改"},
         is_correct=is_correct,
-        created_at=datetime(2026, 7, 5, 9, 0, tzinfo=UTC),
+        created_at=created_at or datetime(2026, 7, 5, 9, 0, tzinfo=UTC),
     )
 
 
@@ -1162,6 +1170,26 @@ def test_mastery_map_uses_practice_answers_to_mark_weak_and_mastered_points() ->
     assert mastery["summary"]["average_score"] == 50
     assert mastery["summary"]["weak_count"] == 1
     assert mastery["summary"]["mastered_count"] == 1
+
+
+def test_mastery_map_uses_latest_attempt_instead_of_lifetime_average() -> None:
+    completed = make_weakness_item(55, 1, 101, knowledge_point_id=401, status="completed")
+    completed.next_review_at = datetime(2026, 7, 20, 8, 0, tzinfo=UTC)
+    repo = FakeCourseRepository(
+        courses=[make_course()],
+        knowledge_points=[KnowledgePoint(id=401, course_id=101, title="启发式搜索", summary="摘要", chapter="第一章", order_index=0)],
+        weakness_items=[completed],
+        practice_answers=[
+            make_practice_answer(901, 401, score=3, is_correct=False, session_id=900, created_at=datetime(2026, 7, 5, 9, 0, tzinfo=UTC)),
+            make_practice_answer(902, 401, score=98, is_correct=True, session_id=901, created_at=datetime(2026, 7, 6, 9, 0, tzinfo=UTC)),
+        ],
+    )
+
+    mastery = as_dict(make_service(repo).get_mastery_map(make_user(), 101))
+
+    assert mastery["points"][0]["status"] == "mastered"
+    assert mastery["points"][0]["score"] == 98
+    assert mastery["summary"]["average_score"] == 98
 
 
 def test_create_course_route_returns_envelope() -> None:

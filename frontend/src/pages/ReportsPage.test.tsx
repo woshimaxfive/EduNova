@@ -114,6 +114,14 @@ const readyReport = {
     resource_usage_summary: {
       doc: { opened: 2, started: 1, completed: 1, helpful: 1, too_easy: 0, too_hard: 0, not_helpful: 0 },
       video: { opened: 1, started: 1, completed: 0, helpful: 0, too_easy: 0, too_hard: 1, not_helpful: 0 }
+    },
+    weakness_progress: {
+      active_count: 0,
+      resolved_count: 1,
+      due_review_count: 0,
+      recent_resolutions: [
+        { title: "启发式搜索", baseline_score: 38, latest_score: 92, improvement: 54, next_review_at: "2026-07-12T10:00:00Z" }
+      ]
     }
   },
   created_at: "2026-07-05T10:10:00Z"
@@ -398,6 +406,8 @@ describe("ReportsPage", () => {
     expect(screen.getByText("60%")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "资源使用概览" })).toHaveTextContent("外部视频");
     expect(screen.getByRole("region", { name: "资源使用概览" })).toHaveTextContent("偏难 1");
+    expect(screen.getByRole("region", { name: "薄弱点进展" })).toHaveTextContent("1 项已攻克");
+    expect(screen.getByRole("region", { name: "薄弱点进展" })).toHaveTextContent("再测 92 分");
     const reportDetailsTrigger = screen.getByRole("button", { name: "报告详情" });
     await user.click(reportDetailsTrigger);
     const closeDetails = screen.getByRole("button", { name: "关闭报告详情" });

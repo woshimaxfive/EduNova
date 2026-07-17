@@ -1051,3 +1051,5 @@ Phase 31 不新增表或迁移。大型资料仍使用现有资料、解析版�
 Phase 38 不新增数据表或 Alembic 迁移。新生成路径在既有 `learning_paths.plan_json` 保存 `generation_mode=model_generated` 与 `planning_input_hash`；本节学习安排继续在 `learning_tasks.learning_bundle_json` 保存 `learning_problem`、`example_direction`、教学策略、难度和画像因素代码。练习跨批次差异字段写入既有 `practice_answers.question_json`，模型任务聚合写入既有 `ai_jobs.progress_json/result_json`。历史 `model_enhanced`、`deterministic_source`、`legacy` 和缺字段 JSON 保持可读。
 
 Phase 40 不新增表或迁移。`weakness_review_queue.diagnosis_json` 增加兼容性进度键：`baseline_score`、`latest_score`、`attempt_count`、最多 8 个 `practice_session_ids` 和 `last_practice_session_id`；历史缺字段按空进度读取。`practice_sessions.assessment_json` 可保存 `targeted_weakness_id/title` 及再测状态、提升值和是否通过。API 只返回安全派生字段，JSON 中的原始作答或内部诊断字段不得透传。
+
+Phase 41 仍不新增表或迁移。当前掌握度按 `practice_answers.session_id` 归组后选择最新会话，`weakness_review_queue.next_review_at` 区分“已攻克等待巩固”和“到期复习”。`assessment_reports.report_json.weakness_progress` 是可选兼容字段，只保存聚合数量、标题、起点分、最新分、提升值和下次复习时间，不保存原始作答或模型原文。

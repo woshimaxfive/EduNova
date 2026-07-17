@@ -48,6 +48,18 @@ export type AssessmentReportContent = {
       not_helpful: number;
     }
   >>;
+  weakness_progress?: {
+    active_count: number;
+    resolved_count: number;
+    due_review_count: number;
+    recent_resolutions: Array<{
+      title: string;
+      baseline_score: number | null;
+      latest_score: number | null;
+      improvement: number | null;
+      next_review_at: string | null;
+    }>;
+  };
   trend?: {
     direction: "improved" | "declined" | "stable" | "insufficient";
     score_delta: number;

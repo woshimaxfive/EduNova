@@ -22,6 +22,7 @@ type PracticeDrawerProps = {
   isGenerating: boolean;
   canGenerate: boolean;
   error: string;
+  courseLocked?: boolean;
   onCourseChange: (courseId: string) => void;
   onPointChange: (pointId: string) => void;
   onQuestionCountChange: (count: number) => void;
@@ -43,6 +44,7 @@ export function PracticeDrawer({
   isGenerating,
   canGenerate,
   error,
+  courseLocked = false,
   onCourseChange,
   onPointChange,
   onQuestionCountChange,
@@ -65,12 +67,16 @@ export function PracticeDrawer({
         {mode === "settings" ? (
           <>
             <div className="practice-drawer-content practice-settings-form">
-              <label>
-                <span>课程</span>
-                <select aria-label="选择课程" value={courseId} onChange={(event) => onCourseChange(event.target.value)}>
-                  {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
-                </select>
-              </label>
+              {courseLocked ? (
+                <div className="practice-locked-course"><span>当前课程</span><strong>{courses.find((course) => course.id === courseId)?.title ?? "当前课程"}</strong></div>
+              ) : (
+                <label>
+                  <span>课程</span>
+                  <select aria-label="选择课程" value={courseId} onChange={(event) => onCourseChange(event.target.value)}>
+                    {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
+                  </select>
+                </label>
+              )}
               <label>
                 <span>知识点</span>
                 <select aria-label="选择知识点" value={pointId} onChange={(event) => onPointChange(event.target.value)}>

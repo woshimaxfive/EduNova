@@ -437,8 +437,8 @@ describe("student interaction affordances", () => {
 
     const courseActions = screen.getByRole("navigation", { name: "课程辅助入口" });
     const expectedActions = [
-      ["自由练习", `${PATHS.practice}?course_id=808`],
-      ["查看报告", `${PATHS.reports}?course_id=808`]
+      ["自由练习", "/app/courses/808/practice"],
+      ["查看报告", "/app/courses/808/reports"]
     ] as const;
 
     for (const [label, path] of expectedActions) {

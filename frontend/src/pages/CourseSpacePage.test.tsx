@@ -1221,13 +1221,13 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(within(loopActions).getByRole("button", { name: /来源/ })).toBeInTheDocument();
     expect(within(loopActions).getByRole("button", { name: /生成资源/ })).toBeInTheDocument();
     expect(within(loopActions).getByRole("link", { name: /学习路径/ }).getAttribute("href")).toContain(
-      `${PATHS.path}?course_id=808`
+      "/app/courses/808/path?"
     );
     expect(within(loopActions).getByRole("link", { name: /进入练习/ }).getAttribute("href")).toContain(
-      `${PATHS.practice}?course_id=808`
+      "/app/courses/808/practice?"
     );
     expect(within(loopActions).getByRole("link", { name: /学习报告/ }).getAttribute("href")).toContain(
-      `${PATHS.reports}?course_id=808`
+      "/app/courses/808/reports?"
     );
     expect(within(loopActions).queryByRole("button", { name: /课堂协作轨迹/ })).not.toBeInTheDocument();
   });
@@ -1415,11 +1415,11 @@ describe("CourseSpacePage course tutor sessions", () => {
     const actionLinks = await screen.findByRole("navigation", { name: "课程辅助入口" });
     expect(within(actionLinks).getByRole("link", { name: "自由练习" })).toHaveAttribute(
       "href",
-      `${PATHS.practice}?course_id=808`
+      "/app/courses/808/practice"
     );
     expect(within(actionLinks).getByRole("link", { name: "查看报告" })).toHaveAttribute(
       "href",
-      `${PATHS.reports}?course_id=808`
+      "/app/courses/808/reports"
     );
   });
 

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 import { getMasteryMap, listCourses } from "../api/courses";
 import { createIdempotencyKey, createReportGenerationJob, type AiJob } from "../api/aiJobs";
@@ -13,7 +13,7 @@ import {
 } from "../api/exports";
 import { listRecentCompletedPracticeSessions } from "../api/practice";
 import { getLatestReport } from "../api/reports";
-import { PATHS } from "../app/routePaths";
+import { PATHS, buildCoursePracticeWorkspacePath } from "../app/routePaths";
 import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
 import { ReportDashboard } from "../components/reports/ReportDashboard";
 import { ReportDrawer, type ReportDetailTab, type ReportDrawerMode } from "../components/reports/ReportDrawer";
@@ -73,6 +73,7 @@ async function waitForExportJob(initialJob: ExportJob) {
 export function ReportsPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { courseId: routeCourseId } = useParams();
   const [drawerMode, setDrawerMode] = useState<ReportDrawerMode>(null);
   const [detailTab, setDetailTab] = useState<ReportDetailTab>("summary");
   const [localError, setLocalError] = useState("");
@@ -85,7 +86,8 @@ export function ReportsPage() {
 
   const coursesQuery = useQuery({ queryKey: ["report-courses"], queryFn: () => listCourses() });
   const courses = coursesQuery.data?.data ?? [];
-  const effectiveCourseId = searchParams.get("course_id") || courses[0]?.id || "";
+  const lockedCourseId = routeCourseId || "";
+  const effectiveCourseId = lockedCourseId || searchParams.get("course_id") || courses[0]?.id || "";
   const numericCourseId = Number(effectiveCourseId);
   const canUseCourse = Number.isFinite(numericCourseId) && numericCourseId > 0;
 
@@ -202,10 +204,11 @@ export function ReportsPage() {
 
   return (
     <>
-      <PageFrame title="学习报告" titleMode="sr-only" variant="wide-workspace">
+      <PageFrame title="学习报告" titleMode="sr-only" variant="wide-workspace" courseId={lockedCourseId ? Number(lockedCourseId) : null}>
         <section className="report-workspace" aria-label="学习报告数据工作台">
           <ReportWorkspaceToolbar
             courses={courses}
+            courseLocked={Boolean(lockedCourseId)}
             courseId={effectiveCourseId}
             freshness={freshness}
             createdAt={report?.created_at}
@@ -233,7 +236,7 @@ export function ReportsPage() {
               trendLabel={currentTrend.label}
               weakestPoints={weakestPoints}
               primaryAction={primaryAction}
-              buildPracticeHref={(knowledgePointId) => buildContextHref(PATHS.practice, {
+              buildPracticeHref={(knowledgePointId) => buildContextHref(lockedCourseId ? buildCoursePracticeWorkspacePath(lockedCourseId) : PATHS.practice, {
                 course_id: effectiveCourseId,
                 knowledge_point_id: knowledgePointId,
                 new: "1"

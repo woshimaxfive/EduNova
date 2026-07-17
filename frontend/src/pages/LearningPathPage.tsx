@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { getMasteryMap, listCourses } from "../api/courses";
 import { getCurrentPath, updatePathTask, type LearningPathTask, type PathTaskStatus } from "../api/paths";
@@ -30,9 +30,11 @@ function parsePositiveId(value: string | null) {
 export function LearningPathPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { courseId: routeCourseId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryCourseId = parsePositiveId(searchParams.get("course_id"));
-  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(queryCourseId);
+  const lockedCourseId = parsePositiveId(routeCourseId ?? null);
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(lockedCourseId ?? queryCourseId);
   const [pathFilter, setPathFilter] = useState<PathTaskFilter>("all");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<PathDetailTab>("mastery");
@@ -46,7 +48,7 @@ export function LearningPathPage() {
   });
   const courses = useMemo(() => coursesQuery.data?.data ?? [], [coursesQuery.data?.data]);
   const firstCourseId = courses[0] ? parsePositiveId(courses[0].id) : null;
-  const effectiveCourseId = selectedCourseId ?? queryCourseId ?? firstCourseId;
+  const effectiveCourseId = lockedCourseId ?? selectedCourseId ?? queryCourseId ?? firstCourseId;
   const hasCourse = effectiveCourseId !== null;
 
   const currentPathQuery = useQuery({
@@ -162,7 +164,7 @@ export function LearningPathPage() {
 
   return (
     <>
-      <PageFrame title="学习路径" titleMode="sr-only" variant="wide-workspace">
+      <PageFrame title="学习路径" titleMode="sr-only" variant="wide-workspace" courseId={lockedCourseId}>
         <div className="learning-path-workspace">
           <LearningPathToolbar
             returnLink={<CourseReturnLink courseId={effectiveCourseId} compact />}
@@ -173,6 +175,7 @@ export function LearningPathPage() {
             totalCount={tasks.length}
             hasPlan={Boolean(pathDetail?.path)}
             generatePending={planningPending}
+            courseLocked={lockedCourseId !== null}
             onCourseChange={handleCourseChange}
             onGenerate={generateLearningPath}
             onOpenDetails={() => {

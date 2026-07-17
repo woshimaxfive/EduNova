@@ -68,6 +68,7 @@ type LearningPathToolbarProps = {
   totalCount: number;
   hasPlan: boolean;
   generatePending: boolean;
+  courseLocked?: boolean;
   onCourseChange: (event: ChangeEvent<HTMLSelectElement>) => void;
   onGenerate: () => void;
   onOpenDetails: () => void;
@@ -82,6 +83,7 @@ export function LearningPathToolbar({
   totalCount,
   hasPlan,
   generatePending,
+  courseLocked = false,
   onCourseChange,
   onGenerate,
   onOpenDetails
@@ -98,15 +100,22 @@ export function LearningPathToolbar({
         </div>
       </div>
 
-      <label className="path-course-select">
-        <span>当前课程</span>
-        <select value={courseId ?? ""} onChange={onCourseChange} disabled={courses.length === 0}>
-          {courses.length === 0 ? <option value="">暂无课程</option> : null}
-          {courses.map((course) => (
-            <option key={course.id} value={course.id}>{course.title}</option>
-          ))}
-        </select>
-      </label>
+      {courseLocked ? (
+        <div className="path-course-select" aria-label={`当前课程 ${courseTitle}`}>
+          <span>当前课程</span>
+          <strong>{courseTitle}</strong>
+        </div>
+      ) : (
+        <label className="path-course-select">
+          <span>当前课程</span>
+          <select value={courseId ?? ""} onChange={onCourseChange} disabled={courses.length === 0}>
+            {courses.length === 0 ? <option value="">暂无课程</option> : null}
+            {courses.map((course) => (
+              <option key={course.id} value={course.id}>{course.title}</option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <div className="path-toolbar-progress" aria-label={`${courseTitle}完成进度 ${progressPercent}%`}>
         <span>学习进度</span>

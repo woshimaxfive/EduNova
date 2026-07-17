@@ -7,6 +7,9 @@ export const PATHS = {
   path: "/app/path",
   courses: "/app/courses",
   courseDetail: "/app/courses/:courseId",
+  coursePath: "/app/courses/:courseId/path",
+  coursePractice: "/app/courses/:courseId/practice",
+  courseReports: "/app/courses/:courseId/reports",
   studio: "/app/studio",
   profile: "/app/profile",
   practice: "/app/practice",
@@ -18,4 +21,16 @@ export type AppPath = (typeof PATHS)[keyof typeof PATHS];
 
 export function buildCoursePath(courseId: string | number) {
   return `${PATHS.courses}/${courseId}`;
+}
+
+export function buildCoursePathWorkspacePath(courseId: string | number) {
+  return `${buildCoursePath(courseId)}/path`;
+}
+
+export function buildCoursePracticeWorkspacePath(courseId: string | number) {
+  return `${buildCoursePath(courseId)}/practice`;
+}
+
+export function buildCourseReportsWorkspacePath(courseId: string | number) {
+  return `${buildCoursePath(courseId)}/reports`;
 }

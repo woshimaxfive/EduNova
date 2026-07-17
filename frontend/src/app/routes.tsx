@@ -47,6 +47,9 @@ export function AppRoutes() {
       <Route path={PATHS.app} element={protectedPage(<LearningSpacePage />)} />
       <Route path={PATHS.library} element={protectedPage(<LibraryPage />)} />
       <Route path={PATHS.path} element={protectedPage(<LearningPathPage />)} />
+      <Route path={PATHS.coursePath} element={protectedPage(<LearningPathPage />)} />
+      <Route path={PATHS.coursePractice} element={protectedPage(<PracticePage />)} />
+      <Route path={PATHS.courseReports} element={protectedPage(<ReportsPage />)} />
       <Route path={PATHS.courseDetail} element={protectedPage(lazyPage(<CourseSpacePage />))} />
       <Route path={PATHS.studio} element={protectedPage(<StudioPage />)} />
       <Route path={PATHS.profile} element={protectedPage(<ProfilePage />)} />

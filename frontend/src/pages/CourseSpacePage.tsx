@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-import { PATHS } from "../app/routePaths";
+import { PATHS, buildCoursePathWorkspacePath, buildCoursePracticeWorkspacePath, buildCourseReportsWorkspacePath } from "../app/routePaths";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import { createIdempotencyKey, createResourceGenerationJob, getAiJob } from "../api/aiJobs";
 import { uploadMaterial } from "../api/materials";
@@ -223,14 +223,20 @@ function buildCourseClosureHref(
   messageId: string,
   knowledgePointId?: string | null
 ) {
+  const courseWorkspacePath = pathname === PATHS.path
+    ? buildCoursePathWorkspacePath(courseId)
+    : pathname === PATHS.practice
+      ? buildCoursePracticeWorkspacePath(courseId)
+      : pathname === PATHS.reports
+        ? buildCourseReportsWorkspacePath(courseId)
+        : pathname;
   const params = new URLSearchParams({
-    course_id: String(courseId),
     return_to: "course",
     course_message_id: messageId
   });
   if (sessionId) params.set("course_session_id", sessionId);
   if (knowledgePointId) params.set("knowledge_point_id", knowledgePointId);
-  return `${pathname}?${params.toString()}`;
+  return `${courseWorkspacePath}?${params.toString()}`;
 }
 
 export function CourseSpacePage() {
@@ -587,6 +593,8 @@ export function CourseSpacePage() {
       return;
     }
 
+    speech.stopListening();
+    speech.stopSpeaking();
     imageDraft.discardAll();
     setActiveCourseSessionId(sessionId);
     setStreamingSessionId(null);
@@ -599,6 +607,30 @@ export function CourseSpacePage() {
     nextParams.set("course_session_id", sessionId);
     nextParams.delete("course_message_id");
     setSearchParams(nextParams, { replace: true });
+  }
+
+  async function createCourseConversation() {
+    if (!hasRealCourseId) return;
+    speech.stopListening();
+    speech.stopSpeaking();
+    imageDraft.discardAll();
+    setCoursePrompt("");
+    setCourseMessages([]);
+    setActiveTurnDetail(null);
+    setStudyTarget(null);
+    setCourseMode("chat");
+    try {
+      const created = await createTutorSession({ scope: "course", course_id: numericCourseId, mode: "chat", title: "新建课程对话" });
+      setActiveCourseSessionId(created.data.id);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("course_session_id", created.data.id);
+      nextParams.delete("course_message_id");
+      nextParams.delete("knowledge_point_id");
+      setSearchParams(nextParams, { replace: true });
+      void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
+    } catch {
+      setCourseFeedback("新建课程对话失败，请稍后重试。");
+    }
   }
 
   function updateCourseSessionList(updater: (sessions: TutorSessionSummary[]) => TutorSessionSummary[]) {
@@ -959,6 +991,7 @@ export function CourseSpacePage() {
           conversations={sidebarConversations}
           activeConversationId={hasRealCourseId ? selectedCourseSessionId : null}
           onToggleCollapsed={() => setIsHistoryCollapsed((collapsed) => !collapsed)}
+          onNewChat={() => void createCourseConversation()}
           onSelectConversation={(conversation) =>
             hasRealCourseId ? void selectCourseConversation(conversation.id) : undefined
           }
@@ -1118,11 +1151,11 @@ export function CourseSpacePage() {
                           <ChatCircleText size={17} weight="duotone" aria-hidden="true" />
                           <span>开始提问</span>
                         </a>
-                        <Link to={`${PATHS.practice}?course_id=${numericCourseId}`}>
+                        <Link to={buildCoursePracticeWorkspacePath(numericCourseId)}>
                           <ListChecks size={17} weight="duotone" aria-hidden="true" />
                           <span>自由练习</span>
                         </Link>
-                        <Link to={`${PATHS.reports}?course_id=${numericCourseId}`}>
+                        <Link to={buildCourseReportsWorkspacePath(numericCourseId)}>
                           <ChartLineUp size={17} weight="duotone" aria-hidden="true" />
                           <span>查看报告</span>
                         </Link>
@@ -1242,7 +1275,7 @@ export function CourseSpacePage() {
                   weakness_item_id: item.id,
                   new: "1"
                 });
-                navigate(`${PATHS.practice}?${params.toString()}`);
+                navigate(`${buildCoursePracticeWorkspacePath(numericCourseId)}?${params.toString()}`);
               }}
               onOpenWeaknessResource={(item, resourceId) => {
                 const params = new URLSearchParams({

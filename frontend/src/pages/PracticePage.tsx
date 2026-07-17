@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, CheckCircle, ClipboardText, SlidersHorizontal, WarningCircle } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { getKnowledgePoints, listCourses } from "../api/courses";
 import { createIdempotencyKey, createPracticeGenerationJob, type AiJob } from "../api/aiJobs";
@@ -48,11 +48,13 @@ function draftLabel(status: "idle" | "saving" | "saved" | "error") {
 
 export function PracticePage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { courseId: routeCourseId } = useParams();
   const queryClient = useQueryClient();
   const initialCourseId = searchParams.get("course_id") ?? "";
+  const lockedCourseId = routeCourseId ?? "";
   const initialKnowledgePointId = searchParams.get("knowledge_point_id") ?? "";
   const initialWeaknessItemId = Number(searchParams.get("weakness_item_id") ?? "");
-  const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
+  const [selectedCourseId, setSelectedCourseId] = useState(lockedCourseId || initialCourseId);
   const [selectedPointId, setSelectedPointId] = useState(initialKnowledgePointId);
   const [questionCount, setQuestionCount] = useState(5);
   const [difficulty, setDifficulty] = useState<"adaptive" | "easy" | "medium" | "hard">("adaptive");
@@ -83,9 +85,10 @@ export function PracticePage() {
 
   const coursesQuery = useQuery({ queryKey: ["practice-courses"], queryFn: () => listCourses() });
   const courses = Array.isArray(coursesQuery.data?.data) ? coursesQuery.data.data : [];
-  const effectiveCourseId = selectedCourseId || courses[0]?.id || "";
+  const effectiveCourseId = lockedCourseId || selectedCourseId || courses[0]?.id || "";
   const numericCourseId = Number(effectiveCourseId);
   const canUseCourse = Number.isFinite(numericCourseId) && numericCourseId > 0;
+
   const pointsQuery = useQuery({
     queryKey: ["practice-knowledge-points", numericCourseId],
     queryFn: () => getKnowledgePoints(numericCourseId),
@@ -355,7 +358,7 @@ export function PracticePage() {
 
   return (
     <>
-      <PageFrame title="练习" titleMode="sr-only" variant="wide-workspace">
+      <PageFrame title="练习" titleMode="sr-only" variant="wide-workspace" courseId={lockedCourseId ? Number(lockedCourseId) : null}>
         <div className="practice-focus-workspace">
         <PracticeToolbar
           courseTitle={selectedCourseTitle}
@@ -460,6 +463,7 @@ export function PracticePage() {
           <PracticeDrawer
             mode={drawerMode}
             courses={courses}
+            courseLocked={Boolean(lockedCourseId)}
             points={knowledgePoints}
             courseId={effectiveCourseId}
             pointId={effectivePointId}

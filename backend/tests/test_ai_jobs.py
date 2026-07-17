@@ -163,6 +163,9 @@ class FakeRepository:
     def refresh(self, instance: object) -> None:
         return None
 
+    def delete(self, job: AiJob) -> None:
+        self.jobs.remove(job)
+
 
 def make_user(user_id: int = 1) -> User:
     return User(id=user_id, account=f"u{user_id}", hashed_password="x", display_name="学生", role="student", starter_mode="blank")
@@ -565,6 +568,32 @@ def test_same_failed_job_cannot_be_retried_more_than_three_times() -> None:
     assert attempts == [1, 2, 3]
     with pytest.raises(AiJobConflictError, match="最大重试次数"):
         service.retry_job(user, int(original.job_id))
+
+
+def test_failed_or_cancelled_job_can_be_deleted_by_owner() -> None:
+    user = make_user()
+    failed = AiJob(id=1, user_id=1, workflow="resource_generation", status="failed", progress_percent=40, stage="failed", label="失败", agent_trace_id="trace_failed", idempotency_key="failed", request_json={}, progress_json={}, result_json={}, attempt_count=0, created_at=NOW, updated_at=NOW)
+    cancelled = AiJob(id=2, user_id=1, workflow="resource_generation", status="cancelled", progress_percent=10, stage="cancelled", label="已取消", agent_trace_id="trace_cancelled", idempotency_key="cancelled", request_json={}, progress_json={}, result_json={}, attempt_count=0, created_at=NOW, updated_at=NOW)
+    repository = FakeRepository(users=[user], jobs=[failed, cancelled])
+    service = make_service(repository)
+
+    service.delete_job(user, 1)
+    service.delete_job(user, 2)
+
+    assert repository.jobs == []
+
+
+def test_active_or_other_users_job_cannot_be_deleted() -> None:
+    user = make_user()
+    running = AiJob(id=1, user_id=1, workflow="resource_generation", status="running", progress_percent=40, stage="generate", label="生成中", agent_trace_id="trace_running", idempotency_key="running", request_json={}, progress_json={}, result_json={}, attempt_count=0, created_at=NOW, updated_at=NOW)
+    other_failed = AiJob(id=2, user_id=2, workflow="resource_generation", status="failed", progress_percent=40, stage="failed", label="失败", agent_trace_id="trace_other", idempotency_key="other", request_json={}, progress_json={}, result_json={}, attempt_count=0, created_at=NOW, updated_at=NOW)
+    repository = FakeRepository(users=[user, make_user(2)], jobs=[running, other_failed])
+    service = make_service(repository)
+
+    with pytest.raises(AiJobConflictError, match="只有失败或已取消"):
+        service.delete_job(user, 1)
+    with pytest.raises(AiJobNotFoundError):
+        service.delete_job(user, 2)
 
 
 def test_stale_job_is_failed_only_when_queue_no_longer_has_it() -> None:

@@ -255,6 +255,9 @@ class SqlAlchemyAiJobRepository:
     def refresh(self, instance: object) -> None:
         self.db.refresh(instance)
 
+    def delete(self, job: AiJob) -> None:
+        self.db.delete(job)
+
 
 class AgentJobContext:
     def __init__(self, job_id: int, *, session_factory=SessionLocal) -> None:
@@ -999,6 +1002,14 @@ class AiJobService:
             retry_of_job_id=original.id,
             attempt_count=next_attempt,
         )
+
+    def delete_job(self, user: User, job_id: int) -> None:
+        job = self._require(user, job_id, for_update=True)
+        if job.status not in RETRYABLE_STATUSES:
+            self.repository.rollback()
+            raise AiJobConflictError("只有失败或已取消的任务可以删除。")
+        self.repository.delete(job)
+        self.repository.commit()
 
     def run_job(self, job_id: int) -> AiJobResponse:
         job = self.repository.get_job(job_id, for_update=True)

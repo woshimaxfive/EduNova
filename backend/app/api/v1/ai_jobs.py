@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from fastapi import Depends, Query, Request
+from fastapi import Depends, Query, Request, Response
 from sse_starlette import EventSourceResponse
 
 from backend.app.api.contracts import TypedAPIRouter as APIRouter
@@ -61,6 +61,16 @@ def retry_ai_job(
     service: AiJobService = Depends(get_ai_job_service),
 ) -> dict:
     return api_response(service.retry_job(current_user, job_id).model_dump(mode="json"))
+
+
+@router.delete("/{job_id}", status_code=204)
+def delete_ai_job(
+    job_id: int,
+    current_user: User = Depends(get_current_user),
+    service: AiJobService = Depends(get_ai_job_service),
+) -> Response:
+    service.delete_job(current_user, job_id)
+    return Response(status_code=204)
 
 
 @router.get("/{job_id}/events")

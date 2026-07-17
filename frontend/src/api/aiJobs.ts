@@ -54,6 +54,7 @@ export const AI_JOB_ENDPOINTS = {
   events: (jobId: string) => `/ai-jobs/${jobId}/events`,
   cancel: (jobId: string) => `/ai-jobs/${jobId}/cancel`,
   retry: (jobId: string) => `/ai-jobs/${jobId}/retry`,
+  delete: (jobId: string) => `/ai-jobs/${jobId}`,
   courseBuilder: "/courses/from-materials/jobs",
   resourceGeneration: "/resources/generation-jobs",
   pathPlanning: "/paths/generation-jobs",
@@ -127,6 +128,10 @@ export async function cancelAiJob(jobId: string) {
 export async function retryAiJob(jobId: string) {
   const response = await apiClient.post<ApiEnvelope<AiJob>>(AI_JOB_ENDPOINTS.retry(jobId));
   return response.data.data;
+}
+
+export async function deleteAiJob(jobId: string) {
+  await apiClient.delete(AI_JOB_ENDPOINTS.delete(jobId));
 }
 
 export async function streamAiJob(

@@ -285,9 +285,9 @@ backend/app/
 | `backend/app/services/courses.py` | 课程 API 边界和依赖装配；`CourseBuilderGraphRunner` 接管来源大纲、课程结构、知识点、切片、embedding、审核/修订与事务持久化 |
 | `backend/app/services/exports.py` | 学习档案导出服务，负责旧同步 Markdown 兼容接口和 Markdown/PDF/DOCX 异步 job 渲染 |
 | `backend/app/workers/export_jobs.py` | Redis/RQ 导出 worker 入口 |
-| `backend/app/services/ai_jobs.py` | `AIJobRuntime` 服务，负责任务创建、幂等、活动上限、状态/心跳、取消、重试、失联检测和 Graph 依赖装配 |
+| `backend/app/services/ai_jobs.py` | `AIJobRuntime` 服务，负责任务创建、幂等、活动上限、状态/心跳、取消、重试、失败/取消任务删除、失联检测和 Graph 依赖装配 |
 | `backend/app/workers/ai_jobs.py` | 独立 `edunova_ai` Redis/RQ worker 入口 |
-| `backend/app/api/v1/ai_jobs.py` | AI 任务列表、详情、SSE、取消和重试接口 |
+| `backend/app/api/v1/ai_jobs.py` | AI 任务列表、详情、SSE、取消、重试和终态失败任务删除接口 |
 | `backend/app/api/v1/tutor.py` | `/api/v1/tutor/sessions` 受保护会话接口 |
 | `backend/app/api/v1/materials.py` | `/api/v1/materials/*` 和 `/api/v1/courses/{course_id}/materials` 受保护资料接口 |
 | `backend/app/api/v1/courses.py` | `/api/v1/courses/*`、同步 `/from-materials` 和异步 `/from-materials/jobs` 受保护课程接口 |

@@ -65,7 +65,7 @@ export function StudioPage() {
   const [regenerateDialogOpen, setRegenerateDialogOpen] = useState(false);
   const [compareDialogOpen, setCompareDialogOpen] = useState(false);
   const handledCompletedJobIds = useRef(new Set<string>());
-  const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
+  const { jobs, trackJob, getJob, cancelJob, retryJob, deleteJob } = useAiJobs();
   const resourceJob = getJob(resourceJobId);
   const isGenerating = Boolean(resourceJob && ["queued", "running", "cancelling"].includes(resourceJob.status));
 
@@ -210,18 +210,11 @@ export function StudioPage() {
   useEffect(() => {
     if (!resourceJob) return;
     if (resourceJob.status === "failed") {
-      // Restore durable server job failure after navigation or refresh.
+      // Keep the failure visible without forcing a drawer the user has closed to reopen.
+      // Initial page restoration is handled once by the effect above.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setFeedbackTone("warning");
       setFeedback(resourceJob.error_message ?? "资源生成失败，请稍后重试。");
-      if (resourceJob.request.generation_action === "alternative" || resourceJob.request.generation_action === "refine") {
-        if (Number.isFinite(Number(resourceJob.request.source_resource_id))) {
-          setSelectedResourceId(String(resourceJob.request.source_resource_id));
-        }
-        setRegenerateDialogOpen(true);
-      } else {
-        setDrawerMode("generate");
-      }
       return;
     }
     if (resourceJob.status !== "completed" || handledCompletedJobIds.current.has(resourceJob.job_id)) return;
@@ -329,6 +322,21 @@ export function StudioPage() {
     const job = await retryJob(resourceJob.job_id);
     setFeedback(null);
     setResourceJobId(job.job_id);
+  }
+
+  async function handleDeleteJob() {
+    if (!resourceJob || !["failed", "cancelled"].includes(resourceJob.status)) return;
+    try {
+      await deleteJob(resourceJob.job_id);
+      setResourceJobId(null);
+      setFeedbackTone("info");
+      setFeedback("失败任务已删除。你可以调整设置后重新生成。");
+      setDrawerMode(null);
+      setRegenerateDialogOpen(false);
+    } catch {
+      setFeedbackTone("warning");
+      setFeedback("任务删除失败，请稍后重试。");
+    }
   }
 
   const canGenerate = effectiveCourseId !== null
@@ -446,6 +454,7 @@ export function StudioPage() {
         onGenerate={handleGenerate}
         onCancelJob={() => resourceJob ? void cancelJob(resourceJob.job_id) : undefined}
         onRetryJob={() => void handleRetryJob()}
+        onDeleteJob={() => void handleDeleteJob()}
       />
 
       {regenerateDialogOpen && selectedResource ? (

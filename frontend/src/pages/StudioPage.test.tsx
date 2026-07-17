@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { PATHS } from "../app/routePaths";
 import { AGENT_ENDPOINTS } from "../api/agents";
+import { AI_JOB_ENDPOINTS } from "../api/aiJobs";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { PATH_ENDPOINTS } from "../api/paths";
@@ -621,10 +622,14 @@ describe("StudioPage resource generation", () => {
     expect(screen.getByRole("main", { name: "成果画布" })).toBeInTheDocument();
   });
 
-  it("shows local feedback when resource generation fails", async () => {
+  it("keeps a failed generation drawer closable and deletes the durable task", async () => {
     const user = userEvent.setup();
+    const calls: Array<{ method: string; url: string }> = [];
 
     apiClient.defaults.adapter = async (config) => {
+      const method = (config.method ?? "get").toLowerCase();
+      const url = config.url ?? "";
+      calls.push({ method, url });
       if (config.url === COURSE_ENDPOINTS.list) {
         return {
           data: {
@@ -686,8 +691,28 @@ describe("StudioPage resource generation", () => {
         };
       }
 
-      if (config.url === RESOURCE_ENDPOINTS.generationJobs) {
-        throw new Error("generate failed");
+      if (url === RESOURCE_ENDPOINTS.generationJobs) {
+        return {
+          data: {
+            data: makeCompletedAiJob({
+              job_id: "77",
+              status: "failed",
+              label: "任务执行失败",
+              error_code: "VALIDATION_ERROR",
+              error_message: "所有资源均未通过安全审核。",
+              can_retry: true
+            }),
+            trace_id: "trace_failed_job"
+          },
+          status: 202,
+          statusText: "Accepted",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === AI_JOB_ENDPOINTS.delete("77") && method === "delete") {
+        return { data: undefined, status: 204, statusText: "No Content", headers: {}, config };
       }
 
       return {
@@ -710,9 +735,23 @@ describe("StudioPage resource generation", () => {
     await user.type(within(generateDrawer).getByRole("textbox", { name: "生成目标" }), "保留我的生成目标");
     await user.click(within(generateDrawer).getByRole("button", { name: "开始生成" }));
 
-    expect(await within(generateDrawer).findByRole("alert")).toHaveTextContent("资源生成失败，请稍后重试。");
+    expect((await within(generateDrawer).findAllByText("所有资源均未通过安全审核。")).length).toBeGreaterThan(0);
     expect(within(generateDrawer).getByRole("textbox", { name: "生成目标" })).toHaveValue("保留我的生成目标");
     expect(screen.getByRole("main", { name: "成果画布", hidden: true })).toHaveTextContent("这门课还没有学习资源");
+
+    await user.click(within(generateDrawer).getByRole("button", { name: "关闭生成设置" }));
+    expect(screen.queryByRole("dialog", { name: "生成设置" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("所有资源均未通过安全审核。");
+
+    await user.click(within(screen.getByRole("banner", { name: "资源工坊工具栏" })).getByRole("button", { name: "新建资源" }));
+    const reopenedDrawer = screen.getByRole("dialog", { name: "生成设置" });
+    await user.click(within(reopenedDrawer).getByRole("button", { name: "删除任务" }));
+
+    await waitFor(() => {
+      expect(calls).toContainEqual({ method: "delete", url: AI_JOB_ENDPOINTS.delete("77") });
+    });
+    expect(screen.queryByRole("dialog", { name: "生成设置" })).not.toBeInTheDocument();
+    expect(await screen.findByText("失败任务已删除。你可以调整设置后重新生成。")).toBeInTheDocument();
   });
 
   it("opens path resources in bundle order and advances only after resource completion", async () => {

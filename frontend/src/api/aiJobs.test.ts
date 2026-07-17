@@ -7,6 +7,7 @@ import {
   createPracticeGenerationJob,
   createReportGenerationJob,
   createResourceGenerationJob,
+  deleteAiJob,
   streamAiJob
 } from "./aiJobs";
 import { apiClient } from "./client";
@@ -86,5 +87,17 @@ describe("AI job API contracts", () => {
     await streamAiJob(job.job_id, (event, snapshot) => events.push(`${event}:${snapshot.progress_percent}`));
 
     expect(events).toEqual(["snapshot:60", "done:100"]);
+  });
+
+  it("deletes a terminal AI job through its durable endpoint", async () => {
+    const calls: Array<{ method?: string; url?: string }> = [];
+    apiClient.defaults.adapter = async (config) => {
+      calls.push({ method: config.method, url: config.url });
+      return { data: undefined, status: 204, statusText: "No Content", headers: {}, config };
+    };
+
+    await deleteAiJob("77");
+
+    expect(calls).toContainEqual({ method: "delete", url: AI_JOB_ENDPOINTS.delete("77") });
   });
 });

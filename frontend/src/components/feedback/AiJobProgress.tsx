@@ -1,4 +1,4 @@
-import { ArrowClockwise, CircleNotch, Stop, X } from "@phosphor-icons/react";
+import { ArrowClockwise, CircleNotch, Stop, Trash, X } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 
 import { type AiJob } from "../../api/aiJobs";
@@ -9,6 +9,7 @@ type Props = {
   compact?: boolean;
   onCancel?: () => void;
   onRetry?: () => void;
+  onDelete?: () => void;
   onDismiss?: () => void;
 };
 
@@ -45,7 +46,7 @@ function resultHref(job: AiJob) {
   return null;
 }
 
-export function AiJobProgress({ job, compact = false, onCancel, onRetry, onDismiss }: Props) {
+export function AiJobProgress({ job, compact = false, onCancel, onRetry, onDelete, onDismiss }: Props) {
   const completedHref = job.status === "completed" ? resultHref(job) : null;
   const workflowLabel = job.workflow === "resource_generation" && job.request.path_task_id
     ? "本节资源生成"
@@ -85,6 +86,12 @@ export function AiJobProgress({ job, compact = false, onCancel, onRetry, onDismi
           <button type="button" className="icon-text-button" onClick={onRetry}>
             <ArrowClockwise size={15} />
             <span>重试</span>
+          </button>
+        ) : null}
+        {(job.status === "failed" || job.status === "cancelled") && onDelete ? (
+          <button type="button" className="icon-text-button" onClick={onDelete}>
+            <Trash size={15} />
+            <span>删除任务</span>
           </button>
         ) : null}
         {job.status === "completed" && onDismiss ? <button type="button" className="icon-text-button" onClick={onDismiss}><X size={14} /><span>收起</span></button> : null}

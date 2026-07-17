@@ -67,6 +67,7 @@ type StudioDrawerProps = {
   onGenerate: () => void;
   onCancelJob: () => void;
   onRetryJob: () => void;
+  onDeleteJob: () => void;
 };
 
 export function StudioDrawer(props: StudioDrawerProps) {
@@ -171,7 +172,7 @@ function GeneratePanel(props: StudioDrawerProps) {
         </fieldset>
 
         {props.job ? (
-          <AiJobProgress job={props.job} onCancel={props.onCancelJob} onRetry={props.onRetryJob} />
+          <AiJobProgress job={props.job} onCancel={props.onCancelJob} onRetry={props.onRetryJob} onDelete={props.onDeleteJob} />
         ) : null}
         <InlineFeedback message={props.feedback} tone="warning" className="studio-drawer-feedback" />
       </div>

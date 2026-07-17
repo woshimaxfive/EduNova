@@ -7,7 +7,7 @@ import { AiJobProgress } from "./AiJobProgress";
 
 export function AiJobTray() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const { jobs, cancelJob, retryJob, dismissJob } = useAiJobs();
+  const { jobs, cancelJob, retryJob, deleteJob, dismissJob } = useAiJobs();
   const [expanded, setExpanded] = useState(false);
   const visible = jobs.filter((job) => ["queued", "running", "cancelling", "failed", "completed"].includes(job.status)).slice(0, 4);
   if (!isAuthenticated || visible.length === 0) return null;
@@ -28,6 +28,7 @@ export function AiJobTray() {
               compact
               onCancel={() => void cancelJob(job.job_id)}
               onRetry={() => void retryJob(job.job_id)}
+              onDelete={() => void deleteJob(job.job_id)}
               onDismiss={() => dismissJob(job.job_id)}
             />
           ))}

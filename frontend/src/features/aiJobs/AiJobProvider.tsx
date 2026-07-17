@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-import { cancelAiJob, listAiJobs, retryAiJob, streamAiJob, type AiJob } from "../../api/aiJobs";
+import { cancelAiJob, deleteAiJob, listAiJobs, retryAiJob, streamAiJob, type AiJob } from "../../api/aiJobs";
 import { useAuthStore } from "../auth/authStore";
 import { invalidateCourseLearningLoop } from "../course-space/courseLoopQueries";
 import { invalidateLearningNextActions } from "../learning-actions/learningActions";
@@ -12,6 +12,7 @@ type AiJobContextValue = {
   getJob: (jobId: string | null | undefined) => AiJob | undefined;
   cancelJob: (jobId: string) => Promise<AiJob>;
   retryJob: (jobId: string) => Promise<AiJob>;
+  deleteJob: (jobId: string) => Promise<void>;
   dismissJob: (jobId: string) => void;
 };
 
@@ -164,6 +165,18 @@ export function AiJobProvider({ children }: PropsWithChildren) {
       return next;
     });
   }, []);
+  const deleteJob = useCallback(async (jobId: string) => {
+    await deleteAiJob(jobId);
+    hiddenJobIds.current.add(jobId);
+    streams.current.get(jobId)?.abort();
+    streams.current.delete(jobId);
+    setJobMap((current) => {
+      const next = { ...current };
+      delete next[jobId];
+      return next;
+    });
+    await queryClient.invalidateQueries({ queryKey: ["ai-jobs"] });
+  }, [queryClient]);
 
   const value = useMemo<AiJobContextValue>(() => ({
     jobs: Object.values(jobMap).sort((left, right) => right.updated_at.localeCompare(left.updated_at)),
@@ -171,8 +184,9 @@ export function AiJobProvider({ children }: PropsWithChildren) {
     getJob: (jobId) => (jobId ? jobMap[jobId] : undefined),
     cancelJob,
     retryJob,
+    deleteJob,
     dismissJob
-  }), [cancelJob, dismissJob, jobMap, retryJob, subscribe]);
+  }), [cancelJob, deleteJob, dismissJob, jobMap, retryJob, subscribe]);
 
   return <AiJobContext.Provider value={value}>{children}</AiJobContext.Provider>;
 }
@@ -199,17 +213,26 @@ export function useAiJobs() {
     });
     return job;
   }, []);
+  const localDeleteJob = useCallback(async (jobId: string) => {
+    await deleteAiJob(jobId);
+    setLocalJobMap((current) => {
+      const next = { ...current };
+      delete next[jobId];
+      return next;
+    });
+  }, []);
   const fallback = useMemo<AiJobContextValue>(() => ({
     jobs: Object.values(localJobMap),
     trackJob: localTrackJob,
     getJob: (jobId) => (jobId ? localJobMap[jobId] : undefined),
     cancelJob: localCancelJob,
     retryJob: localRetryJob,
+    deleteJob: localDeleteJob,
     dismissJob: (jobId) => setLocalJobMap((current) => {
       const next = { ...current };
       delete next[jobId];
       return next;
     })
-  }), [localCancelJob, localJobMap, localRetryJob, localTrackJob]);
+  }), [localCancelJob, localDeleteJob, localJobMap, localRetryJob, localTrackJob]);
   return context ?? fallback;
 }

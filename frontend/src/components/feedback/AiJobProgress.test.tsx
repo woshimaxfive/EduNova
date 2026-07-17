@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { makeCompletedAiJob } from "../../test/aiJobs";
 import { AiJobProgress } from "./AiJobProgress";
@@ -52,5 +53,25 @@ describe("AiJobProgress", () => {
       "href",
       "/app/reports?course_id=808"
     );
+  });
+
+  it("offers durable deletion for failed tasks without removing retry", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    const onRetry = vi.fn();
+    render(
+      <MemoryRouter>
+        <AiJobProgress
+          job={makeCompletedAiJob({ status: "failed", can_retry: true, error_message: "生成失败" })}
+          onDelete={onDelete}
+          onRetry={onRetry}
+        />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole("button", { name: "删除任务" }));
+
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 });

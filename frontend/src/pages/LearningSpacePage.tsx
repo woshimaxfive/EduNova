@@ -50,6 +50,7 @@ import { useBrowserSpeech } from "../features/speech/useBrowserSpeech";
 import { SecureTutorImages, TutorImagePicker } from "../features/tutor/TutorImageAttachments";
 import { useTutorImageDraft } from "../features/tutor/useTutorImageDraft";
 import { appendTutorProgressStage, type TutorResponseProgressState } from "../features/tutor/tutorResponseProgress";
+import { useTutorPersistedResponseProgress } from "../features/tutor/useTutorPersistedResponseProgress";
 import { TutorResponseProgress } from "../components/tutor/TutorResponseProgress";
 
 type LibraryMaterial = {
@@ -162,6 +163,11 @@ export function LearningSpacePage() {
   const courseJob = getJob(courseJobId);
   const isCreatingCourse = Boolean(courseJob && ["queued", "running", "cancelling"].includes(courseJob.status));
   const hasHomeThread = messages.length > 0;
+  const persistedAnswerProgress = useTutorPersistedResponseProgress(
+    messages
+      .filter((message) => message.role === "assistant" && !message.streaming)
+      .map((message) => ({ messageId: message.id, traceId: message.trace_id }))
+  );
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", "summary"],
     queryFn: getDashboardSummary,
@@ -788,8 +794,12 @@ export function LearningSpacePage() {
                     <TutorResponseProgress state={streamProgress} />
                   ) : null}
                   {message.role === "user" ? <SecureTutorImages attachments={message.attachments} /> : null}
-                  {message.role === "assistant" && !message.streaming && answerProgress[message.id] ? (
-                    <TutorResponseProgress state={answerProgress[message.id]} completed durationMs={answerProgress[message.id].durationMs} />
+                  {message.role === "assistant" && !message.streaming && (answerProgress[message.id] ?? persistedAnswerProgress[message.id]) ? (
+                    <TutorResponseProgress
+                      state={answerProgress[message.id] ?? persistedAnswerProgress[message.id]}
+                      completed
+                      durationMs={(answerProgress[message.id] ?? persistedAnswerProgress[message.id]).durationMs}
+                    />
                   ) : null}
                   {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : <p>{message.content}</p>}
                   {message.role === "assistant" && !message.streaming ? (

@@ -69,6 +69,7 @@ import { useBrowserSpeech } from "../features/speech/useBrowserSpeech";
 import { SecureTutorImages, TutorImagePicker } from "../features/tutor/TutorImageAttachments";
 import { useTutorImageDraft } from "../features/tutor/useTutorImageDraft";
 import { appendTutorProgressStage, type TutorResponseProgressState } from "../features/tutor/tutorResponseProgress";
+import { useTutorPersistedResponseProgress } from "../features/tutor/useTutorPersistedResponseProgress";
 import { TutorResponseProgress } from "../components/tutor/TutorResponseProgress";
 import "../styles/course-space.css";
 
@@ -384,6 +385,11 @@ export function CourseSpacePage() {
       : hasRealCourseId && selectedCourseSessionId && activeCourseSessionDetailId === selectedCourseSessionId
         ? persistedCourseMessages
         : courseMessages;
+  const persistedCourseAnswerProgress = useTutorPersistedResponseProgress(
+    displayedCourseMessages
+      .filter((message) => message.role === "assistant")
+      .map((message) => ({ messageId: message.id, traceId: message.traceId }))
+  );
   const hasDisplayedCourseMessages = displayedCourseMessages.length > 0;
   const isCourseLoading = hasRealCourseId && courseQuery.isPending && !fallbackCourse;
   const courseSummary = fallbackCourse
@@ -1056,8 +1062,12 @@ export function CourseSpacePage() {
                             content={sanitizeCourseAnswerContent(message.content)}
                             progress={!isPersisted && courseStreamProgress ? (
                               <TutorResponseProgress state={courseStreamProgress} />
-                            ) : isPersisted && courseAnswerProgress[message.id] ? (
-                              <TutorResponseProgress state={courseAnswerProgress[message.id]} completed durationMs={courseAnswerProgress[message.id].durationMs} />
+                            ) : isPersisted && (courseAnswerProgress[message.id] ?? persistedCourseAnswerProgress[message.id]) ? (
+                              <TutorResponseProgress
+                                state={courseAnswerProgress[message.id] ?? persistedCourseAnswerProgress[message.id]}
+                                completed
+                                durationMs={(courseAnswerProgress[message.id] ?? persistedCourseAnswerProgress[message.id]).durationMs}
+                              />
                             ) : undefined}
                             actions={isPersisted && message.content.trim() ? (
                               <CourseClosedLoopActions

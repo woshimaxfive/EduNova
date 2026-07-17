@@ -679,6 +679,8 @@ export function LearningSpacePage() {
   }
 
   const selectHomeConversation = useCallback(async (conversation: DashboardSummaryThread) => {
+    speech.stopListening();
+    speech.stopSpeaking();
     imageDraft.discardAll();
     setActiveHomeThreadId(conversation.id);
 
@@ -693,7 +695,7 @@ export function LearningSpacePage() {
       void error;
       setComposerFeedback({ message: "历史对话读取失败，请稍后再试。", tone: "warning" });
     }
-  }, [imageDraft, navigate]);
+  }, [imageDraft, navigate, speech]);
 
   useEffect(() => {
     if (!selectedHomeThreadIdFromNavigation) {

@@ -9,7 +9,7 @@
 当前已完成能力的完整说明放在 [STATUS.md](STATUS.md)。
 接口、数据库、测试、部署和 UI 细节分别放在对应专业文档中，不再全部堆到看板里。
 
-当前状态：Phase 53 已完成封盘热修与最终工程验收，产品开发冻结。下一步仅限赛题实时性能取证、PPT、演示视频、提交包和答辩材料；不再进入新的产品 Phase。
+当前状态：Phase 53 已完成封盘热修与最终工程验收，产品开发冻结。2026-07-18 已完成最终 Docker + 真实 Provider 性能取证，但 RAG 和模型首 Token 超出赛题门槛；材料制作暂停，等待性能风险处置决定，不再进入新的产品 Phase。
 
 Phase 53 收口清单：
 
@@ -26,7 +26,7 @@ Phase 53 收口清单：
 - [x] 最终工程门禁：后端 519 项、前端 275 项、离线 AI 评测 10 项、Ruff、ESLint、TypeScript、production build、Alembic、OpenAPI、UTF-8 编码和 Compose 配置通过；backend 镜像重建并健康。隔离 Docker E2E 的 pgvector、代码执行隔离和 2 条 Playwright 流程通过，临时栈与卷已清理。
 - [x] E2E 显式覆盖 `SYSTEM_GENERATION_*`，防止本机真实后台生成配置进入 rules-only 隔离环境；该测试只接受诚实失败，不允许持久化模板路径。
 - [x] 最终浏览器快速复核：一次性账号可注册进入首页；1440px 与 390px 均无横向溢出、页面错误或控制台错误，账号已精确删除。
-- [ ] 赛题实时性能取证：`contest_readiness` 当前仍为 `evidence_gap`。必须以新的真实 Provider/浏览器时延样本补齐七类指标，不能用历史或离线数据填充。
+- [x] 赛题实时性能取证：以一次性账号在最终 Docker 与真实 Provider 下采集 3 组脱敏毫秒样本，并在结束后精确删除账号及级联数据。质量门禁通过、七类性能证据完整；但 `contest_readiness --require-live` 为 `failed`：RAG P95 `6485ms`（目标 `<=3000ms`）、模型首 Token P95 `22578ms`（目标 `<=15000ms`）。其余五项达标。不得把本轮结果写成性能通过，PPT、视频和提交包继续暂停。
 
 Phase 52 收口清单：
 

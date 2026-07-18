@@ -132,4 +132,4 @@ Phase 12.2 主流程：
 - UTF-8 无 BOM、Ruff、ESLint、TypeScript、production build、Alembic `20260718_0032`、非破坏性 OpenAPI 与 Docker Compose 配置均通过。backend 镜像已重建，健康检查返回 `{"status":"ok","service":"edunova-api"}`。
 - `agent-browser` 使用一次性账号完成注册与首页进入；1440px 和 390px 下页面 `scrollWidth` 等于 `clientWidth`，页面和控制台错误为空。测试账号已从数据库精确删除。
 - 隔离 Docker E2E 通过 pgvector 排序/隔离、代码执行隔离和 2 条 Playwright 流程。首次执行暴露 E2E 未覆盖 `SYSTEM_GENERATION_*`，使 rules-only 测试继承本机真实后台生成配置；补齐三类 Worker 的显式占位配置后，规则环境诚实失败且不持久化模板路径，重跑 2 项均通过并清理隔离容器和卷。
-- `contest_readiness` 的离线质量部分通过，但没有输入新的真实七类性能样本，因此总状态仍为 `evidence_gap`。这不是性能通过，也不应以历史样本替代；补齐真实样本后才可运行 `--require-live` 作为赛题性能结论。
+- 最终 Docker + 真实 Provider 的 3 组脱敏样本已输入 `contest_readiness --require-live`，离线质量部分通过且证据完整。非 AI API P95 `32ms`、SSE 首状态 `391ms`、AIJob 创建 `62ms`、首次进度 `16ms`、三类资源批次 `82891ms` 达标；RAG P95 `6485ms`（目标 `<=3000ms`）和模型首 Token P95 `22578ms`（目标 `<=15000ms`）未达标，因此总状态为 `failed`。一次性账号及级联数据已精确删除，输出只保留在被忽略的本地 `output/contest-readiness`，不能写作性能通过。

@@ -119,10 +119,6 @@ class SemanticDecisionPayload(BaseModel):
             "normal": "medium",
             "moderate": "medium",
             "intermediate": "medium",
-            "n/a": "medium",
-            "na": "medium",
-            "none": "medium",
-            "notapplicable": "medium",
             "hard": "hard",
             "困难": "hard",
             "复杂": "hard",
@@ -133,6 +129,8 @@ class SemanticDecisionPayload(BaseModel):
             "difficult": "hard",
             "advanced": "hard",
         }
+        if normalized in {"n/a", "na", "none", "notapplicable"}:
+            return "medium" if str(info.data.get("resource_action") or "none") == "none" else value
         normalized_value = aliases.get(normalized)
         if normalized_value is not None:
             return normalized_value

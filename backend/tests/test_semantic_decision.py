@@ -103,6 +103,22 @@ def test_semantic_decision_keeps_unknown_difficulty_strict_for_resource_action()
     assert decision.decision_mode == "degraded"
 
 
+def test_semantic_decision_keeps_placeholder_difficulty_strict_for_resource_action() -> None:
+    model = FakeModel(
+        '{"intent":"learning_resource_generation","search_required":false,"search_query":"",'
+        '"reasoning_mode":"auto","course_related":true,"confidence":0.9,'
+        '"reason_codes":["resource_generation"],"reason_summary":"生成课程资源。",'
+        '"profile_signals":[],"resource_action":"generate","resource_types":["mindmap"],'
+        '"resource_difficulty":"N/A"}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="生成一份二叉树思维导图", scope="course", course_title="数据结构"
+    )
+
+    assert decision.decision_mode == "degraded"
+
+
 def test_model_can_request_global_original_sources_without_keyword_fallback() -> None:
     model = FakeModel(
         '{"intent":"verification","search_required":true,"search_query":"RFC 9110 original",'

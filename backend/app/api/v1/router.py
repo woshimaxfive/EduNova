@@ -17,6 +17,7 @@ from backend.app.api.v1.rag import router as rag_router
 from backend.app.api.v1.reports import router as reports_router
 from backend.app.api.v1.resources import router as resources_router
 from backend.app.api.v1.settings import router as settings_router
+from backend.app.api.v1.speech import router as speech_router
 from backend.app.api.v1.tutor import router as tutor_router
 
 
@@ -36,4 +37,5 @@ api_router.include_router(rag_router)
 api_router.include_router(reports_router)
 api_router.include_router(resources_router)
 api_router.include_router(settings_router)
+api_router.include_router(speech_router)
 api_router.include_router(tutor_router)

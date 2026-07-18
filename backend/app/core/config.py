@@ -48,6 +48,16 @@ class Settings(BaseSettings):
     system_vision_api_secret: str = ""
     system_vision_model: str = "imagev3"
     vision_request_timeout_seconds: float = 60.0
+    system_speech_provider: str = "xfyun"
+    system_speech_app_id: str = ""
+    system_speech_api_key: str = ""
+    system_speech_api_secret: str = ""
+    system_speech_asr_url: str = "wss://iat-api.xfyun.cn/v2/iat"
+    system_speech_tts_url: str = "wss://tts-api.xfyun.cn/v2/tts"
+    system_speech_tts_voice: str = "xiaoyan"
+    system_speech_tts_speed: int = 50
+    speech_request_timeout_seconds: float = 75.0
+    speech_max_audio_seconds: int = 60
     model_settings_encryption_key: str = ""
     # Domestic OpenAI-compatible providers commonly need more than 20 seconds
     # for structured JSON or the first streamed token. A 45-second attempt

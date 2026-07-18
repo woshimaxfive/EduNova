@@ -2,17 +2,13 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from email.utils import format_datetime
-import hashlib
-import hmac
 import json
-from urllib.parse import urlencode, urlparse
 
 from websockets.exceptions import WebSocketException
 from websockets.sync.client import connect
 
 from backend.app.providers.openai_compatible import ModelProviderError
+from backend.app.providers.xfyun_auth import XfyunAuthError, build_xfyun_signed_url
 
 
 @dataclass(frozen=True)
@@ -89,22 +85,10 @@ class XfyunVisionProvider:
 
     @staticmethod
     def _signed_url(config: XfyunVisionConfig) -> str:
-        parsed = urlparse(config.base_url)
-        if parsed.scheme not in {"ws", "wss"} or not parsed.netloc:
+        try:
+            return build_xfyun_signed_url(config.base_url, config.api_key, config.api_secret)
+        except XfyunAuthError:
             raise ModelProviderError("讯飞图片理解地址无效。", code="invalid_request")
-        path = parsed.path or "/v2.1/image"
-        date = format_datetime(datetime.now(UTC), usegmt=True)
-        signature_origin = f"host: {parsed.netloc}\ndate: {date}\nGET {path} HTTP/1.1"
-        signature = base64.b64encode(
-            hmac.new(config.api_secret.encode(), signature_origin.encode(), hashlib.sha256).digest()
-        ).decode("ascii")
-        authorization_origin = (
-            f'api_key="{config.api_key}", algorithm="hmac-sha256", '
-            f'headers="host date request-line", signature="{signature}"'
-        )
-        authorization = base64.b64encode(authorization_origin.encode()).decode("ascii")
-        query = urlencode({"authorization": authorization, "date": date, "host": parsed.netloc})
-        return f"{parsed.scheme}://{parsed.netloc}{path}?{query}"
 
     @staticmethod
     def _provider_error(code: int) -> ModelProviderError:

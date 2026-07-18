@@ -1145,3 +1145,13 @@ docker compose down
 2026-07-17 Phase 42 实际验收：侧栏与资料库定向回归 12 项、ESLint、编码检查和 production frontend build 通过；只重建 frontend 镜像。`agent-browser` 使用普通新账号与内置课程逐页审计桌面工作台，复现并修复收起侧栏后的空历史竖排问题；最终确认空历史与加载更多入口均不进入图标栏，资料库首次空态显示明确上传引导，390px 无横向溢出。未发起模型生成或大型资料处理。
 
 2026-07-17 Phase 39 阶段门禁：`scripts/test.ps1` 通过后端 462 项、前端 244 项、离线评测 10 项，以及编码、Ruff、Alembic head、OpenAPI 漂移、ESLint、production build 与 Compose 配置检查。真实浏览器使用生产 Docker 完成内置数据结构课程和用户上传原创历史提纲的问答、路径、资源、练习与报告复核；发现的问题均先复现后补定向回归。
+
+## Phase 48 讯飞语音增强验收
+
+- Provider 覆盖讯飞签名、ASR 动态结果合并、TTS 音频分片、认证失败、超时和供应商错误映射；图片理解的公共签名重构必须保持原回归通过。
+- API 覆盖未登录拒绝、PCM MIME/时长/大小限制、标准转写响应、二进制 MP3响应和 `private, no-store`。
+- 前端覆盖服务端 ASR 回填且不自动发送、录音中与转写中状态、服务端失败后浏览器识别降级、TTS 服务端播放及浏览器语音回退、暂停/继续/停止和卸载清理。
+- 真实兼容试验使用程序化无版权中文录音与短文本，只记录耗时、长度和成功状态；测试结束精确删除临时音频，不保存转写原文、音频、密钥或供应商原始响应。
+- 阶段收口运行后端/前端定向测试、OpenAPI、编码、lint、类型检查与 Compose；重建 backend/frontend 后使用 `agent-browser` 检查桌面和 390px 入口、权限失败降级与无横向溢出。Docker 保持运行供封盘前继续验收。
+
+2026-07-18 Phase 48 实际验收：`scripts/test.ps1` 通过后端 508 项、前端 258 项、离线评测 10 项，以及编码、Ruff、Alembic head、非破坏性 OpenAPI、ESLint、类型、production build 与 Compose。真实讯飞 TTS 返回有效 MP3；程序化无版权中文 WAV 转为 16 kHz PCM 后由 IAT 成功转写，测试仅记录长度和耗时并清理临时音频。backend/frontend 镜像重建并健康运行。`agent-browser` 验证桌面入口、无麦克风权限时的明确键盘降级及 390px `scrollWidth=390`；临时账号已级联删除。

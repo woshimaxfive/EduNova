@@ -2709,3 +2709,14 @@ Phase 31 不新增接口路径或数据库迁移。现有资料解析进度对�
 - 课程会话只能生成到会话绑定课程；回答必须属于当前用户、当前会话且为 assistant。新 AIJob 与 `resource_job_ids` 在同一事务写入，默认幂等键固定为会话和消息。
 - `POST /api/v1/tutor/sessions/{session_id}/messages/{message_id}/resource-jobs` 将任务关联到该次助手确认，历史读取时 `TutorMessage.resource_jobs` 返回任务状态、失败提示和已生成资源。
 - 对话中提取到的显式资源主题是硬约束。所选课程及其知识点不含该主题时，资源任务以可恢复失败结束，并返回“所选课程没有该主题的可用资料，请选择对应课程后再生成”；不得静默改为当前课程的其他主题。
+
+## Phase 48 讯飞语音合同
+
+- `POST /api/v1/speech/transcriptions`
+  - 需要登录；使用 multipart 字段 `file` 上传 `application/octet-stream`、`audio/pcm` 或 `audio/L16`。
+  - 音频必须为 16 kHz、16 bit、单声道 PCM，最长 60 秒；返回标准 `ApiEnvelope`，`data` 包含 `transcript`、`provider` 和 `duration_ms`。
+  - 音频只用于当次讯飞语音听写，不保存到数据库、对象存储、日志或 trace。
+- `POST /api/v1/speech/synthesis`
+  - 需要登录；请求为 `{ "text": "待朗读文本" }`，文本最长 12000 字符。
+  - 成功直接返回 `audio/mpeg`，并设置 `Cache-Control: private, no-store`；不返回公开音频地址，不持久化合成结果。
+  - 两个接口都可能返回 `SPEECH_NOT_CONFIGURED`、`SPEECH_PROVIDER_ERROR`、`SPEECH_TIMEOUT` 等统一错误；前端据此降级到浏览器 Web Speech，不阻断文字学习流程。

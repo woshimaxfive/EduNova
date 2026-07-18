@@ -170,6 +170,7 @@ export function LearningSpacePage() {
     onNotice: (message, tone) => setComposerFeedback({ message, tone })
   });
   const isListening = speech.isListening;
+  const isTranscribing = speech.isTranscribing;
   const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
   const courseJob = getJob(courseJobId);
   const isCreatingCourse = Boolean(courseJob && ["queued", "running", "cancelling"].includes(courseJob.status));
@@ -934,9 +935,10 @@ export function LearningSpacePage() {
                   <button
                     className={isListening ? "voice-button active" : "voice-button"}
                     type="button"
-                    title="语音输入"
+                    title={isTranscribing ? "正在识别" : isListening ? "结束录音" : "语音输入"}
                     aria-label="语音输入"
                     aria-pressed={isListening}
+                    disabled={isTranscribing}
                     onClick={handleVoiceInput}
                   >
                     <Microphone size={18} weight="duotone" aria-hidden="true" />

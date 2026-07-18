@@ -466,3 +466,9 @@ Local 模式使用 `CHAT_ATTACHMENT_STORAGE_DIR`（默认 `var/uploads/chat-atta
 AI Worker 的 pip、Torch 与 Hugging Face 下载使用 BuildKit 持久缓存。依赖层和 Docling 模型层只在对应锁定输入变化时重建；模型下载最多重试 3 次，连续失败会终止新镜像构建，不会替换当前已发布镜像。`HF_ENDPOINT` 默认使用官方 `https://huggingface.co`，镜像站只有经过当前网络真实验证后才应覆盖。
 
 缓存解决重复下载，不保证首次访问上游一定成功。2026-07-16 实测约 192 MiB Torch wheel已从缓存复用，但 Hugging Face 官方 `docling-layout-heron` 元数据接口连续返回 504，故本轮首次 Docling 模型层构建据实失败，当前健康 AI Worker 镜像和容器保持运行。上游恢复后只需重跑 `docker compose --progress plain build ai-worker`；成功后再运行一次相同命令，确认依赖与模型步骤显示 `CACHED`，最后才重建 Worker 容器。
+
+## 17. Phase 48 讯飞语音配置
+
+backend 使用 `SYSTEM_SPEECH_APP_ID`、`SYSTEM_SPEECH_API_KEY`、`SYSTEM_SPEECH_API_SECRET` 调用讯飞语音听写和在线语音合成；默认地址分别为 `wss://iat-api.xfyun.cn/v2/iat` 与 `wss://tts-api.xfyun.cn/v2/tts`。`SYSTEM_SPEECH_TTS_VOICE` 默认 `xiaoyan`，`SYSTEM_SPEECH_TTS_SPEED` 默认 `50`。
+
+Compose 为兼容当前同一讯飞应用授权，在未设置独立语音变量时可回退服务器 Embedding 的 APPID/APIKey/APISecret；公开部署仍建议显式填写独立 `SYSTEM_SPEECH_*` 变量，便于轮换、审计和最小权限管理。配置只进入 backend，不进入 frontend 镜像。语音接入未新增端口、数据卷、数据库迁移或 Worker；发布时只需重建 backend 与 frontend，并确认浏览器可访问麦克风（公网需 HTTPS 或 localhost 安全上下文）。

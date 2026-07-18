@@ -721,7 +721,7 @@ flowchart LR
 - `learning_bundle_json` 保存路径任务的教学策略、理由和有序资源项。第三方类型不进入领域实体，缺失资源仍由用户确认后通过既有 AIJob 生成。
 - `VideoCurationService` 复用 `WebSearchService`，只归一化 B 站 BV 号和 YouTube 视频 ID。前端不信任任意 `embed_url`，而是从平台与 ID 构造官方播放器地址。
 - `resource_interactions` 是课程级轻量行为事实，不是通用埋点平台；它不保存正文、音频、鼠标轨迹或隐私原文。
-- 浏览器 Web Speech 只作为渐进增强。语音识别只回填输入框，不自动发送；朗读前清理 Markdown、URL、引用标号和代码块。
+- 语音识别只回填输入框，不自动发送；朗读前清理 Markdown、URL、引用标号和代码块。Phase 48 起服务端讯飞 IAT/TTS 为首选，浏览器 Web Speech 保留为渐进降级。
 - 学生可见“协作过程”来自白名单 Agent trace，禁止展示 Provider 原始思维链、系统提示词、完整模型输入、画像原文和资料原文。
 
 ## 21. Phase 28 反馈决策与合同门禁
@@ -812,3 +812,9 @@ AssessmentGraph 的修订输入包含上一版学生可见候选和精确风险�
 语义路由在资源动作中额外输出 `resource_topic`，其值只允许表达课程主题或知识点名称，不包含资源类型和生成命令。该字段随 assistant 提案持久化；主页用户选定课程后，Tutor Service 在当前课程 `knowledge_points` 白名单中进行规范化精确匹配，必要时只接受标题包含关系中的最长候选。模型负责理解主题，确定性代码只负责课程归属和真实实体校验。
 
 主题匹配优先级高于回答中可能存在的相邻引用，匹配失败时拒绝创建错误知识点资源。成功绑定后，ResourceGenerationGraph 按知识点检索专属切片，再执行受并发上限约束的 Worker 波次、模型生成、质量审核和原子持久化。兼容模型对 `uses_history` 的列表/对象误输出只被归一为布尔值，真实引用 ID 仍由 `referenced_turn_ids` 独立白名单校验。
+
+## 34. Phase 48 服务端语音增强
+
+主页与课程空间复用前端 `useBrowserSpeech` 门面，但默认链路已调整为：浏览器 `getUserMedia` 采集浮点采样 → 本地重采样为 16 kHz/16 bit/单声道 PCM → 受认证后端接口 → `XfyunSpeechProvider` → 文字回填。朗读链路为清理 Markdown/URL/代码后的文本 → 后端讯飞 TTS → 浏览器私有 Blob 播放。任一服务端调用失败时，门面降级到 Web Speech API；键盘输入始终是最终兜底。
+
+`XfyunSpeechProvider` 与图片理解 Provider 共用 `xfyun_auth` HMAC WebSocket 签名器，供应商协议不会进入 Tutor Graph、数据库或前端业务模型。语音不是课程资料，不进入 Storage Adapter、聊天消息附件、跨会话记忆、画像、证据或 Agent trace。后端只在请求内存中处理 PCM/MP3，响应禁止缓存，日志只允许安全错误分类和耗时。

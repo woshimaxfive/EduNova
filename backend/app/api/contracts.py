@@ -42,6 +42,7 @@ from backend.app.schemas.resources import (
     ResourceQualityScoreResponse,
     ResourceLearningStateResponse,
 )
+from backend.app.schemas.speech import SpeechTranscriptionResult
 from backend.app.schemas.tutor import (
     DeleteTutorSessionResponse,
     TutorSessionDetail,
@@ -206,6 +207,7 @@ RESPONSE_MODELS: dict[str, Any] = {
     "get_privacy_settings": ApiEnvelope[PrivacySettingsResponse],
     "update_privacy_settings": ApiEnvelope[PrivacySettingsResponse],
     "clear_conversation_memory": ApiEnvelope[ClearConversationMemoryResponse],
+    "transcribe_speech": ApiEnvelope[SpeechTranscriptionResult],
     "create_session": ApiEnvelope[TutorSessionSummary],
     "list_sessions": ApiEnvelope[list[TutorSessionSummary]],
     "list_home_history": ApiEnvelope[TutorSessionHistoryPage],

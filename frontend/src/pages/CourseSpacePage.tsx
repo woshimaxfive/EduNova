@@ -1238,9 +1238,10 @@ export function CourseSpacePage() {
                         <button
                           className={speech.isListening ? "voice-button active" : "voice-button"}
                           type="button"
-                          title={speech.isListening ? "停止聆听" : "语音输入"}
+                          title={speech.isTranscribing ? "正在识别" : speech.isListening ? "结束录音" : "语音输入"}
                           aria-label="语音输入"
                           aria-pressed={speech.isListening}
+                          disabled={speech.isTranscribing}
                           onClick={speech.toggleListening}
                         >
                           <Microphone size={18} weight="duotone" aria-hidden="true" />

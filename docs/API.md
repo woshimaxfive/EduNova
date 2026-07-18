@@ -2720,3 +2720,10 @@ Phase 31 不新增接口路径或数据库迁移。现有资料解析进度对�
   - 需要登录；请求为 `{ "text": "待朗读文本" }`，文本最长 12000 字符。
   - 成功直接返回 `audio/mpeg`，并设置 `Cache-Control: private, no-store`；不返回公开音频地址，不持久化合成结果。
   - 两个接口都可能返回 `SPEECH_NOT_CONFIGURED`、`SPEECH_PROVIDER_ERROR`、`SPEECH_TIMEOUT` 等统一错误；前端据此降级到浏览器 Web Speech，不阻断文字学习流程。
+
+## Phase 51 课程资源上下文合同
+
+- `POST /api/v1/tutor/sessions/{session_id}/messages` 与 `/messages/stream` 的请求增加可选 `context_resource_id`。
+- 该字段只允许课程会话使用；资源必须属于当前用户、绑定同一课程、状态为 `completed` 且包含可学习内容，否则返回 `RESOURCE_CONTEXT_INVALID`，不会静默退回普通问答。
+- 服务端从资源现有 JSON 中确定性提取标题、类型、知识点和最多 6000 字安全文本。外部视频只提供平台、标题、作者、时长与原平台链接，不使用搜索摘要冒充视频内容。
+- 资源上下文只进入当次回答输入，不加入 `citation_json`，不参与画像、弱点、练习评分或掌握度。SSE/Trace仅暴露 `resource_context_used`、`context_resource_id` 和 `context_resource_type`。

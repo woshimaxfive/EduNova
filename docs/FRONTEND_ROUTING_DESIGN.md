@@ -626,3 +626,10 @@ Phase 5 以后：
 - 图谱平移缩放键为 `edunova.course-graph.viewport.v1:{courseId}:{scope}:{chapter}`，AIJob 托盘和逐回答协作折叠状态也只写当前标签页。刷新与前进后退恢复语义，换课程和换标签页互不污染。
 - 图谱节点点击必须在一次 URL 更新中同时写入 `knowledge_point_id` 与 `detail=knowledge`，禁止分别基于旧查询参数写入。节点抽屉进入课程内练习时携带 `return_to=course&return_view=graph&return_detail=knowledge`，返回后恢复同一节点与抽屉。
 - 最新一条持久化回答的安全 Trace 摘要随回答主动加载；更早回答仍按展开加载，既保证刷新后“协作完成”可见，也避免长会话并发请求全部 Trace。
+
+## 24. Phase 51 课程助教 URL 合同
+
+- `mentor=open` 只在课程 `mode=study` 和资源工坊当前资源阅读页生效；主页、完整课程问答、路径、练习和报告忽略该参数。
+- `course_session_id` 与 `mentor=open` 同时存在时不强制切换为完整问答。切到 `mode=chat` 会清除 `mentor`，但保留同一课程会话供完整问答继续。
+- 从知识点相关资源进入 `/app/studio` 时携带 `course_id`、`resource_id`、`knowledge_point_id`、`mentor=open` 和 `course_session_id`。切换同课程资源只更新资源上下文，不更换会话；切换课程时清理旧会话绑定。
+- 助教草稿不持久化。历史消息由服务端会话恢复，面板开关与安全 ID 由 URL 恢复，语音播放和录音状态在关闭或离页时清理。

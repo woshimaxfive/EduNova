@@ -224,3 +224,7 @@ PathPlanning、Assessment、Report、Resource、Profile 及语义决策节点通
 `AiCollaborationPanel` 是前端展示适配层，不是新的 Agent、Graph 或 trace 存储。它统一读取 Tutor SSE 实时阶段、持久化 `AgentTraceResponse` 和 AIJob 进度，显示真实节点、实际耗时、来源数、个性化因素、审核状态、部分失败和安全降级。
 
 兼容的 `AgentTimeline` 与 `TutorResponseProgress` 继续保留原调用合同，但内部委托统一面板。展示层禁止输出 Prompt、Provider 原始响应、原始思维链、完整资料或画像；刷新后只从服务端 Trace/AIJob 恢复真实状态，并用 `sessionStorage` 恢复用户自己的折叠偏好。
+
+## Phase 51 资源陪学边界
+
+课程助教不新增 Graph 或 Agent。`context_resource_id` 经 Tutor Service 权限与课程校验后被转换为受控 `resource_context`，作为 `CourseTutorGraphRunner` 的辅助输入；课程 Retriever、联网、回答、Review 和持久化节点继续原样执行。资源上下文不能产生课程引用、画像信号、弱点或评分证据，安全 Trace 只记录 ID、类型和使用标记。

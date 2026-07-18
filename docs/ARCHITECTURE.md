@@ -832,3 +832,9 @@ Phase 50 只重组现有前端展示，不新增业务状态。课程空间的 `
 知识图谱复用现有 `@xyflow/react`。布局只读取章节顺序、知识点顺序和合法 `prerequisite_ids`；缺失或循环边跳过，不阻断其余节点。桌面端支持聚焦链路和课程全景，移动端降级为纵向章节链路。`AiCollaborationPanel` 通过适配器读取 Tutor SSE、`AgentTraceResponse` 和 AIJob，只展示白名单阶段、实际耗时、来源数、因素代码、审核状态和降级原因。
 
 主页 `TodayLearningInsight` 是 Dashboard、当前课程掌握图、课程学习状态与 `LearningNextAction` 的确定性投影。它不能预测提升、编造诊断或触发额外模型调用；相关 Query 在练习、资源、弱点、路径和报告更新后沿用原有失效范围刷新。
+
+## 37. Phase 51 课程助教与资源上下文
+
+`CourseMentorDock` 是课程学习界面的非模态适配层，不是新的 Agent。课程空间沿用现有 Tutor 控制器，资源工坊通过共享的无界面课程会话控制器读取/创建普通 `course` 会话并消费同一 SSE 合同；完整课程问答仍承担图片、资源提案和回答详情等完整能力。
+
+资源页只在发送时锁定 `context_resource_id`。`TutorSessionService` 重新读取当前用户资源并校验课程和可学习状态，再生成受控 `resource_context` 交给现有 `CourseTutorGraphRunner`。回答模型看到资源安全文本和课程切片，但最终引用仍只来自课程检索或明确的外部补充；资源正文不会扩散到日志、Trace、画像或评估链路。

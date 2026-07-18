@@ -1177,3 +1177,14 @@ docker compose down
 2026-07-18 Phase 50 实际验收：前端全量 Vitest、ESLint、TypeScript、production build、OpenAPI 非破坏检查、UTF-8 编码和 Compose 配置均通过。frontend 镜像重建后健康，完整 Compose 保持运行。`agent-browser` 使用一次性内置课程账号确认裸课程 URL 自动补全图谱状态、节点详情刷新后仍打开、课程全景可切换；390px 自动降级为纵向链路且 `scrollWidth=390`。关键浏览器请求均为 200，控制台无应用错误；临时账号与截图已清理。
 
 2026-07-18 Phase 50 体验复核：新增回归覆盖主页已有对话后不显示重复下一行动、最新持久化回答主动恢复协作摘要、图谱练习课程子路由和返回目标；前端全量 266 项、ESLint、TypeScript、production build、OpenAPI 非破坏检查、编码、Compose 与 diff 检查通过。真实浏览器分别在主页与课程问答完成一次回答后刷新，均直接看到“协作完成”；点击另一图谱节点后标题与 `knowledge_point_id` 同步，进入 `/app/courses/39/practice` 后可返回同一图谱节点和详情抽屉。桌面与 390px 的 `scrollWidth` 均等于 `clientWidth`，临时账号已级联删除，Docker 保持运行。
+
+## Phase 51 课程助教悬浮陪学验收
+
+- 后端覆盖课程资源成功注入、跨用户/跨课程/非完成/空内容拒绝、6000 字上限和视频仅元数据；断言资源不进入回答引用。
+- 前端覆盖助教默认关闭、快捷问题只写草稿、语音和朗读控制、`mentor/course_session_id` URL恢复、课程切换隔离，以及资源发送携带锁定的 `context_resource_id`。
+- 课程空间、资源工坊和完整问答验证同一课程会话连续；主页、路径、练习和报告断言不显示助教。
+- 桌面和 390px 真实浏览器检查浮层焦点、Escape、滚动、无横向溢出、资源切换与刷新恢复。重建 backend/frontend 后保持 Docker 运行。
+
+2026-07-18 Phase 51 实际验收：后端 515 项、前端 269 项、离线评测 10 项及 Ruff、ESLint、TypeScript、production build、Alembic head、OpenAPI 漂移、UTF-8 编码与 Compose 配置检查通过。`scripts/test.ps1` 首次包装运行在前端测试启动时达到 120 秒外层超时，已完成的后端门禁有效，剩余前端全量与工程门禁随后逐项运行并通过；不将该超时包装调用表述为一次完整成功。backend/frontend 镜像重建后健康，Compose 保持运行。
+
+`agent-browser` 使用一次性内置课程账号完成真实链路：知识图谱助教首次发送创建课程会话，刷新恢复 `mentor=open`、会话和历史；进入资源工坊后生成一份讲解资源，并在同一会话中询问“这份资源的关键步骤”，回答与资源中的识别数据元素、定义逻辑关系和确定操作需求一致；再次刷新仍保留两轮历史，完整课程问答可读取同一会话。390px 浮层宽 370px，页面与根节点 `scrollWidth` 均为 390；无麦克风权限时显示键盘降级，路径页即使带入 `mentor=open` 也不渲染助教。浏览器控制台和页面错误为空；临时账号、课程和资源已精确清理。

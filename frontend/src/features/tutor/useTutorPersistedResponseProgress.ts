@@ -26,12 +26,12 @@ export function toCompletedTutorResponseProgress(trace: AgentTrace): TutorComple
   return { startedAt, stages, durationMs };
 }
 
-export function useTutorPersistedResponseProgress(answerTraces: TutorAnswerTrace[]) {
+export function useTutorPersistedResponseProgress(answerTraces: TutorAnswerTrace[], activeMessageId?: string | null) {
   const queries = useQueries({
-    queries: answerTraces.map(({ traceId }) => ({
+    queries: answerTraces.map(({ traceId, messageId }) => ({
       queryKey: ["agents", "trace", traceId],
       queryFn: () => getAgentTrace(traceId ?? ""),
-      enabled: Boolean(traceId),
+      enabled: Boolean(traceId) && messageId === activeMessageId,
       staleTime: 5 * 60_000,
       retry: false
     }))

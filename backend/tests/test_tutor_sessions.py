@@ -128,6 +128,29 @@ class FakeTutorRepository:
             key=lambda message: message.created_at,
         )
 
+    def get_assistant_message(self, user_id: int, session_id: int, message_id: int) -> ChatMessage | None:
+        return next(
+            (
+                message
+                for message in self.messages
+                if message.id == message_id
+                and message.session_id == session_id
+                and message.user_id == user_id
+                and message.role == "assistant"
+            ),
+            None,
+        )
+
+    def link_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None:
+        message = self.get_assistant_message(user_id, session_id, message_id)
+        if message is None:
+            raise LookupError("回答不存在")
+        message.resource_job_ids = list(dict.fromkeys([*(message.resource_job_ids or []), job_id]))
+
+    def register_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None:
+        self.link_resource_job(user_id, session_id, message_id, job_id)
+        self.commit()
+
     def add_session(self, session: ChatSession) -> None:
         session.id = self.next_session_id
         self.next_session_id += 1
@@ -468,6 +491,61 @@ def make_home_material(material_id: int = 301, user_id: int = 1) -> Material:
         extracted_text="主页资料提示：启发式搜索要结合 A* 和估价函数一起复习。",
         metadata_json={"size_label": "12 KB", "extension": "PDF"},
     )
+
+
+def test_prepare_resource_job_uses_persisted_model_proposal_and_answer_evidence() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    service = module.TutorSessionService(repo)
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+    message = ChatMessage(
+        session_id=session.id,
+        user_id=user.id,
+        role="assistant",
+        content="二叉树遍历讲解",
+        citation_json=[{"chunk_id": 501, "knowledge_point_id": 401, "source_type": "course"}],
+        trace_id="trace-resource",
+        resource_job_ids=[],
+        resource_proposal_json={
+            "action": "suggest",
+            "resource_types": ["mindmap", "quiz"],
+            "difficulty": "easy",
+            "learning_goal": "掌握三种遍历顺序",
+            "reason_summary": "图解和练习互补。",
+            "confidence": 0.9,
+        },
+    )
+    repo.add_message(message)
+
+    request, linked = service.prepare_resource_job(user, session.id, message.id, 7)
+
+    assert request["resource_types"] == ["mindmap", "quiz"]
+    assert request["knowledge_point_id"] == 401
+    assert request["evidence_chunk_ids"] == [501]
+    assert linked == []
+
+
+def test_prepare_resource_job_rejects_cross_course_binding() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7, 8})
+    service = module.TutorSessionService(repo)
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+    message = ChatMessage(
+        session_id=session.id,
+        user_id=user.id,
+        role="assistant",
+        content="回答",
+        citation_json=[],
+        trace_id=None,
+        resource_job_ids=[],
+        resource_proposal_json={"action": "generate", "resource_types": ["doc"]},
+    )
+    repo.add_message(message)
+
+    with pytest.raises(module.InvalidMaterialContextError, match="其他课程"):
+        service.prepare_resource_job(user, session.id, message.id, 8)
 
 
 @dataclass

@@ -34,7 +34,6 @@ import {
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
-import { isResourceGenerationPrompt, resourceRequestFromPrompt } from "../features/tutor/resourceGenerationIntent";
 import { InlineFeedback, type FeedbackTone } from "../components/feedback/InlineFeedback";
 import { AiJobProgress } from "../components/feedback/AiJobProgress";
 import { ModalFrame } from "../components/primitives/Dialog";
@@ -76,6 +75,7 @@ type HomeMessage = {
   trace_id: string | null;
   attachments: TutorImageAttachment[];
   resource_jobs?: TutorMessage["resource_jobs"];
+  resource_proposal?: TutorMessage["resource_proposal"];
   streaming?: boolean;
 };
 
@@ -84,7 +84,7 @@ type LearningSpaceNavigationState = {
   selectedMaterialIds?: string[];
 };
 
-type PendingHomeResourceGeneration = { sessionId: string; messageId: string; prompt: string };
+type PendingHomeResourceGeneration = { sessionId: string; messageId: string };
 
 type DashboardSummaryResponse = Awaited<ReturnType<typeof getDashboardSummary>>;
 
@@ -100,7 +100,8 @@ function mapTutorMessages(apiMessages: TutorMessage[]) {
     citation_json: message.citation_json ?? [],
     trace_id: message.trace_id ?? null,
     attachments: message.attachments ?? []
-    ,resource_jobs: message.resource_jobs ?? []
+    ,resource_jobs: message.resource_jobs ?? [],
+    resource_proposal: message.resource_proposal ?? null
   }));
 }
 
@@ -186,7 +187,8 @@ export function LearningSpacePage() {
   const persistedAnswerProgress = useTutorPersistedResponseProgress(
     messages
       .filter((message) => message.role === "assistant" && !message.streaming)
-      .map((message) => ({ messageId: message.id, traceId: message.trace_id }))
+      .map((message) => ({ messageId: message.id, traceId: message.trace_id })),
+    expandedAnswerId
   );
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", "summary"],
@@ -543,7 +545,6 @@ export function LearningSpacePage() {
         sessionId,
         {
           message: question,
-          ...(isResourceGenerationPrompt(question) ? { resource_request: true } : {}),
           ...(imageDraft.attachmentIds.length ? { attachment_ids: imageDraft.attachmentIds } : {})
         },
         {
@@ -597,7 +598,8 @@ export function LearningSpacePage() {
       );
 
       const persistedMessages = mapTutorMessages(detail.messages);
-      const persistedAssistantId = [...persistedMessages].reverse().find((message) => message.role === "assistant")?.id;
+      const persistedAssistant = [...persistedMessages].reverse().find((message) => message.role === "assistant");
+      const persistedAssistantId = persistedAssistant?.id;
       if (persistedAssistantId) {
         setAnswerProgress((current) => ({
           ...current,
@@ -614,8 +616,8 @@ export function LearningSpacePage() {
         });
       }
       setMessages(persistedMessages);
-      if (persistedAssistantId && isResourceGenerationPrompt(question)) {
-        setPendingHomeResourceGeneration({ sessionId: detail.session.id, messageId: persistedAssistantId, prompt: question });
+      if (persistedAssistantId && persistedAssistant?.resource_proposal?.action === "generate") {
+        setPendingHomeResourceGeneration({ sessionId: detail.session.id, messageId: persistedAssistantId });
       }
       setActiveHomeThreadId(detail.session.id);
       navigate(`${PATHS.app}?session_id=${detail.session.id}`, { replace: true, state: null });
@@ -650,10 +652,8 @@ export function LearningSpacePage() {
   async function generateHomeResource(courseId: number) {
     const pending = pendingHomeResourceGeneration;
     if (!pending) return;
-    const request = resourceRequestFromPrompt(pending.prompt, courseId);
-    if (!request) return;
     try {
-      const job = await createTutorResourceGenerationJob(pending.sessionId, pending.messageId, request);
+      const job = await createTutorResourceGenerationJob(pending.sessionId, pending.messageId, { course_id: courseId });
       trackJob(job);
       const detail = await getTutorSession(pending.sessionId);
       setMessages(mapTutorMessages(detail.data.messages));
@@ -851,6 +851,18 @@ export function LearningSpacePage() {
                       {job.error_message ? <small>{job.error_message}</small> : null}
                     </section>
                   ))}
+                  {message.role === "assistant" && message.resource_proposal && message.resource_proposal.action !== "none" && !(message.resource_jobs?.length) ? (
+                    <section className="tutor-resource-card" aria-label="学习资源建议">
+                      <strong>{message.resource_proposal.action === "generate" ? "准备生成配套学习资源" : "可以生成配套学习资源"}</strong>
+                      <small>{message.resource_proposal.reason_summary}</small>
+                      <button
+                        type="button"
+                        onClick={() => activeHomeThreadId && setPendingHomeResourceGeneration({ sessionId: activeHomeThreadId, messageId: message.id })}
+                      >
+                        选择课程并生成
+                      </button>
+                    </section>
+                  ) : null}
                   {message.role === "assistant" && !message.streaming ? (
                     <button
                       className="message-speak-button"

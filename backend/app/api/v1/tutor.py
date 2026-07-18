@@ -348,10 +348,27 @@ def create_tutor_resource_job(
     job_service: AiJobService = Depends(get_ai_job_service),
 ) -> dict:
     try:
-        job = job_service.create_resource_generation_job(current_user, course_id=payload.course_id, knowledge_point_id=payload.knowledge_point_id, resource_types=list(payload.resource_types), learning_goal=payload.learning_goal, difficulty=payload.difficulty, tutor_message_id=message_id, idempotency_key=idempotency_key)
-        tutor_service.register_resource_job(current_user, session_id, message_id, int(job.job_id))
+        request, _linked_job_ids = tutor_service.prepare_resource_job(
+            current_user,
+            session_id,
+            message_id,
+            payload.course_id,
+            legacy_request={
+                "resource_types": list(payload.resource_types),
+                "learning_goal": payload.learning_goal,
+                "difficulty": payload.difficulty,
+            },
+        )
+        job = job_service.create_resource_generation_job(
+            current_user,
+            **request,
+            on_created=lambda job_id: tutor_service.link_resource_job(current_user, session_id, message_id, job_id),
+            idempotency_key=idempotency_key or f"tutor-resource-{session_id}-{message_id}",
+        )
     except SessionNotFoundError as exc:
         raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc
+    except InvalidMaterialContextError as exc:
+        raise ApiError(status.HTTP_400_BAD_REQUEST, "RESOURCE_PROPOSAL_INVALID", str(exc)) from exc
     return api_response(job.model_dump(mode="json"))
 
 

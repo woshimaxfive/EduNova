@@ -534,6 +534,7 @@ class ChatMessage(IdMixin, CreatedAtMixin, Base):
     trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     # Durable links let generated resources remain visible on the originating answer after refresh.
     resource_job_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    resource_proposal_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
 class ChatMessageAttachment(IdMixin, CreatedAtMixin, Base):

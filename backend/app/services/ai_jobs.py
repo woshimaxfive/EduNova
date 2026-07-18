@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -457,6 +457,8 @@ class AiJobService:
         source_resource_id: int | None = None,
         path_task_id: int | None = None,
         tutor_message_id: int | None = None,
+        evidence_chunk_ids: list[int] | None = None,
+        on_created: Callable[[int], None] | None = None,
         idempotency_key: str | None = None,
     ) -> AiJobResponse:
         if self.repository.get_course_for_user(user.id, course_id) is None:
@@ -512,8 +514,10 @@ class AiJobService:
                 "source_resource_id": source_resource_id,
                 "path_task_id": path_task_id,
                 "tutor_message_id": tutor_message_id,
+                "evidence_chunk_ids": [int(item) for item in dict.fromkeys(evidence_chunk_ids or []) if int(item) > 0][:8],
             },
             idempotency_key=idempotency_key,
+            before_commit=(lambda job: on_created(int(job.id))) if on_created is not None else None,
         )
 
     def create_path_task_resource_job(
@@ -780,6 +784,7 @@ class AiJobService:
         idempotency_key: str | None,
         retry_of_job_id: int | None = None,
         attempt_count: int = 0,
+        before_commit: Callable[[AiJob], None] | None = None,
     ) -> AiJobResponse:
         key = self._normalize_key(idempotency_key)
         existing = self.repository.get_by_idempotency(user.id, key)
@@ -813,6 +818,8 @@ class AiJobService:
         )
         try:
             self.repository.add(job)
+            if before_commit is not None:
+                before_commit(job)
             self.repository.commit()
             self.repository.refresh(job)
         except Exception:
@@ -1191,7 +1198,9 @@ class AiJobService:
     def _run_resource_generation(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:
         from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
         from backend.app.services.code_verifier import HttpCodeVerifier
+        from backend.app.services.embeddings import EmbeddingService
         from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
+        from backend.app.services.rag import RagService, SqlAlchemyRagRepository
         from backend.app.services.resources import ResourceGenerationGraphRunner, ResourceGenerationService, SqlAlchemyResourceRepository
 
         model_service = ModelSettingsService(
@@ -1210,7 +1219,28 @@ class AiJobService:
         )
         request = dict(job.request_json or {})
         course = service._require_course(user, int(request["course_id"]))
-        knowledge_point = service._resolve_knowledge_point(course.id, request.get("knowledge_point_id"))
+        knowledge_point_id = request.get("knowledge_point_id")
+        matched_evidence_chunk_ids = [
+            int(item) for item in request.get("evidence_chunk_ids", []) if str(item).isdigit()
+        ][:8]
+        if knowledge_point_id is None and request.get("tutor_message_id") is not None:
+            context.before_node("resolve_context", "正在匹配课程知识点")
+            query = str(request.get("learning_goal") or "").strip()
+            if not query:
+                raise AiJobValidationError("对话资源缺少可用于匹配课程知识点的学习目标。")
+            try:
+                search_result = RagService(
+                    SqlAlchemyRagRepository(self.repository.db),
+                    embedding_service=EmbeddingService(model_service),
+                    rerank_service=model_service,
+                ).search(user=user, course_id=course.id, query=query, top_k=3)
+            except Exception as exc:
+                raise AiJobValidationError("暂时无法把对话主题匹配到课程知识点，请稍后重试。") from exc
+            matched, matched_evidence_chunk_ids = self._select_tutor_resource_match(search_result.results)
+            if matched is None:
+                raise AiJobValidationError("没有在所选课程中找到与本次对话匹配的知识点。")
+            knowledge_point_id = int(matched.knowledge_point_id)
+        knowledge_point = service._resolve_knowledge_point(course.id, knowledge_point_id)
         source_resource = (
             service.repository.get_resource_for_user(user.id, int(request["source_resource_id"]))
             if request.get("source_resource_id") is not None
@@ -1233,11 +1263,26 @@ class AiJobService:
         )
         return {
             "course_id": str(course.id),
+            "knowledge_point_id": str(knowledge_point.id) if knowledge_point is not None else None,
+            "evidence_chunk_ids": matched_evidence_chunk_ids,
             "path_task_id": str(request["path_task_id"]) if request.get("path_task_id") is not None else None,
             "resource_ids": [resource.id for resource in result.resources],
             "failed_resource_types": result.failed_resource_types,
             "warnings": result.warnings,
         }
+
+    @staticmethod
+    def _select_tutor_resource_match(results: list[Any]) -> tuple[Any | None, list[int]]:
+        matched = next((item for item in results if item.knowledge_point_id is not None), None)
+        if matched is None:
+            return None, []
+        knowledge_point_id = int(matched.knowledge_point_id)
+        evidence_chunk_ids = [
+            int(item.chunk_id)
+            for item in results
+            if item.knowledge_point_id == knowledge_point_id
+        ][:8]
+        return matched, evidence_chunk_ids
 
     def _run_path_planning(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:
         from backend.app.agents.path_planning import PathPlanningGraphRunner

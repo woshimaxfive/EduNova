@@ -147,6 +147,11 @@ class FakeModelSettingsRepository:
             if setting.user_id == user_id and setting.id != except_setting_id:
                 setting.is_embedding_default = False
 
+    def unset_rerank_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None:
+        for setting in self.settings_by_id.values():
+            if setting.user_id == user_id and setting.id != except_setting_id:
+                setting.is_rerank_default = False
+
     def unset_vision_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None:
         for setting in self.settings_by_id.values():
             if setting.user_id == user_id and setting.id != except_setting_id:
@@ -551,7 +556,7 @@ def test_multi_model_configs_are_independently_saved_and_defaulted() -> None:
     assert [config["is_default"] for config in configs["configs"]] == [True, False]
 
 
-def test_chat_and_embedding_defaults_can_use_different_configs() -> None:
+def test_personal_chat_default_does_not_override_server_embedding_runtime() -> None:
     module = load_model_settings_module()
     user = make_user()
     repo = FakeModelSettingsRepository(settings_by_user={})
@@ -592,12 +597,12 @@ def test_chat_and_embedding_defaults_can_use_different_configs() -> None:
     assert chat_runtime.base_url == "https://spark-api-open.xf-yun.com/v1"
     assert chat_runtime.chat_model == "lite"
     assert chat_runtime.api_key == "spark-secret"
-    assert embedding_runtime.base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    assert embedding_runtime.embedding_model == "text-embedding-v4"
-    assert embedding_runtime.api_key == "qwen-secret"
+    assert embedding_runtime.base_url == "https://model.example.local/v1"
+    assert embedding_runtime.embedding_model == "system-embedding"
+    assert embedding_runtime.api_key == "sk-system-secret"
 
 
-def test_one_config_can_combine_different_chat_and_embedding_providers() -> None:
+def test_legacy_combined_config_keeps_fields_but_embedding_runtime_is_server_managed() -> None:
     module = load_model_settings_module()
     user = make_user()
     repo = FakeModelSettingsRepository(settings_by_user={})
@@ -645,14 +650,14 @@ def test_one_config_can_combine_different_chat_and_embedding_providers() -> None
     assert chat_runtime.base_url == "https://spark-api-open.xf-yun.com/v1"
     assert chat_runtime.api_key == "spark-chat-secret"
     assert chat_runtime.chat_model == "lite"
-    assert embedding_runtime.base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    assert embedding_runtime.api_key == "qwen-embedding-secret"
-    assert embedding_runtime.embedding_model == "text-embedding-v4"
+    assert embedding_runtime.base_url == "https://model.example.local/v1"
+    assert embedding_runtime.api_key == "sk-system-secret"
+    assert embedding_runtime.embedding_model == "system-embedding"
     assert provider.calls is not None
     assert provider.calls[0]["config"].base_url == "https://spark-api-open.xf-yun.com/v1"
     assert provider.calls[0]["config"].api_key == "spark-chat-secret"
-    assert provider.calls[1]["config"].base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    assert provider.calls[1]["config"].api_key == "qwen-embedding-secret"
+    assert provider.calls[1]["config"].base_url == "https://model.example.local/v1"
+    assert provider.calls[1]["config"].api_key == "sk-system-secret"
 
 
 def test_thinking_parameter_is_only_forwarded_to_spark_chat_configs() -> None:
@@ -1526,7 +1531,7 @@ def test_model_settings_service_uses_embedding_model_for_vectors() -> None:
     assert len(vectors[0]) == 1536
     assert provider.calls is not None
     assert provider.calls[-1]["texts"] == ["启发式搜索"]
-    assert provider.calls[-1]["config"].embedding_model == "text-embedding-v4"
+    assert provider.calls[-1]["config"].embedding_model == "system-embedding"
 
 
 @pytest.mark.parametrize(
@@ -1661,11 +1666,11 @@ def test_model_settings_routes_use_documented_envelopes() -> None:
     assert test_response.json()["data"]["operation"] == "chat"
     assert embedding_test_response.status_code == 200
     assert embedding_test_response.json()["data"]["operation"] == "embedding"
-    assert embedding_test_response.json()["data"]["model"] == "user-embedding"
+    assert embedding_test_response.json()["data"]["model"] == "system-embedding"
     assert configs_response.status_code == 200
     assert configs_response.json()["data"]["default_config_id"] is not None
     assert configs_response.json()["data"]["default_chat_config_id"] == embedding_config_id
-    assert configs_response.json()["data"]["default_embedding_config_id"] == embedding_config_id
+    assert configs_response.json()["data"]["default_embedding_config_id"] is None
     assert "sk-user-secret" not in str(configs_response.json())
     assert embedding_default_response.status_code == 200
     assert embedding_default_response.json()["data"]["default_embedding_config_id"] == embedding_config_id

@@ -44,7 +44,6 @@ import {
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
-import { isResourceGenerationPrompt, resourceRequestFromPrompt } from "../features/tutor/resourceGenerationIntent";
 import { CourseAssistantTurn } from "../components/course-space/CourseAssistantTurn";
 import { CourseClosedLoopActions, type CourseAnswerPanelKind } from "../components/course-space/CourseClosedLoopActions";
 import { CourseContentView, type CourseContentMode } from "../components/course-space/CourseContentView";
@@ -148,6 +147,7 @@ type CourseMessage = {
   traceId?: string | null;
   attachments?: TutorImageAttachment[];
   resourceJobs?: TutorMessage["resource_jobs"];
+  resourceProposal?: TutorMessage["resource_proposal"];
 };
 
 const COURSE_COMPOSER_MAX_HEIGHT = 154;
@@ -187,7 +187,8 @@ function mapTutorMessagesToCourseMessages(messages: TutorMessage[]): CourseMessa
       supplementalSources: message.role === "assistant" ? supplementalSources : undefined,
       traceId: message.role === "assistant" ? message.trace_id : null,
       attachments: message.attachments ?? []
-      ,resourceJobs: message.resource_jobs ?? []
+      ,resourceJobs: message.resource_jobs ?? [],
+      resourceProposal: message.resource_proposal ?? null
     };
   });
 }
@@ -398,7 +399,8 @@ export function CourseSpacePage() {
   const persistedCourseAnswerProgress = useTutorPersistedResponseProgress(
     displayedCourseMessages
       .filter((message) => message.role === "assistant")
-      .map((message) => ({ messageId: message.id, traceId: message.traceId }))
+      .map((message) => ({ messageId: message.id, traceId: message.traceId })),
+    activeTurnDetail?.messageId
   );
   const hasDisplayedCourseMessages = displayedCourseMessages.length > 0;
   const isCourseLoading = hasRealCourseId && courseQuery.isPending && !fallbackCourse;
@@ -904,7 +906,6 @@ export function CourseSpacePage() {
 
       const detail = await streamTutorMessage(sessionId, {
         message: question,
-        ...(isResourceGenerationPrompt(question) ? { resource_request: true } : {}),
         ...(imageDraft.attachmentIds.length ? { attachment_ids: imageDraft.attachmentIds } : {})
       }, {
         onStatus: (status) => {
@@ -922,12 +923,15 @@ export function CourseSpacePage() {
       let messages = mapTutorMessagesToCourseMessages(detail.messages);
 
       const persistedAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-      const resourceRequest = persistedAssistant ? resourceRequestFromPrompt(question, numericCourseId) : null;
-      if (persistedAssistant && resourceRequest) {
-        const job = await createTutorResourceGenerationJob(detail.session.id, persistedAssistant.id, resourceRequest);
-        trackJob(job);
-        const refreshed = await getTutorSession(detail.session.id);
-        messages = mapTutorMessagesToCourseMessages(refreshed.data.messages);
+      if (persistedAssistant?.resourceProposal?.action === "generate") {
+        try {
+          const job = await createTutorResourceGenerationJob(detail.session.id, persistedAssistant.id, { course_id: numericCourseId });
+          trackJob(job);
+          const refreshed = await getTutorSession(detail.session.id);
+          messages = mapTutorMessagesToCourseMessages(refreshed.data.messages);
+        } catch (resourceError) {
+          setCourseFeedback(resourceError instanceof Error ? resourceError.message : "回答已保存，但资源任务创建失败，请在回答下方重试。");
+        }
       }
 
       setActiveCourseSessionId(detail.session.id);
@@ -956,6 +960,18 @@ export function CourseSpacePage() {
       setCourseFeedback(error instanceof Error ? error.message : "模型暂不可用，请检查设置或稍后重试。");
     } finally {
       setIsSearchingCourse(false);
+    }
+  }
+
+  async function generateSuggestedCourseResources(message: CourseMessage) {
+    if (!selectedCourseSessionId || !hasRealCourseId || !message.resourceProposal) return;
+    try {
+      const job = await createTutorResourceGenerationJob(selectedCourseSessionId, message.id, { course_id: numericCourseId });
+      trackJob(job);
+      const refreshed = await getTutorSession(selectedCourseSessionId);
+      setCourseMessages(mapTutorMessagesToCourseMessages(refreshed.data.messages));
+    } catch (error) {
+      setCourseFeedback(error instanceof Error ? error.message : "资源生成任务创建失败，请稍后再试。");
     }
   }
 
@@ -1143,6 +1159,13 @@ export function CourseSpacePage() {
                                     {job.error_message ? <small>{job.error_message}</small> : null}
                                   </section>
                                 ))}
+                                {message.resourceProposal && message.resourceProposal.action !== "none" && !(message.resourceJobs?.length) ? (
+                                  <section className="tutor-resource-card" aria-label="学习资源建议">
+                                    <strong>{message.resourceProposal.action === "generate" ? "准备生成学习资源" : "建议补充学习资源"}</strong>
+                                    <small>{message.resourceProposal.reason_summary}</small>
+                                    <button type="button" onClick={() => void generateSuggestedCourseResources(message)}>生成建议资源</button>
+                                  </section>
+                                ) : null}
                                 {detail}
                               </>
                             }

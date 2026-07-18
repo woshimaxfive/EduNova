@@ -172,3 +172,61 @@ def test_course_evidence_assessment_rejects_unreturned_citation_ids() -> None:
     assert result["relation_type"] == "adjacent"
     assert result["relevant_citation_ids"] == ["12"]
     assert result["external_search_helpful"] is True
+
+
+def test_explicit_resource_generation_is_model_decided_without_keyword_rules() -> None:
+    model = FakeModel(
+        '{"intent":"learning_resource_generation","search_required":false,"search_query":"",'
+        '"reasoning_mode":"auto","course_related":true,"confidence":0.95,'
+        '"reason_codes":["explicit_resource_generation"],"reason_summary":"用户明确要求生成配套资源。",'
+        '"profile_signals":[],"resource_action":"generate",'
+        '"resource_types":["mindmap","quiz"],"resource_difficulty":"medium",'
+        '"resource_learning_goal":"用图解和练习掌握二叉树遍历",'
+        '"resource_reason_summary":"图解建立结构，练习检验理解。"}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="给我换两种方式把这节内容做成可以学习的材料", scope="course"
+    )
+
+    assert decision.resource_action == "generate"
+    assert decision.resource_types == ("mindmap", "quiz")
+    assert decision.resource_learning_goal == "用图解和练习掌握二叉树遍历"
+
+
+def test_empty_collection_history_flag_does_not_discard_valid_resource_decision() -> None:
+    model = FakeModel(
+        '{"intent":"learning_resource_generation","search_required":false,"search_query":"",'
+        '"reasoning_mode":"auto","course_related":true,"confidence":0.95,'
+        '"reason_codes":["explicit_resource_generation"],"reason_summary":"用户明确要求生成配套资源。",'
+        '"profile_signals":[],"uses_history":[],"resource_action":"generate",'
+        '"resource_types":["mindmap","quiz"],"resource_difficulty":"medium",'
+        '"resource_learning_goal":"掌握二叉树遍历",'
+        '"resource_reason_summary":"图解建立结构，练习检验理解。"}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="请生成思维导图和练习题", scope="home"
+    )
+
+    assert decision.decision_mode == "model"
+    assert decision.uses_history is False
+    assert decision.resource_action == "generate"
+
+
+def test_ambiguous_learning_need_only_returns_confirmable_suggestion() -> None:
+    model = FakeModel(
+        '{"intent":"learning_support","search_required":false,"search_query":"",'
+        '"reasoning_mode":"auto","course_related":true,"confidence":0.83,'
+        '"reason_codes":["visual_support_helpful"],"reason_summary":"图解可能帮助理解。",'
+        '"profile_signals":[],"resource_action":"suggest","resource_types":["mindmap"],'
+        '"resource_difficulty":"easy","resource_learning_goal":"梳理状态变化",'
+        '"resource_reason_summary":"建议先用图解确认状态关系。"}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="我还是有点绕，有没有更直观的办法？", scope="course"
+    )
+
+    assert decision.resource_action == "suggest"
+    assert decision.resource_types == ("mindmap",)

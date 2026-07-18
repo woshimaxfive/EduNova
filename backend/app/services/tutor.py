@@ -128,6 +128,9 @@ class TutorSessionRepository(Protocol):
     def list_messages(self, session_id: int) -> list[ChatMessage]:
         ...
 
+    def get_assistant_message(self, user_id: int, session_id: int, message_id: int) -> ChatMessage | None:
+        ...
+
     def add_session(self, session: ChatSession) -> None:
         ...
 
@@ -145,6 +148,8 @@ class TutorSessionRepository(Protocol):
     def resource_job_map(self, user_id: int, message_ids: list[int]) -> dict[int, list[TutorResourceJob]]: ...
 
     def register_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None: ...
+
+    def link_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None: ...
 
     def bound_attachments(
         self, user_id: int, session_id: int, message_ids: list[int]
@@ -441,6 +446,16 @@ class SqlAlchemyTutorSessionRepository:
             )
         )
 
+    def get_assistant_message(self, user_id: int, session_id: int, message_id: int) -> ChatMessage | None:
+        return self.db.scalar(
+            select(ChatMessage).where(
+                ChatMessage.id == message_id,
+                ChatMessage.session_id == session_id,
+                ChatMessage.user_id == user_id,
+                ChatMessage.role == "assistant",
+            )
+        )
+
     def add_session(self, session: ChatSession) -> None:
         self.db.add(session)
 
@@ -509,11 +524,15 @@ class SqlAlchemyTutorSessionRepository:
         return result
 
     def register_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None:
+        self.link_resource_job(user_id, session_id, message_id, job_id)
+        self.db.commit()
+
+    def link_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None:
         message = self.db.scalar(select(ChatMessage).where(ChatMessage.id == message_id, ChatMessage.session_id == session_id, ChatMessage.user_id == user_id, ChatMessage.role == "assistant").with_for_update())
         if message is None:
             raise SessionNotFoundError("回答不存在或无权访问。")
         message.resource_job_ids = list(dict.fromkeys([*(message.resource_job_ids or []), job_id]))
-        self.db.commit()
+        self.db.add(message)
 
     def bound_attachments(
         self, user_id: int, session_id: int, message_ids: list[int]
@@ -620,6 +639,27 @@ class TutorSessionService:
                 for index, message in enumerate(conversation_context.messages)
             ] if conversation_context is not None else [],
         )
+
+    @staticmethod
+    def _resource_proposal_from_state(state: AgentState) -> dict[str, Any]:
+        action = str(state.get("resource_action") or "none")
+        valid_types = {"doc", "mindmap", "quiz", "code", "slide", "animation", "video"}
+        resource_types = [
+            str(item)
+            for item in dict.fromkeys(state.get("resource_types", []))
+            if str(item) in valid_types
+        ][:3]
+        if action not in {"suggest", "generate"} or not resource_types:
+            return {}
+        difficulty = str(state.get("resource_difficulty") or "medium")
+        return {
+            "action": action,
+            "resource_types": resource_types,
+            "difficulty": difficulty if difficulty in {"easy", "medium", "hard"} else "medium",
+            "learning_goal": str(state.get("resource_learning_goal") or state.get("standalone_query") or state.get("message_text") or "")[:500],
+            "reason_summary": str(state.get("resource_reason_summary") or "根据本轮学习目标推荐。")[:160],
+            "confidence": max(0.0, min(1.0, float(state.get("semantic_decision_confidence") or 0))),
+        }
 
     def create_session(
         self,
@@ -857,6 +897,14 @@ class TutorSessionService:
             citation_json=[],
             trace_id=None,
             attachment_ids=attachment_ids,
+            resource_proposal={
+                "action": "generate",
+                "resource_types": ["doc"],
+                "difficulty": "medium",
+                "learning_goal": message_text[:500],
+                "reason_summary": "旧客户端明确请求生成学习资源。",
+                "confidence": 1.0,
+            },
         )
         yield {"event": "done", "data": detail.model_dump()}
 
@@ -1133,6 +1181,7 @@ class TutorSessionService:
         profile_signal_updates: dict[str, Any] | None = None,
         profile_signal_confidence: dict[str, float] | None = None,
         attachment_ids: list[int] | None = None,
+        resource_proposal: dict[str, Any] | None = None,
     ) -> TutorSessionDetail:
         normalized_attachment_ids = list(dict.fromkeys(attachment_ids or []))[:3]
         attachments = (
@@ -1157,6 +1206,7 @@ class TutorSessionService:
             content=assistant_reply,
             citation_json=citation_json,
             trace_id=trace_id,
+            resource_proposal_json=resource_proposal or {},
         )
 
         try:
@@ -1256,6 +1306,64 @@ class TutorSessionService:
     def register_resource_job(self, user: User, session_id: int, message_id: int, job_id: int) -> None:
         self._get_session_for_user(user.id, session_id)
         self.repository.register_resource_job(user.id, session_id, message_id, job_id)
+
+    def prepare_resource_job(
+        self,
+        user: User,
+        session_id: int,
+        message_id: int,
+        requested_course_id: int,
+        legacy_request: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], list[int]]:
+        session = self._get_session_for_user(user.id, session_id)
+        message = self.repository.get_assistant_message(user.id, session_id, message_id)
+        if message is None:
+            raise SessionNotFoundError("回答不存在或无权访问。")
+        if session.scope == "course" and int(session.course_id or 0) != requested_course_id:
+            raise InvalidMaterialContextError("不能把课程回答生成到其他课程。")
+
+        proposal = getattr(message, "resource_proposal_json", {})
+        proposal = proposal if isinstance(proposal, dict) else {}
+        if proposal.get("action") not in {"suggest", "generate"}:
+            proposal = legacy_request or {}
+        valid_types = {"doc", "mindmap", "quiz", "code", "slide", "animation", "video"}
+        resource_types = [
+            str(item)
+            for item in dict.fromkeys(proposal.get("resource_types", []))
+            if str(item) in valid_types
+        ][:3]
+        if not resource_types:
+            raise InvalidMaterialContextError("该回答没有可确认的资源生成提案。")
+        difficulty = str(proposal.get("difficulty") or "medium")
+        if difficulty not in {"easy", "medium", "hard"}:
+            difficulty = "medium"
+        knowledge_point_id = None
+        evidence_chunk_ids: list[int] = []
+        for citation in message.citation_json or []:
+            if not isinstance(citation, dict) or citation.get("source_type") in {"web", "history"}:
+                continue
+            chunk_id = citation.get("chunk_id")
+            if str(chunk_id).isdigit():
+                evidence_chunk_ids.append(int(chunk_id))
+            candidate = citation.get("knowledge_point_id")
+            if knowledge_point_id is None and str(candidate).isdigit():
+                knowledge_point_id = int(candidate)
+        return (
+            {
+                "course_id": requested_course_id,
+                "knowledge_point_id": knowledge_point_id,
+                "resource_types": resource_types,
+                "learning_goal": str(proposal.get("learning_goal") or message.content)[:500],
+                "difficulty": difficulty,
+                "tutor_message_id": message_id,
+                "evidence_chunk_ids": list(dict.fromkeys(evidence_chunk_ids))[:8],
+            },
+            [int(item) for item in (message.resource_job_ids or []) if str(item).isdigit()],
+        )
+
+    def link_resource_job(self, user: User, session_id: int, message_id: int, job_id: int) -> None:
+        self._get_session_for_user(user.id, session_id)
+        self.repository.link_resource_job(user.id, session_id, message_id, job_id)
 
     def _persist_course_tutor_graph_trace(
         self,
@@ -2175,6 +2283,8 @@ class HomeTutorGraphRunner:
                     "semantic_decision_mode": "vision_model",
                     "semantic_decision_confidence": float(visual.get("confidence") or 0),
                     "semantic_warning": None,
+                    "resource_action": "none",
+                    "resource_types": [],
                     "retrieval_query": str(visual.get("standalone_query") or message),
                     "standalone_query": str(visual.get("standalone_query") or message),
                     "uses_history": False,
@@ -2227,6 +2337,11 @@ class HomeTutorGraphRunner:
                 "semantic_decision_mode": decision.decision_mode,
                 "semantic_decision_confidence": decision.confidence,
                 "semantic_warning": decision.warning,
+                "resource_action": getattr(decision, "resource_action", "none"),
+                "resource_types": list(getattr(decision, "resource_types", ())),
+                "resource_difficulty": getattr(decision, "resource_difficulty", "medium"),
+                "resource_learning_goal": getattr(decision, "resource_learning_goal", ""),
+                "resource_reason_summary": getattr(decision, "resource_reason_summary", ""),
                 "retrieval_query": standalone_query if history_visual else (
                     getattr(decision, "standalone_query", "")
                     if getattr(decision, "uses_history", False)
@@ -2618,6 +2733,7 @@ class HomeTutorGraphRunner:
             profile_signal_updates=dict(state.get("profile_signal_updates", {})),
             profile_signal_confidence=dict(state.get("profile_signal_confidence", {})),
             attachment_ids=list(state.get("attachment_ids", [])),
+            resource_proposal=self.service._resource_proposal_from_state(state),
         )
         duration_ms = max(1, int((perf_counter() - started) * 1000))
         artifact_id = detail.messages[-1].id if detail.messages else None
@@ -2893,6 +3009,7 @@ class CourseTutorGraphRunner:
             profile_signal_updates=dict(result.get("profile_signal_updates", {})),
             profile_signal_confidence=dict(result.get("profile_signal_confidence", {})),
             attachment_ids=attachment_ids or [],
+            resource_proposal=self.service._resource_proposal_from_state(result),
         )
 
     def stream(
@@ -2977,6 +3094,7 @@ class CourseTutorGraphRunner:
                 profile_signal_updates=dict(state.get("profile_signal_updates", {})),
                 profile_signal_confidence=dict(state.get("profile_signal_confidence", {})),
                 attachment_ids=attachment_ids or [],
+                resource_proposal=self.service._resource_proposal_from_state(state),
             )
             yield {"event": "done", "data": detail.model_dump()}
         except Exception as exc:
@@ -3109,6 +3227,8 @@ class CourseTutorGraphRunner:
                     "semantic_decision_mode": "vision_model",
                     "semantic_decision_confidence": float(visual.get("confidence") or 0),
                     "semantic_warning": None,
+                    "resource_action": "none",
+                    "resource_types": [],
                     "retrieval_query": str(visual.get("standalone_query") or state["message_text"]),
                     "standalone_query": str(visual.get("standalone_query") or state["message_text"]),
                     "uses_history": False,
@@ -3162,6 +3282,11 @@ class CourseTutorGraphRunner:
                 "semantic_decision_mode": decision.decision_mode,
                 "semantic_decision_confidence": decision.confidence,
                 "semantic_warning": decision.warning,
+                "resource_action": getattr(decision, "resource_action", "none"),
+                "resource_types": list(getattr(decision, "resource_types", ())),
+                "resource_difficulty": getattr(decision, "resource_difficulty", "medium"),
+                "resource_learning_goal": getattr(decision, "resource_learning_goal", ""),
+                "resource_reason_summary": getattr(decision, "resource_reason_summary", ""),
                 "retrieval_query": standalone_query if history_visual else (
                     getattr(decision, "standalone_query", "")
                     if getattr(decision, "uses_history", False)

@@ -360,19 +360,15 @@ class MaterialService:
     def delete_material(self, user: User, material_id: int) -> None:
         material = self._require_material(user, material_id)
         storage_path = material.storage_path
+        # Keep deletion retryable: a storage outage must not remove the database
+        # record while leaving a private object that can no longer be addressed.
+        self.storage.delete(storage_path)
         try:
             self.repository.delete_material(material)
             self.repository.commit()
         except Exception:
             self.repository.rollback()
             raise
-
-        # The database record is already gone; a storage outage must not make
-        # the user retry a deletion that has actually succeeded.
-        try:
-            self.storage.delete(storage_path)
-        except Exception:
-            pass
 
     def get_outline(self, user: User, material_id: int) -> MaterialOutlineResponse:
         material = self._require_material(user, material_id)

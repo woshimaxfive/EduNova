@@ -2848,6 +2848,7 @@
           },
           "difficulty": {
             "default": "medium",
+            "deprecated": true,
             "enum": [
               "easy",
               "medium",
@@ -2866,15 +2867,19 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Knowledge Point Id"
           },
           "learning_goal": {
             "default": "",
+            "deprecated": true,
             "maxLength": 500,
             "title": "Learning Goal",
             "type": "string"
           },
           "resource_types": {
+            "deprecated": true,
+            "description": "兼容旧客户端；服务端优先使用对应回答中已持久化的模型提案。",
             "items": {
               "enum": [
                 "doc",
@@ -2888,14 +2893,12 @@
               "type": "string"
             },
             "maxItems": 3,
-            "minItems": 1,
             "title": "Resource Types",
             "type": "array"
           }
         },
         "required": [
-          "course_id",
-          "resource_types"
+          "course_id"
         ],
         "title": "CreateTutorResourceJobRequest",
         "type": "object"
@@ -8876,6 +8879,16 @@
             "title": "Resource Jobs",
             "type": "array"
           },
+          "resource_proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TutorResourceProposal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "role": {
             "enum": [
               "user",
@@ -8951,6 +8964,65 @@
           "label"
         ],
         "title": "TutorResourceJob",
+        "type": "object"
+      },
+      "TutorResourceProposal": {
+        "properties": {
+          "action": {
+            "default": "none",
+            "enum": [
+              "none",
+              "suggest",
+              "generate"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "confidence": {
+            "default": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "difficulty": {
+            "default": "medium",
+            "enum": [
+              "easy",
+              "medium",
+              "hard"
+            ],
+            "title": "Difficulty",
+            "type": "string"
+          },
+          "learning_goal": {
+            "default": "",
+            "title": "Learning Goal",
+            "type": "string"
+          },
+          "reason_summary": {
+            "default": "",
+            "title": "Reason Summary",
+            "type": "string"
+          },
+          "resource_types": {
+            "items": {
+              "enum": [
+                "doc",
+                "mindmap",
+                "quiz",
+                "code",
+                "slide",
+                "animation",
+                "video"
+              ],
+              "type": "string"
+            },
+            "title": "Resource Types",
+            "type": "array"
+          }
+        },
+        "title": "TutorResourceProposal",
         "type": "object"
       },
       "TutorSessionDetail": {

@@ -63,6 +63,11 @@ class AgentState(TypedDict, total=False):
     semantic_decision_mode: str
     semantic_decision_confidence: float
     semantic_warning: str | None
+    resource_action: str
+    resource_types: list[str]
+    resource_difficulty: str
+    resource_learning_goal: str
+    resource_reason_summary: str
     semantic_search_query: str
     standalone_query: str
     uses_history: bool

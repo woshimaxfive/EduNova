@@ -112,10 +112,15 @@ class SendTutorMessageRequest(BaseModel):
 
 class CreateTutorResourceJobRequest(BaseModel):
     course_id: int = Field(gt=0)
-    knowledge_point_id: int | None = Field(default=None, gt=0)
-    resource_types: list[Literal["doc", "mindmap", "quiz", "code", "slide", "animation", "video"]] = Field(min_length=1, max_length=3)
-    learning_goal: str = Field(default="", max_length=500)
-    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    knowledge_point_id: int | None = Field(default=None, gt=0, json_schema_extra={"deprecated": True})
+    resource_types: list[Literal["doc", "mindmap", "quiz", "code", "slide", "animation", "video"]] = Field(
+        default_factory=list,
+        max_length=3,
+        json_schema_extra={"deprecated": True},
+        description="兼容旧客户端；服务端优先使用对应回答中已持久化的模型提案。",
+    )
+    learning_goal: str = Field(default="", max_length=500, json_schema_extra={"deprecated": True})
+    difficulty: Literal["easy", "medium", "hard"] = Field(default="medium", json_schema_extra={"deprecated": True})
 
 
 class AttachTutorMaterialRequest(BaseModel):
@@ -163,6 +168,15 @@ class TutorResourceJob(BaseModel):
     resources: list[TutorGeneratedResource] = Field(default_factory=list)
 
 
+class TutorResourceProposal(BaseModel):
+    action: Literal["none", "suggest", "generate"] = "none"
+    resource_types: list[Literal["doc", "mindmap", "quiz", "code", "slide", "animation", "video"]] = Field(default_factory=list)
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    learning_goal: str = ""
+    reason_summary: str = ""
+    confidence: float = Field(default=0, ge=0, le=1)
+
+
 class TutorMessage(BaseModel):
     id: str
     session_id: str
@@ -173,6 +187,7 @@ class TutorMessage(BaseModel):
     created_at: str
     attachments: list[TutorImageAttachment] = Field(default_factory=list)
     resource_jobs: list[TutorResourceJob] = Field(default_factory=list)
+    resource_proposal: TutorResourceProposal | None = None
 
 
 class TutorSessionDetail(BaseModel):
@@ -235,6 +250,9 @@ def attachment_to_api(attachment: ChatMessageAttachment) -> TutorImageAttachment
 
 
 def message_to_api(message: ChatMessage, attachments: list[ChatMessageAttachment] | None = None, resource_jobs: list[TutorResourceJob] | None = None) -> TutorMessage:
+    stored_proposal = getattr(message, "resource_proposal_json", {})
+    raw_proposal = stored_proposal if isinstance(stored_proposal, dict) else {}
+    proposal = TutorResourceProposal.model_validate(raw_proposal) if raw_proposal.get("action") in {"suggest", "generate"} else None
     return TutorMessage(
         id=str(message.id),
         session_id=str(message.session_id),
@@ -245,6 +263,7 @@ def message_to_api(message: ChatMessage, attachments: list[ChatMessageAttachment
         created_at=_iso_timestamp(message.created_at),
         attachments=[attachment_to_api(item) for item in (attachments or [])],
         resource_jobs=resource_jobs or [],
+        resource_proposal=proposal,
     )
 
 

@@ -669,6 +669,8 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - `content`。
 - `citation_json`。
 - `trace_id`。
+- `resource_job_ids`，JSONB，默认 `[]`；从该回答创建的资源 AIJob ID，刷新后恢复。
+- `resource_proposal_json`，JSONB，默认 `{}`；只保存模型判定的动作、类型、难度、学习目标、安全理由和置信度。
 - `created_at`。
 
 ### 4.19 `model_settings`

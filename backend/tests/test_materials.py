@@ -392,6 +392,23 @@ def test_delete_material_removes_owned_record_links_chunks_and_stored_file(tmp_p
         service.delete_material(make_user(2), material_id)
 
 
+def test_delete_material_keeps_database_record_when_storage_cleanup_fails(tmp_path: Path, monkeypatch) -> None:
+    repo = FakeMaterialRepository()
+    service = make_service(repo, tmp_path)
+    uploaded = upload_bytes(service, make_user(), "retry-delete.txt", b"delete", "text/plain")
+    material_id = int(as_dict(uploaded)["id"])
+
+    def fail_delete(_path: str) -> None:
+        raise OSError("storage unavailable")
+
+    monkeypatch.setattr(service.storage, "delete", fail_delete)
+
+    with pytest.raises(OSError, match="storage unavailable"):
+        service.delete_material(make_user(), material_id)
+
+    assert [material.id for material in repo.materials] == [material_id]
+
+
 def test_material_detail_summarizes_sections_pages_and_owned_courses(tmp_path: Path) -> None:
     course = Course(id=101, owner_id=1, title="机器学习", source_type="generated")
     other_course = Course(id=202, owner_id=2, title="其他用户课程", source_type="generated")

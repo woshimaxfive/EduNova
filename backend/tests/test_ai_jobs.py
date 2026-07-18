@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -444,6 +445,20 @@ def test_invalid_material_and_resource_ownership_are_rejected() -> None:
         service.create_course_builder_job(user, material_ids=[11], course_title="", idempotency_key="course")
     with pytest.raises(AiJobNotFoundError, match="课程"):
         service.create_resource_generation_job(user, course_id=21, knowledge_point_id=None, resource_types=["doc"], learning_goal="", difficulty="medium", idempotency_key="resource")
+
+
+def test_tutor_resource_match_uses_first_retrieved_real_knowledge_point() -> None:
+    results = [
+        SimpleNamespace(chunk_id=10, knowledge_point_id=None),
+        SimpleNamespace(chunk_id=11, knowledge_point_id=42),
+        SimpleNamespace(chunk_id=12, knowledge_point_id=42),
+        SimpleNamespace(chunk_id=13, knowledge_point_id=99),
+    ]
+
+    matched, evidence_chunk_ids = AiJobService._select_tutor_resource_match(results)
+
+    assert matched.knowledge_point_id == 42
+    assert evidence_chunk_ids == [11, 12]
 
 
 def test_forced_material_reparse_keeps_previous_confirmed_state_in_job() -> None:

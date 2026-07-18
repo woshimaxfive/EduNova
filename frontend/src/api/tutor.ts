@@ -113,11 +113,14 @@ export type TutorMessage = {
   created_at: string;
   attachments?: TutorImageAttachment[];
   resource_jobs?: TutorResourceJob[];
+  resource_proposal?: TutorResourceProposal | null;
 };
 
 export type TutorGeneratedResource = { id: string; title: string; resource_type: string; course_id: string | null };
 export type TutorResourceJob = { job_id: string; status: string; label: string; error_message: string | null; resources: TutorGeneratedResource[] };
-export type CreateTutorResourceJobRequest = { course_id: number; knowledge_point_id?: number | null; resource_types: Array<"doc" | "mindmap" | "quiz" | "code" | "slide" | "animation" | "video">; learning_goal?: string; difficulty?: "easy" | "medium" | "hard" };
+export type TutorResourceType = "doc" | "mindmap" | "quiz" | "code" | "slide" | "animation" | "video";
+export type TutorResourceProposal = { action: "none" | "suggest" | "generate"; resource_types: TutorResourceType[]; difficulty: "easy" | "medium" | "hard"; learning_goal: string; reason_summary: string; confidence: number };
+export type CreateTutorResourceJobRequest = { course_id: number; knowledge_point_id?: number | null; resource_types?: TutorResourceType[]; learning_goal?: string; difficulty?: "easy" | "medium" | "hard" };
 
 export type TutorSessionDetail = {
   session: TutorSessionSummary;
@@ -229,7 +232,7 @@ export async function sendTutorMessage(sessionId: number | string, payload: Send
 }
 
 export async function createTutorResourceGenerationJob(sessionId: number | string, messageId: number | string, payload: CreateTutorResourceJobRequest) {
-  const response = await apiClient.post<ApiEnvelope<import("./aiJobs").AiJob>>(TUTOR_ENDPOINTS.resourceJobs(sessionId, messageId), payload, { headers: { "Idempotency-Key": `tutor-resource-${crypto.randomUUID()}` } });
+  const response = await apiClient.post<ApiEnvelope<import("./aiJobs").AiJob>>(TUTOR_ENDPOINTS.resourceJobs(sessionId, messageId), payload, { headers: { "Idempotency-Key": `tutor-resource-${sessionId}-${messageId}` } });
   return response.data.data;
 }
 

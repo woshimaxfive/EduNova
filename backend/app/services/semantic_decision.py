@@ -17,6 +17,7 @@ class SemanticModelService(Protocol):
 
 
 ProfileDimension = Literal["weak_points", "learning_preference", "learning_goal", "knowledge_foundation"]
+ResourceType = Literal["doc", "mindmap", "quiz", "code", "slide", "animation", "video"]
 
 
 class ProfileSignalPayload(BaseModel):
@@ -49,6 +50,11 @@ class SemanticDecisionPayload(BaseModel):
     standalone_query: str = Field(default="", max_length=500)
     uses_history: bool = False
     referenced_turn_ids: list[str] = Field(default_factory=list, max_length=8)
+    resource_action: Literal["none", "suggest", "generate"] = "none"
+    resource_types: list[ResourceType] = Field(default_factory=list, max_length=3)
+    resource_difficulty: Literal["easy", "medium", "hard"] = "medium"
+    resource_learning_goal: str = Field(default="", max_length=500)
+    resource_reason_summary: str = Field(default="", max_length=160)
 
     @field_validator("intent")
     @classmethod
@@ -60,7 +66,14 @@ class SemanticDecisionPayload(BaseModel):
     def normalize_empty_profile_signals(cls, value: object) -> object:
         return [] if value == {} or value is None else value
 
-    @field_validator("search_query", "standalone_query", "reason_summary")
+    @field_validator("uses_history", mode="before")
+    @classmethod
+    def normalize_empty_history_flag(cls, value: object) -> object:
+        # 部分兼容模型会把“没有引用历史”输出为空数组或空对象。
+        # 这里只归一化明确的空值；非空集合及其他非法类型仍交给 Pydantic 拒绝。
+        return False if value in (None, [], {}) else value
+
+    @field_validator("search_query", "standalone_query", "reason_summary", "resource_learning_goal", "resource_reason_summary")
     @classmethod
     def normalize_text(cls, value: str) -> str:
         return " ".join(value.split())
@@ -193,6 +206,11 @@ class SemanticDecisionService:
             summary=str(parsed["reason_summary"])[:160],
             warning=None,
             source_scope=str(parsed.get("source_scope") or "mainland_preferred"),
+            resource_action=str(parsed.get("resource_action") or "none"),
+            resource_types=tuple(dict.fromkeys(str(item) for item in parsed.get("resource_types", [])))[:3],
+            resource_difficulty=str(parsed.get("resource_difficulty") or "medium"),
+            resource_learning_goal=str(parsed.get("resource_learning_goal") or "")[:500],
+            resource_reason_summary=str(parsed.get("resource_reason_summary") or "")[:160],
         )
 
     def assess_course_evidence(
@@ -281,7 +299,11 @@ class SemanticDecisionService:
             "source_scope 默认 mainland_preferred；只有用户明确要求国外平台、国际原始论文/标准，或问题必须依赖国际原始来源时"
             "才输出 global_required。输出字段固定为 intent、search_required、search_query、reasoning_mode、source_scope、course_related、"
             "confidence、reason_codes、reason_summary、profile_signals、standalone_query、uses_history、"
-            "referenced_turn_ids。需要结合历史时，把当前问题改写成可独立理解的 standalone_query；"
+            "referenced_turn_ids、resource_action、resource_types、resource_difficulty、resource_learning_goal、resource_reason_summary。"
+            "明确要求创建、生成某种学习资源时 resource_action=generate；学生只表达理解困难、希望换种方式学习，且具体资源确实有帮助时"
+            " resource_action=suggest；其他情况必须为 none。generate/suggest 时从 doc、mindmap、quiz、code、slide、animation、video"
+            "选择最多 3 类适合当前问题和学科的资源，不能机械地给所有学科安排代码。resource_learning_goal 要概括真实学习目标，"
+            "resource_reason_summary 只说明推荐理由；none 时 resource_types 必须是 []。需要结合历史时，把当前问题改写成可独立理解的 standalone_query；"
             "referenced_turn_ids 只引用输入中存在的 turn_id。intent 优先使用 general_learning、"
             "material_question、current_information、external_resource_recommendation、verification、comparison、"
             "diagnosis、planning；没有画像信号时 profile_signals 必须是 []，不能输出 {}。"

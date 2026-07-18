@@ -2632,19 +2632,28 @@ export interface components {
             course_id: number;
             /**
              * Difficulty
+             * @deprecated
              * @default medium
              * @enum {string}
              */
             difficulty: "easy" | "medium" | "hard";
-            /** Knowledge Point Id */
+            /**
+             * Knowledge Point Id
+             * @deprecated
+             */
             knowledge_point_id?: number | null;
             /**
              * Learning Goal
+             * @deprecated
              * @default
              */
             learning_goal: string;
-            /** Resource Types */
-            resource_types: ("doc" | "mindmap" | "quiz" | "code" | "slide" | "animation" | "video")[];
+            /**
+             * Resource Types
+             * @deprecated
+             * @description 兼容旧客户端；服务端优先使用对应回答中已持久化的模型提案。
+             */
+            resource_types?: ("doc" | "mindmap" | "quiz" | "code" | "slide" | "animation" | "video")[];
         };
         /** CreateTutorSessionRequest */
         CreateTutorSessionRequest: {
@@ -4724,6 +4733,7 @@ export interface components {
             id: string;
             /** Resource Jobs */
             resource_jobs?: components["schemas"]["TutorResourceJob"][];
+            resource_proposal?: components["schemas"]["TutorResourceProposal"] | null;
             /**
              * Role
              * @enum {string}
@@ -4746,6 +4756,38 @@ export interface components {
             resources?: components["schemas"]["TutorGeneratedResource"][];
             /** Status */
             status: string;
+        };
+        /** TutorResourceProposal */
+        TutorResourceProposal: {
+            /**
+             * Action
+             * @default none
+             * @enum {string}
+             */
+            action: "none" | "suggest" | "generate";
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
+            /**
+             * Difficulty
+             * @default medium
+             * @enum {string}
+             */
+            difficulty: "easy" | "medium" | "hard";
+            /**
+             * Learning Goal
+             * @default
+             */
+            learning_goal: string;
+            /**
+             * Reason Summary
+             * @default
+             */
+            reason_summary: string;
+            /** Resource Types */
+            resource_types?: ("doc" | "mindmap" | "quiz" | "code" | "slide" | "animation" | "video")[];
         };
         /** TutorSessionDetail */
         TutorSessionDetail: {

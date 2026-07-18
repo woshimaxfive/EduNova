@@ -37,6 +37,7 @@ type CourseKnowledgeGraphProps = {
   onChapterChange?: (chapter: string) => void;
   onDetailClose?: () => void;
   onContinue?: (pointId: string) => void;
+  resourceHref?: (pointId: string) => string;
 };
 
 type KnowledgeNodeData = {
@@ -70,7 +71,8 @@ export function CourseKnowledgeGraph({
   onScopeChange,
   onChapterChange,
   onDetailClose,
-  onContinue
+  onContinue,
+  resourceHref
 }: CourseKnowledgeGraphProps) {
   const selectedPoint = points.find((point) => point.id === selectedId) ?? points[0] ?? null;
   const chapters = useMemo(
@@ -195,7 +197,7 @@ export function CourseKnowledgeGraph({
             <nav className="knowledge-node-actions" aria-label="知识点操作">
               <button type="button" onClick={() => onContinue?.(selectedPoint.id)}><BookOpenText size={18} />继续学习<ArrowRight size={16} /></button>
               <Link to={`${buildCoursePracticeWorkspacePath(courseId)}?${practiceParams?.toString() ?? ""}`}><ListChecks size={18} />针对练习</Link>
-              <Link to={`${PATHS.studio}?course_id=${courseId}&knowledge_point_id=${selectedPoint.id}`}><ChartLineUp size={18} />查看或生成资源</Link>
+              <Link to={resourceHref?.(selectedPoint.id) ?? `${PATHS.studio}?course_id=${courseId}&knowledge_point_id=${selectedPoint.id}`}><ChartLineUp size={18} />查看或生成资源</Link>
               {recommendation ? <Link to={learningActionHref(recommendation)}>执行推荐行动</Link> : null}
             </nav>
           </aside>

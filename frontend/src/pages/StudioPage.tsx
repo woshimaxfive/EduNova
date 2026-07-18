@@ -1,11 +1,11 @@
 import { ArrowClockwise, CheckCircle, X } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import { createIdempotencyKey, createResourceGenerationJob } from "../api/aiJobs";
-import { getKnowledgePoints, listCourses } from "../api/courses";
+import { getCourseLearningState, getKnowledgePoints, getMasteryMap, listCourses } from "../api/courses";
 import { getCurrentPath } from "../api/paths";
 import {
   getResourceQuality,
@@ -26,12 +26,14 @@ import {
 } from "../components/studio/StudioDrawer";
 import { StudioResourceLibrary } from "../components/studio/StudioResourceLibrary";
 import { ConfirmDialog } from "../components/primitives/Dialog";
+import { CourseMentorDock } from "../components/course-space/CourseMentorDock";
 import { StudioWorkspaceToolbar } from "../components/studio/StudioWorkspaceToolbar";
 import { StudioRegenerateDialog, StudioVersionCompareDialog } from "../components/studio/StudioVersionDialogs";
 import { groupResourceVersions } from "../components/studio/studioResourceVersions";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import { useLearningNextAction } from "../features/learning-actions/learningActions";
+import { useCourseMentorConversation } from "../features/tutor/useCourseMentorConversation";
 import { PageFrame } from "./PageFrame";
 import { PATHS } from "../app/routePaths";
 import "../styles/studio.css";
@@ -50,6 +52,8 @@ export function StudioPage() {
   const initialKnowledgePointId = parsePositiveId(searchParams.get("knowledge_point_id"));
   const initialLearningGoal = searchParams.get("learning_goal") ?? "";
   const pathTaskId = searchParams.get("path_task_id");
+  const requestedCourseSessionId = searchParams.get("course_session_id");
+  const mentorOpen = searchParams.get("mentor") === "open";
   const numericPathTaskId = parsePositiveId(pathTaskId);
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(initialCourseId);
   const [selectedKnowledgePointId, setSelectedKnowledgePointId] = useState<number | null>(initialKnowledgePointId);
@@ -156,6 +160,36 @@ export function StudioPage() {
   const selectedResourceKnowledgePointTitle = selectedResource?.knowledge_point_id
     ? knowledgePoints.find((point) => point.id === selectedResource.knowledge_point_id)?.title ?? "课程知识点"
     : "整门课程";
+  const masteryQuery = useQuery({
+    queryKey: courseLoopQueryKeys.masteryMap(effectiveCourseId ?? 0),
+    queryFn: () => getMasteryMap(effectiveCourseId ?? 0),
+    enabled: effectiveCourseId !== null,
+    staleTime: 10_000
+  });
+  const learningStateQuery = useQuery({
+    queryKey: courseLoopQueryKeys.learningState(effectiveCourseId ?? 0),
+    queryFn: () => getCourseLearningState(effectiveCourseId ?? 0),
+    enabled: effectiveCourseId !== null,
+    staleTime: 10_000
+  });
+  const updateMentorSession = useCallback((sessionId: string) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("course_session_id", sessionId);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const mentor = useCourseMentorConversation({
+    courseId: effectiveCourseId,
+    requestedSessionId: requestedCourseSessionId,
+    contextResourceId: selectedResource ? Number.parseInt(selectedResource.id, 10) : null,
+    enabled: mentorOpen,
+    onSessionChange: updateMentorSession
+  });
+  const selectedMastery = masteryQuery.data?.data?.points?.find((point) => point.id === selectedResource?.knowledge_point_id) ?? null;
+  const selectedWeaknessCount = (learningStateQuery.data?.data?.weakness_review_queue ?? []).filter((item) =>
+    item.knowledge_point_id === selectedResource?.knowledge_point_id && ["pending", "confirmed", "reviewing"].includes(item.status)
+  ).length;
   const selectedResourceTraceId = selectedResource?.agent_trace_id ?? selectedResource?.content_json.metadata?.agent_trace_id ?? null;
   const resourceQualityQuery = useQuery({
     queryKey: ["resources", "quality", selectedResource?.id],
@@ -296,7 +330,13 @@ export function StudioPage() {
     setResourceTypeFilter("all");
     setFeedback(null);
     setDetailTab("quality");
-    setUrlSelection(courseId, null);
+    const next = new URLSearchParams(searchParams);
+    if (courseId === null) next.delete("course_id");
+    else next.set("course_id", String(courseId));
+    next.delete("resource_id");
+    next.delete("course_session_id");
+    next.delete("mentor");
+    setSearchParams(next, { replace: true });
   }
 
   function selectResource(resourceId: string) {
@@ -484,6 +524,47 @@ export function StudioPage() {
         onRetryJob={() => void handleRetryJob()}
         onDeleteJob={() => void handleDeleteJob()}
       />
+
+      {effectiveCourseId !== null && selectedResource ? (
+        <CourseMentorDock
+          open={mentorOpen}
+          courseTitle={selectedCourse?.title ?? "当前课程"}
+          pointTitle={selectedResourceKnowledgePointTitle}
+          resourceTitle={selectedResource.title}
+          masteryScore={selectedMastery?.score ?? null}
+          weaknessCount={selectedWeaknessCount}
+          recommendation={nextActionQuery.data?.data ?? null}
+          messages={mentor.messages}
+          prompt={mentor.prompt}
+          isSending={mentor.isSending}
+          feedback={mentor.feedback}
+          isListening={mentor.speech.isListening}
+          isTranscribing={mentor.speech.isTranscribing}
+          isSpeaking={Boolean(mentor.speech.activeSpeechId)}
+          isSpeechPaused={mentor.speech.isSpeechPaused}
+          onOpenChange={(open) => {
+            if (!open) {
+              mentor.speech.stopListening();
+              mentor.speech.stopSpeaking();
+            }
+            const next = new URLSearchParams(searchParams);
+            if (open) {
+              next.set("mentor", "open");
+              if (mentor.selectedSessionId) next.set("course_session_id", mentor.selectedSessionId);
+            } else {
+              next.delete("mentor");
+            }
+            setSearchParams(next, { replace: true });
+          }}
+          onPromptChange={mentor.setPrompt}
+          onPromptKeyDown={mentor.onPromptKeyDown}
+          onSend={() => void mentor.send()}
+          onToggleListening={() => void mentor.speech.toggleListening()}
+          onReadLatest={mentor.readLatest}
+          onPauseOrResume={mentor.speech.pauseOrResumeSpeaking}
+          onStopSpeaking={mentor.speech.stopSpeaking}
+        />
+      ) : null}
 
       {regenerateDialogOpen && selectedResource ? (
         <StudioRegenerateDialog

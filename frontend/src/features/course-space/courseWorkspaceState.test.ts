@@ -22,6 +22,16 @@ it("restores an explicit conversation panel", () => {
   expect(parseCourseWorkspaceUrl(new URLSearchParams("course_message_id=m1&panel=why"))).toMatchObject({ panel: "why" });
 });
 
+it("keeps the floating mentor in study mode while restoring its course session", () => {
+  expect(parseCourseWorkspaceUrl(new URLSearchParams("mentor=open&course_session_id=s1&knowledge_point_id=2"))).toMatchObject({
+    mode: "study",
+    view: "overview",
+    mentorOpen: true,
+    courseSessionId: "s1",
+    knowledgePointId: "2"
+  });
+});
+
 it("chooses a safe point when a URL point is invalid", () => {
   expect(selectCourseWorkspacePoint(points, "missing", null, [])).toBe("2");
 });

@@ -311,7 +311,7 @@ export function CourseSpacePage() {
   const [isProgressDrawerOpen, setIsProgressDrawerOpen] = useState(false);
   const [isProgressSyncing, setIsProgressSyncing] = useState(false);
   const [progressSyncWarning, setProgressSyncWarning] = useState<string | null>(null);
-  const [isStudyAssistantOpen, setIsStudyAssistantOpen] = useState(false);
+  const [isStudyAssistantOpen, setIsStudyAssistantOpen] = useState(initialWorkspaceState.mentorOpen);
   const [studyTarget, setStudyTarget] = useState<StudyTarget | null>(
     initialKnowledgePointId ? { type: "knowledge", id: initialKnowledgePointId } : null
   );
@@ -539,6 +539,7 @@ export function CourseSpacePage() {
     setGraphScope(requested.graphScope);
     setGraphChapter(requested.graphChapter && chapters.has(requested.graphChapter) ? requested.graphChapter : "");
     setIsKnowledgeDetailOpen(requested.detailKnowledge && Boolean(selectedPointId));
+    setIsStudyAssistantOpen(requested.mode === "study" && requested.mentorOpen);
     if (selectedPointId) setStudyTarget({ type: "knowledge", id: selectedPointId });
     setActiveTurnDetail(requested.courseMessageId && requested.panel
       ? { messageId: requested.courseMessageId, panel: requested.panel }
@@ -662,6 +663,7 @@ export function CourseSpacePage() {
     nextParams.delete("course_message_id");
     nextParams.delete("panel");
     nextParams.delete("detail");
+    nextParams.delete("mentor");
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -744,6 +746,7 @@ export function CourseSpacePage() {
         const nextParams = new URLSearchParams(searchParams);
         nextParams.delete("course_session_id");
         nextParams.delete("course_message_id");
+        nextParams.delete("mentor");
         setSearchParams(nextParams, { replace: true });
       }
 
@@ -787,7 +790,27 @@ export function CourseSpacePage() {
     if (mode === "chat") setIsStudyAssistantOpen(false);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("mode", mode);
+    if (mode === "chat") nextParams.delete("mentor");
     if (mode === "study" && !nextParams.has("view")) nextParams.set("view", "graph");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function changeStudyAssistant(open: boolean) {
+    setIsStudyAssistantOpen(open);
+    if (!open) {
+      speech.stopListening();
+      speech.stopSpeaking();
+    } else if (!coursePrompt.trim() && selectedKnowledgePoint) {
+      setCoursePrompt(`关于“${selectedKnowledgePoint.title}”，`);
+    }
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("mode", "study");
+    if (open) {
+      nextParams.set("mentor", "open");
+      if (selectedCourseSessionId) nextParams.set("course_session_id", selectedCourseSessionId);
+    } else {
+      nextParams.delete("mentor");
+    }
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -1363,6 +1386,8 @@ export function CourseSpacePage() {
             ) : (
               <CourseContentView
                 courseId={numericCourseId}
+                courseTitle={courseSummary.title}
+                courseSessionId={selectedCourseSessionId}
                 points={apiKnowledgePoints}
                 masteryPoints={masteryMapQuery.data?.data.points ?? []}
                 selectedPoint={selectedKnowledgePoint}
@@ -1384,6 +1409,10 @@ export function CourseSpacePage() {
                 prompt={coursePrompt}
                 isSending={isSearchingCourse}
                 feedback={courseFeedback}
+                isListening={speech.isListening}
+                isTranscribing={speech.isTranscribing}
+                isSpeaking={Boolean(speech.activeSpeechId)}
+                isSpeechPaused={speech.isSpeechPaused}
                 onViewChange={changeCourseContentView}
                 onGraphScopeChange={changeGraphScope}
                 onGraphChapterChange={changeGraphChapter}
@@ -1397,16 +1426,17 @@ export function CourseSpacePage() {
                   const pointId = knowledgePointContentQuery.data?.data.next_knowledge_point_id;
                   if (pointId) openKnowledgeStudy(pointId);
                 }}
-                onOpenAssistant={() => {
-                  if (!coursePrompt.trim() && selectedKnowledgePoint) {
-                    setCoursePrompt(`关于“${selectedKnowledgePoint.title}”，`);
-                  }
-                  setIsStudyAssistantOpen(true);
-                }}
-                onCloseAssistant={() => setIsStudyAssistantOpen(false)}
+                onAssistantOpenChange={changeStudyAssistant}
                 onPromptChange={setCoursePrompt}
                 onPromptKeyDown={handleCourseComposerKeyDown}
                 onSend={() => void sendCourseQuestion()}
+                onToggleListening={() => void speech.toggleListening()}
+                onReadLatest={() => {
+                  const latest = [...displayedCourseMessages].reverse().find((message) => message.role === "assistant" && message.content.trim());
+                  if (latest) toggleReadMessage(latest);
+                }}
+                onPauseOrResumeSpeaking={speech.pauseOrResumeSpeaking}
+                onStopSpeaking={speech.stopSpeaking}
               />
             )}
 

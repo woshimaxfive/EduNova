@@ -15,6 +15,7 @@ export type CourseWorkspaceUrlState = {
   courseSessionId: string | null;
   courseMessageId: string | null;
   panel: CourseAnswerPanelKind | null;
+  mentorOpen: boolean;
 };
 
 const coursePanels = new Set<CourseAnswerPanelKind>(["citations", "resources", "why", "thinking"]);
@@ -25,7 +26,8 @@ export function parseCourseWorkspaceUrl(searchParams: URLSearchParams): CourseWo
   const requestedScope = searchParams.get("graph_scope");
   const panelValue = searchParams.get("panel");
   const requestedPanel = (panelValue === "trace" ? "thinking" : panelValue) as CourseAnswerPanelKind | null;
-  const hasConversationTarget = Boolean(searchParams.get("course_session_id") || searchParams.get("course_message_id"));
+  const mentorOpen = searchParams.get("mentor") === "open";
+  const hasConversationTarget = Boolean(searchParams.get("course_message_id") || (searchParams.get("course_session_id") && !mentorOpen));
   const hasStudyTarget = Boolean(searchParams.get("knowledge_point_id"));
   return {
     mode: requestedMode === "chat" || requestedMode === "study"
@@ -40,7 +42,8 @@ export function parseCourseWorkspaceUrl(searchParams: URLSearchParams): CourseWo
     detailKnowledge: searchParams.get("detail") === "knowledge",
     courseSessionId: searchParams.get("course_session_id"),
     courseMessageId: searchParams.get("course_message_id"),
-    panel: requestedPanel && coursePanels.has(requestedPanel) ? requestedPanel : null
+    panel: requestedPanel && coursePanels.has(requestedPanel) ? requestedPanel : null,
+    mentorOpen
   };
 }
 
@@ -80,6 +83,8 @@ export function normalizeCourseWorkspaceParams(
   if (state.detailKnowledge && pointId) next.set("detail", "knowledge");
   else next.delete("detail");
   if (!state.courseMessageId || !state.panel) next.delete("panel");
+  if (state.mode === "study" && state.mentorOpen) next.set("mentor", "open");
+  else next.delete("mentor");
   return next;
 }
 

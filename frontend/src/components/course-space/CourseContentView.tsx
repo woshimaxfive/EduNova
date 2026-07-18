@@ -1,4 +1,4 @@
-import { BookOpenText, ChatCircleText, Graph, List, X } from "@phosphor-icons/react";
+import { BookOpenText, Graph, List } from "@phosphor-icons/react";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 
@@ -9,8 +9,7 @@ import { type RagSearchResultItem } from "../../api/rag";
 import { PATHS } from "../../app/routePaths";
 import { CourseKnowledgeGraph } from "./CourseKnowledgeGraph";
 import { InlineFeedback } from "../feedback/InlineFeedback";
-import { MarkdownMessage } from "../feedback/MarkdownMessage";
-import { ModalFrame } from "../primitives/Dialog";
+import { CourseMentorDock } from "./CourseMentorDock";
 
 export type CourseContentMode = "overview" | "graph";
 
@@ -22,6 +21,8 @@ type CourseContentMessage = {
 
 type CourseContentViewProps = {
   courseId: number;
+  courseTitle: string;
+  courseSessionId: string | null;
   points: ApiCourseKnowledgePoint[];
   masteryPoints: CourseMasteryPoint[];
   selectedPoint: ApiCourseKnowledgePoint | null;
@@ -41,6 +42,10 @@ type CourseContentViewProps = {
   prompt: string;
   isSending: boolean;
   feedback: string | null;
+  isListening: boolean;
+  isTranscribing: boolean;
+  isSpeaking: boolean;
+  isSpeechPaused: boolean;
   onViewChange: (view: CourseContentMode) => void;
   onGraphScopeChange: (scope: GraphScope) => void;
   onGraphChapterChange: (chapter: string) => void;
@@ -48,15 +53,20 @@ type CourseContentViewProps = {
   onSelectPoint: (pointId: string, view?: CourseContentMode) => void;
   onSelectPrevious: () => void;
   onSelectNext: () => void;
-  onOpenAssistant: () => void;
-  onCloseAssistant: () => void;
+  onAssistantOpenChange: (open: boolean) => void;
   onPromptChange: (value: string) => void;
   onPromptKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onSend: () => void;
+  onToggleListening: () => void;
+  onReadLatest: () => void;
+  onPauseOrResumeSpeaking: () => void;
+  onStopSpeaking: () => void;
 };
 
 export function CourseContentView({
   courseId,
+  courseTitle,
+  courseSessionId,
   points,
   masteryPoints,
   selectedPoint,
@@ -76,6 +86,10 @@ export function CourseContentView({
   prompt,
   isSending,
   feedback,
+  isListening,
+  isTranscribing,
+  isSpeaking,
+  isSpeechPaused,
   onViewChange,
   onGraphScopeChange,
   onGraphChapterChange,
@@ -83,11 +97,14 @@ export function CourseContentView({
   onSelectPoint,
   onSelectPrevious,
   onSelectNext,
-  onOpenAssistant,
-  onCloseAssistant,
+  onAssistantOpenChange,
   onPromptChange,
   onPromptKeyDown,
-  onSend
+  onSend,
+  onToggleListening,
+  onReadLatest,
+  onPauseOrResumeSpeaking,
+  onStopSpeaking
 }: CourseContentViewProps) {
   const workspaceRef = useRef<HTMLElement>(null);
   const chapters = useMemo(() => groupByChapter(points), [points]);
@@ -149,10 +166,6 @@ export function CourseContentView({
               <span>知识图谱</span>
             </button>
           </div>
-          <button className="course-content-assistant-trigger" type="button" onClick={onOpenAssistant}>
-            <ChatCircleText size={18} weight="duotone" aria-hidden="true" />
-            <span>围绕这里提问</span>
-          </button>
         </div>
 
         {view === "graph" ? (
@@ -172,6 +185,7 @@ export function CourseContentView({
               onChapterChange={onGraphChapterChange}
               onDetailClose={onGraphDetailClose}
               onContinue={(pointId) => onSelectPoint(pointId, "overview")}
+              resourceHref={(pointId) => studioKnowledgePointHref(courseId, pointId, assistantOpen, courseSessionId)}
             />
           </div>
         ) : (
@@ -216,7 +230,7 @@ export function CourseContentView({
                   <section className="course-content-resources" aria-label="相关学习资源">
                     <h3>相关学习资源</h3>
                     {relatedResources.map((resource) => (
-                      <Link key={resource.id} to={`${PATHS.studio}?course_id=${courseId}&resource_id=${resource.id}`}>
+                      <Link key={resource.id} to={studioResourceHref(courseId, resource.id, assistantOpen, courseSessionId)}>
                         {resource.title}
                       </Link>
                     ))}
@@ -238,41 +252,46 @@ export function CourseContentView({
         )}
       </main>
 
-      {assistantOpen ? (
-        <ModalFrame title="AI 辅导" layerClassName="course-content-assistant-layer" onClose={onCloseAssistant}>
-          <aside className="course-content-assistant" aria-labelledby="course-content-assistant-title">
-            <header>
-              <h2 id="course-content-assistant-title">AI 辅导</h2>
-              <button type="button" aria-label="关闭 AI 辅导" onClick={onCloseAssistant}>
-                <X size={19} weight="bold" aria-hidden="true" />
-              </button>
-            </header>
-            <div className="course-content-mini-thread">
-              {messages.slice(-2).map((message) => (
-                <article className={`course-message ${message.role}`} key={message.id}>
-                  {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : <p>{message.content}</p>}
-                </article>
-              ))}
-              {messages.length === 0 ? <p className="course-content-assistant-empty">围绕当前知识点提问，回答会继续保存在这门课程的会话中。</p> : null}
-            </div>
-            <div className="course-content-composer">
-              <label htmlFor="course-content-question-input">课程问题输入</label>
-              <textarea
-                id="course-content-question-input"
-                rows={4}
-                value={prompt}
-                onChange={(event) => onPromptChange(event.target.value)}
-                onKeyDown={onPromptKeyDown}
-                placeholder="问这里为什么，换个例子，或让它出一道练习"
-              />
-              <button type="button" disabled={isSending} onClick={onSend}>{isSending ? "发送中" : "发送"}</button>
-              <InlineFeedback message={feedback} tone="warning" className="course-inline-feedback" />
-            </div>
-          </aside>
-        </ModalFrame>
-      ) : null}
+      <CourseMentorDock
+        open={assistantOpen}
+        courseTitle={courseTitle}
+        pointTitle={selectedPoint?.title ?? "当前课程"}
+        masteryScore={masteryPoints.find((point) => point.id === selectedPoint?.id)?.score ?? null}
+        weaknessCount={weaknesses.filter((item) => item.knowledge_point_id === selectedPoint?.id && ["pending", "confirmed", "reviewing"].includes(item.status)).length}
+        recommendation={recommendation}
+        messages={messages}
+        prompt={prompt}
+        isSending={isSending}
+        feedback={feedback}
+        isListening={isListening}
+        isTranscribing={isTranscribing}
+        isSpeaking={isSpeaking}
+        isSpeechPaused={isSpeechPaused}
+        onOpenChange={onAssistantOpenChange}
+        onPromptChange={onPromptChange}
+        onPromptKeyDown={onPromptKeyDown}
+        onSend={onSend}
+        onToggleListening={onToggleListening}
+        onReadLatest={onReadLatest}
+        onPauseOrResume={onPauseOrResumeSpeaking}
+        onStopSpeaking={onStopSpeaking}
+      />
     </section>
   );
+}
+
+function studioResourceHref(courseId: number, resourceId: string, assistantOpen: boolean, courseSessionId: string | null) {
+  const params = new URLSearchParams({ course_id: String(courseId), resource_id: resourceId });
+  if (assistantOpen) params.set("mentor", "open");
+  if (assistantOpen && courseSessionId) params.set("course_session_id", courseSessionId);
+  return `${PATHS.studio}?${params.toString()}`;
+}
+
+function studioKnowledgePointHref(courseId: number, pointId: string, assistantOpen: boolean, courseSessionId: string | null) {
+  const params = new URLSearchParams({ course_id: String(courseId), knowledge_point_id: pointId });
+  if (assistantOpen) params.set("mentor", "open");
+  if (assistantOpen && courseSessionId) params.set("course_session_id", courseSessionId);
+  return `${PATHS.studio}?${params.toString()}`;
 }
 
 function groupByChapter(points: ApiCourseKnowledgePoint[]) {

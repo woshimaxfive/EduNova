@@ -1716,10 +1716,10 @@ describe("CourseSpacePage course tutor sessions", () => {
     courseSurface!.scrollTop = 240;
     await user.click(within(studyMode).getByRole("button", { name: "启发式搜索基础" }));
     expect(courseSurface!.scrollTop).toBe(0);
-    expect(screen.queryByRole("dialog", { name: "AI 辅导" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "围绕这里提问" }));
-    expect(screen.getByRole("dialog", { name: "AI 辅导" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "关闭 AI 辅导" }));
+    expect(screen.queryByRole("dialog", { name: "EduNova 课程助教" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "打开课程助教" }));
+    expect(screen.getByRole("dialog", { name: "EduNova 课程助教" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "关闭课程助教" }));
 
     await user.click(screen.getByRole("button", { name: "问答" }));
 
@@ -1831,9 +1831,9 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(within(studyMode).getByLabelText("本次回答引用")).toHaveTextContent("人工智能导论讲义.md");
     expect(within(studyMode).getByLabelText("本次回答引用")).toHaveTextContent("基础检索");
     expect(within(studyMode).getByText("启发式搜索使用启发函数估计剩余代价。")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "围绕这里提问" }));
-    expect(screen.getByRole("dialog", { name: "AI 辅导" })).toHaveTextContent("历史里的回答保留真实引用。");
-    await user.click(screen.getByRole("button", { name: "关闭 AI 辅导" }));
+    await user.click(screen.getByRole("button", { name: "打开课程助教" }));
+    expect(screen.getByRole("dialog", { name: "EduNova 课程助教" })).toHaveTextContent("历史里的回答保留真实引用。");
+    await user.click(screen.getByRole("button", { name: "关闭课程助教" }));
 
     await user.click(screen.getByRole("button", { name: "问答" }));
 

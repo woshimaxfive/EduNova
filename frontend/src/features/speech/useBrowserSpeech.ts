@@ -121,6 +121,7 @@ export function useBrowserSpeech(options: {
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [activeSpeechId, setActiveSpeechId] = useState<string | null>(null);
+  const [isSpeechPaused, setIsSpeechPaused] = useState(false);
 
   useEffect(() => {
     optionsRef.current = options;
@@ -136,7 +137,33 @@ export function useBrowserSpeech(options: {
     audioUrlRef.current = null;
     if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
     setActiveSpeechId(null);
+    setIsSpeechPaused(false);
   }, []);
+
+  const pauseOrResumeSpeaking = useCallback(() => {
+    if (!activeSpeechId || typeof window === "undefined") return;
+    if (audioRef.current) {
+      if (audioRef.current.paused) {
+        void audioRef.current.play().then(() => setIsSpeechPaused(false)).catch(() => {
+          optionsRef.current.onNotice("朗读继续播放失败，请重新朗读。", "warning");
+          stopSpeaking();
+        });
+      } else {
+        audioRef.current.pause();
+        setIsSpeechPaused(true);
+      }
+      return;
+    }
+    if ("speechSynthesis" in window) {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+        setIsSpeechPaused(false);
+      } else {
+        window.speechSynthesis.pause();
+        setIsSpeechPaused(true);
+      }
+    }
+  }, [activeSpeechId, stopSpeaking]);
 
   const startBrowserRecognition = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -264,9 +291,17 @@ export function useBrowserSpeech(options: {
     utterance.voice = voices.find((voice) => /xiaoxiao|yunxi|natural|online/i.test(voice.name) && voice.lang.startsWith("zh"))
       ?? voices.find((voice) => voice.lang.startsWith("zh"))
       ?? null;
-    utterance.onend = () => setActiveSpeechId(null);
-    utterance.onerror = () => setActiveSpeechId(null);
+    utterance.onend = () => {
+      setActiveSpeechId(null);
+      setIsSpeechPaused(false);
+    };
+    utterance.onerror = () => {
+      setActiveSpeechId(null);
+      setIsSpeechPaused(false);
+      setIsSpeechPaused(false);
+    };
     setActiveSpeechId(speechId);
+    setIsSpeechPaused(false);
     window.speechSynthesis.speak(utterance);
   }, []);
 
@@ -281,6 +316,7 @@ export function useBrowserSpeech(options: {
     const parts = splitSpeechForPlayback(cleaned);
     const playbackToken = ++playbackTokenRef.current;
     setActiveSpeechId(speechId);
+    setIsSpeechPaused(false);
     let partIndex = 0;
     try {
       const requestPart = async (text: string) => {
@@ -335,5 +371,15 @@ export function useBrowserSpeech(options: {
     if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
   }, []);
 
-  return { isListening, isTranscribing, activeSpeechId, toggleListening, stopListening, speak, stopSpeaking };
+  return {
+    isListening,
+    isTranscribing,
+    activeSpeechId,
+    isSpeechPaused,
+    toggleListening,
+    stopListening,
+    speak,
+    stopSpeaking,
+    pauseOrResumeSpeaking
+  };
 }

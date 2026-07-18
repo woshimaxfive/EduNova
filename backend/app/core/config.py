@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     system_speech_api_secret: str = ""
     system_speech_asr_url: str = "wss://iat-api.xfyun.cn/v2/iat"
     system_speech_tts_url: str = "wss://tts-api.xfyun.cn/v2/tts"
-    system_speech_tts_voice: str = "xiaoyan"
+    system_speech_tts_voice: str = "x4_yezi"
     system_speech_tts_speed: int = 50
     speech_request_timeout_seconds: float = 75.0
     speech_max_audio_seconds: int = 60

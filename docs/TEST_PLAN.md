@@ -1155,3 +1155,12 @@ docker compose down
 - 阶段收口运行后端/前端定向测试、OpenAPI、编码、lint、类型检查与 Compose；重建 backend/frontend 后使用 `agent-browser` 检查桌面和 390px 入口、权限失败降级与无横向溢出。Docker 保持运行供封盘前继续验收。
 
 2026-07-18 Phase 48 实际验收：`scripts/test.ps1` 通过后端 508 项、前端 258 项、离线评测 10 项，以及编码、Ruff、Alembic head、非破坏性 OpenAPI、ESLint、类型、production build 与 Compose。真实讯飞 TTS 返回有效 MP3；程序化无版权中文 WAV 转为 16 kHz PCM 后由 IAT 成功转写，测试仅记录长度和耗时并清理临时音频。backend/frontend 镜像重建并健康运行。`agent-browser` 验证桌面入口、无麦克风权限时的明确键盘降级及 390px `scrollWidth=390`；临时账号已级联删除。
+
+## Phase 49 真实浏览器语音回归
+
+- 前端覆盖 MediaRecorder 启停、浏览器音频解码、16 kHz PCM 转换、短录音拒绝、空语音精确提示与服务故障后的浏览器降级。
+- 长回答朗读必须拆成多个短请求，第一请求不超过 180 字符；播放当前段时预取下一段，停止后不继续播放，后续段失败不得从头重复朗读。
+- Provider 错误映射区分无效录音、超时、认证和额度；学生界面只显示安全原因，不返回讯飞原始响应或录音内容。
+- 使用已授权 `x4_yezi` 做一次短文本真实 TTS 验证；通过真实 Chrome 麦克风完成一次中文输入，确认后端不再出现未解释 502。阶段完成后只运行受影响定向测试、编码、OpenAPI/Compose检查与 backend/frontend 重建，不重复全项目重门禁。
+
+2026-07-18 Phase 49 当前验收：后端语音 6 项、前端语音 4 项定向测试通过，Ruff、ESLint、TypeScript、编码、Compose 与 diff 检查通过；backend/frontend 已重建并保持健康。服务器使用 `x4_yezi` 真实合成 9 字短句成功，返回 19008 字节、耗时约 1.8 秒。已登录 Chrome 中长回答朗读启动后，后端连续收到 2 个短段请求且均为 200，停止按钮正常，控制台无错误。真人麦克风中文输入仍需用户在当前设备上说一句完成最终硬件确认，未将程序化测试冒充真人录音验收。

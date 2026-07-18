@@ -101,4 +101,6 @@ class SpeechService:
         status_code = 503 if exc.code in {"not_configured", "authentication_failed", "rate_limited"} else 502
         if exc.code in {"invalid_audio", "invalid_text"}:
             status_code = 400
+        if exc.code == "empty_transcript":
+            status_code = 422
         return SpeechServiceError(str(exc), code=f"SPEECH_{exc.code.upper()}", status_code=status_code)

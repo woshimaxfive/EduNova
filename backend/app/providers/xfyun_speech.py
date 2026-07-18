@@ -25,7 +25,7 @@ class XfyunSpeechConfig:
     api_secret: str
     asr_url: str
     tts_url: str
-    tts_voice: str = "xiaoyan"
+    tts_voice: str = "x4_yezi"
     tts_speed: int = 50
 
 
@@ -188,8 +188,12 @@ class XfyunSpeechProvider:
 
     @staticmethod
     def _provider_error(code: int, service: str) -> XfyunSpeechError:
-        if code in {10005, 10006, 10007, 10019, 10105}:
+        if code in {10005, 10105}:
             return XfyunSpeechError(f"{service}认证失败。", code="authentication_failed")
-        if code in {11200, 11201, 11202, 10160}:
+        if code in {10006, 10007, 10009, 10043, 10044, 10109, 10139, 10160, 10161, 10163, 10165}:
+            return XfyunSpeechError(f"{service}收到的录音格式无效。", code="invalid_audio")
+        if code in {10014, 10019, 10114, 10200, 10700}:
+            return XfyunSpeechError(f"{service}请求超时。", code="timeout", retryable=True)
+        if code in {11200, 11201, 11202}:
             return XfyunSpeechError(f"{service}额度不足或请求过于频繁。", code="rate_limited", retryable=True)
         return XfyunSpeechError(f"{service}拒绝了本次请求。", code="provider_rejected")

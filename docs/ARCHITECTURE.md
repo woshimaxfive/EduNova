@@ -818,3 +818,9 @@ AssessmentGraph 的修订输入包含上一版学生可见候选和精确风险�
 主页与课程空间复用前端 `useBrowserSpeech` 门面，但默认链路已调整为：浏览器 `getUserMedia` 采集浮点采样 → 本地重采样为 16 kHz/16 bit/单声道 PCM → 受认证后端接口 → `XfyunSpeechProvider` → 文字回填。朗读链路为清理 Markdown/URL/代码后的文本 → 后端讯飞 TTS → 浏览器私有 Blob 播放。任一服务端调用失败时，门面降级到 Web Speech API；键盘输入始终是最终兜底。
 
 `XfyunSpeechProvider` 与图片理解 Provider 共用 `xfyun_auth` HMAC WebSocket 签名器，供应商协议不会进入 Tutor Graph、数据库或前端业务模型。语音不是课程资料，不进入 Storage Adapter、聊天消息附件、跨会话记忆、画像、证据或 Agent trace。后端只在请求内存中处理 PCM/MP3，响应禁止缓存，日志只允许安全错误分类和耗时。
+
+## 35. Phase 49 真实录音与低延迟朗读
+
+真实浏览器录音改由标准 `MediaRecorder` 采集浏览器支持的 Opus/WebM 或兼容格式，结束后通过 `AudioContext.decodeAudioData` 解码，统一重采样为 16 kHz/16 bit/单声道 PCM，并只对可判定的低音量信号施加上限为 8 倍的有限增益。该链路替换已弃用且受声卡采样环境影响的 `ScriptProcessorNode`。录音太短、空转写和无效格式属于可重试输入问题，不会永久关闭讯飞；网络、授权、额度等服务问题才在当前页面切换 Web Speech。
+
+TTS 保持既有后端二进制合同，前端将清理后的长回答拆为最多 180 字符的自然短段。首段请求完成后立即播放，同时预取下一段；停止操作通过播放令牌终止剩余队列。固定发音人由部署配置 `x4_yezi` 管理，不向学生暴露未经授权的任意 `vcn`。

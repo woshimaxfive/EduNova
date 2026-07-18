@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { synthesizeSpeech, transcribeSpeech } from "../../api/speech";
+import { SpeechRequestError, synthesizeSpeech, transcribeSpeech } from "../../api/speech";
 
 type RecognitionResultEvent = { results: ArrayLike<ArrayLike<{ transcript: string }>> };
 type RecognitionErrorEvent = { error?: string };
@@ -20,12 +20,11 @@ type SpeechWindow = Window & typeof globalThis & {
   webkitSpeechRecognition?: RecognitionConstructor;
 };
 type AudioCapture = {
-  context: AudioContext;
+  recorder: MediaRecorder;
   stream: MediaStream;
-  source: MediaStreamAudioSourceNode;
-  processor: ScriptProcessorNode;
-  chunks: Float32Array[];
+  chunks: Blob[];
   timeoutId: number;
+  finishing: boolean;
 };
 
 export type SpeechNoticeTone = "info" | "success" | "warning";
@@ -52,16 +51,58 @@ function toPcm16k(chunks: Float32Array[], sourceRate: number): Blob {
   }
   const ratio = sourceRate / 16000;
   const outputLength = Math.max(0, Math.floor(input.length / ratio));
-  const pcm = new Int16Array(outputLength);
+  const resampled = new Float32Array(outputLength);
+  let peak = 0;
   for (let index = 0; index < outputLength; index += 1) {
     const start = Math.floor(index * ratio);
     const end = Math.max(start + 1, Math.min(input.length, Math.floor((index + 1) * ratio)));
     let sum = 0;
     for (let cursor = start; cursor < end; cursor += 1) sum += input[cursor] ?? 0;
     const sample = Math.max(-1, Math.min(1, sum / (end - start)));
+    resampled[index] = sample;
+    peak = Math.max(peak, Math.abs(sample));
+  }
+  const gain = peak >= 0.003 && peak < 0.2 ? Math.min(8, 0.8 / peak) : 1;
+  const pcm = new Int16Array(outputLength);
+  for (let index = 0; index < outputLength; index += 1) {
+    const sample = Math.max(-1, Math.min(1, (resampled[index] ?? 0) * gain));
     pcm[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
   }
   return new Blob([pcm.buffer], { type: "application/octet-stream" });
+}
+
+async function decodeRecordingToPcm16k(recording: Blob): Promise<Blob> {
+  const context = new AudioContext();
+  try {
+    const buffer = await context.decodeAudioData(await recording.arrayBuffer());
+    return toPcm16k([new Float32Array(buffer.getChannelData(0))], buffer.sampleRate);
+  } finally {
+    await context.close();
+  }
+}
+
+function splitSpeechForPlayback(content: string, maxCharacters = 180): string[] {
+  const sentences = content.match(/[^。！？；.!?;]+[。！？；.!?;]?/g) ?? [content];
+  const chunks: string[] = [];
+  let current = "";
+  for (const sentence of sentences) {
+    let remaining = sentence.trim();
+    while (remaining.length > maxCharacters) {
+      if (current) chunks.push(current);
+      chunks.push(remaining.slice(0, maxCharacters));
+      current = "";
+      remaining = remaining.slice(maxCharacters);
+    }
+    if (!remaining) continue;
+    if (current && current.length + remaining.length > maxCharacters) {
+      chunks.push(current);
+      current = remaining;
+    } else {
+      current += remaining;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
 }
 
 export function useBrowserSpeech(options: {
@@ -73,6 +114,8 @@ export function useBrowserSpeech(options: {
   const captureRef = useRef<AudioCapture | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const playbackTokenRef = useRef(0);
+  const playbackResolveRef = useRef<(() => void) | null>(null);
   const serverAsrUnavailableRef = useRef(false);
   const serverTtsUnavailableRef = useRef(false);
   const [isListening, setIsListening] = useState(false);
@@ -84,6 +127,9 @@ export function useBrowserSpeech(options: {
   }, [options]);
 
   const stopSpeaking = useCallback(() => {
+    playbackTokenRef.current += 1;
+    playbackResolveRef.current?.();
+    playbackResolveRef.current = null;
     audioRef.current?.pause();
     audioRef.current = null;
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
@@ -120,27 +166,41 @@ export function useBrowserSpeech(options: {
 
   const finishServerRecording = useCallback(async () => {
     const capture = captureRef.current;
-    if (!capture) return;
+    if (!capture || capture.finishing) return;
+    capture.finishing = true;
     captureRef.current = null;
     window.clearTimeout(capture.timeoutId);
-    capture.processor.disconnect();
-    capture.source.disconnect();
-    capture.stream.getTracks().forEach((track) => track.stop());
-    await capture.context.close();
     setIsListening(false);
-    const audio = toPcm16k(capture.chunks, capture.context.sampleRate);
-    if (audio.size < 3200) {
-      optionsRef.current.onNotice("录音时间太短，请重新说一遍。", "warning");
-      return;
-    }
-    setIsTranscribing(true);
     try {
+      if (capture.recorder.state !== "inactive") {
+        await new Promise<void>((resolve) => {
+          capture.recorder.addEventListener("stop", () => resolve(), { once: true });
+          capture.recorder.stop();
+        });
+      }
+      capture.stream.getTracks().forEach((track) => track.stop());
+      const recording = new Blob(capture.chunks, { type: capture.recorder.mimeType });
+      const audio = await decodeRecordingToPcm16k(recording);
+      if (audio.size < 3200) {
+        optionsRef.current.onNotice("录音时间太短，请重新说一遍。", "warning");
+        return;
+      }
+      setIsTranscribing(true);
       const result = await transcribeSpeech(audio);
       optionsRef.current.onTranscript(result.transcript);
-    } catch {
-      serverAsrUnavailableRef.current = true;
-      optionsRef.current.onNotice("讯飞语音识别暂时不可用，下次将切换浏览器识别。", "warning");
+    } catch (error) {
+      const canRetryServer = error instanceof SpeechRequestError
+        && ["SPEECH_EMPTY_TRANSCRIPT", "SPEECH_INVALID_AUDIO"].includes(error.code);
+      serverAsrUnavailableRef.current = !canRetryServer;
+      const message = error instanceof SpeechRequestError
+        ? error.message
+        : "录音处理失败，请重新录制。";
+      optionsRef.current.onNotice(
+        canRetryServer ? message : `${message} 再次点击将使用浏览器识别。`,
+        "warning"
+      );
     } finally {
+      capture.stream.getTracks().forEach((track) => track.stop());
       setIsTranscribing(false);
     }
   }, []);
@@ -162,7 +222,8 @@ export function useBrowserSpeech(options: {
     if (isTranscribing) return;
     const canCapture = typeof navigator !== "undefined"
       && Boolean(navigator.mediaDevices?.getUserMedia)
-      && typeof AudioContext !== "undefined";
+      && typeof AudioContext !== "undefined"
+      && typeof MediaRecorder !== "undefined";
     if (!canCapture || serverAsrUnavailableRef.current) {
       startBrowserRecognition();
       return;
@@ -171,15 +232,16 @@ export function useBrowserSpeech(options: {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       });
-      const context = new AudioContext();
-      const source = context.createMediaStreamSource(stream);
-      const processor = context.createScriptProcessor(4096, 1, 1);
-      const chunks: Float32Array[] = [];
-      processor.onaudioprocess = (event) => chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
-      source.connect(processor);
-      processor.connect(context.destination);
+      const preferredType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"]
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = preferredType ? new MediaRecorder(stream, { mimeType: preferredType }) : new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
       const timeoutId = window.setTimeout(() => void finishServerRecording(), 60000);
-      captureRef.current = { context, stream, source, processor, chunks, timeoutId };
+      captureRef.current = { recorder, stream, chunks, timeoutId, finishing: false };
+      recorder.start(250);
       setIsListening(true);
     } catch {
       serverAsrUnavailableRef.current = true;
@@ -212,29 +274,51 @@ export function useBrowserSpeech(options: {
     const cleaned = cleanSpeechText(content);
     if (!cleaned) return;
     stopSpeaking();
-    const canUseServer = typeof navigator !== "undefined" && Boolean(navigator.mediaDevices);
-    if (!canUseServer || serverTtsUnavailableRef.current) {
+    if (serverTtsUnavailableRef.current) {
       speakWithBrowser(cleaned, speechId);
       return;
     }
+    const parts = splitSpeechForPlayback(cleaned);
+    const playbackToken = ++playbackTokenRef.current;
     setActiveSpeechId(speechId);
+    let partIndex = 0;
     try {
-      const blob = await synthesizeSpeech(cleaned);
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audioUrlRef.current = url;
-      audio.onended = stopSpeaking;
-      audio.onerror = () => {
-        serverTtsUnavailableRef.current = true;
-        stopSpeaking();
-        speakWithBrowser(cleaned, speechId);
+      const requestPart = async (text: string) => {
+        try {
+          return { blob: await synthesizeSpeech(text), error: null };
+        } catch (error) {
+          return { blob: null, error };
+        }
       };
-      await audio.play();
+      let pending = requestPart(parts[0] ?? cleaned);
+      for (partIndex = 0; partIndex < parts.length; partIndex += 1) {
+        const result = await pending;
+        if (result.error || !result.blob) throw result.error ?? new Error("speech synthesis returned no audio");
+        const blob = result.blob;
+        if (playbackToken !== playbackTokenRef.current) return;
+        if (partIndex + 1 < parts.length) pending = requestPart(parts[partIndex + 1] ?? "");
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        audioUrlRef.current = url;
+        await new Promise<void>((resolve, reject) => {
+          playbackResolveRef.current = resolve;
+          audio.onended = () => resolve();
+          audio.onerror = () => reject(new Error("audio playback failed"));
+          void audio.play().catch(reject);
+        });
+        playbackResolveRef.current = null;
+        audio.pause();
+        URL.revokeObjectURL(url);
+        audioRef.current = null;
+        audioUrlRef.current = null;
+        if (playbackToken !== playbackTokenRef.current) return;
+      }
+      setActiveSpeechId(null);
     } catch {
       serverTtsUnavailableRef.current = true;
       stopSpeaking();
-      speakWithBrowser(cleaned, speechId);
+      speakWithBrowser(parts.slice(partIndex).join("") || cleaned, speechId);
     }
   }, [speakWithBrowser, stopSpeaking]);
 
@@ -243,10 +327,8 @@ export function useBrowserSpeech(options: {
     const capture = captureRef.current;
     if (capture) {
       window.clearTimeout(capture.timeoutId);
-      capture.processor.disconnect();
-      capture.source.disconnect();
+      if (capture.recorder.state !== "inactive") capture.recorder.stop();
       capture.stream.getTracks().forEach((track) => track.stop());
-      void capture.context.close();
     }
     audioRef.current?.pause();
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);

@@ -633,3 +633,11 @@ Phase 5 以后：
 - `course_session_id` 与 `mentor=open` 同时存在时不强制切换为完整问答。切到 `mode=chat` 会清除 `mentor`，但保留同一课程会话供完整问答继续。
 - 从知识点相关资源进入 `/app/studio` 时携带 `course_id`、`resource_id`、`knowledge_point_id`、`mentor=open` 和 `course_session_id`。切换同课程资源只更新资源上下文，不更换会话；切换课程时清理旧会话绑定。
 - 助教草稿不持久化。历史消息由服务端会话恢复，面板开关与安全 ID 由 URL 恢复，语音播放和录音状态在关闭或离页时清理。
+
+## 25. Phase 53 多课程规范路由
+
+- 课程闭环的规范地址为 `/app/courses/:courseId/path`、`/app/courses/:courseId/practice` 和 `/app/courses/:courseId/reports`。
+- `/app/path`、`/app/practice`、`/app/reports` 继续兼容：优先读取显式 `course_id`，否则使用 Dashboard 的当前课程，再以 `replace` 规范化，不能退回课程数组第一项。
+- 用户主动进入课程相关页面时调用 `/courses/:courseId/activate`；归档课程只读访问不会重新成为当前课程，必须显式恢复学习。
+- `guided=1` 表示由统一下一行动进入知识点学习任务；`question_count=3` 是引导式检测的正式练习参数。
+- `confirm_weakness` 携带知识点和弱点 ID 打开课程学习进度区域；无资源的路径任务进入课程路径并定位 `path_task_id`，不落到空知识点概览。

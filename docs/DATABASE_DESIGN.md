@@ -1057,3 +1057,16 @@ Phase 38 不新增数据表或 Alembic 迁移。新生成路径在既有 `learni
 Phase 40 不新增表或迁移。`weakness_review_queue.diagnosis_json` 增加兼容性进度键：`baseline_score`、`latest_score`、`attempt_count`、最多 8 个 `practice_session_ids` 和 `last_practice_session_id`；历史缺字段按空进度读取。`practice_sessions.assessment_json` 可保存 `targeted_weakness_id/title` 及再测状态、提升值和是否通过。API 只返回安全派生字段，JSON 中的原始作答或内部诊断字段不得透传。
 
 Phase 41 仍不新增表或迁移。当前掌握度按 `practice_answers.session_id` 归组后选择最新会话，`weakness_review_queue.next_review_at` 区分“已攻克等待巩固”和“到期复习”。`assessment_reports.report_json.weakness_progress` 是可选兼容字段，只保存聚合数量、标题、起点分、最新分、提升值和下次复习时间，不保存原始作答或模型原文。
+
+## Phase 53 多课程状态与画像分层
+
+迁移 `20260718_0032` 扩展 `course_enrollments`：
+
+- `learning_status=active|archived`：用户学习状态，与 `courses.status` 的内容生命周期分离。
+- `last_accessed_at`：只记录用户主动进入课程相关页面；用于确定全局当前课程。
+- `completed_at`：用户确认完成并归档的时间。
+- `learning_context_json`：当前课程的目标、已有基础和明确困难。
+- `learning_context_confidence_json`：上述课程字段的逐维可信度。
+- `(user_id, learning_status, last_accessed_at)` 普通索引支持当前活动课程选择。
+
+`profile_events.course_id` 为可空外键：空值表示全局画像证据，非空表示对应课程证据。既有 `student_profiles.learning_goal/knowledge_foundation/weak_points` 继续可读，仅作为课程画像待确认建议，不再自动进入所有课程。删除课程会级联删除其课程画像事件；全局画像事件不受影响。

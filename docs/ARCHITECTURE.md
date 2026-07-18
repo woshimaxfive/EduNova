@@ -838,3 +838,11 @@ Phase 50 只重组现有前端展示，不新增业务状态。课程空间的 `
 `CourseMentorDock` 是课程学习界面的非模态适配层，不是新的 Agent。课程空间沿用现有 Tutor 控制器，资源工坊通过共享的无界面课程会话控制器读取/创建普通 `course` 会话并消费同一 SSE 合同；完整课程问答仍承担图片、资源提案和回答详情等完整能力。
 
 资源页只在发送时锁定 `context_resource_id`。`TutorSessionService` 重新读取当前用户资源并校验课程和可学习状态，再生成受控 `resource_context` 交给现有 `CourseTutorGraphRunner`。回答模型看到资源安全文本和课程切片，但最终引用仍只来自课程检索或明确的外部补充；资源正文不会扩散到日志、Trace、画像或评估链路。
+
+## 38. Phase 53 多课程学习编排
+
+`course_enrollments` 是用户与课程之间的学习编排事实源：`learning_status` 区分活动与归档，`last_accessed_at` 只在用户主动进入课程工作区、路径、资源、练习或报告时更新。Dashboard 和全局下一行动只选择最近主动访问的活动课程；AIJob、轮询、报告生成和后台重排禁止更新该时间。
+
+画像上下文分为两层。`student_profiles` 继续保存专业背景、偏好、理解习惯、节奏和动力等跨课程特征；enrollment JSON 保存课程目标、课程基础和明确困难。`CourseLearnerContext` 组合可信全局因素、当前课程画像和当前课程行为证据，任何课程专属字段都不能跨课程进入模型输入。
+
+课程完成不是 `Course.status`。`CourseStageCompletion` 在读取时确定性计算路径完成、路径知识点评分、75 分阈值、活动/到期薄弱点、完整评分练习和报告新鲜度。只有全部满足且用户确认后才把 enrollment 归档；恢复学习只改变 enrollment，不破坏课程内容和历史证据。

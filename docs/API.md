@@ -632,7 +632,7 @@ Authorization: Bearer <token>
 规则：
 
 - 必须携带 JWT，只允许访问当前用户自己的课程。
-- 读取用户级 `student_profiles` 作为长期偏好和背景，不复制完整画像。
+- 读取用户级 `student_profiles` 的可信通用偏好与背景，并叠加当前 enrollment 的课程目标、基础和困难；不得读取其他课程的课程画像。
 - 请求时执行一次确定性同步：只处理当前课程下 `dimension="weak_points"`、`evidence_json.source_type="course_question"` 的画像候选事件。
 - 有 `knowledge_point_id` 时按知识点去重；无知识点时按安全标题去重，标题优先使用 `section_title`、`source_title`，否则使用“课程问答薄弱点”。
 - 新入队项写入 `weakness_review_queue`，状态为 `pending`，产品语义是“待确认/待复习”，不是系统已经完成正式诊断。
@@ -648,7 +648,7 @@ Authorization: Bearer <token>
 
 - `course_id`。
 - `profile_overlay`：兼容字段，由当前课程上下文派生；目标优先取当前路径目标，基础叠加本课程掌握度摘要，弱点只返回当前课程弱点。
-- `learner_context`：实时派生的课程学习上下文，包含画像应用版本、可信/弱提示维度数量、画像完整度、课程目标、掌握度、当前任务、课程弱点、最近练习、资源类型、报告状态和脱敏 `context_hash`。不复制完整用户画像，也不持久化课程画像表。
+- `learner_context`：实时派生的课程学习上下文，包含画像应用版本、可信/弱提示维度数量、画像完整度、课程目标、掌握度、当前任务、课程弱点、最近练习、资源类型、报告状态和脱敏 `context_hash`。课程目标、基础和困难持久化在当前 `course_enrollments`，不复制完整用户画像。
 - `weakness_summary`：`candidate_event_count`、`pending_count`、`confirmed_count`、`reviewing_count`、`completed_count`、`dismissed_count`、`latest_evidence_at`。
 - `weakness_review_queue`：复习项数组，包含 `id`、`title`、`status`、`source_type`、`course_id`、`knowledge_point_id`、`recommended_resource_ids`、`recommended_resources`、`next_review_at`、`created_at`、`updated_at`。
 - `path_summary`：`status`、`message`、`path_id`、`current_task_title`、`task_count`、`completed_task_count`。
@@ -1352,7 +1352,7 @@ Phase 17 起课程空间和资源工坊改用 `POST /resources/generation-jobs`�
 
 ## 12. Learning Path 接口
 
-状态：Phase 9 已实现。当前后端已挂载 `paths` router，`/app/path` 读取真实课程路径、任务、推荐资源和掌握度图。
+状态：Phase 9 已实现；Phase 53 后规范前端入口为 `/app/courses/{course_id}/path`，旧 `/app/path` 继续兼容并重定向。
 
 统一规则：
 
@@ -2727,3 +2727,28 @@ Phase 31 不新增接口路径或数据库迁移。现有资料解析进度对�
 - 该字段只允许课程会话使用；资源必须属于当前用户、绑定同一课程、状态为 `completed` 且包含可学习内容，否则返回 `RESOURCE_CONTEXT_INVALID`，不会静默退回普通问答。
 - 服务端从资源现有 JSON 中确定性提取标题、类型、知识点和最多 6000 字安全文本。外部视频只提供平台、标题、作者、时长与原平台链接，不使用搜索摘要冒充视频内容。
 - 资源上下文只进入当次回答输入，不加入 `citation_json`，不参与画像、弱点、练习评分或掌握度。SSE/Trace仅暴露 `resource_context_used`、`context_resource_id` 和 `context_resource_type`。
+
+## Phase 53 多课程学习编排合同
+
+### POST `/api/v1/courses/{course_id}/activate`
+
+记录当前用户主动进入课程的时间。只更新对应 enrollment 的 `last_accessed_at`；不会恢复已归档课程，也不会被 AIJob、轮询或后台任务调用。响应为 `ApiEnvelope<CourseSummary>`。
+
+### POST `/api/v1/courses/{course_id}/complete`
+
+在服务端重新计算课程阶段完成条件。只有路径全部完成、路径知识点均有有效评分且不低于 75 分、没有活动或到期薄弱点、至少一次练习全部评分成功、最新报告覆盖最近练习时才归档。未达标返回 `409 COURSE_NOT_READY` 与安全阻塞原因；归档不删除课程数据。
+
+### POST `/api/v1/courses/{course_id}/resume`
+
+把当前用户的 enrollment 恢复为 `active`，清除 `completed_at` 并记录本次主动访问。响应中的 `is_current=true`；课程内容生命周期不变。
+
+### GET/PUT `/api/v1/courses/{course_id}/learner-profile`
+
+读取或更新当前课程专属的 `learning_goal`、`knowledge_foundation` 和 `weak_points`。响应包含逐维可信度、基础/课程画像 readiness 及历史全局字段的待确认建议。PUT 为用户明确输入，目标和基础置信度写为 100；归档课程写入返回 `409 COURSE_ARCHIVED`，读取仍允许。
+
+### 课程与学习状态扩展
+
+- `CourseSummary` 增加 `learning_status`、`last_accessed_at`、`completed_at`、`is_current` 和 `profile_ready`。
+- `DashboardSummary.current_course_id` 指向最近主动访问的活动课程；后台任务不得改变。
+- `CourseLearningState` 增加 `course_profile_readiness` 与 `stage_completion`。后者包含 `eligible/path_completed/assessed_point_count/required_point_count/below_threshold_count/active_weakness_count/due_review_count/report_fresh/blocking_reasons`。
+- `LearningNextAction.kind` 增加 `complete_profile` 与 `complete_course`。全局动作先处理基础画像，再处理当前课程画像和课程级动作；与当前动作无关的后台任务只出现在任务托盘。

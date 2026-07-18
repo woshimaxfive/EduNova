@@ -163,6 +163,8 @@ EduNova 不是把所有逻辑都交给大模型，而是把学生学习链路拆
 - 除资料解析外的九条学习 Graph 统一记录 `profile_applied_version`、可信维度数、完整度和课程上下文版本。资料解析不读取学生画像。trace 只披露计数和版本，不披露画像原文。
 - 新资源、路径和报告保存画像应用版本与课程上下文 hash；画像变化只产生 `stale` 提示，不自动重跑 Graph。
 
+Phase 53 后，可信画像上下文明确分层：全局 ProfileGraph 只持久化可跨课程复用的专业背景、偏好、理解习惯、节奏和动力；课程目标、基础与困难仅在带合法 `course_id` 且通过证据门禁时写入对应 enrollment。A 课程事件和资源反馈不能进入 B 课程 Graph。历史全局目标、基础和弱点仅作为课程画像待确认建议，不能直接驱动生成。
+
 ## 11. MaterialIngestionGraph 与 CourseBuilderGraph
 
 `MaterialIngestionGraph` 是用户资料进入 RAG 和建课前的独立质量门，节点固定为：

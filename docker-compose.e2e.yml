@@ -17,6 +17,10 @@ services:
       SYSTEM_MODEL_API_KEY: replace-with-your-own-key
       SYSTEM_CHAT_MODEL: example-chat-model
       SYSTEM_EMBEDDING_MODEL: example-embedding-model
+      SYSTEM_GENERATION_PROVIDER: openai_compatible
+      SYSTEM_GENERATION_BASE_URL: https://api.example.com/v1
+      SYSTEM_GENERATION_API_KEY: replace-with-your-own-key
+      SYSTEM_GENERATION_MODEL: example-chat-model
       WEB_SEARCH_API_KEY: ""
     ports: !override
       - "${E2E_BACKEND_PORT:-18000}:8000"
@@ -31,6 +35,10 @@ services:
       SYSTEM_MODEL_API_KEY: replace-with-your-own-key
       SYSTEM_CHAT_MODEL: example-chat-model
       SYSTEM_EMBEDDING_MODEL: example-embedding-model
+      SYSTEM_GENERATION_PROVIDER: openai_compatible
+      SYSTEM_GENERATION_BASE_URL: https://api.example.com/v1
+      SYSTEM_GENERATION_API_KEY: replace-with-your-own-key
+      SYSTEM_GENERATION_MODEL: example-chat-model
       WEB_SEARCH_API_KEY: ""
 
   ai-worker:
@@ -43,6 +51,10 @@ services:
       SYSTEM_MODEL_API_KEY: replace-with-your-own-key
       SYSTEM_CHAT_MODEL: example-chat-model
       SYSTEM_EMBEDDING_MODEL: example-embedding-model
+      SYSTEM_GENERATION_PROVIDER: openai_compatible
+      SYSTEM_GENERATION_BASE_URL: https://api.example.com/v1
+      SYSTEM_GENERATION_API_KEY: replace-with-your-own-key
+      SYSTEM_GENERATION_MODEL: example-chat-model
       WEB_SEARCH_API_KEY: ""
 
   nginx:

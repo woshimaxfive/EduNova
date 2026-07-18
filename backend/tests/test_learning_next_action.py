@@ -140,6 +140,54 @@ def test_path_job_is_exposed_as_waiting_next_action() -> None:
     assert action.course_id == "10"
 
 
+def test_global_next_action_prioritizes_active_job_for_current_course() -> None:
+    course = make_course()
+    job = AiJob(
+        id=90,
+        user_id=1,
+        course_id=10,
+        workflow="path_planning",
+        status="running",
+        progress_percent=38,
+        stage="deterministic_rank",
+        label="正在规划学习路径",
+        agent_trace_id="trace-path",
+        idempotency_key="path-10",
+        request_json={"course_id": 10},
+        progress_json={},
+        result_json={},
+    )
+    db = MagicMock()
+    db.scalar.side_effect = [course, None, job]
+    service = service_with(db, mastery())
+    service._base_profile_ready = MagicMock(return_value=True)
+
+    action = service.get_next_action(make_user())
+
+    assert action.kind == "wait_for_path"
+    assert action.status == "waiting"
+    assert action.course_id == "10"
+
+
+def test_first_resource_uses_first_uncompleted_bundle_item() -> None:
+    task = make_task()
+    task.recommended_resource_ids = [50, 51]
+    task.learning_bundle_json = {
+        "items": [
+            {"resource_id": 50},
+            {"resource_id": 51},
+            {"resource_id": 52},
+        ]
+    }
+    db = MagicMock()
+    db.scalars.return_value = [50]
+    db.scalar.return_value = 51
+
+    resource_id = service_with(db, mastery())._first_resource_id(task)
+
+    assert resource_id == 51
+
+
 def test_practice_and_report_jobs_are_exposed_as_waiting_next_actions() -> None:
     service = service_with(MagicMock(), mastery())
     common = {
@@ -177,7 +225,7 @@ def test_course_action_prioritizes_pending_weakness_then_current_path_task() -> 
     assert action.knowledge_point_id == "40"
 
     db = MagicMock()
-    db.scalars.side_effect = [[], [make_task()]]
+    db.scalars.side_effect = [[], [make_task()], []]
     db.scalar.return_value = make_path()
     action = service_with(db, mastery())._course_action(make_user(), make_course())
     assert action.kind == "continue_path_task"

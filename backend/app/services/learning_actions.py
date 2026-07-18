@@ -15,6 +15,7 @@ from backend.app.models import (
     LearningTask,
     Material,
     PracticeSession,
+    ResourceInteraction,
     User,
     WeaknessReviewItem,
     StudentProfile,
@@ -69,6 +70,11 @@ class LearningNextActionService:
             material = None
         if course is None:
             return self._material_action(material)
+        active_job = self._latest_active_job(user.id, course.id)
+        if active_job is not None:
+            job_action = self._job_action(active_job)
+            if job_action is not None:
+                return job_action
         course_profile = self.course_service.get_learner_profile(user, course.id)
         if not course_profile.readiness.ready:
             return self._action(
@@ -376,16 +382,26 @@ class LearningNextActionService:
         return self.db.scalar(statement.order_by(AiJob.updated_at.desc(), AiJob.id.desc()))
 
     def _first_resource_id(self, task: LearningTask) -> int | None:
-        for value in task.recommended_resource_ids or []:
-            parsed = LearningNextActionService._positive_int(value)
-            if parsed is not None and self._valid_task_resource(task, parsed):
-                return parsed
+        completed_resource_ids = set(
+            self.db.scalars(
+                select(ResourceInteraction.resource_id).where(
+                    ResourceInteraction.user_id == task.user_id,
+                    ResourceInteraction.course_id == task.course_id,
+                    ResourceInteraction.path_task_id == task.id,
+                    ResourceInteraction.event_type == "completed",
+                )
+            )
+        )
         bundle = task.learning_bundle_json if isinstance(task.learning_bundle_json, dict) else {}
         for item in bundle.get("items", []):
-            if not isinstance(item, dict) or item.get("learning_status") == "completed":
+            if not isinstance(item, dict):
                 continue
             parsed = self._positive_int(item.get("resource_id"))
-            if parsed is not None and self._valid_task_resource(task, parsed):
+            if parsed is not None and parsed not in completed_resource_ids and self._valid_task_resource(task, parsed):
+                return parsed
+        for value in task.recommended_resource_ids or []:
+            parsed = LearningNextActionService._positive_int(value)
+            if parsed is not None and parsed not in completed_resource_ids and self._valid_task_resource(task, parsed):
                 return parsed
         return None
 

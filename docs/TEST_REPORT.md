@@ -1,6 +1,6 @@
 # EduNova 测试报告
 
-更新时间：2026-07-10
+更新时间：2026-07-18
 
 ## 1. 报告定位
 
@@ -11,6 +11,8 @@ Phase 12.2 的验收记录见：
 ```text
 docs/evidence/PHASE_12_2_ACCEPTANCE.md
 ```
+
+最新封盘验收见第 9 节；Phase 12.2 的数字仅保留为历史记录。
 
 ## 2. 自动化测试基线
 
@@ -120,3 +122,14 @@ Phase 12.2 主流程：
 - `agent-browser` 复核 1440px 与 390px，练习设置可点击、Radix 弹窗可关闭、两种宽度均无水平溢出。两组可信画像路径均为模型增强且无 fallback，在策略和资源模态上至少形成两项可见差异。
 - 精确删除 3 个临时账号、2 份上传副本、5 份导出、23 个 RQ 任务、4 门临时课程和全部级联数据；原始 PDF 的字节数、修改时间和 SHA-256 均与验收前一致，仓库不保存教材文件指纹。
 - 本轮未新增真实性能样本，赛题就绪评测的实时性能证据保持 `evidence_gap`，不使用离线结果替代。
+
+## 9. Phase 53 封盘最终验收
+
+2026-07-18 实际结果：
+
+- 最终编排热修覆盖两条 Phase 53 合同：主页全局下一行动优先展示当前课程的活动 AIJob；路径续学按学习包顺序选择第一个当前用户尚未完成且已可用的资源。
+- 定向回归和后端全量 pytest 共 519 项通过；前端 Vitest 47 个文件、275 项通过；离线 AI 评测 10 项通过。
+- UTF-8 无 BOM、Ruff、ESLint、TypeScript、production build、Alembic `20260718_0032`、非破坏性 OpenAPI 与 Docker Compose 配置均通过。backend 镜像已重建，健康检查返回 `{"status":"ok","service":"edunova-api"}`。
+- `agent-browser` 使用一次性账号完成注册与首页进入；1440px 和 390px 下页面 `scrollWidth` 等于 `clientWidth`，页面和控制台错误为空。测试账号已从数据库精确删除。
+- 隔离 Docker E2E 通过 pgvector 排序/隔离、代码执行隔离和 2 条 Playwright 流程。首次执行暴露 E2E 未覆盖 `SYSTEM_GENERATION_*`，使 rules-only 测试继承本机真实后台生成配置；补齐三类 Worker 的显式占位配置后，规则环境诚实失败且不持久化模板路径，重跑 2 项均通过并清理隔离容器和卷。
+- `contest_readiness` 的离线质量部分通过，但没有输入新的真实七类性能样本，因此总状态仍为 `evidence_gap`。这不是性能通过，也不应以历史样本替代；补齐真实样本后才可运行 `--require-live` 作为赛题性能结论。

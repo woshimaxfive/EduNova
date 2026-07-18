@@ -824,3 +824,11 @@ AssessmentGraph 的修订输入包含上一版学生可见候选和精确风险�
 真实浏览器录音改由标准 `MediaRecorder` 采集浏览器支持的 Opus/WebM 或兼容格式，结束后通过 `AudioContext.decodeAudioData` 解码，统一重采样为 16 kHz/16 bit/单声道 PCM，并只对可判定的低音量信号施加上限为 8 倍的有限增益。该链路替换已弃用且受声卡采样环境影响的 `ScriptProcessorNode`。录音太短、空转写和无效格式属于可重试输入问题，不会永久关闭讯飞；网络、授权、额度等服务问题才在当前页面切换 Web Speech。
 
 TTS 保持既有后端二进制合同，前端将清理后的长回答拆为最多 180 字符的自然短段。首段请求完成后立即播放，同时预取下一段；停止操作通过播放令牌终止剩余队列。固定发音人由部署配置 `x4_yezi` 管理，不向学生暴露未经授权的任意 `vcn`。
+
+## 36. Phase 50 学习全景展示层
+
+Phase 50 只重组现有前端展示，不新增业务状态。课程空间的 `mode/view/knowledge_point_id/graph_scope/graph_chapter/detail/course_session_id/course_message_id/panel` 写入 URL，负责可分享、可回退的语义状态；图谱视口使用按课程、范围和章节隔离的 `sessionStorage`。AIJob、Trace、掌握度、弱点和路径仍从服务端读取，浏览器存储不得成为业务事实来源。
+
+知识图谱复用现有 `@xyflow/react`。布局只读取章节顺序、知识点顺序和合法 `prerequisite_ids`；缺失或循环边跳过，不阻断其余节点。桌面端支持聚焦链路和课程全景，移动端降级为纵向章节链路。`AiCollaborationPanel` 通过适配器读取 Tutor SSE、`AgentTraceResponse` 和 AIJob，只展示白名单阶段、实际耗时、来源数、因素代码、审核状态和降级原因。
+
+主页 `TodayLearningInsight` 是 Dashboard、当前课程掌握图、课程学习状态与 `LearningNextAction` 的确定性投影。它不能预测提升、编造诊断或触发额外模型调用；相关 Query 在练习、资源、弱点、路径和报告更新后沿用原有失效范围刷新。

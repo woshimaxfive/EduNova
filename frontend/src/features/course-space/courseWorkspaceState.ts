@@ -26,13 +26,14 @@ export function parseCourseWorkspaceUrl(searchParams: URLSearchParams): CourseWo
   const panelValue = searchParams.get("panel");
   const requestedPanel = (panelValue === "trace" ? "thinking" : panelValue) as CourseAnswerPanelKind | null;
   const hasConversationTarget = Boolean(searchParams.get("course_session_id") || searchParams.get("course_message_id"));
+  const hasStudyTarget = Boolean(searchParams.get("knowledge_point_id"));
   return {
     mode: requestedMode === "chat" || requestedMode === "study"
       ? requestedMode
       : hasConversationTarget ? "chat" : "study",
     view: requestedView === "overview" || requestedView === "graph"
       ? requestedView
-      : hasConversationTarget ? "overview" : "graph",
+      : requestedMode === "chat" || hasConversationTarget || hasStudyTarget ? "overview" : "graph",
     knowledgePointId: searchParams.get("knowledge_point_id"),
     graphScope: requestedScope === "course" ? "course" : "focus",
     graphChapter: searchParams.get("graph_chapter") ?? "",

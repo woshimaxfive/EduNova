@@ -8,11 +8,12 @@ type AgentTimelineProps = {
   summary?: AgentTrace["summary"];
 };
 
-export function AgentTimeline({ events, staggered = false, summary }: AgentTimelineProps) {
+export function AgentTimeline({ events, summary }: AgentTimelineProps) {
   return (
     <AiCollaborationPanel
       completed
       events={events}
+      defaultExpanded
       summary={summary ? {
         durationMs: summary.duration_ms,
         courseSourceCount: summary.course_source_count,
@@ -22,7 +23,7 @@ export function AgentTimeline({ events, staggered = false, summary }: AgentTimel
         reviewStatus: summary.review_status,
         safetySummary: summary.safety_summary
       } : undefined}
-      storageKey={staggered ? undefined : `trace:${events.map((event) => event.id).join("-")}`}
+      storageKey={undefined}
     />
   );
 }

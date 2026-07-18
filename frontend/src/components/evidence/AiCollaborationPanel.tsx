@@ -22,11 +22,12 @@ type Props = {
   durationMs?: number;
   summary?: CollaborationSummary;
   storageKey?: string;
+  defaultExpanded?: boolean;
 };
 
-export function AiCollaborationPanel({ running = false, completed = false, stages = [], events = [], startedAt, durationMs, summary, storageKey }: Props) {
+export function AiCollaborationPanel({ running = false, completed = false, stages = [], events = [], startedAt, durationMs, summary, storageKey, defaultExpanded = false }: Props) {
   const [now, setNow] = useState(() => Date.now());
-  const [open, setOpen] = useState(() => readExpanded(storageKey));
+  const [open, setOpen] = useState(() => readExpanded(storageKey, defaultExpanded));
   const normalizedStages = useMemo(() => stages.filter((stage, index, all) => all.indexOf(stage) === index), [stages]);
   const elapsed = durationMs ?? summary?.durationMs ?? (startedAt ? now - startedAt : 0);
   const currentStage = normalizedStages.at(-1) ?? events.find((event) => event.status === "running")?.summary ?? "正在组织学习协作";
@@ -92,7 +93,10 @@ function formatDuration(durationMs: number) {
   return durationMs < 1000 ? `${Math.max(0, Math.round(durationMs))} ms` : `${Math.max(1, Math.round(durationMs / 1000))} 秒`;
 }
 
-function readExpanded(key?: string) {
-  if (!key) return false;
-  try { return sessionStorage.getItem(`edunova.collaboration.v1:${key}`) === "open"; } catch { return false; }
+function readExpanded(key: string | undefined, fallback: boolean) {
+  if (!key) return fallback;
+  try {
+    const stored = sessionStorage.getItem(`edunova.collaboration.v1:${key}`);
+    return stored ? stored === "open" : fallback;
+  } catch { return fallback; }
 }

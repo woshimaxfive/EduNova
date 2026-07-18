@@ -33,7 +33,7 @@ describe("learning action routes", () => {
 
   it("routes path tasks to real resources or course knowledge", () => {
     expect(learningActionHref(action("continue_path_task", { resource_id: "18", path_task_id: "9" }))).toBe("/app/studio?course_id=8&resource_id=18&path_task_id=9");
-    expect(learningActionHref(action("continue_path_task", { knowledge_point_id: "42", path_task_id: "9" }))).toBe("/app/courses/8?knowledge_point_id=42&path_task_id=9");
+    expect(learningActionHref(action("continue_path_task", { knowledge_point_id: "42", path_task_id: "9" }))).toBe("/app/courses/8?mode=study&view=overview&knowledge_point_id=42&path_task_id=9");
   });
 
   it("routes practice, path and report actions deterministically", () => {

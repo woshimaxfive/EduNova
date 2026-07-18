@@ -303,8 +303,8 @@ export function CourseSpacePage() {
       : null
   );
   const initialKnowledgePointId = initialWorkspaceState.knowledgePointId;
-  const [courseMode, setCourseMode] = useState<CourseWorkspaceMode>(initialWorkspaceState.mode);
-  const [courseContentView, setCourseContentView] = useState<CourseContentMode>(initialWorkspaceState.view);
+  const [courseMode, setCourseMode] = useState<CourseWorkspaceMode>(hasRealCourseId ? initialWorkspaceState.mode : "chat");
+  const [courseContentView, setCourseContentView] = useState<CourseContentMode>(hasRealCourseId ? initialWorkspaceState.view : "overview");
   const [graphScope, setGraphScope] = useState<GraphScope>(initialWorkspaceState.graphScope);
   const [graphChapter, setGraphChapter] = useState(initialWorkspaceState.graphChapter);
   const [isKnowledgeDetailOpen, setIsKnowledgeDetailOpen] = useState(initialWorkspaceState.detailKnowledge);
@@ -493,7 +493,7 @@ export function CourseSpacePage() {
   const knowledgePointCount = fallbackCourse?.knowledge_point_count ?? apiKnowledgePoints.length;
   const generatedResources = courseResourcesQuery.data?.data ?? [];
   const currentPath = currentPathQuery.data?.data ?? null;
-  const currentPathTaskPointId = currentPath?.tasks.find((task) => task.status === "doing")?.knowledge_point_id ?? null;
+  const currentPathTaskPointId = (Array.isArray(currentPath?.tasks) ? currentPath.tasks : []).find((task) => task.status === "doing")?.knowledge_point_id ?? null;
   const latestReport = latestReportQuery.data?.data ?? null;
   const latestPractice = latestPracticeQuery.data?.data ?? null;
   const latestUserQuestion = [...displayedCourseMessages].reverse().find((message) => message.role === "user")?.content ?? null;

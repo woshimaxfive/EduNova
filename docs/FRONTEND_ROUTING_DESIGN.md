@@ -617,3 +617,10 @@ Phase 5 以后：
 - 课程空会话只展示一个主动作，提问、自由练习和报告作为次级导航；历史回答不再重复显示闭环主动作。
 - AI Job 完成后保留“查看结果”入口并刷新动作，不新增通知路由或第二套任务状态。
 - 首页最近学习最多读取三门课程各自的统一下一最佳行动：行动标签作为“当前重点”，操作直接使用 `learningActionHref` 跳转；学习覆盖明确显示“已练习 X / Y”，不将覆盖度称为掌握度。全部课程抽屉只负责检索和进入，显示课程状态与同一覆盖度，不为每门课程重复请求行动接口。
+
+## 23. Phase 50 课程工作区 URL 合同
+
+- 裸 `/app/courses/:courseId` 在课程与掌握图可用后规范化为 `mode=study&view=graph`；显式路径任务、引用、练习、资源或会话入口优先保留其目标上下文。
+- 课程语义参数为 `mode`、`view`、`knowledge_point_id`、`graph_scope`、`graph_chapter`、`detail`、`course_session_id`、`course_message_id` 和 `panel`。无效、越权或已删除实体由页面清理后回到安全知识点。
+- 主页回答定位使用 `session_id`、`message_id` 和 `panel=sources|why|trace`。课程回答面板使用 `panel=citations|resources|why|trace`；内部兼容名称不得进入分享链接。
+- 图谱平移缩放键为 `edunova.course-graph.viewport.v1:{courseId}:{scope}:{chapter}`，AIJob 托盘和逐回答协作折叠状态也只写当前标签页。刷新与前进后退恢复语义，换课程和换标签页互不污染。

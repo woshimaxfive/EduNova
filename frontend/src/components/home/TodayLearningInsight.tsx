@@ -22,8 +22,9 @@ export function TodayLearningInsight({ course, action, mastery, learningState, l
   const averageScore = summary?.average_score;
   const activeWeaknesses = (weakness?.confirmed_count ?? 0) + (weakness?.reviewing_count ?? 0);
   const pendingWeaknesses = weakness?.pending_count ?? 0;
-  const focusPoint = mastery?.points.find((point) => point.id === action.knowledge_point_id)
-    ?? mastery?.points.filter((point) => point.score !== null).sort((left, right) => (left.score ?? 101) - (right.score ?? 101))[0];
+  const masteryPoints = Array.isArray(mastery?.points) ? mastery.points : [];
+  const focusPoint = masteryPoints.find((point) => point.id === action.knowledge_point_id)
+    ?? masteryPoints.filter((point) => point.score !== null).sort((left, right) => (left.score ?? 101) - (right.score ?? 101))[0];
 
   return (
     <section className="today-learning-insight" aria-label="今日学习洞察">

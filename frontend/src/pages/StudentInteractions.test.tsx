@@ -403,7 +403,7 @@ describe("student interaction affordances", () => {
     };
 
     renderWithProviders(
-      <MemoryRouter initialEntries={["/app/courses/808"]}>
+      <MemoryRouter initialEntries={["/app/courses/808?mode=chat"]}>
         <Routes>
           <Route path={PATHS.courseDetail} element={<CourseSpacePage />} />
         </Routes>
@@ -426,7 +426,7 @@ describe("student interaction affordances", () => {
 
   it("keeps path, practice, and reports as course-context actions", async () => {
     renderWithProviders(
-      <MemoryRouter initialEntries={["/app/courses/808"]}>
+      <MemoryRouter initialEntries={["/app/courses/808?mode=chat"]}>
         <Routes>
           <Route path={PATHS.courseDetail} element={<CourseSpacePage />} />
         </Routes>

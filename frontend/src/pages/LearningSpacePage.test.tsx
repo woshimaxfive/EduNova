@@ -754,7 +754,7 @@ describe("LearningSpacePage", () => {
     expect(screen.getByRole("button", { name: "打开资料库" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: /真实机器学习课/ })).toHaveAttribute("href", "/app/courses/101");
     expect((await screen.findAllByText("学习知识点：监督学习")).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByRole("link", { name: "下一步：学习知识点：监督学习" })).toHaveAttribute("href", "/app/courses/101?knowledge_point_id=88");
+    expect(screen.getByRole("link", { name: "下一步：学习知识点：监督学习" })).toHaveAttribute("href", "/app/courses/101?mode=study&view=overview&knowledge_point_id=88");
     expect(screen.getByText("0 / 8")).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "最近学习列表" })).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(1);

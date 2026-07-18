@@ -218,3 +218,9 @@ PathPlanning、Assessment、Report、Resource、Profile 及语义决策节点通
 - AssessmentGraph 只负责本次绑定练习的生成、评分和复习项状态转换；当前掌握度由确定性 Service 按最近完整会话派生，模型不能直接写分数。
 - ReportGraph 锁定 `weakness_progress`，模型只能围绕活动、已攻克、到期复习及分数提升生成叙事，不能改写这些统计。
 - 到期复习沿用原 `weakness_item_id`。练习题成功持久化后才从 `completed` 转回 `reviewing`，模型或队列失败不会提前撤销已攻克状态。
+
+## Phase 50 统一协作过程展示
+
+`AiCollaborationPanel` 是前端展示适配层，不是新的 Agent、Graph 或 trace 存储。它统一读取 Tutor SSE 实时阶段、持久化 `AgentTraceResponse` 和 AIJob 进度，显示真实节点、实际耗时、来源数、个性化因素、审核状态、部分失败和安全降级。
+
+兼容的 `AgentTimeline` 与 `TutorResponseProgress` 继续保留原调用合同，但内部委托统一面板。展示层禁止输出 Prompt、Provider 原始响应、原始思维链、完整资料或画像；刷新后只从服务端 Trace/AIJob 恢复真实状态，并用 `sessionStorage` 恢复用户自己的折叠偏好。

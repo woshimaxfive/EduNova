@@ -1046,7 +1046,7 @@ function renderCoursePage(options: CoursePageOptions = {}) {
   });
 
   renderWithProviders(
-    <MemoryRouter initialEntries={[options.initialEntry ?? "/app/courses/808"]}>
+    <MemoryRouter initialEntries={[options.initialEntry ?? "/app/courses/808?mode=chat"]}>
       <Routes>
         <Route path={PATHS.courseDetail} element={<CourseSpacePage />} />
       </Routes>

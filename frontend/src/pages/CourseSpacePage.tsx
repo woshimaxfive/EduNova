@@ -1231,6 +1231,7 @@ export function CourseSpacePage() {
                                 state={courseAnswerProgress[message.id] ?? persistedCourseAnswerProgress[message.id]}
                                 completed
                                 durationMs={(courseAnswerProgress[message.id] ?? persistedCourseAnswerProgress[message.id]).durationMs}
+                                storageKey={`course-message:${message.id}`}
                               />
                             ) : undefined}
                             actions={isPersisted && message.content.trim() ? (
@@ -1553,10 +1554,7 @@ function AnswerDetailPanel({
       return (
         <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
           <strong>课堂协作轨迹</strong>
-          {agentTraceSummary ? (
-            <p>{`耗时 ${agentTraceSummary.duration_ms ?? 0} ms · 来源 ${Number(agentTraceSummary.course_source_count ?? 0) + Number(agentTraceSummary.web_source_count ?? 0) + Number(agentTraceSummary.history_source_count ?? 0)} 条 · 个性化因素 ${agentTraceSummary.personalization_factors?.length ?? 0} 项`}</p>
-          ) : null}
-          <AgentTimeline events={agentTraceEvents} />
+          <AgentTimeline events={agentTraceEvents} summary={agentTraceSummary ?? undefined} />
         </section>
       );
     }

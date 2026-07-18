@@ -57,6 +57,7 @@ export function AiJobProgress({ job, compact = false, onCancel, onRetry, onDelet
         <div>
           <strong>{workflowLabel}</strong>
           <span>{job.label}</span>
+          {job.started_at ? <small>{job.completed_at ? `实际用时 ${formatJobDuration(job.started_at, job.completed_at)}` : `已运行 ${formatJobDuration(job.started_at, job.updated_at)}`}</small> : null}
         </div>
         <b>{job.progress_percent}%</b>
       </div>
@@ -71,6 +72,7 @@ export function AiJobProgress({ job, compact = false, onCancel, onRetry, onDelet
         </div>
       ) : null}
       {job.error_message ? <p className="ai-job-progress__error">{job.error_message}</p> : null}
+      {job.warnings.length > 0 ? <p className="ai-job-progress__warning">部分结果需要注意：{job.warnings.join("；")}</p> : null}
       <div className="ai-job-progress__actions">
         {completedHref ? <Link className="icon-text-button" to={completedHref}>查看结果</Link> : null}
         {job.error_code === "authentication_failed" || job.error_code === "not_configured" ? (
@@ -98,4 +100,9 @@ export function AiJobProgress({ job, compact = false, onCancel, onRetry, onDelet
       </div>
     </section>
   );
+}
+
+function formatJobDuration(startedAt: string, endedAt: string) {
+  const durationMs = Math.max(0, Date.parse(endedAt) - Date.parse(startedAt));
+  return `${Math.max(1, Math.round(durationMs / 1000))} 秒`;
 }

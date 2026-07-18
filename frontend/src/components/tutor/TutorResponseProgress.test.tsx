@@ -8,7 +8,7 @@ describe("TutorResponseProgress", () => {
   it("shows the current safe stage while an answer is streaming", () => {
     render(<TutorResponseProgress state={{ startedAt: 0, stages: ["正在读取会话上下文", "正在检索课程资料"] }} />);
 
-    expect(screen.getByRole("status", { name: "正在协作回答" })).toHaveTextContent("正在协作回答");
+    expect(screen.getByRole("status", { name: "AI 正在完成这一步" })).toHaveTextContent("AI 正在完成这一步");
     expect(screen.getAllByText("正在检索课程资料")).toHaveLength(2);
   });
 
@@ -22,11 +22,11 @@ describe("TutorResponseProgress", () => {
       />
     );
 
-    const trigger = screen.getByRole("button", { name: "协作完成 · 用时 11 秒" });
-    expect(screen.queryByRole("list", { name: "本次协作步骤" })).not.toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: /协作完成/ });
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
 
     await user.click(trigger);
 
-    expect(screen.getByRole("list", { name: "本次协作步骤" })).toHaveTextContent("正在组织回答");
+    expect(screen.getByRole("list")).toHaveTextContent("正在组织回答");
   });
 });

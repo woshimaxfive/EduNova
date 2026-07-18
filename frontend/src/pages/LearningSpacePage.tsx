@@ -21,7 +21,7 @@ import { getDashboardSummary } from "../api/dashboard";
 import { getApiErrorMessage } from "../api/errors";
 import { getLearningNextAction } from "../api/learning";
 import { listMaterials, uploadMaterial } from "../api/materials";
-import { listCourses } from "../api/courses";
+import { getCourseLearningState, getMasteryMap, listCourses } from "../api/courses";
 import {
   createTutorSession,
   deleteTutorSession,
@@ -39,6 +39,7 @@ import { AiJobProgress } from "../components/feedback/AiJobProgress";
 import { ModalFrame } from "../components/primitives/Dialog";
 import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
 import { HomeCourseDrawer } from "../components/home/HomeCourseDrawer";
+import { TodayLearningInsight } from "../components/home/TodayLearningInsight";
 import { NextLearningAction } from "../components/learning/NextLearningAction";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
@@ -132,6 +133,8 @@ export function LearningSpacePage() {
   const selectedMaterialIdsFromNavigation = Array.isArray(navigationState?.selectedMaterialIds)
     ? navigationState.selectedMaterialIds.filter((materialId): materialId is string => typeof materialId === "string")
     : [];
+  const initialHomeSearch = new URLSearchParams(location.search);
+  const initialHomePanel = initialHomeSearch.get("panel");
   const homeChatStageRef = useRef<HTMLElement | null>(null);
   const homeQuestionInputRef = useRef<HTMLTextAreaElement>(null);
   const isResettingHomeRef = useRef(false);
@@ -149,8 +152,10 @@ export function LearningSpacePage() {
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
   const [courseJobId, setCourseJobId] = useState<string | null>(null);
   const [isLibraryOpen, setIsLibraryOpen] = useState(() => selectedMaterialIdsFromNavigation.length > 0);
-  const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>("sources");
-  const [expandedAnswerId, setExpandedAnswerId] = useState<string | null>(null);
+  const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>(
+    initialHomePanel === "why" || initialHomePanel === "trace" ? initialHomePanel : "sources"
+  );
+  const [expandedAnswerId, setExpandedAnswerId] = useState<string | null>(() => initialHomeSearch.get("message_id"));
   const [streamingAnswerId, setStreamingAnswerId] = useState<string | null>(null);
   const [streamProgress, setStreamProgress] = useState<TutorResponseProgressState | null>(null);
   const [answerProgress, setAnswerProgress] = useState<Record<string, TutorResponseProgressState & { durationMs: number }>>({});
@@ -175,6 +180,19 @@ export function LearningSpacePage() {
   const courseJob = getJob(courseJobId);
   const isCreatingCourse = Boolean(courseJob && ["queued", "running", "cancelling"].includes(courseJob.status));
   const hasHomeThread = messages.length > 0;
+  function updateHomeAnswerState(messageId: string | null, panel: HomeAnswerPanel = activeAnswerPanel) {
+    setExpandedAnswerId(messageId);
+    setActiveAnswerPanel(panel);
+    const params = new URLSearchParams(location.search);
+    if (messageId) {
+      params.set("message_id", messageId);
+      params.set("panel", panel);
+    } else {
+      params.delete("message_id");
+      params.delete("panel");
+    }
+    navigate(`${PATHS.app}${params.toString() ? `?${params.toString()}` : ""}`, { replace: true, state: null });
+  }
   useEffect(() => {
     if (!activeHomeThreadId) return;
     const linkedJobIds = new Set(messages.flatMap((message) => message.resource_jobs?.map((job) => job.job_id) ?? []));
@@ -198,7 +216,24 @@ export function LearningSpacePage() {
     staleTime: 30_000
   });
   const dashboardSummary = dashboardQuery.data?.data;
+  const recentCourses = useMemo(() => dashboardSummary?.recent_courses ?? [], [dashboardSummary?.recent_courses]);
   const nextActionQuery = useLearningNextAction();
+  const insightCourseId = Number(nextActionQuery.data?.data.course_id ?? recentCourses[0]?.id);
+  const hasInsightCourse = Number.isFinite(insightCourseId);
+  const insightMasteryQuery = useQuery({
+    queryKey: ["courses", "mastery-map", insightCourseId],
+    queryFn: () => getMasteryMap(insightCourseId),
+    enabled: Boolean(token) && !hasHomeThread && hasInsightCourse,
+    staleTime: 10_000,
+    retry: false
+  });
+  const insightLearningStateQuery = useQuery({
+    queryKey: ["courses", "learning-state", insightCourseId],
+    queryFn: () => getCourseLearningState(insightCourseId),
+    enabled: Boolean(token) && !hasHomeThread && hasInsightCourse,
+    staleTime: 10_000,
+    retry: false
+  });
   const historyQuery = useHomeConversationHistory("", Boolean(token));
   const historySearchQuery = useHomeConversationHistory(historySearch, Boolean(token && historySearch));
   const allMaterialsQuery = useQuery({
@@ -207,7 +242,6 @@ export function LearningSpacePage() {
     enabled: Boolean(token),
     staleTime: 30_000
   });
-  const recentCourses = useMemo(() => dashboardSummary?.recent_courses ?? [], [dashboardSummary?.recent_courses]);
   const recentCourseActionQueries = useQueries({
     queries: recentCourses.map((course) => ({
       queryKey: learningActionKeys.detail(Number(course.id)),
@@ -842,6 +876,7 @@ export function LearningSpacePage() {
                       state={answerProgress[message.id] ?? persistedAnswerProgress[message.id]}
                       completed
                       durationMs={(answerProgress[message.id] ?? persistedAnswerProgress[message.id]).durationMs}
+                      storageKey={`home-message:${message.id}`}
                     />
                   ) : null}
                   {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : <p>{message.content}</p>}
@@ -883,8 +918,7 @@ export function LearningSpacePage() {
                       expandedAnswerId={expandedAnswerId}
                       selectedMaterialCount={effectiveConversationMaterialIds.length}
                       warnings={answerWarnings[message.id] ?? []}
-                      onChangePanel={setActiveAnswerPanel}
-                      onSetExpandedAnswer={setExpandedAnswerId}
+                      onTogglePanel={(panel, messageId) => updateHomeAnswerState(messageId, panel)}
                     />
                   ) : null}
                 </article>
@@ -961,14 +995,16 @@ export function LearningSpacePage() {
           </section>
 
           {!hasHomeThread ? (
-            <NextLearningAction
+            <TodayLearningInsight
+              course={recentCourses.find((course) => Number(course.id) === insightCourseId) ?? recentCourses[0] ?? null}
               action={nextActionQuery.data?.data}
-              isLoading={nextActionQuery.isPending}
-              error={nextActionQuery.isError}
-              presentation="home"
-              onAction={handleNextLearningAction}
+              mastery={insightMasteryQuery.data?.data ?? null}
+              learningState={insightLearningStateQuery.data?.data ?? null}
+              loading={nextActionQuery.isPending || dashboardQuery.isPending}
             />
-          ) : null}
+          ) : (
+            <NextLearningAction action={nextActionQuery.data?.data} compact onAction={handleNextLearningAction} />
+          )}
 
           {!hasHomeThread && dashboardQuery.isLoading ? (
             <section className="recent-course-strip empty" aria-label="最近学习">
@@ -1109,8 +1145,7 @@ type HomeAnswerInsightsProps = {
   expandedAnswerId: string | null;
   selectedMaterialCount: number;
   warnings: string[];
-  onChangePanel: (panel: HomeAnswerPanel) => void;
-  onSetExpandedAnswer: (messageId: string | null) => void;
+  onTogglePanel: (panel: HomeAnswerPanel, messageId: string | null) => void;
 };
 
 function HomeAnswerInsights({
@@ -1119,8 +1154,7 @@ function HomeAnswerInsights({
   expandedAnswerId,
   selectedMaterialCount,
   warnings,
-  onChangePanel,
-  onSetExpandedAnswer
+  onTogglePanel
 }: HomeAnswerInsightsProps) {
   const messageId = message.id;
   const isExpanded = expandedAnswerId === messageId;
@@ -1141,8 +1175,7 @@ function HomeAnswerInsights({
   const handleInsightClick = (panel: HomeAnswerPanel) => {
     const shouldCollapse = isExpanded && activePanel === panel;
 
-    onChangePanel(panel);
-    onSetExpandedAnswer(shouldCollapse ? null : messageId);
+    onTogglePanel(panel, shouldCollapse ? null : messageId);
   };
   const citations = message.citation_json ?? [];
   const hasCitations = citations.length > 0;
@@ -1240,10 +1273,7 @@ function HomeAnswerInsights({
               <span className="insight-mark"><Sparkle size={16} weight="fill" aria-hidden="true" />智能体协作轨迹</span>
               {traceQuery.isPending ? <p>正在读取协作轨迹。</p> : null}
               {traceQuery.isError ? <p>协作轨迹读取失败，请稍后重试。</p> : null}
-              {traceQuery.data?.data.summary ? (
-                <p>{`耗时 ${traceQuery.data.data.summary.duration_ms ?? 0} ms · 来源 ${Number(traceQuery.data.data.summary.course_source_count ?? 0) + Number(traceQuery.data.data.summary.web_source_count ?? 0) + Number(traceQuery.data.data.summary.history_source_count ?? 0)} 条 · 个性化因素 ${traceQuery.data.data.summary.personalization_factors?.length ?? 0} 项`}</p>
-              ) : null}
-              {traceEvents.length > 0 ? <AgentTimeline events={traceEvents} /> : null}
+              {traceEvents.length > 0 ? <AgentTimeline events={traceEvents} summary={traceQuery.data?.data.summary} /> : null}
               {!traceQuery.isPending && !traceQuery.isError && traceEvents.length === 0 ? <p>当前协作轨迹暂无可展示步骤。</p> : null}
             </>
           ) : null}

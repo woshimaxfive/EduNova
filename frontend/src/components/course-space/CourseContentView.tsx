@@ -2,7 +2,9 @@ import { BookOpenText, ChatCircleText, Graph, List, X } from "@phosphor-icons/re
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 
-import { type ApiCourseKnowledgePoint, type CourseKnowledgePointContent, type CourseMasteryPoint } from "../../api/courses";
+import { type ApiCourseKnowledgePoint, type CourseKnowledgePointContent, type CourseMasteryPoint, type CourseWeaknessReviewItem } from "../../api/courses";
+import type { LearningNextAction } from "../../api/learning";
+import type { GraphScope } from "../../features/course-space/courseWorkspaceState";
 import { type RagSearchResultItem } from "../../api/rag";
 import { PATHS } from "../../app/routePaths";
 import { CourseKnowledgeGraph } from "./CourseKnowledgeGraph";
@@ -28,12 +30,22 @@ type CourseContentViewProps = {
   contentError: boolean;
   selectedCitation: RagSearchResultItem | null;
   view: CourseContentMode;
+  graphScope: GraphScope;
+  graphChapter: string;
+  graphDetailOpen: boolean;
+  weaknesses: CourseWeaknessReviewItem[];
+  recommendation: LearningNextAction | null;
+  currentTaskPointId: string | null;
   assistantOpen: boolean;
   messages: CourseContentMessage[];
   prompt: string;
   isSending: boolean;
   feedback: string | null;
   onViewChange: (view: CourseContentMode) => void;
+  onGraphScopeChange: (scope: GraphScope) => void;
+  onGraphChapterChange: (chapter: string) => void;
+  onGraphDetailOpen: () => void;
+  onGraphDetailClose: () => void;
   onSelectPoint: (pointId: string, view?: CourseContentMode) => void;
   onSelectPrevious: () => void;
   onSelectNext: () => void;
@@ -54,12 +66,22 @@ export function CourseContentView({
   contentError,
   selectedCitation,
   view,
+  graphScope,
+  graphChapter,
+  graphDetailOpen,
+  weaknesses,
+  recommendation,
+  currentTaskPointId,
   assistantOpen,
   messages,
   prompt,
   isSending,
   feedback,
   onViewChange,
+  onGraphScopeChange,
+  onGraphChapterChange,
+  onGraphDetailOpen,
+  onGraphDetailClose,
   onSelectPoint,
   onSelectPrevious,
   onSelectNext,
@@ -138,9 +160,21 @@ export function CourseContentView({
         {view === "graph" ? (
           <div className="course-content-graph-view">
             <CourseKnowledgeGraph
+              courseId={courseId}
               points={masteryPoints}
               selectedId={selectedPoint?.id}
+              scope={graphScope}
+              chapter={graphChapter}
+              detailOpen={graphDetailOpen}
+              weaknesses={weaknesses}
+              recommendation={recommendation}
+              currentTaskPointId={currentTaskPointId}
               onSelect={(pointId) => onSelectPoint(pointId, "graph")}
+              onScopeChange={onGraphScopeChange}
+              onChapterChange={onGraphChapterChange}
+              onDetailOpen={onGraphDetailOpen}
+              onDetailClose={onGraphDetailClose}
+              onContinue={(pointId) => onSelectPoint(pointId, "overview")}
             />
           </div>
         ) : (

@@ -59,6 +59,13 @@ import { useResponsiveSidebarState } from "../components/layout/useResponsiveSid
 import { buildCourseLoopSummary, buildStudySteps, calculateMasteryPercent } from "../features/course-space/a3Loop";
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import {
+  normalizeCourseWorkspaceParams,
+  parseCourseWorkspaceUrl,
+  sameSearchParams,
+  selectCourseWorkspacePoint,
+  type GraphScope
+} from "../features/course-space/courseWorkspaceState";
+import {
   findBestCitationKnowledgePoint,
   resourceDifficultyForPoint
 } from "../features/course-space/courseRecommendation";
@@ -251,6 +258,7 @@ export function CourseSpacePage() {
   const numericCourseId = courseId ? Number.parseInt(courseId, 10) : Number.NaN;
   const hasRealCourseId = Number.isFinite(numericCourseId);
   const queryClient = useQueryClient();
+  const initialWorkspaceState = parseCourseWorkspaceUrl(searchParams);
   const courseQuery = useQuery({
     queryKey: ["courses", "detail", numericCourseId],
     queryFn: () => getCourse(numericCourseId),
@@ -289,13 +297,17 @@ export function CourseSpacePage() {
     staleTime: 10_000
   });
   const [activeCourseSessionId, setActiveCourseSessionId] = useState<string | null>(null);
-  const [activeTurnDetail, setActiveTurnDetail] = useState<TurnDetailState>(null);
-  const initialKnowledgePointId = searchParams.get("knowledge_point_id");
-  const initialCourseMessageId = searchParams.get("course_message_id");
-  const [courseMode, setCourseMode] = useState<CourseWorkspaceMode>(
-    initialKnowledgePointId && !initialCourseMessageId ? "study" : "chat"
+  const [activeTurnDetail, setActiveTurnDetail] = useState<TurnDetailState>(
+    initialWorkspaceState.courseMessageId && initialWorkspaceState.panel
+      ? { messageId: initialWorkspaceState.courseMessageId, panel: initialWorkspaceState.panel }
+      : null
   );
-  const [courseContentView, setCourseContentView] = useState<CourseContentMode>("overview");
+  const initialKnowledgePointId = initialWorkspaceState.knowledgePointId;
+  const [courseMode, setCourseMode] = useState<CourseWorkspaceMode>(initialWorkspaceState.mode);
+  const [courseContentView, setCourseContentView] = useState<CourseContentMode>(initialWorkspaceState.view);
+  const [graphScope, setGraphScope] = useState<GraphScope>(initialWorkspaceState.graphScope);
+  const [graphChapter, setGraphChapter] = useState(initialWorkspaceState.graphChapter);
+  const [isKnowledgeDetailOpen, setIsKnowledgeDetailOpen] = useState(initialWorkspaceState.detailKnowledge);
   const [isProgressDrawerOpen, setIsProgressDrawerOpen] = useState(false);
   const [isProgressSyncing, setIsProgressSyncing] = useState(false);
   const [progressSyncWarning, setProgressSyncWarning] = useState<string | null>(null);
@@ -370,7 +382,7 @@ export function CourseSpacePage() {
   const courseSessions = Array.isArray(courseSessionsQuery.data?.data) ? courseSessionsQuery.data.data : [];
   const latestCourseSessionId = courseSessions[0]?.id ?? null;
   const requestedCourseSessionId = searchParams.get("course_session_id");
-  const requestedCourseMessageId = initialCourseMessageId;
+  const requestedCourseMessageId = searchParams.get("course_message_id");
   const restorableCourseSessionId = courseSessions.some((session) => session.id === requestedCourseSessionId)
     ? requestedCourseSessionId
     : null;
@@ -481,6 +493,7 @@ export function CourseSpacePage() {
   const knowledgePointCount = fallbackCourse?.knowledge_point_count ?? apiKnowledgePoints.length;
   const generatedResources = courseResourcesQuery.data?.data ?? [];
   const currentPath = currentPathQuery.data?.data ?? null;
+  const currentPathTaskPointId = currentPath?.tasks.find((task) => task.status === "doing")?.knowledge_point_id ?? null;
   const latestReport = latestReportQuery.data?.data ?? null;
   const latestPractice = latestPracticeQuery.data?.data ?? null;
   const latestUserQuestion = [...displayedCourseMessages].reverse().find((message) => message.role === "user")?.content ?? null;
@@ -488,7 +501,7 @@ export function CourseSpacePage() {
     ? `${displayedCourseMessages.at(-1)?.id ?? ""}:${displayedCourseMessages.at(-1)?.content.length ?? 0}`
     : "empty";
   const hasActivePath = Boolean(currentPath?.path) || learningState?.path_summary?.status === "active";
-  const masteryPoints = masteryMapQuery.data?.data.points ?? [];
+  const masteryPoints = useMemo(() => masteryMapQuery.data?.data.points ?? [], [masteryMapQuery.data?.data.points]);
   const nextActionQuery = useLearningNextAction(hasRealCourseId ? numericCourseId : null);
   const recommendation: LearningNextAction = nextActionQuery.data?.data ?? {
     kind: "study_knowledge_point",
@@ -501,6 +514,39 @@ export function CourseSpacePage() {
     path_task_id: null,
     resource_id: null
   };
+  const workspaceSearchSignature = searchParams.toString();
+  const activeWeaknessPointSignature = weaknessItems
+    .filter((item) => ["confirmed", "reviewing", "pending"].includes(item.status) && item.knowledge_point_id)
+    .map((item) => item.knowledge_point_id)
+    .join(",");
+  const recommendedWorkspacePointId = recommendation.knowledge_point_id;
+  useEffect(() => {
+    if (!hasRealCourseId || masteryPoints.length === 0) return;
+    const requested = parseCourseWorkspaceUrl(new URLSearchParams(workspaceSearchSignature));
+    const selectedPointId = selectCourseWorkspacePoint(
+      masteryPoints,
+      requested.knowledgePointId,
+      recommendedWorkspacePointId,
+      activeWeaknessPointSignature ? activeWeaknessPointSignature.split(",") : []
+    );
+    const chapters = new Set(masteryPoints.map((point) => point.chapter?.trim()).filter((value): value is string => Boolean(value)));
+    const normalized = normalizeCourseWorkspaceParams(new URLSearchParams(workspaceSearchSignature), requested, selectedPointId, chapters);
+
+    // URL 是可恢复语义状态的事实来源；这里同时响应浏览器前进、后退和刷新。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCourseMode(requested.mode);
+    setCourseContentView(requested.view);
+    setGraphScope(requested.graphScope);
+    setGraphChapter(requested.graphChapter && chapters.has(requested.graphChapter) ? requested.graphChapter : "");
+    setIsKnowledgeDetailOpen(requested.detailKnowledge && Boolean(selectedPointId));
+    if (selectedPointId) setStudyTarget({ type: "knowledge", id: selectedPointId });
+    setActiveTurnDetail(requested.courseMessageId && requested.panel
+      ? { messageId: requested.courseMessageId, panel: requested.panel }
+      : null);
+    if (!sameSearchParams(new URLSearchParams(workspaceSearchSignature), normalized)) {
+      setSearchParams(normalized, { replace: true });
+    }
+  }, [activeWeaknessPointSignature, hasRealCourseId, masteryPoints, recommendedWorkspacePointId, setSearchParams, workspaceSearchSignature]);
   const courseStarterQuestions = buildCourseStarterQuestions(recommendation, apiKnowledgePoints);
   const profileOverlay = learningState?.profile_overlay;
   const hasProfileEvidence = Boolean(
@@ -610,8 +656,12 @@ export function CourseSpacePage() {
     setActiveTurnDetail(null);
     setIsStudyAssistantOpen(false);
     const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("mode", "chat");
+    nextParams.set("view", "overview");
     nextParams.set("course_session_id", sessionId);
     nextParams.delete("course_message_id");
+    nextParams.delete("panel");
+    nextParams.delete("detail");
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -629,9 +679,13 @@ export function CourseSpacePage() {
       const created = await createTutorSession({ scope: "course", course_id: numericCourseId, mode: "chat", title: "新建课程对话" });
       setActiveCourseSessionId(created.data.id);
       const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("mode", "chat");
+      nextParams.set("view", "overview");
       nextParams.set("course_session_id", created.data.id);
       nextParams.delete("course_message_id");
       nextParams.delete("knowledge_point_id");
+      nextParams.delete("panel");
+      nextParams.delete("detail");
       setSearchParams(nextParams, { replace: true });
       void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
     } catch {
@@ -705,7 +759,10 @@ export function CourseSpacePage() {
     setStudyTarget({ type: "knowledge", id: pointId });
     setCourseContentView(view);
     const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("mode", "study");
+    nextParams.set("view", view);
     nextParams.set("knowledge_point_id", pointId);
+    if (view !== "graph") nextParams.delete("detail");
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -715,7 +772,10 @@ export function CourseSpacePage() {
     setCourseContentView("overview");
     if (citation.knowledge_point_id) {
       const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("mode", "study");
+      nextParams.set("view", "overview");
       nextParams.set("knowledge_point_id", String(citation.knowledge_point_id));
+      nextParams.delete("detail");
       setSearchParams(nextParams, { replace: true });
     }
   }
@@ -723,6 +783,43 @@ export function CourseSpacePage() {
   function changeCourseMode(mode: CourseWorkspaceMode) {
     setCourseMode(mode);
     if (mode === "chat") setIsStudyAssistantOpen(false);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("mode", mode);
+    if (mode === "study" && !nextParams.has("view")) nextParams.set("view", "graph");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function changeCourseContentView(view: CourseContentMode) {
+    setCourseContentView(view);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("mode", "study");
+    nextParams.set("view", view);
+    if (view !== "graph") nextParams.delete("detail");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function changeGraphScope(scope: GraphScope) {
+    setGraphScope(scope);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("graph_scope", scope);
+    if (scope === "focus") nextParams.delete("graph_chapter");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function changeGraphChapter(chapter: string) {
+    setGraphChapter(chapter);
+    const nextParams = new URLSearchParams(searchParams);
+    if (chapter) nextParams.set("graph_chapter", chapter);
+    else nextParams.delete("graph_chapter");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function changeKnowledgeDetail(open: boolean) {
+    setIsKnowledgeDetailOpen(open);
+    const nextParams = new URLSearchParams(searchParams);
+    if (open) nextParams.set("detail", "knowledge");
+    else nextParams.delete("detail");
+    setSearchParams(nextParams, { replace: true });
   }
 
   async function syncCourseProgress() {
@@ -760,9 +857,14 @@ export function CourseSpacePage() {
     question: string | null,
     citations: RagSearchResultItem[]
   ) {
-    setActiveTurnDetail((current) =>
-      current?.messageId === messageId && current.panel === panel ? null : { messageId, panel }
-    );
+    const closes = activeTurnDetail?.messageId === messageId && activeTurnDetail.panel === panel;
+    setActiveTurnDetail(closes ? null : { messageId, panel });
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("mode", "chat");
+    nextParams.set("course_message_id", messageId);
+    if (closes) nextParams.delete("panel");
+    else nextParams.set("panel", panel === "thinking" ? "trace" : panel);
+    setSearchParams(nextParams, { replace: true });
     if (panel === "resources") {
       setResourceContext({ question, knowledgePointId: findBestCitationKnowledgePoint(citations) });
     }
@@ -1266,6 +1368,12 @@ export function CourseSpacePage() {
                 contentError={knowledgePointContentQuery.isError}
                 selectedCitation={selectedCitation}
                 view={courseContentView}
+                graphScope={graphScope}
+                graphChapter={graphChapter}
+                graphDetailOpen={isKnowledgeDetailOpen}
+                weaknesses={weaknessItems}
+                recommendation={recommendation}
+                currentTaskPointId={currentPathTaskPointId}
                 assistantOpen={isStudyAssistantOpen}
                 messages={displayedCourseMessages.map((message) => message.role === "assistant"
                   ? { ...message, content: sanitizeCourseAnswerContent(message.content) }
@@ -1273,7 +1381,11 @@ export function CourseSpacePage() {
                 prompt={coursePrompt}
                 isSending={isSearchingCourse}
                 feedback={courseFeedback}
-                onViewChange={setCourseContentView}
+                onViewChange={changeCourseContentView}
+                onGraphScopeChange={changeGraphScope}
+                onGraphChapterChange={changeGraphChapter}
+                onGraphDetailOpen={() => changeKnowledgeDetail(true)}
+                onGraphDetailClose={() => changeKnowledgeDetail(false)}
                 onSelectPoint={openKnowledgeStudy}
                 onSelectPrevious={() => {
                   const pointId = knowledgePointContentQuery.data?.data.previous_knowledge_point_id;

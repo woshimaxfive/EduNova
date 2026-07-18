@@ -45,29 +45,22 @@ it("renders a focused learning chain and keeps related knowledge points interact
   render(<CourseKnowledgeGraph points={points} selectedId="402" onSelect={onSelect} />);
 
   expect(screen.getByRole("region", { name: "课程知识图谱" })).toBeInTheDocument();
-  expect(screen.getByText("学习链路")).toBeInTheDocument();
-  expect(screen.getByLabelText("当前知识点：启发式搜索")).toHaveTextContent("36 分");
-  expect(screen.getByText("直接先修").parentElement).toHaveTextContent("1");
-  expect(screen.getByText("即将解锁").parentElement).toHaveTextContent("1");
+  expect(screen.getAllByText("聚焦链路").length).toBeGreaterThan(0);
+  expect(screen.getAllByRole("button", { name: /启发式搜索/ })[0]).toHaveTextContent("36");
 
-  fireEvent.click(screen.getByRole("button", { name: /状态空间/ }));
+  fireEvent.click(screen.getAllByRole("button", { name: /状态空间/ })[0]);
   expect(onSelect).toHaveBeenCalledWith("401");
 });
 
 it("shows every chapter in the course overview and enters a focused chain when a point is selected", () => {
   const onSelect = vi.fn();
-  render(<CourseKnowledgeGraph points={points} selectedId="402" onSelect={onSelect} />);
+  render(<CourseKnowledgeGraph points={points} selectedId="402" scope="course" chapter="" onSelect={onSelect} />);
 
-  fireEvent.change(screen.getByLabelText("章节"), { target: { value: "" } });
+  expect(screen.getAllByText("课程全景").length).toBeGreaterThan(0);
+  expect(screen.getByLabelText("课程全景画布")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: /状态空间/ }).length).toBeGreaterThan(0);
+  expect(screen.getAllByRole("button", { name: /A\* 搜索/ }).length).toBeGreaterThan(0);
 
-  expect(onSelect).not.toHaveBeenCalled();
-  expect(screen.getByText("课程全景")).toBeInTheDocument();
-  expect(screen.getByLabelText("课程全部知识点")).toHaveTextContent("搜索基础");
-  expect(screen.getByLabelText("课程全部知识点")).toHaveTextContent("搜索方法");
-  expect(screen.getByRole("button", { name: /状态空间/ })).toHaveTextContent("1");
-  expect(screen.getByRole("button", { name: /A\* 搜索/ })).toHaveTextContent("3");
-  expect(screen.getByRole("button", { name: /A\* 搜索/ })).toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole("button", { name: /状态空间/ }));
+  fireEvent.click(screen.getAllByRole("button", { name: /状态空间/ })[0]);
   expect(onSelect).toHaveBeenCalledWith("401");
 });

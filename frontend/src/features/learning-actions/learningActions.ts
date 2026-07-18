@@ -48,6 +48,8 @@ export function learningActionHref(action: LearningNextAction) {
       });
     }
     return withParams(action.course_id ? buildCoursePath(action.course_id) : PATHS.app, {
+      mode: "study",
+      view: "overview",
       knowledge_point_id: action.knowledge_point_id,
       path_task_id: action.path_task_id
     });
@@ -62,6 +64,8 @@ export function learningActionHref(action: LearningNextAction) {
   }
   if (action.kind === "study_knowledge_point") {
     return withParams(action.course_id ? buildCoursePath(action.course_id) : PATHS.app, {
+      mode: "study",
+      view: "overview",
       knowledge_point_id: action.knowledge_point_id
     });
   }

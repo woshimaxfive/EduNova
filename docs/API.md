@@ -2700,3 +2700,9 @@ Phase 31 不新增接口路径或数据库迁移。现有资料解析进度对�
 - `completed` 弱点在 `next_review_at` 前不进入下一行动；到期后返回 `practice_weakness`，并携带原 `weakness_item_id` 与“到期复习”语义。
 - 练习生成接口只额外接受已经到期的 `completed` 项。练习成功创建后该项转为 `reviewing`；尚未到期、已忽略或归属不匹配仍拒绝。
 - 报告内容兼容增加 `weakness_progress`：`active_count`、`resolved_count`、`due_review_count` 和最多 5 条 `recent_resolutions`。旧报告缺少该字段时前端按空进展显示。
+
+## Phase 42 对话资源生成合同
+
+- `POST /api/v1/tutor/sessions/{session_id}/messages/stream` 增加可选 `resource_request`。为 `true` 时只持久化用户请求和简短确认，不调用 Tutor 回答模型；主页随后由用户选择课程，课程空间直接使用当前课程。
+- `POST /api/v1/tutor/sessions/{session_id}/messages/{message_id}/resource-jobs` 将任务关联到该次助手确认，历史读取时 `TutorMessage.resource_jobs` 返回任务状态、失败提示和已生成资源。
+- 对话中提取到的显式资源主题是硬约束。所选课程及其知识点不含该主题时，资源任务以可恢复失败结束，并返回“所选课程没有该主题的可用资料，请选择对应课程后再生成”；不得静默改为当前课程的其他主题。

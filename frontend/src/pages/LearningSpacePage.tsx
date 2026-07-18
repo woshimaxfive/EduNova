@@ -21,10 +21,12 @@ import { getDashboardSummary } from "../api/dashboard";
 import { getApiErrorMessage } from "../api/errors";
 import { getLearningNextAction } from "../api/learning";
 import { listMaterials, uploadMaterial } from "../api/materials";
+import { listCourses } from "../api/courses";
 import {
   createTutorSession,
   deleteTutorSession,
   getTutorSession,
+  createTutorResourceGenerationJob,
   renameTutorSession,
   streamTutorMessage,
   type TutorCitation,
@@ -32,6 +34,7 @@ import {
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
+import { isResourceGenerationPrompt, resourceRequestFromPrompt } from "../features/tutor/resourceGenerationIntent";
 import { InlineFeedback, type FeedbackTone } from "../components/feedback/InlineFeedback";
 import { AiJobProgress } from "../components/feedback/AiJobProgress";
 import { ModalFrame } from "../components/primitives/Dialog";
@@ -71,6 +74,7 @@ type HomeMessage = {
   citation_json: TutorCitation[];
   trace_id: string | null;
   attachments: TutorImageAttachment[];
+  resource_jobs?: TutorMessage["resource_jobs"];
   streaming?: boolean;
 };
 
@@ -78,6 +82,8 @@ type LearningSpaceNavigationState = {
   selectedHomeThreadId?: string;
   selectedMaterialIds?: string[];
 };
+
+type PendingHomeResourceGeneration = { sessionId: string; messageId: string; prompt: string };
 
 type DashboardSummaryResponse = Awaited<ReturnType<typeof getDashboardSummary>>;
 
@@ -93,6 +99,7 @@ function mapTutorMessages(apiMessages: TutorMessage[]) {
     citation_json: message.citation_json ?? [],
     trace_id: message.trace_id ?? null,
     attachments: message.attachments ?? []
+    ,resource_jobs: message.resource_jobs ?? []
   }));
 }
 
@@ -126,6 +133,7 @@ export function LearningSpacePage() {
   const homeChatStageRef = useRef<HTMLElement | null>(null);
   const homeQuestionInputRef = useRef<HTMLTextAreaElement>(null);
   const isResettingHomeRef = useRef(false);
+  const refreshedTutorResourceJobIds = useRef(new Set<string>());
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
   const [localHomeThreads, setLocalHomeThreads] = useState<DashboardSummaryThread[]>([]);
@@ -149,6 +157,7 @@ export function LearningSpacePage() {
   const [courseDialogFeedback, setCourseDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [materialDialogFeedback, setMaterialDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [isCourseDrawerOpen, setIsCourseDrawerOpen] = useState(false);
+  const [pendingHomeResourceGeneration, setPendingHomeResourceGeneration] = useState<PendingHomeResourceGeneration | null>(null);
   const imageDraft = useTutorImageDraft(
     ensureHomeImageSession,
     (message) => setComposerFeedback({ message, tone: "warning" }),
@@ -163,6 +172,16 @@ export function LearningSpacePage() {
   const courseJob = getJob(courseJobId);
   const isCreatingCourse = Boolean(courseJob && ["queued", "running", "cancelling"].includes(courseJob.status));
   const hasHomeThread = messages.length > 0;
+  useEffect(() => {
+    if (!activeHomeThreadId) return;
+    const linkedJobIds = new Set(messages.flatMap((message) => message.resource_jobs?.map((job) => job.job_id) ?? []));
+    const terminalJob = jobs.find((job) => linkedJobIds.has(job.job_id) && ["completed", "failed", "cancelled"].includes(job.status) && !refreshedTutorResourceJobIds.current.has(job.job_id));
+    if (!terminalJob) return;
+    refreshedTutorResourceJobIds.current.add(terminalJob.job_id);
+    void getTutorSession(activeHomeThreadId).then((detail) => setMessages(mapTutorMessages(detail.data.messages))).catch(() => {
+      refreshedTutorResourceJobIds.current.delete(terminalJob.job_id);
+    });
+  }, [activeHomeThreadId, jobs, messages]);
   const persistedAnswerProgress = useTutorPersistedResponseProgress(
     messages
       .filter((message) => message.role === "assistant" && !message.streaming)
@@ -523,6 +542,7 @@ export function LearningSpacePage() {
         sessionId,
         {
           message: question,
+          ...(isResourceGenerationPrompt(question) ? { resource_request: true } : {}),
           ...(imageDraft.attachmentIds.length ? { attachment_ids: imageDraft.attachmentIds } : {})
         },
         {
@@ -593,6 +613,9 @@ export function LearningSpacePage() {
         });
       }
       setMessages(persistedMessages);
+      if (persistedAssistantId && isResourceGenerationPrompt(question)) {
+        setPendingHomeResourceGeneration({ sessionId: detail.session.id, messageId: persistedAssistantId, prompt: question });
+      }
       setActiveHomeThreadId(detail.session.id);
       navigate(`${PATHS.app}?session_id=${detail.session.id}`, { replace: true, state: null });
       upsertHomeThread(detail.session);
@@ -621,6 +644,22 @@ export function LearningSpacePage() {
     setActiveHomeThreadId(created.data.id);
     upsertHomeThread(created.data);
     return created.data.id;
+  }
+
+  async function generateHomeResource(courseId: number) {
+    const pending = pendingHomeResourceGeneration;
+    if (!pending) return;
+    const request = resourceRequestFromPrompt(pending.prompt, courseId);
+    if (!request) return;
+    try {
+      const job = await createTutorResourceGenerationJob(pending.sessionId, pending.messageId, request);
+      trackJob(job);
+      const detail = await getTutorSession(pending.sessionId);
+      setMessages(mapTutorMessages(detail.data.messages));
+      setPendingHomeResourceGeneration(null);
+    } catch (error) {
+      setComposerFeedback({ message: error instanceof Error ? error.message : "资源生成任务创建失败，请稍后再试。", tone: "warning" });
+    }
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -804,6 +843,13 @@ export function LearningSpacePage() {
                     />
                   ) : null}
                   {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : <p>{message.content}</p>}
+                  {message.role === "assistant" && message.resource_jobs?.map((job) => (
+                    <section className="tutor-resource-card" key={job.job_id} aria-label="对话生成资源">
+                      <strong>{job.status === "completed" ? "已生成学习资源" : job.status === "failed" ? "资源生成失败" : job.label}</strong>
+                      {job.resources.map((resource) => <Link key={resource.id} to={`${PATHS.studio}?course_id=${resource.course_id}&resource_id=${resource.id}`}>{resource.title}</Link>)}
+                      {job.error_message ? <small>{job.error_message}</small> : null}
+                    </section>
+                  ))}
                   {message.role === "assistant" && !message.streaming ? (
                     <button
                       className="message-speak-button"
@@ -989,6 +1035,12 @@ export function LearningSpacePage() {
         />
       ) : null}
       {isCourseDrawerOpen ? <HomeCourseDrawer onClose={() => setIsCourseDrawerOpen(false)} /> : null}
+      {pendingHomeResourceGeneration ? (
+        <HomeResourceCourseDialog
+          onClose={() => setPendingHomeResourceGeneration(null)}
+          onSelect={(courseId) => void generateHomeResource(courseId)}
+        />
+      ) : null}
       {isCourseDialogOpen ? (
         <CourseGenerationDialog
           materials={materials}
@@ -1013,6 +1065,28 @@ type DashboardSummaryThread = {
   title: string;
   meta: string;
 };
+
+function HomeResourceCourseDialog({ onClose, onSelect }: { onClose: () => void; onSelect: (courseId: number) => void }) {
+  const coursesQuery = useQuery({ queryKey: ["courses", "resource-target"], queryFn: () => listCourses(), staleTime: 30_000 });
+  const courses = coursesQuery.data?.data ?? [];
+  return (
+    <ModalFrame title="选择资源课程" layerClassName="course-dialog-backdrop" onClose={onClose}>
+      <section className="course-dialog home-resource-course-dialog" aria-label="选择资源保存课程">
+        <div className="dialog-copy"><h2>保存到哪门课程？</h2><p>选择课程后，系统会结合该课程的资料、知识点和学习进度生成资源。</p></div>
+        {coursesQuery.isPending ? <span>正在读取课程...</span> : null}
+        {coursesQuery.isError ? <span>课程列表读取失败，请关闭后重试。</span> : null}
+        <div className="home-resource-course-list">
+          {courses.map((course) => (
+            <button type="button" key={course.id} onClick={() => onSelect(Number(course.id))}>
+              <BookOpen size={18} weight="duotone" aria-hidden="true" />
+              <span><strong>{course.title}</strong><small>{course.subject || "未标注学科"}</small></span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </ModalFrame>
+  );
+}
 
 type HomeAnswerInsightsProps = {
   message: HomeMessage;

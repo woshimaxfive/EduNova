@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-from fastapi import Depends, File, Query, Response, UploadFile, status
+from fastapi import Depends, File, Header, Query, Response, UploadFile, status
 from sse_starlette import EventSourceResponse
 
 from backend.app.api.contracts import TypedAPIRouter as APIRouter
@@ -18,6 +18,7 @@ from backend.app.schemas.tutor import (
     CreateTutorSessionRequest,
     DeleteTutorSessionResponse,
     SendTutorMessageRequest,
+    CreateTutorResourceJobRequest,
     UpdateTutorSessionRequest,
     attachment_to_api,
 )
@@ -44,6 +45,8 @@ from backend.app.services.tutor_attachments import (
 from backend.app.services.vision_understanding import VisionUnderstandingService
 from backend.app.services.web_search import WebSearchService
 from backend.app.services.conversation_memory import ConversationMemoryService, RqConversationMemoryQueue
+from backend.app.api.v1.ai_jobs import get_ai_job_service
+from backend.app.services.ai_jobs import AiJobService
 
 
 router = APIRouter(prefix="/tutor", tags=["tutor"])
@@ -296,6 +299,7 @@ def stream_message(
             deep_thinking=payload.deep_thinking,
             selected_material_ids=payload.selected_material_ids,
             attachment_ids=payload.attachment_ids,
+            resource_request=payload.resource_request,
         )
     except EmptyMessageError as exc:
         raise ApiError(
@@ -331,6 +335,24 @@ def stream_message(
             yield sse_event(event_name, data)
 
     return event_source_response(encode_events())
+
+
+@router.post("/sessions/{session_id}/messages/{message_id}/resource-jobs", status_code=202)
+def create_tutor_resource_job(
+    session_id: int,
+    message_id: int,
+    payload: CreateTutorResourceJobRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    current_user: User = Depends(get_current_user),
+    tutor_service: TutorSessionService = Depends(get_tutor_session_service),
+    job_service: AiJobService = Depends(get_ai_job_service),
+) -> dict:
+    try:
+        job = job_service.create_resource_generation_job(current_user, course_id=payload.course_id, knowledge_point_id=payload.knowledge_point_id, resource_types=list(payload.resource_types), learning_goal=payload.learning_goal, difficulty=payload.difficulty, tutor_message_id=message_id, idempotency_key=idempotency_key)
+        tutor_service.register_resource_job(current_user, session_id, message_id, int(job.job_id))
+    except SessionNotFoundError as exc:
+        raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc
+    return api_response(job.model_dump(mode="json"))
 
 
 @router.post("/sessions/{session_id}/attachments", status_code=status.HTTP_201_CREATED)

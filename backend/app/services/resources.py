@@ -1925,6 +1925,12 @@ class ResourceGenerationGraphRunner:
         topic = knowledge_point.title if knowledge_point is not None else (
             context_points[0].title if context_points else state["course"].title
         )
+        requested_topic = self._requested_dialogue_topic(learning_goal)
+        if requested_topic:
+            course_topics = " ".join([state["course"].title, *(point.title for point in context_points)])
+            if self._normalized_topic(requested_topic) not in self._normalized_topic(course_topics):
+                raise ResourceGenerationError(f"所选课程没有“{requested_topic}”的可用资料，请选择对应课程后再生成。")
+            topic = requested_topic
         source_resource = state.get("source_resource")
         source_content = source_resource.content_json if source_resource is not None and isinstance(source_resource.content_json, dict) else {}
         source_intent = source_content.get("intent") if isinstance(source_content.get("intent"), dict) else None
@@ -1975,6 +1981,18 @@ class ResourceGenerationGraphRunner:
             "artifact_intents": intents,
             "historical_resources": historical_resources,
         }
+
+    @staticmethod
+    def _requested_dialogue_topic(learning_goal: str) -> str | None:
+        match = re.search(r"(?:生成|制作|创建|出)\s*(.+?)\s*(?:的)?\s*(?:资源|讲义|笔记|思维导图|脑图|题目|练习|测验|代码|课件|PPT|动画|视频)", learning_goal, re.IGNORECASE)
+        if match is None:
+            return None
+        topic = re.sub(r"\s+", "", match.group(1)).strip("，。！？!?：:")
+        return topic[:80] if topic else None
+
+    @staticmethod
+    def _normalized_topic(value: str) -> str:
+        return re.sub(r"[\s\W_]+", "", value, flags=re.UNICODE).casefold()
 
     def _model_refine_artifact_intents(
         self,

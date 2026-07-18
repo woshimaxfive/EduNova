@@ -1590,6 +1590,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tutor/sessions/{session_id}/messages/{message_id}/resource-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Tutor Resource Job */
+        post: operations["create_tutor_resource_job_api_v1_tutor_sessions__session_id__messages__message_id__resource_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2608,6 +2625,26 @@ export interface components {
             question_count: number;
             /** Weakness Item Id */
             weakness_item_id?: number | null;
+        };
+        /** CreateTutorResourceJobRequest */
+        CreateTutorResourceJobRequest: {
+            /** Course Id */
+            course_id: number;
+            /**
+             * Difficulty
+             * @default medium
+             * @enum {string}
+             */
+            difficulty: "easy" | "medium" | "hard";
+            /** Knowledge Point Id */
+            knowledge_point_id?: number | null;
+            /**
+             * Learning Goal
+             * @default
+             */
+            learning_goal: string;
+            /** Resource Types */
+            resource_types: ("doc" | "mindmap" | "quiz" | "code" | "slide" | "animation" | "video")[];
         };
         /** CreateTutorSessionRequest */
         CreateTutorSessionRequest: {
@@ -4555,6 +4592,11 @@ export interface components {
              * @default
              */
             message: string;
+            /**
+             * Resource Request
+             * @default false
+             */
+            resource_request: boolean;
             /** Selected Material Ids */
             selected_material_ids?: number[] | null;
             /**
@@ -4629,6 +4671,17 @@ export interface components {
             /** Answers */
             answers: components["schemas"]["SubmitPracticeAnswerItem"][];
         };
+        /** TutorGeneratedResource */
+        TutorGeneratedResource: {
+            /** Course Id */
+            course_id: string | null;
+            /** Id */
+            id: string;
+            /** Resource Type */
+            resource_type: string;
+            /** Title */
+            title: string;
+        };
         /** TutorImageAttachment */
         TutorImageAttachment: {
             /** Content Url */
@@ -4669,6 +4722,8 @@ export interface components {
             created_at: string;
             /** Id */
             id: string;
+            /** Resource Jobs */
+            resource_jobs?: components["schemas"]["TutorResourceJob"][];
             /**
              * Role
              * @enum {string}
@@ -4678,6 +4733,19 @@ export interface components {
             session_id: string;
             /** Trace Id */
             trace_id: string | null;
+        };
+        /** TutorResourceJob */
+        TutorResourceJob: {
+            /** Error Message */
+            error_message?: string | null;
+            /** Job Id */
+            job_id: string;
+            /** Label */
+            label: string;
+            /** Resources */
+            resources?: components["schemas"]["TutorGeneratedResource"][];
+            /** Status */
+            status: string;
         };
         /** TutorSessionDetail */
         TutorSessionDetail: {
@@ -15855,6 +15923,117 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    create_tutor_resource_job_api_v1_tutor_sessions__session_id__messages__message_id__resource_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                session_id: number;
+                message_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTutorResourceJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_AiJobResponse_"];
                 };
             };
             /** @description Bad Request */

@@ -38,11 +38,13 @@ import {
   listTutorSessions,
   renameTutorSession,
   streamTutorMessage,
+  createTutorResourceGenerationJob,
   type TutorCitation,
   type TutorImageAttachment,
   type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
+import { isResourceGenerationPrompt, resourceRequestFromPrompt } from "../features/tutor/resourceGenerationIntent";
 import { CourseAssistantTurn } from "../components/course-space/CourseAssistantTurn";
 import { CourseClosedLoopActions, type CourseAnswerPanelKind } from "../components/course-space/CourseClosedLoopActions";
 import { CourseContentView, type CourseContentMode } from "../components/course-space/CourseContentView";
@@ -145,6 +147,7 @@ type CourseMessage = {
   supplementalSources?: TutorCitation[];
   traceId?: string | null;
   attachments?: TutorImageAttachment[];
+  resourceJobs?: TutorMessage["resource_jobs"];
 };
 
 const COURSE_COMPOSER_MAX_HEIGHT = 154;
@@ -184,6 +187,7 @@ function mapTutorMessagesToCourseMessages(messages: TutorMessage[]): CourseMessa
       supplementalSources: message.role === "assistant" ? supplementalSources : undefined,
       traceId: message.role === "assistant" ? message.trace_id : null,
       attachments: message.attachments ?? []
+      ,resourceJobs: message.resource_jobs ?? []
     };
   });
 }
@@ -900,6 +904,7 @@ export function CourseSpacePage() {
 
       const detail = await streamTutorMessage(sessionId, {
         message: question,
+        ...(isResourceGenerationPrompt(question) ? { resource_request: true } : {}),
         ...(imageDraft.attachmentIds.length ? { attachment_ids: imageDraft.attachmentIds } : {})
       }, {
         onStatus: (status) => {
@@ -914,7 +919,16 @@ export function CourseSpacePage() {
           );
         }
       });
-      const messages = mapTutorMessagesToCourseMessages(detail.messages);
+      let messages = mapTutorMessagesToCourseMessages(detail.messages);
+
+      const persistedAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+      const resourceRequest = persistedAssistant ? resourceRequestFromPrompt(question, numericCourseId) : null;
+      if (persistedAssistant && resourceRequest) {
+        const job = await createTutorResourceGenerationJob(detail.session.id, persistedAssistant.id, resourceRequest);
+        trackJob(job);
+        const refreshed = await getTutorSession(detail.session.id);
+        messages = mapTutorMessagesToCourseMessages(refreshed.data.messages);
+      }
 
       setActiveCourseSessionId(detail.session.id);
       setCourseMessages(messages);
@@ -922,7 +936,6 @@ export function CourseSpacePage() {
       setCourseStreamProgress(null);
       setCoursePrompt("");
       imageDraft.clearAfterSend();
-      const persistedAssistant = [...messages].reverse().find((message) => message.role === "assistant");
       if (persistedAssistant) {
         setCourseAnswerProgress((current) => ({
           ...current,
@@ -1119,7 +1132,18 @@ export function CourseSpacePage() {
                                 onOpenWhy={() => toggleTurnPanel(message.id, "why", question, citations)}
                               />
                             ) : undefined}
-                            detail={detail}
+                            detail={
+                              <>
+                                {message.resourceJobs?.map((job) => (
+                                  <section className="tutor-resource-card" key={job.job_id} aria-label="对话生成资源">
+                                    <strong>{job.status === "completed" ? "已生成学习资源" : job.status === "failed" ? "资源生成失败" : job.label}</strong>
+                                    {job.resources.map((resource) => <Link key={resource.id} to={`${PATHS.studio}?course_id=${numericCourseId}&resource_id=${resource.id}`}>{resource.title}</Link>)}
+                                    {job.error_message ? <small>{job.error_message}</small> : null}
+                                  </section>
+                                ))}
+                                {detail}
+                              </>
+                            }
                           />
                         );
                       })}

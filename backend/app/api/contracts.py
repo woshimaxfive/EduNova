@@ -181,6 +181,7 @@ RESPONSE_MODELS: dict[str, Any] = {
     "get_latest_report": ApiEnvelope[ReportEnvelope],
     "generate_resources": ApiEnvelope[GenerateResourcesResult],
     "create_resource_generation_job": ApiEnvelope[AiJobResponse],
+    "create_tutor_resource_job": ApiEnvelope[AiJobResponse],
     "list_resources": ResourceListEnvelope,
     "get_resource": ApiEnvelope[GeneratedResourceResponse],
     "get_resource_quality": ApiEnvelope[list[ResourceQualityScoreResponse]],

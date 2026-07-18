@@ -456,6 +456,7 @@ class AiJobService:
         generation_action: str = "new",
         source_resource_id: int | None = None,
         path_task_id: int | None = None,
+        tutor_message_id: int | None = None,
         idempotency_key: str | None = None,
     ) -> AiJobResponse:
         if self.repository.get_course_for_user(user.id, course_id) is None:
@@ -510,6 +511,7 @@ class AiJobService:
                 "generation_action": generation_action,
                 "source_resource_id": source_resource_id,
                 "path_task_id": path_task_id,
+                "tutor_message_id": tutor_message_id,
             },
             idempotency_key=idempotency_key,
         )

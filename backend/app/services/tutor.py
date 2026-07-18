@@ -26,6 +26,8 @@ from backend.app.models import (
     ChatSession,
     Course,
     CourseEnrollment,
+    AiJob,
+    GeneratedResource,
     Material,
     User,
 )
@@ -34,6 +36,8 @@ from backend.app.schemas.tutor import (
     TutorSessionHistoryItem,
     TutorSessionHistoryPage,
     TutorSessionSummary,
+    TutorResourceJob,
+    TutorGeneratedResource,
     session_detail_to_api,
     session_to_summary,
 )
@@ -137,6 +141,10 @@ class TutorSessionRepository(Protocol):
     def bind_attachments(self, attachments: list[ChatMessageAttachment], message_id: int) -> None: ...
 
     def attachment_map(self, message_ids: list[int]) -> dict[int, list[ChatMessageAttachment]]: ...
+
+    def resource_job_map(self, user_id: int, message_ids: list[int]) -> dict[int, list[TutorResourceJob]]: ...
+
+    def register_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None: ...
 
     def bound_attachments(
         self, user_id: int, session_id: int, message_ids: list[int]
@@ -478,6 +486,35 @@ class SqlAlchemyTutorSessionRepository:
                 result.setdefault(attachment.message_id, []).append(attachment)
         return result
 
+    def resource_job_map(self, user_id: int, message_ids: list[int]) -> dict[int, list[TutorResourceJob]]:
+        if not message_ids:
+            return {}
+        messages = list(self.db.scalars(select(ChatMessage).where(ChatMessage.id.in_(message_ids), ChatMessage.user_id == user_id)))
+        job_ids = {int(job_id) for message in messages for job_id in (message.resource_job_ids or []) if str(job_id).isdigit()}
+        jobs = {job.id: job for job in self.db.scalars(select(AiJob).where(AiJob.user_id == user_id, AiJob.id.in_(job_ids)))} if job_ids else {}
+        resource_ids = {int(resource_id) for job in jobs.values() for resource_id in (job.result_json or {}).get("resource_ids", []) if str(resource_id).isdigit()}
+        resources = {resource.id: resource for resource in self.db.scalars(select(GeneratedResource).where(GeneratedResource.user_id == user_id, GeneratedResource.id.in_(resource_ids)))} if resource_ids else {}
+        result: dict[int, list[TutorResourceJob]] = {}
+        for message in messages:
+            for job_id in message.resource_job_ids or []:
+                job = jobs.get(int(job_id)) if str(job_id).isdigit() else None
+                if job is None:
+                    continue
+                linked = [
+                    resources[int(item)]
+                    for item in (job.result_json or {}).get("resource_ids", [])
+                    if str(item).isdigit() and int(item) in resources
+                ]
+                result.setdefault(message.id, []).append(TutorResourceJob(job_id=str(job.id), status=job.status, label=job.label, error_message=job.error_message, resources=[TutorGeneratedResource(id=str(item.id), title=item.title, resource_type=item.resource_type, course_id=str(item.course_id) if item.course_id is not None else None) for item in linked]))
+        return result
+
+    def register_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None:
+        message = self.db.scalar(select(ChatMessage).where(ChatMessage.id == message_id, ChatMessage.session_id == session_id, ChatMessage.user_id == user_id, ChatMessage.role == "assistant").with_for_update())
+        if message is None:
+            raise SessionNotFoundError("回答不存在或无权访问。")
+        message.resource_job_ids = list(dict.fromkeys([*(message.resource_job_ids or []), job_id]))
+        self.db.commit()
+
     def bound_attachments(
         self, user_id: int, session_id: int, message_ids: list[int]
     ) -> list[ChatMessageAttachment]:
@@ -754,6 +791,7 @@ class TutorSessionService:
         deep_thinking: bool = False,
         selected_material_ids: list[int] | None = None,
         attachment_ids: list[int] | None = None,
+        resource_request: bool = False,
     ) -> Iterator[dict[str, Any]]:
         normalized_attachment_ids = list(dict.fromkeys(attachment_ids or []))[:3]
         stored_message_text = content.strip() or (DEFAULT_IMAGE_QUESTION if normalized_attachment_ids else "")
@@ -766,6 +804,14 @@ class TutorSessionService:
         )
         if not message_text:
             raise EmptyMessageError("消息不能为空。")
+
+        if resource_request:
+            return self._stream_resource_request_confirmation(
+                user=user,
+                session=session,
+                message_text=message_text,
+                attachment_ids=normalized_attachment_ids,
+            )
 
         if session.scope == "course":
             return CourseTutorGraphRunner(self).stream(
@@ -791,6 +837,28 @@ class TutorSessionService:
             stored_message_text=stored_message_text,
             vision_decision=vision_decision,
         )
+
+    def _stream_resource_request_confirmation(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        message_text: str,
+        attachment_ids: list[int],
+    ) -> Iterator[dict[str, Any]]:
+        reply = "已识别为资源生成请求。请选择课程后，我会基于该课程资料生成资源。" if session.scope == "home" else "已识别为资源生成请求，正在基于当前课程资料创建任务。"
+        yield self._stream_event("metadata", session.id, None, 0, False)
+        yield {"event": "token", "data": {"content": reply}}
+        detail = self._persist_message_pair(
+            user=user,
+            session=session,
+            message_text=message_text,
+            assistant_reply=reply,
+            citation_json=[],
+            trace_id=None,
+            attachment_ids=attachment_ids,
+        )
+        yield {"event": "done", "data": detail.model_dump()}
 
     def _prepare_visual_question(
         self,
@@ -1181,7 +1249,13 @@ class TutorSessionService:
         messages = self.repository.list_messages(session.id)
         mapper = getattr(self.repository, "attachment_map", None)
         attachment_map = mapper([message.id for message in messages]) if callable(mapper) else {}
-        return session_detail_to_api(session, messages, attachment_map)
+        resource_mapper = getattr(self.repository, "resource_job_map", None)
+        resource_job_map = resource_mapper(session.user_id, [message.id for message in messages]) if callable(resource_mapper) else {}
+        return session_detail_to_api(session, messages, attachment_map, resource_job_map)
+
+    def register_resource_job(self, user: User, session_id: int, message_id: int, job_id: int) -> None:
+        self._get_session_for_user(user.id, session_id)
+        self.repository.register_resource_job(user.id, session_id, message_id, job_id)
 
     def _persist_course_tutor_graph_trace(
         self,

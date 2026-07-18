@@ -78,6 +78,7 @@ class SendTutorMessageRequest(BaseModel):
         description="兼容旧客户端；true 强制深度推理，false 或缺省由系统自动判断。",
     )
     selected_material_ids: list[int] | None = None
+    resource_request: bool = False
 
     @field_validator("message")
     @classmethod
@@ -107,6 +108,14 @@ class SendTutorMessageRequest(BaseModel):
         if len(normalized) > 10:
             raise ValueError("单个会话最多选择 10 份参考资料。")
         return normalized
+
+
+class CreateTutorResourceJobRequest(BaseModel):
+    course_id: int = Field(gt=0)
+    knowledge_point_id: int | None = Field(default=None, gt=0)
+    resource_types: list[Literal["doc", "mindmap", "quiz", "code", "slide", "animation", "video"]] = Field(min_length=1, max_length=3)
+    learning_goal: str = Field(default="", max_length=500)
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
 
 
 class AttachTutorMaterialRequest(BaseModel):
@@ -139,6 +148,21 @@ class TutorImageAttachment(BaseModel):
     created_at: str
 
 
+class TutorGeneratedResource(BaseModel):
+    id: str
+    title: str
+    resource_type: str
+    course_id: str | None
+
+
+class TutorResourceJob(BaseModel):
+    job_id: str
+    status: str
+    label: str
+    error_message: str | None = None
+    resources: list[TutorGeneratedResource] = Field(default_factory=list)
+
+
 class TutorMessage(BaseModel):
     id: str
     session_id: str
@@ -148,6 +172,7 @@ class TutorMessage(BaseModel):
     trace_id: str | None
     created_at: str
     attachments: list[TutorImageAttachment] = Field(default_factory=list)
+    resource_jobs: list[TutorResourceJob] = Field(default_factory=list)
 
 
 class TutorSessionDetail(BaseModel):
@@ -209,7 +234,7 @@ def attachment_to_api(attachment: ChatMessageAttachment) -> TutorImageAttachment
     )
 
 
-def message_to_api(message: ChatMessage, attachments: list[ChatMessageAttachment] | None = None) -> TutorMessage:
+def message_to_api(message: ChatMessage, attachments: list[ChatMessageAttachment] | None = None, resource_jobs: list[TutorResourceJob] | None = None) -> TutorMessage:
     return TutorMessage(
         id=str(message.id),
         session_id=str(message.session_id),
@@ -219,6 +244,7 @@ def message_to_api(message: ChatMessage, attachments: list[ChatMessageAttachment
         trace_id=message.trace_id,
         created_at=_iso_timestamp(message.created_at),
         attachments=[attachment_to_api(item) for item in (attachments or [])],
+        resource_jobs=resource_jobs or [],
     )
 
 
@@ -226,8 +252,9 @@ def session_detail_to_api(
     session: ChatSession,
     messages: list[ChatMessage],
     attachment_map: dict[int, list[ChatMessageAttachment]] | None = None,
+    resource_job_map: dict[int, list[TutorResourceJob]] | None = None,
 ) -> TutorSessionDetail:
     return TutorSessionDetail(
         session=session_to_summary(session),
-        messages=[message_to_api(message, (attachment_map or {}).get(message.id, [])) for message in messages],
+        messages=[message_to_api(message, (attachment_map or {}).get(message.id, []), (resource_job_map or {}).get(message.id, [])) for message in messages],
     )

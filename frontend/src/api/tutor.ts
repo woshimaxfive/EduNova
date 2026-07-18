@@ -15,6 +15,7 @@ export const TUTOR_ENDPOINTS = {
   materialAttachments: (sessionId: number | string) => `/tutor/sessions/${sessionId}/attachments/from-material`,
   attachment: (attachmentId: number | string) => `/tutor/attachments/${attachmentId}`,
   attachmentContent: (attachmentId: number | string) => `/tutor/attachments/${attachmentId}/content`
+  ,resourceJobs: (sessionId: number | string, messageId: number | string) => `/tutor/sessions/${sessionId}/messages/${messageId}/resource-jobs`
 } as const;
 
 export type TutorSessionScope = "home" | "course";
@@ -58,6 +59,7 @@ export type SendTutorMessageRequest = {
   deep_thinking?: boolean;
   selected_material_ids?: number[];
   attachment_ids?: number[];
+  resource_request?: boolean;
 };
 
 export type TutorSessionSummary = {
@@ -110,7 +112,12 @@ export type TutorMessage = {
   trace_id: string | null;
   created_at: string;
   attachments?: TutorImageAttachment[];
+  resource_jobs?: TutorResourceJob[];
 };
+
+export type TutorGeneratedResource = { id: string; title: string; resource_type: string; course_id: string | null };
+export type TutorResourceJob = { job_id: string; status: string; label: string; error_message: string | null; resources: TutorGeneratedResource[] };
+export type CreateTutorResourceJobRequest = { course_id: number; knowledge_point_id?: number | null; resource_types: Array<"doc" | "mindmap" | "quiz" | "code" | "slide" | "animation" | "video">; learning_goal?: string; difficulty?: "easy" | "medium" | "hard" };
 
 export type TutorSessionDetail = {
   session: TutorSessionSummary;
@@ -219,6 +226,11 @@ export async function deleteTutorSession(sessionId: number | string) {
 export async function sendTutorMessage(sessionId: number | string, payload: SendTutorMessageRequest) {
   const response = await apiClient.post<ApiEnvelope<TutorSessionDetail>>(TUTOR_ENDPOINTS.message(sessionId), payload);
   return response.data;
+}
+
+export async function createTutorResourceGenerationJob(sessionId: number | string, messageId: number | string, payload: CreateTutorResourceJobRequest) {
+  const response = await apiClient.post<ApiEnvelope<import("./aiJobs").AiJob>>(TUTOR_ENDPOINTS.resourceJobs(sessionId, messageId), payload, { headers: { "Idempotency-Key": `tutor-resource-${crypto.randomUUID()}` } });
+  return response.data.data;
 }
 
 export async function uploadTutorAttachment(sessionId: number | string, file: File) {

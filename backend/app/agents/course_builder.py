@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import UTC, datetime
 from decimal import Decimal
 from math import ceil
 import operator
@@ -428,7 +429,14 @@ class CourseBuilderGraphRunner:
         structure = state["structure"]
         title = str(state.get("requested_title") or structure.get("title") or Path(materials[0].filename).stem).strip()[:255]
         course = Course(owner_id=state["user_id"], title=title, description=structure["description"], subject=structure["subject"], source_type="uploaded", visibility="private", status="ready", agent_trace_id=state["trace_id"], structure_json={})
-        enrollment = CourseEnrollment(user_id=state["user_id"], course_id=0, role="learner", progress_percent=Decimal("0"))
+        enrollment = CourseEnrollment(
+            user_id=state["user_id"],
+            course_id=0,
+            role="learner",
+            progress_percent=Decimal("0"),
+            learning_status="active",
+            last_accessed_at=datetime.now(UTC),
+        )
         course_materials = [self.service._build_course_material(state["user"], material) for material in materials]
         for item in course_materials:
             item.agent_trace_id = state["trace_id"]

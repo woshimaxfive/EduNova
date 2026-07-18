@@ -67,8 +67,14 @@ class SqlAlchemyDashboardRepository:
         return list(
             self.db.scalars(
                 select(Course)
-                .where(Course.owner_id == user_id)
-                .order_by(Course.updated_at.desc(), Course.id.desc())
+                .join(CourseEnrollment, CourseEnrollment.course_id == Course.id)
+                .where(Course.owner_id == user_id, CourseEnrollment.user_id == user_id)
+                .order_by(
+                    (CourseEnrollment.learning_status == "active").desc(),
+                    CourseEnrollment.last_accessed_at.desc().nullslast(),
+                    CourseEnrollment.created_at.desc(),
+                    Course.id.desc(),
+                )
                 .limit(limit)
             )
         )
@@ -197,7 +203,7 @@ class DashboardService:
 
     def build_summary(self, user: User) -> DashboardSummary:
         profile = self.repository.get_profile(user.id)
-        courses = self.repository.list_recent_courses(user.id, limit=3)
+        courses = self.repository.list_recent_courses(user.id, limit=6)
         if not courses:
             course_ids: list[int] = []
         else:
@@ -211,12 +217,23 @@ class DashboardService:
         practiced = self.repository.practiced_knowledge_point_ids(user.id, course_ids)
         latest_times = self.repository.latest_practice_times(user.id, course_ids)
 
+        enrollment_by_course = {item.course_id: item for item in enrollments}
         sorted_courses = sorted(
             courses,
-            key=lambda c: (latest_times.get(c.id) or c.updated_at),
+            key=lambda c: (
+                (enrollment_by_course.get(c.id).learning_status or "active") == "active" if enrollment_by_course.get(c.id) else True,
+                enrollment_by_course.get(c.id).last_accessed_at if enrollment_by_course.get(c.id) and enrollment_by_course.get(c.id).last_accessed_at else (latest_times.get(c.id) or c.updated_at),
+            ),
             reverse=True,
         )
         recent_courses = self._build_courses(sorted_courses, enrollments, kp_counts, practiced)
+        active_enrollments = [item for item in enrollments if (item.learning_status or "active") == "active"]
+        current_enrollment = max(
+            active_enrollments,
+            key=lambda item: item.last_accessed_at or item.created_at,
+            default=None,
+        )
+        current_course_id = current_enrollment.course_id if current_enrollment is not None else None
         recent_materials = [self._build_material(material) for material in materials]
         recent_resources = [self._build_resource(resource) for resource in resources]
 
@@ -242,6 +259,7 @@ class DashboardService:
             command_suggestions=self._build_command_suggestions(user, recent_courses, recent_materials),
             evidence_summary=self._build_evidence_summary(resources),
             empty_state=self._build_empty_state(user, recent_courses, conversations, recent_resources, profile),
+            current_course_id=str(current_course_id) if current_course_id is not None else None,
         )
 
     @staticmethod
@@ -253,6 +271,11 @@ class DashboardService:
             has_profile=profile is not None,
             knowledge_foundation=profile_json.get("knowledge_foundation"),
             learning_goal=profile_json.get("learning_goal"),
+            base_profile_ready=bool(profile) and any(
+                bool(profile_json.get(key))
+                and float((profile.dimension_confidence_json or {}).get(key, 0) or 0) >= 50
+                for key in ("learning_preference", "learning_pace")
+            ),
         )
 
     @staticmethod
@@ -263,6 +286,10 @@ class DashboardService:
         practiced: dict[int, set[int]],
     ) -> list[DashboardCourse]:
         result: list[DashboardCourse] = []
+        enrollment_by_course = {item.course_id: item for item in enrollments}
+        active_enrollments = [item for item in enrollments if (item.learning_status or "active") == "active"]
+        current_enrollment = max(active_enrollments, key=lambda item: item.last_accessed_at or item.created_at, default=None)
+        current_id = current_enrollment.course_id if current_enrollment is not None else None
 
         for course in courses:
             total_kps = kp_counts.get(course.id, 0)
@@ -287,6 +314,8 @@ class DashboardService:
                     knowledge_point_count=total_kps,
                     focus=focus,
                     next="继续学习" if progress > 0 else "开始学习",
+                    learning_status=(enrollment_by_course.get(course.id).learning_status or "active") if enrollment_by_course.get(course.id) else "active",
+                    is_current=course.id == current_id,
                 )
             )
 

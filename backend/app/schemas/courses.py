@@ -25,6 +25,47 @@ class CourseSummary(BaseModel):
     material_count: int
     knowledge_point_count: int
     chunk_count: int
+    learning_status: str = "active"
+    last_accessed_at: str | None = None
+    completed_at: str | None = None
+    is_current: bool = False
+    profile_ready: bool = False
+
+
+class CourseLearnerProfileUpdate(BaseModel):
+    learning_goal: str = Field(min_length=1, max_length=1000)
+    knowledge_foundation: str = Field(min_length=1, max_length=1000)
+    weak_points: list[str] = Field(default_factory=list, max_length=20)
+
+
+class CourseProfileReadiness(BaseModel):
+    ready: bool = False
+    goal_ready: bool = False
+    foundation_ready: bool = False
+    global_preference_ready: bool = False
+    missing_fields: list[str] = Field(default_factory=list)
+
+
+class CourseLearnerProfile(BaseModel):
+    course_id: str
+    learning_goal: str = ""
+    knowledge_foundation: str = ""
+    weak_points: list[str] = Field(default_factory=list)
+    dimension_confidence: dict[str, float] = Field(default_factory=dict)
+    readiness: CourseProfileReadiness
+    legacy_suggestions: dict[str, object] = Field(default_factory=dict)
+
+
+class CourseStageCompletion(BaseModel):
+    eligible: bool = False
+    path_completed: bool = False
+    assessed_point_count: int = 0
+    required_point_count: int = 0
+    below_threshold_count: int = 0
+    active_weakness_count: int = 0
+    due_review_count: int = 0
+    report_fresh: bool = False
+    blocking_reasons: list[str] = Field(default_factory=list)
 
 
 class CourseKnowledgePoint(BaseModel):
@@ -209,6 +250,8 @@ class CourseLearningState(BaseModel):
     path_summary: CoursePathSummary
     mastery_summary: CourseMasterySummary
     evidence_summary: CourseEvidenceSummary
+    course_profile_readiness: CourseProfileReadiness = Field(default_factory=CourseProfileReadiness)
+    stage_completion: CourseStageCompletion = Field(default_factory=CourseStageCompletion)
 
 
 def iso_timestamp(value: datetime | None) -> str | None:

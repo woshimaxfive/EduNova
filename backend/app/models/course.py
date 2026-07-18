@@ -3,7 +3,9 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
+from datetime import datetime
+
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -73,6 +75,7 @@ class CourseEnrollment(IdMixin, CreatedAtMixin, Base):
             "course_id",
             name="uq_course_enrollments_user_course",
         ),
+        Index("ix_course_enrollments_user_learning_access", "user_id", "learning_status", "last_accessed_at"),
     )
 
     user_id: Mapped[int] = mapped_column(
@@ -91,6 +94,11 @@ class CourseEnrollment(IdMixin, CreatedAtMixin, Base):
         nullable=False,
         default=0,
     )
+    learning_status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+    last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    learning_context_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    learning_context_confidence_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     user: Mapped["User"] = relationship(back_populates="enrollments")
     course: Mapped["Course"] = relationship(back_populates="enrollments")

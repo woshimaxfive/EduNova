@@ -26,9 +26,14 @@ from backend.app.models import (
     StudentProfile,
     User,
     WeaknessReviewItem,
+    AssessmentReport,
 )
 from backend.app.schemas.courses import (
     CourseEvidenceSummary,
+    CourseLearnerProfile,
+    CourseLearnerProfileUpdate,
+    CourseProfileReadiness,
+    CourseStageCompletion,
     CourseKnowledgePoint,
     CourseKnowledgePointContent,
     CourseKnowledgeSection,
@@ -107,6 +112,14 @@ class CourseRepository(Protocol):
     def list_courses_for_user(self, user_id: int, source_type: str | None = None) -> list[Course]: ...
 
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None: ...
+
+    def get_enrollment(self, user_id: int, course_id: int) -> CourseEnrollment | None: ...
+
+    def list_enrollments(self, user_id: int) -> list[CourseEnrollment]: ...
+
+    def list_completed_practices(self, user_id: int, course_id: int) -> list[PracticeSession]: ...
+
+    def get_latest_report(self, user_id: int, course_id: int) -> AssessmentReport | None: ...
 
     def list_course_materials(self, course_id: int) -> list[CourseMaterial]: ...
 
@@ -238,6 +251,36 @@ class SqlAlchemyCourseRepository:
 
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return self.db.scalar(select(Course).where(Course.id == course_id, Course.owner_id == user_id))
+
+    def get_enrollment(self, user_id: int, course_id: int) -> CourseEnrollment | None:
+        return self.db.scalar(select(CourseEnrollment).where(
+            CourseEnrollment.user_id == user_id,
+            CourseEnrollment.course_id == course_id,
+        ))
+
+    def list_enrollments(self, user_id: int) -> list[CourseEnrollment]:
+        return list(self.db.scalars(
+            select(CourseEnrollment)
+            .where(CourseEnrollment.user_id == user_id)
+            .order_by(CourseEnrollment.last_accessed_at.desc().nullslast(), CourseEnrollment.created_at.desc())
+        ))
+
+    def list_completed_practices(self, user_id: int, course_id: int) -> list[PracticeSession]:
+        return list(self.db.scalars(
+            select(PracticeSession).where(
+                PracticeSession.user_id == user_id,
+                PracticeSession.course_id == course_id,
+                PracticeSession.status == "completed",
+            ).order_by(PracticeSession.updated_at.desc(), PracticeSession.id.desc())
+        ))
+
+    def get_latest_report(self, user_id: int, course_id: int) -> AssessmentReport | None:
+        return self.db.scalar(
+            select(AssessmentReport).where(
+                AssessmentReport.user_id == user_id,
+                AssessmentReport.course_id == course_id,
+            ).order_by(AssessmentReport.created_at.desc(), AssessmentReport.id.desc())
+        )
 
     def list_course_materials(self, course_id: int) -> list[CourseMaterial]:
         return list(self.db.scalars(select(CourseMaterial).where(CourseMaterial.course_id == course_id).order_by(CourseMaterial.id)))
@@ -402,12 +445,77 @@ class CourseService:
 
     def list_courses(self, user: User, source_type: str | None = None) -> CourseListResponse:
         courses = self.repository.list_courses_for_user(user.id, source_type)
-        data = [self._build_summary(course, user_id=user.id) for course in courses]
+        enrollments = {item.course_id: item for item in self._list_enrollments(user.id)}
+        current_id = next((item.course_id for item in enrollments.values() if item.learning_status == "active"), None)
+        courses.sort(key=lambda item: (
+            0 if enrollments.get(item.id) and enrollments[item.id].learning_status == "active" else 1,
+            -(enrollments.get(item.id).last_accessed_at or enrollments.get(item.id).created_at).timestamp() if enrollments.get(item.id) else 0,
+        ))
+        data = [self._build_summary(course, user_id=user.id, enrollment=enrollments.get(course.id), current_course_id=current_id) for course in courses]
         return CourseListResponse(data=data, page=1, page_size=len(data), total=len(data))
 
     def get_course(self, user: User, course_id: int) -> CourseSummary:
         course = self._require_course(user, course_id)
-        return self._build_summary(course, user_id=user.id)
+        enrollment = self._require_enrollment(user.id, course.id)
+        current = next((item.course_id for item in self._list_enrollments(user.id) if (item.learning_status or "active") == "active"), None)
+        return self._build_summary(course, user_id=user.id, enrollment=enrollment, current_course_id=current)
+
+    def activate_course(self, user: User, course_id: int) -> CourseSummary:
+        course = self._require_course(user, course_id)
+        enrollment = self._require_enrollment(user.id, course.id)
+        enrollment.last_accessed_at = datetime.now(UTC)
+        self.repository.commit()
+        current_id = course.id if (enrollment.learning_status or "active") == "active" else None
+        return self._build_summary(course, user_id=user.id, enrollment=enrollment, current_course_id=current_id)
+
+    def resume_course(self, user: User, course_id: int) -> CourseSummary:
+        course = self._require_course(user, course_id)
+        enrollment = self._require_enrollment(user.id, course.id)
+        enrollment.learning_status = "active"
+        enrollment.completed_at = None
+        enrollment.last_accessed_at = datetime.now(UTC)
+        self.repository.commit()
+        return self._build_summary(course, user_id=user.id, enrollment=enrollment, current_course_id=course.id)
+
+    def get_learner_profile(self, user: User, course_id: int) -> CourseLearnerProfile:
+        course = self._require_course(user, course_id)
+        enrollment = self._require_enrollment(user.id, course.id)
+        return self._course_profile(user.id, course.id, enrollment)
+
+    def update_learner_profile(self, user: User, course_id: int, payload: CourseLearnerProfileUpdate) -> CourseLearnerProfile:
+        course = self._require_course(user, course_id)
+        enrollment = self._require_enrollment(user.id, course.id)
+        if enrollment.learning_status == "archived":
+            raise CourseGenerationError("课程已完成归档；请先恢复学习再更新课程画像。")
+        enrollment.learning_context_json = {
+            "learning_goal": payload.learning_goal.strip(),
+            "knowledge_foundation": payload.knowledge_foundation.strip(),
+            "weak_points": [item.strip() for item in payload.weak_points if item.strip()][:20],
+        }
+        enrollment.learning_context_confidence_json = {
+            "learning_goal": 100,
+            "knowledge_foundation": 100,
+            "weak_points": 100 if payload.weak_points else 0,
+        }
+        self.repository.commit()
+        return self._course_profile(user.id, course.id, enrollment)
+
+    def complete_course(self, user: User, course_id: int) -> CourseSummary:
+        course = self._require_course(user, course_id)
+        enrollment = self._require_enrollment(user.id, course.id)
+        if enrollment.learning_status == "archived":
+            raise CourseGenerationError("课程已经完成归档。")
+        completion = self._stage_completion(user, course.id)
+        if not completion.eligible:
+            raise CourseGenerationError("课程尚未达到阶段完成标准：" + "；".join(completion.blocking_reasons))
+        enrollment.learning_status = "archived"
+        enrollment.completed_at = datetime.now(UTC)
+        self.repository.commit()
+        return self._build_summary(course, user_id=user.id, enrollment=enrollment, current_course_id=None)
+
+    def get_stage_completion(self, user: User, course_id: int) -> CourseStageCompletion:
+        course = self._require_course(user, course_id)
+        return self._stage_completion(user, course.id)
 
     def get_overview(self, user: User, course_id: int) -> CourseOverview:
         course = self._require_course(user, course_id)
@@ -553,6 +661,8 @@ class CourseService:
                 latest_source_title=latest_candidate.source_title if latest_candidate is not None else None,
                 latest_section_title=latest_candidate.section_title if latest_candidate is not None else None,
             ),
+            course_profile_readiness=self._course_profile(user.id, course.id, self._require_enrollment(user.id, course.id)).readiness,
+            stage_completion=self._stage_completion(user, course.id, mastery_points=mastery_points),
         )
 
     def update_weakness_review_item(
@@ -563,6 +673,8 @@ class CourseService:
         action: str,
     ) -> CourseWeaknessReviewItem:
         course = self._require_course(user, course_id)
+        if self._require_enrollment(user.id, course.id).learning_status == "archived":
+            raise CourseWeaknessStateTransitionError("课程已完成归档；请先恢复学习再更新薄弱点。")
         item = self.repository.get_weakness_review_item(user.id, course.id, item_id)
         if item is None:
             raise CourseNotFoundError("弱点复习项不存在或无权访问。")
@@ -783,6 +895,144 @@ class CourseService:
         if course is None:
             raise CourseNotFoundError("课程不存在或无权访问。")
         return course
+
+    def _require_enrollment(self, user_id: int, course_id: int) -> CourseEnrollment:
+        getter = getattr(self.repository, "get_enrollment", None)
+        enrollment = getter(user_id, course_id) if callable(getter) else next(
+            (item for item in getattr(self.repository, "enrollments", []) if item.user_id == user_id and item.course_id == course_id),
+            None,
+        )
+        if enrollment is None:
+            enrollment = CourseEnrollment(
+                user_id=user_id,
+                course_id=course_id,
+                role="learner",
+                progress_percent=0,
+                learning_status="active",
+                learning_context_json={},
+                learning_context_confidence_json={},
+            )
+        return enrollment
+
+    def _list_enrollments(self, user_id: int) -> list[CourseEnrollment]:
+        loader = getattr(self.repository, "list_enrollments", None)
+        if callable(loader):
+            return loader(user_id)
+        return [item for item in getattr(self.repository, "enrollments", []) if item.user_id == user_id]
+
+    def _base_profile_ready(self, user_id: int) -> bool:
+        profile = self.repository.get_profile(user_id)
+        if profile is None:
+            return False
+        values = normalize_profile_json(profile.profile_json)
+        confidence = profile.dimension_confidence_json or {}
+        return any(
+            bool(values.get(key)) and float(confidence.get(key, 0) or 0) >= 50
+            for key in ("learning_preference", "learning_pace")
+        )
+
+    def _course_profile(self, user_id: int, course_id: int, enrollment: CourseEnrollment) -> CourseLearnerProfile:
+        values = enrollment.learning_context_json or {}
+        confidence = enrollment.learning_context_confidence_json or {}
+        goal_ready = bool(str(values.get("learning_goal") or "").strip()) and float(confidence.get("learning_goal", 0) or 0) >= 50
+        foundation_ready = bool(str(values.get("knowledge_foundation") or "").strip()) and float(confidence.get("knowledge_foundation", 0) or 0) >= 50
+        preference_ready = self._base_profile_ready(user_id)
+        missing = []
+        if not goal_ready:
+            missing.append("learning_goal")
+        if not foundation_ready:
+            missing.append("knowledge_foundation")
+        if not preference_ready:
+            missing.append("learning_preference_or_pace")
+        profile = self.repository.get_profile(user_id)
+        legacy = normalize_profile_json(profile.profile_json if profile is not None else None)
+        return CourseLearnerProfile(
+            course_id=str(course_id),
+            learning_goal=str(values.get("learning_goal") or ""),
+            knowledge_foundation=str(values.get("knowledge_foundation") or ""),
+            weak_points=[str(item) for item in values.get("weak_points", []) if str(item).strip()],
+            dimension_confidence={key: float(value) for key, value in confidence.items() if isinstance(value, (int, float))},
+            readiness=CourseProfileReadiness(
+                ready=not missing,
+                goal_ready=goal_ready,
+                foundation_ready=foundation_ready,
+                global_preference_ready=preference_ready,
+                missing_fields=missing,
+            ),
+            legacy_suggestions={
+                "learning_goal": legacy.get("learning_goal") or "",
+                "knowledge_foundation": legacy.get("knowledge_foundation") or "",
+                "weak_points": legacy.get("weak_points") or [],
+            },
+        )
+
+    def _stage_completion(
+        self,
+        user: User,
+        course_id: int,
+        *,
+        mastery_points: list[CourseMasteryPoint] | None = None,
+    ) -> CourseStageCompletion:
+        path = self.repository.get_active_path(user.id, course_id)
+        tasks = self.repository.list_tasks_for_path(path.id) if path is not None else []
+        path_completed = bool(tasks) and all(task.status == "completed" for task in tasks)
+        required_ids = {task.knowledge_point_id for task in tasks if task.knowledge_point_id is not None}
+        if mastery_points is None:
+            mastery = self.get_mastery_map(user, course_id)
+            mastery_points = mastery.points
+        required_points = [point for point in mastery_points if int(point.id) in required_ids]
+        assessed_count = sum(1 for point in required_points if point.score is not None)
+        below_count = sum(1 for point in required_points if point.score is None or point.score < 75)
+        weaknesses = self.repository.list_weakness_review_items(user.id, course_id)
+        active_count = sum(1 for item in weaknesses if item.status in {"pending", "confirmed", "reviewing"})
+        due_count = sum(1 for item in weaknesses if is_review_due(item))
+        practice_loader = getattr(self.repository, "list_completed_practices", None)
+        practices = practice_loader(user.id, course_id) if callable(practice_loader) else []
+        answers = self.repository.list_practice_answers(user.id, course_id)
+        latest_practice = practices[0] if practices else None
+        answers_by_session = {
+            practice.id: [item for item in answers if item.session_id == practice.id]
+            for practice in practices
+        }
+        fully_graded = any(
+            session_answers and all((item.feedback_json or {}).get("score") is not None for item in session_answers)
+            for session_answers in answers_by_session.values()
+        )
+        report_loader = getattr(self.repository, "get_latest_report", None)
+        latest_report = report_loader(user.id, course_id) if callable(report_loader) else None
+        report_fresh = bool(
+            latest_report
+            and latest_practice
+            and latest_report.created_at >= latest_practice.updated_at
+        )
+        reasons = []
+        if not path_completed:
+            reasons.append("学习路径尚未完成")
+        if not required_ids:
+            reasons.append("学习路径尚未关联可评估知识点")
+        if required_ids and assessed_count < len(required_ids):
+            reasons.append("仍有路径知识点尚未形成掌握度证据")
+        if below_count:
+            reasons.append("仍有路径知识点掌握度低于75分")
+        if active_count:
+            reasons.append("仍有待处理薄弱点")
+        if due_count:
+            reasons.append("仍有到期复习任务")
+        if not fully_graded:
+            reasons.append("尚无一次完整评分的练习")
+        if not report_fresh:
+            reasons.append("最新报告尚未覆盖最近练习")
+        return CourseStageCompletion(
+            eligible=not reasons,
+            path_completed=path_completed,
+            assessed_point_count=assessed_count,
+            required_point_count=len(required_ids),
+            below_threshold_count=below_count,
+            active_weakness_count=active_count,
+            due_review_count=due_count,
+            report_fresh=report_fresh,
+            blocking_reasons=reasons,
+        )
 
     @classmethod
     def _candidate_from_event(cls, event: ProfileEvent | None) -> WeaknessCandidate | None:
@@ -1041,6 +1291,8 @@ class CourseService:
         knowledge_point_count: int | None = None,
         chunk_count: int | None = None,
         user_id: int | None = None,
+        enrollment: CourseEnrollment | None = None,
+        current_course_id: int | None = None,
     ) -> CourseSummary:
         if material_count is None:
             material_count = len(self.repository.list_course_materials(course.id))
@@ -1075,6 +1327,11 @@ class CourseService:
             material_count=material_count,
             knowledge_point_count=knowledge_point_count,
             chunk_count=chunk_count,
+            learning_status=(enrollment.learning_status or "active") if enrollment is not None else "active",
+            last_accessed_at=iso_timestamp(enrollment.last_accessed_at) if enrollment is not None else None,
+            completed_at=iso_timestamp(enrollment.completed_at) if enrollment is not None else None,
+            is_current=course.id == current_course_id,
+            profile_ready=self._course_profile(user_id, course.id, enrollment).readiness.ready if user_id is not None and enrollment is not None else False,
         )
 
     @staticmethod

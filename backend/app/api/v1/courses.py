@@ -11,7 +11,7 @@ from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.models import User
 from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
-from backend.app.schemas.courses import CreateCourseFromMaterialsRequest
+from backend.app.schemas.courses import CreateCourseFromMaterialsRequest, CourseLearnerProfileUpdate
 from backend.app.services.courses import (
     CourseGenerationError,
     CourseNotFoundError,
@@ -128,6 +128,55 @@ def get_course_learning_state(
         return api_response(service.get_learning_state(current_user, course_id).model_dump())
     except CourseNotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+
+
+@router.post("/{course_id}/activate")
+def activate_course(course_id: int, current_user: User = Depends(get_current_user), service: CourseService = Depends(get_course_service)) -> dict:
+    try:
+        return api_response(service.activate_course(current_user, course_id).model_dump())
+    except CourseNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+
+
+@router.post("/{course_id}/complete")
+def complete_course(course_id: int, current_user: User = Depends(get_current_user), service: CourseService = Depends(get_course_service)) -> dict:
+    try:
+        return api_response(service.complete_course(current_user, course_id).model_dump())
+    except CourseNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+    except CourseGenerationError as exc:
+        raise ApiError(409, "COURSE_NOT_READY", str(exc)) from exc
+
+
+@router.post("/{course_id}/resume")
+def resume_course(course_id: int, current_user: User = Depends(get_current_user), service: CourseService = Depends(get_course_service)) -> dict:
+    try:
+        return api_response(service.resume_course(current_user, course_id).model_dump())
+    except CourseNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+
+
+@router.get("/{course_id}/learner-profile")
+def get_course_learner_profile(course_id: int, current_user: User = Depends(get_current_user), service: CourseService = Depends(get_course_service)) -> dict:
+    try:
+        return api_response(service.get_learner_profile(current_user, course_id).model_dump())
+    except CourseNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+
+
+@router.put("/{course_id}/learner-profile")
+def update_course_learner_profile(
+    course_id: int,
+    payload: CourseLearnerProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    service: CourseService = Depends(get_course_service),
+) -> dict:
+    try:
+        return api_response(service.update_learner_profile(current_user, course_id, payload).model_dump())
+    except CourseNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+    except CourseGenerationError as exc:
+        raise ApiError(409, "COURSE_ARCHIVED", str(exc)) from exc
 
 
 def _update_weakness_review_item(

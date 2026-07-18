@@ -30,12 +30,15 @@ from backend.app.models import (
     MaterialChunk,
     ProfileEvent,
     PracticeAnswer,
+    PracticeSession,
+    AssessmentReport,
     StudentProfile,
     User,
     WeaknessReviewItem,
 )
 from backend.app.services.auth import AuthService
-from backend.app.services.courses import CourseNotFoundError, CourseService
+from backend.app.services.courses import CourseGenerationError, CourseNotFoundError, CourseService
+from backend.app.schemas.courses import CourseLearnerProfileUpdate
 from backend.app.services.material_retrieval import MaterialChunkingService
 
 
@@ -63,6 +66,8 @@ class FakeCourseRepository:
     learning_paths: list[LearningPath] = field(default_factory=list)
     learning_tasks: list[LearningTask] = field(default_factory=list)
     practice_answers: list[PracticeAnswer] = field(default_factory=list)
+    practice_sessions: list[PracticeSession] = field(default_factory=list)
+    assessment_reports: list[AssessmentReport] = field(default_factory=list)
     next_course_id: int = 101
     next_enrollment_id: int = 201
     next_course_material_id: int = 301
@@ -167,6 +172,24 @@ class FakeCourseRepository:
 
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return next((course for course in self.courses if course.owner_id == user_id and course.id == course_id), None)
+
+    def get_enrollment(self, user_id: int, course_id: int) -> CourseEnrollment | None:
+        return next((item for item in self.enrollments if item.user_id == user_id and item.course_id == course_id), None)
+
+    def list_enrollments(self, user_id: int) -> list[CourseEnrollment]:
+        items = [item for item in self.enrollments if item.user_id == user_id]
+        return sorted(items, key=lambda item: item.last_accessed_at or item.created_at or datetime.min.replace(tzinfo=UTC), reverse=True)
+
+    def list_completed_practices(self, user_id: int, course_id: int) -> list[PracticeSession]:
+        return sorted(
+            [item for item in self.practice_sessions if item.user_id == user_id and item.course_id == course_id and item.status == "completed"],
+            key=lambda item: item.updated_at,
+            reverse=True,
+        )
+
+    def get_latest_report(self, user_id: int, course_id: int) -> AssessmentReport | None:
+        reports = [item for item in self.assessment_reports if item.user_id == user_id and item.course_id == course_id]
+        return max(reports, key=lambda item: item.created_at, default=None)
 
     def list_course_materials(self, course_id: int) -> list[CourseMaterial]:
         return [material for material in self.course_materials if material.course_id == course_id]
@@ -778,6 +801,96 @@ def test_course_read_apis_are_scoped_to_current_user() -> None:
 
     with pytest.raises(CourseNotFoundError):
         service.get_course(make_user(2), 101)
+
+
+def test_course_profile_is_isolated_per_course_and_requires_reusable_global_preference() -> None:
+    profile = StudentProfile(
+        id=9,
+        user_id=1,
+        profile_json={"learning_preference": ["图解"], "learning_goal": "旧的全局目标"},
+        dimension_confidence_json={"learning_preference": 80, "learning_goal": 90},
+        confidence_score=Decimal("0.8"),
+    )
+    enrollments = [
+        CourseEnrollment(
+            id=1,
+            user_id=1,
+            course_id=101,
+            role="learner",
+            progress_percent=0,
+            learning_status="active",
+            learning_context_json={},
+            learning_context_confidence_json={},
+            last_accessed_at=datetime(2026, 7, 18, 10, 0, tzinfo=UTC),
+        ),
+        CourseEnrollment(
+            id=2,
+            user_id=1,
+            course_id=102,
+            role="learner",
+            progress_percent=0,
+            learning_status="active",
+            learning_context_json={"learning_goal": "通过英语四级", "knowledge_foundation": "能阅读短文"},
+            learning_context_confidence_json={"learning_goal": 100, "knowledge_foundation": 100},
+            last_accessed_at=datetime(2026, 7, 18, 9, 0, tzinfo=UTC),
+        ),
+    ]
+    repo = FakeCourseRepository(
+        courses=[make_course(101, title="算法"), make_course(102, title="英语")],
+        enrollments=enrollments,
+        profiles={1: profile},
+    )
+    service = make_service(repo)
+
+    first = service.get_learner_profile(make_user(), 101)
+    second = service.get_learner_profile(make_user(), 102)
+
+    assert first.readiness.ready is False
+    assert first.learning_goal == ""
+    assert first.legacy_suggestions["learning_goal"] == "旧的全局目标"
+    assert second.readiness.ready is True
+    assert second.learning_goal == "通过英语四级"
+
+    updated = service.update_learner_profile(
+        make_user(),
+        101,
+        CourseLearnerProfileUpdate(
+            learning_goal="准备算法面试",
+            knowledge_foundation="掌握数组与循环",
+            weak_points=["递归"],
+        ),
+    )
+    assert updated.readiness.ready is True
+    assert updated.learning_goal == "准备算法面试"
+    assert service.get_learner_profile(make_user(), 102).learning_goal == "通过英语四级"
+
+
+def test_archived_course_remains_readable_but_rejects_learning_profile_mutation() -> None:
+    enrollment = CourseEnrollment(
+        id=1,
+        user_id=1,
+        course_id=101,
+        role="learner",
+        progress_percent=100,
+        learning_status="archived",
+        learning_context_json={"learning_goal": "完成复习", "knowledge_foundation": "已掌握基础"},
+        learning_context_confidence_json={"learning_goal": 100, "knowledge_foundation": 100},
+        completed_at=datetime(2026, 7, 18, 12, 0, tzinfo=UTC),
+    )
+    repo = FakeCourseRepository(courses=[make_course()], enrollments=[enrollment])
+    service = make_service(repo)
+
+    assert service.get_course(make_user(), 101).learning_status == "archived"
+    with pytest.raises(CourseGenerationError, match="请先恢复学习"):
+        service.update_learner_profile(
+            make_user(),
+            101,
+            CourseLearnerProfileUpdate(learning_goal="新目标", knowledge_foundation="新基础", weak_points=[]),
+        )
+
+    resumed = service.resume_course(make_user(), 101)
+    assert resumed.learning_status == "active"
+    assert resumed.is_current is True
 
 
 def test_knowledge_point_content_returns_safe_ordered_course_evidence() -> None:

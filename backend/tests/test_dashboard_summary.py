@@ -197,6 +197,7 @@ def test_blank_user_dashboard_summary_stays_empty_and_stable() -> None:
         "has_profile": False,
         "knowledge_foundation": None,
         "learning_goal": None,
+        "base_profile_ready": False,
     }
     assert summary["recent_conversations"] == []
     assert summary["recent_courses"] == []
@@ -238,9 +239,11 @@ def test_data_structures_user_summary_uses_internal_course_without_library_mater
             "progress_label": "未开始",
             "practiced_knowledge_point_count": 0,
             "knowledge_point_count": 0,
-            "focus": "计算机科学",
-            "next": "开始学习",
-        }
+                "focus": "计算机科学",
+                "next": "开始学习",
+                "learning_status": "active",
+                "is_current": False,
+            }
     ]
     assert summary["recent_materials"] == []
     assert summary["material_library_summary"] == {"material_count": 0, "unassigned_count": 0}

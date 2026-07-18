@@ -13,6 +13,7 @@ class ProfileSummary(BaseModel):
     has_profile: bool
     knowledge_foundation: str | None
     learning_goal: str | None
+    base_profile_ready: bool = False
 
 
 class DashboardConversation(BaseModel):
@@ -32,6 +33,8 @@ class DashboardCourse(BaseModel):
     knowledge_point_count: int
     focus: str
     next: str
+    learning_status: str = "active"
+    is_current: bool = False
 
 
 class MaterialLibrarySummary(BaseModel):
@@ -80,3 +83,4 @@ class DashboardSummary(BaseModel):
     command_suggestions: list[str]
     evidence_summary: EvidenceSummary
     empty_state: EmptyState
+    current_course_id: str | None = None

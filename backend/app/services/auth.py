@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 import re
 from typing import Protocol
 
@@ -15,7 +16,7 @@ from backend.app.core.security import (
     verify_password,
 )
 from backend.app.data.builtin_courses.data_structures import BUILTIN_DATA_STRUCTURES_COURSE
-from backend.app.models import Course, User
+from backend.app.models import Course, CourseEnrollment, User
 from backend.app.services.course_seed import (
     build_builtin_data_structures_course_graph,
     finalize_builtin_course_graph,
@@ -247,6 +248,16 @@ class AuthService:
 
         course = build_builtin_data_structures_course_graph(user)
         course.visibility = "private"
+        course.enrollments.append(
+            CourseEnrollment(
+                user=user,
+                role="learner",
+                learning_status="active",
+                last_accessed_at=datetime.now(UTC),
+                learning_context_json={},
+                learning_context_confidence_json={},
+            )
+        )
         self.repository.add_course(course)
         self.repository.flush()
         finalize_builtin_course_graph(course)

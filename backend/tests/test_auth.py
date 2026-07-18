@@ -160,6 +160,10 @@ def test_register_data_structures_copies_internal_course_without_library_materia
     assert all(material.storage_path.startswith("builtin://") for material in course.materials)
     assert len(course.knowledge_points) == 56
     assert len(course.knowledge_chunks) == 184
+    assert len(course.enrollments) == 1
+    assert course.enrollments[0].user is user
+    assert course.enrollments[0].learning_status == "active"
+    assert course.enrollments[0].last_accessed_at is not None
     assert all(chunk.course is course for chunk in course.knowledge_chunks)
     assert all(
         prerequisite_id in {point.id for point in course.knowledge_points}

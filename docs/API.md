@@ -2704,8 +2704,8 @@ Phase 31 不新增接口路径或数据库迁移。现有资料解析进度对�
 ## Phase 45 对话资源生成合同
 
 - `POST /api/v1/tutor/sessions/{session_id}/messages/stream` 的 `resource_request` 仅保留为旧客户端兼容字段。新版客户端不再发送它，资源意图由 `SemanticDecisionService` 在既有语义路由调用中判断。
-- `TutorMessage.resource_proposal` 可为空；有值时包含 `action=generate|suggest`、`response_mode=answer|action|answer_and_action`、`resource_types`、`difficulty`、`learning_goal`、`reason_summary` 与 `confidence`。`generate` 表示明确请求，`suggest` 必须由用户确认；`action` 表示纯生成请求不再产生重复长回答，`answer_and_action` 表示先正常讲解再执行提案。
-- `POST /api/v1/tutor/sessions/{session_id}/messages/{message_id}/resource-jobs` 新客户端只需提交 `course_id`。其余旧字段继续兼容，但服务端优先读取该 assistant 消息中已持久化的模型提案。课程回答从真实引用派生知识点和切片证据；主页回答先立即创建任务，再由 Worker 使用提案学习目标检索所选课程并绑定真实知识点，避免同步接口等待 Embedding/Rerank。
+- `TutorMessage.resource_proposal` 可为空；有值时包含 `action=generate|suggest`、`response_mode=answer|action|answer_and_action`、`resource_types`、`difficulty`、`topic`、`learning_goal`、`reason_summary` 与 `confidence`。`topic` 是模型识别出的课程主题或知识点名称；`generate` 表示明确请求，`suggest` 必须由用户确认；`action` 表示纯生成请求不再产生重复长回答，`answer_and_action` 表示先正常讲解再执行提案。
+- `POST /api/v1/tutor/sessions/{session_id}/messages/{message_id}/resource-jobs` 新客户端只需提交 `course_id`。其余旧字段继续兼容，但服务端优先读取该 assistant 消息中已持久化的模型提案。服务端先用提案 `topic` 在所选课程知识点白名单中绑定真实知识点，再继承合法切片证据；主题不存在时返回可执行错误，不让 Worker使用课程首知识点。
 - 课程会话只能生成到会话绑定课程；回答必须属于当前用户、当前会话且为 assistant。新 AIJob 与 `resource_job_ids` 在同一事务写入，默认幂等键固定为会话和消息。
 - `POST /api/v1/tutor/sessions/{session_id}/messages/{message_id}/resource-jobs` 将任务关联到该次助手确认，历史读取时 `TutorMessage.resource_jobs` 返回任务状态、失败提示和已生成资源。
 - 对话中提取到的显式资源主题是硬约束。所选课程及其知识点不含该主题时，资源任务以可恢复失败结束，并返回“所选课程没有该主题的可用资料，请选择对应课程后再生成”；不得静默改为当前课程的其他主题。

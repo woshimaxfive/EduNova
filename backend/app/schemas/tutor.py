@@ -173,6 +173,7 @@ class TutorResourceProposal(BaseModel):
     response_mode: Literal["answer", "action", "answer_and_action"] = "answer"
     resource_types: list[Literal["doc", "mindmap", "quiz", "code", "slide", "animation", "video"]] = Field(default_factory=list)
     difficulty: Literal["easy", "medium", "hard"] = "medium"
+    topic: str = ""
     learning_goal: str = ""
     reason_summary: str = ""
     confidence: float = Field(default=0, ge=0, le=1)

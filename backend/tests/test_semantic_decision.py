@@ -277,6 +277,35 @@ def test_scalar_reason_code_does_not_discard_valid_resource_decision() -> None:
     assert decision.response_mode == "action"
 
 
+def test_non_boolean_history_container_does_not_discard_valid_resource_decision() -> None:
+    model = FakeModel(
+        '{"intent":"material_question","search_required":false,"search_query":"",'
+        '"reasoning_mode":"auto","source_scope":"mainland_preferred","course_related":true,'
+        '"confidence":0.95,"reason_codes":["resource_generation"],'
+        '"reason_summary":"生成课程资源。","profile_signals":[],'
+        '"standalone_query":"生成广义表的思维导图",'
+        '"uses_history":[{"turn_id":"121","content":"生成广义表的思维导图"}],'
+        '"referenced_turn_ids":["121"],"resource_action":"generate",'
+        '"resource_types":["mindmap"],"resource_difficulty":"medium",'
+        '"resource_topic":"广义表",'
+        '"resource_learning_goal":"梳理广义表知识",'
+        '"resource_reason_summary":"使用思维导图整理。",'
+        '"answer_requested":false,"response_mode":"action"}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="生成广义表的思维导图", scope="course"
+    )
+
+    assert len(model.calls) == 1
+    assert decision.decision_mode == "model"
+    assert decision.uses_history is True
+    assert decision.resource_action == "generate"
+    assert decision.resource_types == ("mindmap",)
+    assert decision.resource_topic == "广义表"
+    assert decision.response_mode == "action"
+
+
 def test_invalid_structured_decision_gets_one_model_repair_before_degrading() -> None:
     valid = (
         '{"intent":"material_question","search_required":false,"search_query":"二叉树知识导图",'

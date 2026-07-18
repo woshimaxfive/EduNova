@@ -61,6 +61,7 @@ class FakeTutorRepository:
     materials: list[Material] = field(default_factory=list)
     allowed_course_ids: set[int] = field(default_factory=set)
     course_titles: dict[int, str] = field(default_factory=dict)
+    course_topic_points: dict[tuple[int, str], int] = field(default_factory=dict)
     next_session_id: int = 1
     next_message_id: int = 1
     committed: bool = False
@@ -121,6 +122,10 @@ class FakeTutorRepository:
         if not self.user_can_access_course(user_id, course_id):
             return None
         return SimpleNamespace(id=course_id, title=self.course_titles.get(course_id, ""))
+
+    def find_knowledge_point_for_topic(self, course_id: int, topic: str) -> SimpleNamespace | None:
+        point_id = self.course_topic_points.get((course_id, topic))
+        return SimpleNamespace(id=point_id, title=topic) if point_id is not None else None
 
     def list_messages(self, session_id: int) -> list[ChatMessage]:
         return sorted(
@@ -526,6 +531,39 @@ def test_prepare_resource_job_uses_persisted_model_proposal_and_answer_evidence(
     assert linked == []
 
 
+def test_prepare_resource_job_prefers_model_topic_over_unrelated_answer_citation() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(
+        allowed_course_ids={7},
+        course_topic_points={(7, "广义表"): 909},
+    )
+    service = module.TutorSessionService(repo)
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="主页答疑")
+    message = ChatMessage(
+        session_id=session.id,
+        user_id=user.id,
+        role="assistant",
+        content="请选择目标课程后生成思维导图。",
+        citation_json=[{"chunk_id": 501, "knowledge_point_id": 401, "source_type": "course"}],
+        trace_id="trace-resource-topic",
+        resource_job_ids=[],
+        resource_proposal_json={
+            "action": "generate",
+            "response_mode": "action",
+            "resource_types": ["mindmap"],
+            "topic": "广义表",
+            "learning_goal": "掌握广义表的递归结构",
+        },
+    )
+    repo.add_message(message)
+
+    request, _ = service.prepare_resource_job(user, session.id, message.id, 7)
+
+    assert request["knowledge_point_id"] == 909
+    assert request["evidence_chunk_ids"] == []
+
+
 def test_prepare_resource_job_rejects_cross_course_binding() -> None:
     module = load_tutor_module()
     user = make_user(1)
@@ -578,6 +616,7 @@ class FakeSemanticDecisionService:
     resource_action: str = "none"
     resource_types: tuple[str, ...] = ()
     resource_difficulty: str = "medium"
+    resource_topic: str = ""
     resource_learning_goal: str = ""
     resource_reason_summary: str = ""
     response_mode: str = "answer"
@@ -605,6 +644,7 @@ class FakeSemanticDecisionService:
             resource_action=self.resource_action,
             resource_types=self.resource_types,
             resource_difficulty=self.resource_difficulty,
+            resource_topic=self.resource_topic,
             resource_learning_goal=self.resource_learning_goal,
             resource_reason_summary=self.resource_reason_summary,
             response_mode=self.response_mode,

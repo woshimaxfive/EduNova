@@ -41,6 +41,7 @@ class ToolDecision:
     resource_action: ResourceAction = "none"
     resource_types: tuple[str, ...] = ()
     resource_difficulty: Literal["easy", "medium", "hard"] = "medium"
+    resource_topic: str = ""
     resource_learning_goal: str = ""
     resource_reason_summary: str = ""
     response_mode: ResponseMode = "answer"

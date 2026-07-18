@@ -4794,6 +4794,11 @@ export interface components {
              * @enum {string}
              */
             response_mode: "answer" | "action" | "answer_and_action";
+            /**
+             * Topic
+             * @default
+             */
+            topic: string;
         };
         /** TutorSessionDetail */
         TutorSessionDetail: {

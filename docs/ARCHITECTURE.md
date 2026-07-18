@@ -806,3 +806,9 @@ AssessmentGraph 的修订输入包含上一版学生可见候选和精确风险�
 资源提案继续由同一次 `SemanticDecisionService` 调用生成，并增加 `answer_requested` 与派生的 `response_mode`。`answer` 用于普通回答，`action` 用于只要求创建资源，`answer_and_action` 用于既要求讲解又要求创建资源。只有模型明确输出 `answer_requested=true` 才允许生成动作进入组合模式，避免兼容模型把“生成一张图”本身误当成“回答”；这不是前端关键词识别。Graph 只在 `action` 模式跳过回答 planner、回答生成器和回答 reviewer，返回确定性的简短任务确认；这段确认不是学习资源，真正的文档、导图、练习等内容仍必须经过 ResourceGenerationGraph 的模型生成和质量门禁。
 
 课程资源动作仍执行课程检索与边界校验，主页仍要求选择课程，不能用提速绕过证据与用户隔离。提案沿用 assistant 消息的 JSON 字段，AIJob、幂等键、任务托盘、结果恢复和失败删除语义不变，因此不需要数据库迁移。
+
+## 33. Phase 47 资源主题绑定
+
+语义路由在资源动作中额外输出 `resource_topic`，其值只允许表达课程主题或知识点名称，不包含资源类型和生成命令。该字段随 assistant 提案持久化；主页用户选定课程后，Tutor Service 在当前课程 `knowledge_points` 白名单中进行规范化精确匹配，必要时只接受标题包含关系中的最长候选。模型负责理解主题，确定性代码只负责课程归属和真实实体校验。
+
+主题匹配优先级高于回答中可能存在的相邻引用，匹配失败时拒绝创建错误知识点资源。成功绑定后，ResourceGenerationGraph 按知识点检索专属切片，再执行受并发上限约束的 Worker 波次、模型生成、质量审核和原子持久化。兼容模型对 `uses_history` 的列表/对象误输出只被归一为布尔值，真实引用 ID 仍由 `referenced_turn_ids` 独立白名单校验。

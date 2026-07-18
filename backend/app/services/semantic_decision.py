@@ -53,6 +53,7 @@ class SemanticDecisionPayload(BaseModel):
     resource_action: Literal["none", "suggest", "generate"] = "none"
     resource_types: list[ResourceType] = Field(default_factory=list, max_length=3)
     resource_difficulty: Literal["easy", "medium", "hard"] = "medium"
+    resource_topic: str = Field(default="", max_length=120)
     resource_learning_goal: str = Field(default="", max_length=500)
     resource_reason_summary: str = Field(default="", max_length=160)
     answer_requested: bool = False
@@ -80,11 +81,16 @@ class SemanticDecisionPayload(BaseModel):
     @field_validator("uses_history", mode="before")
     @classmethod
     def normalize_empty_history_flag(cls, value: object) -> object:
-        # 部分兼容模型会把“没有引用历史”输出为空数组或空对象。
-        # 这里只归一化明确的空值；非空集合及其他非法类型仍交给 Pydantic 拒绝。
-        return False if value in (None, [], {}) else value
+        # 部分兼容模型会把布尔语义错误地展开成引用列表或对象。引用本身仍由
+        # referenced_turn_ids 的白名单校验约束；这里仅把容器收口为布尔值，
+        # 避免一个非关键字段让已经合法的资源动作整体降级成普通对话。
+        if value is None:
+            return False
+        if isinstance(value, (list, dict)):
+            return bool(value)
+        return value
 
-    @field_validator("search_query", "standalone_query", "reason_summary", "resource_learning_goal", "resource_reason_summary")
+    @field_validator("search_query", "standalone_query", "reason_summary", "resource_topic", "resource_learning_goal", "resource_reason_summary")
     @classmethod
     def normalize_text(cls, value: str) -> str:
         return " ".join(value.split())
@@ -96,6 +102,7 @@ class ResourceDecisionPayload(BaseModel):
     resource_action: Literal["none", "suggest", "generate"] = "none"
     resource_types: list[ResourceType] = Field(default_factory=list, max_length=3)
     resource_difficulty: Literal["easy", "medium", "hard"] = "medium"
+    resource_topic: str = Field(default="", max_length=120)
     resource_learning_goal: str = Field(default="", max_length=500)
     resource_reason_summary: str = Field(default="", max_length=160)
     answer_requested: bool = False
@@ -233,6 +240,7 @@ class SemanticDecisionService:
                     resource_action=resource_decision.resource_action,
                     resource_types=tuple(resource_decision.resource_types),
                     resource_difficulty=resource_decision.resource_difficulty,
+                    resource_topic=resource_decision.resource_topic,
                     resource_learning_goal=resource_decision.resource_learning_goal,
                     resource_reason_summary=resource_decision.resource_reason_summary,
                     response_mode=response_mode,
@@ -304,6 +312,7 @@ class SemanticDecisionService:
             resource_action=resource_action,
             resource_types=tuple(dict.fromkeys(str(item) for item in parsed.get("resource_types", [])))[:3],
             resource_difficulty=str(parsed.get("resource_difficulty") or "medium"),
+            resource_topic=str(parsed.get("resource_topic") or "")[:120],
             resource_learning_goal=str(parsed.get("resource_learning_goal") or "")[:500],
             resource_reason_summary=str(parsed.get("resource_reason_summary") or "")[:160],
             response_mode=str(response_mode),
@@ -395,10 +404,14 @@ class SemanticDecisionService:
             "source_scope 默认 mainland_preferred；只有用户明确要求国外平台、国际原始论文/标准，或问题必须依赖国际原始来源时"
             "才输出 global_required。输出字段固定为 intent、search_required、search_query、reasoning_mode、source_scope、course_related、"
             "confidence、reason_codes、reason_summary、profile_signals、standalone_query、uses_history、"
-            "referenced_turn_ids、resource_action、resource_types、resource_difficulty、resource_learning_goal、resource_reason_summary、answer_requested、response_mode。"
+            "referenced_turn_ids、resource_action、resource_types、resource_difficulty、resource_topic、resource_learning_goal、resource_reason_summary、answer_requested、response_mode。"
             "明确要求创建、生成某种学习资源时 resource_action=generate；学生只表达理解困难、希望换种方式学习，且具体资源确实有帮助时"
             " resource_action=suggest；其他情况必须为 none。generate/suggest 时从 doc、mindmap、quiz、code、slide、animation、video"
             "选择最多 3 类适合当前问题和学科的资源，不能机械地给所有学科安排代码。resource_learning_goal 要概括真实学习目标，"
+            "用户明确点名一种或多种资源类型时，只能返回用户点名的类型，不得擅自追加配套类型；"
+            "只有用户笼统要求‘学习资源’或‘学习安排’时，才自主选择互补类型。"
+            "generate/suggest 时 resource_topic 必须只写要学习的课程主题或知识点名称，例如‘广义表’，不能写生成命令、资源类型或完整句子；"
+            "none 时 resource_topic 必须是空字符串。"
             "resource_reason_summary 只说明推荐理由；none 时 resource_types 必须是 []。需要结合历史时，把当前问题改写成可独立理解的 standalone_query；"
             "answer_requested 只有用户明确要求先讲解、回答或分析某个问题时才为 true；仅要求生成、制作或创建资源时必须为 false，"
             "因为资源正文由下游异步工作流生成。response_mode 只能是 answer、action、answer_and_action：纯创建资源必须用 action；"

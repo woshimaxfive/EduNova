@@ -28,6 +28,7 @@ from backend.app.models import (
     CourseEnrollment,
     AiJob,
     GeneratedResource,
+    KnowledgePoint,
     Material,
     User,
 )
@@ -123,6 +124,9 @@ class TutorSessionRepository(Protocol):
         ...
 
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
+        ...
+
+    def find_knowledge_point_for_topic(self, course_id: int, topic: str) -> KnowledgePoint | None:
         ...
 
     def list_messages(self, session_id: int) -> list[ChatMessage]:
@@ -437,6 +441,35 @@ class SqlAlchemyTutorSessionRepository:
             return None
         return self.db.scalar(select(Course).where(Course.id == course_id))
 
+    def find_knowledge_point_for_topic(self, course_id: int, topic: str) -> KnowledgePoint | None:
+        topic_key = self._topic_key(topic)
+        if not topic_key:
+            return None
+        points = list(
+            self.db.scalars(
+                select(KnowledgePoint)
+                .where(KnowledgePoint.course_id == course_id)
+                .order_by(KnowledgePoint.order_index.asc(), KnowledgePoint.id.asc())
+            )
+        )
+        exact = next((point for point in points if self._topic_key(point.title) == topic_key), None)
+        if exact is not None:
+            return exact
+        candidates = [
+            point
+            for point in points
+            if self._topic_key(point.title)
+            and (
+                self._topic_key(point.title) in topic_key
+                or topic_key in self._topic_key(point.title)
+            )
+        ]
+        return max(candidates, key=lambda point: len(self._topic_key(point.title)), default=None)
+
+    @staticmethod
+    def _topic_key(value: object) -> str:
+        return "".join(character for character in str(value or "").casefold() if character.isalnum())
+
     def list_messages(self, session_id: int) -> list[ChatMessage]:
         return list(
             self.db.scalars(
@@ -657,6 +690,7 @@ class TutorSessionService:
             "response_mode": str(state.get("response_mode") or "answer"),
             "resource_types": resource_types,
             "difficulty": difficulty if difficulty in {"easy", "medium", "hard"} else "medium",
+            "topic": str(state.get("resource_topic") or "")[:120],
             "learning_goal": str(state.get("resource_learning_goal") or state.get("standalone_query") or state.get("message_text") or "")[:500],
             "reason_summary": str(state.get("resource_reason_summary") or "根据本轮学习目标推荐。")[:160],
             "confidence": max(0.0, min(1.0, float(state.get("semantic_decision_confidence") or 0))),
@@ -1356,14 +1390,23 @@ class TutorSessionService:
         if difficulty not in {"easy", "medium", "hard"}:
             difficulty = "medium"
         knowledge_point_id = None
+        topic = str(proposal.get("topic") or "").strip()
+        topic_finder = getattr(self.repository, "find_knowledge_point_for_topic", None)
+        if topic and callable(topic_finder):
+            point = topic_finder(requested_course_id, topic)
+            if point is None:
+                raise InvalidMaterialContextError(f"所选课程中没有与“{topic}”匹配的知识点，请选择对应课程。")
+            knowledge_point_id = point.id
         evidence_chunk_ids: list[int] = []
         for citation in message.citation_json or []:
             if not isinstance(citation, dict) or citation.get("source_type") in {"web", "history"}:
                 continue
+            candidate = citation.get("knowledge_point_id")
+            if knowledge_point_id is not None and str(candidate).isdigit() and int(candidate) != knowledge_point_id:
+                continue
             chunk_id = citation.get("chunk_id")
             if str(chunk_id).isdigit():
                 evidence_chunk_ids.append(int(chunk_id))
-            candidate = citation.get("knowledge_point_id")
             if knowledge_point_id is None and str(candidate).isdigit():
                 knowledge_point_id = int(candidate)
         return (
@@ -2359,6 +2402,7 @@ class HomeTutorGraphRunner:
                 "resource_action": getattr(decision, "resource_action", "none"),
                 "resource_types": list(getattr(decision, "resource_types", ())),
                 "resource_difficulty": getattr(decision, "resource_difficulty", "medium"),
+                "resource_topic": getattr(decision, "resource_topic", ""),
                 "resource_learning_goal": getattr(decision, "resource_learning_goal", ""),
                 "resource_reason_summary": getattr(decision, "resource_reason_summary", ""),
                 "response_mode": getattr(decision, "response_mode", "answer"),
@@ -3331,6 +3375,7 @@ class CourseTutorGraphRunner:
                 "resource_action": getattr(decision, "resource_action", "none"),
                 "resource_types": list(getattr(decision, "resource_types", ())),
                 "resource_difficulty": getattr(decision, "resource_difficulty", "medium"),
+                "resource_topic": getattr(decision, "resource_topic", ""),
                 "resource_learning_goal": getattr(decision, "resource_learning_goal", ""),
                 "resource_reason_summary": getattr(decision, "resource_reason_summary", ""),
                 "response_mode": getattr(decision, "response_mode", "answer"),

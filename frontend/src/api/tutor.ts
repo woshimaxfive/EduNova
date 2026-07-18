@@ -119,7 +119,7 @@ export type TutorMessage = {
 export type TutorGeneratedResource = { id: string; title: string; resource_type: string; course_id: string | null };
 export type TutorResourceJob = { job_id: string; status: string; label: string; error_message: string | null; resources: TutorGeneratedResource[] };
 export type TutorResourceType = "doc" | "mindmap" | "quiz" | "code" | "slide" | "animation" | "video";
-export type TutorResourceProposal = { action: "none" | "suggest" | "generate"; response_mode: "answer" | "action" | "answer_and_action"; resource_types: TutorResourceType[]; difficulty: "easy" | "medium" | "hard"; learning_goal: string; reason_summary: string; confidence: number };
+export type TutorResourceProposal = { action: "none" | "suggest" | "generate"; response_mode: "answer" | "action" | "answer_and_action"; resource_types: TutorResourceType[]; difficulty: "easy" | "medium" | "hard"; topic?: string; learning_goal: string; reason_summary: string; confidence: number };
 export type CreateTutorResourceJobRequest = { course_id: number; knowledge_point_id?: number | null; resource_types?: TutorResourceType[]; learning_goal?: string; difficulty?: "easy" | "medium" | "hard" };
 
 export type TutorSessionDetail = {

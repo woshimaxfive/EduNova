@@ -66,6 +66,7 @@ class AgentState(TypedDict, total=False):
     resource_action: str
     resource_types: list[str]
     resource_difficulty: str
+    resource_topic: str
     resource_learning_goal: str
     resource_reason_summary: str
     response_mode: str

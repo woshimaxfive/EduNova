@@ -9030,6 +9030,11 @@
             ],
             "title": "Response Mode",
             "type": "string"
+          },
+          "topic": {
+            "default": "",
+            "title": "Topic",
+            "type": "string"
           }
         },
         "title": "TutorResourceProposal",

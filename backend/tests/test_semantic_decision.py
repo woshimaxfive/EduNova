@@ -39,6 +39,70 @@ def test_resource_recommendation_is_decided_by_model_semantics() -> None:
     assert decision.source_scope == "mainland_preferred"
 
 
+def test_semantic_decision_normalizes_known_resource_difficulty_alias() -> None:
+    model = FakeModel(
+        '{"intent":"material_question","search_required":false,"search_query":"",'
+        '"reasoning_mode":"auto","course_related":true,"confidence":0.9,'
+        '"reason_codes":["course_question"],"reason_summary":"课程内概念问题。",'
+        '"profile_signals":[],"resource_difficulty":"中等"}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="二叉树前序遍历是什么？", scope="course", course_title="数据结构"
+    )
+
+    assert decision.decision_mode == "model"
+    assert decision.resource_difficulty == "medium"
+
+
+def test_semantic_decision_normalizes_difficulty_wrapper() -> None:
+    model = FakeModel(
+        '{"intent":"material_question","search_required":false,"search_query":"",'
+        '"reasoning_mode":"auto","course_related":true,"confidence":0.9,'
+        '"reason_codes":["course_question"],"reason_summary":"课程内概念问题。",'
+        '"profile_signals":[],"resource_difficulty":"中等难度"}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="二叉树前序遍历是什么？", scope="course", course_title="数据结构"
+    )
+
+    assert decision.decision_mode == "model"
+    assert decision.resource_difficulty == "medium"
+
+
+def test_semantic_decision_normalizes_non_resource_difficulty_placeholder() -> None:
+    model = FakeModel(
+        '{"intent":"material_question","search_required":false,"search_query":"",'
+        '"reasoning_mode":"auto","course_related":true,"confidence":0.9,'
+        '"reason_codes":["course_question"],"reason_summary":"课程内概念问题。",'
+        '"profile_signals":[],"resource_difficulty":"N/A"}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="二叉树前序遍历是什么？", scope="course", course_title="数据结构"
+    )
+
+    assert decision.decision_mode == "model"
+    assert decision.resource_difficulty == "medium"
+
+
+def test_semantic_decision_keeps_unknown_difficulty_strict_for_resource_action() -> None:
+    model = FakeModel(
+        '{"intent":"learning_resource_generation","search_required":false,"search_query":"",'
+        '"reasoning_mode":"auto","course_related":true,"confidence":0.9,'
+        '"reason_codes":["resource_generation"],"reason_summary":"生成课程资源。",'
+        '"profile_signals":[],"resource_action":"generate","resource_types":["mindmap"],'
+        '"resource_difficulty":"unrecognized"}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="生成一份二叉树思维导图", scope="course", course_title="数据结构"
+    )
+
+    assert decision.decision_mode == "degraded"
+
+
 def test_model_can_request_global_original_sources_without_keyword_fallback() -> None:
     model = FakeModel(
         '{"intent":"verification","search_required":true,"search_query":"RFC 9110 original",'

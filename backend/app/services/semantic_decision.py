@@ -4,7 +4,7 @@ from dataclasses import replace
 import json
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator, model_validator
 
 from backend.app.agents.tool_policy import ToolDecision, decide_tool_capabilities, explicitly_requests_search
 from backend.app.models import User
@@ -88,6 +88,59 @@ class SemanticDecisionPayload(BaseModel):
             return False
         if isinstance(value, (list, dict)):
             return bool(value)
+        return value
+
+    @field_validator("resource_difficulty", mode="before")
+    @classmethod
+    def normalize_resource_difficulty(cls, value: object, info: ValidationInfo) -> object:
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip().lower().replace(" ", "").replace("_", "-")
+        for wrapper in ("难易程度", "难易度", "难度", "级别", "等级", "difficulty", "level"):
+            normalized = normalized.replace(wrapper, "")
+        normalized = normalized.strip("-_：:")
+        aliases = {
+            "easy": "easy",
+            "简单": "easy",
+            "入门": "easy",
+            "初级": "easy",
+            "基础": "easy",
+            "低": "easy",
+            "较低": "easy",
+            "beginner": "easy",
+            "basic": "easy",
+            "medium": "medium",
+            "中等": "medium",
+            "适中": "medium",
+            "一般": "medium",
+            "普通": "medium",
+            "中级": "medium",
+            "标准": "medium",
+            "normal": "medium",
+            "moderate": "medium",
+            "intermediate": "medium",
+            "n/a": "medium",
+            "na": "medium",
+            "none": "medium",
+            "notapplicable": "medium",
+            "hard": "hard",
+            "困难": "hard",
+            "复杂": "hard",
+            "高级": "hard",
+            "进阶": "hard",
+            "高": "hard",
+            "较高": "hard",
+            "difficult": "hard",
+            "advanced": "hard",
+        }
+        normalized_value = aliases.get(normalized)
+        if normalized_value is not None:
+            return normalized_value
+        # Difficulty has no behavioral meaning when no resource action is requested.
+        # Keep strict validation for real resource proposals so unknown values retain
+        # the existing repair and conservative-degradation path.
+        if str(info.data.get("resource_action") or "none") == "none":
+            return "medium"
         return value
 
     @field_validator("search_query", "standalone_query", "reason_summary", "resource_topic", "resource_learning_goal", "resource_reason_summary")

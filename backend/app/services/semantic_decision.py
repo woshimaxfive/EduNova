@@ -4,7 +4,7 @@ from dataclasses import replace
 import json
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from backend.app.agents.tool_policy import ToolDecision, decide_tool_capabilities, explicitly_requests_search
 from backend.app.models import User
@@ -68,6 +68,15 @@ class SemanticDecisionPayload(BaseModel):
     def normalize_empty_profile_signals(cls, value: object) -> object:
         return [] if value == {} or value is None else value
 
+    @field_validator("reason_codes", mode="before")
+    @classmethod
+    def normalize_reason_codes(cls, value: object) -> object:
+        if value in (None, "", "none", [], {}):
+            return []
+        if isinstance(value, str):
+            return [value]
+        return value
+
     @field_validator("uses_history", mode="before")
     @classmethod
     def normalize_empty_history_flag(cls, value: object) -> object:
@@ -79,6 +88,24 @@ class SemanticDecisionPayload(BaseModel):
     @classmethod
     def normalize_text(cls, value: str) -> str:
         return " ".join(value.split())
+
+
+class ResourceDecisionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resource_action: Literal["none", "suggest", "generate"] = "none"
+    resource_types: list[ResourceType] = Field(default_factory=list, max_length=3)
+    resource_difficulty: Literal["easy", "medium", "hard"] = "medium"
+    resource_learning_goal: str = Field(default="", max_length=500)
+    resource_reason_summary: str = Field(default="", max_length=160)
+    answer_requested: bool = False
+    confidence: float = Field(default=0.8, ge=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_action_payload(self) -> ResourceDecisionPayload:
+        if self.resource_action in {"suggest", "generate"} and not self.resource_types:
+            raise ValueError("资源动作必须包含至少一种合法资源类型。")
+        return self
 
 
 class CourseEvidenceDecisionPayload(BaseModel):
@@ -119,6 +146,19 @@ class SemanticDecisionService:
             )
         return self.model_service.chat_completion(user, messages)
 
+    @staticmethod
+    def _salvage_resource_decision(value: str) -> ResourceDecisionPayload | None:
+        parsed = parse_json_object(value)
+        if parsed is None:
+            return None
+        fields = ResourceDecisionPayload.model_fields
+        payload = {key: parsed[key] for key in fields if key in parsed}
+        try:
+            result = ResourceDecisionPayload.model_validate(payload)
+        except ValidationError:
+            return None
+        return result if result.resource_action in {"suggest", "generate"} else None
+
     def decide(
         self,
         *,
@@ -151,7 +191,52 @@ class SemanticDecisionService:
         except Exception:
             return replace(fallback, warning="语义能力暂时降级，未自动推断联网、深度推理或学习画像。")
         parsed = parse_json_object(raw, SemanticDecisionPayload)
+        repaired = False
         if parsed is None:
+            try:
+                repaired_raw = self._structured_completion(
+                    user,
+                    [
+                        {
+                            "role": "system",
+                            "content": (
+                                "修正上一份语义决策的 JSON 结构，只输出一个 JSON 对象，不改变原有语义。"
+                                "reason_codes、profile_signals、referenced_turn_ids、resource_types 必须是数组；"
+                                "uses_history、course_related、search_required、answer_requested 必须是布尔值；"
+                                "字段必须符合原任务要求，不能增加额外字段或输出解释。"
+                            ),
+                        },
+                        {"role": "user", "content": str(raw)[:5000]},
+                    ],
+                    task_type="semantic_routing_repair",
+                )
+            except Exception:
+                repaired_raw = ""
+            parsed = parse_json_object(repaired_raw, SemanticDecisionPayload)
+            repaired = parsed is not None
+        if parsed is None:
+            resource_decision = self._salvage_resource_decision(repaired_raw) or self._salvage_resource_decision(raw)
+            if resource_decision is not None:
+                response_mode = (
+                    "answer_and_action"
+                    if resource_decision.resource_action == "generate" and resource_decision.answer_requested
+                    else "action" if resource_decision.resource_action == "generate" else "answer"
+                )
+                return replace(
+                    fallback,
+                    reason_codes=("resource_decision_salvaged",),
+                    intent="learning_resource_generation",
+                    confidence=resource_decision.confidence,
+                    decision_mode="model",
+                    summary=resource_decision.resource_reason_summary or "模型已识别资源学习动作。",
+                    warning="完整语义路由格式异常，已保留通过独立校验的资源动作；其他语义能力采用保守降级。",
+                    resource_action=resource_decision.resource_action,
+                    resource_types=tuple(resource_decision.resource_types),
+                    resource_difficulty=resource_decision.resource_difficulty,
+                    resource_learning_goal=resource_decision.resource_learning_goal,
+                    resource_reason_summary=resource_decision.resource_reason_summary,
+                    response_mode=response_mode,
+                )
             return replace(fallback, warning="语义能力暂时降级，未自动推断联网、深度推理或学习画像。")
 
         explicit_search = explicitly_requests_search(question)
@@ -167,6 +252,8 @@ class SemanticDecisionService:
             reason_codes.insert(0, "legacy_deep")
         if not reason_codes:
             reason_codes.append("model_decision")
+        if repaired:
+            reason_codes.insert(0, "structured_repair")
 
         profile_updates: dict[str, object] = {}
         profile_confidence: dict[str, float] = {}

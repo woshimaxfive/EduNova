@@ -4,15 +4,16 @@ from backend.app.services.semantic_decision import SemanticDecisionService
 
 
 class FakeModel:
-    def __init__(self, response: str | Exception) -> None:
+    def __init__(self, response: str | Exception | list[str | Exception]) -> None:
         self.response = response
         self.calls: list[list[dict[str, str]]] = []
 
     def chat_completion(self, user, messages):
         self.calls.append(messages)
-        if isinstance(self.response, Exception):
-            raise self.response
-        return self.response
+        response = self.response.pop(0) if isinstance(self.response, list) else self.response
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 def user():
@@ -252,6 +253,76 @@ def test_empty_collection_history_flag_does_not_discard_valid_resource_decision(
     assert decision.decision_mode == "model"
     assert decision.uses_history is False
     assert decision.resource_action == "generate"
+
+
+def test_scalar_reason_code_does_not_discard_valid_resource_decision() -> None:
+    model = FakeModel(
+        '{"intent":"material_question","search_required":false,"search_query":"二叉树知识导图",'
+        '"reasoning_mode":"auto","source_scope":"mainland_preferred","course_related":true,'
+        '"confidence":0.95,"reason_codes":"none","reason_summary":"稳定学科知识。",'
+        '"profile_signals":[],"standalone_query":"生成二叉树的知识导图","uses_history":[],'
+        '"referenced_turn_ids":[],"resource_action":"generate","resource_types":["mindmap"],'
+        '"resource_difficulty":"medium","resource_learning_goal":"系统梳理二叉树核心概念",'
+        '"resource_reason_summary":"使用思维导图整理定义和遍历方法。",'
+        '"answer_requested":false,"response_mode":"action"}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="生成二叉树的知识导图", scope="home"
+    )
+
+    assert decision.decision_mode == "model"
+    assert decision.resource_action == "generate"
+    assert decision.resource_types == ("mindmap",)
+    assert decision.response_mode == "action"
+
+
+def test_invalid_structured_decision_gets_one_model_repair_before_degrading() -> None:
+    valid = (
+        '{"intent":"material_question","search_required":false,"search_query":"二叉树知识导图",'
+        '"reasoning_mode":"auto","course_related":true,"confidence":0.95,'
+        '"reason_codes":["resource_generation"],"reason_summary":"生成课程资源。",'
+        '"profile_signals":[],"standalone_query":"生成二叉树的知识导图","uses_history":false,'
+        '"referenced_turn_ids":[],"resource_action":"generate","resource_types":["mindmap"],'
+        '"resource_difficulty":"medium","resource_learning_goal":"梳理二叉树知识",'
+        '"resource_reason_summary":"使用思维导图整理。","answer_requested":false,"response_mode":"action"}'
+    )
+    model = FakeModel(['{"intent":"material_question","profile_signals":"invalid"}', valid])
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="生成二叉树的知识导图", scope="home"
+    )
+
+    assert len(model.calls) == 2
+    assert decision.decision_mode == "model"
+    assert decision.reason_codes[0] == "structured_repair"
+    assert decision.resource_action == "generate"
+    assert decision.response_mode == "action"
+
+
+def test_valid_resource_subdecision_survives_unrelated_semantic_schema_failures() -> None:
+    invalid_full_but_valid_resource = (
+        '{"intent":"material_question","search_required":false,"reasoning_mode":"auto",'
+        '"confidence":0.95,"reason_codes":"none","reason_summary":"生成课程资源。",'
+        '"profile_signals":"invalid","uses_history":"invalid","resource_action":"generate",'
+        '"resource_types":["mindmap"],"resource_difficulty":"medium",'
+        '"resource_learning_goal":"梳理二叉树知识",'
+        '"resource_reason_summary":"使用思维导图整理。","answer_requested":false,"response_mode":"action"}'
+    )
+    model = FakeModel([invalid_full_but_valid_resource, invalid_full_but_valid_resource])
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="生成二叉树的知识导图", scope="home"
+    )
+
+    assert len(model.calls) == 2
+    assert decision.decision_mode == "model"
+    assert decision.reason_codes == ("resource_decision_salvaged",)
+    assert decision.resource_action == "generate"
+    assert decision.resource_types == ("mindmap",)
+    assert decision.response_mode == "action"
+    assert decision.search_required is False
+    assert decision.profile_updates == {}
 
 
 def test_ambiguous_learning_need_only_returns_confirmable_suggestion() -> None:

@@ -291,6 +291,10 @@ def make_settings(**overrides: Any) -> Settings:
         "system_model_base_url": "https://model.example.local/v1",
         "system_model_api_key": "sk-system-secret",
         "system_chat_model": "system-chat",
+        "system_generation_provider": "openai_compatible",
+        "system_generation_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "system_generation_api_key": "sk-generation-secret",
+        "system_generation_model": "qwen3.7-plus",
         "system_embedding_model": "system-embedding",
         "model_settings_encryption_key": FERNET_TEST_KEY,
         "model_request_timeout_seconds": 12.5,
@@ -1083,7 +1087,7 @@ def test_personal_structured_model_failure_does_not_fall_back_to_system_provider
     assert (provider.calls or [])[0]["config"].base_url == "https://personal.example/v1"
 
 
-def test_generation_tasks_use_the_dedicated_default_without_changing_normal_answers() -> None:
+def test_personal_answer_default_also_covers_generation_tasks() -> None:
     module = load_model_settings_module()
     from backend.app.providers.model_tasks import ModelTaskProfile
 
@@ -1138,31 +1142,18 @@ def test_generation_tasks_use_the_dedicated_default_without_changing_normal_answ
     assert configs["default_config_id"] == spark["id"]
     assert configs["default_generation_config_id"] == qwen["id"]
     assert service.resolve_runtime_config(user).chat_model == "spark-x"
-    assert service.resolve_generation_runtime_config(user).chat_model == "qwen3.7-plus"
-    assert (provider.calls or [])[0]["config"].chat_model == "qwen3.7-plus"
+    assert service.resolve_generation_runtime_config(user).chat_model == "spark-x"
+    assert (provider.calls or [])[0]["config"].chat_model == "spark-x"
     assert (provider.calls or [])[1]["config"].chat_model == "spark-x"
 
 
-def test_generation_runtime_falls_back_to_the_answer_default_when_unset() -> None:
+def test_generation_runtime_uses_server_generation_fallback_without_personal_answer_model() -> None:
     module = load_model_settings_module()
     user = make_user()
     repo = FakeModelSettingsRepository(settings_by_user={})
     service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=FakeProvider())
-    created = as_dict(service.create_config(
-        user,
-        module.SaveModelConfigRequest(
-            display_name="回答模型",
-            preset_id="spark",
-            provider="openai_compatible",
-            base_url="https://spark-api-open.xf-yun.com/agent/v1",
-            api_key="spark-secret",
-            chat_model="spark-x",
-            make_default=True,
-        ),
-    ))
-    repo.settings_by_id[created["id"]].is_generation_default = False
-
-    assert service.resolve_generation_runtime_config(user).chat_model == "spark-x"
+    assert service.resolve_runtime_config(user).chat_model == "system-chat"
+    assert service.resolve_generation_runtime_config(user).chat_model == "qwen3.7-plus"
 
 
 def test_embedding_not_configured_does_not_overwrite_chat_test_status() -> None:

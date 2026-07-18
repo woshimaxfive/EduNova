@@ -673,7 +673,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 
 ### 4.19 `model_settings`
 
-用途：保存用户模型设置。Phase 6.1 复用本表完成一人一套配置；Phase 6.2 通过 Alembic `20260704_0006` 扩展为同一用户多套配置，去掉 `user_id` 唯一限制，用户 API Key 使用 Fernet 加密后写入 `api_key_ciphertext`，系统 `.env` 模型配置不写入本表。
+用途：保存用户模型设置。当前产品只读取用户回答连接，用户 API Key 使用 Fernet 加密后写入 `api_key_ciphertext`；服务器生成、向量、重排序和视觉配置均不写入本表。历史多配置与默认字段保留为兼容数据，不再由学生端设置页维护。
 
 字段：
 
@@ -703,9 +703,9 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 | `rerank_workspace_id` | varchar | 百炼 Workspace ID，可空 |
 | `tool_flags_json` | jsonb | 兼容预留字段；联网与推理由每次 Graph 自动决策，设置页和前端不保存开关 |
 | `is_default` | boolean | 是否为当前用户回答默认配置，保留旧字段名兼容 |
-| `is_generation_default` | boolean | 是否为当前用户生成任务默认配置 |
-| `is_embedding_default` | boolean | 是否为当前用户向量默认配置 |
-| `is_rerank_default` | boolean | 是否为当前用户重排序默认配置 |
+| `is_generation_default` | boolean | 历史兼容字段，当前运行时不读取 |
+| `is_embedding_default` | boolean | 历史兼容字段，当前运行时不读取 |
+| `is_rerank_default` | boolean | 历史兼容字段，当前运行时不读取 |
 | `last_test_ok` | boolean | 最近一次连接测试是否成功 |
 | `last_test_message` | text | 最近一次连接测试的脱敏结果摘要 |
 | `last_tested_at` | timestamptz | 最近一次连接测试时间 |

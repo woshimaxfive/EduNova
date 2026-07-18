@@ -453,6 +453,24 @@
   display: none;
 }
 
+.personal-answer-model { max-width: 920px; }
+.personal-answer-model .settings-panel-heading p { margin: 5px 0 0; color: var(--text-muted); font-size: var(--font-body-compact); }
+.personal-model-routing { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--wide-workspace-divider); border-radius: 7px; overflow: hidden; }
+.personal-model-routing article { display: flex; gap: 10px; min-width: 0; padding: 15px; border-right: 1px solid var(--wide-workspace-divider); background: color-mix(in srgb, var(--wide-workspace-control) 46%, transparent); }
+.personal-model-routing article:last-child { border-right: 0; }
+.personal-model-routing svg { flex: 0 0 auto; color: var(--accent-strong); }
+.personal-model-routing strong, .personal-model-routing span { display: block; }
+.personal-model-routing strong { color: var(--text-strong); font-size: var(--font-meta); }
+.personal-model-routing span { margin-top: 4px; color: var(--text-muted); font-size: var(--font-caption); line-height: 1.5; }
+.personal-model-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; padding: 18px; border: 1px solid var(--wide-workspace-divider); border-radius: 7px; background: color-mix(in srgb, var(--wide-workspace-control) 35%, transparent); }
+.personal-model-editor > label { display: grid; gap: 7px; min-width: 0; }
+.personal-model-editor > label > span { color: var(--text-muted); font-size: var(--font-meta); }
+.personal-model-editor input, .personal-model-editor select { min-width: 0; min-height: 40px; border: 1px solid var(--wide-workspace-divider); border-radius: 5px; padding: 8px 10px; color: var(--text); background: var(--wide-workspace-control); }
+.personal-model-wide, .personal-model-provider, .personal-model-editor > .settings-inline-feedback, .personal-model-editor > footer, .personal-model-editor > .settings-connection-test { grid-column: 1 / -1; }
+.personal-model-provider { display: grid; gap: 3px; padding: 11px 12px; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.personal-model-provider strong { color: var(--text-strong); font-size: var(--font-meta); }
+.personal-model-provider span { color: var(--text-muted); font-size: var(--font-caption); line-height: 1.5; }
+
 .settings-config-list {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -1300,6 +1318,10 @@
   .settings-editor-actions { flex-wrap: wrap; }
   .settings-editor-actions > div { flex-basis: 100%; }
   .settings-editor-actions .primary-action { flex: 1; }
+  .personal-model-routing, .personal-model-editor { grid-template-columns: 1fr; }
+  .personal-model-routing article { border-right: 0; border-bottom: 1px solid var(--wide-workspace-divider); }
+  .personal-model-routing article:last-child { border-bottom: 0; }
+  .personal-model-wide, .personal-model-provider, .personal-model-editor > .settings-inline-feedback, .personal-model-editor > footer, .personal-model-editor > .settings-connection-test { grid-column: auto; }
   .settings-privacy-list article { grid-template-columns: 30px minmax(0, 1fr); }
   .settings-privacy-list article > span,
   .settings-privacy-list article > a { grid-column: 2; justify-self: start; }

@@ -1077,7 +1077,7 @@ Authorization: Bearer <token>
 - 无 token 返回 401。
 - 访问他人课程返回 404。
 - 无命中时 `results=[]`，前端必须显示资料不足，不得伪造引用。
-- 后端优先使用当前用户向量默认配置。讯飞使用原生签名接口和 2560 维 `query/para`；百炼、硅基及自定义服务使用 OpenAI-compatible `/embeddings`，实际维度由预设或连接测试识别。向量默认与回答默认可以来自不同配置。
+- 后端固定使用服务器向量配置。讯飞使用原生签名接口和 2560 维 `query/para`；百炼、硅基及自定义服务使用 OpenAI-compatible `/embeddings`。
 - 如果没有可用 embedding 模型或 Provider 调用失败，后端使用关键词 fallback；旧 1536 维数据缺少当前配置指纹时视为 legacy，不进入当前向量候选。
 - 外部 embedding 失败时不阻断问答，接口会退回关键词检索并通过 `embedding_status` 暴露状态。
 - 关键词 Top 30 与向量 Top 30 使用 RRF 合并为 Top 20；配置重排序后返回 Top 5。重排序失败只退回 RRF，不跨 Provider 自动转发。
@@ -2209,7 +2209,7 @@ course_id=101
 
 ### GET `/settings/model`
 
-用途：获取当前有效模型设置摘要。该兼容接口分别解析回答默认和向量默认；某一用途没有个人默认时，只回退对应的 `.env` 系统配置。两种用途可以来自同一套组合配置、不同配置或不同服务器连接。响应不会返回明文 API Key。前端 Provider 预设首位为讯飞星火 Spark，但后端协议仍统一保存为 `openai_compatible`。
+用途：获取当前有效模型设置摘要。个人只可配置回答模型，回答和后台生成均优先使用它；没有个人模型时分别回退 `.env` 的 `SYSTEM_MODEL_*` 与 `SYSTEM_GENERATION_*`。向量、重排序和图片理解固定使用服务器配置。响应不会返回明文 API Key。
 
 响应：
 
@@ -2257,7 +2257,7 @@ course_id=101
 
 ### POST `/settings/model/test`
 
-用途：测试当前有效模型连通性。请求体省略时测试当前回答默认配置；`operation=embedding` 或 `operation=rerank` 时分别测试当前向量或重排序默认配置。对应用途没有个人默认时分别回退服务器配置。显式探测不自动重试，也不跨 Provider 切换。
+用途：测试当前有效模型连通性。请求体省略时测试个人回答模型或服务器回答兜底；`operation=embedding`、`operation=rerank` 和 `operation=vision` 测试对应服务器配置。显式探测不自动重试，也不跨 Provider 切换。
 
 可选请求：
 

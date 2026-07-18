@@ -63,6 +63,7 @@ import { useAuthStore } from "../features/auth/authStore";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import { ConnectionTestCard } from "../features/settings/ConnectionTestCard";
 import { DeleteModelConfigDialog } from "../features/settings/DeleteModelConfigDialog";
+import { PersonalAnswerModelSettings } from "../features/settings/PersonalAnswerModelSettings";
 import {
   SettingsNavigation,
   type SettingsSection
@@ -270,6 +271,7 @@ export function SettingsPage() {
 
   const requestedSection = searchParams.get("section") as SettingsSection | null;
   const activeSection = requestedSection && VALID_SECTIONS.has(requestedSection) ? requestedSection : "model";
+  const showLegacyModelPanel = import.meta.env.MODE === "__legacy_model_settings__";
   const [nickname, setNickname] = useState(authUser?.displayName ?? "");
   const [selectedConfigId, setSelectedConfigId] = useState<number | "new" | null>(null);
   const [draft, setDraft] = useState<ModelConfigDraft>(EMPTY_CONFIG_DRAFT);
@@ -748,7 +750,7 @@ export function SettingsPage() {
           <div className="settings-workspace-body">
             <SettingsNavigation activeSection={activeSection} onSelect={selectSection} />
             <main className="settings-content" aria-label="设置内容">
-              {activeSection === "model" ? (
+              {showLegacyModelPanel && activeSection === "model" ? (
                 <section className="settings-panel" role="region" aria-label="模型设置">
                   <header className="settings-panel-heading">
                     <div>
@@ -1346,6 +1348,8 @@ export function SettingsPage() {
                   </div>
                 </section>
               ) : null}
+
+              {activeSection === "model" ? <PersonalAnswerModelSettings /> : null}
 
               {activeSection === "account" ? (
                 <section className="settings-panel settings-account-panel" role="region" aria-label="账号设置">

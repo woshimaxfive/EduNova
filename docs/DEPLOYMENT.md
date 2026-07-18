@@ -138,6 +138,10 @@ SYSTEM_MODEL_PROVIDER=openai_compatible
 SYSTEM_MODEL_BASE_URL=https://api.example.com/v1
 SYSTEM_MODEL_API_KEY=replace-with-your-own-key
 SYSTEM_CHAT_MODEL=example-chat-model
+SYSTEM_GENERATION_PROVIDER=openai_compatible
+SYSTEM_GENERATION_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+SYSTEM_GENERATION_API_KEY=replace-with-your-own-key
+SYSTEM_GENERATION_MODEL=qwen3.7-plus
 SYSTEM_EMBEDDING_PROVIDER=openai_compatible
 SYSTEM_EMBEDDING_BASE_URL=https://embedding.example.com/v1
 SYSTEM_EMBEDDING_API_KEY=replace-with-your-embedding-key
@@ -161,17 +165,17 @@ MODEL_SETTINGS_ENCRYPTION_KEY=replace-with-fernet-key
 MODEL_REQUEST_TIMEOUT_SECONDS=45
 ```
 
-`SYSTEM_MODEL_*`、`SYSTEM_EMBEDDING_*`、`SYSTEM_RERANK_*` 和 `SYSTEM_VISION_*` 分别是服务器回答、向量、重排序和图片理解兜底配置。个人默认配置优先，未配置时使用对应服务器能力。国内默认推荐百炼 `qwen3.7-plus` 作为回答与图片理解兜底，两类变量可以使用同一百炼 Key，但仍分别配置以便独立轮换。讯飞 `imagev3` 仍受支持：将视觉 Provider、Base URL、Model 改为 `xfyun_vision`、`wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image`、`imagev3`；其 APPID、APIKey、APISecret 留空时，Compose 会复用 `SYSTEM_EMBEDDING_*` 三凭证。
+`SYSTEM_MODEL_*`、`SYSTEM_GENERATION_*`、`SYSTEM_EMBEDDING_*`、`SYSTEM_RERANK_*` 和 `SYSTEM_VISION_*` 分别是服务器回答、后台生成、向量、重排序和图片理解配置。个人回答配置优先覆盖回答与后台生成；向量、重排序和图片理解始终使用对应服务器能力。本地默认采用 X2-Flash 回答、百炼 `qwen3.7-plus` 生成和图片理解。讯飞 `imagev3` 仍受支持：将视觉 Provider、Base URL、Model 改为 `xfyun_vision`、`wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image`、`imagev3`；其 APPID、APIKey、APISecret 留空时，Compose 会复用 `SYSTEM_EMBEDDING_*` 三凭证。
 
 `VISION_REQUEST_TIMEOUT_SECONDS` 独立控制图片理解超时，默认 60 秒。它不放宽普通文本请求的超时，避免高分辨率截图或视觉模型首响应较慢时被通用 20 秒阈值提前中断。
 
 Docker Compose 会把仓库根目录的 `.env` 作为 backend 容器的可选运行时环境文件读取，用于注入 `SYSTEM_MODEL_*`、`MODEL_SETTINGS_ENCRYPTION_KEY` 等服务器配置。`.env` 已被 `.gitignore` 忽略，不能提交真实密钥。为了避免把密钥展开到终端日志，统一验证脚本只运行 `docker compose config --quiet`。
 
-个人模型配置通过 `/settings/model/configs` 保存到 `model_settings`：
+个人回答模型通过 `/settings/model` 保存到 `model_settings`：
 
 - 主页、课程回答和生成型 Graph 优先使用当前用户回答默认配置。
-- 资料与课程 RAG 的 Embedding 优先使用当前用户向量默认配置。
-- 每套个人配置都能为回答、向量和重排序分别保存 Provider、地址、凭证和模型；同一套方案可组合不同服务商。
+- 资料与课程 RAG 的 Embedding、重排序与图片理解由服务器托管。
+- 个人只保存回答 Provider、地址、凭证和模型；该配置同时覆盖回答和后台生成。
 - 三类默认可指向同一套或不同套配置；某一用途没有个人默认时，只回退该用途的服务器配置。
 - 用户 API Key 使用 Fernet 加密保存。
 - 接口只返回脱敏 Key，不返回明文。
@@ -381,7 +385,7 @@ http://127.0.0.1:5173
 - 课程空间问题会持久化真实引用，并在默认模型可用时生成流式 RAG 回答。
 - Phase 14 后，外部 embedding 可用时课程检索使用 pgvector SQL cosine 候选；本地或 Provider 失败显示关键词 fallback，不把 hash 标记为语义命中。
 - Phase 6.5 后课程空间默认问答模式和学习模式都在同一路由内完成，不新增部署入口。
-- `/app/settings` 可管理多套用户模型配置。
+- `/app/settings` 只允许配置个人回答模型；其余能力由服务器托管。
 - `/app/profile`、`/app/studio`、`/app/path`、`/app/practice` 和 `/app/reports` 已接入真实画像、资源、路径、练习、报告和 Markdown/PDF/DOCX 异步导出接口。
 
 本地开发时 Vite 会把 `/api` 代理到 `http://127.0.0.1:8000`。

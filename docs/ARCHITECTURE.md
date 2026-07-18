@@ -268,7 +268,7 @@ backend/app/
 | `backend/app/data/builtin_courses/data_structures/` | 8 个理论章节、伪代码、16 个实验和公开书目组成的静态内置课程包 |
 | `backend/app/services/course_seed.py` | 为用户确定性安装课程内部来源，并按内部 slug 幂等替换旧内置课 |
 | `backend/app/services/tutor.py` | 主页/课程会话 API 边界和依赖装配；`HomeTutorGraphRunner` 接管主页上下文、路由、资料检索、联网、规划、回答、Review/Repair 和持久化，`CourseTutorGraphRunner` 接管严格课程 RAG 问答 |
-| `backend/app/services/model_settings.py` | 模型设置服务，负责单配置内回答/向量/重排序独立连接、回答/生成任务/向量/重排序默认、系统兜底、凭证加密、连接测试与实际向量维度识别 |
+| `backend/app/services/model_settings.py` | 模型设置服务，负责个人回答模型、服务器回答/生成/向量/重排序/视觉兜底、凭证加密与连接测试 |
 | `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计 |
 | `backend/app/services/embeddings.py` | Embedding 服务，负责讯飞原生与 OpenAI-compatible 动态维度调用、配置指纹和切片向量写入；无配置时只返回关键词 fallback |
 | `backend/app/providers/retrieval.py` | 讯飞签名 Embedding、UTF-8 2KB 分片池化、硅基/百炼 Rerank Provider |
@@ -460,7 +460,7 @@ ReviewAgent 审核
 - Phase 5.3 已让课程会话发送消息时复用该检索结果，并把引用写入 `chat_messages.citation_json`。
 - Phase 6.1 已让课程会话在有引用且模型配置可用时调用 OpenAI-compatible Chat Completions 生成非流式回答，并把模型内容保存到 `chat_messages.content`，引用继续保存在 `citation_json`。
 - Phase 6.3 已新增课程消息流式路径：后端通过 `event: metadata/token/done/error` 输出 SSE，完成后一次性持久化完整 assistant；失败时不保存半截内容。
-- `EmbeddingService` 优先使用当前用户向量默认配置或对应服务器兜底。讯飞走原生签名 2560 维接口，百炼/硅基/自定义走 OpenAI-compatible `/embeddings`；查询按用户、范围、Provider、模型、维度和配置指纹隔离。
+- `EmbeddingService` 始终使用服务器向量配置。讯飞走原生签名 2560 维接口，百炼/硅基/自定义走 OpenAI-compatible `/embeddings`；查询按用户、范围、Provider、模型、维度和配置指纹隔离。
 - 课程与主页资料 RAG 均执行关键词 Top 30、向量 Top 30、RRF Top 20、可选 Rerank、最终 Top 5。向量或重排序失败时逐层回退，API 展示 `retrieval_source`、`embedding_status` 和 `rerank_status`。
 - 切换向量默认不会自动消耗额度；`embedding_reindex` AI Job 由用户显式发起，复用 RQ、进度、取消和重试。
 
@@ -535,10 +535,10 @@ Provider 抽象目标能力：
 配置解析优先级：
 
 ```text
-生成任务默认配置 -> 回答默认配置 -> .env 中的 SYSTEM_MODEL_* -> 未配置提示
+个人回答配置 -> .env 中的 SYSTEM_GENERATION_* -> 未配置提示
 ```
 
-回答 Key、向量 Key、讯飞 APPID/APISecret 与重排序 Key 均使用 Fernet 加密。每条配置保存三项独立连接和测试摘要；回答、生成任务、向量和重排序默认可指向同一套或不同套方案。资源生成及其 Review/Repair、路径规划、练习生成/Review/Revision 和报告生成使用生成任务默认；主页/课程普通对话、语义路由、评分、检索和图片理解不切换该默认。`GET /settings/model/configs` 只返回脱敏状态、能力可用性和各默认配置 ID，不返回明文凭证。
+个人回答 Key 使用 Fernet 加密。个人模型只保存回答连接；资源生成及其 Review/Repair、路径规划、练习生成/Review/Revision 和报告生成优先使用该个人回答连接，未配置时使用 `SYSTEM_GENERATION_*`。主页/课程普通对话和语义路由使用个人回答连接或 `SYSTEM_MODEL_*`；向量、重排序和图片理解只使用对应服务器配置。兼容的历史多配置接口只返回脱敏状态，不返回明文凭证。
 
 Phase 18 后，个人配置只有在字段不完整时才沿用现有服务器配置兜底；已经对个人配置发起的请求发生超时、限流或服务故障时，只在同一配置内有限重试，不把学习内容自动发送给另一 Provider。普通调用与 Embedding 最多 3 次，流式调用只允许在首 token 前重试。Redis 暂不可用时限流与熔断 fail-open，但模型 HTTP 超时、Graph fallback 和安全审计边界继续生效。
 
@@ -755,7 +755,7 @@ PathPlanningGraph 接受 Provider 常见的单层 `output` 协议包装，解包
 
 视觉 Provider 通过项目适配层隔离。国内默认 `XfyunVisionProvider` 使用讯飞开放平台图片理解 WSS、HMAC签名和 `imagev3` domain；OpenAI-compatible视觉模型继续由原有 SDK适配器承载。两者统一只向 `VisionUnderstandingService` 返回文本，再经一次 `json-repair` 与 Pydantic九字段合同校验，供应商响应类型不进入 Graph。OCR模型不作为结构图、公式或流程语义理解的替代方案。
 
-视觉配置遵循“用户图片理解默认 → `SYSTEM_VISION_*` 服务器兜底 → 明确未配置”的优先级，与回答、向量、重排序的多配置模型一致。服务器兜底可使用百炼 `qwen3.7-plus` 的 OpenAI-compatible 图文协议或讯飞 `imagev3` WebSocket 协议；服务器配置通过适配层归一为现有视觉运行时，不让供应商协议进入 Graph。讯飞视觉三凭证为空时可复用同一讯飞应用的 `SYSTEM_EMBEDDING_*`。
+图片理解固定使用 `SYSTEM_VISION_*` 服务器配置，不读取个人模型设置。服务器可使用百炼 `qwen3.7-plus` 的 OpenAI-compatible 图文协议或讯飞 `imagev3` WebSocket 协议；服务器配置通过适配层归一为现有视觉运行时，不让供应商协议进入 Graph。讯飞视觉三凭证为空时可复用同一讯飞应用的 `SYSTEM_EMBEDDING_*`。
 
 图片提问复用 `StorageAdapter`、上传安全、模型运行时和 tutor SSE。输入区只有一个“添加资料”入口：文档调用资料上传并进入原解析任务，PNG/JPEG 先创建 `Material(ingestion_status=stored)` 持久资产，再由 `ChatMessageAttachment.material_id` 绑定当前用户和会话；删除待发送附件不会误删资料库原图。`VisionUnderstandingService` 通过适配层调用明确声明视觉能力的配置，供应商类型不进入 Graph。视觉输出先经 Pydantic 校验，回答模型只接收结构化摘要和必要课程证据，不接收原始图片。
 

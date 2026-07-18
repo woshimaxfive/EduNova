@@ -403,22 +403,17 @@ describe("student core pages", () => {
 
     expect(screen.getByRole("heading", { name: "设置" })).toHaveClass("visually-hidden");
     expect(screen.getByText("系统设置")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "模型连接" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "图片理解模型配置" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "配置图片理解" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "回答模型" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "回答模型设置" })).toBeInTheDocument();
     expect(screen.queryByText("连接配置")).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "模型设置" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "回答服务商" })).toBeInTheDocument();
     expect(within(screen.getByRole("combobox", { name: "回答服务商" })).queryByRole("option", { name: "讯飞开放平台 · 图片理解" })).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "向量服务商" })).toBeInTheDocument();
-    expect(screen.getAllByText("讯飞星火 X2-Flash")).toHaveLength(2);
-    const embeddingProviderPreset = screen.getByRole("combobox", { name: "向量服务商" });
-    expect(within(embeddingProviderPreset).queryByRole("option", { name: "讯飞星火 X2-Flash" })).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "重排序服务商" })).toBeInTheDocument();
-    expect(within(embeddingProviderPreset).queryByRole("option", { name: "DeepSeek" })).not.toBeInTheDocument();
+    expect(screen.getByText("图片理解与资料检索")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "向量服务商" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "重排序服务商" })).not.toBeInTheDocument();
     expect(screen.queryByText("深度思考")).not.toBeInTheDocument();
     expect(screen.queryByText("联网搜索")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存配置" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存回答模型" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /账号安全/ }));
     expect(screen.getByRole("region", { name: "账号设置" })).toBeInTheDocument();
@@ -428,7 +423,7 @@ describe("student core pages", () => {
     expect(screen.getByRole("region", { name: "隐私与数据" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "跨会话记忆" })).toBeChecked();
     expect(screen.getByRole("button", { name: "清除派生记忆" })).toBeDisabled();
-    expect(screen.queryByRole("region", { name: "模型设置" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "回答模型设置" })).not.toBeInTheDocument();
   });
 
   it("keeps secondary routes inside the same shell with home history", async () => {

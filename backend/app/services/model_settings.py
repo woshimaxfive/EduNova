@@ -631,13 +631,20 @@ class ModelSettingsService:
         self._clear_changed_connection_tests(setting, payload)
         self._apply_settings_payload(setting, payload)
         setting.is_default = True
+        # Personal settings intentionally cover answers only. Other capabilities
+        # are server-managed so credentials and runtime choices stay consistent.
+        setting.is_generation_default = False
+        setting.is_embedding_default = False
+        setting.is_rerank_default = False
+        setting.is_vision_default = False
+        setting.vision_app_id_ciphertext = None
+        setting.vision_api_key_ciphertext = None
+        setting.vision_api_secret_ciphertext = None
         self.repository.unset_defaults_for_user(user.id, except_setting_id=setting.id)
-        setting.is_embedding_default = bool(setting.embedding_model)
-        if setting.is_embedding_default:
-            self.repository.unset_embedding_defaults_for_user(user.id, except_setting_id=setting.id)
-        setting.is_rerank_default = bool(setting.rerank_model)
-        if setting.is_rerank_default:
-            self.repository.unset_rerank_defaults_for_user(user.id, except_setting_id=setting.id)
+        self.repository.unset_generation_defaults_for_user(user.id)
+        self.repository.unset_embedding_defaults_for_user(user.id)
+        self.repository.unset_rerank_defaults_for_user(user.id)
+        self.repository.unset_vision_defaults_for_user(user.id)
         self._save_and_commit(setting)
         return self.get_summary(user)
 
@@ -956,21 +963,15 @@ class ModelSettingsService:
         )
 
     def resolve_generation_runtime_config(self, user: User) -> RuntimeModelConfig:
-        get_default = getattr(self.repository, "get_generation_default_for_user", None)
-        user_setting = get_default(user.id) if callable(get_default) else None
-        if user_setting is not None:
-            runtime = self._runtime_from_user_setting(user_setting)
-            if runtime.can_use_model:
-                return runtime
-        return self.resolve_runtime_config(user)
+        user_runtime = self.resolve_runtime_config(user)
+        if user_runtime.source == "user" and user_runtime.can_use_model:
+            return user_runtime
+        system_runtime = self._generation_runtime_from_system_settings()
+        if system_runtime.can_use_model:
+            return system_runtime
+        return user_runtime
 
     def resolve_embedding_runtime_config(self, user: User) -> RuntimeModelConfig:
-        user_setting = self.repository.get_embedding_default_for_user(user.id)
-        if user_setting is not None:
-            user_runtime = self._embedding_runtime_from_user_setting(user_setting)
-            if user_runtime.can_use_model:
-                return user_runtime
-
         system_runtime = self._embedding_runtime_from_system_settings()
         if system_runtime.can_use_model:
             return system_runtime
@@ -985,12 +986,6 @@ class ModelSettingsService:
         )
 
     def resolve_rerank_runtime_config(self, user: User) -> RuntimeModelConfig:
-        get_default = getattr(self.repository, "get_rerank_default_for_user", None)
-        user_setting = get_default(user.id) if callable(get_default) else None
-        if user_setting is not None:
-            runtime = self._rerank_runtime_from_user_setting(user_setting)
-            if runtime.can_use_model:
-                return runtime
         runtime = self._rerank_runtime_from_system_settings()
         if runtime.can_use_model:
             return runtime
@@ -1005,12 +1000,6 @@ class ModelSettingsService:
         )
 
     def resolve_vision_runtime_config(self, user: User) -> RuntimeModelConfig:
-        setting = self.repository.get_vision_default_for_user(user.id)
-        if setting is not None:
-            runtime = self._vision_runtime_from_user_setting(setting)
-            capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
-            if capabilities.supports_image_input and runtime.can_use_model:
-                return runtime
         system_runtime = self._vision_runtime_from_system_settings()
         if system_runtime.can_use_model:
             return system_runtime
@@ -1734,6 +1723,24 @@ class ModelSettingsService:
                 api_key=api_key,
                 chat_model=self.settings.system_chat_model,
             ),
+            preset_id=preset_id,
+        )
+
+    def _generation_runtime_from_system_settings(self) -> RuntimeModelConfig:
+        api_key = self.settings.system_generation_api_key.strip()
+        base_url = self.settings.system_generation_base_url.strip()
+        model = self.settings.system_generation_model.strip()
+        provider = self.settings.system_generation_provider.strip() or "openai_compatible"
+        lowered_url = base_url.lower()
+        preset_id = "qwen" if "dashscope.aliyuncs.com" in lowered_url else "custom"
+        return RuntimeModelConfig(
+            source="system",
+            provider=self._normalize_provider(provider),
+            base_url=base_url or None,
+            api_key=api_key or None,
+            chat_model=model or None,
+            embedding_model=None,
+            can_use_model=self._can_use_model(provider, base_url, api_key, model),
             preset_id=preset_id,
         )
 

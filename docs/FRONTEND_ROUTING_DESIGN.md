@@ -624,3 +624,5 @@ Phase 5 以后：
 - 课程语义参数为 `mode`、`view`、`knowledge_point_id`、`graph_scope`、`graph_chapter`、`detail`、`course_session_id`、`course_message_id` 和 `panel`。无效、越权或已删除实体由页面清理后回到安全知识点。
 - 主页回答定位使用 `session_id`、`message_id` 和 `panel=sources|why|trace`。课程回答面板使用 `panel=citations|resources|why|trace`；内部兼容名称不得进入分享链接。
 - 图谱平移缩放键为 `edunova.course-graph.viewport.v1:{courseId}:{scope}:{chapter}`，AIJob 托盘和逐回答协作折叠状态也只写当前标签页。刷新与前进后退恢复语义，换课程和换标签页互不污染。
+- 图谱节点点击必须在一次 URL 更新中同时写入 `knowledge_point_id` 与 `detail=knowledge`，禁止分别基于旧查询参数写入。节点抽屉进入课程内练习时携带 `return_to=course&return_view=graph&return_detail=knowledge`，返回后恢复同一节点与抽屉。
+- 最新一条持久化回答的安全 Trace 摘要随回答主动加载；更早回答仍按展开加载，既保证刷新后“协作完成”可见，也避免长会话并发请求全部 Trace。

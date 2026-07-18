@@ -9,9 +9,16 @@ export function buildCourseReturnHref(searchParams: URLSearchParams, courseId: n
   const sessionId = searchParams.get("course_session_id");
   const messageId = searchParams.get("course_message_id");
   const knowledgePointId = searchParams.get("knowledge_point_id");
+  const returnView = searchParams.get("return_view");
+  const returnDetail = searchParams.get("return_detail");
   if (sessionId) params.set("course_session_id", sessionId);
   if (messageId) params.set("course_message_id", messageId);
   if (knowledgePointId) params.set("knowledge_point_id", knowledgePointId);
+  if (returnView === "graph" || returnView === "overview") {
+    params.set("mode", "study");
+    params.set("view", returnView);
+  }
+  if (returnView === "graph" && returnDetail === "knowledge") params.set("detail", "knowledge");
   const suffix = params.size > 0 ? `?${params.toString()}` : "";
   return `${buildCoursePath(courseId)}${suffix}`;
 }

@@ -1175,3 +1175,5 @@ docker compose down
 - 阶段收口运行前端全量 Vitest、ESLint、TypeScript、production build、OpenAPI 非破坏检查、编码与 Compose；重建 frontend 并用真实浏览器验证桌面和 390px 的图谱、节点详情、协作过程及刷新恢复。
 
 2026-07-18 Phase 50 实际验收：前端全量 Vitest、ESLint、TypeScript、production build、OpenAPI 非破坏检查、UTF-8 编码和 Compose 配置均通过。frontend 镜像重建后健康，完整 Compose 保持运行。`agent-browser` 使用一次性内置课程账号确认裸课程 URL 自动补全图谱状态、节点详情刷新后仍打开、课程全景可切换；390px 自动降级为纵向链路且 `scrollWidth=390`。关键浏览器请求均为 200，控制台无应用错误；临时账号与截图已清理。
+
+2026-07-18 Phase 50 体验复核：新增回归覆盖主页已有对话后不显示重复下一行动、最新持久化回答主动恢复协作摘要、图谱练习课程子路由和返回目标；前端全量 266 项、ESLint、TypeScript、production build、OpenAPI 非破坏检查、编码、Compose 与 diff 检查通过。真实浏览器分别在主页与课程问答完成一次回答后刷新，均直接看到“协作完成”；点击另一图谱节点后标题与 `knowledge_point_id` 同步，进入 `/app/courses/39/practice` 后可返回同一图谱节点和详情抽屉。桌面与 390px 的 `scrollWidth` 均等于 `clientWidth`，临时账号已级联删除，Docker 保持运行。

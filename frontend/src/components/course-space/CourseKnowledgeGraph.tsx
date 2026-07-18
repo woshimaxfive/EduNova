@@ -17,7 +17,7 @@ import "@xyflow/react/dist/style.css";
 
 import type { CourseMasteryPoint, CourseWeaknessReviewItem } from "../../api/courses";
 import type { LearningNextAction } from "../../api/learning";
-import { PATHS } from "../../app/routePaths";
+import { buildCoursePracticeWorkspacePath, PATHS } from "../../app/routePaths";
 import type { GraphScope } from "../../features/course-space/courseWorkspaceState";
 import { learningActionHref } from "../../features/learning-actions/learningActions";
 import { ModalFrame } from "../primitives/Dialog";
@@ -35,7 +35,6 @@ type CourseKnowledgeGraphProps = {
   onSelect: (pointId: string) => void;
   onScopeChange?: (scope: GraphScope) => void;
   onChapterChange?: (chapter: string) => void;
-  onDetailOpen?: () => void;
   onDetailClose?: () => void;
   onContinue?: (pointId: string) => void;
 };
@@ -70,7 +69,6 @@ export function CourseKnowledgeGraph({
   onSelect,
   onScopeChange,
   onChapterChange,
-  onDetailOpen,
   onDetailClose,
   onContinue
 }: CourseKnowledgeGraphProps) {
@@ -106,16 +104,21 @@ export function CourseKnowledgeGraph({
 
   function selectPoint(pointId: string) {
     onSelect(pointId);
-    onDetailOpen?.();
   }
+
+  const practiceParams = selectedPoint ? new URLSearchParams({
+    knowledge_point_id: selectedPoint.id,
+    new: "1",
+    return_to: "course",
+    return_view: "graph",
+    return_detail: "knowledge"
+  }) : null;
 
   return (
     <section className="course-knowledge-graph knowledge-flow-shell" role="region" aria-label="课程知识图谱">
       <div className="course-knowledge-graph-heading knowledge-flow-heading">
         <div>
-          <span className="knowledge-flow-eyebrow">LEARNING ATLAS</span>
           <strong>{scope === "focus" ? "聚焦链路" : "课程全景"}</strong>
-          <span>{scope === "focus" ? "看清当前基础、正在学习的节点和即将解锁的方向" : "按章节查看整门课程的真实先修关系"}</span>
         </div>
         <div className="knowledge-flow-tools">
           <div className="knowledge-flow-segmented" aria-label="图谱范围">
@@ -191,7 +194,7 @@ export function CourseKnowledgeGraph({
             {recommendation ? <section className="knowledge-node-next"><span>下一最佳行动</span><strong>{recommendation.label}</strong><p>{recommendation.description}</p></section> : null}
             <nav className="knowledge-node-actions" aria-label="知识点操作">
               <button type="button" onClick={() => onContinue?.(selectedPoint.id)}><BookOpenText size={18} />继续学习<ArrowRight size={16} /></button>
-              <Link to={`${PATHS.practice}?course_id=${courseId}&knowledge_point_id=${selectedPoint.id}&new=1`}><ListChecks size={18} />针对练习</Link>
+              <Link to={`${buildCoursePracticeWorkspacePath(courseId)}?${practiceParams?.toString() ?? ""}`}><ListChecks size={18} />针对练习</Link>
               <Link to={`${PATHS.studio}?course_id=${courseId}&knowledge_point_id=${selectedPoint.id}`}><ChartLineUp size={18} />查看或生成资源</Link>
               {recommendation ? <Link to={learningActionHref(recommendation)}>执行推荐行动</Link> : null}
             </nav>

@@ -758,11 +758,13 @@ export function CourseSpacePage() {
     setCourseMode("study");
     setStudyTarget({ type: "knowledge", id: pointId });
     setCourseContentView(view);
+    setIsKnowledgeDetailOpen(view === "graph");
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("mode", "study");
     nextParams.set("view", view);
     nextParams.set("knowledge_point_id", pointId);
-    if (view !== "graph") nextParams.delete("detail");
+    if (view === "graph") nextParams.set("detail", "knowledge");
+    else nextParams.delete("detail");
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -1385,7 +1387,6 @@ export function CourseSpacePage() {
                 onViewChange={changeCourseContentView}
                 onGraphScopeChange={changeGraphScope}
                 onGraphChapterChange={changeGraphChapter}
-                onGraphDetailOpen={() => changeKnowledgeDetail(true)}
                 onGraphDetailClose={() => changeKnowledgeDetail(false)}
                 onSelectPoint={openKnowledgeStudy}
                 onSelectPrevious={() => {

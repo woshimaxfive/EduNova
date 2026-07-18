@@ -28,7 +28,7 @@ export function TodayLearningInsight({ course, action, mastery, learningState, l
 
   return (
     <section className="today-learning-insight" aria-label="今日学习洞察">
-      <header><div><span>TODAY'S LEARNING SIGNAL</span><h2>今日学习洞察</h2></div><strong>{course.title}</strong></header>
+      <header><h2>今日学习洞察</h2><strong>{course.title}</strong></header>
       <div className="today-learning-insight-grid">
         <article><Target size={20} weight="duotone" /><span>当前重点</span><strong>{focusPoint?.title ?? action.label}</strong><small>{action.description}</small></article>
         <article><ChartDonut size={20} weight="duotone" /><span>真实平均掌握度</span><strong>{averageScore == null ? "尚未评估" : `${Math.round(averageScore)} 分`}</strong><small>{summary?.assessed_count ? `来自 ${summary.assessed_count} 个已评估知识点` : "完成练习后形成可靠数据"}</small></article>

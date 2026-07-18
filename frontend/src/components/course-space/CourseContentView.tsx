@@ -44,7 +44,6 @@ type CourseContentViewProps = {
   onViewChange: (view: CourseContentMode) => void;
   onGraphScopeChange: (scope: GraphScope) => void;
   onGraphChapterChange: (chapter: string) => void;
-  onGraphDetailOpen: () => void;
   onGraphDetailClose: () => void;
   onSelectPoint: (pointId: string, view?: CourseContentMode) => void;
   onSelectPrevious: () => void;
@@ -80,7 +79,6 @@ export function CourseContentView({
   onViewChange,
   onGraphScopeChange,
   onGraphChapterChange,
-  onGraphDetailOpen,
   onGraphDetailClose,
   onSelectPoint,
   onSelectPrevious,
@@ -172,7 +170,6 @@ export function CourseContentView({
               onSelect={(pointId) => onSelectPoint(pointId, "graph")}
               onScopeChange={onGraphScopeChange}
               onChapterChange={onGraphChapterChange}
-              onDetailOpen={onGraphDetailOpen}
               onDetailClose={onGraphDetailClose}
               onContinue={(pointId) => onSelectPoint(pointId, "overview")}
             />

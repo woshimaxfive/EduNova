@@ -28,10 +28,12 @@ export function toCompletedTutorResponseProgress(trace: AgentTrace): TutorComple
 
 export function useTutorPersistedResponseProgress(answerTraces: TutorAnswerTrace[], activeMessageId?: string | null) {
   const queries = useQueries({
-    queries: answerTraces.map(({ traceId, messageId }) => ({
+    queries: answerTraces.map(({ traceId, messageId }, index) => ({
       queryKey: ["agents", "trace", traceId],
       queryFn: () => getAgentTrace(traceId ?? ""),
-      enabled: Boolean(traceId) && messageId === activeMessageId,
+      // 最新回答的协作摘要属于回答正文的一部分，刷新后应直接恢复；
+      // 更早回答仍按用户展开读取，避免长会话产生 N 次并发请求。
+      enabled: Boolean(traceId) && (messageId === activeMessageId || index === answerTraces.length - 1),
       staleTime: 5 * 60_000,
       retry: false
     }))

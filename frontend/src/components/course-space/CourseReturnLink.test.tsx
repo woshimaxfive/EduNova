@@ -44,6 +44,19 @@ describe("CourseReturnLink", () => {
     expect(screen.getByRole("link", { name: "返回课程空间" })).toHaveClass("course-return-link-compact");
   });
 
+  it("restores the graph node drawer when practice was opened from a knowledge node", () => {
+    render(
+      <MemoryRouter initialEntries={["/app/courses/808/practice?return_to=course&return_view=graph&return_detail=knowledge&knowledge_point_id=402"]}>
+        <CourseReturnLink courseId={808} alwaysShow />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: "返回课程空间继续学习" })).toHaveAttribute(
+      "href",
+      "/app/courses/808?knowledge_point_id=402&mode=study&view=graph&detail=knowledge"
+    );
+  });
+
   it("shows the course return for a course-owned workspace without a source query", () => {
     render(
       <MemoryRouter initialEntries={["/app/courses/808/path"]}>

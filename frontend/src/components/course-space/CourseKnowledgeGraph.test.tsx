@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
 
 import type { CourseMasteryPoint } from "../../api/courses";
@@ -50,6 +51,26 @@ it("renders a focused learning chain and keeps related knowledge points interact
 
   fireEvent.click(screen.getAllByRole("button", { name: /状态空间/ })[0]);
   expect(onSelect).toHaveBeenCalledWith("401");
+});
+
+it("opens practice inside the course workspace and preserves the graph return target", () => {
+  render(
+    <MemoryRouter>
+      <CourseKnowledgeGraph
+        courseId={808}
+        points={points}
+        selectedId="402"
+        detailOpen
+        onSelect={vi.fn()}
+      />
+    </MemoryRouter>
+  );
+
+  expect(screen.queryByText("LEARNING ATLAS")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "针对练习" })).toHaveAttribute(
+    "href",
+    "/app/courses/808/practice?knowledge_point_id=402&new=1&return_to=course&return_view=graph&return_detail=knowledge"
+  );
 });
 
 it("shows every chapter in the course overview and enters a focused chain when a point is selected", () => {

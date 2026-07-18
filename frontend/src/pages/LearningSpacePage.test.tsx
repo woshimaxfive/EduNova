@@ -920,13 +920,14 @@ describe("LearningSpacePage", () => {
       {
         historyDetail: makeSessionDetail("501", "刷新恢复会话", [
           { id: "u-refresh", role: "user", content: "刷新前的问题" },
-          { id: "a-refresh", role: "assistant", content: "刷新后仍可见的回答" }
+          { id: "a-refresh", role: "assistant", content: "刷新后仍可见的回答", trace_id: "trace_home_tutor_test" }
         ], [201])
       },
       ["/app?session_id=501"]
     );
 
     expect(await screen.findByText("刷新前的问题")).toBeInTheDocument();
+    expect(await screen.findByText("协作完成")).toBeInTheDocument();
     const composer = within(screen.getByRole("region", { name: "底部学习输入" }));
     expect(composer.getByText("真实资料讲义.md")).toBeInTheDocument();
     expect(composer.getByText("共 1 份")).toBeInTheDocument();
@@ -983,6 +984,7 @@ describe("LearningSpacePage", () => {
     expect(screen.getByRole("button", { name: /期末复习怎么安排/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("已生成回答。")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /准备好一起学习了吗/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "下一步学习" })).not.toBeInTheDocument();
   });
 
   it("keeps selected material state and removes manual capability toggles", async () => {

@@ -40,7 +40,6 @@ import { ModalFrame } from "../components/primitives/Dialog";
 import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
 import { HomeCourseDrawer } from "../components/home/HomeCourseDrawer";
 import { TodayLearningInsight } from "../components/home/TodayLearningInsight";
-import { NextLearningAction } from "../components/learning/NextLearningAction";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { isCompactWorkspaceViewport, useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
@@ -289,14 +288,6 @@ export function LearningSpacePage() {
     () => conversationMaterialIds.filter((materialId) => materials.some((material) => material.id === materialId)),
     [conversationMaterialIds, materials]
   );
-
-  function handleNextLearningAction(action: NonNullable<typeof nextActionQuery.data>["data"]) {
-    if (action.kind === "upload_material") {
-      document.querySelector<HTMLInputElement>('input[aria-label="上传资料文件"]')?.click();
-      return;
-    }
-    navigate(learningActionHref(action));
-  }
 
   useEffect(() => {
     const input = homeQuestionInputRef.current;
@@ -926,7 +917,6 @@ export function LearningSpacePage() {
             </section>
           ) : (
             <div className="home-hero-copy">
-              <p className="home-kicker">EduNova</p>
               <h1>
                 <span>{`嗨，${learnerName}，`}</span>
                 <span>准备好一起学习了吗？</span>
@@ -1002,9 +992,7 @@ export function LearningSpacePage() {
               learningState={insightLearningStateQuery.data?.data ?? null}
               loading={nextActionQuery.isPending || dashboardQuery.isPending}
             />
-          ) : (
-            <NextLearningAction action={nextActionQuery.data?.data} compact onAction={handleNextLearningAction} />
-          )}
+          ) : null}
 
           {!hasHomeThread && dashboardQuery.isLoading ? (
             <section className="recent-course-strip empty" aria-label="最近学习">

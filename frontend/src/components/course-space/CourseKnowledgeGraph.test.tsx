@@ -48,9 +48,12 @@ it("renders prerequisite knowledge points and keeps node selection interactive",
   );
 
   expect(screen.getByRole("region", { name: "课程知识图谱" })).toBeInTheDocument();
-  expect(screen.getByText("2 个知识点")).toBeInTheDocument();
-  const node = screen.getByText("启发式搜索").closest(".react-flow__node");
-  expect(node).not.toBeNull();
-  fireEvent.click(node!);
+  expect(screen.getByText("当前知识点关系")).toBeInTheDocument();
+  expect(screen.getByLabelText("当前图谱范围")).toHaveTextContent("先修 1");
+  expect(screen.getByLabelText("当前图谱范围")).toHaveTextContent("启发式搜索");
+  expect(screen.getByLabelText("当前图谱范围")).toHaveTextContent("后续 0");
+  expect(screen.getByText("先修")).toBeInTheDocument();
+  expect(screen.getByText("当前")).toBeInTheDocument();
+  fireEvent.click(screen.getByTestId("rf__node-402"));
   expect(onSelect).toHaveBeenCalledWith("402");
 });

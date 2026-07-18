@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Background,
   Controls,
   MarkerType,
+  Position,
   ReactFlow,
   type Edge,
   type Node
@@ -26,31 +27,63 @@ const statusLabels: Record<string, string> = {
 };
 
 export function CourseKnowledgeGraph({ points, selectedId, onSelect }: CourseKnowledgeGraphProps) {
-  const { nodes, edges } = useMemo(() => buildGraph(points, selectedId), [points, selectedId]);
+  const chapters = useMemo(
+    () => [...new Set(points.map((point) => point.chapter?.trim()).filter((chapter): chapter is string => Boolean(chapter)))],
+    [points]
+  );
+  const selectedPoint = points.find((point) => point.id === selectedId) ?? points[0] ?? null;
+  const [chapterFilter, setChapterFilter] = useState(selectedPoint?.chapter ?? "");
+  const effectiveChapterFilter = !chapterFilter || selectedPoint?.chapter === chapterFilter
+    ? chapterFilter
+    : selectedPoint?.chapter ?? "";
+  const { nodes, edges, prerequisites, dependents } = useMemo(
+    () => buildFocusedGraph(points, selectedPoint?.id ?? null, effectiveChapterFilter),
+    [effectiveChapterFilter, points, selectedPoint?.id]
+  );
 
-  if (points.length === 0) return null;
+  if (!selectedPoint) return null;
+
+  function selectChapter(chapter: string) {
+    setChapterFilter(chapter);
+    const firstPoint = points.find((point) => (chapter ? point.chapter === chapter : true));
+    if (firstPoint) onSelect(firstPoint.id);
+  }
 
   return (
     <section className="course-knowledge-graph" role="region" aria-label="课程知识图谱">
       <div className="course-knowledge-graph-heading">
-        <strong>知识依赖与掌握状态</strong>
-        <span>{points.length} 个知识点</span>
+        <div>
+          <strong>当前知识点关系</strong>
+          <span>只展示直接先修与后续，避免图谱拥挤</span>
+        </div>
+        <label className="course-knowledge-graph-filter">
+          <span>章节</span>
+          <select value={effectiveChapterFilter} onChange={(event) => selectChapter(event.target.value)}>
+            <option value="">全部章节</option>
+            {chapters.map((chapter) => <option key={chapter} value={chapter}>{chapter}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="course-knowledge-graph-context" aria-label="当前图谱范围">
+        <span>先修 {prerequisites.length}</span>
+        <strong>{selectedPoint.title}</strong>
+        <span>后续 {dependents.length}</span>
       </div>
       <div className="course-knowledge-graph-canvas">
         <ReactFlow
           nodes={nodes}
           edges={edges}
           fitView
-          fitViewOptions={{ padding: 0.22 }}
-          minZoom={0.45}
-          maxZoom={1.5}
+          fitViewOptions={{ padding: 0.16 }}
+          minZoom={0.65}
+          maxZoom={1.4}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable
           onNodeClick={(_, node) => onSelect(node.id)}
           proOptions={{ hideAttribution: true }}
         >
-          <Background gap={22} size={1} color="rgba(11, 143, 127, 0.12)" />
+          <Background gap={24} size={1} color="rgba(11, 143, 127, 0.09)" />
           <Controls showInteractive={false} />
         </ReactFlow>
       </div>
@@ -64,62 +97,60 @@ export function CourseKnowledgeGraph({ points, selectedId, onSelect }: CourseKno
   );
 }
 
-function buildGraph(points: CourseMasteryPoint[], selectedId?: string | null) {
+function buildFocusedGraph(points: CourseMasteryPoint[], selectedId: string | null, chapterFilter: string) {
   const pointById = new Map(points.map((point) => [point.id, point]));
-  const hasDependencies = points.some((point) =>
-    (point.prerequisite_ids ?? []).some((id) => pointById.has(id))
-  );
-  const fallbackColumns = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(points.length))));
-  const levelCache = new Map<string, number>();
-  const findLevel = (point: CourseMasteryPoint, visiting = new Set<string>()): number => {
-    const cached = levelCache.get(point.id);
-    if (cached !== undefined) return cached;
-    if (visiting.has(point.id)) return 0;
-    const nextVisiting = new Set(visiting).add(point.id);
-    const parentLevels = (point.prerequisite_ids ?? [])
-      .map((id) => pointById.get(id))
-      .filter((item): item is CourseMasteryPoint => Boolean(item))
-      .map((parent) => findLevel(parent, nextVisiting));
-    const level = parentLevels.length > 0 ? Math.max(...parentLevels) + 1 : 0;
-    levelCache.set(point.id, level);
-    return level;
-  };
-  const rowsByLevel = new Map<number, number>();
-  const columnsPerBand = 4;
-  const nodes: Node[] = points.map((point, index) => {
-    const level = findLevel(point);
-    const row = rowsByLevel.get(level) ?? 0;
-    rowsByLevel.set(level, row + 1);
-    const band = Math.floor(level / columnsPerBand);
-    const columnInBand = level % columnsPerBand;
-    const column = band % 2 === 0 ? columnInBand : columnsPerBand - columnInBand - 1;
+  const selected = selectedId ? pointById.get(selectedId) ?? null : null;
+  if (!selected) return { nodes: [], edges: [], prerequisites: [], dependents: [] };
+  const visibleInChapter = (point: CourseMasteryPoint) => !chapterFilter || point.chapter === chapterFilter;
+  const prerequisites = (selected.prerequisite_ids ?? [])
+    .map((id) => pointById.get(id))
+    .filter((point): point is CourseMasteryPoint => Boolean(point))
+    .filter(visibleInChapter)
+    .sort((a, b) => a.order_index - b.order_index);
+  const dependents = points
+    .filter((point) => visibleInChapter(point) && (point.prerequisite_ids ?? []).includes(selected.id))
+    .sort((a, b) => a.order_index - b.order_index);
+  const columns = [
+    { points: prerequisites, x: 0, role: "先修" },
+    { points: [selected], x: 270, role: "当前" },
+    { points: dependents, x: 540, role: "后续" }
+  ];
+  const maxRows = Math.max(prerequisites.length, dependents.length, 1);
+  const nodes: Node[] = columns.flatMap(({ points: columnPoints, x, role }) => columnPoints.map((point, index) => {
+    const y = role === "当前" ? Math.max(0, ((maxRows - 1) * 112) / 2) : index * 112;
     return {
       id: point.id,
-      position: hasDependencies
-        ? { x: column * 208, y: band * 116 + row * 82 }
-        : { x: (index % fallbackColumns) * 208, y: Math.floor(index / fallbackColumns) * 92 },
+      position: { x, y },
       data: {
         label: (
           <div className="course-knowledge-node-content">
+            <em>{role}</em>
             <strong>{point.title}</strong>
             <span>{statusLabels[point.status] ?? point.status} · {point.score === null ? "未评估" : `${point.score} 分`}</span>
           </div>
         )
       },
-      className: `course-knowledge-node ${point.status} ${selectedId === point.id ? "selected" : ""}`,
-      style: { width: 180, minHeight: 70 }
+      className: `course-knowledge-node ${point.status} ${selected.id === point.id ? "selected" : ""}`,
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+      style: { width: 226, minHeight: 88 }
     };
-  });
-  const edges: Edge[] = points.flatMap((point) =>
-    (point.prerequisite_ids ?? [])
-      .filter((source) => pointById.has(source))
-      .map((source) => ({
-        id: `${source}-${point.id}`,
-        source,
-        target: point.id,
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#0b8f7f" },
-        style: { stroke: "#0b8f7f", strokeWidth: 1.5 }
-      }))
-  );
-  return { nodes, edges };
+  }));
+  const edges: Edge[] = [
+    ...prerequisites.map((point) => ({
+      id: `${point.id}-${selected.id}`,
+      source: point.id,
+      target: selected.id,
+      markerEnd: { type: MarkerType.ArrowClosed, color: "#0b8f7f" },
+      style: { stroke: "#0b8f7f", strokeWidth: 1.7 }
+    })),
+    ...dependents.map((point) => ({
+      id: `${selected.id}-${point.id}`,
+      source: selected.id,
+      target: point.id,
+      markerEnd: { type: MarkerType.ArrowClosed, color: "#0b8f7f" },
+      style: { stroke: "#0b8f7f", strokeWidth: 1.7 }
+    }))
+  ];
+  return { nodes, edges, prerequisites, dependents };
 }

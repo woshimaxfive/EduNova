@@ -1208,3 +1208,5 @@ docker compose down
 - 阶段收口运行后端与前端全量、OpenAPI 漂移、Alembic head、编码、构建和 Compose；最后使用一次性账号在桌面与 390px 验证多课程切换、画像引导、引导式学习和归档状态。
 
 2026-07-18 Phase 53 实际验收：`scripts/test.ps1` 通过后端 517 项、前端 274 项、离线 AI 评测 10 项、Ruff、ESLint、TypeScript、production build、Alembic `20260718_0032`、OpenAPI 非破坏检查、UTF-8 编码和 Compose 配置。`agent-browser` 一次性账号从示例课程注册进入主页，完成全局画像和课程画像，再通过真实上传、解析、目录确认和建课得到第二门课程；主动进入两门课程时当前课程随之切换，后台任务未抢占。旧 `/app/practice` 规范化到当前课程，`guided=1` 刷新恢复且 3 题按钮保持选中，报告页如实阻止未达标归档。桌面与 390px 的 `scrollWidth` 等于视口宽度，控制台和页面错误为空。临时账号、两门课程、资料、任务与截图已精确清理；赛题实时性能入口仍输出 `evidence_gap`，本轮未将其冒充通过。
+
+2026-07-18 Phase 53 封盘前热修：新增资料库非资料类下一行动路由回归，以及报告阶段完成区和仪表盘的结构隔离断言。前端全量 275 项、ESLint、TypeScript 和 Docker production build 通过。真实浏览器确认资料库“完善画像”进入 `/app/profile?onboarding=1`；报告桌面与 390px 的阶段条和仪表盘 `overlap=false`，390px 下 `scrollWidth=innerWidth=390`，控制台与页面错误为空。

@@ -251,7 +251,7 @@ export function ReportsPage() {
           {!canUseCourse && !coursesQuery.isPending ? (
             <main className="report-no-course"><FileTextFallback /><h2>还没有可生成报告的课程</h2><p>先从资料库创建课程并完成一次练习。</p><a href={PATHS.library}>进入资料库</a></main>
           ) : (
-            <>
+            <div className="report-learning-body">
               <section className={`course-stage-completion ${stageCompletion?.eligible ? "eligible" : "pending"}`} aria-label="课程阶段完成状态">
                 <div>
                   <strong>{selectedCourse?.learning_status === "archived" ? "这门课程已归档" : stageCompletion?.eligible ? "阶段学习已达标" : "课程阶段完成条件"}</strong>
@@ -303,7 +303,7 @@ export function ReportsPage() {
               onGenerate={() => { if (!reportJobRunning) generateMutation.mutate(); }}
               onRetryReport={() => latestReportQuery.refetch()}
               />
-            </>
+            </div>
           )}
         </section>
       </PageFrame>

@@ -11,6 +11,7 @@ import { AUTH_ENDPOINTS } from "../api/auth";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
 import { DASHBOARD_ENDPOINTS, type DashboardSummary } from "../api/dashboard";
+import { LEARNING_ENDPOINTS } from "../api/learning";
 import { MATERIAL_ENDPOINTS, type MaterialListItem } from "../api/materials";
 import { PRACTICE_ENDPOINTS } from "../api/practice";
 import { PROFILE_ENDPOINTS, type StudentProfileResponse, type ProfileEventResponse } from "../api/profiles";
@@ -2335,5 +2336,54 @@ describe("student interaction affordances", () => {
     await user.click(within(historyRail).getByRole("button", { name: "新建对话" }));
 
     expect(screen.getByRole("heading", { name: /准备好一起学习了吗/ })).toBeInTheDocument();
+  });
+
+  it("routes non-material next actions out of the library workspace", async () => {
+    const user = userEvent.setup();
+
+    apiClient.defaults.adapter = async (config) => {
+      const url = config.url ?? "";
+      if (url === MATERIAL_ENDPOINTS.list) {
+        return { data: { data: [], trace_id: "trace_empty_library" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === COURSE_ENDPOINTS.list) {
+        return { data: { data: [], page: 1, page_size: 0, total: 0, trace_id: "trace_empty_courses" }, status: 200, statusText: "OK", headers: {}, config };
+      }
+      if (url === LEARNING_ENDPOINTS.nextAction) {
+        return {
+          data: {
+            data: {
+              kind: "complete_profile",
+              status: "ready",
+              label: "完善基础学习画像",
+              description: "补充偏好和学习节奏。",
+              course_id: null,
+              material_id: null,
+              knowledge_point_id: null,
+              path_task_id: null,
+              resource_id: null
+            },
+            trace_id: "trace_profile_action"
+          },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+      return { data: { data: {}, trace_id: "trace_default" }, status: 200, statusText: "OK", headers: {}, config };
+    };
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={[PATHS.library]}>
+        <Routes>
+          <Route path={PATHS.library} element={<LibraryPage />} />
+          <Route path={PATHS.profile} element={<div>已进入画像引导</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(await screen.findByRole("button", { name: "完善画像" }));
+    expect(await screen.findByText("已进入画像引导")).toBeInTheDocument();
   });
 });

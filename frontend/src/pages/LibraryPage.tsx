@@ -36,7 +36,7 @@ import { isComparableMaterial } from "../components/library/libraryMaterialState
 import { LibraryWorkspaceToolbar, type LibraryFilter } from "../components/library/LibraryWorkspaceToolbar";
 import { NextLearningAction } from "../components/learning/NextLearningAction";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
-import { invalidateLearningNextActions, useLearningNextAction } from "../features/learning-actions/learningActions";
+import { invalidateLearningNextActions, learningActionHref, useLearningNextAction } from "../features/learning-actions/learningActions";
 import { PageFrame } from "./PageFrame";
 import "../styles/library.css";
 
@@ -200,7 +200,11 @@ export function LibraryPage() {
       return;
     }
     const material = files.find((item) => item.id === action.material_id);
-    if (material) openMaterial(material);
+    if (material) {
+      openMaterial(material);
+      return;
+    }
+    navigate(learningActionHref(action));
   }
   const latestComparisonQuery = useQuery({
     queryKey: ["materials", "comparison", "latest", parsePositiveId(recentComparisonCourseId)],

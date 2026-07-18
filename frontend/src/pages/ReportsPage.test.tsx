@@ -395,6 +395,9 @@ describe("ReportsPage", () => {
     renderWithProviders(<ReportsPage />);
 
     expect(await screen.findByText("还没有真实学习报告")).toBeInTheDocument();
+    const stageCompletion = screen.getByRole("region", { name: "课程阶段完成状态" });
+    expect(stageCompletion.parentElement).toHaveClass("report-learning-body");
+    expect(stageCompletion.nextElementSibling).toHaveAttribute("aria-label", "学习数据仪表盘");
     expect(screen.getByText("完成一次课程练习后可生成报告")).toBeInTheDocument();
     expect(screen.queryByText("学习报告读取失败，请稍后重试。")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出学习档案" })).toBeInTheDocument();

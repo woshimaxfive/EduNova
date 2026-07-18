@@ -20,6 +20,14 @@
   color: var(--text);
 }
 
+.report-learning-body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .report-workspace-toolbar {
   position: relative;
   z-index: 8;
@@ -734,6 +742,7 @@
     border-radius: 0;
   }
   .report-workspace { display: block; min-height: 100%; overflow: visible; }
+  .report-learning-body { display: block; overflow: visible; }
   .report-workspace-toolbar { position: sticky; top: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
   .report-toolbar-status { display: none; }
   .report-toolbar-actions button:not(.primary) { width: 36px; padding: 0; }

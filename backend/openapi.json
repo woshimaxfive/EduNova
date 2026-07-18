@@ -8536,6 +8536,19 @@
             "title": "Attachment Ids",
             "type": "array"
           },
+          "context_resource_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "课程资源阅读页的当前资源；仅作为受控学习上下文，不作为教材证据。",
+            "title": "Context Resource Id"
+          },
           "deep_thinking": {
             "default": false,
             "deprecated": true,

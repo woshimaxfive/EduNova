@@ -59,6 +59,8 @@ class FakeTutorRepository:
     messages: list[ChatMessage] = field(default_factory=list)
     agent_logs: list[Any] = field(default_factory=list)
     materials: list[Material] = field(default_factory=list)
+    resources: list[Any] = field(default_factory=list)
+    knowledge_points: list[Any] = field(default_factory=list)
     allowed_course_ids: set[int] = field(default_factory=set)
     course_titles: dict[int, str] = field(default_factory=dict)
     course_topic_points: dict[tuple[int, str], int] = field(default_factory=dict)
@@ -122,6 +124,18 @@ class FakeTutorRepository:
         if not self.user_can_access_course(user_id, course_id):
             return None
         return SimpleNamespace(id=course_id, title=self.course_titles.get(course_id, ""))
+
+    def get_resource_for_user(self, user_id: int, resource_id: int) -> Any | None:
+        return next(
+            (resource for resource in self.resources if resource.id == resource_id and resource.user_id == user_id),
+            None,
+        )
+
+    def get_knowledge_point(self, course_id: int, point_id: int) -> Any | None:
+        return next(
+            (point for point in self.knowledge_points if point.id == point_id and point.course_id == course_id),
+            None,
+        )
 
     def find_knowledge_point_for_topic(self, course_id: int, topic: str) -> SimpleNamespace | None:
         point_id = self.course_topic_points.get((course_id, topic))
@@ -257,10 +271,13 @@ class FakeCourseAnswerGenerator:
         question: str,
         citations: list[dict[str, Any]],
         conversation_context: Any | None = None,
+        resource_context: dict[str, Any] | None = None,
     ) -> SimpleNamespace:
         call: dict[str, Any] = {"user_id": user.id, "question": question, "citations": citations}
         if conversation_context is not None:
             call["conversation_context"] = conversation_context
+        if resource_context is not None:
+            call["resource_context"] = resource_context
         self.calls.append(call)
         if self.should_raise is not None:
             raise self.should_raise
@@ -380,6 +397,7 @@ class FakeCourseAnswerGenerator:
         question: str,
         citations: list[dict[str, Any]],
         conversation_context: Any | None = None,
+        resource_context: dict[str, Any] | None = None,
     ) -> SimpleNamespace:
         self.calls.append(
             {
@@ -388,6 +406,7 @@ class FakeCourseAnswerGenerator:
                 "citations": citations,
                 "stream": True,
                 **({"conversation_context": conversation_context} if conversation_context is not None else {}),
+                **({"resource_context": resource_context} if resource_context is not None else {}),
             }
         )
         if self.should_raise is not None:
@@ -1032,6 +1051,162 @@ def test_append_course_message_persists_real_citations_from_course_knowledge() -
     assert repo.agent_logs[0].metadata_json["artifact_id"] == str(repo.messages[1].id)
     assert repo.agent_logs[2].metadata_json["citation_count"] == 1
     assert repo.agent_logs[7].metadata_json["review_status"] == "passed"
+
+
+def test_course_resource_context_guides_answer_without_becoming_a_citation() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    resource = SimpleNamespace(
+        id=701,
+        user_id=1,
+        course_id=7,
+        knowledge_point_id=401,
+        resource_type="doc",
+        title="启发式搜索分步讲义",
+        status="completed",
+        content_json={"sections": [{"heading": "估价函数", "body": "先计算 g(n)，再结合 h(n)。"}]},
+    )
+    point = SimpleNamespace(id=401, course_id=7, title="启发式搜索")
+    repo = FakeTutorRepository(
+        allowed_course_ids={7},
+        resources=[resource],
+        knowledge_points=[point],
+    )
+    citation_searcher = FakeCourseCitationSearcher(
+        results=[
+            {
+                "chunk_id": 501,
+                "course_id": 7,
+                "material_id": 301,
+                "knowledge_point_id": 401,
+                "content": "教材说明启发函数用于估计剩余代价。",
+                "source_title": "人工智能导论讲义.md",
+                "page_number": 18,
+                "section_title": "启发式搜索",
+                "score": 9.5,
+            }
+        ]
+    )
+    generator = FakeCourseAnswerGenerator()
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=citation_searcher,
+        course_answer_generator=generator,
+    )
+    session = service.create_session(user, "course", 7, "chat", "课程答疑")
+
+    detail = as_dict(
+        service.append_message(
+            user,
+            session.id,
+            "这份讲义里的两个函数是什么关系？",
+            context_resource_id=701,
+        )
+    )
+
+    assert "启发式搜索" in citation_searcher.calls[0]["query"]
+    assert "启发式搜索分步讲义" in citation_searcher.calls[0]["query"]
+    assert generator.calls[0]["resource_context"] == {
+        "resource_id": 701,
+        "resource_type": "doc",
+        "title": "启发式搜索分步讲义",
+        "knowledge_point": "启发式搜索",
+        "content": "估价函数\n先计算 g(n)，再结合 h(n)。",
+        "usage_rule": "只辅助理解当前学习资源；课程资料仍是教材事实与页码引用来源。",
+    }
+    assert detail["messages"][-1]["citation_json"] == [generator.calls[0]["citations"][0]]
+    assert all(item.get("resource_id") is None for item in detail["messages"][-1]["citation_json"])
+    resource_logs = [log for log in repo.agent_logs if log.metadata_json.get("resource_context_used")]
+    assert resource_logs
+    assert all(log.metadata_json["context_resource_id"] == 701 for log in resource_logs)
+
+
+@pytest.mark.parametrize(
+    ("scope", "resource"),
+    [
+        (
+            "home",
+            SimpleNamespace(
+                id=701, user_id=1, course_id=7, knowledge_point_id=None,
+                resource_type="doc", title="讲义", status="completed", content_json={"body": "内容"},
+            ),
+        ),
+        (
+            "course",
+            SimpleNamespace(
+                id=701, user_id=2, course_id=7, knowledge_point_id=None,
+                resource_type="doc", title="他人讲义", status="completed", content_json={"body": "内容"},
+            ),
+        ),
+        (
+            "course",
+            SimpleNamespace(
+                id=701, user_id=1, course_id=8, knowledge_point_id=None,
+                resource_type="doc", title="其他课程讲义", status="completed", content_json={"body": "内容"},
+            ),
+        ),
+        (
+            "course",
+            SimpleNamespace(
+                id=701, user_id=1, course_id=7, knowledge_point_id=None,
+                resource_type="doc", title="未完成讲义", status="draft", content_json={"body": "内容"},
+            ),
+        ),
+    ],
+)
+def test_resource_context_rejects_invalid_scope_ownership_course_or_status(scope: str, resource: Any) -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7}, resources=[resource])
+    service = module.TutorSessionService(repo, course_answer_generator=FakeCourseAnswerGenerator())
+    session = service.create_session(user, scope, 7 if scope == "course" else None, "chat", "测试会话")
+
+    with pytest.raises(module.InvalidResourceContextError):
+        service.append_message(user, session.id, "解释这份资源", context_resource_id=701)
+
+
+def test_resource_context_is_bounded_and_video_uses_metadata_only() -> None:
+    module = load_tutor_module()
+
+    bounded = module.TutorSessionService._resource_context_content(
+        "doc",
+        {"body": "甲" * 9000, "citation_json": ["不应进入"], "metadata": {"secret": "不应进入"}},
+    )
+    video = module.TutorSessionService._resource_context_content(
+        "video",
+        {
+            "artifact": {
+                "platform": "bilibili",
+                "title": "缓存结构动画",
+                "author": "公开课",
+                "duration": "12:30",
+                "original_url": "https://www.bilibili.com/video/BV1test",
+                "summary": "搜索摘要不能冒充视频内容",
+                "transcript": "并未观看的视频全文",
+            }
+        },
+    )
+
+    assert len(bounded) == 1200
+    assert "不应进入" not in bounded
+    assert "缓存结构动画" in video
+    assert "搜索摘要" not in video
+    assert "视频全文" not in video
+
+
+def test_resource_context_rejects_empty_learning_content() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    resource = SimpleNamespace(
+        id=701, user_id=1, course_id=7, knowledge_point_id=None,
+        resource_type="doc", title="空资源", status="completed", content_json={},
+    )
+    repo = FakeTutorRepository(allowed_course_ids={7}, resources=[resource])
+    service = module.TutorSessionService(repo, course_answer_generator=FakeCourseAnswerGenerator())
+    session = service.create_session(user, "course", 7, "chat", "课程答疑")
+
+    with pytest.raises(module.InvalidResourceContextError, match="没有可供助教理解"):
+        service.append_message(user, session.id, "解释这份资源", context_resource_id=701)
 
 
 def test_course_citation_search_filters_low_relevance_reranker_tail() -> None:

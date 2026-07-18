@@ -32,6 +32,7 @@ from backend.app.services.semantic_decision import SemanticDecisionService
 from backend.app.services.tutor import (
     EmptyMessageError,
     InvalidMaterialContextError,
+    InvalidResourceContextError,
     InvalidSessionScopeError,
     SessionNotFoundError,
     SqlAlchemyTutorSessionRepository,
@@ -258,6 +259,7 @@ def send_message(
             deep_thinking=payload.deep_thinking,
             selected_material_ids=payload.selected_material_ids,
             attachment_ids=payload.attachment_ids,
+            context_resource_id=payload.context_resource_id,
         )
     except EmptyMessageError as exc:
         raise ApiError(
@@ -273,6 +275,8 @@ def send_message(
         ) from exc
     except InvalidMaterialContextError as exc:
         raise ApiError(status_code=status.HTTP_400_BAD_REQUEST, code="MATERIAL_CONTEXT_INVALID", message=str(exc)) from exc
+    except InvalidResourceContextError as exc:
+        raise ApiError(status_code=status.HTTP_400_BAD_REQUEST, code="RESOURCE_CONTEXT_INVALID", message=str(exc)) from exc
     except CourseAnswerGenerationError as exc:
         raise ApiError(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -300,6 +304,7 @@ def stream_message(
             selected_material_ids=payload.selected_material_ids,
             attachment_ids=payload.attachment_ids,
             resource_request=payload.resource_request,
+            context_resource_id=payload.context_resource_id,
         )
     except EmptyMessageError as exc:
         raise ApiError(
@@ -321,6 +326,8 @@ def stream_message(
         ) from exc
     except InvalidMaterialContextError as exc:
         raise ApiError(status_code=status.HTTP_400_BAD_REQUEST, code="MATERIAL_CONTEXT_INVALID", message=str(exc)) from exc
+    except InvalidResourceContextError as exc:
+        raise ApiError(status_code=status.HTTP_400_BAD_REQUEST, code="RESOURCE_CONTEXT_INVALID", message=str(exc)) from exc
     except CourseAnswerGenerationError as exc:
         raise ApiError(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

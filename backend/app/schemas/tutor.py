@@ -67,6 +67,11 @@ class DeleteTutorSessionResponse(BaseModel):
 class SendTutorMessageRequest(BaseModel):
     message: str = Field(default="", max_length=8000)
     attachment_ids: list[int] = Field(default_factory=list)
+    context_resource_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="课程资源阅读页的当前资源；仅作为受控学习上下文，不作为教材证据。",
+    )
     use_web_search: bool = Field(
         default=False,
         json_schema_extra={"deprecated": True},

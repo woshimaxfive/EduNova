@@ -107,6 +107,10 @@ class InvalidMaterialContextError(ValueError):
     pass
 
 
+class InvalidResourceContextError(ValueError):
+    pass
+
+
 class TutorSessionRepository(Protocol):
     def list_sessions(self, user_id: int, scope: str, course_id: int | None = None) -> list[ChatSession]:
         ...
@@ -124,6 +128,12 @@ class TutorSessionRepository(Protocol):
         ...
 
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
+        ...
+
+    def get_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None:
+        ...
+
+    def get_knowledge_point(self, course_id: int, knowledge_point_id: int) -> KnowledgePoint | None:
         ...
 
     def find_knowledge_point_for_topic(self, course_id: int, topic: str) -> KnowledgePoint | None:
@@ -289,6 +299,8 @@ def _supported_course_answer_kwargs(callable_value: Any, state: AgentState) -> d
     try:
         if "plan_summary" in signature(callable_value).parameters:
             kwargs["plan_summary"] = str(state.get("plan_summary") or "")
+        if "resource_context" in signature(callable_value).parameters:
+            kwargs["resource_context"] = state.get("resource_context")
     except (TypeError, ValueError):
         pass
     return kwargs
@@ -440,6 +452,22 @@ class SqlAlchemyTutorSessionRepository:
         if not self.user_can_access_course(user_id, course_id):
             return None
         return self.db.scalar(select(Course).where(Course.id == course_id))
+
+    def get_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None:
+        return self.db.scalar(
+            select(GeneratedResource).where(
+                GeneratedResource.id == resource_id,
+                GeneratedResource.user_id == user_id,
+            )
+        )
+
+    def get_knowledge_point(self, course_id: int, knowledge_point_id: int) -> KnowledgePoint | None:
+        return self.db.scalar(
+            select(KnowledgePoint).where(
+                KnowledgePoint.id == knowledge_point_id,
+                KnowledgePoint.course_id == course_id,
+            )
+        )
 
     def find_knowledge_point_for_topic(self, course_id: int, topic: str) -> KnowledgePoint | None:
         topic_key = self._topic_key(topic)
@@ -836,10 +864,12 @@ class TutorSessionService:
         deep_thinking: bool = False,
         selected_material_ids: list[int] | None = None,
         attachment_ids: list[int] | None = None,
+        context_resource_id: int | None = None,
     ) -> TutorSessionDetail:
         normalized_attachment_ids = list(dict.fromkeys(attachment_ids or []))[:3]
         stored_message_text = content.strip() or (DEFAULT_IMAGE_QUESTION if normalized_attachment_ids else "")
         session = self._get_session_for_user(user.id, session_id)
+        resource_context = self._prepare_resource_context(user, session, context_resource_id)
         message_text, vision_decision = self._prepare_visual_question(
             user=user,
             session=session,
@@ -859,6 +889,7 @@ class TutorSessionService:
                 attachment_ids=normalized_attachment_ids,
                 stored_message_text=stored_message_text,
                 vision_decision=vision_decision,
+                resource_context=resource_context,
             )
         material_ids, material_warnings = self._material_context_for_message(user, session, selected_material_ids)
         return HomeTutorGraphRunner(self).append(
@@ -884,10 +915,12 @@ class TutorSessionService:
         selected_material_ids: list[int] | None = None,
         attachment_ids: list[int] | None = None,
         resource_request: bool = False,
+        context_resource_id: int | None = None,
     ) -> Iterator[dict[str, Any]]:
         normalized_attachment_ids = list(dict.fromkeys(attachment_ids or []))[:3]
         stored_message_text = content.strip() or (DEFAULT_IMAGE_QUESTION if normalized_attachment_ids else "")
         session = self._get_session_for_user(user.id, session_id)
+        resource_context = self._prepare_resource_context(user, session, context_resource_id)
         message_text, vision_decision = self._prepare_visual_question(
             user=user,
             session=session,
@@ -915,6 +948,7 @@ class TutorSessionService:
                 attachment_ids=normalized_attachment_ids,
                 stored_message_text=stored_message_text,
                 vision_decision=vision_decision,
+                resource_context=resource_context,
             )
         material_ids, material_warnings = self._material_context_for_message(user, session, selected_material_ids)
         return HomeTutorGraphRunner(self).stream(
@@ -929,6 +963,73 @@ class TutorSessionService:
             stored_message_text=stored_message_text,
             vision_decision=vision_decision,
         )
+
+    def _prepare_resource_context(
+        self,
+        user: User,
+        session: ChatSession,
+        resource_id: int | None,
+    ) -> dict[str, Any] | None:
+        if resource_id is None:
+            return None
+        if session.scope != "course" or session.course_id is None:
+            raise InvalidResourceContextError("当前会话不能使用课程资源上下文。")
+        resource = self.repository.get_resource_for_user(user.id, resource_id)
+        if resource is None or resource.course_id != session.course_id or resource.status != "completed":
+            raise InvalidResourceContextError("当前资源不存在、不可学习或无权访问。")
+        point = (
+            self.repository.get_knowledge_point(session.course_id, resource.knowledge_point_id)
+            if resource.knowledge_point_id is not None
+            else None
+        )
+        content = self._resource_context_content(resource.resource_type, resource.content_json)
+        if not content.strip():
+            raise InvalidResourceContextError("当前资源没有可供助教理解的有效内容。")
+        return {
+            "resource_id": resource.id,
+            "resource_type": resource.resource_type,
+            "title": resource.title[:255],
+            "knowledge_point": str(getattr(point, "title", "") or "")[:160],
+            "content": content,
+            "usage_rule": "只辅助理解当前学习资源；课程资料仍是教材事实与页码引用来源。",
+        }
+
+    @classmethod
+    def _resource_context_content(cls, resource_type: str, content_json: dict[str, Any]) -> str:
+        if resource_type == "video":
+            artifact = content_json.get("artifact") if isinstance(content_json, dict) else None
+            source = artifact if isinstance(artifact, dict) else content_json
+            fields = (
+                ("平台", source.get("platform")),
+                ("标题", source.get("title")),
+                ("作者", source.get("author")),
+                ("时长", source.get("duration")),
+                ("原平台链接", source.get("original_url") or source.get("url")),
+            )
+            return "\n".join(f"{label}：{value}" for label, value in fields if value)[:6000]
+
+        parts: list[str] = []
+
+        def collect(value: Any, depth: int = 0) -> None:
+            if sum(len(item) for item in parts) >= 6000 or depth > 5:
+                return
+            if isinstance(value, str):
+                normalized = " ".join(value.split())
+                if normalized:
+                    parts.append(normalized[:1200])
+            elif isinstance(value, dict):
+                for key, item in value.items():
+                    if str(key) in {"metadata", "quality", "agent_trace_id", "citation_json"}:
+                        continue
+                    collect(item, depth + 1)
+            elif isinstance(value, list):
+                for item in value[:40]:
+                    collect(item, depth + 1)
+            elif isinstance(value, (int, float, bool)):
+                parts.append(str(value))
+
+        collect(content_json)
+        return "\n".join(parts)[:6000]
 
     def _stream_resource_request_confirmation(
         self,
@@ -1644,6 +1745,7 @@ class TutorSessionService:
             safe_context_metadata.get("context_message_count")
             or safe_context_metadata.get("context_summary_used")
             or safe_context_metadata.get("retrieval_query_mode") == "contextual"
+            or safe_context_metadata.get("resource_context_used")
         ):
             data.update(safe_context_metadata)
         return {
@@ -1972,6 +2074,11 @@ class TutorSessionService:
             "retrieval_query_mode": "contextual"
             if context_metadata.get("retrieval_query_mode") == "contextual"
             else "direct",
+            "resource_context_used": bool(context_metadata.get("resource_context_used")),
+            "context_resource_id": int(context_metadata.get("context_resource_id"))
+            if str(context_metadata.get("context_resource_id") or "").isdigit()
+            else None,
+            "context_resource_type": str(context_metadata.get("context_resource_type") or "")[:32],
         }
 
     @staticmethod
@@ -3072,6 +3179,7 @@ class CourseTutorGraphRunner:
         attachment_ids: list[int] | None = None,
         stored_message_text: str | None = None,
         vision_decision: dict[str, Any] | None = None,
+        resource_context: dict[str, Any] | None = None,
     ) -> TutorSessionDetail:
         state = self._initial_state(
             user=user,
@@ -3082,6 +3190,7 @@ class CourseTutorGraphRunner:
             attachment_ids=attachment_ids or [],
             stored_message_text=stored_message_text or message_text,
             vision_decision=vision_decision,
+            resource_context=resource_context,
         )
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow)):
             result = self.graph.invoke(state)
@@ -3112,6 +3221,7 @@ class CourseTutorGraphRunner:
         attachment_ids: list[int] | None = None,
         stored_message_text: str | None = None,
         vision_decision: dict[str, Any] | None = None,
+        resource_context: dict[str, Any] | None = None,
     ) -> Iterator[dict[str, Any]]:
         state = self._initial_state(
             user=user,
@@ -3122,6 +3232,7 @@ class CourseTutorGraphRunner:
             attachment_ids=attachment_ids or [],
             stored_message_text=stored_message_text or message_text,
             vision_decision=vision_decision,
+            resource_context=resource_context,
         )
         try:
             yield {"event": "status", "data": {"stage": "profile", "label": "正在读取学习画像"}}
@@ -3228,6 +3339,7 @@ class CourseTutorGraphRunner:
         attachment_ids: list[int],
         stored_message_text: str,
         vision_decision: dict[str, Any] | None,
+        resource_context: dict[str, Any] | None,
     ) -> AgentState:
         conversation_context = self.service._build_conversation_context(
             session,
@@ -3235,12 +3347,33 @@ class CourseTutorGraphRunner:
             current_question=message_text,
         )
         retrieval_query = self.service._build_contextual_query(message_text, conversation_context)
+        if resource_context:
+            resource_hint = " ".join(
+                item
+                for item in (
+                    str(resource_context.get("knowledge_point") or ""),
+                    str(resource_context.get("title") or ""),
+                )
+                if item
+            )
+            retrieval_query = self.service._safe_query_text(
+                f"{resource_hint} {retrieval_query}".strip(),
+                limit=CONTEXT_MESSAGE_CHAR_LIMIT,
+            )
         context_metadata = self.service._context_metadata(
             conversation_context,
             retrieval_query,
             message_text,
             retrieval_active=True,
         )
+        if resource_context:
+            context_metadata.update(
+                {
+                    "resource_context_used": True,
+                    "context_resource_id": resource_context.get("resource_id"),
+                    "context_resource_type": resource_context.get("resource_type"),
+                }
+            )
         decision = decide_tool_capabilities(message_text, force_search=force_search, force_deep=force_deep)
         return {
             "trace_id": make_trace_id(),
@@ -3254,6 +3387,7 @@ class CourseTutorGraphRunner:
             "attachment_ids": attachment_ids,
             "stored_message_text": stored_message_text,
             "vision_decision": vision_decision,
+            "resource_context": resource_context,
             "use_web_search": force_search,
             "deep_thinking": force_deep,
             "search_required": decision.search_required,
@@ -3877,6 +4011,7 @@ class CourseTutorGraphRunner:
 
     def _base_metadata(self, state: AgentState) -> dict[str, Any]:
         citations = list(state.get("citation_json", []))
+        resource_context = state.get("resource_context") if isinstance(state.get("resource_context"), dict) else None
         return {
             "citation_count": len(citations),
             "course_citation_count": sum(1 for item in citations if item.get("source_type") != "web"),
@@ -3890,4 +4025,9 @@ class CourseTutorGraphRunner:
             "semantic_intent": str(state.get("intent") or "general_learning")[:64],
             "profile_signal_count": len(state.get("profile_signal_updates", {})),
             **self.service._safe_trace_context_metadata(state.get("context_metadata")),
+            "resource_context_used": bool(resource_context),
+            "context_resource_id": resource_context.get("resource_id") if resource_context else None,
+            "context_resource_type": str(resource_context.get("resource_type") or "")[:32]
+            if resource_context
+            else "",
         }

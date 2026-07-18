@@ -46,6 +46,7 @@ class AgentState(TypedDict, total=False):
     stored_message_text: str
     attachment_ids: list[int]
     vision_decision: dict[str, Any] | None
+    resource_context: dict[str, Any] | None
     conversation_context: Any
     retrieval_query: str
     context_metadata: dict[str, Any]

@@ -4635,6 +4635,11 @@ export interface components {
             /** Attachment Ids */
             attachment_ids?: number[];
             /**
+             * Context Resource Id
+             * @description 课程资源阅读页的当前资源；仅作为受控学习上下文，不作为教材证据。
+             */
+            context_resource_id?: number | null;
+            /**
              * Deep Thinking
              * @deprecated
              * @description 兼容旧客户端；true 强制深度推理，false 或缺省由系统自动判断。

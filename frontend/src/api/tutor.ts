@@ -60,6 +60,7 @@ export type SendTutorMessageRequest = {
   selected_material_ids?: number[];
   attachment_ids?: number[];
   resource_request?: boolean;
+  context_resource_id?: number;
 };
 
 export type TutorSessionSummary = {
@@ -138,6 +139,9 @@ export type TutorStreamMetadata = {
   context_message_count?: number;
   context_summary_used?: boolean;
   retrieval_query_mode?: string;
+  resource_context_used?: boolean;
+  context_resource_id?: number | null;
+  context_resource_type?: string;
 };
 
 export type TutorStreamStatus = {
@@ -287,7 +291,16 @@ export async function streamTutorMessage(
     }
   }
   if (!response.ok) {
-    throw new Error("模型暂不可用，请检查设置或稍后重试。");
+    let message = "模型暂不可用，请检查设置或稍后重试。";
+    try {
+      const body = await response.json() as { error?: { message?: unknown } };
+      if (typeof body.error?.message === "string" && body.error.message.trim()) {
+        message = body.error.message;
+      }
+    } catch {
+      // 非 JSON 错误响应沿用安全通用提示。
+    }
+    throw new Error(message);
   }
   if (!response.body) {
     throw new Error("当前浏览器不支持流式回答。");

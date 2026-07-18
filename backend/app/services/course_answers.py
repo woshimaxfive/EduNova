@@ -370,6 +370,7 @@ class CourseAnswerService:
         learner_context: dict[str, Any] | None = None,
         reasoning_mode: str = "auto",
         plan_summary: str | None = None,
+        resource_context: dict[str, Any] | None = None,
     ) -> CourseAnswerGeneration:
         if not citations:
             return CourseAnswerGeneration(content="我先检查了课程资料，但还没有足够依据支撑这个问题。", trace_id=None)
@@ -381,6 +382,7 @@ class CourseAnswerService:
             conversation_context=conversation_context,
             learner_context=learner_context,
             plan_summary=plan_summary,
+            resource_context=resource_context,
         )
         try:
             content = self._course_chat_completion(user, messages, reasoning_mode)
@@ -408,6 +410,7 @@ class CourseAnswerService:
         learner_context: dict[str, Any] | None = None,
         reasoning_mode: str = "auto",
         plan_summary: str | None = None,
+        resource_context: dict[str, Any] | None = None,
     ) -> CourseAnswerStream:
         if not citations:
             return CourseAnswerStream(
@@ -423,6 +426,7 @@ class CourseAnswerService:
             conversation_context=conversation_context,
             learner_context=learner_context,
             plan_summary=plan_summary,
+            resource_context=resource_context,
         )
         try:
             tokens = self._course_chat_completion_stream(user, messages, reasoning_mode)
@@ -543,6 +547,7 @@ class CourseAnswerService:
         conversation_context: ConversationContext | None = None,
         learner_context: dict[str, Any] | None = None,
         plan_summary: str | None = None,
+        resource_context: dict[str, Any] | None = None,
     ) -> list[dict[str, str]]:
         course_blocks: list[str] = []
         web_blocks: list[str] = []
@@ -609,6 +614,8 @@ class CourseAnswerService:
                         str(plan_summary or "模型自适应处理。")[:1000],
                         "可信课程画像摘要：",
                         CourseAnswerService._learner_context_text(learner_context),
+                        "当前学习资源上下文：",
+                        CourseAnswerService._resource_context_text(resource_context),
                         "请基于上述来源生成学习回答；如果只有外部来源，必须明确称为外部补充。不要在正文列出来源编号、匹配度或片段，来源证据由前端来源面板展示。",
                     ]
                 ),
@@ -739,6 +746,12 @@ class CourseAnswerService:
         if not learner_context:
             return "暂无达到使用门槛的画像信息。"
         return json.dumps(learner_context, ensure_ascii=False, separators=(",", ":"))[:1600]
+
+    @staticmethod
+    def _resource_context_text(resource_context: dict[str, Any] | None) -> str:
+        if not resource_context:
+            return "未从资源阅读页发起。"
+        return json.dumps(resource_context, ensure_ascii=False, separators=(",", ":"))[:6400]
 
     @staticmethod
     def _conversation_context_messages(conversation_context: ConversationContext | None) -> list[dict[str, str]]:

@@ -2289,7 +2289,7 @@ course_id=101
 
 ### GET `/settings/model/configs`
 
-用途：读取当前用户所有模型配置和系统默认服务摘要。必须携带 JWT。每条配置可包含回答、向量和重排序三组独立连接；所有 Key 只返回脱敏状态。`can_use_model`、`can_use_embedding_model` 和 `can_use_rerank_model` 分别表示三项能力。
+用途：读取当前用户所有模型配置和系统默认服务摘要。必须携带 JWT。每条配置可包含回答、向量和重排序三组独立连接；所有 Key 只返回脱敏状态。`can_use_model`、`can_use_embedding_model` 和 `can_use_rerank_model` 分别表示三项能力；`is_generation_default` 标记后台生成模型用途。
 
 响应：
 
@@ -2316,6 +2316,7 @@ course_id=101
         "can_use_model": true,
         "can_use_embedding_model": true,
         "is_default": true,
+        "is_generation_default": false,
         "is_embedding_default": true,
         "last_test_ok": true,
         "last_test_message": "AI 服务连接正常。",
@@ -2346,6 +2347,7 @@ course_id=101
     },
     "default_config_id": 1,
     "default_chat_config_id": 1,
+    "default_generation_config_id": null,
     "default_embedding_config_id": null
   },
   "trace_id": "trace_settings_configs"
@@ -2354,7 +2356,7 @@ course_id=101
 
 ### POST `/settings/model/configs`
 
-用途：创建当前用户的一条模型配置方案。`display_name` 在同一用户内不能重复；回答、向量和重排序至少填写一项。三项能力分别接受自己的 Provider、预设、Base URL、Key 和模型，因此同一方案可组合不同服务商。`make_default`、`make_embedding_default`、`make_rerank_default` 只影响各自用途。
+用途：创建当前用户的一条模型配置方案。`display_name` 在同一用户内不能重复；回答、向量和重排序至少填写一项。三项能力分别接受自己的 Provider、预设、Base URL、Key 和模型，因此同一方案可组合不同服务商。`make_default`、`make_generation_default`、`make_embedding_default`、`make_rerank_default` 只影响各自用途。
 
 请求：
 
@@ -2384,7 +2386,11 @@ course_id=101
 
 ### POST `/settings/model/configs/{config_id}/default`
 
-用途：把当前用户自己的某条配置设为回答默认，并取消同用户其他回答默认项。主页、课程问答和生成型 Graph 优先使用回答默认；不存在时回退服务器 `.env` 回答配置。`default_config_id` 继续作为 `default_chat_config_id` 的兼容别名。
+用途：把当前用户自己的某条配置设为回答默认，并取消同用户其他回答默认项。主页、课程问答、语义路由和图片后续回答优先使用回答默认；不存在时回退服务器 `.env` 回答配置。`default_config_id` 继续作为 `default_chat_config_id` 的兼容别名。
+
+### POST `/settings/model/configs/{config_id}/generation-default`
+
+用途：把包含 `chat_model` 的配置设为生成任务默认，并取消同用户其他生成默认项。资源生成及其 Review/Repair、路径规划、练习生成/Review/Revision 和报告生成优先使用它；没有个人生成默认时回退回答默认，再回退服务器 `.env` 回答配置。普通对话、语义路由、评分、检索和图片理解不使用该路由。
 
 ### POST `/settings/model/configs/{config_id}/embedding-default`
 
@@ -2404,7 +2410,7 @@ course_id=101
 
 ### DELETE `/settings/model/configs/{config_id}`
 
-用途：删除当前用户自己的某条模型配置。若该配置承担回答或向量默认，对应用途分别选择剩余的可用配置；没有候选时独立回退服务器配置。
+用途：删除当前用户自己的某条模型配置。若该配置承担回答、生成任务或向量默认，对应用途分别选择剩余的可用配置；没有候选时按对应回退规则使用服务器配置。
 
 模型 Provider 第一版按 OpenAI-compatible 协议实现：
 

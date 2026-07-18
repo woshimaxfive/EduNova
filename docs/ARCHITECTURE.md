@@ -88,7 +88,7 @@ Docker Compose 为 PostgreSQL、Redis 和导出文件分别使用固定命名卷
 - 个人资料库上传、列表、详情和进度。
 - TXT/Markdown/PDF/DOCX/PPTX 已解析资料生成课程。
 - 课程详情、知识点、课程会话、RAG 引用和流式回答。
-- 多模型配置管理、回答/向量独立默认和连接测试。
+- 多模型配置管理、回答/生成任务/向量独立默认和连接测试。
 - 主页与课程空间内置联网搜索和自适应推理、`home_tutor/course_tutor` trace、浏览器语音输入和朗读。
 - 资源工坊、画像、持续学习路径、练习、报告、资料对比和学习档案导出。
 
@@ -268,7 +268,7 @@ backend/app/
 | `backend/app/data/builtin_courses/data_structures/` | 8 个理论章节、伪代码、16 个实验和公开书目组成的静态内置课程包 |
 | `backend/app/services/course_seed.py` | 为用户确定性安装课程内部来源，并按内部 slug 幂等替换旧内置课 |
 | `backend/app/services/tutor.py` | 主页/课程会话 API 边界和依赖装配；`HomeTutorGraphRunner` 接管主页上下文、路由、资料检索、联网、规划、回答、Review/Repair 和持久化，`CourseTutorGraphRunner` 接管严格课程 RAG 问答 |
-| `backend/app/services/model_settings.py` | 模型设置服务，负责单配置内回答/向量/重排序独立连接、三类默认、系统兜底、凭证加密、连接测试与实际向量维度识别 |
+| `backend/app/services/model_settings.py` | 模型设置服务，负责单配置内回答/向量/重排序独立连接、回答/生成任务/向量/重排序默认、系统兜底、凭证加密、连接测试与实际向量维度识别 |
 | `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计 |
 | `backend/app/services/embeddings.py` | Embedding 服务，负责讯飞原生与 OpenAI-compatible 动态维度调用、配置指纹和切片向量写入；无配置时只返回关键词 fallback |
 | `backend/app/providers/retrieval.py` | 讯飞签名 Embedding、UTF-8 2KB 分片池化、硅基/百炼 Rerank Provider |
@@ -535,10 +535,10 @@ Provider 抽象目标能力：
 配置解析优先级：
 
 ```text
-当前用户对应用途的默认配置 -> .env 中对应用途的 SYSTEM_MODEL_* -> 未配置提示
+生成任务默认配置 -> 回答默认配置 -> .env 中的 SYSTEM_MODEL_* -> 未配置提示
 ```
 
-回答 Key、向量 Key、讯飞 APPID/APISecret 与重排序 Key 均使用 Fernet 加密。每条配置保存三项独立连接和测试摘要，三类默认可指向同一套或不同套方案。`GET /settings/model/configs` 只返回脱敏状态、能力可用性和三类默认配置 ID，不返回明文凭证。
+回答 Key、向量 Key、讯飞 APPID/APISecret 与重排序 Key 均使用 Fernet 加密。每条配置保存三项独立连接和测试摘要；回答、生成任务、向量和重排序默认可指向同一套或不同套方案。资源生成及其 Review/Repair、路径规划、练习生成/Review/Revision 和报告生成使用生成任务默认；主页/课程普通对话、语义路由、评分、检索和图片理解不切换该默认。`GET /settings/model/configs` 只返回脱敏状态、能力可用性和各默认配置 ID，不返回明文凭证。
 
 Phase 18 后，个人配置只有在字段不完整时才沿用现有服务器配置兜底；已经对个人配置发起的请求发生超时、限流或服务故障时，只在同一配置内有限重试，不把学习内容自动发送给另一 Provider。普通调用与 Embedding 最多 3 次，流式调用只允许在首 token 前重试。Redis 暂不可用时限流与熔断 fail-open，但模型 HTTP 超时、Graph fallback 和安全审计边界继续生效。
 

@@ -5550,6 +5550,11 @@
             "title": "Is Embedding Default",
             "type": "boolean"
           },
+          "is_generation_default": {
+            "default": false,
+            "title": "Is Generation Default",
+            "type": "boolean"
+          },
           "is_rerank_default": {
             "default": false,
             "title": "Is Rerank Default",
@@ -6025,6 +6030,17 @@
               }
             ],
             "title": "Default Embedding Config Id"
+          },
+          "default_generation_config_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Generation Config Id"
           },
           "default_rerank_config_id": {
             "anyOf": [
@@ -8017,6 +8033,11 @@
             "title": "Make Embedding Default",
             "type": "boolean"
           },
+          "make_generation_default": {
+            "default": false,
+            "title": "Make Generation Default",
+            "type": "boolean"
+          },
           "make_rerank_default": {
             "default": false,
             "title": "Make Rerank Default",
@@ -9206,6 +9227,11 @@
               }
             ],
             "title": "Make Embedding Default"
+          },
+          "make_generation_default": {
+            "default": false,
+            "title": "Make Generation Default",
+            "type": "boolean"
           },
           "make_rerank_default": {
             "anyOf": [
@@ -21228,6 +21254,144 @@
           }
         },
         "summary": "Set Embedding Default Model Config",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/model/configs/{config_id}/generation-default": {
+      "post": {
+        "operationId": "set_generation_default_model_config_api_v1_settings_model_configs__config_id__generation_default_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "config_id",
+            "required": true,
+            "schema": {
+              "title": "Config Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_ModelSettingsListResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Set Generation Default Model Config",
         "tags": [
           "settings"
         ]

@@ -46,6 +46,12 @@ from backend.app.services.model_execution import (
 
 MODEL_NOT_CONFIGURED_MESSAGE = "已找到资料依据，但当前未配置可用模型。"
 LOCAL_PLACEHOLDER_API_KEY = "local-dev-key"
+GENERATION_TASK_PREFIXES = ("resource_", "path_", "practice_", "report_")
+
+
+def _uses_generation_runtime(task_type: str) -> bool:
+    """Keep normal tutoring and recognition on the answer-model route."""
+    return task_type.startswith(GENERATION_TASK_PREFIXES)
 
 
 def _vision_connection_test_image() -> str:
@@ -100,6 +106,7 @@ class ModelNotConfiguredError(RuntimeError):
 class ModelSettingsRepository(Protocol):
     def get_for_user(self, user_id: int) -> ModelSetting | None: ...
     def get_default_for_user(self, user_id: int) -> ModelSetting | None: ...
+    def get_generation_default_for_user(self, user_id: int) -> ModelSetting | None: ...
     def get_embedding_default_for_user(self, user_id: int) -> ModelSetting | None: ...
     def get_rerank_default_for_user(self, user_id: int) -> ModelSetting | None: ...
     def get_vision_default_for_user(self, user_id: int) -> ModelSetting | None: ...
@@ -108,6 +115,7 @@ class ModelSettingsRepository(Protocol):
     def save(self, setting: ModelSetting) -> None: ...
     def delete(self, setting: ModelSetting) -> None: ...
     def unset_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
+    def unset_generation_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
     def unset_embedding_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
     def unset_rerank_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
     def unset_vision_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None: ...
@@ -217,6 +225,7 @@ class SaveModelConfigRequest(SaveModelSettingsRequest):
     embedding_preset_id: str | None = Field(default=None, max_length=80)
     rerank_preset_id: str | None = Field(default=None, max_length=80)
     make_default: bool = False
+    make_generation_default: bool = False
     make_embedding_default: bool = False
     make_rerank_default: bool = False
     make_vision_default: bool = False
@@ -236,6 +245,7 @@ class UpdateModelConfigRequest(BaseModel):
     base_url: str | None = Field(default=None, min_length=1, max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
     chat_model: str | None = Field(default=None, max_length=120)
+    make_generation_default: bool = False
     vision_app_id: str | None = Field(default=None, max_length=500)
     vision_api_key: str | None = Field(default=None, max_length=500)
     vision_api_secret: str | None = Field(default=None, max_length=500)
@@ -380,6 +390,7 @@ class ModelConfigSummary(BaseModel):
     can_use_embedding_model: bool
     can_use_rerank_model: bool = False
     is_default: bool
+    is_generation_default: bool = False
     is_embedding_default: bool
     is_rerank_default: bool = False
     is_vision_default: bool = False
@@ -397,6 +408,7 @@ class ModelSettingsListResponse(BaseModel):
     system_summary: ModelSettingsSummary
     default_config_id: int | None
     default_chat_config_id: int | None
+    default_generation_config_id: int | None = None
     default_embedding_config_id: int | None
     default_rerank_config_id: int | None = None
     default_vision_config_id: int | None = None
@@ -456,6 +468,13 @@ class SqlAlchemyModelSettingsRepository:
             .order_by(ModelSetting.updated_at.desc(), ModelSetting.id.desc())
         )
 
+    def get_generation_default_for_user(self, user_id: int) -> ModelSetting | None:
+        return self.db.scalar(
+            select(ModelSetting)
+            .where(ModelSetting.user_id == user_id, ModelSetting.is_generation_default.is_(True))
+            .order_by(ModelSetting.updated_at.desc(), ModelSetting.id.desc())
+        )
+
     def get_embedding_default_for_user(self, user_id: int) -> ModelSetting | None:
         return self.db.scalar(
             select(ModelSetting)
@@ -484,6 +503,7 @@ class SqlAlchemyModelSettingsRepository:
                 .where(ModelSetting.user_id == user_id)
                 .order_by(
                     ModelSetting.is_default.desc(),
+                    ModelSetting.is_generation_default.desc(),
                     ModelSetting.is_embedding_default.desc(),
                     ModelSetting.is_rerank_default.desc(),
                     ModelSetting.is_vision_default.desc(),
@@ -511,6 +531,12 @@ class SqlAlchemyModelSettingsRepository:
         if except_setting_id is not None:
             statement = statement.where(ModelSetting.id != except_setting_id)
         self.db.execute(statement.values(is_default=False))
+
+    def unset_generation_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None:
+        statement = update(ModelSetting).where(ModelSetting.user_id == user_id)
+        if except_setting_id is not None:
+            statement = statement.where(ModelSetting.id != except_setting_id)
+        self.db.execute(statement.values(is_generation_default=False))
 
     def unset_embedding_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None:
         statement = update(ModelSetting).where(ModelSetting.user_id == user_id)
@@ -577,6 +603,7 @@ class ModelSettingsService:
     def list_configs(self, user: User) -> ModelSettingsListResponse:
         configs = [self._config_summary(setting) for setting in self.repository.list_for_user(user.id)]
         default_chat_config = next((config for config in configs if config.is_default), None)
+        default_generation_config = next((config for config in configs if config.is_generation_default), None)
         default_embedding_config = next((config for config in configs if config.is_embedding_default), None)
         default_rerank_config = next((config for config in configs if config.is_rerank_default), None)
         default_vision_config = next((config for config in configs if config.is_vision_default), None)
@@ -585,6 +612,7 @@ class ModelSettingsService:
             system_summary=self._system_summary(),
             default_config_id=default_chat_config.id if default_chat_config else None,
             default_chat_config_id=default_chat_config.id if default_chat_config else None,
+            default_generation_config_id=default_generation_config.id if default_generation_config else None,
             default_embedding_config_id=default_embedding_config.id if default_embedding_config else None,
             default_rerank_config_id=default_rerank_config.id if default_rerank_config else None,
             default_vision_config_id=default_vision_config.id if default_vision_config else None,
@@ -617,6 +645,7 @@ class ModelSettingsService:
         existing_configs = self.repository.list_for_user(user.id)
         self._ensure_unique_display_name(user.id, payload.display_name)
         has_chat_default = any(candidate.is_default for candidate in existing_configs)
+        has_generation_default = any(candidate.is_generation_default for candidate in existing_configs)
         has_embedding_default = any(candidate.is_embedding_default for candidate in existing_configs)
         has_rerank_default = any(candidate.is_rerank_default for candidate in existing_configs)
         capabilities = provider_capabilities(
@@ -630,6 +659,8 @@ class ModelSettingsService:
             provider="openai_compatible",
             is_default=bool(payload.chat_model)
             and (payload.make_default or (not has_chat_default and not capabilities.supports_image_input)),
+            is_generation_default=bool(payload.chat_model)
+            and (payload.make_generation_default or (not has_generation_default and not capabilities.supports_image_input)),
             is_embedding_default=bool(payload.embedding_model)
             and (payload.make_embedding_default or not has_embedding_default),
             is_rerank_default=bool(payload.rerank_model)
@@ -641,6 +672,8 @@ class ModelSettingsService:
             raise ModelSettingsValidationError("该配置未声明图片理解能力。")
         if setting.is_default:
             self.repository.unset_defaults_for_user(user.id)
+        if setting.is_generation_default:
+            self.repository.unset_generation_defaults_for_user(user.id)
         if setting.is_embedding_default:
             self.repository.unset_embedding_defaults_for_user(user.id)
         if setting.is_rerank_default:
@@ -762,6 +795,11 @@ class ModelSettingsService:
                 raise ModelSettingsValidationError("该配置没有回答模型，不能设为回答默认。")
             self.repository.unset_defaults_for_user(user.id, except_setting_id=config_id)
             setting.is_default = True
+        if payload.make_generation_default:
+            if not setting.chat_model:
+                raise ModelSettingsValidationError("该配置没有回答模型，不能设为生成任务默认。")
+            self.repository.unset_generation_defaults_for_user(user.id, except_setting_id=config_id)
+            setting.is_generation_default = True
         if payload.make_embedding_default:
             if not setting.embedding_model:
                 raise ModelSettingsValidationError("该配置没有向量模型，不能设为向量默认。")
@@ -784,6 +822,8 @@ class ModelSettingsService:
             raise ModelSettingsValidationError("回答、向量和重排序模型至少填写一项。")
         if setting.is_default and not setting.chat_model:
             raise ModelSettingsValidationError("回答默认配置不能清空回答模型。")
+        if setting.is_generation_default and not setting.chat_model:
+            raise ModelSettingsValidationError("生成任务默认配置不能清空回答模型。")
         if setting.is_embedding_default and not setting.embedding_model:
             raise ModelSettingsValidationError("向量默认配置不能清空向量模型。")
         if setting.is_rerank_default and not setting.rerank_model:
@@ -794,6 +834,7 @@ class ModelSettingsService:
     def delete_config(self, user: User, config_id: int) -> ModelSettingsListResponse:
         setting = self._get_user_setting_or_raise(user, config_id)
         was_default = setting.is_default
+        was_generation_default = setting.is_generation_default
         was_embedding_default = setting.is_embedding_default
         was_rerank_default = setting.is_rerank_default
         was_vision_default = setting.is_vision_default
@@ -805,6 +846,12 @@ class ModelSettingsService:
                 if next_chat:
                     next_chat.is_default = True
                     self.repository.save(next_chat)
+            if was_generation_default:
+                remaining = [candidate for candidate in self.repository.list_for_user(user.id) if candidate.id != config_id]
+                next_generation = next((candidate for candidate in remaining if candidate.chat_model), None)
+                if next_generation:
+                    next_generation.is_generation_default = True
+                    self.repository.save(next_generation)
             if was_embedding_default:
                 remaining = [candidate for candidate in self.repository.list_for_user(user.id) if candidate.id != config_id]
                 next_embedding = next((candidate for candidate in remaining if candidate.embedding_model), None)
@@ -846,6 +893,15 @@ class ModelSettingsService:
             raise ModelSettingsValidationError("该配置没有回答模型，不能设为回答默认。")
         setting.is_default = True
         self.repository.unset_defaults_for_user(user.id, except_setting_id=config_id)
+        self._save_and_commit(setting)
+        return self.list_configs(user)
+
+    def set_generation_default_config(self, user: User, config_id: int) -> ModelSettingsListResponse:
+        setting = self._get_user_setting_or_raise(user, config_id)
+        if not setting.chat_model:
+            raise ModelSettingsValidationError("该配置没有回答模型，不能设为生成任务默认。")
+        setting.is_generation_default = True
+        self.repository.unset_generation_defaults_for_user(user.id, except_setting_id=config_id)
         self._save_and_commit(setting)
         return self.list_configs(user)
 
@@ -898,6 +954,15 @@ class ModelSettingsService:
             embedding_model=None,
             can_use_model=False,
         )
+
+    def resolve_generation_runtime_config(self, user: User) -> RuntimeModelConfig:
+        get_default = getattr(self.repository, "get_generation_default_for_user", None)
+        user_setting = get_default(user.id) if callable(get_default) else None
+        if user_setting is not None:
+            runtime = self._runtime_from_user_setting(user_setting)
+            if runtime.can_use_model:
+                return runtime
+        return self.resolve_runtime_config(user)
 
     def resolve_embedding_runtime_config(self, user: User) -> RuntimeModelConfig:
         user_setting = self.repository.get_embedding_default_for_user(user.id)
@@ -1070,7 +1135,7 @@ class ModelSettingsService:
         *,
         require_verified: bool = True,
     ) -> ModelCompletion:
-        runtime = self.resolve_runtime_config(user)
+        runtime = self.resolve_generation_runtime_config(user) if _uses_generation_runtime(profile.task_type) else self.resolve_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
             raise ModelNotConfiguredError(MODEL_NOT_CONFIGURED_MESSAGE)
         capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
@@ -1856,6 +1921,7 @@ class ModelSettingsService:
             can_use_embedding_model=embedding_runtime.can_use_model,
             can_use_rerank_model=rerank_runtime.can_use_model,
             is_default=setting.is_default,
+            is_generation_default=bool(getattr(setting, "is_generation_default", False)),
             is_embedding_default=setting.is_embedding_default,
             is_rerank_default=setting.is_rerank_default,
             is_vision_default=bool(getattr(setting, "is_vision_default", False)),

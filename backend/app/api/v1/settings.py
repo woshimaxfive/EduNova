@@ -228,6 +228,30 @@ def set_default_model_config(
     return api_response(configs.model_dump())
 
 
+@router.post("/model/configs/{config_id}/generation-default")
+def set_generation_default_model_config(
+    config_id: int,
+    current_user: User = Depends(get_current_user),
+    service: ModelSettingsService = Depends(get_model_settings_service),
+) -> dict:
+    try:
+        configs = service.set_generation_default_config(current_user, config_id)
+    except ModelSettingsNotFoundError as exc:
+        raise ApiError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="MODEL_SETTINGS_NOT_FOUND",
+            message=str(exc),
+        ) from exc
+    except ModelSettingsValidationError as exc:
+        raise ApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="MODEL_SETTINGS_INVALID",
+            message=str(exc),
+        ) from exc
+
+    return api_response(configs.model_dump())
+
+
 @router.post("/model/configs/{config_id}/embedding-default")
 def set_embedding_default_model_config(
     config_id: int,

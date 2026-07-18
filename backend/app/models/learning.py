@@ -629,6 +629,7 @@ class ModelSetting(IdMixin, TimestampMixin, Base):
     __tablename__ = "model_settings"
     __table_args__ = (
         Index("ix_model_settings_user_default", "user_id", "is_default"),
+        Index("ix_model_settings_user_generation_default", "user_id", "is_generation_default"),
         Index("ix_model_settings_user_embedding_default", "user_id", "is_embedding_default"),
         Index("ix_model_settings_user_rerank_default", "user_id", "is_rerank_default"),
         Index(
@@ -674,6 +675,7 @@ class ModelSetting(IdMixin, TimestampMixin, Base):
     rerank_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
     rerank_workspace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_generation_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_embedding_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_rerank_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_vision_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

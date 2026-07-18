@@ -1665,6 +1665,7 @@ describe("student interaction affordances", () => {
           can_use_model: true,
           can_use_embedding_model: false,
           is_default: true,
+          is_generation_default: false,
           is_embedding_default: false,
           last_test_ok: null,
           last_test_message: null,
@@ -1689,6 +1690,7 @@ describe("student interaction affordances", () => {
           can_use_model: false,
           can_use_embedding_model: true,
           is_default: false,
+          is_generation_default: false,
           is_embedding_default: false,
           last_test_ok: null,
           last_test_message: null,
@@ -1697,6 +1699,7 @@ describe("student interaction affordances", () => {
       ],
       default_config_id: 1,
       default_chat_config_id: 1,
+      default_generation_config_id: null,
       default_embedding_config_id: null,
       default_rerank_config_id: null,
       default_vision_config_id: null,
@@ -1784,6 +1787,7 @@ describe("student interaction affordances", () => {
           can_use_model: true,
           can_use_embedding_model: Boolean(data.embedding_model),
           is_default: false,
+          is_generation_default: false,
           is_embedding_default: false,
           last_test_ok: null,
           last_test_message: null,
@@ -1816,6 +1820,25 @@ describe("student interaction affordances", () => {
 
         return {
           data: { data: settingsList, trace_id: "trace_settings_default" },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config
+        };
+      }
+
+      if (url === SETTINGS_ENDPOINTS.generationDefaultConfig(2) && method === "post") {
+        settingsList = {
+          ...settingsList,
+          default_generation_config_id: 2,
+          configs: settingsList.configs.map((item) => ({
+            ...item,
+            is_generation_default: item.id === 2
+          }))
+        };
+
+        return {
+          data: { data: settingsList, trace_id: "trace_settings_generation_default" },
           status: 200,
           statusText: "OK",
           headers: {},
@@ -2029,6 +2052,13 @@ describe("student interaction affordances", () => {
       url: SETTINGS_ENDPOINTS.defaultConfig(2)
     }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("已设为默认回答配置。"));
+
+    await user.click(screen.getByRole("button", { name: "设为生成任务默认" }));
+    await waitFor(() => expect(calls).toContainEqual({
+      method: "post",
+      url: SETTINGS_ENDPOINTS.generationDefaultConfig(2)
+    }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("已设为生成任务默认配置。"));
 
     await user.click(screen.getByRole("button", { name: "验证回答服务连接" }));
 

@@ -195,6 +195,7 @@ RESPONSE_MODELS: dict[str, Any] = {
     "update_model_config": ApiEnvelope[ModelConfigSummary],
     "delete_model_config": ApiEnvelope[ModelSettingsListResponse],
     "set_default_model_config": ApiEnvelope[ModelSettingsListResponse],
+    "set_generation_default_model_config": ApiEnvelope[ModelSettingsListResponse],
     "set_embedding_default_model_config": ApiEnvelope[ModelSettingsListResponse],
     "set_rerank_default_model_config": ApiEnvelope[ModelSettingsListResponse],
     "set_vision_default_model_config": ApiEnvelope[ModelSettingsListResponse],

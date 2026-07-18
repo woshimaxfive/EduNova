@@ -55,6 +55,7 @@ EduNova 数据库设计服务于学生个性化学习闭环。第一版需要同
 - `backend/migrations/versions/20260716_0026_visual_tutor.py`：为模型配置增加独立视觉默认标记，并创建私有聊天图片附件表。
 - `backend/migrations/versions/20260716_0027_xfyun_native_vision.py`：为个人模型配置增加讯飞原生视觉三项加密凭证。
 - `backend/migrations/versions/20260716_0028_link_chat_images_to_materials.py`：允许聊天附件引用资料库中的持久图片资产，兼容旧附件对象键。
+- `backend/migrations/versions/20260718_0029_add_generation_model_default.py`：为模型配置增加生成任务默认标记和用户级索引。
 
 Phase 4.2 的 `/dashboard/summary` 不新增表和字段，只读取当前已有数据并整理为首页总览响应。Phase 4.4 后，资料库摘要和最近资料列表改为读取独立 `materials`，未归属数量通过 `course_material_links` 计算。
 
@@ -702,6 +703,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 | `rerank_workspace_id` | varchar | 百炼 Workspace ID，可空 |
 | `tool_flags_json` | jsonb | 兼容预留字段；联网与推理由每次 Graph 自动决策，设置页和前端不保存开关 |
 | `is_default` | boolean | 是否为当前用户回答默认配置，保留旧字段名兼容 |
+| `is_generation_default` | boolean | 是否为当前用户生成任务默认配置 |
 | `is_embedding_default` | boolean | 是否为当前用户向量默认配置 |
 | `is_rerank_default` | boolean | 是否为当前用户重排序默认配置 |
 | `last_test_ok` | boolean | 最近一次连接测试是否成功 |
@@ -718,7 +720,7 @@ Phase 3 重定向后，会话需要区分主页会话和课程会话：
 - 前端只显示脱敏 Key。
 - 回答、向量或重排序连接未变化时，空 Key 会保留原密钥；Provider 或 Base URL 变化时必须重新提供对应 Key，否则清除旧密文。
 - 缺少 `MODEL_SETTINGS_ENCRYPTION_KEY` 时，不允许保存新的用户 Key。
-- 同一用户可保存多套配置；每套配置可组合不同回答、向量和重排序服务商。三类运行时分别读取自己的默认标记，某一用途缺失时独立回退服务器 `.env`。
+- 同一用户可保存多套配置；每套配置可组合不同回答、向量和重排序服务商。回答、生成任务、向量和重排序运行时分别读取自己的默认标记；生成任务未设置时先回退回答默认，其他用途缺失时独立回退服务器 `.env`。
 - 删除默认配置后，后端只在包含对应模型的剩余配置中选择该用途的新默认。
 - 设置页回答预设首位为讯飞 Spark X2-Flash；向量和重排序预设可使用各自原生协议，不能伪装为聊天接口。
 - `connection_test_json` 只保存操作类型、模型名、成功状态、安全错误分类、是否可重试和测试时间；不保存 Prompt、回答、向量、密钥或 Provider 原始错误。旧 `last_test_*` 继续兼容回答模型最近测试。

@@ -1297,6 +1297,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/model/configs/{config_id}/generation-default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Generation Default Model Config */
+        post: operations["set_generation_default_model_config_api_v1_settings_model_configs__config_id__generation_default_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/model/configs/{config_id}/rerank-default": {
         parameters: {
             query?: never;
@@ -3573,6 +3590,11 @@ export interface components {
             /** Is Embedding Default */
             is_embedding_default: boolean;
             /**
+             * Is Generation Default
+             * @default false
+             */
+            is_generation_default: boolean;
+            /**
              * Is Rerank Default
              * @default false
              */
@@ -3723,6 +3745,8 @@ export interface components {
             default_config_id: number | null;
             /** Default Embedding Config Id */
             default_embedding_config_id: number | null;
+            /** Default Generation Config Id */
+            default_generation_config_id?: number | null;
             /** Default Rerank Config Id */
             default_rerank_config_id?: number | null;
             /** Default Vision Config Id */
@@ -4426,6 +4450,11 @@ export interface components {
              */
             make_embedding_default: boolean;
             /**
+             * Make Generation Default
+             * @default false
+             */
+            make_generation_default: boolean;
+            /**
              * Make Rerank Default
              * @default false
              */
@@ -4767,6 +4796,11 @@ export interface components {
             make_default?: boolean | null;
             /** Make Embedding Default */
             make_embedding_default?: boolean | null;
+            /**
+             * Make Generation Default
+             * @default false
+             */
+            make_generation_default: boolean;
             /** Make Rerank Default */
             make_rerank_default?: boolean | null;
             /** Make Vision Default */
@@ -13565,6 +13599,111 @@ export interface operations {
         };
     };
     set_embedding_default_model_config_api_v1_settings_model_configs__config_id__embedding_default_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                config_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_ModelSettingsListResponse_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    set_generation_default_model_config_api_v1_settings_model_configs__config_id__generation_default_post: {
         parameters: {
             query?: never;
             header?: {

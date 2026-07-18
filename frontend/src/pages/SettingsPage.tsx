@@ -27,6 +27,7 @@ import {
   getPrivacySettings,
   listModelConfigs,
   setDefaultEmbeddingConfig,
+  setDefaultGenerationConfig,
   setDefaultModelConfig,
   setDefaultRerankConfig,
   setDefaultVisionConfig,
@@ -294,10 +295,12 @@ export function SettingsPage() {
   const settingsList = modelConfigsQuery.data?.data ?? null;
   const configs = useMemo(() => settingsList?.configs ?? [], [settingsList?.configs]);
   const defaultChatConfigId = settingsList?.default_chat_config_id ?? settingsList?.default_config_id ?? null;
+  const defaultGenerationConfigId = settingsList?.default_generation_config_id ?? null;
   const defaultEmbeddingConfigId = settingsList?.default_embedding_config_id ?? null;
   const defaultRerankConfigId = settingsList?.default_rerank_config_id ?? null;
   const defaultVisionConfigId = settingsList?.default_vision_config_id ?? null;
   const defaultChatConfig = configs.find((config) => config.id === defaultChatConfigId) ?? null;
+  const defaultGenerationConfig = configs.find((config) => config.id === defaultGenerationConfigId) ?? null;
   const defaultEmbeddingConfig = configs.find((config) => config.id === defaultEmbeddingConfigId) ?? null;
   const defaultRerankConfig = configs.find((config) => config.id === defaultRerankConfigId) ?? null;
   const defaultVisionConfig = configs.find((config) => config.id === defaultVisionConfigId) ?? null;
@@ -365,6 +368,7 @@ export function SettingsPage() {
   );
   const systemSummary = settingsList?.system_summary ?? null;
   const effectiveChatReady = defaultChatConfig?.can_use_model ?? systemSummary?.can_use_model ?? false;
+  const effectiveGenerationReady = defaultGenerationConfig?.can_use_model ?? effectiveChatReady;
   const effectiveEmbeddingReady = defaultEmbeddingConfig?.can_use_embedding_model
     ?? systemSummary?.can_use_embedding_model
     ?? false;
@@ -418,6 +422,15 @@ export function SettingsPage() {
       showToast("已设为默认回答配置。", "success");
     },
     onError: (error) => setModelFeedback(getApiErrorMessage(error, "默认回答配置切换失败，请稍后重试。"))
+  });
+
+  const generationDefaultConfigMutation = useMutation({
+    mutationFn: (configId: number) => setDefaultGenerationConfig(configId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["settings", "model-configs"] });
+      showToast("已设为生成任务默认配置。", "success");
+    },
+    onError: (error) => setModelFeedback(getApiErrorMessage(error, "生成任务默认配置切换失败，请稍后重试。"))
   });
 
   const embeddingDefaultConfigMutation = useMutation({
@@ -725,6 +738,7 @@ export function SettingsPage() {
             </div>
             <div className="settings-effective-state" aria-label="当前 AI 服务状态">
               <span className={effectiveChatReady ? "ready" : "inactive"}>回答{effectiveChatReady ? "正常" : "未连接"}</span>
+              <span className={effectiveGenerationReady ? "ready" : "inactive"}>生成{effectiveGenerationReady ? "正常" : "未连接"}</span>
               <span className={effectiveEmbeddingReady ? "ready" : "inactive"}>向量{effectiveEmbeddingReady ? "正常" : "未连接"}</span>
               <span className={effectiveRerankReady ? "ready" : "inactive"}>重排序{effectiveRerankReady ? "正常" : "未连接"}</span>
               <span className={effectiveVisionReady ? "ready" : "inactive"}>图片理解{effectiveVisionReady ? "正常" : "未连接"}</span>
@@ -764,6 +778,19 @@ export function SettingsPage() {
                     </div>
                     <button type="button" onClick={() => defaultVisionConfig ? selectConfig(defaultVisionConfig) : createVisionConfig()}>
                       {defaultVisionConfig ? "管理当前配置" : systemSummary?.can_use_vision_model ? "添加个人配置" : "立即配置"}
+                    </button>
+                  </section>
+
+                  <section className={effectiveGenerationReady ? "settings-vision-entry ready" : "settings-vision-entry"} aria-label="生成任务模型配置">
+                    <span aria-hidden="true"><Robot size={22} weight="duotone" /></span>
+                    <div>
+                      <strong>生成任务模型</strong>
+                      <p>{defaultGenerationConfig
+                        ? `当前使用 ${defaultGenerationConfig.display_name} · ${defaultGenerationConfig.chat_model || "模型待填写"}`
+                        : "资源、路径、练习和报告暂时沿用回答默认配置。"}</p>
+                    </div>
+                    <button type="button" onClick={() => defaultGenerationConfig ? selectConfig(defaultGenerationConfig) : defaultChatConfig ? selectConfig(defaultChatConfig) : createNewConfig()}>
+                      {defaultGenerationConfig ? "管理当前配置" : defaultChatConfig ? "选择生成模型" : "新建配置"}
                     </button>
                   </section>
 
@@ -868,6 +895,7 @@ export function SettingsPage() {
                               <strong>{config.display_name}</strong>
                               <span className="settings-config-defaults">
                                 {config.is_default ? <small>回答</small> : null}
+                                {config.is_generation_default ? <small>生成</small> : null}
                                 {config.is_embedding_default ? <small>向量</small> : null}
                                 {config.is_rerank_default ? <small>重排</small> : null}
                                 {config.is_vision_default ? <small>图片</small> : null}
@@ -908,7 +936,9 @@ export function SettingsPage() {
                           <span>
                             {isCreating
                               ? "新配置"
-                              : selectedConfig?.is_default && selectedConfig?.is_embedding_default
+                              : selectedConfig?.is_default && selectedConfig?.is_generation_default
+                                ? "回答与生成默认"
+                                : selectedConfig?.is_default && selectedConfig?.is_embedding_default
                                 ? "回答与向量默认"
                                 : selectedConfig?.is_default
                                   ? "回答默认"
@@ -1265,6 +1295,11 @@ export function SettingsPage() {
                         {!isVisionConfig && !isCreating && currentDraft.chat_model && !selectedConfig?.is_default ? (
                           <button type="button" className="secondary-action" onClick={() => activeConfigId && defaultConfigMutation.mutate(activeConfigId)} disabled={defaultConfigMutation.isPending || isDirty}>
                             设为回答默认
+                          </button>
+                        ) : null}
+                        {!isVisionConfig && !isCreating && currentDraft.chat_model && !selectedConfig?.is_generation_default ? (
+                          <button type="button" className="secondary-action" onClick={() => activeConfigId && generationDefaultConfigMutation.mutate(activeConfigId)} disabled={generationDefaultConfigMutation.isPending || isDirty}>
+                            设为生成任务默认
                           </button>
                         ) : null}
                         {!isCreating && currentDraft.chat_model && isVisionProviderPreset(currentDraft.preset_id) && !selectedConfig?.is_vision_default ? (

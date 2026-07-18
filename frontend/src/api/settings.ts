@@ -9,6 +9,7 @@ export const SETTINGS_ENDPOINTS = {
   config: (configId: number) => `/settings/model/configs/${configId}`,
   testConfig: (configId: number) => `/settings/model/configs/${configId}/test`,
   defaultConfig: (configId: number) => `/settings/model/configs/${configId}/default`,
+  generationDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/generation-default`,
   embeddingDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/embedding-default`,
   rerankDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/rerank-default`,
   visionDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/vision-default`,
@@ -51,6 +52,7 @@ export type ModelConfigRequest = ModelSettingsRequest & {
   embedding_preset_id?: string | null;
   rerank_preset_id?: string | null;
   make_default?: boolean;
+  make_generation_default?: boolean;
   make_embedding_default?: boolean;
   make_rerank_default?: boolean;
   make_vision_default?: boolean;
@@ -63,6 +65,7 @@ export type ModelConfigUpdateRequest = Partial<ModelSettingsRequest> & {
   rerank_preset_id?: string | null;
   is_default?: boolean;
   make_default?: boolean;
+  make_generation_default?: boolean;
   make_vision_default?: boolean;
 };
 
@@ -111,6 +114,7 @@ export type ModelConfigSummary = ModelSettingsSummary & {
   embedding_preset_id?: string | null;
   rerank_preset_id?: string | null;
   is_default: boolean;
+  is_generation_default?: boolean;
   is_embedding_default: boolean;
   is_rerank_default?: boolean;
   is_vision_default?: boolean;
@@ -138,6 +142,7 @@ export type ModelSettingsListResponse = {
   configs: ModelConfigSummary[];
   default_config_id: number | null;
   default_chat_config_id: number | null;
+  default_generation_config_id?: number | null;
   default_embedding_config_id: number | null;
   default_rerank_config_id?: number | null;
   default_vision_config_id?: number | null;
@@ -207,6 +212,13 @@ export async function deleteModelConfig(configId: number) {
 
 export async function setDefaultModelConfig(configId: number) {
   const response = await apiClient.post<ApiEnvelope<ModelSettingsListResponse>>(SETTINGS_ENDPOINTS.defaultConfig(configId));
+  return response.data;
+}
+
+export async function setDefaultGenerationConfig(configId: number) {
+  const response = await apiClient.post<ApiEnvelope<ModelSettingsListResponse>>(
+    SETTINGS_ENDPOINTS.generationDefaultConfig(configId)
+  );
   return response.data;
 }
 

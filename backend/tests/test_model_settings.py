@@ -75,6 +75,16 @@ class FakeModelSettingsRepository:
         )
         return default or self.settings_by_user.get(user_id)
 
+    def get_generation_default_for_user(self, user_id: int) -> ModelSetting | None:
+        return next(
+            (
+                setting
+                for setting in self.settings_by_id.values()
+                if setting.user_id == user_id and setting.is_generation_default
+            ),
+            None,
+        )
+
     def get_embedding_default_for_user(self, user_id: int) -> ModelSetting | None:
         return next(
             (
@@ -126,6 +136,11 @@ class FakeModelSettingsRepository:
                 setting.is_default = False
         if except_setting_id is None:
             self.settings_by_user.pop(user_id, None)
+
+    def unset_generation_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None:
+        for setting in self.settings_by_id.values():
+            if setting.user_id == user_id and setting.id != except_setting_id:
+                setting.is_generation_default = False
 
     def unset_embedding_defaults_for_user(self, user_id: int, except_setting_id: int | None = None) -> None:
         for setting in self.settings_by_id.values():
@@ -1068,6 +1083,88 @@ def test_personal_structured_model_failure_does_not_fall_back_to_system_provider
     assert (provider.calls or [])[0]["config"].base_url == "https://personal.example/v1"
 
 
+def test_generation_tasks_use_the_dedicated_default_without_changing_normal_answers() -> None:
+    module = load_model_settings_module()
+    from backend.app.providers.model_tasks import ModelTaskProfile
+
+    user = make_user()
+    provider = FakeProvider(content='{"status":"ok"}')
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(
+        repository=repo,
+        settings=make_settings(),
+        provider=provider,
+        execution_runtime=ImmediateExecutionRuntime(),
+    )
+    spark = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="星火回答",
+            preset_id="spark",
+            provider="openai_compatible",
+            base_url="https://spark-api-open.xf-yun.com/agent/v1",
+            api_key="spark-secret",
+            chat_model="spark-x",
+            make_default=True,
+        ),
+    ))
+    qwen = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="通义生成",
+            preset_id="qwen",
+            provider="openai_compatible",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            api_key="qwen-secret",
+            chat_model="qwen3.7-plus",
+            make_generation_default=True,
+        ),
+    ))
+
+    configs = as_dict(service.list_configs(user))
+    service.chat_completion_for_task(
+        user,
+        [{"role": "user", "content": "生成一份练习"}],
+        ModelTaskProfile(task_type="practice_generation"),
+        require_verified=False,
+    )
+    service.chat_completion_for_task(
+        user,
+        [{"role": "user", "content": "识别用户意图"}],
+        ModelTaskProfile(task_type="semantic_routing"),
+        require_verified=False,
+    )
+
+    assert configs["default_config_id"] == spark["id"]
+    assert configs["default_generation_config_id"] == qwen["id"]
+    assert service.resolve_runtime_config(user).chat_model == "spark-x"
+    assert service.resolve_generation_runtime_config(user).chat_model == "qwen3.7-plus"
+    assert (provider.calls or [])[0]["config"].chat_model == "qwen3.7-plus"
+    assert (provider.calls or [])[1]["config"].chat_model == "spark-x"
+
+
+def test_generation_runtime_falls_back_to_the_answer_default_when_unset() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=FakeProvider())
+    created = as_dict(service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="回答模型",
+            preset_id="spark",
+            provider="openai_compatible",
+            base_url="https://spark-api-open.xf-yun.com/agent/v1",
+            api_key="spark-secret",
+            chat_model="spark-x",
+            make_default=True,
+        ),
+    ))
+    repo.settings_by_id[created["id"]].is_generation_default = False
+
+    assert service.resolve_generation_runtime_config(user).chat_model == "spark-x"
+
+
 def test_embedding_not_configured_does_not_overwrite_chat_test_status() -> None:
     module = load_model_settings_module()
     user = make_user()
@@ -1544,6 +1641,10 @@ def test_model_settings_routes_use_documented_envelopes() -> None:
         f"/api/v1/settings/model/configs/{created_config_id}/default",
         headers={"Authorization": f"Bearer {token}"},
     )
+    generation_default_response = client.post(
+        f"/api/v1/settings/model/configs/{created_config_id}/generation-default",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     targeted_test_response = client.post(
         f"/api/v1/settings/model/configs/{created_config_id}/test",
         headers={"Authorization": f"Bearer {token}"},
@@ -1581,6 +1682,8 @@ def test_model_settings_routes_use_documented_envelopes() -> None:
     assert create_response.json()["data"]["display_name"] == "本地 Ollama"
     assert default_response.status_code == 200
     assert default_response.json()["data"]["default_config_id"] == created_config_id
+    assert generation_default_response.status_code == 200
+    assert generation_default_response.json()["data"]["default_generation_config_id"] == created_config_id
     assert targeted_test_response.status_code == 200
     assert targeted_test_response.json()["data"]["config_id"] == created_config_id
     assert delete_response.status_code == 200

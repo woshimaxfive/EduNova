@@ -54,14 +54,18 @@ it("renders a focused learning chain and keeps related knowledge points interact
   expect(onSelect).toHaveBeenCalledWith("401");
 });
 
-it("keeps the current knowledge point when switching to all chapters", () => {
+it("shows every chapter in the course overview and enters a focused chain when a point is selected", () => {
   const onSelect = vi.fn();
   render(<CourseKnowledgeGraph points={points} selectedId="402" onSelect={onSelect} />);
 
   fireEvent.change(screen.getByLabelText("章节"), { target: { value: "" } });
 
   expect(onSelect).not.toHaveBeenCalled();
-  expect(screen.getByLabelText("当前知识点：启发式搜索")).toBeInTheDocument();
-  expect(screen.getByLabelText("当前图谱范围")).toHaveTextContent("直接先修1");
-  expect(screen.getByLabelText("当前图谱范围")).toHaveTextContent("即将解锁1");
+  expect(screen.getByText("课程全景")).toBeInTheDocument();
+  expect(screen.getByLabelText("课程全部知识点")).toHaveTextContent("搜索基础");
+  expect(screen.getByLabelText("课程全部知识点")).toHaveTextContent("搜索方法");
+  expect(screen.getByRole("button", { name: /A\* 搜索/ })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: /状态空间/ }));
+  expect(onSelect).toHaveBeenCalledWith("401");
 });

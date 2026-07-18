@@ -30,6 +30,7 @@ export function CourseKnowledgeGraph({ points, selectedId, onSelect }: CourseKno
     () => buildFocusedGraph(points, selectedPoint?.id ?? null),
     [points, selectedPoint?.id]
   );
+  const isCourseOverview = effectiveChapterFilter === "";
 
   if (!selectedPoint) return null;
 
@@ -40,12 +41,17 @@ export function CourseKnowledgeGraph({ points, selectedId, onSelect }: CourseKno
     if (firstPoint) onSelect(firstPoint.id);
   }
 
+  function selectOverviewPoint(point: CourseMasteryPoint) {
+    setChapterFilter(point.chapter ?? "");
+    onSelect(point.id);
+  }
+
   return (
     <section className="course-knowledge-graph" role="region" aria-label="课程知识图谱">
       <div className="course-knowledge-graph-heading">
         <div>
-          <strong>学习链路</strong>
-          <span>从已具备的基础，连接到下一步学习</span>
+          <strong>{isCourseOverview ? "课程全景" : "学习链路"}</strong>
+          <span>{isCourseOverview ? "按章节浏览全部知识点，选择一个节点打开对应内容" : "从已具备的基础，连接到下一步学习"}</span>
         </div>
         <label className="course-knowledge-graph-filter">
           <span>章节</span>
@@ -56,11 +62,15 @@ export function CourseKnowledgeGraph({ points, selectedId, onSelect }: CourseKno
         </label>
       </div>
 
-      <div className="course-learning-chain" aria-label="当前图谱范围">
-        <RelationshipColumn label="直接先修" points={prerequisites} emptyText="这是当前范围的起点" onSelect={onSelect} />
-        <CurrentKnowledgePoint point={selectedPoint} />
-        <RelationshipColumn label="即将解锁" points={dependents} emptyText="继续学习将解锁更多内容" onSelect={onSelect} />
-      </div>
+      {isCourseOverview ? (
+        <CourseKnowledgeOverview chapters={chapters} points={points} selectedPoint={selectedPoint} onSelect={selectOverviewPoint} />
+      ) : (
+        <div key={selectedPoint.id} className="course-learning-chain" aria-label="当前图谱范围">
+          <RelationshipColumn label="直接先修" points={prerequisites} emptyText="这是当前范围的起点" onSelect={onSelect} />
+          <CurrentKnowledgePoint point={selectedPoint} />
+          <RelationshipColumn label="即将解锁" points={dependents} emptyText="继续学习将解锁更多内容" onSelect={onSelect} />
+        </div>
+      )}
 
       <div className="course-knowledge-graph-legend" aria-label="知识图谱图例">
         <span className="weak">薄弱</span>
@@ -69,6 +79,53 @@ export function CourseKnowledgeGraph({ points, selectedId, onSelect }: CourseKno
         <span>未开始</span>
       </div>
     </section>
+  );
+}
+
+function CourseKnowledgeOverview({
+  chapters,
+  points,
+  selectedPoint,
+  onSelect
+}: {
+  chapters: string[];
+  points: CourseMasteryPoint[];
+  selectedPoint: CourseMasteryPoint;
+  onSelect: (point: CourseMasteryPoint) => void;
+}) {
+  return (
+    <div className="course-knowledge-overview" aria-label="课程全部知识点">
+      {chapters.map((chapter, chapterIndex) => {
+        const chapterPoints = points.filter((point) => point.chapter === chapter).sort((a, b) => a.order_index - b.order_index);
+        const chapterStyle = { "--chapter-index": chapterIndex } as CSSProperties;
+        return (
+          <section key={chapter} className="course-knowledge-overview-chapter" style={chapterStyle} aria-label={`${chapter}知识点`}>
+            <div className="course-knowledge-overview-chapter-heading">
+              <span>{String(chapterIndex + 1).padStart(2, "0")}</span>
+              <div>
+                <strong>{chapter}</strong>
+                <small>{chapterPoints.length} 个知识点</small>
+              </div>
+            </div>
+            <div className="course-knowledge-overview-points">
+              {chapterPoints.map((point) => (
+                <button
+                  key={point.id}
+                  className={`course-knowledge-overview-point ${point.status} ${selectedPoint.id === point.id ? "selected" : ""}`}
+                  type="button"
+                  aria-current={selectedPoint.id === point.id ? "true" : undefined}
+                  onClick={() => onSelect(point)}
+                >
+                  <span>{point.order_index + 1}</span>
+                  <strong>{point.title}</strong>
+                  <em>{statusLabels[point.status] ?? point.status}</em>
+                </button>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
   );
 }
 

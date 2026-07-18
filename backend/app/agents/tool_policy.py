@@ -9,6 +9,7 @@ ReasoningMode = Literal["auto", "deep"]
 SourceScope = Literal["mainland_preferred", "global_required"]
 DecisionMode = Literal["model", "forced", "model_forced", "degraded"]
 ResourceAction = Literal["none", "suggest", "generate"]
+ResponseMode = Literal["answer", "action", "answer_and_action"]
 
 
 _EXPLICIT_SEARCH_COMMAND = re.compile(
@@ -42,6 +43,7 @@ class ToolDecision:
     resource_difficulty: Literal["easy", "medium", "hard"] = "medium"
     resource_learning_goal: str = ""
     resource_reason_summary: str = ""
+    response_mode: ResponseMode = "answer"
 
     @property
     def reason_summary(self) -> str:

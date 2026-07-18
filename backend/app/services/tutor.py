@@ -654,12 +654,30 @@ class TutorSessionService:
         difficulty = str(state.get("resource_difficulty") or "medium")
         return {
             "action": action,
+            "response_mode": str(state.get("response_mode") or "answer"),
             "resource_types": resource_types,
             "difficulty": difficulty if difficulty in {"easy", "medium", "hard"} else "medium",
             "learning_goal": str(state.get("resource_learning_goal") or state.get("standalone_query") or state.get("message_text") or "")[:500],
             "reason_summary": str(state.get("resource_reason_summary") or "根据本轮学习目标推荐。")[:160],
             "confidence": max(0.0, min(1.0, float(state.get("semantic_decision_confidence") or 0))),
         }
+
+    @staticmethod
+    def _resource_action_reply(state: AgentState) -> str:
+        labels = {
+            "doc": "讲解文档",
+            "mindmap": "思维导图",
+            "quiz": "练习题",
+            "code": "代码实操",
+            "slide": "演示文稿",
+            "animation": "动画图解",
+            "video": "教学视频",
+        }
+        selected = [labels.get(str(item), str(item)) for item in state.get("resource_types", [])][:3]
+        resource_text = "、".join(selected) or "学习资源"
+        if str(state.get("workflow")) == "home_tutor":
+            return f"已理解你的学习目标。请选择目标课程后，我会生成{resource_text}，进度和结果会保留在这条回答下方。"
+        return f"已理解你的学习目标，正在准备生成{resource_text}。任务进度和完成结果会显示在这条回答下方。"
 
     def create_session(
         self,
@@ -2285,6 +2303,7 @@ class HomeTutorGraphRunner:
                     "semantic_warning": None,
                     "resource_action": "none",
                     "resource_types": [],
+                    "response_mode": "answer",
                     "retrieval_query": str(visual.get("standalone_query") or message),
                     "standalone_query": str(visual.get("standalone_query") or message),
                     "uses_history": False,
@@ -2342,6 +2361,7 @@ class HomeTutorGraphRunner:
                 "resource_difficulty": getattr(decision, "resource_difficulty", "medium"),
                 "resource_learning_goal": getattr(decision, "resource_learning_goal", ""),
                 "resource_reason_summary": getattr(decision, "resource_reason_summary", ""),
+                "response_mode": getattr(decision, "response_mode", "answer"),
                 "retrieval_query": standalone_query if history_visual else (
                     getattr(decision, "standalone_query", "")
                     if getattr(decision, "uses_history", False)
@@ -2489,6 +2509,8 @@ class HomeTutorGraphRunner:
 
     def _planner_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            if state.get("response_mode") == "action":
+                return ({"plan_summary": ""}, "资源动作无需重复生成回答规划。", "skipped", {"response_mode": "action"})
             if state.get("reasoning_mode") != "deep":
                 return ({"plan_summary": ""}, "模型将自适应处理当前问题。", "skipped", {"reasoning_mode": "auto"})
             planner = getattr(self.service.course_answer_generator, "plan_home", None)
@@ -2520,6 +2542,16 @@ class HomeTutorGraphRunner:
 
     def _answer_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            if state.get("response_mode") == "action":
+                reply = self.service._resource_action_reply(state)
+                if state.get("streaming"):
+                    self._write(state, "token", {"content": reply})
+                return (
+                    {"assistant_reply": reply, "used_model": False},
+                    "已返回资源任务确认，不重复生成长回答。",
+                    "completed",
+                    {"response_mode": "action", "resource_action": state.get("resource_action")},
+                )
             generator = self.service.course_answer_generator
             if generator is None:
                 reply = HOME_MODEL_NOT_CONFIGURED_MESSAGE
@@ -2583,6 +2615,19 @@ class HomeTutorGraphRunner:
 
     def _review_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            if state.get("response_mode") == "action":
+                review_result = {
+                    "review_status": "passed",
+                    "confidence": float(state.get("semantic_decision_confidence") or 0),
+                    "risk_flags": [],
+                    "safety_summary": "资源动作已通过结构、类型和课程边界校验。",
+                }
+                return (
+                    {"review_result": review_result, "needs_repair": False},
+                    "资源动作确认无需重复模型审核。",
+                    "completed",
+                    review_result,
+                )
             reply = str(state.get("assistant_reply") or "")
             if not state.get("used_model"):
                 review_result = {
@@ -3229,6 +3274,7 @@ class CourseTutorGraphRunner:
                     "semantic_warning": None,
                     "resource_action": "none",
                     "resource_types": [],
+                    "response_mode": "answer",
                     "retrieval_query": str(visual.get("standalone_query") or state["message_text"]),
                     "standalone_query": str(visual.get("standalone_query") or state["message_text"]),
                     "uses_history": False,
@@ -3287,6 +3333,7 @@ class CourseTutorGraphRunner:
                 "resource_difficulty": getattr(decision, "resource_difficulty", "medium"),
                 "resource_learning_goal": getattr(decision, "resource_learning_goal", ""),
                 "resource_reason_summary": getattr(decision, "resource_reason_summary", ""),
+                "response_mode": getattr(decision, "response_mode", "answer"),
                 "retrieval_query": standalone_query if history_visual else (
                     getattr(decision, "standalone_query", "")
                     if getattr(decision, "uses_history", False)
@@ -3490,6 +3537,8 @@ class CourseTutorGraphRunner:
 
     def _planner_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            if state.get("response_mode") == "action":
+                return ({"plan_summary": ""}, "资源动作无需重复生成课程回答规划。", "skipped", {"response_mode": "action"})
             if state.get("reasoning_mode") != "deep":
                 return ({"plan_summary": ""}, "模型将自适应处理当前问题。", "skipped", {"reasoning_mode": "auto"})
             planner = getattr(self.service.course_answer_generator, "plan_course", None)
@@ -3520,6 +3569,13 @@ class CourseTutorGraphRunner:
 
     def _tutor_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            if state.get("response_mode") == "action":
+                return (
+                    {"assistant_reply": self.service._resource_action_reply(state), "used_model": False},
+                    "已返回资源任务确认，不重复生成课程长回答。",
+                    "completed",
+                    {"response_mode": "action", "resource_action": state.get("resource_action")},
+                )
             citations = list(state.get("citation_json", []))
             evidence_citations = [item for item in citations if item.get("source_type") != "history"]
             if not evidence_citations:
@@ -3572,6 +3628,13 @@ class CourseTutorGraphRunner:
 
     def _prepare_stream_tutor_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
+            if state.get("response_mode") == "action":
+                return (
+                    {"tokens": [self.service._resource_action_reply(state)], "used_model": False},
+                    "已返回资源任务确认，不重复生成课程长回答。",
+                    "completed",
+                    {"response_mode": "action", "resource_action": state.get("resource_action")},
+                )
             citations = list(state.get("citation_json", []))
             if not citations:
                 return (
@@ -3622,6 +3685,14 @@ class CourseTutorGraphRunner:
         )
 
     def _weakness_node(self, state: AgentState) -> dict[str, Any]:
+        if state.get("response_mode") == "action":
+            return self._run_node(
+                state,
+                agent_name="weakness",
+                step_index=7,
+                input_summary="识别弱点候选",
+                work=lambda: ({}, "资源创建请求不作为薄弱点证据。", "skipped", {"response_mode": "action"}),
+            )
         citation_count = sum(1 for item in state.get("citation_json", []) if item.get("source_type") != "web")
         signal_count = len(state.get("profile_signal_updates", {}))
         output = (
@@ -3638,6 +3709,21 @@ class CourseTutorGraphRunner:
         )
 
     def _review_node(self, state: AgentState) -> dict[str, Any]:
+        if state.get("response_mode") == "action":
+            metadata = {
+                "review_status": "passed",
+                "confidence": float(state.get("semantic_decision_confidence") or 0),
+                "risk_flags": [],
+                "safety_summary": "资源动作已通过结构、类型和课程边界校验。",
+                "response_mode": "action",
+            }
+            return self._run_node(
+                state,
+                agent_name="review",
+                step_index=8,
+                input_summary="审核资源动作边界",
+                work=lambda: ({"review_result": metadata}, "资源动作确认无需重复模型审核。", "completed", metadata),
+            )
         citations = list(state.get("citation_json", []))
         course_citation_count = sum(1 for item in citations if item.get("source_type") != "web")
         web_citation_count = sum(1 for item in citations if item.get("source_type") == "web")

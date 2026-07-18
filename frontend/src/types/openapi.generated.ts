@@ -4788,6 +4788,12 @@ export interface components {
             reason_summary: string;
             /** Resource Types */
             resource_types?: ("doc" | "mindmap" | "quiz" | "code" | "slide" | "animation" | "video")[];
+            /**
+             * Response Mode
+             * @default answer
+             * @enum {string}
+             */
+            response_mode: "answer" | "action" | "answer_and_action";
         };
         /** TutorSessionDetail */
         TutorSessionDetail: {

@@ -190,8 +190,48 @@ def test_explicit_resource_generation_is_model_decided_without_keyword_rules() -
     )
 
     assert decision.resource_action == "generate"
+    assert decision.response_mode == "action"
     assert decision.resource_types == ("mindmap", "quiz")
     assert decision.resource_learning_goal == "用图解和练习掌握二叉树遍历"
+
+
+def test_explanation_plus_resource_generation_keeps_answer_and_action() -> None:
+    model = FakeModel(
+        '{"intent":"learning_resource_generation","search_required":false,"search_query":"",'
+        '"reasoning_mode":"auto","course_related":true,"confidence":0.94,'
+        '"reason_codes":["explain_then_generate"],"reason_summary":"先讲解再生成图解。",'
+        '"profile_signals":[],"resource_action":"generate","answer_requested":true,'
+        '"response_mode":"answer_and_action",'
+        '"resource_types":["mindmap"],"resource_difficulty":"medium",'
+        '"resource_learning_goal":"理解二叉树遍历后生成图解",'
+        '"resource_reason_summary":"讲解与图解都由用户明确要求。"}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="先解释二叉树遍历，再给我生成一张思维导图", scope="course"
+    )
+
+    assert decision.resource_action == "generate"
+    assert decision.response_mode == "answer_and_action"
+
+
+def test_resource_generation_cannot_claim_combined_answer_without_explicit_answer_request() -> None:
+    model = FakeModel(
+        '{"intent":"learning_resource_generation","search_required":false,"search_query":"",'
+        '"reasoning_mode":"auto","course_related":true,"confidence":0.95,'
+        '"reason_codes":["explicit_resource_generation"],"reason_summary":"用户只要求生成图解。",'
+        '"profile_signals":[],"resource_action":"generate","answer_requested":false,'
+        '"response_mode":"answer_and_action","resource_types":["mindmap"],'
+        '"resource_difficulty":"medium","resource_learning_goal":"梳理二叉树遍历",'
+        '"resource_reason_summary":"生成一份图解资源。"}'
+    )
+
+    decision = SemanticDecisionService(model).decide(
+        user=user(), question="请给二叉树遍历生成一张思维导图", scope="home"
+    )
+
+    assert decision.resource_action == "generate"
+    assert decision.response_mode == "action"
 
 
 def test_empty_collection_history_flag_does_not_discard_valid_resource_decision() -> None:

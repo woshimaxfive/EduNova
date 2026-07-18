@@ -9020,6 +9020,16 @@
             },
             "title": "Resource Types",
             "type": "array"
+          },
+          "response_mode": {
+            "default": "answer",
+            "enum": [
+              "answer",
+              "action",
+              "answer_and_action"
+            ],
+            "title": "Response Mode",
+            "type": "string"
           }
         },
         "title": "TutorResourceProposal",

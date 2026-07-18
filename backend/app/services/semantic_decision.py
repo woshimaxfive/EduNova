@@ -55,6 +55,8 @@ class SemanticDecisionPayload(BaseModel):
     resource_difficulty: Literal["easy", "medium", "hard"] = "medium"
     resource_learning_goal: str = Field(default="", max_length=500)
     resource_reason_summary: str = Field(default="", max_length=160)
+    answer_requested: bool = False
+    response_mode: Literal["answer", "action", "answer_and_action"] | None = None
 
     @field_validator("intent")
     @classmethod
@@ -189,6 +191,12 @@ class SemanticDecisionService:
         forced = bool(force_search or explicit_search or force_deep)
         query = str(parsed.get("search_query") or "").strip() or " ".join(question.split())
         standalone_query = str(parsed.get("standalone_query") or "").strip() or " ".join(question.split())
+        resource_action = str(parsed.get("resource_action") or "none")
+        response_mode = parsed.get("response_mode")
+        if resource_action == "generate":
+            response_mode = "answer_and_action" if bool(parsed.get("answer_requested")) else "action"
+        elif response_mode is None:
+            response_mode = "answer"
         return ToolDecision(
             search_required=search_required,
             reasoning_mode=reasoning_mode if reasoning_mode == "deep" else "auto",
@@ -206,11 +214,12 @@ class SemanticDecisionService:
             summary=str(parsed["reason_summary"])[:160],
             warning=None,
             source_scope=str(parsed.get("source_scope") or "mainland_preferred"),
-            resource_action=str(parsed.get("resource_action") or "none"),
+            resource_action=resource_action,
             resource_types=tuple(dict.fromkeys(str(item) for item in parsed.get("resource_types", [])))[:3],
             resource_difficulty=str(parsed.get("resource_difficulty") or "medium"),
             resource_learning_goal=str(parsed.get("resource_learning_goal") or "")[:500],
             resource_reason_summary=str(parsed.get("resource_reason_summary") or "")[:160],
+            response_mode=str(response_mode),
         )
 
     def assess_course_evidence(
@@ -299,11 +308,14 @@ class SemanticDecisionService:
             "source_scope 默认 mainland_preferred；只有用户明确要求国外平台、国际原始论文/标准，或问题必须依赖国际原始来源时"
             "才输出 global_required。输出字段固定为 intent、search_required、search_query、reasoning_mode、source_scope、course_related、"
             "confidence、reason_codes、reason_summary、profile_signals、standalone_query、uses_history、"
-            "referenced_turn_ids、resource_action、resource_types、resource_difficulty、resource_learning_goal、resource_reason_summary。"
+            "referenced_turn_ids、resource_action、resource_types、resource_difficulty、resource_learning_goal、resource_reason_summary、answer_requested、response_mode。"
             "明确要求创建、生成某种学习资源时 resource_action=generate；学生只表达理解困难、希望换种方式学习，且具体资源确实有帮助时"
             " resource_action=suggest；其他情况必须为 none。generate/suggest 时从 doc、mindmap、quiz、code、slide、animation、video"
             "选择最多 3 类适合当前问题和学科的资源，不能机械地给所有学科安排代码。resource_learning_goal 要概括真实学习目标，"
             "resource_reason_summary 只说明推荐理由；none 时 resource_types 必须是 []。需要结合历史时，把当前问题改写成可独立理解的 standalone_query；"
+            "answer_requested 只有用户明确要求先讲解、回答或分析某个问题时才为 true；仅要求生成、制作或创建资源时必须为 false，"
+            "因为资源正文由下游异步工作流生成。response_mode 只能是 answer、action、answer_and_action：纯创建资源必须用 action；"
+            "明确要求先讲解再创建时用 answer_and_action；其余用 answer。"
             "referenced_turn_ids 只引用输入中存在的 turn_id。intent 优先使用 general_learning、"
             "material_question、current_information、external_resource_recommendation、verification、comparison、"
             "diagnosis、planning；没有画像信号时 profile_signals 必须是 []，不能输出 {}。"

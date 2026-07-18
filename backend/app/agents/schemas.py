@@ -68,6 +68,7 @@ class AgentState(TypedDict, total=False):
     resource_difficulty: str
     resource_learning_goal: str
     resource_reason_summary: str
+    response_mode: str
     semantic_search_query: str
     standalone_query: str
     uses_history: bool

@@ -575,6 +575,12 @@ class FakeSemanticDecisionService:
     intent: str = "general_learning"
     search_query: str = ""
     course_related: bool = False
+    resource_action: str = "none"
+    resource_types: tuple[str, ...] = ()
+    resource_difficulty: str = "medium"
+    resource_learning_goal: str = ""
+    resource_reason_summary: str = ""
+    response_mode: str = "answer"
     profile_updates: dict[str, Any] = field(default_factory=dict)
     profile_confidence: dict[str, float] = field(default_factory=dict)
     calls: list[dict[str, Any]] = field(default_factory=list)
@@ -596,6 +602,12 @@ class FakeSemanticDecisionService:
             course_related=self.course_related,
             profile_updates=self.profile_updates,
             profile_confidence=self.profile_confidence,
+            resource_action=self.resource_action,
+            resource_types=self.resource_types,
+            resource_difficulty=self.resource_difficulty,
+            resource_learning_goal=self.resource_learning_goal,
+            resource_reason_summary=self.resource_reason_summary,
+            response_mode=self.response_mode,
             warning=None,
         )
 
@@ -1743,6 +1755,38 @@ def test_stream_course_message_emits_tokens_and_persists_final_messages() -> Non
     assert repo.agent_logs[7].metadata_json["risk_flags"] == []
 
 
+def test_stream_course_resource_action_skips_answer_planner_and_review_model_calls() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    answer_generator = FakeCourseAnswerGenerator(tokens=["不应调用"])
+    semantic_service = FakeSemanticDecisionService(
+        course_related=True,
+        resource_action="generate",
+        resource_types=("mindmap", "quiz"),
+        resource_learning_goal="用图解和练习掌握启发式搜索",
+        resource_reason_summary="图解梳理关系，练习检验理解。",
+        response_mode="action",
+    )
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=FakeCourseCitationSearcher(results=[]),
+        course_answer_generator=answer_generator,
+        semantic_decision_service=semantic_service,
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+
+    events = list(service.stream_message(user=user, session_id=session.id, content="生成思维导图和练习题"))
+
+    assert events[-1]["event"] == "done"
+    assert answer_generator.calls == []
+    assert answer_generator.plan_calls == []
+    assert answer_generator.review_calls == []
+    assert "正在准备生成思维导图、练习" in repo.messages[1].content
+    assert repo.messages[1].resource_proposal_json["response_mode"] == "action"
+    assert repo.messages[1].resource_proposal_json["resource_types"] == ["mindmap", "quiz"]
+
+
 def test_stream_course_message_passes_context_to_retrieval_model_and_metadata() -> None:
     module = load_tutor_module()
     user = make_user(1)
@@ -1880,6 +1924,34 @@ def test_stream_home_message_returns_graph_events_without_model_config() -> None
     assert [name for name in event_names if name in {"done", "error", "cancelled"}] == ["done"]
     assert events[0]["data"]["workflow"] == "home_tutor"
     assert "当前未配置可用模型" in next(event["data"]["content"] for event in events if event["event"] == "token")
+
+
+def test_stream_home_resource_action_skips_long_answer_and_keeps_course_selection_proposal() -> None:
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository()
+    answer_generator = FakeCourseAnswerGenerator(tokens=["不应调用"])
+    service = module.TutorSessionService(
+        repo,
+        course_answer_generator=answer_generator,
+        semantic_decision_service=FakeSemanticDecisionService(
+            resource_action="generate",
+            resource_types=("mindmap",),
+            resource_learning_goal="梳理机器学习流程",
+            resource_reason_summary="用图解建立整体结构。",
+            response_mode="action",
+        ),
+    )
+    session = service.create_session(user=user, scope="home", course_id=None, mode="chat", title="主页答疑")
+
+    events = list(service.stream_message(user=user, session_id=session.id, content="生成一张机器学习思维导图"))
+
+    assert events[-1]["event"] == "done"
+    assert answer_generator.calls == []
+    assert answer_generator.plan_calls == []
+    assert answer_generator.review_calls == []
+    assert "请选择目标课程" in repo.messages[1].content
+    assert repo.messages[1].resource_proposal_json["response_mode"] == "action"
 
 
 def test_stream_home_message_emits_replace_after_review_repair() -> None:

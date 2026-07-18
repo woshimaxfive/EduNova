@@ -1120,6 +1120,7 @@ export function CourseSpacePage() {
                                 recommendation={isLatestAssistant ? recommendation : null}
                                 citationCount={citations.length}
                                 resourceCount={generatedResources.length}
+                                hasTrace={Boolean(effectiveTraceId)}
                                 activePanel={turnPanel}
                                 isSpeaking={speech.activeSpeechId === message.id}
                                 pathHref={pathHref}
@@ -1130,6 +1131,7 @@ export function CourseSpacePage() {
                                 onOpenCitations={() => toggleTurnPanel(message.id, "citations", question, citations)}
                                 onOpenResources={() => toggleTurnPanel(message.id, "resources", question, citations)}
                                 onOpenWhy={() => toggleTurnPanel(message.id, "why", question, citations)}
+                                onOpenTrace={() => toggleTurnPanel(message.id, "thinking", question, citations)}
                               />
                             ) : undefined}
                             detail={

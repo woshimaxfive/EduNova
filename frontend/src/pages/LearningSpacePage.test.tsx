@@ -1086,7 +1086,7 @@ describe("LearningSpacePage", () => {
     expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("真实资料讲义.md");
     expect(within(thread).getByRole("region", { name: "回答展开详情" })).toHaveTextContent("联网搜索结果");
 
-    expect(within(thread).queryByRole("button", { name: "协作过程" })).not.toBeInTheDocument();
+    expect(within(thread).getByRole("button", { name: "协作轨迹" })).toBeInTheDocument();
   });
 
   it("uses browser speech recognition for voice input and browser speech synthesis for read aloud", async () => {
@@ -1367,7 +1367,7 @@ describe("LearningSpacePage", () => {
     expect(historyRail.querySelectorAll("button[aria-pressed]")).toHaveLength(initialThreadCount + 1);
   });
 
-  it("keeps the home answer actions focused on sources and explanation", async () => {
+  it("shows the home answer collaboration trace alongside sources and explanation", async () => {
     const user = userEvent.setup();
 
     renderWithDashboardSummary(starterSummary);
@@ -1380,7 +1380,7 @@ describe("LearningSpacePage", () => {
     await user.click(screen.getByRole("button", { name: "发送" }));
     expect(screen.queryByRole("button", { name: "学习路径" })).not.toBeInTheDocument();
 
-    expect(screen.queryByRole("button", { name: "协作过程" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "协作轨迹" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "为什么这样回答" })).toBeInTheDocument();
   });
 

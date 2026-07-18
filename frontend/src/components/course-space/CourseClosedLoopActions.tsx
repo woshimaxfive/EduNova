@@ -17,6 +17,7 @@ type CourseClosedLoopActionsProps = {
   recommendation: LearningNextAction | null;
   citationCount: number;
   resourceCount: number;
+  hasTrace: boolean;
   activePanel: CourseAnswerPanelKind | null;
   isSpeaking: boolean;
   pathHref: string;
@@ -27,12 +28,14 @@ type CourseClosedLoopActionsProps = {
   onOpenCitations: () => void;
   onOpenResources: () => void;
   onOpenWhy: () => void;
+  onOpenTrace: () => void;
 };
 
 export function CourseClosedLoopActions({
   recommendation,
   citationCount,
   resourceCount,
+  hasTrace,
   activePanel,
   isSpeaking,
   pathHref,
@@ -42,7 +45,8 @@ export function CourseClosedLoopActions({
   onRead,
   onOpenCitations,
   onOpenResources,
-  onOpenWhy
+  onOpenWhy,
+  onOpenTrace
 }: CourseClosedLoopActionsProps) {
   return (
     <section className="course-closed-loop-actions" aria-label="课程闭环行动">
@@ -83,6 +87,12 @@ export function CourseClosedLoopActions({
           <Sparkle size={17} weight="duotone" aria-hidden="true" />
           <span>为什么这样回答</span>
         </button>
+        {hasTrace ? (
+          <button type="button" aria-label="协作轨迹" aria-pressed={activePanel === "thinking"} onClick={onOpenTrace}>
+            <Sparkle size={17} weight="duotone" aria-hidden="true" />
+            <span>协作轨迹</span>
+          </button>
+        ) : null}
       </div>
     </section>
   );

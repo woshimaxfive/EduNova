@@ -1229,7 +1229,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(within(loopActions).getByRole("link", { name: /学习报告/ }).getAttribute("href")).toContain(
       "/app/courses/808/reports?"
     );
-    expect(within(loopActions).queryByRole("button", { name: /课堂协作轨迹/ })).not.toBeInTheDocument();
+    expect(within(loopActions).getByRole("button", { name: "协作轨迹" })).toBeInTheDocument();
   });
 
   it("hides echoed model context from persisted course answers", async () => {

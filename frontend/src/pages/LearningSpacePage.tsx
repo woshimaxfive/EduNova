@@ -15,7 +15,7 @@ import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState }
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { buildCoursePath, PATHS } from "../app/routePaths";
-import { getAgentTrace } from "../api/agents";
+import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import { createCourseBuilderJob, createIdempotencyKey, getAiJob, type AiJob } from "../api/aiJobs";
 import { getDashboardSummary } from "../api/dashboard";
 import { getApiErrorMessage } from "../api/errors";
@@ -55,6 +55,7 @@ import { useTutorImageDraft } from "../features/tutor/useTutorImageDraft";
 import { appendTutorProgressStage, type TutorResponseProgressState } from "../features/tutor/tutorResponseProgress";
 import { useTutorPersistedResponseProgress } from "../features/tutor/useTutorPersistedResponseProgress";
 import { TutorResponseProgress } from "../components/tutor/TutorResponseProgress";
+import { AgentTimeline } from "../components/evidence/AgentTimeline";
 
 type LibraryMaterial = {
   id: string;
@@ -87,7 +88,7 @@ type PendingHomeResourceGeneration = { sessionId: string; messageId: string; pro
 
 type DashboardSummaryResponse = Awaited<ReturnType<typeof getDashboardSummary>>;
 
-type HomeAnswerPanel = "sources" | "why";
+type HomeAnswerPanel = "sources" | "why" | "trace";
 
 const HOME_COMPOSER_MAX_HEIGHT = 154;
 
@@ -1112,12 +1113,16 @@ function HomeAnswerInsights({
   const traceQuery = useQuery({
     queryKey: ["agents", "trace", message.trace_id],
     queryFn: () => getAgentTrace(message.trace_id ?? ""),
-    enabled: Boolean(message.trace_id) && isExpanded && activePanel === "why",
+    enabled: Boolean(message.trace_id) && isExpanded && (activePanel === "why" || activePanel === "trace"),
     staleTime: 10_000
   });
   const personalizationCount = useMemo(
     () => traceQuery.data?.data.summary?.personalization_factors?.length ?? 0,
     [traceQuery.data?.data.summary?.personalization_factors]
+  );
+  const traceEvents = useMemo(
+    () => traceQuery.data?.data.steps.map(mapAgentTraceStepToEvent) ?? [],
+    [traceQuery.data?.data.steps]
   );
   const handleInsightClick = (panel: HomeAnswerPanel) => {
     const shouldCollapse = isExpanded && activePanel === panel;
@@ -1156,6 +1161,18 @@ function HomeAnswerInsights({
           <LinkSimple size={16} weight="duotone" aria-hidden="true" />
           <span>来源</span>
         </button>
+        {message.trace_id ? (
+          <button
+            className={isExpanded && activePanel === "trace" ? "active" : ""}
+            type="button"
+            aria-expanded={isExpanded && activePanel === "trace"}
+            aria-pressed={isExpanded && activePanel === "trace"}
+            onClick={() => handleInsightClick("trace")}
+          >
+            <Sparkle size={16} weight="duotone" aria-hidden="true" />
+            <span>协作轨迹</span>
+          </button>
+        ) : null}
       </div>
 
       {isExpanded ? (
@@ -1202,6 +1219,18 @@ function HomeAnswerInsights({
                   ? `本次讲解依据课程上下文，并使用 ${personalizationCount} 项可信学习因素调整讲解深度、案例和下一步；这些因素不会改变事实或引用。`
                   : "本次主要依据问题、会话上下文和可验证来源组织回答，没有使用低可信画像改变内容。"}
               </p>
+            </>
+          ) : null}
+          {activePanel === "trace" ? (
+            <>
+              <span className="insight-mark"><Sparkle size={16} weight="fill" aria-hidden="true" />智能体协作轨迹</span>
+              {traceQuery.isPending ? <p>正在读取协作轨迹。</p> : null}
+              {traceQuery.isError ? <p>协作轨迹读取失败，请稍后重试。</p> : null}
+              {traceQuery.data?.data.summary ? (
+                <p>{`耗时 ${traceQuery.data.data.summary.duration_ms ?? 0} ms · 来源 ${Number(traceQuery.data.data.summary.course_source_count ?? 0) + Number(traceQuery.data.data.summary.web_source_count ?? 0) + Number(traceQuery.data.data.summary.history_source_count ?? 0)} 条 · 个性化因素 ${traceQuery.data.data.summary.personalization_factors?.length ?? 0} 项`}</p>
+              ) : null}
+              {traceEvents.length > 0 ? <AgentTimeline events={traceEvents} /> : null}
+              {!traceQuery.isPending && !traceQuery.isError && traceEvents.length === 0 ? <p>当前协作轨迹暂无可展示步骤。</p> : null}
             </>
           ) : null}
         </div>

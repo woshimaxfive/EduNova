@@ -20,6 +20,11 @@ import { AgentTraceDisclosure } from "../../components/evidence/AgentTraceDisclo
 import { ModalFrame } from "../../components/primitives/Dialog";
 import { ConfirmDialog } from "../../components/primitives/Dialog";
 import { InlineFeedback } from "../../components/feedback/InlineFeedback";
+import {
+  isResourceType,
+  resourceRoleLabel,
+  resourceTypeMeta
+} from "../../components/resources/resourceDisplayMeta";
 import { MasteryOverviewChart } from "../../components/visualization/LearningCharts";
 
 export type PathTaskFilter = "all" | PathTaskStatus;
@@ -217,6 +222,17 @@ export function PathTaskCanvas({
   const visibleTasks = filter === "all" && currentTask
     ? [currentTask, ...filteredTasks.filter((task) => task.id !== currentTask.id)]
     : filteredTasks;
+  const plannedResourceCount = tasks.reduce((total, task) => total + (task.learning_bundle?.items.length ?? 0), 0);
+  const readyResourceCount = tasks.reduce(
+    (total, task) => total + (task.learning_bundle?.ready_count ?? task.learning_bundle?.items.filter((item) => item.resource_id).length ?? 0),
+    0
+  );
+  const weaknessCount = pathDetail?.evidence_summary.confirmed_or_reviewing_weakness_count ?? 0;
+  const planSummary = [
+    `当前安排 ${tasks.length} 项任务`,
+    weaknessCount > 0 ? `优先处理 ${weaknessCount} 个已确认薄弱点` : "按课程顺序推进",
+    plannedResourceCount > 0 ? `规划 ${plannedResourceCount} 项学习资源，其中 ${readyResourceCount} 项已就绪` : "资源将在学习时按需安排"
+  ].join("；");
 
   if (isPending && !pathDetail) {
     return <div className="path-workspace-state"><span className="path-state-spinner" />正在读取学习路径</div>;
@@ -235,12 +251,13 @@ export function PathTaskCanvas({
       </div>
     );
   }
+  const activePath = pathDetail.path;
 
   return (
     <section className="path-task-canvas" aria-label="个性化路径任务">
       <header className="path-canvas-heading">
         <h2>{filter === "all" ? "学习任务" : taskStatusLabel(filter as PathTaskStatus)}</h2>
-        <small>{pathDetail.message}</small>
+        <small>{planSummary}</small>
       </header>
       {pathDetail.path.plan_json.trigger === "assessment" ? (
         <div className="path-reflow-band">
@@ -258,7 +275,7 @@ export function PathTaskCanvas({
       {visibleTasks.length === 0 ? (
         <div className="path-filter-empty">当前筛选下没有任务。</div>
       ) : (
-        <ol className="path-task-list">
+        <ol className={filter === "all" ? "path-task-list connected" : "path-task-list"}>
           {visibleTasks.map((task, index) => {
             const isCurrent = task.id === currentTask?.id && task.status !== "completed";
             const bundle = task.learning_bundle;
@@ -272,8 +289,10 @@ export function PathTaskCanvas({
               && ["queued", "running", "cancelling", "failed"].includes(job.status)
             ));
             const resourceJobActive = Boolean(resourceJob && ["queued", "running", "cancelling"].includes(resourceJob.status));
+            const generationMode = bundle?.generation_mode ?? String(activePath.plan_json.generation_mode ?? "legacy");
+            const currentLabel = isModelGeneratedMode(generationMode) ? "AI 当前推荐" : "当前学习任务";
             return (
-              <li key={task.id} className={isCurrent ? "current" : task.status}>
+              <li key={task.id} className={["path-task-item", task.status, isCurrent ? "current" : ""].filter(Boolean).join(" ")}>
                 <div className="path-task-marker">
                   {task.status === "completed" ? <Check size={16} weight="bold" aria-hidden="true" /> : <span>{index + 1}</span>}
                 </div>
@@ -281,7 +300,7 @@ export function PathTaskCanvas({
                   <div className="path-task-meta">
                     <span>{taskStatusLabel(task.status)}</span>
                     <span>{taskTypeLabel(task.task_type)}</span>
-                    {isCurrent ? <b>当前任务</b> : null}
+                    {isCurrent ? <b>{currentLabel}</b> : null}
                   </div>
                   <h3>{task.title}</h3>
                   <p>{task.reason}</p>
@@ -296,14 +315,20 @@ export function PathTaskCanvas({
                       <div>
                         {task.learning_bundle.items.map((item, itemIndex) => (
                           <span key={`${item.resource_type}-${itemIndex}`}>
-                            {item.resource_type} · {item.role}
-                            {item.resource_id
+                            {(() => {
+                              const meta = isResourceType(item.resource_type) ? resourceTypeMeta[item.resource_type] : null;
+                              const ResourceIcon = meta?.Icon ?? FileText;
+                              return <ResourceIcon size={14} weight="duotone" aria-hidden="true" />;
+                            })()}
+                            <span>{isResourceType(item.resource_type) ? resourceTypeMeta[item.resource_type].label : "学习资源"}</span>
+                            <small>{resourceRoleLabel(item.role)}</small>
+                            <b>{item.resource_id
                               ? item.learning_status === "completed"
-                                ? " · 已完成"
+                                ? "已完成"
                                 : item.learning_status === "in_progress"
-                                  ? " · 学习中"
-                                  : " · 已就绪"
-                              : " · 待生成"}
+                                  ? "学习中"
+                                  : "已就绪"
+                              : "待生成"}</b>
                           </span>
                         ))}
                       </div>

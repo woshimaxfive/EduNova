@@ -239,7 +239,7 @@ describe("StudioPage resource generation", () => {
     await user.click(within(screen.getByRole("banner", { name: "资源工坊工具栏" })).getByRole("button", { name: "新建资源" }));
     const generateDrawer = screen.getByRole("dialog", { name: "生成设置" });
     await user.type(within(generateDrawer).getByRole("textbox", { name: "生成目标" }), "期末前掌握搜索题");
-    for (const type of ["思维导图", "练习", "代码实操", "PPT", "动画图解"]) {
+    for (const type of ["思维导图", "练习题", "代码实操", "PPT", "动画图解"]) {
       await user.click(within(generateDrawer).getByRole("checkbox", { name: type }));
     }
     await user.click(within(generateDrawer).getByRole("button", { name: "开始生成" }));

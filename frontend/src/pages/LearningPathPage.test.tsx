@@ -137,7 +137,11 @@ const masteryResponse = {
   }]
 };
 
-function installBaseAdapter(options: { empty?: boolean; calls?: Array<{ method: string; url: string; payload: unknown }> } = {}) {
+function installBaseAdapter(options: {
+  empty?: boolean;
+  pathResponse?: typeof activePathResponse;
+  calls?: Array<{ method: string; url: string; payload: unknown }>;
+} = {}) {
   const hasPath = !options.empty;
   apiClient.defaults.adapter = async (config) => {
     const method = (config.method ?? "get").toLowerCase();
@@ -148,7 +152,7 @@ function installBaseAdapter(options: { empty?: boolean; calls?: Array<{ method: 
     if (url === PATH_ENDPOINTS.current) {
       const data = !hasPath
         ? { course_id: "808", status: "not_started", message: "学习路径尚未生成。", path: null, tasks: [], evidence_summary: { knowledge_point_count: 3, confirmed_or_reviewing_weakness_count: 1, pending_weakness_count: 0, resource_count: 1, basis: [] } }
-        : activePathResponse;
+        : options.pathResponse ?? activePathResponse;
       return { data: { data }, status: 200, statusText: "OK", headers: {}, config };
     }
     if (url === COURSE_ENDPOINTS.masteryMap(808)) return { data: { data: masteryResponse }, status: 200, statusText: "OK", headers: {}, config };
@@ -210,9 +214,18 @@ describe("LearningPathPage", () => {
     expect(screen.getByText("个性化学习安排")).toBeInTheDocument();
     expect(screen.queryByText("期末冲刺")).not.toBeInTheDocument();
     expect(screen.getByText("个性化规划 · 难度 适中")).toBeInTheDocument();
+    expect(screen.getByText("AI 当前推荐")).toBeInTheDocument();
+    expect(screen.getByText("讲解文档")).toBeInTheDocument();
+    expect(screen.getByText("思维导图")).toBeInTheDocument();
+    expect(screen.getByText(/当前安排 1 项任务；优先处理 1 个已确认薄弱点；规划 2 项学习资源，其中 1 项已就绪/)).toBeInTheDocument();
+    expect(document.querySelector(".path-task-list")).toHaveClass("connected");
     expect(screen.queryByText(/安全默认组合/)).not.toBeInTheDocument();
     expect(screen.getByText("由练习结果更新 · 保留 2 个既有任务")).toBeInTheDocument();
     expect(screen.getByText("学习画像已变化，可更新学习路径以应用新的安排依据。")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /进行中/ }));
+    expect(document.querySelector(".path-task-list")).not.toHaveClass("connected");
+    await user.click(screen.getByRole("button", { name: /全部任务/ }));
 
     await user.click(screen.getByRole("button", { name: "路径详情" }));
     const drawer = screen.getByRole("dialog", { name: "路径详情" });
@@ -245,6 +258,26 @@ describe("LearningPathPage", () => {
       url: PATH_ENDPOINTS.taskResourceJobs(1001)
     })));
     expect(await screen.findByRole("button", { name: "正在生成" })).toBeDisabled();
+  });
+
+  it("labels a deterministic current task without presenting it as an AI recommendation", async () => {
+    installBaseAdapter({
+      pathResponse: {
+        ...activePathResponse,
+        path: {
+          ...activePathResponse.path,
+          plan_json: { ...activePathResponse.path.plan_json, generation_mode: "deterministic_source" }
+        },
+        tasks: activePathResponse.tasks.map((task) => ({
+          ...task,
+          learning_bundle: { ...task.learning_bundle, generation_mode: "deterministic_source" }
+        }))
+      }
+    });
+    renderWithProviders(<LearningPathPage />);
+
+    expect(await screen.findByText("当前学习任务")).toBeInTheDocument();
+    expect(screen.queryByText("AI 当前推荐")).not.toBeInTheDocument();
   });
 
   it("queues path planning with one click and only sends the course id", async () => {

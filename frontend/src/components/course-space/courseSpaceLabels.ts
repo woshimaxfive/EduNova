@@ -1,15 +1,5 @@
-import { type ResourceType } from "../../api/resources";
 import { type StudyStepStatus } from "../../features/course-space/a3Loop";
-
-export const resourceTypeLabels: Record<ResourceType, string> = {
-  doc: "讲解文档",
-  mindmap: "思维导图",
-  quiz: "练习题",
-  code: "代码实操",
-  slide: "PPT",
-  animation: "动画图解",
-  video: "外部视频"
-};
+export { resourceTypeLabels } from "../resources/resourceDisplayMeta";
 
 export const studyStepStatusLabels: Record<StudyStepStatus, string> = {
   done: "已完成",

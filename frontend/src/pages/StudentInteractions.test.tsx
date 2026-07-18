@@ -765,7 +765,7 @@ describe("student interaction affordances", () => {
     const generateDrawer = screen.getByRole("dialog", { name: "生成设置" });
     await waitFor(() => expect(within(generateDrawer).getByRole("combobox", { name: "生成知识点" })).not.toBeDisabled());
     await user.selectOptions(within(generateDrawer).getByRole("combobox", { name: "生成知识点" }), "401");
-    await user.click(within(generateDrawer).getByRole("checkbox", { name: "练习" }));
+    await user.click(within(generateDrawer).getByRole("checkbox", { name: "练习题" }));
     await user.click(within(generateDrawer).getByRole("button", { name: "开始生成" }));
 
     await waitFor(() => {

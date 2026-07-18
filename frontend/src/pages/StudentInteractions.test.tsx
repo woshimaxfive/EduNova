@@ -48,6 +48,16 @@ function renderPage(page: ReactNode) {
   renderWithProviders(<MemoryRouter>{page}</MemoryRouter>);
 }
 
+function renderCoursePage(page: ReactNode, route: string, entry: string) {
+  renderWithProviders(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes>
+        <Route path={route} element={page} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+
 function parsePayload(data: unknown) {
   if (typeof data !== "string") {
     return data;
@@ -610,7 +620,7 @@ describe("student interaction affordances", () => {
       return { data: { data: {}, trace_id: "trace_practice_default" }, status: 200, statusText: "OK", headers: {}, config };
     };
 
-    renderPage(<PracticePage />);
+    renderCoursePage(<PracticePage />, PATHS.coursePractice, "/app/courses/808/practice?knowledge_point_id=401");
 
     await screen.findByRole("heading", { name: "开始针对性练习" });
     expect(screen.getByText("反向传播")).toBeInTheDocument();
@@ -1044,7 +1054,7 @@ describe("student interaction affordances", () => {
       return { data: { data: {}, trace_id: "trace_report_default" }, status: 200, statusText: "OK", headers: {}, config };
     };
 
-    renderPage(<ReportsPage />);
+    renderCoursePage(<ReportsPage />, PATHS.courseReports, "/app/courses/808/reports");
 
     await user.click(await screen.findByRole("button", { name: "生成学习报告" }));
 

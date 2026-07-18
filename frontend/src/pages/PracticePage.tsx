@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, CheckCircle, ClipboardText, SlidersHorizontal, WarningCircle } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { getKnowledgePoints, listCourses } from "../api/courses";
 import { createIdempotencyKey, createPracticeGenerationJob, type AiJob } from "../api/aiJobs";
@@ -30,6 +30,7 @@ import {
 import { selectResumablePracticeJob } from "../features/practice/practiceJobSelection";
 import { useLearningNextAction } from "../features/learning-actions/learningActions";
 import { PageFrame } from "./PageFrame";
+import { buildCoursePracticeWorkspacePath } from "../app/routePaths";
 import "../styles/practice.css";
 
 type PracticeSessionEnvelope = PracticeSessionDetail | { data?: PracticeSessionDetail };
@@ -48,6 +49,7 @@ function draftLabel(status: "idle" | "saving" | "saved" | "error") {
 
 export function PracticePage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { courseId: routeCourseId } = useParams();
   const queryClient = useQueryClient();
   const initialCourseId = searchParams.get("course_id") ?? "";
@@ -56,7 +58,10 @@ export function PracticePage() {
   const initialWeaknessItemId = Number(searchParams.get("weakness_item_id") ?? "");
   const [selectedCourseId, setSelectedCourseId] = useState(lockedCourseId || initialCourseId);
   const [selectedPointId, setSelectedPointId] = useState(initialKnowledgePointId);
-  const [questionCount, setQuestionCount] = useState(5);
+  const requestedQuestionCount = Number(searchParams.get("question_count") ?? 5);
+  const [questionCount, setQuestionCount] = useState(
+    Number.isFinite(requestedQuestionCount) ? Math.min(10, Math.max(1, Math.round(requestedQuestionCount))) : 5
+  );
   const [difficulty, setDifficulty] = useState<"adaptive" | "easy" | "medium" | "hard">("adaptive");
   const [currentSession, setCurrentSession] = useState<PracticeSessionDetail | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -85,9 +90,15 @@ export function PracticePage() {
 
   const coursesQuery = useQuery({ queryKey: ["practice-courses"], queryFn: () => listCourses() });
   const courses = Array.isArray(coursesQuery.data?.data) ? coursesQuery.data.data : [];
-  const effectiveCourseId = lockedCourseId || selectedCourseId || courses[0]?.id || "";
+  const effectiveCourseId = lockedCourseId || selectedCourseId || courses.find((course) => course.is_current)?.id || "";
   const numericCourseId = Number(effectiveCourseId);
   const canUseCourse = Number.isFinite(numericCourseId) && numericCourseId > 0;
+  useEffect(() => {
+    if (lockedCourseId || !canUseCourse) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("course_id");
+    navigate(`${buildCoursePracticeWorkspacePath(numericCourseId)}${next.size ? `?${next.toString()}` : ""}`, { replace: true });
+  }, [canUseCourse, lockedCourseId, navigate, numericCourseId, searchParams]);
 
   const pointsQuery = useQuery({
     queryKey: ["practice-knowledge-points", numericCourseId],
@@ -358,7 +369,7 @@ export function PracticePage() {
 
   return (
     <>
-      <PageFrame title="练习" titleMode="sr-only" variant="wide-workspace" courseId={lockedCourseId ? Number(lockedCourseId) : null}>
+      <PageFrame title="练习" titleMode="sr-only" variant="wide-workspace" courseId={numericCourseId || null}>
         <div className="practice-focus-workspace">
         <PracticeToolbar
           courseTitle={selectedCourseTitle}

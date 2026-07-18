@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-import { getMasteryMap, listCourses } from "../api/courses";
+import { completeCourse, getCourseLearningState, getMasteryMap, listCourses, resumeCourse } from "../api/courses";
 import { createIdempotencyKey, createReportGenerationJob, type AiJob } from "../api/aiJobs";
 import {
   createLearningDossierExportJob,
@@ -13,7 +13,7 @@ import {
 } from "../api/exports";
 import { listRecentCompletedPracticeSessions } from "../api/practice";
 import { getLatestReport } from "../api/reports";
-import { PATHS, buildCoursePracticeWorkspacePath } from "../app/routePaths";
+import { PATHS, buildCoursePracticeWorkspacePath, buildCourseReportsWorkspacePath } from "../app/routePaths";
 import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
 import { ReportDashboard } from "../components/reports/ReportDashboard";
 import { ReportDrawer, type ReportDetailTab, type ReportDrawerMode } from "../components/reports/ReportDrawer";
@@ -72,6 +72,7 @@ async function waitForExportJob(initialJob: ExportJob) {
 
 export function ReportsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { courseId: routeCourseId } = useParams();
   const [drawerMode, setDrawerMode] = useState<ReportDrawerMode>(null);
@@ -87,9 +88,15 @@ export function ReportsPage() {
   const coursesQuery = useQuery({ queryKey: ["report-courses"], queryFn: () => listCourses() });
   const courses = coursesQuery.data?.data ?? [];
   const lockedCourseId = routeCourseId || "";
-  const effectiveCourseId = lockedCourseId || searchParams.get("course_id") || courses[0]?.id || "";
+  const effectiveCourseId = lockedCourseId || searchParams.get("course_id") || courses.find((course) => course.is_current)?.id || "";
   const numericCourseId = Number(effectiveCourseId);
   const canUseCourse = Number.isFinite(numericCourseId) && numericCourseId > 0;
+  useEffect(() => {
+    if (lockedCourseId || !canUseCourse) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("course_id");
+    navigate(`${buildCourseReportsWorkspacePath(numericCourseId)}${next.size ? `?${next.toString()}` : ""}`, { replace: true });
+  }, [canUseCourse, lockedCourseId, navigate, numericCourseId, searchParams]);
 
   const latestReportQuery = useQuery({
     queryKey: courseLoopQueryKeys.latestReport(numericCourseId),
@@ -101,12 +108,18 @@ export function ReportsPage() {
     queryFn: () => getMasteryMap(numericCourseId),
     enabled: canUseCourse
   });
+  const learningStateQuery = useQuery({
+    queryKey: courseLoopQueryKeys.learningState(numericCourseId),
+    queryFn: () => getCourseLearningState(numericCourseId),
+    enabled: canUseCourse
+  });
   const recentPracticesQuery = useQuery({
     queryKey: courseLoopQueryKeys.recentPractices(numericCourseId),
     queryFn: () => listRecentCompletedPracticeSessions(numericCourseId, 5),
     enabled: canUseCourse
   });
   const nextActionQuery = useLearningNextAction(canUseCourse ? numericCourseId : null);
+  const selectedCourse = courses.find((course) => Number(course.id) === numericCourseId) ?? null;
   const reportJob = jobs.find((job) => job.job_id === reportJobId)
     ?? jobs.find((job) => job.workflow === "report_generation" && Number(job.request.course_id) === numericCourseId);
   const reportJobRunning = reportJob?.status === "queued" || reportJob?.status === "running" || reportJob?.status === "cancelling";
@@ -154,9 +167,22 @@ export function ReportsPage() {
         : "学习档案导出失败，请稍后重试。");
     }
   });
+  const lifecycleMutation = useMutation({
+    mutationFn: () => selectedCourse?.learning_status === "archived"
+      ? resumeCourse(numericCourseId)
+      : completeCourse(numericCourseId),
+    onSuccess: () => {
+      setLocalError("");
+      void queryClient.invalidateQueries({ queryKey: ["courses"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      void invalidateCourseLearningLoop(queryClient, numericCourseId);
+    },
+    onError: () => setLocalError(selectedCourse?.learning_status === "archived" ? "恢复课程失败，请稍后重试。" : "课程尚未达到归档条件，请先完成下方未达标项。")
+  });
 
   const report = latestReportQuery.data?.data;
   const masteryMap = masteryQuery.data?.data;
+  const stageCompletion = learningStateQuery.data?.data.stage_completion;
   const recentPractices = recentPracticesQuery.data?.data;
   const latestPractice = recentPractices?.[0] ?? null;
   const freshness = latestReportQuery.isError
@@ -204,7 +230,7 @@ export function ReportsPage() {
 
   return (
     <>
-      <PageFrame title="学习报告" titleMode="sr-only" variant="wide-workspace" courseId={lockedCourseId ? Number(lockedCourseId) : null}>
+      <PageFrame title="学习报告" titleMode="sr-only" variant="wide-workspace" courseId={numericCourseId || null}>
         <section className="report-workspace" aria-label="学习报告数据工作台">
           <ReportWorkspaceToolbar
             courses={courses}
@@ -225,7 +251,34 @@ export function ReportsPage() {
           {!canUseCourse && !coursesQuery.isPending ? (
             <main className="report-no-course"><FileTextFallback /><h2>还没有可生成报告的课程</h2><p>先从资料库创建课程并完成一次练习。</p><a href={PATHS.library}>进入资料库</a></main>
           ) : (
-            <ReportDashboard
+            <>
+              <section className={`course-stage-completion ${stageCompletion?.eligible ? "eligible" : "pending"}`} aria-label="课程阶段完成状态">
+                <div>
+                  <strong>{selectedCourse?.learning_status === "archived" ? "这门课程已归档" : stageCompletion?.eligible ? "阶段学习已达标" : "课程阶段完成条件"}</strong>
+                  <p>{selectedCourse?.learning_status === "archived"
+                    ? "课程记录、聊天、资源、练习和报告均已保留，可随时恢复学习。"
+                    : stageCompletion?.eligible
+                      ? "路径、掌握度、薄弱点、完整练习和最新报告均已满足确定性标准。"
+                      : "完成课程不是点完任务：仍需真实练习、掌握度和最新报告共同证明。"}</p>
+                </div>
+                {stageCompletion && selectedCourse?.learning_status !== "archived" ? (
+                  <ul>
+                    <li>{stageCompletion.path_completed ? "路径已完成" : "路径未完成"}</li>
+                    <li>{stageCompletion.assessed_point_count}/{stageCompletion.required_point_count} 个路径知识点已评估</li>
+                    <li>{stageCompletion.below_threshold_count} 个知识点低于 75 分</li>
+                    <li>{stageCompletion.active_weakness_count + stageCompletion.due_review_count} 个薄弱或复习事项待处理</li>
+                    <li>{stageCompletion.report_fresh ? "报告已覆盖最近练习" : "报告尚未覆盖最近练习"}</li>
+                  </ul>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={lifecycleMutation.isPending || (selectedCourse?.learning_status !== "archived" && !stageCompletion?.eligible)}
+                  onClick={() => lifecycleMutation.mutate()}
+                >
+                  {lifecycleMutation.isPending ? "处理中" : selectedCourse?.learning_status === "archived" ? "恢复学习" : "完成并归档课程"}
+                </button>
+              </section>
+              <ReportDashboard
               report={report}
               masteryMap={masteryMap}
               latestPractice={latestPractice}
@@ -236,17 +289,21 @@ export function ReportsPage() {
               trendLabel={currentTrend.label}
               weakestPoints={weakestPoints}
               primaryAction={primaryAction}
-              buildPracticeHref={(knowledgePointId) => buildContextHref(lockedCourseId ? buildCoursePracticeWorkspacePath(lockedCourseId) : PATHS.practice, {
-                course_id: effectiveCourseId,
-                knowledge_point_id: knowledgePointId,
-                new: "1"
-              })}
+              buildPracticeHref={(knowledgePointId) => buildContextHref(
+                lockedCourseId ? buildCoursePracticeWorkspacePath(lockedCourseId) : PATHS.practice,
+                {
+                  ...(lockedCourseId ? {} : { course_id: effectiveCourseId }),
+                  knowledge_point_id: knowledgePointId,
+                  new: "1"
+                }
+              )}
               dataWarning={dataWarning}
               reportError={readError || localError || reportJobError}
               isLoading={isLoading}
               onGenerate={() => { if (!reportJobRunning) generateMutation.mutate(); }}
               onRetryReport={() => latestReportQuery.refetch()}
-            />
+              />
+            </>
           )}
         </section>
       </PageFrame>

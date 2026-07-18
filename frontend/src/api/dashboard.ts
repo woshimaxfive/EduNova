@@ -13,6 +13,7 @@ export type DashboardProfileSummary = {
   has_profile: boolean;
   knowledge_foundation: string | null;
   learning_goal: string | null;
+  base_profile_ready?: boolean;
 };
 
 export type DashboardConversation = {
@@ -32,6 +33,8 @@ export type DashboardCourse = {
   knowledge_point_count: number;
   focus: string;
   next: string;
+  learning_status?: "active" | "archived";
+  is_current?: boolean;
 };
 
 export type DashboardMaterial = {
@@ -74,6 +77,7 @@ export type DashboardSummary = {
     description: string;
     action_label: string;
   };
+  current_course_id?: string | null;
 };
 
 export async function getDashboardSummary() {

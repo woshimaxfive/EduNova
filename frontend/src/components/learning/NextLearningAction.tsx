@@ -20,10 +20,11 @@ export function NextLearningAction({ action, isLoading = false, error = false, c
   }
   if (error || !action) return null;
   const href = learningActionHref(action);
+  const heading = action.status === "waiting" ? "正在进行" : "下一步学习";
   const content = <>{action.status === "blocked" ? <WarningCircle size={19} weight="duotone" /> : action.status === "waiting" ? <CircleNotch className="spin" size={19} /> : null}<span>{learningActionButtonLabel(action)}</span><ArrowRight size={17} weight="bold" /></>;
   return (
     <section className={`${className} ${action.status}`} aria-label="下一步学习">
-      <div><span>下一步学习</span><strong>{action.label}</strong><p>{action.description}</p></div>
+      <div><span>{heading}</span><strong>{action.label}</strong><p>{action.description}</p></div>
       {onAction ? <button type="button" onClick={() => onAction(action)}>{content}</button> : <Link to={href}>{content}</Link>}
     </section>
   );

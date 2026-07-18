@@ -39,7 +39,7 @@ export function StudioWorkspaceToolbar({
           onChange={(event) => onCourseChange(event.target.value ? Number.parseInt(event.target.value, 10) : null)}
         >
           {courses.length > 0 ? courses.map((course) => (
-            <option key={course.id} value={course.id}>{course.title}</option>
+            <option key={course.id} value={course.id}>{course.title}{course.learning_status === "archived" ? "（已完成）" : course.is_current ? "（当前学习）" : ""}</option>
           )) : <option value="">还没有课程</option>}
         </select>
       </label>

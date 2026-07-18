@@ -10,6 +10,10 @@ export const COURSE_ENDPOINTS = {
     `/courses/${courseId}/knowledge-points/${knowledgePointId}/content`,
   masteryMap: (courseId: number) => `/courses/${courseId}/mastery-map`,
   learningState: (courseId: number) => `/courses/${courseId}/learning-state`,
+  activate: (courseId: number) => `/courses/${courseId}/activate`,
+  complete: (courseId: number) => `/courses/${courseId}/complete`,
+  resume: (courseId: number) => `/courses/${courseId}/resume`,
+  learnerProfile: (courseId: number) => `/courses/${courseId}/learner-profile`,
   weaknessReviewAction: (courseId: number, itemId: string, action: CourseWeaknessReviewAction) =>
     `/courses/${courseId}/weakness-review-items/${itemId}/${action}`,
   fromMaterials: "/courses/from-materials",
@@ -34,6 +38,41 @@ export type ApiCourseSummary = {
   material_count: number;
   knowledge_point_count: number;
   chunk_count: number;
+  learning_status?: "active" | "archived";
+  last_accessed_at?: string | null;
+  completed_at?: string | null;
+  is_current?: boolean;
+  profile_ready?: boolean;
+};
+
+export type CourseProfileReadiness = {
+  ready: boolean;
+  goal_ready: boolean;
+  foundation_ready: boolean;
+  global_preference_ready: boolean;
+  missing_fields: string[];
+};
+
+export type CourseLearnerProfile = {
+  course_id: string;
+  learning_goal: string;
+  knowledge_foundation: string;
+  weak_points: string[];
+  dimension_confidence: Record<string, number>;
+  readiness: CourseProfileReadiness;
+  legacy_suggestions: Record<string, unknown>;
+};
+
+export type CourseStageCompletion = {
+  eligible: boolean;
+  path_completed: boolean;
+  assessed_point_count: number;
+  required_point_count: number;
+  below_threshold_count: number;
+  active_weakness_count: number;
+  due_review_count: number;
+  report_fresh: boolean;
+  blocking_reasons: string[];
 };
 
 export type ApiCourseKnowledgePoint = {
@@ -218,6 +257,8 @@ export type CourseLearningState = {
   path_summary: CoursePathSummary;
   mastery_summary: CourseMasterySummary;
   evidence_summary: CourseEvidenceSummary;
+  course_profile_readiness?: CourseProfileReadiness;
+  stage_completion?: CourseStageCompletion;
 };
 
 export async function listCourses(sourceType?: "builtin" | "uploaded") {
@@ -256,6 +297,31 @@ export async function getMasteryMap(courseId: number) {
 
 export async function getCourseLearningState(courseId: number) {
   const response = await apiClient.get<ApiEnvelope<CourseLearningState>>(COURSE_ENDPOINTS.learningState(courseId));
+  return response.data;
+}
+
+export async function activateCourse(courseId: number) {
+  const response = await apiClient.post<ApiEnvelope<ApiCourseSummary>>(COURSE_ENDPOINTS.activate(courseId));
+  return response.data;
+}
+
+export async function completeCourse(courseId: number) {
+  const response = await apiClient.post<ApiEnvelope<ApiCourseSummary>>(COURSE_ENDPOINTS.complete(courseId));
+  return response.data;
+}
+
+export async function resumeCourse(courseId: number) {
+  const response = await apiClient.post<ApiEnvelope<ApiCourseSummary>>(COURSE_ENDPOINTS.resume(courseId));
+  return response.data;
+}
+
+export async function getCourseLearnerProfile(courseId: number) {
+  const response = await apiClient.get<ApiEnvelope<CourseLearnerProfile>>(COURSE_ENDPOINTS.learnerProfile(courseId));
+  return response.data;
+}
+
+export async function updateCourseLearnerProfile(courseId: number, payload: { learning_goal: string; knowledge_foundation: string; weak_points: string[] }) {
+  const response = await apiClient.put<ApiEnvelope<CourseLearnerProfile>>(COURSE_ENDPOINTS.learnerProfile(courseId), payload);
   return response.data;
 }
 

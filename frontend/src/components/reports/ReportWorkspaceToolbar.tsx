@@ -76,7 +76,7 @@ export function ReportWorkspaceToolbar({
           <label className="report-course-select">
             <span>学习报告 · 当前课程</span>
             <select aria-label="选择课程" value={courseId} onChange={(event) => onCourseChange(event.target.value)}>
-              {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
+              {courses.map((course) => <option key={course.id} value={course.id}>{course.title}{course.learning_status === "archived" ? "（已完成）" : course.is_current ? "（当前学习）" : ""}</option>)}
             </select>
           </label>
         )}

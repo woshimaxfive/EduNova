@@ -11,7 +11,7 @@ export type PracticeDrawerMode = "settings" | "results";
 
 type PracticeDrawerProps = {
   mode: PracticeDrawerMode;
-  courses: Array<{ id: string; title: string }>;
+  courses: Array<{ id: string; title: string; learning_status?: "active" | "archived"; is_current?: boolean }>;
   points: Array<{ id: string; title: string }>;
   courseId: string;
   pointId: string;
@@ -73,7 +73,7 @@ export function PracticeDrawer({
                 <label>
                   <span>课程</span>
                   <select aria-label="选择课程" value={courseId} onChange={(event) => onCourseChange(event.target.value)}>
-                    {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
+                    {courses.map((course) => <option key={course.id} value={course.id}>{course.title}{course.learning_status === "archived" ? "（已完成）" : course.is_current ? "（当前学习）" : ""}</option>)}
                   </select>
                 </label>
               )}

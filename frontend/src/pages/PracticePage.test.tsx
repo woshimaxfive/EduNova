@@ -30,6 +30,7 @@ function renderWithProviders(initialPath = `${PATHS.practice}?course_id=808&new=
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path={PATHS.practice} element={<><PracticePage /><LocationProbe /></>} />
+          <Route path={PATHS.coursePractice} element={<><PracticePage /><LocationProbe /></>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>

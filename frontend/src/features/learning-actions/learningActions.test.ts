@@ -33,14 +33,14 @@ describe("learning action routes", () => {
 
   it("routes path tasks to real resources or course knowledge", () => {
     expect(learningActionHref(action("continue_path_task", { resource_id: "18", path_task_id: "9" }))).toBe("/app/studio?course_id=8&resource_id=18&path_task_id=9");
-    expect(learningActionHref(action("continue_path_task", { knowledge_point_id: "42", path_task_id: "9" }))).toBe("/app/courses/8?mode=study&view=overview&knowledge_point_id=42&path_task_id=9");
+    expect(learningActionHref(action("continue_path_task", { knowledge_point_id: "42", path_task_id: "9" }))).toBe("/app/courses/8/path?path_task_id=9");
   });
 
   it("routes practice, path and report actions deterministically", () => {
-    expect(learningActionHref(action("practice_weakness", { knowledge_point_id: "42", weakness_item_id: "61" }))).toBe("/app/practice?course_id=8&knowledge_point_id=42&weakness_item_id=61&new=1");
-    expect(learningActionHref(action("generate_path"))).toBe("/app/path?course_id=8");
-    expect(learningActionHref(action("update_report"))).toBe("/app/reports?course_id=8");
-    expect(learningActionHref(action("wait_for_practice"))).toBe("/app/practice?course_id=8");
-    expect(learningActionHref(action("wait_for_report"))).toBe("/app/reports?course_id=8");
+    expect(learningActionHref(action("practice_weakness", { knowledge_point_id: "42", weakness_item_id: "61" }))).toBe("/app/courses/8/practice?knowledge_point_id=42&weakness_item_id=61&new=1");
+    expect(learningActionHref(action("generate_path"))).toBe("/app/courses/8/path");
+    expect(learningActionHref(action("update_report"))).toBe("/app/courses/8/reports");
+    expect(learningActionHref(action("wait_for_practice"))).toBe("/app/courses/8/practice");
+    expect(learningActionHref(action("wait_for_report"))).toBe("/app/courses/8/reports");
   });
 });

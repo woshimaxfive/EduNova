@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
   getMyProfile,
@@ -8,6 +9,7 @@ import {
   type ProfileEventResponse,
   type StudentProfileResponse
 } from "../api/profiles";
+import { getCourseLearnerProfile, listCourses, updateCourseLearnerProfile } from "../api/courses";
 import { ProfileComposer } from "../components/profile/ProfileComposer";
 import { ProfileDimensionRail } from "../components/profile/ProfileDimensionRail";
 import {
@@ -61,6 +63,9 @@ const EMPTY_PROFILE: StudentProfileResponse = {
 
 export function ProfilePage() {
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const requestedCourseId = Number(searchParams.get("course_id"));
+  const courseId = Number.isFinite(requestedCourseId) && requestedCourseId > 0 ? requestedCourseId : null;
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
   const [selectedKey, setSelectedKey] = useState<ProfileDimensionKey | null>(null);
@@ -70,6 +75,7 @@ export function ProfilePage() {
   const [profileFeedback, setProfileFeedback] = useState("");
   const [highlightedKeys, setHighlightedKeys] = useState<ProfileDimensionKey[]>([]);
   const [localInteraction, setLocalInteraction] = useState<ProfileLocalInteraction | null>(null);
+  const [courseProfileFeedback, setCourseProfileFeedback] = useState("");
 
   useEffect(() => () => {
     if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
@@ -80,6 +86,15 @@ export function ProfilePage() {
     queryFn: getMyProfile,
     staleTime: 30_000
   });
+  const coursesQuery = useQuery({ queryKey: ["courses", "profile"], queryFn: () => listCourses(), staleTime: 30_000 });
+  const courseProfileQuery = useQuery({
+    queryKey: ["courses", "learner-profile", courseId],
+    queryFn: () => getCourseLearnerProfile(courseId ?? 0),
+    enabled: courseId !== null,
+    staleTime: 30_000
+  });
+  const profileCourses = Array.isArray(coursesQuery.data?.data) ? coursesQuery.data.data : [];
+  const selectedCourse = profileCourses.find((course) => Number(course.id) === courseId) ?? null;
   const eventsQuery = useQuery({
     queryKey: ["profiles", "events"],
     queryFn: listProfileEvents,
@@ -147,6 +162,19 @@ export function ProfilePage() {
     },
     onError: () => setProfileFeedback("画像更新失败，请稍后重试。")
   });
+  const updateCourseProfileMutation = useMutation({
+    mutationFn: (payload: { learning_goal: string; knowledge_foundation: string; weak_points: string[] }) =>
+      updateCourseLearnerProfile(courseId ?? 0, payload),
+    onSuccess: () => {
+      setCourseProfileFeedback("课程画像已保存，后续路径、资源、练习和报告会使用这门课自己的目标与基础。");
+      void queryClient.invalidateQueries({ queryKey: ["courses"] });
+      void queryClient.invalidateQueries({ queryKey: ["courses", "learner-profile", courseId] });
+      void queryClient.invalidateQueries({ queryKey: ["courses", "learning-state", courseId] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      void invalidateLearningNextActions(queryClient);
+    },
+    onError: () => setCourseProfileFeedback("课程画像保存失败，请稍后重试。")
+  });
 
   function submitProfileAnswer() {
     const answer = profileAnswer.trim();
@@ -170,10 +198,18 @@ export function ProfilePage() {
     : eventsQuery.isError
       ? "部分画像证据暂时无法读取。"
       : profileFeedback;
+  const courseProfile = courseProfileQuery.data?.data;
+  const initialCourseGoal = courseProfile?.learning_goal || String(courseProfile?.legacy_suggestions.learning_goal ?? "");
+  const initialCourseFoundation = courseProfile?.knowledge_foundation || String(courseProfile?.legacy_suggestions.knowledge_foundation ?? "");
+  const initialCourseWeakPoints = courseProfile?.weak_points.length
+    ? courseProfile.weak_points
+    : Array.isArray(courseProfile?.legacy_suggestions.weak_points)
+      ? courseProfile.legacy_suggestions.weak_points.map(String)
+      : [];
 
   return (
     <>
-      <PageFrame title="学习画像" titleMode="sr-only" variant="wide-workspace">
+      <PageFrame title="学习画像" titleMode="sr-only" variant="wide-workspace" courseId={courseId}>
         <section className="profile-workspace" aria-label="动态学习画像工作台">
           <ProfileWorkspaceToolbar
             completeness={calculateProfileCompleteness(profile)}
@@ -184,6 +220,48 @@ export function ProfilePage() {
             updatedAt={profile.updated_at}
             onFocusComposer={() => composerRef.current?.focus()}
           />
+          {courseId !== null ? (
+            <form
+              className="course-profile-editor"
+              aria-label="课程专属画像"
+              key={`${courseId}-${courseProfileQuery.dataUpdatedAt}`}
+              onSubmit={(event) => {
+                event.preventDefault();
+                const form = new FormData(event.currentTarget);
+                updateCourseProfileMutation.mutate({
+                  learning_goal: String(form.get("learning_goal") ?? "").trim(),
+                  knowledge_foundation: String(form.get("knowledge_foundation") ?? "").trim(),
+                  weak_points: String(form.get("weak_points") ?? "").split(/[,，\n]/).map((item) => item.trim()).filter(Boolean)
+                });
+              }}
+            >
+              <div>
+                <strong>{selectedCourse ? `《${selectedCourse.title}》学习画像` : "课程专属画像"}</strong>
+                <p>目标、基础和困难仅用于这门课程；通用偏好与学习节奏仍由下方全局画像维护。</p>
+              </div>
+              <label>
+                <span>本课程学习目标</span>
+                <textarea required name="learning_goal" rows={2} defaultValue={initialCourseGoal} placeholder="例如：期末复习并能独立完成综合题" />
+              </label>
+              <label>
+                <span>本课程已有基础</span>
+                <textarea required name="knowledge_foundation" rows={2} defaultValue={initialCourseFoundation} placeholder="例如：理解基本概念，但综合应用还不熟练" />
+              </label>
+              <label>
+                <span>明确困难（可选，每行一项）</span>
+                <textarea name="weak_points" rows={2} defaultValue={initialCourseWeakPoints.join("\n")} placeholder="不确定时可以留空，后续由练习证据形成" />
+              </label>
+              <div className="course-profile-editor-actions">
+                <span role="status">{courseProfileFeedback}</span>
+                <button
+                  type="submit"
+                  disabled={updateCourseProfileMutation.isPending}
+                >
+                  {updateCourseProfileMutation.isPending ? "保存中" : "保存课程画像"}
+                </button>
+              </div>
+            </form>
+          ) : null}
           {localInteraction ? (
             <NextLearningAction action={nextActionQuery.data?.data} isLoading={nextActionQuery.isPending} error={nextActionQuery.isError} compact />
           ) : null}

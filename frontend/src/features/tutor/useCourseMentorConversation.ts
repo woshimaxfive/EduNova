@@ -44,7 +44,10 @@ export function useCourseMentorConversation({
     enabled: enabled && courseId !== null,
     staleTime: 10_000
   });
-  const sessions = useMemo(() => sessionsQuery.data?.data ?? [], [sessionsQuery.data?.data]);
+  const sessions = useMemo(
+    () => Array.isArray(sessionsQuery.data?.data) ? sessionsQuery.data.data : [],
+    [sessionsQuery.data]
+  );
   const selectedSessionId = sessions.some((session) => session.id === requestedSessionId)
     ? requestedSessionId
     : sessions[0]?.id ?? null;

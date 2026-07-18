@@ -28,6 +28,7 @@ function renderWithProviders(ui: ReactNode, initialPath = `${PATHS.reports}?cour
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path={PATHS.reports} element={ui} />
+          <Route path={PATHS.courseReports} element={ui} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -514,7 +515,7 @@ describe("ReportsPage", () => {
     expect(screen.getByRole("region", { name: "最近报告快照" })).toHaveTextContent("本次评估得分 67");
     expect(screen.getByRole("link", { name: "针对练习启发式搜索" })).toHaveAttribute(
       "href",
-      "/app/practice?return_to=course&course_session_id=91&course_message_id=92&course_id=808&knowledge_point_id=401&new=1"
+      "/app/courses/808/practice?return_to=course&course_session_id=91&course_message_id=92&knowledge_point_id=401&new=1"
     );
   });
 

@@ -12,7 +12,7 @@
 
 .profile-workspace {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -118,6 +118,7 @@
 }
 
 .profile-workspace-body {
+  grid-row: 4;
   display: grid;
   grid-template-columns: 336px minmax(0, 1fr);
   min-width: 0;
@@ -1038,4 +1039,60 @@
   .profile-updating-state > span {
     animation-duration: 1.4s;
   }
+}
+
+.course-profile-editor {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) repeat(3, minmax(180px, 1fr));
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--wide-workspace-divider);
+  background: color-mix(in srgb, var(--accent-soft) 58%, white);
+}
+
+.course-profile-editor > div:first-child { align-self: center; }
+.course-profile-editor strong { color: var(--text-strong); font-size: 15px; }
+.course-profile-editor p { margin: 5px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.55; }
+.course-profile-editor label { display: grid; gap: 6px; color: var(--text-muted); font-size: 12px; }
+.course-profile-editor textarea {
+  min-height: 66px;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid var(--wide-workspace-divider);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text-strong);
+  font: inherit;
+  line-height: 1.5;
+}
+.course-profile-editor-actions {
+  grid-column: 2 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.course-profile-editor-actions span { flex: 1; color: var(--text-muted); font-size: 12px; }
+.course-profile-editor-actions button {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  font-weight: 700;
+}
+.course-profile-editor-actions button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+@media (max-width: 1100px) {
+  .course-profile-editor { grid-template-columns: 1fr 1fr; }
+  .course-profile-editor > div:first-child { grid-column: 1 / -1; }
+  .course-profile-editor-actions { grid-column: 1 / -1; }
+}
+
+@media (max-width: 720px) {
+  .course-profile-editor { grid-template-columns: 1fr; padding: 14px; }
+  .course-profile-editor > div:first-child,
+  .course-profile-editor-actions { grid-column: auto; }
+  .course-profile-editor-actions { align-items: stretch; flex-direction: column; }
 }

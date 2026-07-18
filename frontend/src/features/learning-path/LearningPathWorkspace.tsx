@@ -62,6 +62,8 @@ function pathGenerationLabel(value: unknown) {
 type CourseOption = {
   id: string;
   title: string;
+  learning_status?: "active" | "archived";
+  is_current?: boolean;
 };
 
 type LearningPathToolbarProps = {
@@ -116,7 +118,7 @@ export function LearningPathToolbar({
           <select value={courseId ?? ""} onChange={onCourseChange} disabled={courses.length === 0}>
             {courses.length === 0 ? <option value="">暂无课程</option> : null}
             {courses.map((course) => (
-              <option key={course.id} value={course.id}>{course.title}</option>
+              <option key={course.id} value={course.id}>{course.title}{course.learning_status === "archived" ? "（已完成）" : course.is_current ? "（当前学习）" : ""}</option>
             ))}
           </select>
         </label>
@@ -292,7 +294,7 @@ export function PathTaskCanvas({
             const generationMode = bundle?.generation_mode ?? String(activePath.plan_json.generation_mode ?? "legacy");
             const currentLabel = isModelGeneratedMode(generationMode) ? "AI 当前推荐" : "当前学习任务";
             return (
-              <li key={task.id} className={["path-task-item", task.status, isCurrent ? "current" : ""].filter(Boolean).join(" ")}>
+              <li key={task.id} data-path-task-id={task.id} className={["path-task-item", task.status, isCurrent ? "current" : ""].filter(Boolean).join(" ")}>
                 <div className="path-task-marker">
                   {task.status === "completed" ? <Check size={16} weight="bold" aria-hidden="true" /> : <span>{index + 1}</span>}
                 </div>

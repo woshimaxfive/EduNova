@@ -278,6 +278,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/courses/{course_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate Course */
+        post: operations["activate_course_api_v1_courses__course_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courses/{course_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Course */
+        post: operations["complete_course_api_v1_courses__course_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/courses/{course_id}/knowledge-points": {
         parameters: {
             query?: never;
@@ -305,6 +339,24 @@ export interface paths {
         /** Get Course Knowledge Point Content */
         get: operations["get_course_knowledge_point_content_api_v1_courses__course_id__knowledge_points__knowledge_point_id__content_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courses/{course_id}/learner-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Course Learner Profile */
+        get: operations["get_course_learner_profile_api_v1_courses__course_id__learner_profile_get"];
+        /** Update Course Learner Profile */
+        put: operations["update_course_learner_profile_api_v1_courses__course_id__learner_profile_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -374,6 +426,23 @@ export interface paths {
         get: operations["get_course_overview_api_v1_courses__course_id__overview_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courses/{course_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Course */
+        post: operations["resume_course_api_v1_courses__course_id__resume_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1810,6 +1879,12 @@ export interface components {
             /** Trace Id */
             trace_id: string;
         };
+        /** ApiEnvelope[CourseLearnerProfile] */
+        ApiEnvelope_CourseLearnerProfile_: {
+            data: components["schemas"]["CourseLearnerProfile"];
+            /** Trace Id */
+            trace_id: string;
+        };
         /** ApiEnvelope[CourseLearningState] */
         ApiEnvelope_CourseLearningState_: {
             data: components["schemas"]["CourseLearningState"];
@@ -2353,15 +2428,52 @@ export interface components {
             /** Trusted Dimensions */
             trusted_dimensions?: string[];
         };
+        /** CourseLearnerProfile */
+        CourseLearnerProfile: {
+            /** Course Id */
+            course_id: string;
+            /** Dimension Confidence */
+            dimension_confidence?: {
+                [key: string]: number;
+            };
+            /**
+             * Knowledge Foundation
+             * @default
+             */
+            knowledge_foundation: string;
+            /**
+             * Learning Goal
+             * @default
+             */
+            learning_goal: string;
+            /** Legacy Suggestions */
+            legacy_suggestions?: {
+                [key: string]: unknown;
+            };
+            readiness: components["schemas"]["CourseProfileReadiness"];
+            /** Weak Points */
+            weak_points?: string[];
+        };
+        /** CourseLearnerProfileUpdate */
+        CourseLearnerProfileUpdate: {
+            /** Knowledge Foundation */
+            knowledge_foundation: string;
+            /** Learning Goal */
+            learning_goal: string;
+            /** Weak Points */
+            weak_points?: string[];
+        };
         /** CourseLearningState */
         CourseLearningState: {
             /** Course Id */
             course_id: string;
+            course_profile_readiness?: components["schemas"]["CourseProfileReadiness"];
             evidence_summary: components["schemas"]["CourseEvidenceSummary"];
             learner_context: components["schemas"]["CourseLearnerContextResponse"];
             mastery_summary: components["schemas"]["CourseMasterySummary"];
             path_summary: components["schemas"]["CoursePathSummary"];
             profile_overlay: components["schemas"]["CourseProfileOverlay"];
+            stage_completion?: components["schemas"]["CourseStageCompletion"];
             /** Weakness Review Queue */
             weakness_review_queue: components["schemas"]["CourseWeaknessReviewItem"][];
             weakness_summary: components["schemas"]["CourseWeaknessSummary"];
@@ -2488,6 +2600,31 @@ export interface components {
             /** Weak Points */
             weak_points: string[];
         };
+        /** CourseProfileReadiness */
+        CourseProfileReadiness: {
+            /**
+             * Foundation Ready
+             * @default false
+             */
+            foundation_ready: boolean;
+            /**
+             * Global Preference Ready
+             * @default false
+             */
+            global_preference_ready: boolean;
+            /**
+             * Goal Ready
+             * @default false
+             */
+            goal_ready: boolean;
+            /** Missing Fields */
+            missing_fields?: string[];
+            /**
+             * Ready
+             * @default false
+             */
+            ready: boolean;
+        };
         /** CourseResourceBrief */
         CourseResourceBrief: {
             /** Id */
@@ -2496,6 +2633,51 @@ export interface components {
             resource_type: string;
             /** Title */
             title: string;
+        };
+        /** CourseStageCompletion */
+        CourseStageCompletion: {
+            /**
+             * Active Weakness Count
+             * @default 0
+             */
+            active_weakness_count: number;
+            /**
+             * Assessed Point Count
+             * @default 0
+             */
+            assessed_point_count: number;
+            /**
+             * Below Threshold Count
+             * @default 0
+             */
+            below_threshold_count: number;
+            /** Blocking Reasons */
+            blocking_reasons?: string[];
+            /**
+             * Due Review Count
+             * @default 0
+             */
+            due_review_count: number;
+            /**
+             * Eligible
+             * @default false
+             */
+            eligible: boolean;
+            /**
+             * Path Completed
+             * @default false
+             */
+            path_completed: boolean;
+            /**
+             * Report Fresh
+             * @default false
+             */
+            report_fresh: boolean;
+            /**
+             * Required Point Count
+             * @default 0
+             */
+            required_point_count: number;
         };
         /** CourseStructureSummary */
         CourseStructureSummary: {
@@ -2530,12 +2712,26 @@ export interface components {
             agent_trace_id?: string | null;
             /** Chunk Count */
             chunk_count: number;
+            /** Completed At */
+            completed_at?: string | null;
             /** Description */
             description: string | null;
             /** Id */
             id: string;
+            /**
+             * Is Current
+             * @default false
+             */
+            is_current: boolean;
             /** Knowledge Point Count */
             knowledge_point_count: number;
+            /** Last Accessed At */
+            last_accessed_at?: string | null;
+            /**
+             * Learning Status
+             * @default active
+             */
+            learning_status: string;
             /** Material Count */
             material_count: number;
             /**
@@ -2543,6 +2739,11 @@ export interface components {
              * @default 0
              */
             practiced_knowledge_point_count: number;
+            /**
+             * Profile Ready
+             * @default false
+             */
+            profile_ready: boolean;
             /** Progress Percent */
             progress_percent: number;
             /** Source Type */
@@ -2743,8 +2944,18 @@ export interface components {
             focus: string;
             /** Id */
             id: string;
+            /**
+             * Is Current
+             * @default false
+             */
+            is_current: boolean;
             /** Knowledge Point Count */
             knowledge_point_count: number;
+            /**
+             * Learning Status
+             * @default active
+             */
+            learning_status: string;
             /** Next */
             next: string;
             /** Practiced Knowledge Point Count */
@@ -2790,6 +3001,8 @@ export interface components {
         DashboardSummary: {
             /** Command Suggestions */
             command_suggestions: string[];
+            /** Current Course Id */
+            current_course_id?: string | null;
             empty_state: components["schemas"]["EmptyState"];
             evidence_summary: components["schemas"]["EvidenceSummary"];
             material_library_summary: components["schemas"]["MaterialLibrarySummary"];
@@ -4218,6 +4431,8 @@ export interface components {
             change_summary: string;
             /** Confidence Score */
             confidence_score?: number | null;
+            /** Course Id */
+            course_id?: string | null;
             /** Created At */
             created_at: string;
             /** Dimension */
@@ -4245,6 +4460,11 @@ export interface components {
         };
         /** ProfileSummary */
         ProfileSummary: {
+            /**
+             * Base Profile Ready
+             * @default false
+             */
+            base_profile_ready: boolean;
             /** Display Name */
             display_name: string;
             /** Has Profile */
@@ -6887,6 +7107,216 @@ export interface operations {
             };
         };
     };
+    activate_course_api_v1_courses__course_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_CourseSummary_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    complete_course_api_v1_courses__course_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_CourseSummary_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
     get_course_knowledge_points_api_v1_courses__course_id__knowledge_points_get: {
         parameters: {
             query?: never;
@@ -7013,6 +7443,220 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_CourseKnowledgePointContent_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_course_learner_profile_api_v1_courses__course_id__learner_profile_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_CourseLearnerProfile_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    update_course_learner_profile_api_v1_courses__course_id__learner_profile_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourseLearnerProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_CourseLearnerProfile_"];
                 };
             };
             /** @description Bad Request */
@@ -7437,6 +8081,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_CourseOverview_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    resume_course_api_v1_courses__course_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_CourseSummary_"];
                 };
             };
             /** @description Bad Request */

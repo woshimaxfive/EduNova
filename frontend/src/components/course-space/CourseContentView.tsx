@@ -30,6 +30,7 @@ type CourseContentViewProps = {
   contentPending: boolean;
   contentError: boolean;
   selectedCitation: RagSearchResultItem | null;
+  guided: boolean;
   view: CourseContentMode;
   graphScope: GraphScope;
   graphChapter: string;
@@ -74,6 +75,7 @@ export function CourseContentView({
   contentPending,
   contentError,
   selectedCitation,
+  guided,
   view,
   graphScope,
   graphChapter,
@@ -192,6 +194,24 @@ export function CourseContentView({
           <article className="course-content-reader" aria-label="学习内容">
             {selectedPoint ? (
               <>
+                {guided ? (
+                  <section className="guided-learning-task" aria-label="本次学习任务">
+                    <div>
+                      <strong>本次学习任务</strong>
+                      <h2>理解“{selectedPoint.title}”并形成练习证据</h2>
+                      <p>{recommendation?.description ?? "这是当前课程尚未形成可靠掌握度证据的知识点。"}</p>
+                    </div>
+                    <ol>
+                      <li><b>1</b><span>阅读下方课程核心内容或已就绪资源</span></li>
+                      <li><b>2</b><span>需要时让课程助教换一个例子讲解</span></li>
+                      <li><b>3</b><span>完成 3 题检查，提交后才形成掌握度证据</span></li>
+                    </ol>
+                    <div className="guided-learning-actions">
+                      <button type="button" onClick={() => onAssistantOpenChange(true)}>让助教换个例子</button>
+                      <Link to={`${PATHS.courses}/${courseId}/practice?course_id=${courseId}&knowledge_point_id=${selectedPoint.id}&question_count=3&new=1`}>我已阅读，开始 3 题检查</Link>
+                    </div>
+                  </section>
+                ) : null}
                 <span className="course-content-kicker">{selectedPoint.chapter ?? "课程知识点"}</span>
                 <h2>{selectedPoint.title}</h2>
                 <p className="course-content-objective">{selectedPoint.summary ?? "这条知识点暂时没有课程摘要，可以打开 AI 辅导继续追问。"}</p>

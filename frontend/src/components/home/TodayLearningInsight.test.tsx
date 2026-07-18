@@ -20,5 +20,5 @@ it("shows only evidence-backed mastery, weakness and next action values", () => 
   );
   expect(screen.getByRole("region", { name: "今日学习洞察" })).toHaveTextContent("61 分");
   expect(screen.getByRole("region", { name: "今日学习洞察" })).toHaveTextContent("1 个已确认 · 1 个待确认");
-  expect(screen.getByRole("link", { name: /开始学习/ })).toHaveAttribute("href", "/app/courses/8?mode=study&view=overview&knowledge_point_id=2");
+  expect(screen.getByRole("link", { name: /开始学习/ })).toHaveAttribute("href", "/app/courses/8?mode=study&view=overview&knowledge_point_id=2&guided=1");
 });

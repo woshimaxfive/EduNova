@@ -3503,6 +3503,18 @@ a {
   white-space: nowrap;
 }
 
+.recent-course-state {
+  width: fit-content;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: rgba(16, 24, 32, 0.055);
+  font-size: 11px;
+  font-weight: 750;
+}
+.recent-course-state.current { color: var(--accent-strong); background: var(--accent-soft); }
+.recent-course-state.archived { color: #65736f; background: rgba(96, 112, 106, 0.1); }
+
 .recent-course-copy > a {
   color: var(--text-strong);
   font-weight: 800;
@@ -7636,6 +7648,11 @@ a {
 .today-learning-insight > footer > div { display: flex; align-items: center; gap: 7px; color: #647b76; font-size: .82rem; }
 .today-learning-insight > footer a { display: inline-flex; min-height: 40px; align-items: center; gap: 8px; padding: 0 15px; border-radius: 9px; color: white; background: #173b37; font-size: .88rem; font-weight: 800; text-decoration: none; }
 .today-learning-insight.loading { display: grid; gap: 4px; padding: 19px 21px; }
+.today-learning-profile-guide { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 18px 20px; }
+.today-learning-profile-guide > svg { color: var(--accent-strong); }
+.today-learning-profile-guide strong { color: var(--text-strong); }
+.today-learning-profile-guide p { margin: 4px 0 0; color: var(--text-muted); font-size: .86rem; line-height: 1.55; }
+.today-learning-profile-guide > a { display: inline-flex; min-height: 40px; align-items: center; gap: 8px; padding: 0 15px; border-radius: 9px; color: white; background: #173b37; font-size: .88rem; font-weight: 800; text-decoration: none; }
 
 @media (max-width: 700px) {
   .today-learning-insight { width: calc(100% - 24px); border-radius: 14px; }
@@ -7645,4 +7662,6 @@ a {
   .today-learning-insight-grid article:last-child { border-bottom: 0; }
   .today-learning-insight > footer > div { display: none; }
   .today-learning-insight > footer a { width: 100%; justify-content: center; }
+  .today-learning-profile-guide { grid-template-columns: auto minmax(0, 1fr); }
+  .today-learning-profile-guide > a { grid-column: 1 / -1; justify-content: center; }
 }

@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -9,6 +9,7 @@ import { useHomeConversationHistory } from "../features/home/useHomeConversation
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
 import { useResponsiveSidebarState } from "../components/layout/useResponsiveSidebarState";
 import { createTutorSession, deleteTutorSession, listTutorSessions, renameTutorSession } from "../api/tutor";
+import { activateCourse } from "../api/courses";
 
 type PageFrameProps = {
   title: string;
@@ -43,8 +44,18 @@ export function PageFrame({ title, children, variant = "standard", titleMode = "
   const searchThreads = (historySearchQuery.data?.pages ?? []).flatMap((page) =>
     (page.data?.items ?? []).map(({ id, title: threadTitle, match_snippet }) => ({ id, title: threadTitle, meta: match_snippet || "历史会话" }))
   );
-  const courseThreads = (courseSessionsQuery.data?.data ?? []).map(({ id, title: threadTitle, updated_at }) => ({ id, title: threadTitle, meta: updated_at.slice(0, 10) }));
+  const courseSessionData = Array.isArray(courseSessionsQuery.data?.data) ? courseSessionsQuery.data.data : [];
+  const courseThreads = courseSessionData.map(({ id, title: threadTitle, updated_at }) => ({ id, title: threadTitle, meta: updated_at.slice(0, 10) }));
   const conversations = hasCourseContext ? courseThreads : homeThreads;
+
+  useEffect(() => {
+    if (!hasCourseContext) return;
+    void activateCourse(Number(courseId)).then(() => {
+      void queryClient.invalidateQueries({ queryKey: ["courses"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      void queryClient.invalidateQueries({ queryKey: ["learning", "next-action", "global"] });
+    }).catch(() => undefined);
+  }, [courseId, hasCourseContext, queryClient]);
 
   function goHome() {
     navigate(hasCourseContext ? buildCoursePath(Number(courseId)) : PATHS.app, { state: null });

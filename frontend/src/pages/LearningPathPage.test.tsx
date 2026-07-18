@@ -22,6 +22,7 @@ function renderWithProviders(ui: ReactNode, initialPath = `${PATHS.path}?course_
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path={PATHS.path} element={<>{ui}<LocationProbe /></>} />
+          <Route path={PATHS.coursePath} element={<>{ui}<LocationProbe /></>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -299,7 +300,7 @@ describe("LearningPathPage", () => {
 
     expect(await screen.findByText("复习启发式搜索")).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByTestId("location")).toHaveTextContent(`${PATHS.path}?course_id=808`);
+      expect(screen.getByTestId("location")).toHaveTextContent("/app/courses/808/path");
       expect(screen.getByTestId("location")).not.toHaveTextContent("sprint");
       expect(screen.getByTestId("location")).not.toHaveTextContent("comparison_id");
     });

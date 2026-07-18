@@ -1,7 +1,7 @@
 import { type QueryClient, useQuery } from "@tanstack/react-query";
 
 import { getLearningNextAction, type LearningNextAction } from "../../api/learning";
-import { buildCoursePath, PATHS } from "../../app/routePaths";
+import { buildCoursePath, buildCoursePathWorkspacePath, buildCoursePracticeWorkspacePath, buildCourseReportsWorkspacePath, PATHS } from "../../app/routePaths";
 
 export const learningActionKeys = {
   all: ["learning", "next-action"] as const,
@@ -33,12 +33,15 @@ function withParams(path: string, params: Record<string, string | null | undefin
 }
 
 export function learningActionHref(action: LearningNextAction) {
+  if (action.kind === "complete_profile") {
+    return withParams(PATHS.profile, { course_id: action.course_id, onboarding: "1" });
+  }
   if (["upload_material", "wait_for_material", "review_material", "retry_material", "create_course"].includes(action.kind)) {
     return withParams(PATHS.library, { material_id: action.material_id });
   }
   if (action.kind === "wait_for_course") return PATHS.app;
-  if (["generate_path", "wait_for_path"].includes(action.kind)) return withParams(PATHS.path, { course_id: action.course_id });
-  if (action.kind === "wait_for_practice") return withParams(PATHS.practice, { course_id: action.course_id });
+  if (["generate_path", "wait_for_path"].includes(action.kind)) return action.course_id ? buildCoursePathWorkspacePath(action.course_id) : PATHS.path;
+  if (action.kind === "wait_for_practice") return action.course_id ? buildCoursePracticeWorkspacePath(action.course_id) : PATHS.practice;
   if (action.kind === "continue_path_task") {
     if (action.resource_id) {
       return withParams(PATHS.studio, {
@@ -47,16 +50,21 @@ export function learningActionHref(action: LearningNextAction) {
         path_task_id: action.path_task_id
       });
     }
+    return action.course_id
+      ? withParams(buildCoursePathWorkspacePath(action.course_id), { path_task_id: action.path_task_id })
+      : PATHS.path;
+  }
+  if (action.kind === "confirm_weakness") {
     return withParams(action.course_id ? buildCoursePath(action.course_id) : PATHS.app, {
       mode: "study",
       view: "overview",
       knowledge_point_id: action.knowledge_point_id,
-      path_task_id: action.path_task_id
+      weakness_item_id: action.weakness_item_id,
+      open_progress: "1"
     });
   }
   if (action.kind === "practice_weakness") {
-    return withParams(PATHS.practice, {
-      course_id: action.course_id,
+    return withParams(action.course_id ? buildCoursePracticeWorkspacePath(action.course_id) : PATHS.practice, {
       knowledge_point_id: action.knowledge_point_id,
       weakness_item_id: action.weakness_item_id,
       new: "1"
@@ -66,11 +74,12 @@ export function learningActionHref(action: LearningNextAction) {
     return withParams(action.course_id ? buildCoursePath(action.course_id) : PATHS.app, {
       mode: "study",
       view: "overview",
-      knowledge_point_id: action.knowledge_point_id
+      knowledge_point_id: action.knowledge_point_id,
+      guided: "1"
     });
   }
-  if (["update_report", "review_report", "wait_for_report"].includes(action.kind)) {
-    return withParams(PATHS.reports, { course_id: action.course_id });
+  if (["update_report", "review_report", "wait_for_report", "complete_course"].includes(action.kind)) {
+    return action.course_id ? buildCourseReportsWorkspacePath(action.course_id) : PATHS.reports;
   }
   if (action.course_id) return buildCoursePath(action.course_id);
   return PATHS.app;
@@ -78,6 +87,7 @@ export function learningActionHref(action: LearningNextAction) {
 
 const ACTION_BUTTON_LABELS: Record<string, string> = {
   upload_material: "上传资料",
+  complete_profile: "完善画像",
   wait_for_material: "查看进度",
   retry_material: "重新解析",
   review_material: "确认目录",
@@ -92,7 +102,8 @@ const ACTION_BUTTON_LABELS: Record<string, string> = {
   study_knowledge_point: "开始学习",
   update_report: "更新报告",
   wait_for_report: "查看生成进度",
-  review_report: "查看报告"
+  review_report: "查看报告",
+  complete_course: "完成课程"
 };
 
 export function learningActionButtonLabel(action: LearningNextAction) {

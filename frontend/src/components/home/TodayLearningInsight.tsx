@@ -16,7 +16,20 @@ type Props = {
 
 export function TodayLearningInsight({ course, action, mastery, learningState, loading = false }: Props) {
   if (loading) return <section className="today-learning-insight loading" role="status"><span>今日学习洞察</span><strong>正在汇总真实学习状态</strong></section>;
-  if (!course || !action) return null;
+  if (!action) return null;
+  if (!course && action.kind === "complete_profile") {
+    return (
+      <section className="today-learning-insight profile-guide" aria-label="基础画像引导">
+        <header><h2>先让学习真正适合你</h2><strong>约 1–2 分钟</strong></header>
+        <div className="today-learning-profile-guide">
+          <Brain size={24} weight="duotone" aria-hidden="true" />
+          <div><strong>{action.label}</strong><p>{action.description}</p></div>
+          <Link to={learningActionHref(action)}><span>现在完善</span><ArrowRight size={17} weight="bold" /></Link>
+        </div>
+      </section>
+    );
+  }
+  if (!course) return null;
   const summary = mastery?.summary;
   const weakness = learningState?.weakness_summary;
   const averageScore = summary?.average_score;

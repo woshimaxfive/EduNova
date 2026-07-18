@@ -217,7 +217,11 @@ export function LearningSpacePage() {
   const dashboardSummary = dashboardQuery.data?.data;
   const recentCourses = useMemo(() => dashboardSummary?.recent_courses ?? [], [dashboardSummary?.recent_courses]);
   const nextActionQuery = useLearningNextAction();
-  const insightCourseId = Number(nextActionQuery.data?.data.course_id ?? recentCourses[0]?.id);
+  const insightCourseId = Number(
+    nextActionQuery.data?.data.course_id
+      ?? dashboardSummary?.current_course_id
+      ?? recentCourses.find((course) => course.is_current)?.id
+  );
   const hasInsightCourse = Number.isFinite(insightCourseId);
   const insightMasteryQuery = useQuery({
     queryKey: ["courses", "mastery-map", insightCourseId],
@@ -986,7 +990,7 @@ export function LearningSpacePage() {
 
           {!hasHomeThread ? (
             <TodayLearningInsight
-              course={recentCourses.find((course) => Number(course.id) === insightCourseId) ?? recentCourses[0] ?? null}
+              course={recentCourses.find((course) => Number(course.id) === insightCourseId) ?? null}
               action={nextActionQuery.data?.data}
               mastery={insightMasteryQuery.data?.data ?? null}
               learningState={insightLearningStateQuery.data?.data ?? null}
@@ -1033,6 +1037,9 @@ export function LearningSpacePage() {
                       <BookOpen size={18} weight="duotone" aria-hidden="true" />
                       <span className="recent-course-copy">
                         <Link to={buildCoursePath(course.id)}>{course.title}</Link>
+                        <span className={`recent-course-state ${course.learning_status === "archived" ? "archived" : course.is_current ? "current" : "other"}`}>
+                          {course.learning_status === "archived" ? "已完成" : course.is_current ? "当前学习" : "其他课程"}
+                        </span>
                         <small><b>当前重点</b>{action?.label ?? course.focus}</small>
                       </span>
                       <span className="recent-course-progress"><small>学习覆盖</small><em>{progress}</em></span>

@@ -14,6 +14,7 @@ import { getAgentTrace, mapAgentTraceStepToEvent } from "../api/agents";
 import { createIdempotencyKey, createResourceGenerationJob, getAiJob } from "../api/aiJobs";
 import { uploadMaterial } from "../api/materials";
 import {
+  activateCourse,
   getCourse,
   getCourseLearningState,
   getCourseOverview,
@@ -258,6 +259,14 @@ export function CourseSpacePage() {
   const numericCourseId = courseId ? Number.parseInt(courseId, 10) : Number.NaN;
   const hasRealCourseId = Number.isFinite(numericCourseId);
   const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!hasRealCourseId) return;
+    void activateCourse(numericCourseId).then(() => {
+      void queryClient.invalidateQueries({ queryKey: ["courses"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+      void queryClient.invalidateQueries({ queryKey: ["learning", "next-action", "global"] });
+    }).catch(() => undefined);
+  }, [hasRealCourseId, numericCourseId, queryClient]);
   const initialWorkspaceState = parseCourseWorkspaceUrl(searchParams);
   const courseQuery = useQuery({
     queryKey: ["courses", "detail", numericCourseId],
@@ -308,7 +317,7 @@ export function CourseSpacePage() {
   const [graphScope, setGraphScope] = useState<GraphScope>(initialWorkspaceState.graphScope);
   const [graphChapter, setGraphChapter] = useState(initialWorkspaceState.graphChapter);
   const [isKnowledgeDetailOpen, setIsKnowledgeDetailOpen] = useState(initialWorkspaceState.detailKnowledge);
-  const [isProgressDrawerOpen, setIsProgressDrawerOpen] = useState(false);
+  const [isProgressDrawerOpen, setIsProgressDrawerOpen] = useState(searchParams.get("open_progress") === "1");
   const [isProgressSyncing, setIsProgressSyncing] = useState(false);
   const [progressSyncWarning, setProgressSyncWarning] = useState<string | null>(null);
   const [isStudyAssistantOpen, setIsStudyAssistantOpen] = useState(initialWorkspaceState.mentorOpen);
@@ -1395,6 +1404,7 @@ export function CourseSpacePage() {
                 contentPending={knowledgePointContentQuery.isPending && knowledgePointContentQuery.fetchStatus !== "idle"}
                 contentError={knowledgePointContentQuery.isError}
                 selectedCitation={selectedCitation}
+                guided={searchParams.get("guided") === "1"}
                 view={courseContentView}
                 graphScope={graphScope}
                 graphChapter={graphChapter}

@@ -18,7 +18,7 @@ import {
 import { courseLoopQueryKeys, invalidateCourseLearningLoop } from "../features/course-space/courseLoopQueries";
 import { PageFrame } from "./PageFrame";
 import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
-import { PATHS } from "../app/routePaths";
+import { PATHS, buildCoursePathWorkspacePath } from "../app/routePaths";
 import "../styles/learning-path.css";
 
 function parsePositiveId(value: string | null) {
@@ -47,9 +47,15 @@ export function LearningPathPage() {
     staleTime: 30_000
   });
   const courses = useMemo(() => coursesQuery.data?.data ?? [], [coursesQuery.data?.data]);
-  const firstCourseId = courses[0] ? parsePositiveId(courses[0].id) : null;
-  const effectiveCourseId = lockedCourseId ?? selectedCourseId ?? queryCourseId ?? firstCourseId;
+  const currentCourseId = parsePositiveId(courses.find((course) => course.is_current)?.id ?? null);
+  const effectiveCourseId = lockedCourseId ?? selectedCourseId ?? queryCourseId ?? currentCourseId;
   const hasCourse = effectiveCourseId !== null;
+  useEffect(() => {
+    if (lockedCourseId !== null || effectiveCourseId === null) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("course_id");
+    navigate(`${buildCoursePathWorkspacePath(effectiveCourseId)}${next.size ? `?${next.toString()}` : ""}`, { replace: true });
+  }, [effectiveCourseId, lockedCourseId, navigate, searchParams]);
 
   const currentPathQuery = useQuery({
     queryKey: courseLoopQueryKeys.currentPath(effectiveCourseId ?? 0),
@@ -66,7 +72,8 @@ export function LearningPathPage() {
 
   const selectedCourse = courses.find((course) => parsePositiveId(course.id) === effectiveCourseId) ?? null;
   const pathDetail = currentPathQuery.data?.data ?? null;
-  const tasks = pathDetail?.tasks ?? [];
+  const tasks = useMemo(() => pathDetail?.tasks ?? [], [pathDetail?.tasks]);
+  const requestedTaskId = searchParams.get("path_task_id");
   const masteryPoints = masteryQuery.data?.data?.points ?? [];
   const completedCount = tasks.filter((task) => task.status === "completed").length;
   const pathJob = jobs.find((job) => (
@@ -85,6 +92,14 @@ export function LearningPathPage() {
     nextParams.delete("sprint_plan_id");
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
+  useEffect(() => {
+    if (!requestedTaskId || !tasks.some((task) => task.id === requestedTaskId)) return;
+    window.requestAnimationFrame(() => {
+      [...document.querySelectorAll<HTMLElement>("[data-path-task-id]")]
+        .find((element) => element.dataset.pathTaskId === requestedTaskId)
+        ?.scrollIntoView({ block: "center" });
+    });
+  }, [requestedTaskId, tasks]);
 
   const generateMutation = useMutation({
     mutationFn: (courseId: number) => createPathPlanningJob(
@@ -164,7 +179,7 @@ export function LearningPathPage() {
 
   return (
     <>
-      <PageFrame title="学习路径" titleMode="sr-only" variant="wide-workspace" courseId={lockedCourseId}>
+      <PageFrame title="学习路径" titleMode="sr-only" variant="wide-workspace" courseId={effectiveCourseId}>
         <div className="learning-path-workspace">
           <LearningPathToolbar
             returnLink={<CourseReturnLink courseId={effectiveCourseId} compact alwaysShow={lockedCourseId !== null} />}

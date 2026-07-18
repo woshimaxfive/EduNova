@@ -90,7 +90,9 @@ export function StudioPage() {
     if (courses.length === 0) return null;
     if (selectedCourseId !== null && courses.some((course) => Number(course.id) === selectedCourseId)) return selectedCourseId;
     if (initialCourseId !== null && courses.some((course) => Number(course.id) === initialCourseId)) return initialCourseId;
-    return Number.parseInt(courses[0].id, 10);
+    const currentCourse = courses.find((course) => course.is_current && course.learning_status !== "archived");
+    const firstActiveCourse = courses.find((course) => course.learning_status !== "archived");
+    return Number.parseInt((currentCourse ?? firstActiveCourse ?? courses[0]).id, 10);
   }, [courses, initialCourseId, selectedCourseId]);
   const selectedCourse = courses.find((course) => Number(course.id) === effectiveCourseId) ?? null;
 
@@ -416,7 +418,7 @@ export function StudioPage() {
 
   return (
     <>
-      <PageFrame title="资源工坊" titleMode="sr-only" variant="wide-workspace">
+      <PageFrame title="资源工坊" titleMode="sr-only" variant="wide-workspace" courseId={effectiveCourseId}>
         <section className="studio-workspace" aria-label="资源成果工作台">
           <StudioWorkspaceToolbar
             courses={courses}

@@ -64,6 +64,8 @@ it("shows every chapter in the course overview and enters a focused chain when a
   expect(screen.getByText("课程全景")).toBeInTheDocument();
   expect(screen.getByLabelText("课程全部知识点")).toHaveTextContent("搜索基础");
   expect(screen.getByLabelText("课程全部知识点")).toHaveTextContent("搜索方法");
+  expect(screen.getByRole("button", { name: /状态空间/ })).toHaveTextContent("1");
+  expect(screen.getByRole("button", { name: /A\* 搜索/ })).toHaveTextContent("3");
   expect(screen.getByRole("button", { name: /A\* 搜索/ })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: /状态空间/ }));

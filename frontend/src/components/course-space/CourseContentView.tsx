@@ -34,7 +34,7 @@ type CourseContentViewProps = {
   isSending: boolean;
   feedback: string | null;
   onViewChange: (view: CourseContentMode) => void;
-  onSelectPoint: (pointId: string) => void;
+  onSelectPoint: (pointId: string, view?: CourseContentMode) => void;
   onSelectPrevious: () => void;
   onSelectNext: () => void;
   onOpenAssistant: () => void;
@@ -137,7 +137,11 @@ export function CourseContentView({
 
         {view === "graph" ? (
           <div className="course-content-graph-view">
-            <CourseKnowledgeGraph points={masteryPoints} selectedId={selectedPoint?.id} onSelect={onSelectPoint} />
+            <CourseKnowledgeGraph
+              points={masteryPoints}
+              selectedId={selectedPoint?.id}
+              onSelect={(pointId) => onSelectPoint(pointId, "graph")}
+            />
           </div>
         ) : (
           <article className="course-content-reader" aria-label="学习内容">

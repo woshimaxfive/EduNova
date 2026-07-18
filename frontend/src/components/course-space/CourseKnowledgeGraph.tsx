@@ -93,6 +93,12 @@ function CourseKnowledgeOverview({
   selectedPoint: CourseMasteryPoint;
   onSelect: (point: CourseMasteryPoint) => void;
 }) {
+  const displayOrder = new Map(
+    [...points]
+      .sort((left, right) => left.order_index - right.order_index)
+      .map((point, index) => [point.id, index + 1])
+  );
+
   return (
     <div className="course-knowledge-overview" aria-label="课程全部知识点">
       {chapters.map((chapter, chapterIndex) => {
@@ -116,7 +122,7 @@ function CourseKnowledgeOverview({
                   aria-current={selectedPoint.id === point.id ? "true" : undefined}
                   onClick={() => onSelect(point)}
                 >
-                  <span>{point.order_index + 1}</span>
+                  <span>{displayOrder.get(point.id)}</span>
                   <strong>{point.title}</strong>
                   <em>{statusLabels[point.status] ?? point.status}</em>
                 </button>

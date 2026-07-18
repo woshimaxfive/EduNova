@@ -694,10 +694,10 @@ export function CourseSpacePage() {
     }
   }
 
-  function openKnowledgeStudy(pointId: string) {
+  function openKnowledgeStudy(pointId: string, view: CourseContentMode = "overview") {
     setCourseMode("study");
     setStudyTarget({ type: "knowledge", id: pointId });
-    setCourseContentView("overview");
+    setCourseContentView(view);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("knowledge_point_id", pointId);
     setSearchParams(nextParams, { replace: true });

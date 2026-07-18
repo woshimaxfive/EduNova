@@ -7,6 +7,7 @@ import type { AssessmentReport } from "../../api/reports";
 import type { ReportFreshness } from "../../features/reports/reportViewModel";
 import type { LearningNextAction } from "../../api/learning";
 import { learningActionHref } from "../../features/learning-actions/learningActions";
+import { resourceTypeLabels } from "../resources/resourceDisplayMeta";
 import { MasteryOverviewChart, PracticeTrendChart } from "../visualization/LearningCharts";
 
 type ReportDashboardProps = {
@@ -32,15 +33,12 @@ function scoreLabel(score: number | null | undefined) {
   return typeof score === "number" ? `${Math.round(score)} 分` : "暂无";
 }
 
-const RESOURCE_LABELS: Record<string, string> = {
-  doc: "文档",
-  mindmap: "导图",
-  quiz: "练习",
-  code: "代码",
-  slide: "幻灯片",
-  animation: "动画",
-  video: "外部视频"
-};
+function reviewStatusLabel(status: string | undefined) {
+  if (status === "passed") return "审核通过";
+  if (status === "warning" || status === "needs_review") return "审核有警告";
+  if (status === "failed") return "审核未通过";
+  return status ? `审核状态：${status}` : "审核未提供";
+}
 
 export function ReportDashboard({
   report,
@@ -63,6 +61,11 @@ export function ReportDashboard({
   const summary = masteryMap?.summary;
   const masteryPoints = Array.isArray(masteryMap?.points) ? masteryMap.points : [];
   const weaknessProgress = report?.report.weakness_progress;
+  const reportEvidence = report?.report.evidence_summary;
+  const reviewResult = report?.report.review_result;
+  const reviewConfidence = typeof reviewResult?.confidence === "number" && Number.isFinite(reviewResult.confidence)
+    ? Math.round(reviewResult.confidence * 100)
+    : null;
   const snapshotTitle = freshness === "unavailable"
     ? "报告快照暂时无法读取"
     : report?.status === "ready"
@@ -99,12 +102,12 @@ export function ReportDashboard({
       ) : null}
 
       <section className="report-metric-strip" aria-label="实时学习指标">
-        <article>
+        <article className="primary-metric">
           <span>最新练习</span>
           <strong>{scoreLabel(latestPractice?.score ?? report?.score)}</strong>
           <small>{latestPractice?.status === "completed" ? "最近一次已完成练习" : "等待完成练习"}</small>
         </article>
-        <article>
+        <article className="primary-metric">
           <span>平均掌握度</span>
           <strong>{averageMastery === null ? "未评估" : `${averageMastery}%`}</strong>
           <small>{summary?.assessed_count ?? 0} 个知识点有有效证据</small>
@@ -114,7 +117,7 @@ export function ReportDashboard({
           <strong>{summary?.mastered_count ?? 0}</strong>
           <small>{summary?.learning_count ?? 0} 个正在学习</small>
         </article>
-        <article>
+        <article className="weak-metric">
           <span>薄弱知识点</span>
           <strong>{summary?.weak_count ?? 0}</strong>
           <small>{summary?.recommended_review_count ?? 0} 个建议复习</small>
@@ -173,7 +176,16 @@ export function ReportDashboard({
           <span>{snapshotTitle}</span>
           <p>{snapshotSummary}</p>
         </div>
-        <small>{freshness === "unavailable" ? "报告读取失败，未判定为空报告" : report?.created_at ? `生成于 ${new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(report.created_at))}` : "等待真实练习证据"}</small>
+        <div className="report-snapshot-meta">
+          <small>{freshness === "unavailable" ? "报告读取失败，未判定为空报告" : report?.created_at ? `生成于 ${new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(report.created_at))}` : "等待真实练习证据"}</small>
+          {report?.status === "ready" ? (
+            <div className="report-trust-summary" aria-label="报告证据与审核状态">
+              {reportEvidence ? <span>练习 {reportEvidence.practice_count} 次 · 作答 {reportEvidence.answer_count} 题 · 资源 {reportEvidence.resource_count} 项</span> : <span>证据摘要未提供</span>}
+              <span data-status={reviewResult?.review_status ?? "unknown"}>{reviewStatusLabel(reviewResult?.review_status)}</span>
+              {reviewConfidence === null ? null : <span>置信度 {reviewConfidence}%</span>}
+            </div>
+          ) : null}
+        </div>
       </section>
 
       <section className="report-resource-usage" aria-labelledby="report-weakness-progress-heading">
@@ -205,7 +217,7 @@ export function ReportDashboard({
           <ul>
             {Object.entries(report?.report.resource_usage_summary ?? {}).map(([resourceType, counts]) => (
               <li key={resourceType}>
-                <strong>{RESOURCE_LABELS[resourceType] ?? resourceType}</strong>
+                <strong>{resourceType in resourceTypeLabels ? resourceTypeLabels[resourceType as keyof typeof resourceTypeLabels] : "学习资源"}</strong>
                 <span>打开 {counts?.opened ?? 0}</span>
                 <span>完成 {counts?.completed ?? 0}</span>
                 <span>有帮助 {counts?.helpful ?? 0}</span>

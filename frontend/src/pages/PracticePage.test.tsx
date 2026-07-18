@@ -376,6 +376,9 @@ describe("PracticePage", () => {
     expect(await screen.findByRole("heading", { name: "A* 评估函数包含哪些部分？" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /实际代价 g\(n\)/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /估计代价 h\(n\)/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("progressbar", { name: "已回答 1 题，共 3 题" })).toHaveAttribute("value", "1");
+    await user.click(screen.getByRole("button", { name: "了解智能适配依据" }));
+    expect(await screen.findByText("根据当前掌握度、已确认薄弱点和最近练习结果调整。")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "第 3 题，未答" }));
     expect(await screen.findByRole("heading", { name: "说明 A* 为什么需要可采纳启发函数。" })).toBeInTheDocument();
     expect(screen.getByTestId("location")).toHaveTextContent("question_id=q3");
@@ -415,6 +418,7 @@ describe("PracticePage", () => {
 
     const summary = await screen.findByRole("region", { name: "练习结果摘要" });
     expect(within(summary).getByText("66")).toBeInTheDocument();
+    expect(summary.querySelector(".practice-result-ring-value")).toBeInTheDocument();
     expect(within(summary).getByText("答对 2 / 3")).toBeInTheDocument();
     expect(within(summary).getByRole("button", { name: "开始新练习" })).toBeInTheDocument();
     expect(screen.getByText("把评估函数误认为随机选择。")).toBeInTheDocument();
@@ -501,6 +505,8 @@ describe("PracticePage", () => {
     expect((await screen.findAllByText("暂未评分")).length).toBeGreaterThan(0);
     const summary = screen.getByRole("region", { name: "练习结果摘要" });
     expect(within(summary).getByText("已评分 0 / 3")).toBeInTheDocument();
+    expect(summary.querySelector(".practice-result-score")).toHaveClass("ungraded");
+    expect(summary.querySelector(".practice-result-ring-value")).not.toBeInTheDocument();
     expect(screen.queryByText("得分 0")).not.toBeInTheDocument();
   });
 

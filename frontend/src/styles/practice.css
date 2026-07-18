@@ -64,7 +64,8 @@
   column-gap: 10px;
 }
 
-.practice-toolbar-metrics > span {
+.practice-toolbar-metrics > span,
+.practice-adaptive-trigger {
   grid-row: 1 / span 2;
   min-height: 28px;
   display: inline-flex;
@@ -73,6 +74,73 @@
   border: 1px solid var(--wide-workspace-divider);
   border-radius: 5px;
   background: var(--wide-workspace-control);
+}
+
+.practice-adaptive-trigger {
+  gap: 5px;
+  border: 1px solid var(--wide-workspace-divider);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--font-caption);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.practice-adaptive-trigger:hover,
+.practice-adaptive-trigger:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--wide-workspace-divider));
+  color: var(--accent-strong);
+}
+
+.practice-adaptive-popover {
+  z-index: 120;
+  width: min(300px, calc(100vw - 24px));
+  border: 1px solid var(--wide-workspace-divider);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--text);
+  background: var(--wide-workspace-emphasis);
+  box-shadow: 0 14px 36px rgba(24, 54, 47, 0.14);
+}
+
+.practice-adaptive-popover strong {
+  color: var(--text-strong);
+  font-size: var(--font-control);
+}
+
+.practice-adaptive-popover p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+  line-height: 1.55;
+}
+
+.practice-adaptive-popover-arrow {
+  fill: var(--wide-workspace-emphasis);
+}
+
+.practice-answer-progress {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  border: 0;
+  appearance: none;
+  background: transparent;
+}
+
+.practice-answer-progress::-webkit-progress-bar {
+  background: color-mix(in srgb, var(--line) 64%, transparent);
+}
+
+.practice-answer-progress::-webkit-progress-value {
+  background: var(--accent);
+}
+
+.practice-answer-progress::-moz-progress-bar {
+  background: var(--accent);
 }
 
 .practice-toolbar-metrics > small {
@@ -542,10 +610,43 @@
 }
 
 .practice-result-score {
+  position: relative;
   display: grid;
-  align-content: center;
+  place-items: center;
   min-height: 104px;
   border-right: 1px solid var(--wide-workspace-divider);
+}
+
+.practice-result-score > svg,
+.practice-result-score > div {
+  grid-area: 1 / 1;
+}
+
+.practice-result-score > svg {
+  width: 96px;
+  height: 96px;
+  transform: rotate(-90deg);
+}
+
+.practice-result-ring-track,
+.practice-result-ring-value {
+  fill: none;
+  stroke-width: 8;
+}
+
+.practice-result-ring-track {
+  stroke: color-mix(in srgb, var(--line) 72%, transparent);
+}
+
+.practice-result-ring-value {
+  stroke: var(--accent);
+  stroke-linecap: round;
+}
+
+.practice-result-score > div {
+  display: grid;
+  place-items: center;
+  gap: 2px;
 }
 
 .practice-result-score span {
@@ -556,10 +657,19 @@
 
 .practice-result-score strong {
   color: var(--accent-strong);
-  font-size: 2.8rem;
+  font-size: 2rem;
   font-weight: 850;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+}
+
+.practice-result-score small {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+}
+
+.practice-result-score.ungraded .practice-result-ring-track {
+  stroke-dasharray: 3 5;
 }
 
 .practice-result-copy {

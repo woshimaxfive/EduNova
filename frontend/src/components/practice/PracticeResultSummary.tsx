@@ -32,6 +32,7 @@ export function PracticeResultSummary({
   onRegrade,
   isRegrading
 }: PracticeResultSummaryProps) {
+  const normalizedScore = score === null ? 0 : Math.min(100, Math.max(0, score));
   const summary = score === null
     ? "简答题暂未评分，当前结果不会影响掌握度、弱点或学习路径。"
     : score >= 80
@@ -54,9 +55,26 @@ export function PracticeResultSummary({
 
   return (
     <section className="practice-result-summary" aria-label="练习结果摘要">
-      <div className="practice-result-score">
-        <span>本次得分</span>
-        <strong>{score ?? "—"}</strong>
+      <div className={score === null ? "practice-result-score ungraded" : "practice-result-score"}>
+        <svg viewBox="0 0 120 120" aria-hidden="true">
+          <circle className="practice-result-ring-track" cx="60" cy="60" r="50" pathLength="100" />
+          {score === null ? null : (
+            <circle
+              className="practice-result-ring-value"
+              cx="60"
+              cy="60"
+              r="50"
+              pathLength="100"
+              strokeDasharray={`${normalizedScore} ${100 - normalizedScore}`}
+            />
+          )}
+        </svg>
+        <div>
+          <span>本次得分</span>
+          <strong>{score ?? "—"}</strong>
+          {gradingStatus === "partial" ? <small>已评分 {gradedCount}/{totalCount}</small> : null}
+          {gradingStatus === "ungraded" ? <small>暂未评分</small> : null}
+        </div>
       </div>
       <div className="practice-result-copy">
         <span>{gradingStatus === "complete" ? "练习完成" : gradingStatus === "partial" ? "部分评分" : "暂未评分"}</span>

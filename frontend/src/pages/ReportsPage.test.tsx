@@ -408,6 +408,10 @@ describe("ReportsPage", () => {
     expect(screen.getByRole("region", { name: "资源使用概览" })).toHaveTextContent("偏难 1");
     expect(screen.getByRole("region", { name: "薄弱点进展" })).toHaveTextContent("1 项已攻克");
     expect(screen.getByRole("region", { name: "薄弱点进展" })).toHaveTextContent("再测 92 分");
+    const reportSnapshot = screen.getByRole("region", { name: "最近报告快照" });
+    expect(reportSnapshot).toHaveTextContent("练习 3 次 · 作答 15 题 · 资源 2 项");
+    expect(reportSnapshot).toHaveTextContent("审核通过");
+    expect(reportSnapshot).toHaveTextContent("置信度 91%");
     const reportDetailsTrigger = screen.getByRole("button", { name: "报告详情" });
     await user.click(reportDetailsTrigger);
     const closeDetails = screen.getByRole("button", { name: "关闭报告详情" });

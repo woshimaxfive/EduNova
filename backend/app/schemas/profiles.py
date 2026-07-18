@@ -87,6 +87,7 @@ class ProfileEventResponse(BaseModel):
     status: str = "applied"
     confidence_score: float | None = None
     created_at: str
+    course_id: str | None = None
 
 
 class ProfileChatResponse(BaseModel):
@@ -189,4 +190,5 @@ def event_to_api(event: ProfileEvent) -> ProfileEventResponse:
         status=str(getattr(event, "status", None) or "applied"),
         confidence_score=float(event.confidence_score) if getattr(event, "confidence_score", None) is not None else None,
         created_at=_iso_timestamp(event.created_at) or "",
+        course_id=str(event.course_id) if getattr(event, "course_id", None) is not None else None,
     )

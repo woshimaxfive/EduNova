@@ -7,7 +7,7 @@ from typing import Any, Protocol
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.app.models import ChatMessage, ChatSession, ProfileEvent, StudentProfile, User
+from backend.app.models import ChatMessage, ChatSession, CourseEnrollment, ProfileEvent, StudentProfile, User
 from backend.app.schemas.profiles import (
     ProfileChatResponse,
     ProfileEventResponse,
@@ -21,14 +21,14 @@ from backend.app.services.model_settings import ModelSettingsService
 
 
 PROFILE_QUESTION_ORDER = (
+    "learning_preference",
+    "learning_pace",
+    "major_background",
+    "cognitive_style",
+    "motivation_interest",
     "learning_goal",
     "knowledge_foundation",
     "weak_points",
-    "learning_preference",
-    "learning_pace",
-    "cognitive_style",
-    "major_background",
-    "motivation_interest",
 )
 
 PROFILE_QUESTIONS = {
@@ -51,6 +51,9 @@ class ProfileRepository(Protocol):
         ...
 
     def add_event(self, event: ProfileEvent) -> None:
+        ...
+
+    def get_course_enrollment(self, user_id: int, course_id: int) -> CourseEnrollment | None:
         ...
 
     def list_events(self, user_id: int, limit: int) -> list[ProfileEvent]:
@@ -85,6 +88,12 @@ class SqlAlchemyProfileRepository:
 
     def add_event(self, event: ProfileEvent) -> None:
         self.db.add(event)
+
+    def get_course_enrollment(self, user_id: int, course_id: int) -> CourseEnrollment | None:
+        return self.db.scalar(select(CourseEnrollment).where(
+            CourseEnrollment.user_id == user_id,
+            CourseEnrollment.course_id == course_id,
+        ))
 
     def list_events(self, user_id: int, limit: int) -> list[ProfileEvent]:
         return list(

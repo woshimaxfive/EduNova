@@ -111,7 +111,7 @@ def test_stored_chat_image_does_not_hijack_the_global_next_action() -> None:
 
     action = service_with(db, mastery()).get_next_action(make_user())
 
-    assert action.kind == "upload_material"
+    assert action.kind == "complete_profile"
 
 
 def test_path_job_is_exposed_as_waiting_next_action() -> None:

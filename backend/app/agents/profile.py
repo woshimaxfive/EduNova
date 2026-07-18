@@ -396,21 +396,46 @@ class ProfileGraphRunner:
             proposed = dict(state.get("proposed_updates", {}))
             profile = state["profile"]
             dimension_evidence_scores = self._dimension_evidence_scores(state, proposed)
-            if applied:
-                profile.profile_json = self.service._merge_profile_json(profile.profile_json, applied)
+            course_id = state.get("course_id")
+            course_dimensions = {"learning_goal", "knowledge_foundation", "weak_points"}
+            course_updates = {key: value for key, value in applied.items() if course_id is not None and key in course_dimensions}
+            global_updates = {key: value for key, value in applied.items() if key not in course_dimensions}
+            effective_course_updates: dict[str, Any] = {}
+            if global_updates:
+                profile.profile_json = self.service._merge_profile_json(profile.profile_json, global_updates)
                 dimension_confidence = dict(getattr(profile, "dimension_confidence_json", None) or {})
-                for key in applied:
+                for key in global_updates:
                     dimension_confidence[key] = round(dimension_evidence_scores.get(key, 0.0) * 100, 2)
                 profile.dimension_confidence_json = dimension_confidence
                 values = [float(value) for value in dimension_confidence.values() if isinstance(value, (int, float))]
                 profile.confidence_score = Decimal(str(round(sum(values) / len(values), 2))) if values else Decimal("0.00")
-                profile.updated_reason = self.service._change_summary(self.service._changed_labels(applied))
+                profile.updated_reason = self.service._change_summary(self.service._changed_labels(global_updates))
                 profile.updated_at = datetime.now(UTC)
+            if course_updates and course_id is not None:
+                enrollment_loader = getattr(self.service.repository, "get_course_enrollment", None)
+                enrollment = enrollment_loader(int(state["user_id"]), int(course_id)) if callable(enrollment_loader) else None
+                if enrollment is not None:
+                    values = dict(enrollment.learning_context_json or {})
+                    confidence = dict(enrollment.learning_context_confidence_json or {})
+                    for key, value in course_updates.items():
+                        if key == "weak_points":
+                            values[key] = list(dict.fromkeys([
+                                *[str(item) for item in values.get(key, []) if str(item).strip()],
+                                *[str(item) for item in value if str(item).strip()],
+                            ]))
+                        else:
+                            values[key] = value
+                        confidence[key] = round(dimension_evidence_scores.get(key, 0.0) * 100, 2)
+                    enrollment.learning_context_json = values
+                    enrollment.learning_context_confidence_json = confidence
+                    effective_course_updates = course_updates
+            effective_applied = {**global_updates, **effective_course_updates}
             return {
                 "profile": profile,
                 "dimension_evidence_scores": dimension_evidence_scores,
-            }, f"已应用 {len(applied)} 个画像维度。", "completed" if applied else "warning", {
-                "applied_count": len(applied),
+                "applied_updates": effective_applied,
+            }, f"已应用 {len(effective_applied)} 个画像维度。", "completed" if effective_applied else "warning", {
+                "applied_count": len(effective_applied),
                 "scored_dimension_count": len(dimension_evidence_scores),
                 "source_factor": self._source_factor(state),
                 "review_factor": self._review_factor(state),
@@ -425,9 +450,14 @@ class ProfileGraphRunner:
         profile = state["profile"]
         event = ProfileEvent(
             user_id=int(state["user_id"]),
+            course_id=int(state["course_id"]) if state.get("course_id") is not None else None,
             profile_id=profile.id,
             dimension="profile_chat" if state.get("operation") == "explicit_chat" else (next(iter(proposed), "learning_signal")),
-            change_summary=profile.updated_reason if applied and profile.updated_reason else "学习行为证据待更多信号确认",
+            change_summary=(
+                self.service._change_summary(self.service._changed_labels(applied))
+                if applied
+                else "学习行为证据待更多信号确认"
+            ),
             evidence_json={
                 "source_type": state.get("source_type"),
                 "updated_dimensions": list(applied),

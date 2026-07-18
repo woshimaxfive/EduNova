@@ -57,6 +57,12 @@ class ProfileEvent(IdMixin, CreatedAtMixin, Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+    course_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     profile_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("student_profiles.id", ondelete="SET NULL"),

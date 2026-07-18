@@ -528,6 +528,23 @@
         "title": "ApiEnvelope[CourseKnowledgePointContent]",
         "type": "object"
       },
+      "ApiEnvelope_CourseLearnerProfile_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CourseLearnerProfile"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "trace_id"
+        ],
+        "title": "ApiEnvelope[CourseLearnerProfile]",
+        "type": "object"
+      },
       "ApiEnvelope_CourseLearningState_": {
         "properties": {
           "data": {
@@ -2013,11 +2030,90 @@
         "title": "CourseLearnerContextResponse",
         "type": "object"
       },
+      "CourseLearnerProfile": {
+        "properties": {
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "dimension_confidence": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Dimension Confidence",
+            "type": "object"
+          },
+          "knowledge_foundation": {
+            "default": "",
+            "title": "Knowledge Foundation",
+            "type": "string"
+          },
+          "learning_goal": {
+            "default": "",
+            "title": "Learning Goal",
+            "type": "string"
+          },
+          "legacy_suggestions": {
+            "additionalProperties": true,
+            "title": "Legacy Suggestions",
+            "type": "object"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/CourseProfileReadiness"
+          },
+          "weak_points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Weak Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "course_id",
+          "readiness"
+        ],
+        "title": "CourseLearnerProfile",
+        "type": "object"
+      },
+      "CourseLearnerProfileUpdate": {
+        "properties": {
+          "knowledge_foundation": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Knowledge Foundation",
+            "type": "string"
+          },
+          "learning_goal": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Learning Goal",
+            "type": "string"
+          },
+          "weak_points": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Weak Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "learning_goal",
+          "knowledge_foundation"
+        ],
+        "title": "CourseLearnerProfileUpdate",
+        "type": "object"
+      },
       "CourseLearningState": {
         "properties": {
           "course_id": {
             "title": "Course Id",
             "type": "string"
+          },
+          "course_profile_readiness": {
+            "$ref": "#/components/schemas/CourseProfileReadiness"
           },
           "evidence_summary": {
             "$ref": "#/components/schemas/CourseEvidenceSummary"
@@ -2033,6 +2129,9 @@
           },
           "profile_overlay": {
             "$ref": "#/components/schemas/CourseProfileOverlay"
+          },
+          "stage_completion": {
+            "$ref": "#/components/schemas/CourseStageCompletion"
           },
           "weakness_review_queue": {
             "items": {
@@ -2394,6 +2493,39 @@
         "title": "CourseProfileOverlay",
         "type": "object"
       },
+      "CourseProfileReadiness": {
+        "properties": {
+          "foundation_ready": {
+            "default": false,
+            "title": "Foundation Ready",
+            "type": "boolean"
+          },
+          "global_preference_ready": {
+            "default": false,
+            "title": "Global Preference Ready",
+            "type": "boolean"
+          },
+          "goal_ready": {
+            "default": false,
+            "title": "Goal Ready",
+            "type": "boolean"
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Fields",
+            "type": "array"
+          },
+          "ready": {
+            "default": false,
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "title": "CourseProfileReadiness",
+        "type": "object"
+      },
       "CourseResourceBrief": {
         "properties": {
           "id": {
@@ -2415,6 +2547,59 @@
           "resource_type"
         ],
         "title": "CourseResourceBrief",
+        "type": "object"
+      },
+      "CourseStageCompletion": {
+        "properties": {
+          "active_weakness_count": {
+            "default": 0,
+            "title": "Active Weakness Count",
+            "type": "integer"
+          },
+          "assessed_point_count": {
+            "default": 0,
+            "title": "Assessed Point Count",
+            "type": "integer"
+          },
+          "below_threshold_count": {
+            "default": 0,
+            "title": "Below Threshold Count",
+            "type": "integer"
+          },
+          "blocking_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Reasons",
+            "type": "array"
+          },
+          "due_review_count": {
+            "default": 0,
+            "title": "Due Review Count",
+            "type": "integer"
+          },
+          "eligible": {
+            "default": false,
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "path_completed": {
+            "default": false,
+            "title": "Path Completed",
+            "type": "boolean"
+          },
+          "report_fresh": {
+            "default": false,
+            "title": "Report Fresh",
+            "type": "boolean"
+          },
+          "required_point_count": {
+            "default": 0,
+            "title": "Required Point Count",
+            "type": "integer"
+          }
+        },
+        "title": "CourseStageCompletion",
         "type": "object"
       },
       "CourseStructureSummary": {
@@ -2478,6 +2663,17 @@
             "title": "Chunk Count",
             "type": "integer"
           },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
           "description": {
             "anyOf": [
               {
@@ -2493,9 +2689,30 @@
             "title": "Id",
             "type": "string"
           },
+          "is_current": {
+            "default": false,
+            "title": "Is Current",
+            "type": "boolean"
+          },
           "knowledge_point_count": {
             "title": "Knowledge Point Count",
             "type": "integer"
+          },
+          "last_accessed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Accessed At"
+          },
+          "learning_status": {
+            "default": "active",
+            "title": "Learning Status",
+            "type": "string"
           },
           "material_count": {
             "title": "Material Count",
@@ -2505,6 +2722,11 @@
             "default": 0,
             "title": "Practiced Knowledge Point Count",
             "type": "integer"
+          },
+          "profile_ready": {
+            "default": false,
+            "title": "Profile Ready",
+            "type": "boolean"
           },
           "progress_percent": {
             "title": "Progress Percent",
@@ -3030,9 +3252,19 @@
             "title": "Id",
             "type": "string"
           },
+          "is_current": {
+            "default": false,
+            "title": "Is Current",
+            "type": "boolean"
+          },
           "knowledge_point_count": {
             "title": "Knowledge Point Count",
             "type": "integer"
+          },
+          "learning_status": {
+            "default": "active",
+            "title": "Learning Status",
+            "type": "string"
           },
           "next": {
             "title": "Next",
@@ -3159,6 +3391,17 @@
             },
             "title": "Command Suggestions",
             "type": "array"
+          },
+          "current_course_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Course Id"
           },
           "empty_state": {
             "$ref": "#/components/schemas/EmptyState"
@@ -7263,6 +7506,17 @@
             ],
             "title": "Confidence Score"
           },
+          "course_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Id"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -7325,6 +7579,11 @@
       },
       "ProfileSummary": {
         "properties": {
+          "base_profile_ready": {
+            "default": false,
+            "title": "Base Profile Ready",
+            "type": "boolean"
+          },
           "display_name": {
             "title": "Display Name",
             "type": "string"
@@ -12213,6 +12472,282 @@
         ]
       }
     },
+    "/api/v1/courses/{course_id}/activate": {
+      "post": {
+        "operationId": "activate_course_api_v1_courses__course_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_CourseSummary_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Activate Course",
+        "tags": [
+          "courses"
+        ]
+      }
+    },
+    "/api/v1/courses/{course_id}/complete": {
+      "post": {
+        "operationId": "complete_course_api_v1_courses__course_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_CourseSummary_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Complete Course",
+        "tags": [
+          "courses"
+        ]
+      }
+    },
     "/api/v1/courses/{course_id}/knowledge-points": {
       "get": {
         "operationId": "get_course_knowledge_points_api_v1_courses__course_id__knowledge_points_get",
@@ -12493,6 +13028,290 @@
           }
         },
         "summary": "Get Course Knowledge Point Content",
+        "tags": [
+          "courses"
+        ]
+      }
+    },
+    "/api/v1/courses/{course_id}/learner-profile": {
+      "get": {
+        "operationId": "get_course_learner_profile_api_v1_courses__course_id__learner_profile_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_CourseLearnerProfile_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Course Learner Profile",
+        "tags": [
+          "courses"
+        ]
+      },
+      "put": {
+        "operationId": "update_course_learner_profile_api_v1_courses__course_id__learner_profile_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseLearnerProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_CourseLearnerProfile_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Update Course Learner Profile",
         "tags": [
           "courses"
         ]
@@ -13055,6 +13874,144 @@
           }
         },
         "summary": "Get Course Overview",
+        "tags": [
+          "courses"
+        ]
+      }
+    },
+    "/api/v1/courses/{course_id}/resume": {
+      "post": {
+        "operationId": "resume_course_api_v1_courses__course_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_CourseSummary_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Resume Course",
         "tags": [
           "courses"
         ]

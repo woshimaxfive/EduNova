@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.models import (
     Course,
+    CourseEnrollment,
     GeneratedResource,
     KnowledgePoint,
     LearningPath,
@@ -49,6 +50,8 @@ class PathModelService(Protocol):
 class PathRepository(Protocol):
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None: ...
 
+    def is_course_active(self, user_id: int, course_id: int) -> bool: ...
+
     def list_knowledge_points(self, course_id: int) -> list[KnowledgePoint]: ...
 
     def get_profile(self, user_id: int) -> StudentProfile | None: ...
@@ -84,6 +87,13 @@ class SqlAlchemyPathRepository:
 
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return self.db.scalar(select(Course).where(Course.id == course_id, Course.owner_id == user_id))
+
+    def is_course_active(self, user_id: int, course_id: int) -> bool:
+        return self.db.scalar(select(CourseEnrollment.id).where(
+            CourseEnrollment.user_id == user_id,
+            CourseEnrollment.course_id == course_id,
+            CourseEnrollment.learning_status == "active",
+        )) is not None
 
     def list_knowledge_points(self, course_id: int) -> list[KnowledgePoint]:
         return list(
@@ -258,6 +268,9 @@ class PathService:
         task = self.repository.get_task_for_user(user.id, task_id)
         if task is None:
             raise PathNotFoundError("学习任务不存在或无权访问。")
+        active_checker = getattr(self.repository, "is_course_active", None)
+        if callable(active_checker) and not active_checker(user.id, int(task.course_id or 0)):
+            raise PathValidationError("课程已完成归档；请先恢复学习再更新路径任务。")
         resources = self.repository.list_generated_resources(user.id, int(task.course_id or 0))
         resources_by_id = {resource.id: resource for resource in resources}
         try:

@@ -16,7 +16,7 @@ from backend.app.core.config import Settings, get_settings
 from backend.app.core.errors import ConflictDomainError, NotFoundDomainError, ValidationDomainError
 from backend.app.core.observability import get_tracer
 from backend.app.db.session import SessionLocal
-from backend.app.models import AiJob, Course, GeneratedResource, KnowledgeChunk, KnowledgePoint, LearningPath, LearningTask, Material, MaterialChunk, ModelSetting, PracticeAnswer, PracticeSession, User, WeaknessReviewItem
+from backend.app.models import AiJob, Course, CourseEnrollment, GeneratedResource, KnowledgeChunk, KnowledgePoint, LearningPath, LearningTask, Material, MaterialChunk, ModelSetting, PracticeAnswer, PracticeSession, User, WeaknessReviewItem
 from backend.app.schemas.ai_jobs import AiJobListResponse, AiJobResponse, ai_job_to_api, iso_timestamp
 from backend.app.services.mastery_progress import is_review_due
 
@@ -159,6 +159,13 @@ class SqlAlchemyAiJobRepository:
 
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return self.db.scalar(select(Course).where(Course.id == course_id, Course.owner_id == user_id))
+
+    def is_course_active(self, user_id: int, course_id: int) -> bool:
+        return self.db.scalar(select(CourseEnrollment.id).where(
+            CourseEnrollment.user_id == user_id,
+            CourseEnrollment.course_id == course_id,
+            CourseEnrollment.learning_status == "active",
+        )) is not None
 
     def get_active_path_job(self, user_id: int, course_id: int) -> AiJob | None:
         return self.db.scalar(
@@ -463,6 +470,7 @@ class AiJobService:
     ) -> AiJobResponse:
         if self.repository.get_course_for_user(user.id, course_id) is None:
             raise AiJobNotFoundError("课程不存在或无权访问。")
+        self._require_active_course(user.id, course_id)
         if knowledge_point_id is not None and self.repository.get_knowledge_point(course_id, knowledge_point_id) is None:
             raise AiJobNotFoundError("知识点不存在或不属于当前课程。")
         unique_types = [item for item in dict.fromkeys(resource_types) if item in {"doc", "mindmap", "quiz", "code", "slide", "animation", "video"}]
@@ -612,6 +620,7 @@ class AiJobService:
     ) -> AiJobResponse:
         if self.repository.get_course_for_user(user.id, course_id) is None:
             raise AiJobNotFoundError("课程不存在或无权访问。")
+        self._require_active_course(user.id, course_id)
         if question_count < 1 or question_count > 12:
             raise AiJobValidationError("题目数量必须在 1 到 12 之间。")
         if difficulty not in {"adaptive", "easy", "medium", "hard"}:
@@ -661,6 +670,7 @@ class AiJobService:
     ) -> AiJobResponse:
         if self.repository.get_course_for_user(user.id, course_id) is None:
             raise AiJobNotFoundError("课程不存在或无权访问。")
+        self._require_active_course(user.id, course_id)
         if practice_session_id is not None:
             session = self.repository.get_practice_session_for_user(user.id, practice_session_id)
             if session is None or int(session.course_id) != course_id:
@@ -690,6 +700,7 @@ class AiJobService:
     ) -> AiJobResponse:
         if self.repository.get_course_for_user(user.id, course_id) is None:
             raise AiJobNotFoundError("课程不存在或无权访问。")
+        self._require_active_course(user.id, course_id)
         if trigger not in {"manual", "assessment"}:
             raise AiJobValidationError("不支持的路径规划触发方式。")
         active = self.repository.get_active_path_job(user.id, course_id)
@@ -773,6 +784,11 @@ class AiJobService:
             request_json={"config_id": int(setting.id), "scope": "all_user_chunks"},
             idempotency_key=idempotency_key,
         )
+
+    def _require_active_course(self, user_id: int, course_id: int) -> None:
+        checker = getattr(self.repository, "is_course_active", None)
+        if callable(checker) and not checker(user_id, course_id):
+            raise AiJobConflictError("课程已完成归档；请先恢复学习再创建新的生成任务。")
 
     def _create(
         self,

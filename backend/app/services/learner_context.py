@@ -83,7 +83,6 @@ class CourseLearnerContext:
             "learning_goal": self.course_goal,
             "knowledge_foundation": self.foundation_summary,
             "weak_points": list(self.active_weaknesses),
-            "profile_weak_points": list(global_context.trusted_value("weak_points", [])),
             "mastery_average": self.mastery_average,
             "current_task_title": self.current_task_title,
             "major_background": global_context.trusted_value("major_background"),
@@ -98,7 +97,7 @@ class CourseLearnerContext:
         summary = self.prompt_summary()
         factor_codes = [
             key
-            for key in ("major_background", "knowledge_foundation", "learning_goal", "learning_preference", "cognitive_style", "learning_pace", "motivation_interest", "profile_weak_points")
+            for key in ("major_background", "knowledge_foundation", "learning_goal", "learning_preference", "cognitive_style", "learning_pace", "motivation_interest")
             if summary.get(key)
         ]
         if self.active_weaknesses:
@@ -176,6 +175,12 @@ class LearnerContextService:
         )
         if course is None:
             raise ValueError("课程不存在或无权访问。")
+        enrollment = self.db.scalar(select(CourseEnrollment).where(
+            CourseEnrollment.user_id == user_id,
+            CourseEnrollment.course_id == course_id,
+        ))
+        if enrollment is None:
+            raise ValueError("课程学习关系不存在或无权访问。")
         global_context = self.global_context(user_id)
         active_path = self.db.scalar(
             select(LearningPath).where(
@@ -269,10 +274,12 @@ class LearnerContextService:
                 AssessmentReport.course_id == course_id,
             ).order_by(AssessmentReport.created_at.desc(), AssessmentReport.id.desc())
         ) is not None
-        global_goal = str(global_context.trusted_value("learning_goal") or "").strip()
+        course_profile = enrollment.learning_context_json or {}
+        course_confidence = enrollment.learning_context_confidence_json or {}
+        profile_goal = str(course_profile.get("learning_goal") or "").strip() if float(course_confidence.get("learning_goal", 0) or 0) >= 50 else ""
         course_goal = str(active_path.goal or "").strip() if active_path is not None else ""
-        course_goal = course_goal or global_goal or f"完成《{course.title}》学习"
-        foundation = str(global_context.trusted_value("knowledge_foundation") or "").strip()
+        course_goal = profile_goal or course_goal or f"完成《{course.title}》学习"
+        foundation = str(course_profile.get("knowledge_foundation") or "").strip() if float(course_confidence.get("knowledge_foundation", 0) or 0) >= 50 else ""
         foundation_summary = foundation or "尚未形成可信基础判断"
         if knowledge_point_count and mastery_average is not None:
             foundation_summary = f"{foundation_summary}；当前课程掌握度约 {mastery_average}%"
@@ -281,7 +288,10 @@ class LearnerContextService:
             "profile_applied_version": global_context.profile_applied_version,
             "course_goal": course_goal,
             "foundation_summary": foundation_summary,
-            "active_weaknesses": [item.title for item in weaknesses],
+            "active_weaknesses": [
+                *[str(item) for item in course_profile.get("weak_points", []) if str(item).strip()],
+                *[item.title for item in weaknesses],
+            ],
             "mastery_average": mastery_average,
             "current_task": current_task.title if current_task is not None else None,
             "resource_types": list(resource_types),
@@ -297,7 +307,10 @@ class LearnerContextService:
             global_context=global_context,
             course_goal=course_goal,
             foundation_summary=foundation_summary,
-            active_weaknesses=tuple(item.title for item in weaknesses),
+            active_weaknesses=tuple(dict.fromkeys([
+                *[str(item) for item in course_profile.get("weak_points", []) if str(item).strip()],
+                *[item.title for item in weaknesses],
+            ])),
             mastery_average=mastery_average,
             knowledge_point_count=knowledge_point_count,
             current_task_title=current_task.title if current_task is not None else None,

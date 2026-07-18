@@ -14,7 +14,7 @@ from backend.app.api.v1.deps import get_auth_service
 from backend.app.core.config import Settings
 from backend.app.core.security import create_access_token
 from backend.app.main import create_app
-from backend.app.models import ChatMessage, ChatSession, ProfileEvent, StudentProfile, User
+from backend.app.models import ChatMessage, ChatSession, CourseEnrollment, ProfileEvent, StudentProfile, User
 from backend.app.services.auth import AuthService
 
 
@@ -43,11 +43,15 @@ class FakeProfileRepository:
     next_event_id: int = 1
     pending_profiles: list[StudentProfile] = field(default_factory=list)
     pending_events: list[ProfileEvent] = field(default_factory=list)
+    enrollments: dict[tuple[int, int], CourseEnrollment] = field(default_factory=dict)
     committed: bool = False
     rolled_back: bool = False
 
     def get_profile(self, user_id: int) -> StudentProfile | None:
         return self.profiles.get(user_id)
+
+    def get_course_enrollment(self, user_id: int, course_id: int) -> CourseEnrollment | None:
+        return self.enrollments.get((user_id, course_id))
 
     def add_profile(self, profile: StudentProfile) -> None:
         self.pending_profiles.append(profile)
@@ -170,8 +174,8 @@ def test_empty_profile_returns_stable_eight_dimension_shape() -> None:
     assert profile["confidence_score"] == 0
     assert profile["completeness_score"] == 0
     assert profile["evidence_confidence_score"] == 0
-    assert profile["next_question"] == "接下来你最想学会、完成或解决什么？"
-    assert profile["next_question_dimension"] == "learning_goal"
+    assert profile["next_question"] == "你更喜欢通过什么形式学习和练习？"
+    assert profile["next_question_dimension"] == "learning_preference"
 
 
 def test_profile_chat_without_model_does_not_guess_profile_updates() -> None:
@@ -224,9 +228,9 @@ def test_profile_model_extracts_natural_chinese_profile_signals() -> None:
 
     profile = result["profile"]["profile_json"]
     assert profile["major_background"] == "计算机专业学生"
-    assert profile["learning_goal"] == "系统掌握神经网络"
+    assert profile["learning_goal"] == ""
     assert profile["learning_preference"] == "图解、代码"
-    assert profile["weak_points"] == ["反向传播推导"]
+    assert profile["weak_points"] == []
     assert profile["learning_pace"] == "每天可以学习四十五分钟"
     assert result["event"]["evidence_json"]["generation_mode"] == "model_generated"
     assert result["event"]["evidence_json"]["parse_status"] == "valid"
@@ -262,9 +266,9 @@ def test_profile_model_accepts_explanatory_text_and_partial_valid_fields() -> No
 
     result = as_dict(service.update_by_chat(user, "我学过 Python，但反向传播推导比较薄弱。"))
 
-    assert result["profile"]["profile_json"]["knowledge_foundation"] == "具备 Python 基础"
-    assert result["profile"]["dimension_confidence"]["knowledge_foundation"] == 83
-    assert result["profile"]["profile_json"]["weak_points"] == ["反向传播推导"]
+    assert result["profile"]["profile_json"]["knowledge_foundation"] == ""
+    assert "knowledge_foundation" not in result["profile"]["dimension_confidence"]
+    assert result["profile"]["profile_json"]["weak_points"] == []
     evidence = result["event"]["evidence_json"]
     assert evidence["generation_mode"] == "model_generated"
     assert evidence["parse_status"] == "valid"
@@ -297,10 +301,10 @@ def test_profile_model_is_authoritative_and_rules_do_not_fill_omitted_dimensions
 
     profile = result["profile"]["profile_json"]
     assert profile["learning_goal"] == ""
-    assert profile["weak_points"] == ["反向传播"]
+    assert profile["weak_points"] == []
     assert profile["motivation_interest"] == "希望进入人工智能领域"
-    assert result["profile"]["dimension_confidence"]["weak_points"] == 86
-    assert result["event"]["evidence_json"]["updated_dimensions"] == ["weak_points", "motivation_interest"]
+    assert "weak_points" not in result["profile"]["dimension_confidence"]
+    assert result["event"]["evidence_json"]["updated_dimensions"] == ["motivation_interest"]
 
 
 def test_profile_model_accepts_semantic_dimension_without_rule_hint() -> None:
@@ -341,10 +345,10 @@ def test_profile_aspiration_and_contribution_update_goal_and_motivation() -> Non
     result = as_dict(service.update_by_chat(user, "想成为AI领域大神，为人类发展做贡献"))
 
     profile = result["profile"]["profile_json"]
-    assert profile["learning_goal"] == "成为 AI 领域专业人才"
+    assert profile["learning_goal"] == ""
     assert profile["motivation_interest"] == "对 AI 感兴趣，希望为人类发展作贡献"
     assert result["event"]["status"] == "applied"
-    assert result["event"]["evidence_json"]["updated_dimensions"] == ["learning_goal", "motivation_interest"]
+    assert result["event"]["evidence_json"]["updated_dimensions"] == ["motivation_interest"]
 
 
 def test_profile_review_rejection_discards_unverified_model_dimensions() -> None:
@@ -471,8 +475,8 @@ def test_explicit_profile_statement_updates_existing_dimension() -> None:
 
     result = as_dict(service.update_by_chat(user, "我的目标是完成深度学习项目。"))
 
-    assert result["profile"]["profile_json"]["learning_goal"] == "完成深度学习项目"
-    assert result["event"]["status"] == "applied"
+    assert result["profile"]["profile_json"]["learning_goal"] == "掌握机器学习"
+    assert result["event"]["status"] == "candidate"
 
 
 def test_profile_next_question_targets_missing_or_low_confidence_dimension() -> None:
@@ -563,15 +567,23 @@ def test_profile_graph_records_real_nodes_and_dimension_confidence() -> None:
     assert result["event"]["agent_trace_id"] == logs[0].trace_id
     assert result["event"]["status"] == "applied"
     assert result["profile"]["dimension_confidence"]["major_background"] == 83
-    assert result["profile"]["completeness_score"] == 37.5
-    assert result["profile"]["evidence_confidence_score"] == 83.33
+    assert result["profile"]["completeness_score"] == 12.5
+    assert result["profile"]["evidence_confidence_score"] == 83.0
     assert "计算机专业大二学生" not in str(logs[0].metadata_json)
 
 
 def test_learning_signal_requires_two_independent_sources_before_applying() -> None:
     module = load_profile_module()
     user = make_user(1)
-    repo = FakeProfileRepository()
+    enrollment = CourseEnrollment(
+        user_id=user.id,
+        course_id=101,
+        role="learner",
+        progress_percent=0,
+        learning_context_json={},
+        learning_context_confidence_json={},
+    )
+    repo = FakeProfileRepository(enrollments={(user.id, 101): enrollment})
     service = module.ProfileService(repo, now=NOW)
 
     first = service.ingest_learning_signal(
@@ -593,7 +605,9 @@ def test_learning_signal_requires_two_independent_sources_before_applying() -> N
 
     assert first is not None and first.status == "candidate"
     assert second is not None and second.status == "applied"
-    assert repo.profiles[user.id].profile_json["weak_points"] == ["反向传播"]
+    assert repo.profiles[user.id].profile_json["weak_points"] == []
+    assert enrollment.learning_context_json["weak_points"] == ["反向传播"]
+    assert second.course_id == 101
     assert {event.source_ref_id for event in repo.events} == {501, 502}
 
 

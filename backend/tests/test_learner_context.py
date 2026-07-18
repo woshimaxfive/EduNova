@@ -1,7 +1,7 @@
 from backend.app.services.learner_context import CourseLearnerContext, GlobalLearnerContext, LearnerContextService
 
 
-def test_course_context_exposes_only_trusted_profile_weak_points_as_path_advice() -> None:
+def test_course_context_does_not_reuse_legacy_global_weak_points_across_courses() -> None:
     context = CourseLearnerContext(
         course_id=101,
         course_title="数据结构",
@@ -22,8 +22,8 @@ def test_course_context_exposes_only_trusted_profile_weak_points_as_path_advice(
         context_hash="context-test",
     )
 
-    assert context.prompt_summary()["profile_weak_points"] == ["二叉树遍历"]
-    assert "profile_weak_points" in context.trace_metadata()["personalization_factors"]
+    assert "profile_weak_points" not in context.prompt_summary()
+    assert "profile_weak_points" not in context.trace_metadata()["personalization_factors"]
 
 
 def test_personalization_freshness_distinguishes_legacy_stale_and_current() -> None:

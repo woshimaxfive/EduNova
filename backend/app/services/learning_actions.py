@@ -9,6 +9,7 @@ from backend.app.models import (
     AiJob,
     AssessmentReport,
     Course,
+    CourseEnrollment,
     CourseMaterialLink,
     LearningPath,
     LearningTask,
@@ -16,6 +17,8 @@ from backend.app.models import (
     PracticeSession,
     User,
     WeaknessReviewItem,
+    StudentProfile,
+    GeneratedResource,
 )
 from backend.app.schemas.learning import LearningNextAction
 from backend.app.services.courses import CourseService
@@ -43,13 +46,22 @@ class LearningNextActionService:
                 job_action = self._job_action(active_job)
                 if job_action is not None:
                     return job_action
+            course_profile = self.course_service.get_learner_profile(user, course.id)
+            if not course_profile.readiness.ready:
+                return self._action(
+                    "complete_profile",
+                    f"完善《{course.title}》的学习目标与基础",
+                    "补充这门课程自己的目标和基础后，路径与资源才能准确个性化。",
+                    course_id=course.id,
+                )
             return self._course_action(user, course)
 
-        active_job = self._latest_active_job(user.id)
-        if active_job is not None:
-            job_action = self._job_action(active_job)
-            if job_action is not None:
-                return job_action
+        if not self._base_profile_ready(user.id):
+            return self._action(
+                "complete_profile",
+                "完善基础学习画像",
+                "告诉我偏好的学习方式或学习节奏，后续课程才能真正按你调整。",
+            )
 
         course = self._latest_course(user.id)
         material = self._latest_unassigned_material(user.id)
@@ -57,6 +69,14 @@ class LearningNextActionService:
             material = None
         if course is None:
             return self._material_action(material)
+        course_profile = self.course_service.get_learner_profile(user, course.id)
+        if not course_profile.readiness.ready:
+            return self._action(
+                "complete_profile",
+                f"完善《{course.title}》的学习目标与基础",
+                "课程画像只用于这门课，不会污染其他课程。你仍可继续浏览和提问。",
+                course_id=course.id,
+            )
         if material is not None and self._material_activity_at(material) > self._course_activity_at(course):
             return self._material_action(material)
         return self._course_action(user, course)
@@ -81,6 +101,7 @@ class LearningNextActionService:
                 "确认后再安排针对性学习；不符合实际也可以忽略。",
                 course_id=course.id,
                 knowledge_point_id=pending.knowledge_point_id,
+                weakness_item_id=pending.id,
             )
 
         path = self.db.scalar(
@@ -204,6 +225,14 @@ class LearningNextActionService:
                 "把最近的学习结果整理成可复盘的阶段报告。",
                 course_id=course.id,
             )
+        completion = self.course_service.get_stage_completion(user, course.id)
+        if completion.eligible:
+            return self._action(
+                "complete_course",
+                "完成并归档这门课程",
+                "本阶段路径、掌握度、薄弱点、练习和报告均已达标。归档不会删除任何学习记录。",
+                course_id=course.id,
+            )
         return self._action(
             "review_report",
             "查看阶段学习报告",
@@ -296,7 +325,25 @@ class LearningNextActionService:
 
     def _latest_course(self, user_id: int) -> Course | None:
         return self.db.scalar(
-            select(Course).where(Course.owner_id == user_id).order_by(Course.updated_at.desc(), Course.id.desc())
+            select(Course)
+            .join(CourseEnrollment, CourseEnrollment.course_id == Course.id)
+            .where(
+                Course.owner_id == user_id,
+                CourseEnrollment.user_id == user_id,
+                CourseEnrollment.learning_status == "active",
+            )
+            .order_by(CourseEnrollment.last_accessed_at.desc().nullslast(), CourseEnrollment.created_at.desc(), Course.id.desc())
+        )
+
+    def _base_profile_ready(self, user_id: int) -> bool:
+        profile = self.db.scalar(select(StudentProfile).where(StudentProfile.user_id == user_id))
+        if profile is None:
+            return False
+        values = profile.profile_json or {}
+        confidence = profile.dimension_confidence_json or {}
+        return any(
+            bool(str(values.get(key) or "").strip()) and float(confidence.get(key, 0) or 0) >= 50
+            for key in ("learning_preference", "learning_pace")
         )
 
     def _latest_unassigned_material(self, user_id: int) -> Material | None:
@@ -328,13 +375,27 @@ class LearningNextActionService:
             statement = statement.where(AiJob.course_id == course_id)
         return self.db.scalar(statement.order_by(AiJob.updated_at.desc(), AiJob.id.desc()))
 
-    @staticmethod
-    def _first_resource_id(task: LearningTask) -> int | None:
+    def _first_resource_id(self, task: LearningTask) -> int | None:
         for value in task.recommended_resource_ids or []:
             parsed = LearningNextActionService._positive_int(value)
-            if parsed is not None:
+            if parsed is not None and self._valid_task_resource(task, parsed):
+                return parsed
+        bundle = task.learning_bundle_json if isinstance(task.learning_bundle_json, dict) else {}
+        for item in bundle.get("items", []):
+            if not isinstance(item, dict) or item.get("learning_status") == "completed":
+                continue
+            parsed = self._positive_int(item.get("resource_id"))
+            if parsed is not None and self._valid_task_resource(task, parsed):
                 return parsed
         return None
+
+    def _valid_task_resource(self, task: LearningTask, resource_id: int) -> bool:
+        return self.db.scalar(select(GeneratedResource.id).where(
+            GeneratedResource.id == resource_id,
+            GeneratedResource.user_id == task.user_id,
+            GeneratedResource.course_id == task.course_id,
+            GeneratedResource.status == "completed",
+        )) is not None
 
     @staticmethod
     def _report_is_stale(report: AssessmentReport | None, practice: PracticeSession | None) -> bool:

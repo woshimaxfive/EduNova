@@ -1,0 +1,46 @@
+@echo off
+setlocal EnableExtensions
+cd /d "%~dp0"
+
+call "01_Check_Environment.bat"
+if errorlevel 1 goto :failed
+
+if not exist ".env" (
+  echo.
+  echo First run: creating a local .env from .env.example...
+  copy /y ".env.example" ".env" >nul
+  if errorlevel 1 goto :env_failed
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='.env'; $t=Get-Content -Raw -Encoding utf8 $p; $jwt=[Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 })); $fernet=([Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))).Replace('+','-').Replace('/','_'); $t=$t.Replace('JWT_SECRET=change-this-local-development-secret', 'JWT_SECRET='+$jwt).Replace('MODEL_SETTINGS_ENCRYPTION_KEY=replace-with-fernet-key', 'MODEL_SETTINGS_ENCRYPTION_KEY='+$fernet); [System.IO.File]::WriteAllText((Join-Path (Get-Location) $p), $t, (New-Object System.Text.UTF8Encoding($false)))"
+  if errorlevel 1 goto :env_failed
+  echo Local random security values were generated. Add your own AI provider credentials to .env to enable AI features.
+)
+
+echo.
+echo Building and starting EduNova. The first run downloads images, dependencies, and document models...
+docker compose up -d --build
+if errorlevel 1 goto :failed
+
+echo Waiting for the health check...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$deadline=(Get-Date).AddSeconds(90); do { try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8080/health' -TimeoutSec 5; if ($r.StatusCode -eq 200) { exit 0 } } catch {}; Start-Sleep -Seconds 2 } while ((Get-Date) -lt $deadline); exit 1"
+if errorlevel 1 goto :health_failed
+
+start "" "http://127.0.0.1:8080"
+echo.
+echo EduNova is ready at http://127.0.0.1:8080
+echo Run 03_Stop_EduNova.bat to stop the services.
+exit /b 0
+
+:env_failed
+echo.
+echo Could not create or initialize .env. Verify that the folder is writable and try again.
+exit /b 1
+
+:health_failed
+echo.
+echo The health check did not pass within 90 seconds. Run docker compose ps or docker compose logs --tail=100.
+exit /b 1
+
+:failed
+echo.
+echo EduNova could not be started. Review the message above.
+exit /b 1

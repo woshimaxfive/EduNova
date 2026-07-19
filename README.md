@@ -128,6 +128,8 @@ evals/            离线 AI 质量评测
 scripts/          开发、检查与测试脚本
 docker-compose.yml Docker Compose 启动编排
 .env.example      不含真实密钥的配置示例
+VERSION.txt       最终提交源码基线标识
+THIRD_PARTY_NOTICES.md 主要第三方组件与许可证说明
 ```
 
 ## 验证命令

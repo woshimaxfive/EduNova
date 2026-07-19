@@ -699,7 +699,7 @@ function MaterialDetailPanel(props: {
   const quality = material.quality_summary ?? {};
   return (
     <>
-      <div className="library-drawer-tabs" role="tablist" aria-label="资料详情分类">
+      <div className="library-drawer-tabs library-detail-tabs" role="tablist" aria-label="资料详情分类">
         {tabs.map((tab) => <button key={tab.id} role="tab" type="button" aria-selected={props.tab === tab.id} onClick={() => props.onTabChange(tab.id)}>{tab.label}</button>)}
       </div>
       {props.tab === "overview" ? (

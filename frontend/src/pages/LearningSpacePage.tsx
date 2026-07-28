@@ -39,6 +39,7 @@ import { AiJobProgress } from "../components/feedback/AiJobProgress";
 import { ModalFrame } from "../components/primitives/Dialog";
 import { MarkdownMessage } from "../components/feedback/MarkdownMessage";
 import { HomeCourseDrawer } from "../components/home/HomeCourseDrawer";
+import { LearningLoopVerification } from "../components/home/LearningLoopVerification";
 import { TodayLearningInsight } from "../components/home/TodayLearningInsight";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
@@ -921,10 +922,12 @@ export function LearningSpacePage() {
             </section>
           ) : (
             <div className="home-hero-copy">
+              <span className="home-hero-context">{`欢迎回来，${learnerName}`}</span>
               <h1>
-                <span>{`嗨，${learnerName}，`}</span>
-                <span>准备好一起学习了吗？</span>
+                <span>把教材变成课程，</span>
+                <span>让每次学习改变下一步。</span>
               </h1>
+              <p>回答绑定课程证据，练习结果进入掌握度与路径，系统只依据真实状态推荐行动。</p>
             </div>
           )}
 
@@ -987,6 +990,15 @@ export function LearningSpacePage() {
             ) : null}
             <InlineFeedback message={composerFeedback?.message ?? null} tone={composerFeedback?.tone} className="composer-inline-feedback" />
           </section>
+
+          {!hasHomeThread ? (
+            <LearningLoopVerification
+              courseId={hasInsightCourse ? String(insightCourseId) : null}
+              nextAction={nextActionQuery.data?.data}
+              onFocusQuestion={() => homeQuestionInputRef.current?.focus()}
+              onOpenLibrary={openLibrary}
+            />
+          ) : null}
 
           {!hasHomeThread ? (
             <TodayLearningInsight

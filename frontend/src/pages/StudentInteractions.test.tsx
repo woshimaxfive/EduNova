@@ -2335,7 +2335,7 @@ describe("student interaction affordances", () => {
 
     await user.click(within(historyRail).getByRole("button", { name: "新建对话" }));
 
-    expect(screen.getByRole("heading", { name: /准备好一起学习了吗/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /让每次学习改变下一步/ })).toBeInTheDocument();
   });
 
   it("routes non-material next actions out of the library workspace", async () => {

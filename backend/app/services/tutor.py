@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from dataclasses import replace
 import logging
 import re
 from time import perf_counter
 from inspect import signature
-from typing import Any, Iterator, Protocol
+from typing import Any, Iterator
 
 from langchain_core.messages import AIMessage, HumanMessage, trim_messages
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
 
 from backend.app.api.errors import make_trace_id
 from backend.app.agents.runtime import PendingAgentTrace, agent_log_from_pending_trace
@@ -22,14 +19,7 @@ from backend.app.agents.tool_policy import decide_tool_capabilities
 from backend.app.models import (
     AgentRunLog,
     ChatMessage,
-    ChatMessageAttachment,
     ChatSession,
-    Course,
-    CourseEnrollment,
-    AiJob,
-    GeneratedResource,
-    KnowledgePoint,
-    Material,
     User,
 )
 from backend.app.schemas.tutor import (
@@ -37,8 +27,6 @@ from backend.app.schemas.tutor import (
     TutorSessionHistoryItem,
     TutorSessionHistoryPage,
     TutorSessionSummary,
-    TutorResourceJob,
-    TutorGeneratedResource,
     session_detail_to_api,
     session_to_summary,
 )
@@ -47,12 +35,31 @@ from backend.app.services.course_answers import (
     CourseAnswerService,
     CourseAnswerGenerationError,
     HOME_MODEL_NOT_CONFIGURED_MESSAGE,
-    HomeAnswerReview,
 )
 from backend.app.services.content_locale import china_first_content_policy
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.providers.openai_compatible import ModelProviderError
+from backend.app.services.tutor_contracts import (
+    ConversationMemoryProvider,
+    CourseAnswerGenerator,
+    CourseCitationSearcher,
+    EmptyMessageError,
+    GeneratedAnswer,
+    InvalidMaterialContextError,
+    InvalidResourceContextError,
+    InvalidSessionScopeError,
+    MaterialCitationSearcher,
+    NativeWebSearchProvider,
+    ProfileEventRecorder,
+    SemanticDecisionProvider,
+    SessionNotFoundError,
+    TutorSessionRepository,
+    WebSearchProvider,
+)
+from backend.app.services.tutor_repository import (
+    SqlAlchemyTutorSessionRepository as SqlAlchemyTutorSessionRepository,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -91,188 +98,6 @@ CONTEXT_TOTAL_CHAR_LIMIT = 6000
 CONTEXT_SUMMARY_CHAR_LIMIT = 1500
 
 
-class InvalidSessionScopeError(ValueError):
-    pass
-
-
-class SessionNotFoundError(LookupError):
-    pass
-
-
-class EmptyMessageError(ValueError):
-    pass
-
-
-class InvalidMaterialContextError(ValueError):
-    pass
-
-
-class InvalidResourceContextError(ValueError):
-    pass
-
-
-class TutorSessionRepository(Protocol):
-    def list_sessions(self, user_id: int, scope: str, course_id: int | None = None) -> list[ChatSession]:
-        ...
-
-    def get_session_for_user(self, session_id: int, user_id: int) -> ChatSession | None:
-        ...
-
-    def list_home_history(self, user_id: int, page: int, page_size: int, query: str) -> tuple[list[ChatSession], int]:
-        ...
-
-    def find_history_match(self, session_id: int, query: str) -> str | None:
-        ...
-
-    def user_can_access_course(self, user_id: int, course_id: int) -> bool:
-        ...
-
-    def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
-        ...
-
-    def get_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None:
-        ...
-
-    def get_knowledge_point(self, course_id: int, knowledge_point_id: int) -> KnowledgePoint | None:
-        ...
-
-    def find_knowledge_point_for_topic(self, course_id: int, topic: str) -> KnowledgePoint | None:
-        ...
-
-    def list_messages(self, session_id: int) -> list[ChatMessage]:
-        ...
-
-    def get_assistant_message(self, user_id: int, session_id: int, message_id: int) -> ChatMessage | None:
-        ...
-
-    def add_session(self, session: ChatSession) -> None:
-        ...
-
-    def add_message(self, message: ChatMessage) -> None:
-        ...
-
-    def pending_attachments(
-        self, user_id: int, session_id: int, attachment_ids: list[int]
-    ) -> list[ChatMessageAttachment]: ...
-
-    def bind_attachments(self, attachments: list[ChatMessageAttachment], message_id: int) -> None: ...
-
-    def attachment_map(self, message_ids: list[int]) -> dict[int, list[ChatMessageAttachment]]: ...
-
-    def resource_job_map(self, user_id: int, message_ids: list[int]) -> dict[int, list[TutorResourceJob]]: ...
-
-    def register_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None: ...
-
-    def link_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None: ...
-
-    def bound_attachments(
-        self, user_id: int, session_id: int, message_ids: list[int]
-    ) -> list[ChatMessageAttachment]: ...
-
-    def add_agent_log(self, log: AgentRunLog) -> None:
-        ...
-
-    def list_home_materials_for_user(self, user_id: int, material_ids: list[int]) -> list[Material]:
-        ...
-
-    def touch_session(self, session: ChatSession) -> None:
-        ...
-
-    def flush(self) -> None:
-        ...
-
-    def commit(self) -> None:
-        ...
-
-    def rollback(self) -> None:
-        ...
-
-
-class CourseCitationSearcher(Protocol):
-    def search(self, user: User, course_id: int, query: str, top_k: int) -> Any:
-        ...
-
-
-class MaterialCitationSearcher(Protocol):
-    def search(self, user: User, material_ids: list[int], query: str, top_k: int = 5) -> Any:
-        ...
-
-
-class CourseAnswerGenerator(Protocol):
-    def generate_home(
-        self,
-        user: User,
-        question: str,
-        citations: list[dict[str, Any]] | None = None,
-        use_web_search: bool = False,
-        deep_thinking: bool = False,
-        warnings: list[str] | None = None,
-        conversation_context: ConversationContext | None = None,
-        plan_summary: str | None = None,
-        learner_context: dict[str, Any] | None = None,
-    ) -> Any:
-        ...
-
-    def generate(
-        self,
-        user: User,
-        question: str,
-        citations: list[dict[str, Any]],
-        conversation_context: ConversationContext | None = None,
-        learner_context: dict[str, Any] | None = None,
-        reasoning_mode: str = "auto",
-    ) -> Any:
-        ...
-
-    def stream(
-        self,
-        user: User,
-        question: str,
-        citations: list[dict[str, Any]],
-        conversation_context: ConversationContext | None = None,
-        learner_context: dict[str, Any] | None = None,
-        reasoning_mode: str = "auto",
-    ) -> Any:
-        ...
-
-    def stream_home(
-        self,
-        user: User,
-        question: str,
-        citations: list[dict[str, Any]] | None = None,
-        use_web_search: bool = False,
-        deep_thinking: bool = False,
-        warnings: list[str] | None = None,
-        conversation_context: ConversationContext | None = None,
-        plan_summary: str | None = None,
-        learner_context: dict[str, Any] | None = None,
-    ) -> Any:
-        ...
-
-    def plan_home(self, user: User, question: str, citations: list[dict[str, Any]]) -> str:
-        ...
-
-    def review_home(
-        self,
-        user: User,
-        question: str,
-        answer: str,
-        citations: list[dict[str, Any]],
-        warnings: list[str] | None = None,
-    ) -> HomeAnswerReview | None:
-        ...
-
-    def repair_home(
-        self,
-        user: User,
-        question: str,
-        draft: str,
-        citations: list[dict[str, Any]],
-        risk_flags: list[str],
-    ) -> str | None:
-        ...
-
-
 def _supported_context_kwargs(callable_value: Any, learner_context: dict[str, Any] | None) -> dict[str, Any]:
     if not learner_context:
         return {}
@@ -304,346 +129,6 @@ def _supported_course_answer_kwargs(callable_value: Any, state: AgentState) -> d
     except (TypeError, ValueError):
         pass
     return kwargs
-
-
-class ProfileEventRecorder(Protocol):
-    def ingest_course_question_signal(
-        self,
-        *,
-        user: User,
-        session: ChatSession,
-        user_message: ChatMessage,
-        message_text: str,
-        citation_json: list[dict[str, Any]],
-        trace_id: str | None,
-        suggested_updates: dict[str, Any] | None = None,
-        suggested_confidence: dict[str, float] | None = None,
-    ) -> Any:
-        ...
-
-
-class WebSearchProvider(Protocol):
-    def search(self, query: str, max_results: int = 5) -> Any:
-        ...
-
-
-class NativeWebSearchProvider(Protocol):
-    def native_web_search(
-        self,
-        user: User,
-        query: str,
-        *,
-        reasoning_mode: str = "auto",
-        force: bool = False,
-    ) -> Any:
-        ...
-
-
-class SemanticDecisionProvider(Protocol):
-    def decide(self, **kwargs: Any) -> Any:
-        ...
-
-
-class ConversationMemoryProvider(Protocol):
-    def search(self, *, user: User, current_session_id: int, query: str, limit: int = 5) -> list[dict[str, Any]]:
-        ...
-
-    def index_pair(
-        self,
-        *,
-        user: User,
-        session: ChatSession,
-        user_message: ChatMessage,
-        assistant_message: ChatMessage,
-    ) -> bool:
-        ...
-
-
-@dataclass(frozen=True)
-class GeneratedAnswer:
-    content: str
-    trace_id: str | None
-
-
-class SqlAlchemyTutorSessionRepository:
-    def __init__(self, db: Session) -> None:
-        self.db = db
-
-    def list_sessions(self, user_id: int, scope: str, course_id: int | None = None) -> list[ChatSession]:
-        statement = select(ChatSession).where(
-            ChatSession.user_id == user_id,
-            ChatSession.scope == scope,
-            ChatSession.archived_from_home.is_(False),
-        )
-        if course_id is not None:
-            statement = statement.where(ChatSession.course_id == course_id)
-
-        return list(self.db.scalars(statement.order_by(ChatSession.updated_at.desc(), ChatSession.id.desc())))
-
-    def get_session_for_user(self, session_id: int, user_id: int) -> ChatSession | None:
-        return self.db.scalar(
-            select(ChatSession).where(
-                ChatSession.id == session_id,
-                ChatSession.user_id == user_id,
-                ChatSession.archived_from_home.is_(False),
-            )
-        )
-
-    def list_home_history(self, user_id: int, page: int, page_size: int, query: str) -> tuple[list[ChatSession], int]:
-        filters = [
-            ChatSession.user_id == user_id,
-            ChatSession.scope == "home",
-            ChatSession.archived_from_home.is_(False),
-        ]
-        if query:
-            message_match = (
-                select(ChatMessage.id)
-                .where(
-                    ChatMessage.session_id == ChatSession.id,
-                    ChatMessage.content.icontains(query, autoescape=True),
-                )
-                .exists()
-            )
-            filters.append(or_(ChatSession.title.icontains(query, autoescape=True), message_match))
-        total = int(self.db.scalar(select(func.count(ChatSession.id)).where(*filters)) or 0)
-        sessions = list(
-            self.db.scalars(
-                select(ChatSession)
-                .where(*filters)
-                .order_by(ChatSession.updated_at.desc(), ChatSession.id.desc())
-                .offset((page - 1) * page_size)
-                .limit(page_size)
-            )
-        )
-        return sessions, total
-
-    def find_history_match(self, session_id: int, query: str) -> str | None:
-        if not query:
-            return None
-        return self.db.scalar(
-            select(ChatMessage.content)
-            .where(
-                ChatMessage.session_id == session_id,
-                ChatMessage.content.icontains(query, autoescape=True),
-            )
-            .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
-            .limit(1)
-        )
-
-    def user_can_access_course(self, user_id: int, course_id: int) -> bool:
-        owned_course = self.db.scalar(
-            select(Course.id).where(
-                Course.id == course_id,
-                Course.owner_id == user_id,
-            )
-        )
-        if owned_course is not None:
-            return True
-
-        enrollment = self.db.scalar(
-            select(CourseEnrollment.id).where(
-                CourseEnrollment.user_id == user_id,
-                CourseEnrollment.course_id == course_id,
-            )
-        )
-        return enrollment is not None
-
-    def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
-        if not self.user_can_access_course(user_id, course_id):
-            return None
-        return self.db.scalar(select(Course).where(Course.id == course_id))
-
-    def get_resource_for_user(self, user_id: int, resource_id: int) -> GeneratedResource | None:
-        return self.db.scalar(
-            select(GeneratedResource).where(
-                GeneratedResource.id == resource_id,
-                GeneratedResource.user_id == user_id,
-            )
-        )
-
-    def get_knowledge_point(self, course_id: int, knowledge_point_id: int) -> KnowledgePoint | None:
-        return self.db.scalar(
-            select(KnowledgePoint).where(
-                KnowledgePoint.id == knowledge_point_id,
-                KnowledgePoint.course_id == course_id,
-            )
-        )
-
-    def find_knowledge_point_for_topic(self, course_id: int, topic: str) -> KnowledgePoint | None:
-        topic_key = self._topic_key(topic)
-        if not topic_key:
-            return None
-        points = list(
-            self.db.scalars(
-                select(KnowledgePoint)
-                .where(KnowledgePoint.course_id == course_id)
-                .order_by(KnowledgePoint.order_index.asc(), KnowledgePoint.id.asc())
-            )
-        )
-        exact = next((point for point in points if self._topic_key(point.title) == topic_key), None)
-        if exact is not None:
-            return exact
-        candidates = [
-            point
-            for point in points
-            if self._topic_key(point.title)
-            and (
-                self._topic_key(point.title) in topic_key
-                or topic_key in self._topic_key(point.title)
-            )
-        ]
-        return max(candidates, key=lambda point: len(self._topic_key(point.title)), default=None)
-
-    @staticmethod
-    def _topic_key(value: object) -> str:
-        return "".join(character for character in str(value or "").casefold() if character.isalnum())
-
-    def list_messages(self, session_id: int) -> list[ChatMessage]:
-        return list(
-            self.db.scalars(
-                select(ChatMessage)
-                .where(ChatMessage.session_id == session_id)
-                .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
-            )
-        )
-
-    def get_assistant_message(self, user_id: int, session_id: int, message_id: int) -> ChatMessage | None:
-        return self.db.scalar(
-            select(ChatMessage).where(
-                ChatMessage.id == message_id,
-                ChatMessage.session_id == session_id,
-                ChatMessage.user_id == user_id,
-                ChatMessage.role == "assistant",
-            )
-        )
-
-    def add_session(self, session: ChatSession) -> None:
-        self.db.add(session)
-
-    def add_message(self, message: ChatMessage) -> None:
-        self.db.add(message)
-
-    def pending_attachments(
-        self, user_id: int, session_id: int, attachment_ids: list[int]
-    ) -> list[ChatMessageAttachment]:
-        if not attachment_ids:
-            return []
-        return list(
-            self.db.scalars(
-                select(ChatMessageAttachment)
-                .where(
-                    ChatMessageAttachment.id.in_(attachment_ids),
-                    ChatMessageAttachment.user_id == user_id,
-                    ChatMessageAttachment.session_id == session_id,
-                    ChatMessageAttachment.status == "pending",
-                    ChatMessageAttachment.message_id.is_(None),
-                )
-                .order_by(ChatMessageAttachment.id.asc())
-            )
-        )
-
-    def bind_attachments(self, attachments: list[ChatMessageAttachment], message_id: int) -> None:
-        for attachment in attachments:
-            attachment.message_id = message_id
-            attachment.status = "bound"
-            attachment.expires_at = None
-            self.db.add(attachment)
-
-    def attachment_map(self, message_ids: list[int]) -> dict[int, list[ChatMessageAttachment]]:
-        if not message_ids:
-            return {}
-        result: dict[int, list[ChatMessageAttachment]] = {}
-        for attachment in self.db.scalars(
-            select(ChatMessageAttachment)
-            .where(ChatMessageAttachment.message_id.in_(message_ids))
-            .order_by(ChatMessageAttachment.created_at.asc(), ChatMessageAttachment.id.asc())
-        ):
-            if attachment.message_id is not None:
-                result.setdefault(attachment.message_id, []).append(attachment)
-        return result
-
-    def resource_job_map(self, user_id: int, message_ids: list[int]) -> dict[int, list[TutorResourceJob]]:
-        if not message_ids:
-            return {}
-        messages = list(self.db.scalars(select(ChatMessage).where(ChatMessage.id.in_(message_ids), ChatMessage.user_id == user_id)))
-        job_ids = {int(job_id) for message in messages for job_id in (message.resource_job_ids or []) if str(job_id).isdigit()}
-        jobs = {job.id: job for job in self.db.scalars(select(AiJob).where(AiJob.user_id == user_id, AiJob.id.in_(job_ids)))} if job_ids else {}
-        resource_ids = {int(resource_id) for job in jobs.values() for resource_id in (job.result_json or {}).get("resource_ids", []) if str(resource_id).isdigit()}
-        resources = {resource.id: resource for resource in self.db.scalars(select(GeneratedResource).where(GeneratedResource.user_id == user_id, GeneratedResource.id.in_(resource_ids)))} if resource_ids else {}
-        result: dict[int, list[TutorResourceJob]] = {}
-        for message in messages:
-            for job_id in message.resource_job_ids or []:
-                job = jobs.get(int(job_id)) if str(job_id).isdigit() else None
-                if job is None:
-                    continue
-                linked = [
-                    resources[int(item)]
-                    for item in (job.result_json or {}).get("resource_ids", [])
-                    if str(item).isdigit() and int(item) in resources
-                ]
-                result.setdefault(message.id, []).append(TutorResourceJob(job_id=str(job.id), status=job.status, label=job.label, error_message=job.error_message, resources=[TutorGeneratedResource(id=str(item.id), title=item.title, resource_type=item.resource_type, course_id=str(item.course_id) if item.course_id is not None else None) for item in linked]))
-        return result
-
-    def register_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None:
-        self.link_resource_job(user_id, session_id, message_id, job_id)
-        self.db.commit()
-
-    def link_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None:
-        message = self.db.scalar(select(ChatMessage).where(ChatMessage.id == message_id, ChatMessage.session_id == session_id, ChatMessage.user_id == user_id, ChatMessage.role == "assistant").with_for_update())
-        if message is None:
-            raise SessionNotFoundError("回答不存在或无权访问。")
-        message.resource_job_ids = list(dict.fromkeys([*(message.resource_job_ids or []), job_id]))
-        self.db.add(message)
-
-    def bound_attachments(
-        self, user_id: int, session_id: int, message_ids: list[int]
-    ) -> list[ChatMessageAttachment]:
-        if not message_ids:
-            return []
-        return list(
-            self.db.scalars(
-                select(ChatMessageAttachment)
-                .where(
-                    ChatMessageAttachment.user_id == user_id,
-                    ChatMessageAttachment.session_id == session_id,
-                    ChatMessageAttachment.message_id.in_(message_ids),
-                    ChatMessageAttachment.status == "bound",
-                )
-                .order_by(ChatMessageAttachment.created_at.desc(), ChatMessageAttachment.id.desc())
-                .limit(3)
-            )
-        )
-
-    def add_agent_log(self, log: AgentRunLog) -> None:
-        self.db.add(log)
-
-    def list_home_materials_for_user(self, user_id: int, material_ids: list[int]) -> list[Material]:
-        if not material_ids:
-            return []
-        unique_ids = list(dict.fromkeys(material_ids))[:10]
-        return list(
-            self.db.scalars(
-                select(Material).where(
-                    Material.user_id == user_id,
-                    Material.id.in_(unique_ids),
-                    Material.parse_status == "completed",
-                    Material.ingestion_status == "confirmed",
-                )
-            )
-        )
-
-    def touch_session(self, session: ChatSession) -> None:
-        session.updated_at = datetime.now(UTC)
-        self.db.add(session)
-
-    def flush(self) -> None:
-        self.db.flush()
-
-    def commit(self) -> None:
-        self.db.commit()
-
-    def rollback(self) -> None:
-        self.db.rollback()
 
 
 class TutorSessionService:

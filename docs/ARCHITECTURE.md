@@ -268,7 +268,9 @@ backend/app/
 | `backend/app/models` | 用户、课程、资料、知识点、知识切片核心模型，以及画像、路径、资源、Agent 轨迹、练习、报告、对话和模型设置基础模型 |
 | `backend/app/data/builtin_courses/data_structures/` | 8 个理论章节、伪代码、16 个实验和公开书目组成的静态内置课程包 |
 | `backend/app/services/course_seed.py` | 为用户确定性安装课程内部来源，并按内部 slug 幂等替换旧内置课 |
-| `backend/app/services/tutor.py` | 主页/课程会话 API 边界和依赖装配；`HomeTutorGraphRunner` 接管主页上下文、路由、资料检索、联网、规划、回答、Review/Repair 和持久化，`CourseTutorGraphRunner` 接管严格课程 RAG 问答 |
+| `backend/app/services/tutor_contracts.py` | Tutor 异常、仓储/Provider 依赖协议和内部回答结果合同 |
+| `backend/app/services/tutor_repository.py` | Tutor 会话、消息、附件与回答资源任务的 SQLAlchemy 持久化实现 |
+| `backend/app/services/tutor.py` | 主页/课程会话业务服务；`HomeTutorGraphRunner` 接管主页上下文、路由、资料检索、联网、规划、回答、Review/Repair 和持久化，`CourseTutorGraphRunner` 接管严格课程 RAG 问答；为兼容既有 API 装配继续导出 Tutor 异常和 SQLAlchemy 仓储 |
 | `backend/app/services/model_settings.py` | 模型设置服务，负责个人回答模型、服务器回答/生成/向量/重排序/视觉兜底、凭证加密与连接测试 |
 | `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计 |
 | `backend/app/services/embeddings.py` | Embedding 服务，负责讯飞原生与 OpenAI-compatible 动态维度调用、配置指纹和切片向量写入；无配置时只返回关键词 fallback |

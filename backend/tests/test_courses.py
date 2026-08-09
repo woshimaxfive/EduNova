@@ -1290,7 +1290,7 @@ def test_mastery_map_uses_practice_answers_to_mark_weak_and_mastered_points() ->
 
 def test_mastery_map_uses_latest_attempt_instead_of_lifetime_average() -> None:
     completed = make_weakness_item(55, 1, 101, knowledge_point_id=401, status="completed")
-    completed.next_review_at = datetime(2026, 7, 20, 8, 0, tzinfo=UTC)
+    completed.next_review_at = datetime.max.replace(tzinfo=UTC)
     repo = FakeCourseRepository(
         courses=[make_course()],
         knowledge_points=[KnowledgePoint(id=401, course_id=101, title="启发式搜索", summary="摘要", chapter="第一章", order_index=0)],

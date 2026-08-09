@@ -273,7 +273,16 @@ backend/app/
 | `backend/app/services/tutor_runtime.py` | Home/Course Tutor 共用的步骤定义、上下文预算、降级文案和 Provider 兼容参数 |
 | `backend/app/services/tutor_home_graph.py` | `HomeTutorGraphRunner`，接管主页上下文、路由、资料检索、联网、规划、回答、Review/Repair 和持久化 |
 | `backend/app/services/tutor_course_graph.py` | `CourseTutorGraphRunner`，接管课程画像、路由、严格 RAG、外部补充、回答、Review 和下一行动 |
-| `backend/app/services/tutor.py` | 主页/课程会话业务服务和安全持久化辅助；为兼容既有 API 与测试导入，继续导出 Tutor 异常、SQLAlchemy 仓储和两个 Graph runner |
+| `backend/app/services/tutor_resource_flow.py` | Tutor 语义决策、资源请求确认、资源任务准备与关联 |
+| `backend/app/services/tutor_response_flow.py` | Tutor 消息追加、流式响应、视觉/资料上下文准备与消息对持久化 |
+| `backend/app/services/tutor_context.py` | 课程、资料、网页引用收集与受预算约束的会话上下文构造 |
+| `backend/app/services/tutor_trace.py` | Home/Course Tutor Graph 和兼容链路的安全 trace 持久化 |
+| `backend/app/services/tutor.py` | 主页/课程会话门面、依赖装配、会话 CRUD 和公共校验；继续导出 Tutor 异常、SQLAlchemy 仓储和两个 Graph runner |
+| `backend/app/agents/assessment_contracts.py` | 练习评估 State、Prompt 版本和生成超时合同 |
+| `backend/app/agents/assessment_generation.py` | 练习出题、模型审核/修订和确定性题目风险门禁 |
+| `backend/app/agents/assessment_evaluation.py` | 客观/语义评分、错因诊断、弱点同步和练习后路径闭环 |
+| `backend/app/agents/assessment_runtime.py` | Assessment Graph 节点执行、任务进度和安全 trace 记录 |
+| `backend/app/agents/assessment.py` | Assessment Graph 门面、创建/提交/重评入口及旧 State 导入兼容 |
 | `backend/app/services/resource_contracts.py` | 资源异常、生成 State、仓储/模型依赖协议、安全引用、生成上下文和共享资源约束 |
 | `backend/app/services/resource_repository.py` | 资源、质量评分、学习任务和课程资料查询的 SQLAlchemy 持久化实现 |
 | `backend/app/services/resource_content.py` | 课程证据筛选、画像安全摘要、上下文关键词与六类结构化资源的确定性 artifact 底稿 |
@@ -297,10 +306,21 @@ backend/app/
 | `backend/app/services/semantic_decision.py` | 使用当前用户有效回答模型输出独立问题、历史引用、结构化意图、联网查询、推理模式和可选课程画像信号；检索后继续判断课程相关性与证据充分性 |
 | `backend/app/services/conversation_memory.py` | 当前用户隔离的跨会话派生记忆、隐私设置、向量检索和 RQ 索引调度；不复制原始聊天 |
 | `backend/app/agents/tool_policy.py` | 只保留旧 true 字段、明确联网命令和模型不可用时的保守降级，不再用关键词枚举推断资源、时效或复杂度 |
-| `backend/app/services/courses.py` | 课程 API 边界和依赖装配；`CourseBuilderGraphRunner` 接管来源大纲、课程结构、知识点、切片、embedding、审核/修订与事务持久化 |
+| `backend/app/services/course_contracts.py` | 课程异常、课程仓储/Embedding 依赖协议和内部内容/弱点候选合同 |
+| `backend/app/services/course_repository.py` | 课程、enrollment、知识点、学习状态与证据查询的 SQLAlchemy 持久化实现 |
+| `backend/app/services/course_content.py` | 用户资料校验、章节解析、课程切片构造和 best-effort embedding |
+| `backend/app/services/course_learning_state.py` | 课程画像、弱点队列、掌握度、路径摘要、阶段完成和 API 投影构造 |
+| `backend/app/services/courses.py` | 课程 API 门面、依赖装配、课程生命周期和知识点读取；`CourseBuilderGraphRunner` 继续接管建课 Graph |
 | `backend/app/services/exports.py` | 学习档案导出服务，负责旧同步 Markdown 兼容接口和 Markdown/PDF/DOCX 异步 job 渲染 |
 | `backend/app/workers/export_jobs.py` | Redis/RQ 导出 worker 入口 |
-| `backend/app/services/ai_jobs.py` | `AIJobRuntime` 服务，负责任务创建、幂等、活动上限、状态/心跳、取消、重试、失败/取消任务删除、失联检测和 Graph 依赖装配 |
+| `backend/app/services/ai_job_contracts.py` | AI 任务异常、状态集合和队列依赖协议 |
+| `backend/app/services/ai_job_queue.py` | RQ 队列入队、取消和活动状态查询适配器 |
+| `backend/app/services/ai_job_repository.py` | AI 任务、关联课程/资料/路径/练习的 SQLAlchemy 持久化实现 |
+| `backend/app/services/ai_job_runtime.py` | Worker 节点取消检查、心跳、进度和聚合模型指标上下文 |
+| `backend/app/services/ai_job_requests.py` | 七类 AI 任务的请求校验、幂等键和任务参数构造 |
+| `backend/app/services/ai_job_lifecycle.py` | AI 任务创建、列表、取消、重试、删除与活动上限控制 |
+| `backend/app/services/ai_job_execution.py` | Worker 工作流分派、Graph/Service 依赖装配和结果持久化 |
+| `backend/app/services/ai_jobs.py` | AI 任务 API/Worker 门面、依赖装配、失联检测与旧导入兼容 |
 | `backend/app/workers/ai_jobs.py` | 独立 `edunova_ai` Redis/RQ worker 入口 |
 | `backend/app/api/v1/ai_jobs.py` | AI 任务列表、详情、SSE、取消、重试和终态失败任务删除接口 |
 | `backend/app/api/v1/tutor.py` | `/api/v1/tutor/sessions` 受保护会话接口 |

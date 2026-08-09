@@ -16,6 +16,14 @@
 
 同日完成模型设置模块第三批运行时构造边界收口：用户与系统的回答、生成、向量、重排序和图片理解配置映射移入 `model_runtime_config.py`；构造器复用现有 Settings 引用、解密回调和三类可用性判断，不接收 Fernet 或加密 key 参数。主服务继续决定个人配置与服务器配置的优先级，并通过九个兼容入口转发到构造器。迁移的九个方法已完成 AST 一致性核对；模型设置定向 45 项、后端全量 524 项、后端 Ruff、OpenAPI 漂移、Alembic head、Compose 配置和 UTF-8 编码检查均通过。密文格式、解密失败语义、讯飞凭证边界、本地空 Key 规则、Provider 能力判断、API 和用户可见行为保持不变，因此不重复前端和浏览器验收。
 
+同日完成练习评估边界收口：`assessment_contracts.py` 保存评估 State 与 Prompt/超时合同，`assessment_generation.py` 负责出题、审核修订和题目风险门禁，`assessment_evaluation.py` 负责评分、诊断、弱点同步与练习后闭环，`assessment_runtime.py` 负责节点执行和安全 trace；`assessment.py` 只保留 Graph 门面、公开入口和旧 `AssessmentState` 导入兼容。练习评估与学习上下文定向 24 项通过。
+
+同日完成 AI 任务边界收口：异常与状态集合、RQ 队列、SQLAlchemy 仓储、节点心跳上下文、七类任务请求构造、任务生命周期和具体工作流执行分别移入 `ai_job_contracts.py`、`ai_job_queue.py`、`ai_job_repository.py`、`ai_job_runtime.py`、`ai_job_requests.py`、`ai_job_lifecycle.py` 和 `ai_job_execution.py`；`ai_jobs.py` 继续作为 API/Worker 兼容门面。AI 任务定向 19 项及资源、解析、练习、路径和模型设置相关回归 124 项通过。
+
+同日完成 Tutor 会话服务剩余职责收口：资源动作、消息响应、证据上下文和安全 trace 分别移入 `tutor_resource_flow.py`、`tutor_response_flow.py`、`tutor_context.py` 和 `tutor_trace.py`；`tutor.py` 保留依赖装配、会话 CRUD、公共校验和旧异常/仓储/Graph 导入兼容。Tutor、视觉与多模态定向 84 项通过。
+
+同日完成课程服务边界收口：课程异常与依赖协议、SQLAlchemy 仓储、资料转课程内容构造、学习状态/掌握度/阶段完成投影分别移入 `course_contracts.py`、`course_repository.py`、`course_content.py` 和 `course_learning_state.py`；`courses.py` 作为课程 API 门面保留课程生命周期、画像入口、知识点读取和旧导入兼容。课程定向 33 项及下一行动、内置课程和课程回答相关回归 43 项通过。四个热点收口后的最终门禁为后端全量 524 项、全量 Ruff、OpenAPI 漂移、Alembic `20260718_0032 (head)`、Compose 配置和 UTF-8 编码检查全部通过。该轮未修改 API、数据库、事件协议、模型调用、依赖或用户可见行为，因此未重复前端构建和浏览器验收。
+
 当前已完成 **Phase 53 多课程学习编排、画像引导与课程完成闭环**。用户注册后仍进入主页；基础画像不足时持续显示非阻塞引导，有课程但课程目标或基础不足时引导补充该课程画像。当前课程以用户最近主动进入的未归档课程为准，API 轮询、AIJob、报告生成和后台路径重排不会自动切换。首页突出当前课程主行动，其余课程显示各自进度与“当前学习/其他课程/已完成”状态。
 
 全局画像仅向下游提供可跨课程复用的专业背景、学习偏好、理解习惯、节奏和动力；课程目标、基础与明确困难保存到对应 `course_enrollments`，历史全局字段只作为待确认建议。旧独立路径、练习与报告地址会规范化到课程内路由；路径任务优先进入学习包中第一个未完成资源，无资源时回到课程路径而不是空知识点页面。由统一行动进入知识点时展示“阅读课程或资源 → 可请课程助教换例子 → 完成 3 题检查”的真实完成标准。

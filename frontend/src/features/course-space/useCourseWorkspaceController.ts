@@ -1,10 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { PATHS } from "../../app/routePaths";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../../api/agents";
-import { createIdempotencyKey, createResourceGenerationJob, getAiJob } from "../../api/aiJobs";
+import { getAiJob } from "../../api/aiJobs";
 import { type LearningNextAction } from "../../api/learning";
 import { uploadMaterial } from "../../api/materials";
 import {
@@ -15,7 +15,6 @@ import {
   type CourseWeaknessReviewItem
 } from "../../api/courses";
 import { type RagSearchResultItem } from "../../api/rag";
-import { type GeneratedResource, type ResourceType } from "../../api/resources";
 import {
   createTutorSession,
   deleteTutorSession,
@@ -33,6 +32,7 @@ import { useResponsiveSidebarState } from "../../components/layout/useResponsive
 import { buildCourseLoopSummary, buildStudySteps, calculateMasteryPercent } from "./a3Loop";
 import { invalidateCourseLearningLoop } from "./courseLoopQueries";
 import { useCourseWorkspaceData } from "./useCourseWorkspaceData";
+import { useCourseResourceGeneration } from "./useCourseResourceGeneration";
 import {
   normalizeCourseWorkspaceParams,
   parseCourseWorkspaceUrl,
@@ -41,8 +41,7 @@ import {
   type GraphScope
 } from "./courseWorkspaceState";
 import {
-  findBestCitationKnowledgePoint,
-  resourceDifficultyForPoint
+  findBestCitationKnowledgePoint
 } from "./courseRecommendation";
 import {
   buildCourseClosureHref,
@@ -134,38 +133,15 @@ export function useCourseWorkspaceController() {
   const [courseFeedback, setCourseFeedback] = useState<string | null>(null);
   const imageDraft = useTutorImageDraft(ensureCourseImageSession, setCourseFeedback, handleCourseDocumentFiles);
   const [weaknessFeedback, setWeaknessFeedback] = useState<string | null>(null);
-  const [courseResourceFeedback, setCourseResourceFeedback] = useState<string | null>(null);
-  const [latestGeneratedResources, setLatestGeneratedResources] = useState<GeneratedResource[]>([]);
-  const [resourceContext, setResourceContext] = useState<{ question: string | null; knowledgePointId: string | null }>({
-    question: null,
-    knowledgePointId: null
-  });
-  const [resourceJobId, setResourceJobId] = useState<string | null>(null);
-  const [selectedCourseResourceTypes, setSelectedCourseResourceTypes] = useState<ResourceType[]>(["doc", "mindmap", "quiz"]);
   const [updatingWeaknessItemId, setUpdatingWeaknessItemId] = useState<string | null>(null);
   const speech = useBrowserSpeech({
     onTranscript: (transcript) => setCoursePrompt((current) => current.trim() ? `${current.trim()} ${transcript}` : transcript),
     onNotice: (message) => setCourseFeedback(message)
   });
   const optimisticMessageSequence = useRef(0);
-  const handledResourceJobId = useRef<string | null>(null);
   const courseQuestionInputRef = useRef<HTMLTextAreaElement>(null);
   const courseChatEndRef = useRef<HTMLDivElement>(null);
-  const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
-  const resourceJob = getJob(resourceJobId);
-  const isGeneratingCourseResources = Boolean(resourceJob && ["queued", "running", "cancelling"].includes(resourceJob.status));
-
-  useEffect(() => {
-    if (resourceJobId || !hasRealCourseId) return;
-    const restored = jobs.find((job) => job.workflow === "resource_generation"
-      && Number(job.request.course_id) === numericCourseId
-      && ["queued", "running", "cancelling", "failed"].includes(job.status));
-    if (!restored) return;
-    // Restore durable server state after navigation or refresh.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (Array.isArray(restored.request.resource_types)) setSelectedCourseResourceTypes(restored.request.resource_types as ResourceType[]);
-    setResourceJobId(restored.job_id);
-  }, [hasRealCourseId, jobs, numericCourseId, resourceJobId]);
+  const { trackJob } = useAiJobs();
 
   useEffect(() => {
     const input = courseQuestionInputRef.current;
@@ -361,6 +337,26 @@ export function useCourseWorkspaceController() {
   };
   const courseLoopSummary = buildCourseLoopSummary(courseLoopInput);
   const courseStudySteps = buildStudySteps(courseLoopInput);
+  const {
+    cancelResourceJob,
+    feedback: courseResourceFeedback,
+    isGenerating: isGeneratingCourseResources,
+    latestGeneratedResources,
+    mutation: courseResourceMutation,
+    resourceJob,
+    retryResourceJob,
+    selectedResourceTypes: selectedCourseResourceTypes,
+    setResourceContext,
+    submitGeneration: submitCourseResourceGeneration,
+    toggleResourceType: toggleCourseResourceType
+  } = useCourseResourceGeneration({
+    courseId: numericCourseId,
+    enabled: hasRealCourseId,
+    courseResourcesQuery,
+    masteryPoints,
+    latestUserQuestion,
+    currentGoal: courseLoopSummary.currentGoal
+  });
 
   useEffect(() => {
     if (courseMode !== "chat" || !hasDisplayedCourseMessages) return;
@@ -375,56 +371,6 @@ export function useCourseWorkspaceController() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [courseMode, hasDisplayedCourseMessages, latestMessageSignature, requestedCourseMessageId, selectedCourseSessionId]);
-
-  useEffect(() => {
-    if (!resourceJob) return;
-    if (resourceJob.status === "failed") {
-      // Surface the terminal state delivered by the external job runtime.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCourseResourceFeedback(resourceJob.error_message ?? "课程资源生成失败，请稍后重试。");
-      return;
-    }
-    if (resourceJob.status !== "completed" || handledResourceJobId.current === resourceJob.job_id) return;
-    handledResourceJobId.current = resourceJob.job_id;
-    const resourceIds = Array.isArray(resourceJob.result.resource_ids)
-      ? resourceJob.result.resource_ids.map(String)
-      : [];
-    setCourseResourceFeedback(resourceJob.warnings.length > 0 ? resourceJob.warnings.join(" ") : null);
-    void (async () => {
-      await invalidateCourseLearningLoop(queryClient, numericCourseId);
-      const refreshed = await courseResourcesQuery.refetch();
-      const resources = refreshed.data?.data ?? [];
-      setLatestGeneratedResources(resourceIds.length > 0 ? resources.filter((item) => resourceIds.includes(item.id)) : resources.slice(0, 6));
-    })();
-  }, [courseResourcesQuery, numericCourseId, queryClient, resourceJob]);
-
-  const courseResourceMutation = useMutation({
-    mutationFn: () => {
-      const parsedKnowledgePointId = resourceContext.knowledgePointId
-        ? Number.parseInt(resourceContext.knowledgePointId, 10)
-        : Number.NaN;
-      const masteryPoint = masteryPoints.find((point) => point.id === resourceContext.knowledgePointId);
-
-      return createResourceGenerationJob(
-        {
-          course_id: numericCourseId,
-          knowledge_point_id: Number.isFinite(parsedKnowledgePointId) ? parsedKnowledgePointId : undefined,
-          resource_types: selectedCourseResourceTypes,
-          learning_goal: resourceContext.question ?? latestUserQuestion ?? courseLoopSummary.currentGoal,
-          difficulty: resourceDifficultyForPoint(masteryPoint)
-        },
-        createIdempotencyKey("course-resource")
-      );
-    },
-    onSuccess: (job) => {
-      handledResourceJobId.current = null;
-      setResourceJobId(job.job_id);
-      trackJob(job);
-    },
-    onError: () => {
-      setCourseResourceFeedback("课程资源生成失败，请稍后重试。");
-    }
-  });
 
   function selectCourseConversation(sessionId: string) {
     if (!hasRealCourseId) {
@@ -726,21 +672,6 @@ export function useCourseWorkspaceController() {
     speech.speak(sanitizeCourseAnswerContent(message.content), message.id);
   }
 
-  function toggleCourseResourceType(resourceType: ResourceType) {
-    setSelectedCourseResourceTypes((current) =>
-      current.includes(resourceType) ? current.filter((item) => item !== resourceType) : [...current, resourceType]
-    );
-  }
-
-  function submitCourseResourceGeneration() {
-    if (!hasRealCourseId || courseResourceMutation.isPending || isGeneratingCourseResources || selectedCourseResourceTypes.length === 0) {
-      return;
-    }
-
-    setCourseResourceFeedback(null);
-    courseResourceMutation.mutate();
-  }
-
   async function updateWeaknessReviewItem(item: CourseWeaknessReviewItem, action: CourseWeaknessReviewAction) {
     if (!hasRealCourseId || updatingWeaknessItemId !== null) {
       return;
@@ -926,7 +857,7 @@ export function useCourseWorkspaceController() {
     agentTraceQuery,
     apiCourse,
     apiKnowledgePoints,
-    cancelJob,
+    cancelResourceJob,
     changeCourseContentView,
     changeCourseMode,
     changeGraphChapter,
@@ -957,7 +888,6 @@ export function useCourseWorkspaceController() {
     graphChapter,
     graphScope,
     handleCourseComposerKeyDown,
-    handledResourceJobId,
     hasDisplayedCourseMessages,
     hasRealCourseId,
     imageDraft,
@@ -987,7 +917,7 @@ export function useCourseWorkspaceController() {
     recommendation,
     renameCourseConversation,
     resourceJob,
-    retryJob,
+    retryResourceJob,
     runRecommendedAction,
     searchParams,
     selectCourseConversation,
@@ -999,7 +929,6 @@ export function useCourseWorkspaceController() {
     setCoursePrompt,
     setIsHistoryCollapsed,
     setIsProgressDrawerOpen,
-    setResourceJobId,
     sidebarConversations,
     speech,
     submitCourseResourceGeneration,

@@ -39,7 +39,7 @@ export function CourseWorkspace() {
     agentTraceQuery,
     apiCourse,
     apiKnowledgePoints,
-    cancelJob,
+    cancelResourceJob,
     changeCourseContentView,
     changeCourseMode,
     changeGraphChapter,
@@ -70,7 +70,6 @@ export function CourseWorkspace() {
     graphChapter,
     graphScope,
     handleCourseComposerKeyDown,
-    handledResourceJobId,
     hasDisplayedCourseMessages,
     hasRealCourseId,
     imageDraft,
@@ -100,7 +99,7 @@ export function CourseWorkspace() {
     recommendation,
     renameCourseConversation,
     resourceJob,
-    retryJob,
+    retryResourceJob,
     runRecommendedAction,
     searchParams,
     selectCourseConversation,
@@ -112,7 +111,6 @@ export function CourseWorkspace() {
     setCoursePrompt,
     setIsHistoryCollapsed,
     setIsProgressDrawerOpen,
-    setResourceJobId,
     sidebarConversations,
     speech,
     submitCourseResourceGeneration,
@@ -209,11 +207,8 @@ export function CourseWorkspace() {
                                 generatedCount={generatedResources.length}
                                 generatedResources={latestGeneratedResources}
                                 job={resourceJob}
-                                onCancelJob={() => resourceJob && void cancelJob(resourceJob.job_id)}
-                                onRetryJob={() => resourceJob && void retryJob(resourceJob.job_id).then((job) => {
-                                  handledResourceJobId.current = null;
-                                  setResourceJobId(job.job_id);
-                                })}
+                                onCancelJob={() => void cancelResourceJob()}
+                                onRetryJob={() => void retryResourceJob()}
                                 onToggleType={toggleCourseResourceType}
                                 onGenerate={submitCourseResourceGeneration}
                               />

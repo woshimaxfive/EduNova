@@ -113,7 +113,7 @@ describe("EduNova routes", () => {
 
     renderRoutes(["/login"]);
 
-    expect(await screen.findByRole("heading", { name: "把教材变成课程，让每次学习改变下一步。" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
   });
 
   it("renders the protected course shell without demo fallback for an invalid course id", async () => {
@@ -196,6 +196,6 @@ describe("EduNova routes", () => {
 
     renderRoutes(["/app/tutor"]);
 
-    expect(await screen.findByRole("heading", { name: "把教材变成课程，让每次学习改变下一步。" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "嗨，同学，准备好一起学习了吗？" })).toBeInTheDocument();
   });
 });

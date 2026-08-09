@@ -742,31 +742,22 @@ describe("LearningSpacePage", () => {
     expect(calls.map((call) => call.url)).toContain(DASHBOARD_ENDPOINTS.summary);
   });
 
-  it("renders an evidence-first learning home with a quick verification path", async () => {
-    const user = userEvent.setup();
-
+  it("renders a calm ChatGPT-style learning home without dashboard rails", async () => {
     renderWithDashboardSummary();
 
     expect(document.querySelector(".home-learning-surface")).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "把教材变成课程，让每次学习改变下一步。" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "嗨，示例学生，准备好一起学习了吗？" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "历史对话" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "AI 学习入口" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "最近学习" })).toBeInTheDocument();
-    const questionInput = screen.getByRole("textbox", { name: "学习问题输入" });
-    expect(questionInput).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "学习问题输入" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开资料库" })).toBeInTheDocument();
-    const verificationPath = screen.getByRole("region", { name: "快速验证学习闭环" });
-    expect(within(verificationPath).getAllByRole("listitem")).toHaveLength(4);
-    expect(await within(verificationPath).findByRole("link", { name: "查看课程" })).toHaveAttribute("href", "/app/courses/101");
-    expect(await within(verificationPath).findByRole("link", { name: "进入练习" })).toHaveAttribute("href", "/app/courses/101/practice");
-    await user.click(within(verificationPath).getByRole("button", { name: "定位提问入口" }));
-    expect(questionInput).toHaveFocus();
     expect(await screen.findByRole("link", { name: /真实机器学习课/ })).toHaveAttribute("href", "/app/courses/101");
     expect((await screen.findAllByText("学习知识点：监督学习")).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByRole("link", { name: "下一步：学习知识点：监督学习" })).toHaveAttribute("href", "/app/courses/101?mode=study&view=overview&knowledge_point_id=88&guided=1");
     expect(screen.getByText("0 / 8")).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "最近学习列表" })).toBeInTheDocument();
-    expect(within(screen.getByRole("list", { name: "最近学习列表" })).getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.queryByRole("region", { name: "资料库轻入口" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "知识学习画布" })).not.toBeInTheDocument();
   });
@@ -992,7 +983,7 @@ describe("LearningSpacePage", () => {
     expect(screen.getByRole("region", { name: "底部学习输入" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /期末复习怎么安排/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("已生成回答。")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /让每次学习改变下一步/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /准备好一起学习了吗/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "下一步学习" })).not.toBeInTheDocument();
   });
 
@@ -1306,7 +1297,7 @@ describe("LearningSpacePage", () => {
     await user.click(screen.getByRole("menuitem", { name: "删除" }));
     await user.click(screen.getByRole("menuitem", { name: "确认删除" }));
 
-    expect(await screen.findByRole("heading", { name: "把教材变成课程，让每次学习改变下一步。" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "嗨，示例学生，准备好一起学习了吗？" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "主页对话" })).not.toBeInTheDocument();
     expect(within(historyRail).queryByRole("button", { name: /接口里的主页历史/ })).not.toBeInTheDocument();
     await waitFor(() => {
@@ -1330,7 +1321,7 @@ describe("LearningSpacePage", () => {
 
     await user.click(screen.getByRole("link", { name: "EduNova 首页" }));
 
-    expect(screen.getByRole("heading", { name: "把教材变成课程，让每次学习改变下一步。" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "嗨，示例学生，准备好一起学习了吗？" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "主页对话" })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("");
     expect(screen.getByRole("region", { name: "历史对话" })).toHaveAttribute("data-collapsed", "false");

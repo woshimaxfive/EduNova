@@ -1,17 +1,16 @@
 EduNova Final Submission
 
-Release version: V1.1 Challenge Edition
-Submission packaging baseline: 2026-07-28
+Release version: V1.0
+Submission packaging baseline: 2026-07-20
 
 Submission package source baseline:
-add6978af61c7a1809bae0cde472299a9643d524
+211527968e2b2dd1c4ded1e353449ef332ce786f
 
 Runtime launcher baseline:
 beb81e8c037060f2cad288722a393ca357ec11c4
 
 Product feature freeze: 2026-07-19
-Challenge judge experience freeze: 2026-07-28
-The challenge edition adds a judge-facing learning-loop entry without changing APIs, data models, model calls, or dependencies.
+Changes after the feature freeze only clarify submission packaging, license notices, and judge-friendly launch information.
 
 This file identifies the exact source baseline for the Software Cup submission.
 No API keys, user data, database data, uploaded materials, or model credentials are included.

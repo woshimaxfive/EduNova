@@ -279,7 +279,9 @@ backend/app/
 | `backend/app/services/resource_content.py` | 课程证据筛选、画像安全摘要、上下文关键词与六类结构化资源的确定性 artifact 底稿 |
 | `backend/app/services/resource_graph.py` | `ResourceGenerationGraphRunner`，接管资源画像、检索、诊断、规划、并行生成、聚合、审核/修复和持久化 |
 | `backend/app/services/resources.py` | 六类资源和教学视频的生成服务、模型增强、质量门禁及旧内部入口兼容 |
-| `backend/app/services/model_settings.py` | 模型设置服务，负责个人回答模型、服务器回答/生成/向量/重排序/视觉兜底、凭证加密与连接测试 |
+| `backend/app/services/model_settings_contracts.py` | 模型设置异常、请求/响应 Schema、运行时配置及仓储/Provider 依赖协议 |
+| `backend/app/services/model_settings_repository.py` | 用户模型配置和五类默认配置选择的 SQLAlchemy 持久化实现 |
+| `backend/app/services/model_settings.py` | 模型设置服务，负责个人/服务器运行时解析、回答/生成/向量/重排序/视觉调用、凭证加密与连接测试，并兼容既有导入路径 |
 | `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计 |
 | `backend/app/services/embeddings.py` | Embedding 服务，负责讯飞原生与 OpenAI-compatible 动态维度调用、配置指纹和切片向量写入；无配置时只返回关键词 fallback |
 | `backend/app/providers/retrieval.py` | 讯飞签名 Embedding、UTF-8 2KB 分片池化、硅基/百炼 Rerank Provider |

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import math
-import re
 from decimal import Decimal
 from typing import Any
 
@@ -10,10 +9,8 @@ from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.models import (
     Course,
     GeneratedResource,
-    KnowledgeChunk,
     KnowledgePoint,
     ResourceQualityScore,
-    StudentProfile,
     User,
 )
 from backend.app.providers.model_tasks import ModelTaskProfile
@@ -32,10 +29,17 @@ from backend.app.services.model_settings import ModelNotConfiguredError
 from backend.app.services.code_verifier import CodeVerifier
 from backend.app.services.embeddings import EmbeddingService
 from backend.app.services.resource_artifacts import (
-    ArtifactBuildInput,
     artifact_to_markdown,
-    build_resource_content,
     validate_resource_content,
+)
+from backend.app.services.resource_content import (
+    build_resource_contexts,
+    build_resource_draft,
+    resource_context_keywords,
+    resource_context_label_key,
+    safe_resource_excerpt,
+    safe_resource_title,
+    summarize_resource_profile,
 )
 from backend.app.services.resource_quality import (
     RESOURCE_PROMPT_VERSION,
@@ -52,7 +56,6 @@ from backend.app.services.resource_intent import (
 )
 from backend.app.services.resource_contracts import (
     QUALITY_SCORE_NAMES,
-    RESOURCE_EXCERPT_LIMIT,
     RESOURCE_MODEL_TIMEOUT_SECONDS,
     RESOURCE_TYPES,
     SENSITIVE_MARKERS,
@@ -65,7 +68,6 @@ from backend.app.services.resource_contracts import (
     ResourceNotFoundError,
     ResourceRepository,
     ResourceValidationError,
-    SafeCitation,
     resource_failure_message as resource_failure_message,
     resource_review_failure_message as resource_review_failure_message,
 )
@@ -273,387 +275,11 @@ class ResourceGenerationService:
             raise ResourceValidationError("一次最多生成 7 类资源。")
         return unique_types
 
-    @staticmethod
-    def _safe_resource_contexts(
-        chunks: list[KnowledgeChunk],
-        knowledge_point: KnowledgePoint | None,
-        context_points: list[KnowledgePoint],
-    ) -> list[ResourceContext]:
-        point_by_id = {point.id: point for point in context_points}
-        if knowledge_point is not None:
-            point_by_id[knowledge_point.id] = knowledge_point
-        selected_chunks = list(chunks)
-        if knowledge_point is not None:
-            point_key = ResourceGenerationService._context_label_key(knowledge_point.title)
-            direct_matches = [
-                chunk
-                for chunk in selected_chunks
-                if point_key
-                and (
-                    point_key in ResourceGenerationService._context_label_key(chunk.section_title)
-                    or ResourceGenerationService._context_label_key(chunk.section_title) in point_key
-                )
-            ]
-            # Course construction may retain broad chapter coverage on a nearby
-            # point.  When exact section evidence exists, do not let those
-            # coverage-only chunks dilute a resource for the current concept.
-            if direct_matches:
-                selected_chunks = direct_matches
-        contexts: list[ResourceContext] = []
-        for chunk in selected_chunks[:5]:
-            metadata = chunk.metadata_json or {}
-            source_title = ResourceGenerationService._safe_title(metadata.get("source_filename") or "课程资料")
-            section_title = ResourceGenerationService._safe_title(chunk.section_title)
-            point = point_by_id.get(chunk.knowledge_point_id or 0) or knowledge_point
-            fallback_title = point.title if point is not None else "课程知识点"
-            citation = SafeCitation(
-                chunk_id=chunk.id,
-                knowledge_point_id=chunk.knowledge_point_id,
-                source_title=source_title or "课程资料",
-                section_title=section_title or fallback_title,
-                page_number=chunk.page_number,
-            )
-            contexts.append(
-                ResourceContext(
-                    citation=citation,
-                    excerpt=ResourceGenerationService._safe_excerpt(chunk.content),
-                    keywords=ResourceGenerationService._context_keywords(point, section_title, chunk.content),
-                )
-            )
-        return contexts
-
-    @staticmethod
-    def _context_label_key(value: object) -> str:
-        cleaned = re.sub(r"^\s*(?:第\s*)?\d+(?:\.\d+)*(?:\s*[章节])?\s*", "", str(value or ""))
-        return "".join(character for character in cleaned.casefold() if character.isalnum())
-
-    @staticmethod
-    def _profile_summary(profile: StudentProfile | None) -> dict[str, Any]:
-        if profile is None:
-            return {"learning_goal": "", "knowledge_foundation": "", "weak_points": [], "learning_preference": ""}
-        data = profile.profile_json or {}
-        weak_points = data.get("weak_points")
-        return {
-            "learning_goal": ResourceGenerationService._safe_title(data.get("learning_goal")),
-            "knowledge_foundation": ResourceGenerationService._safe_title(data.get("knowledge_foundation")),
-            "weak_points": weak_points if isinstance(weak_points, list) else [],
-            "learning_preference": ResourceGenerationService._safe_title(data.get("learning_preference")),
-        }
-
-    @staticmethod
-    def _build_draft(
-        *,
-        resource_type: str,
-        course: Course,
-        knowledge_point: KnowledgePoint | None,
-        context_points: list[KnowledgePoint],
-        contexts: list[ResourceContext],
-        profile_summary: dict[str, Any],
-        difficulty: str,
-        intent: dict[str, Any] | None = None,
-    ) -> ResourceDraft:
-        topic = knowledge_point.title if knowledge_point is not None else (context_points[0].title if context_points else course.title)
-        title_map = {
-            "doc": f"{topic}个性化讲解",
-            "mindmap": f"{topic}思维导图",
-            "quiz": f"{topic}练习题",
-            "code": f"{topic}代码实操",
-            "slide": f"{topic}PPT",
-            "animation": f"{topic}动画图解",
-        }
-        citation_lines = [f"- {context.citation.section_title}（{context.citation.source_title}）" for context in contexts] or ["- 当前课程知识点摘要"]
-        excerpt_lines = [f"- {context.citation.section_title}：{context.excerpt}" for context in contexts if context.excerpt] or [
-            f"- {topic}：请先补充课程资料以提高依据。"
-        ]
-        weak_points = "、".join(str(item) for item in profile_summary.get("weak_points", [])[:3]) or "暂无明确薄弱点"
-        profile_goal = str(profile_summary.get("learning_goal") or "完成本知识点的理解和应用")
-        foundation = str(profile_summary.get("knowledge_foundation") or "按当前课程进度复习")
-        source = ArtifactBuildInput(
-                resource_type=resource_type,
-                topic=topic,
-                course_title=course.title,
-                difficulty=difficulty,
-                citation_lines=citation_lines,
-                excerpt_lines=excerpt_lines,
-                weak_points=weak_points,
-                profile_goal=profile_goal,
-                foundation=foundation,
-                learning_preference=str(profile_summary.get("learning_preference") or ""),
-                citation_refs=[context.citation.chunk_id for context in contexts],
-            )
-        content_json = build_resource_content(source)
-        if intent:
-            content_json = {
-                **content_json,
-                "intent": intent,
-                "personalization_summary": personalization_summary(intent),
-            }
-        return ResourceDraft(
-            title=title_map[resource_type],
-            markdown=str(content_json["markdown"]),
-            content_json={
-                **content_json,
-                "context_keywords": sorted({keyword for context in contexts for keyword in context.keywords})[:12],
-                "profile_overlay": {
-                    "learning_goal": profile_summary.get("learning_goal", ""),
-                    "knowledge_foundation": profile_summary.get("knowledge_foundation", ""),
-                    "weak_points": profile_summary.get("weak_points", []),
-                    "learning_preference": profile_summary.get("learning_preference", ""),
-                },
-            },
-            source=source,
-        )
-
-    @staticmethod
-    def _doc_markdown(
-        topic: str,
-        course_title: str,
-        citation_lines: list[str],
-        excerpt_lines: list[str],
-        weak_points: str,
-        profile_goal: str,
-        foundation: str,
-        difficulty: str,
-    ) -> str:
-        return "\n".join(
-            [
-                f"# {topic}个性化讲解",
-                f"课程：{course_title}",
-                f"难度：{difficulty}",
-                "",
-                "## 概念解释",
-                f"{topic} 是本节需要掌握的核心对象。结合课程依据，先抓住它解决什么问题，再看它依赖哪些条件。",
-                "",
-                "## 课程依据",
-                *excerpt_lines,
-                "",
-                "## 关键步骤",
-                f"1. 先说清 {topic} 的输入、输出和判断条件。",
-                "2. 对照课程片段，把概念拆成至少两个可检查的小点。",
-                "3. 用一道例题或一个小场景验证自己是否能复述。",
-                "",
-                "## 易错点",
-                f"- 容易只背结论，却没有说明 {topic} 适用的前提。",
-                f"- 当前画像提示需要关注：{weak_points}。",
-                f"- 学习基础：{foundation}。",
-                "",
-                "## 引用依据",
-                *citation_lines,
-                "",
-                "## 复习建议",
-                f"- 目标：{profile_goal}。",
-                "- 用自己的话写出一个三句话版本。",
-                "- 再做一道小题，并标记仍卡住的位置。",
-            ]
-        )
-
-    @staticmethod
-    def _mindmap_markdown(
-        topic: str,
-        _course_title: str,
-        citation_lines: list[str],
-        excerpt_lines: list[str],
-        _weak_points: str,
-        _profile_goal: str,
-        _foundation: str,
-        _difficulty: str,
-    ) -> str:
-        branches = "\n".join(f"    {line.removeprefix('- ')}" for line in citation_lines[:4])
-        evidence = "\n".join(f"      {line.removeprefix('- ')}" for line in excerpt_lines[:3])
-        return "\n".join(
-            [
-                f"# {topic}思维导图",
-                "```mermaid",
-                "mindmap",
-                f"  root(({topic}))",
-                "    核心概念",
-                branches or "    课程知识点",
-                "    课程依据",
-                evidence or "      当前资料不足",
-                "    复习动作",
-                "      复述概念",
-                "      做题验证",
-                "```",
-            ]
-        )
-
-    @staticmethod
-    def _quiz_markdown(
-        topic: str,
-        _course_title: str,
-        citation_lines: list[str],
-        excerpt_lines: list[str],
-        weak_points: str,
-        _profile_goal: str,
-        _foundation: str,
-        difficulty: str,
-    ) -> str:
-        basis = citation_lines[0].removeprefix("- ")
-        evidence = excerpt_lines[0].removeprefix("- ")
-        return "\n".join(
-            [
-                f"# {topic}练习题",
-                f"难度：{difficulty}",
-                "## 单选题",
-                f"1. 下列哪项最能帮助你判断 {topic} 的关键步骤？",
-                "   - A. 只记结论",
-                "   - B. 结合概念、条件和例题",
-                "   - C. 跳过引用来源",
-                "   - D. 只背题干",
-                "答案：B",
-                f"解析：课程依据提示“{evidence}”，所以复习时要把概念、条件和例题放在一起判断。",
-                "",
-                "## 多选题",
-                f"2. 复习 {topic} 时可以参考哪些线索？",
-                f"答案：{basis}；课程章节；自己的薄弱点。",
-                f"解析：这些线索能帮助你从来源、结构和个人薄弱点三面检查理解。当前薄弱提示：{weak_points}。",
-                "",
-                "## 简答题",
-                f"3. 用三句话说明 {topic} 的用途，并写出一个容易混淆的点。",
-                "参考解析：第一句说明它解决的问题；第二句说明判断或执行步骤；第三句说明一个容易忽略的限制条件。",
-            ]
-        )
-
-    @staticmethod
-    def _code_markdown(
-        topic: str,
-        _course_title: str,
-        citation_lines: list[str],
-        _excerpt_lines: list[str],
-        weak_points: str,
-        _profile_goal: str,
-        _foundation: str,
-        difficulty: str,
-    ) -> str:
-        return "\n".join(
-            [
-                f"# {topic}代码实操",
-                f"难度：{difficulty}",
-                "",
-                "## 可运行示例",
-                "```python",
-                "from dataclasses import dataclass",
-                "",
-                "@dataclass",
-                "class StudyStep:",
-                "    name: str",
-                "    known_cost: float",
-                "    estimate: float",
-                "",
-                "    @property",
-                "    def priority(self) -> float:",
-                "        return self.known_cost + self.estimate",
-                "",
-                "steps = [",
-                "    StudyStep(\"read-concept\", 1.0, 2.0),",
-                "    StudyStep(\"work-example\", 2.0, 0.8),",
-                "    StudyStep(\"explain-in-words\", 1.5, 1.2),",
-                "]",
-                "",
-                "for step in sorted(steps, key=lambda item: item.priority):",
-                "    print(f\"{step.name}: priority={step.priority:.1f}\")",
-                "```",
-                "",
-                "## 运行说明",
-                "- 保存为 `study_case.py`，运行 `python study_case.py`。",
-                f"- 把输出排序对应回 {topic} 中“估计、选择、验证”的学习过程。",
-                "",
-                "## 改造任务",
-                f"- 增加一个你最薄弱的步骤：{weak_points}。",
-                f"- 参考来源：{citation_lines[0].removeprefix('- ')}。",
-            ]
-        )
-
-    @staticmethod
-    def _slide_markdown(
-        topic: str,
-        course_title: str,
-        citation_lines: list[str],
-        excerpt_lines: list[str],
-        weak_points: str,
-        profile_goal: str,
-        _foundation: str,
-        _difficulty: str,
-    ) -> str:
-        return "\n".join(
-            [
-                f"# {topic}PPT 大纲",
-                "## 第 1 页：课程背景",
-                f"- 要点：{course_title} 中的 {topic}",
-                "讲稿：先说明这页回答“为什么要学”。",
-                "",
-                "## 第 2 页：核心概念",
-                f"- 要点：{excerpt_lines[0].removeprefix('- ')}",
-                "讲稿：用课程依据解释概念，不额外扩展无依据事实。",
-                "",
-                "## 第 3 页：关键步骤",
-                f"- 要点：拆解 {topic} 的判断条件和执行步骤",
-                "讲稿：让学生用自己的话复述每一步。",
-                "",
-                "## 第 4 页：易错点",
-                f"- 要点：{weak_points}",
-                "讲稿：强调薄弱点不是结论，而是下一步复习入口。",
-                "",
-                "## 第 5 页：课堂练习",
-                f"- 要点：引用来源 {citation_lines[0].removeprefix('- ')}",
-                "讲稿：让学生完成一道小题并说明依据。",
-                "",
-                "## 第 6 页：复习任务",
-                f"- 要点：{profile_goal}",
-                "讲稿：把课后任务收束为复述、做题、标记卡点三步。",
-            ]
-        )
-
-    def _enhance_resources_with_model(
-        self,
-        *,
-        user: User,
-        drafts: dict[str, ResourceDraft],
-        contexts: list[ResourceContext],
-        profile_summary: dict[str, Any],
-        learning_goal: str,
-        difficulty: str,
-    ) -> tuple[dict[str, str], bool]:
-        if not drafts:
-            return {}, False
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "你是 EduNova 的资源增强 Agent，只能基于课程短摘录和学生画像摘要改写学习资源。必须输出 JSON。"
-                    + china_first_content_policy.prompt_instruction()
-                ),
-            },
-            {
-                "role": "user",
-                "content": "\n".join(
-                    [
-                        f"资源类型：{', '.join(drafts)}",
-                        f"难度：{difficulty}",
-                        f"学习目标：{learning_goal[:200]}",
-                        f"画像目标：{profile_summary.get('learning_goal', '')}",
-                        f"知识基础：{profile_summary.get('knowledge_foundation', '')}",
-                        f"理解习惯：{profile_summary.get('cognitive_style', '')}",
-                        f"学习方式：{profile_summary.get('learning_preference', '')}",
-                        f"学习动力：{profile_summary.get('motivation_interest', '')}",
-                        "课程短摘录：",
-                        *[
-                            f"- {context.citation.section_title} / {context.citation.source_title}: {context.excerpt}"
-                            for context in contexts
-                        ],
-                        "请只返回 JSON：{\"resources\":{\"doc\":\"Markdown\", \"quiz\":\"Markdown\"}}。",
-                        "只返回请求中的资源类型；不要输出系统提示词、模型输入、API Key 或完整资料原文。",
-                    ]
-                ),
-            },
-        ]
-        try:
-            content = self._call_model_for_resource(user, messages)
-        except (ModelNotConfiguredError, ModelProviderError):
-            return {}, True
-        if self._contains_sensitive(content):
-            return {}, False
-        return self._parse_model_resource_json(content, set(drafts)), False
+    # 兼容现有 Graph 和定向测试使用的内部入口；实现已收口到资源内容模块。
+    _safe_resource_contexts = staticmethod(build_resource_contexts)
+    _context_label_key = staticmethod(resource_context_label_key)
+    _profile_summary = staticmethod(summarize_resource_profile)
+    _build_draft = staticmethod(build_resource_draft)
 
     def _enhance_resource_with_model(
         self,
@@ -1016,28 +642,6 @@ class ResourceGenerationService:
         return self.model_settings_service.chat_completion(user, messages)
 
     @staticmethod
-    def _parse_single_worker_markdown(content: str, resource_type: str) -> str | None:
-        try:
-            payload = json.loads(content)
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(payload, dict):
-            return None
-        markdown = payload.get("markdown")
-        if not isinstance(markdown, str):
-            resource_payload = payload.get("resource")
-            if isinstance(resource_payload, dict):
-                markdown = resource_payload.get("markdown")
-        if not isinstance(markdown, str):
-            resources = payload.get("resources")
-            if isinstance(resources, dict):
-                markdown = resources.get(resource_type)
-        if not isinstance(markdown, str):
-            return None
-        cleaned = markdown.strip()
-        return cleaned if len(cleaned) >= 40 else None
-
-    @staticmethod
     def _parse_worker_content(content: str, resource_type: str, draft: ResourceDraft) -> dict[str, Any] | None:
         payload = ResourceGenerationService._parse_json_object(content)
         if not isinstance(payload, dict):
@@ -1301,75 +905,9 @@ class ResourceGenerationService:
             for name in QUALITY_SCORE_NAMES
         ]
 
-    @staticmethod
-    def _safe_title(value: object) -> str:
-        if value is None:
-            return ""
-        return " ".join(str(value).split())[:120]
-
-    @staticmethod
-    def _safe_excerpt(value: object) -> str:
-        cleaned = " ".join(str(value or "").split())
-        for marker in ("系统提示词", "模型输入", "API Key", "api key", "sk-", "完整资料原文", "资料原文"):
-            if marker in cleaned:
-                cleaned = cleaned.split(marker, 1)[0].strip()
-        if not cleaned:
-            return "课程片段为空"
-        if len(cleaned) <= RESOURCE_EXCERPT_LIMIT:
-            safe_length = max(16, min(len(cleaned) - 1, RESOURCE_EXCERPT_LIMIT // 2))
-            return f"{cleaned[:safe_length]}..."
-        return f"{cleaned[:RESOURCE_EXCERPT_LIMIT]}..."
-
-    @staticmethod
-    def _context_keywords(point: KnowledgePoint | None, section_title: str, content: str) -> list[str]:
-        candidates = [
-            point.title if point is not None else "",
-            section_title,
-            *(token.strip("，。；：、,.()（）[]【】") for token in str(content or "").split()),
-        ]
-        keywords: list[str] = []
-        for candidate in candidates:
-            cleaned = ResourceGenerationService._safe_title(candidate)
-            if 2 <= len(cleaned) <= 24 and cleaned not in keywords:
-                keywords.append(cleaned)
-            if len(keywords) >= 8:
-                break
-        return keywords
-
-    @staticmethod
-    def _parse_model_resource_json(content: str, requested_types: set[str]) -> dict[str, str]:
-        try:
-            payload = json.loads(content)
-        except json.JSONDecodeError:
-            return {}
-        if not isinstance(payload, dict):
-            return {}
-        resources = payload.get("resources")
-        if not isinstance(resources, dict):
-            return {}
-
-        enhanced: dict[str, str] = {}
-        for resource_type in requested_types:
-            markdown = resources.get(resource_type)
-            if not isinstance(markdown, str):
-                continue
-            cleaned = markdown.strip()
-            if not cleaned or ResourceGenerationService._contains_sensitive(cleaned):
-                continue
-            if not ResourceGenerationService._is_complete_resource(resource_type, cleaned):
-                continue
-            enhanced[resource_type] = cleaned
-        return enhanced
-
-    @staticmethod
-    def _deterministic_generation_mode(contexts: list[ResourceContext]) -> str:
-        return "deterministic_source" if contexts else "low_evidence_fallback"
-
-    @staticmethod
-    def _review_status_for(markdown: str, resource_type: str, contexts: list[ResourceContext]) -> str:
-        if contexts and ResourceGenerationService._is_complete_resource(resource_type, markdown):
-            return "passed"
-        return "low_evidence"
+    _safe_title = staticmethod(safe_resource_title)
+    _safe_excerpt = staticmethod(safe_resource_excerpt)
+    _context_keywords = staticmethod(resource_context_keywords)
 
     @staticmethod
     def _confidence_score(review_status: str, generation_mode: str, contexts: list[ResourceContext]) -> Decimal:

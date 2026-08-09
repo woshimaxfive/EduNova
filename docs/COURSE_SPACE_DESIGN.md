@@ -117,8 +117,10 @@ Agent trace 只展示安全协作摘要、节点状态和模型调用汇总，�
 ## 7. 组件边界
 
 - `CourseSpacePage`：查询、状态装配、SSE 和事件协调。
+- `courseConversation.ts`：会话消息映射、旧回答清理、推荐问题和闭环跳转参数。
 - `CourseWorkspaceHeader`：课程栏与模式切换。
 - `CourseAssistantTurn`：Assistant Markdown 回合。
+- `CourseAnswerDetailPanel`：单条回答的来源、协作轨迹、学习路径和资源入口详情。
 - `CourseClosedLoopActions`：逐回答行动栏。
 - `CourseInlineResourcePanel`：课程上下文资源生成。
 - `CourseProgressDrawer`：A3 进度、弱点和建课轨迹。

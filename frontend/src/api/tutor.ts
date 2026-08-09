@@ -14,8 +14,8 @@ export const TUTOR_ENDPOINTS = {
   attachments: (sessionId: number | string) => `/tutor/sessions/${sessionId}/attachments`,
   materialAttachments: (sessionId: number | string) => `/tutor/sessions/${sessionId}/attachments/from-material`,
   attachment: (attachmentId: number | string) => `/tutor/attachments/${attachmentId}`,
-  attachmentContent: (attachmentId: number | string) => `/tutor/attachments/${attachmentId}/content`
-  ,resourceJobs: (sessionId: number | string, messageId: number | string) => `/tutor/sessions/${sessionId}/messages/${messageId}/resource-jobs`
+  attachmentContent: (attachmentId: number | string) => `/tutor/attachments/${attachmentId}/content`,
+  resourceJobs: (sessionId: number | string, messageId: number | string) => `/tutor/sessions/${sessionId}/messages/${messageId}/resource-jobs`
 } as const;
 
 export type TutorSessionScope = "home" | "course";

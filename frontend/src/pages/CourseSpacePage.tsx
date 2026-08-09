@@ -22,8 +22,6 @@ import {
   getKnowledgePoints,
   getMasteryMap,
   updateCourseWeaknessReviewItem,
-  type ApiCourseKnowledgePoint,
-  type CoursePathSummary,
   type CourseWeaknessReviewAction,
   type CourseWeaknessReviewItem
 } from "../api/courses";
@@ -40,11 +38,9 @@ import {
   renameTutorSession,
   streamTutorMessage,
   createTutorResourceGenerationJob,
-  type TutorCitation,
-  type TutorImageAttachment,
-  type TutorMessage,
   type TutorSessionSummary
 } from "../api/tutor";
+import { CourseAnswerDetailPanel } from "../components/course-space/CourseAnswerDetailPanel";
 import { CourseAssistantTurn } from "../components/course-space/CourseAssistantTurn";
 import { CourseClosedLoopActions, type CourseAnswerPanelKind } from "../components/course-space/CourseClosedLoopActions";
 import { CourseContentView, type CourseContentMode } from "../components/course-space/CourseContentView";
@@ -52,7 +48,6 @@ import { CourseInlineResourcePanel } from "../components/course-space/CourseInli
 import { CourseProgressDrawer } from "../components/course-space/CourseProgressDrawer";
 import { NextLearningAction } from "../components/learning/NextLearningAction";
 import { CourseWorkspaceHeader, type CourseWorkspaceMode } from "../components/course-space/CourseWorkspaceHeader";
-import { AgentTimeline } from "../components/evidence/AgentTimeline";
 import { InlineFeedback } from "../components/feedback/InlineFeedback";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { LearningSpaceShell } from "../components/layout/LearningSpaceShell";
@@ -70,7 +65,16 @@ import {
   findBestCitationKnowledgePoint,
   resourceDifficultyForPoint
 } from "../features/course-space/courseRecommendation";
-import { type AgentTraceEvent } from "../types/api";
+import {
+  buildCourseClosureHref,
+  buildCourseStarterQuestions,
+  courseQuestionTitle,
+  findQuestionForAssistant,
+  mapCourseSessionsToConversations,
+  mapTutorMessagesToCourseMessages,
+  sanitizeCourseAnswerContent,
+  type CourseMessage
+} from "../features/course-space/courseConversation";
 import { useAiJobs } from "../features/aiJobs/AiJobProvider";
 import { useLearningNextAction } from "../features/learning-actions/learningActions";
 import { type LearningNextAction } from "../api/learning";
@@ -81,56 +85,6 @@ import { appendTutorProgressStage, type TutorResponseProgressState } from "../fe
 import { useTutorPersistedResponseProgress } from "../features/tutor/useTutorPersistedResponseProgress";
 import { TutorResponseProgress } from "../components/tutor/TutorResponseProgress";
 import "../styles/course-space.css";
-
-function retrievalSourceLabel(source?: string | null) {
-  if (source === "hybrid") {
-    return "混合检索";
-  }
-  if (source === "vector") {
-    return "向量检索";
-  }
-  return "关键词检索";
-}
-
-function embeddingStatusLabel(status?: string | null) {
-  if (status === "local_fallback") {
-    return "基础关键词检索";
-  }
-  if (status === "completed") {
-    return "真实向量";
-  }
-  if (status === "provider_failed") {
-    return "关键词检索";
-  }
-  return "关键词检索";
-}
-
-function sanitizeCourseAnswerContent(content: string) {
-  const normalized = content.trim();
-  const withoutInlineSources = normalized
-    .replace(
-      /(?:\*\*\s*依据\s*[:：]\s*\*\*|依据\s*[:：])\s*(?:\d+[.、]\s*)?(?:来源|章节|匹配度|片段)\s*[:：][\s\S]*?(?=(?:\s*\*\*[^*]{1,32}[:：]\s*\*\*)|(?:\s*(?:易错点|下一步|练习|建议)\s*[:：])|$)/g,
-      ""
-    )
-    .replace(/[（(]\s*匹配度\s*[:：]\s*[^）)]*[）)]\s*[-—–]\s*来源\s*[:：]\s*\[[^\]]+\]\s*[-—–]\s*片段\s*[:：]\s*/g, "：")
-    .replace(/\s*[-—–]\s*来源\s*[:：]\s*\[[^\]]+\]\s*[-—–]\s*片段\s*[:：]\s*/g, "：")
-    .replace(/[（(]\s*匹配度\s*[:：]\s*[^）)]*[）)]/g, "")
-    .replace(/(^|\n)\s*(?:\d+[.、]\s*)?(?:来源|章节|匹配度|片段)\s*[:：][^\n]*(?=\n|$)/g, "$1")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  if (!withoutInlineSources.includes("学生问题：") || !withoutInlineSources.includes("课程引用：")) {
-    return withoutInlineSources || content;
-  }
-
-  const markers = ["根据上述引用", "基于上述引用", "依据上述引用", "从上述引用", "从这些引用"];
-  const markerPositions = markers.map((marker) => withoutInlineSources.indexOf(marker)).filter((position) => position >= 0);
-  if (markerPositions.length > 0) {
-    return withoutInlineSources.slice(Math.min(...markerPositions)).trim();
-  }
-
-  return "这条回答包含过多内部引用上下文。请打开来源面板查看证据，或换一种问法继续提问。";
-}
 
 type TutorSessionsResponse = Awaited<ReturnType<typeof listTutorSessions>>;
 type TurnDetailState = {
@@ -146,111 +100,8 @@ type StudyTarget =
       type: "citation";
       citation: RagSearchResultItem;
     };
-type CourseMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  citations?: RagSearchResultItem[];
-  supplementalSources?: TutorCitation[];
-  traceId?: string | null;
-  attachments?: TutorImageAttachment[];
-  resourceJobs?: TutorMessage["resource_jobs"];
-  resourceProposal?: TutorMessage["resource_proposal"];
-};
 
 const COURSE_COMPOSER_MAX_HEIGHT = 154;
-
-function courseQuestionTitle(question: string) {
-  const normalized = question.trim();
-  return normalized.length > 30 ? `${normalized.slice(0, 30)}...` : normalized;
-}
-
-function isRagCitation(citation: unknown): citation is RagSearchResultItem {
-  if (typeof citation !== "object" || citation === null) {
-    return false;
-  }
-
-  const item = citation as Partial<RagSearchResultItem>;
-  return (
-    typeof item.chunk_id === "number" &&
-    typeof item.course_id === "number" &&
-    typeof item.material_id === "number" &&
-    typeof item.content === "string" &&
-    typeof item.source_title === "string"
-  );
-}
-
-function mapTutorMessagesToCourseMessages(messages: TutorMessage[]): CourseMessage[] {
-  return messages.map((message) => {
-    const citations = message.role === "assistant" ? message.citation_json.filter(isRagCitation) : [];
-    const supplementalSources = message.role === "assistant"
-      ? message.citation_json.filter((citation) => !isRagCitation(citation))
-      : [];
-
-    return {
-      id: message.id,
-      role: message.role,
-      content: message.content,
-      citations: message.role === "assistant" ? citations : undefined,
-      supplementalSources: message.role === "assistant" ? supplementalSources : undefined,
-      traceId: message.role === "assistant" ? message.trace_id : null,
-      attachments: message.attachments ?? []
-      ,resourceJobs: message.resource_jobs ?? [],
-      resourceProposal: message.resource_proposal ?? null
-    };
-  });
-}
-
-function mapCourseSessionsToConversations(sessions: TutorSessionSummary[]) {
-  return sessions.map((session) => ({
-    id: session.id,
-    title: session.title,
-    meta: "课程内"
-  }));
-}
-
-function findQuestionForAssistant(messages: CourseMessage[], assistantIndex: number) {
-  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === "user") return messages[index]?.content ?? null;
-  }
-  return null;
-}
-
-function buildCourseStarterQuestions(
-  recommendation: LearningNextAction,
-  points: ApiCourseKnowledgePoint[]
-) {
-  const recommendedPoint = points.find((point) => point.id === recommendation.knowledge_point_id) ?? points[0];
-  const pointTitle = recommendedPoint?.title ?? "这门课的核心知识";
-  return [
-    `请结合课程资料解释${pointTitle}，并给一个具体例子`,
-    `学习${pointTitle}前，我需要先掌握什么？`,
-    `围绕${pointTitle}出一道检查理解的问题`
-  ];
-}
-
-function buildCourseClosureHref(
-  pathname: string,
-  courseId: number,
-  sessionId: string | null,
-  messageId: string,
-  knowledgePointId?: string | null
-) {
-  const courseWorkspacePath = pathname === PATHS.path
-    ? buildCoursePathWorkspacePath(courseId)
-    : pathname === PATHS.practice
-      ? buildCoursePracticeWorkspacePath(courseId)
-      : pathname === PATHS.reports
-        ? buildCourseReportsWorkspacePath(courseId)
-        : pathname;
-  const params = new URLSearchParams({
-    return_to: "course",
-    course_message_id: messageId
-  });
-  if (sessionId) params.set("course_session_id", sessionId);
-  if (knowledgePointId) params.set("knowledge_point_id", knowledgePointId);
-  return `${courseWorkspacePath}?${params.toString()}`;
-}
 
 export function CourseSpacePage() {
   const { courseId } = useParams();
@@ -1234,7 +1085,7 @@ export function CourseSpacePage() {
                                 onGenerate={submitCourseResourceGeneration}
                               />
                             ) : null}
-                            <AnswerDetailPanel
+                            <CourseAnswerDetailPanel
                               activePanel={turnPanel}
                               courseId={hasRealCourseId ? numericCourseId : null}
                               citations={citations}
@@ -1489,189 +1340,5 @@ export function CourseSpacePage() {
         </section>
       </section>
     </LearningSpaceShell>
-  );
-}
-
-type AnswerDetailPanelProps = {
-  activePanel: CourseAnswerPanelKind;
-  courseId: number | null;
-  citations: RagSearchResultItem[];
-  supplementalSources: TutorCitation[];
-  hasRealCourse: boolean;
-  hasSearched: boolean;
-  pathSummary: CoursePathSummary | null;
-  pathHref: string;
-  agentTraceId: string | null;
-  agentTraceEvents: AgentTraceEvent[];
-  agentTraceSummary: { duration_ms?: number; personalization_factors?: string[]; course_source_count?: number; web_source_count?: number; history_source_count?: number } | null;
-  isAgentTraceLoading: boolean;
-  isAgentTraceError: boolean;
-  onOpenCitation: (citation: RagSearchResultItem) => void;
-};
-
-function AnswerDetailPanel({
-  activePanel,
-  courseId,
-  citations,
-  supplementalSources,
-  hasRealCourse,
-  hasSearched,
-  pathSummary,
-  pathHref,
-  agentTraceId,
-  agentTraceEvents,
-  agentTraceSummary,
-  isAgentTraceLoading,
-  isAgentTraceError,
-  onOpenCitation
-}: AnswerDetailPanelProps) {
-  if (activePanel === "why") {
-    const factors = agentTraceSummary?.personalization_factors?.length ?? 0;
-    return (
-      <section className="answer-detail-panel" role="region" aria-label="为什么这样回答">
-        <strong>为什么这样回答</strong>
-        <p>
-          {factors > 0
-            ? `系统使用 ${factors} 项可信学习因素调整讲解深度、案例和下一步，同时保持课程事实、引用和评分边界不变。`
-            : "系统主要依据当前问题、会话上下文和课程证据组织回答，没有让候选或低可信画像改变事实。"}
-        </p>
-      </section>
-    );
-  }
-
-  if (activePanel === "resources") {
-    const studioHref = courseId !== null ? `${PATHS.studio}?course_id=${courseId}` : PATHS.studio;
-
-    return (
-      <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-        <strong>生成资源</strong>
-        <p>资源工坊会基于当前课程和知识点生成讲解、练习、思维导图、代码实操、PPT 和动画图解。</p>
-        <Link to={studioHref}>进入资源工坊</Link>
-      </section>
-    );
-  }
-
-  if (activePanel === "path") {
-    return (
-      <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-        <strong>学习路径</strong>
-        <p>{pathSummary?.message ?? "学习路径尚未生成。"}</p>
-        {pathSummary?.current_task_title ? (
-          <div className="answer-detail-meta">
-            <span>当前任务</span>
-            <em>{pathSummary.current_task_title}</em>
-          </div>
-        ) : null}
-        {pathSummary ? (
-          <small>
-            {pathSummary.completed_task_count}/{pathSummary.task_count} 已完成
-          </small>
-        ) : null}
-        <Link to={pathHref}>查看完整路径</Link>
-      </section>
-    );
-  }
-
-  if (activePanel === "thinking") {
-    if (isAgentTraceError) {
-      return (
-        <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-          <strong>课堂协作轨迹</strong>
-          <InlineFeedback message="Agent 轨迹读取失败，请稍后重试。" tone="warning" className="course-inline-feedback" />
-        </section>
-      );
-    }
-
-    if (isAgentTraceLoading) {
-      return (
-        <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-          <strong>课堂协作轨迹</strong>
-          <p>正在读取课堂协作轨迹。</p>
-        </section>
-      );
-    }
-
-    if (agentTraceId && agentTraceEvents.length > 0) {
-      return (
-        <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-          <strong>课堂协作轨迹</strong>
-          <AgentTimeline events={agentTraceEvents} summary={agentTraceSummary ?? undefined} />
-        </section>
-      );
-    }
-
-    return (
-      <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-        <strong>课堂协作轨迹</strong>
-        <p>
-          {agentTraceId
-            ? "当前 Agent trace 暂无可展示步骤。"
-            : hasSearched
-              ? `Profile、Retriever、Tutor、Weakness、Review、NextAction 已围绕本次回答协作，命中 ${citations.length} 条引用。`
-              : "发送课程问题后，会按 Profile、Retriever、Tutor、Weakness、Review、NextAction 记录课堂协作轨迹。"}
-        </p>
-      </section>
-    );
-  }
-
-  if (hasRealCourse) {
-    if (!hasSearched) {
-      return (
-        <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-          <strong>来源</strong>
-          <p>发送课程问题后，会先从本课程知识切片中检索真实引用。</p>
-        </section>
-      );
-    }
-
-    if (citations.length === 0 && supplementalSources.length === 0) {
-      return (
-        <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-          <strong>来源</strong>
-          <p>当前课程资料里没有找到足够依据。</p>
-        </section>
-      );
-    }
-
-    return (
-      <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-        <strong>来源</strong>
-        <div className="citation-list">
-          {citations.map((citation) => (
-            <button
-              key={citation.chunk_id}
-              className="citation-item citation-item-button"
-              type="button"
-              onClick={() => onOpenCitation(citation)}
-            >
-              <strong>{citation.source_title}</strong>
-              <span>{citation.section_title ?? "课程切片"}</span>
-              <small className="citation-meta">
-                {citation.page_number ? <span>教材第 {citation.page_number} 页</span> : null}
-                <span>匹配度 {citation.score.toFixed(1)}</span>
-                <span>{retrievalSourceLabel(citation.retrieval_source)}</span>
-                <span>{embeddingStatusLabel(citation.embedding_status)}</span>
-              </small>
-              <span className="citation-content">{citation.content}</span>
-            </button>
-          ))}
-          {supplementalSources.map((citation, index) => (
-            <article className="citation-item" key={`${citation.source_type ?? "source"}-${citation.url ?? citation.title ?? index}`}>
-              <strong>{citation.title ?? (citation.source_type === "history" ? "历史对话" : "外部补充")}</strong>
-              <span>{citation.source_type === "history" ? "历史对话，仅用于上下文" : `${citation.access_scope === "external_fallback" ? "境外补充" : citation.access_scope === "mainland_preferred" ? "国内优先来源" : "外部补充"}，不作为课程证据`}</span>
-              <span className="citation-content">{citation.snippet ?? citation.content ?? "来源已记录"}</span>
-              {citation.url ? <a href={citation.url} target="_blank" rel="noreferrer">打开来源</a> : null}
-            </article>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="answer-detail-panel" role="region" aria-label="回答展开详情">
-      <strong>来源</strong>
-      <p>请从课程列表进入真实课程后再查看引用来源。</p>
-    </section>
   );
 }

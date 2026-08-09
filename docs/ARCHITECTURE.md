@@ -201,8 +201,9 @@ frontend/src/
 | `frontend/src/api/client.ts` | Axios 客户端，默认基础路径 `/api/v1`，自动附加 token，401 清理登录态并返回登录页 |
 | `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，默认基础路径 `/api/v1` |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和短状态信号的纯状态模型 |
+| `frontend/src/features/course-space/courseConversation.ts` | 课程会话展示模型、旧回答清理、推荐问题和闭环跳转参数 |
 | `frontend/src/pages` | 登录、注册、学习空间、资料库、课程空间、学习路径、资源工坊、画像、练习、报告、设置和 404；AI 辅导由课程空间直接承载 |
-| `frontend/src/components` | 贴边侧栏、学习空间壳子、学习画布、资料源簇、命令栏、资源输出区、证据层、Agent 轨迹、局部反馈和轻量 toast |
+| `frontend/src/components` | 贴边侧栏、学习空间壳子、学习画布、课程回答详情、资料源簇、命令栏、资源输出区、证据层、Agent 轨迹、局部反馈和轻量 toast |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、reduced motion 和 reduced transparency 基础 |
 
 前端 API 模块当前分工：

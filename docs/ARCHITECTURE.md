@@ -208,9 +208,10 @@ frontend/src/
 | `frontend/src/features/settings/useSettingsController.ts` | 设置分区 URL、账号安全、隐私设置和顶部服务状态协调 |
 | `frontend/src/features/settings/SettingsWorkspace.tsx`、`AccountSettingsSection.tsx`、`PrivacySettingsSection.tsx` | 当前设置工作区及账号、隐私展示；正式模型设置继续由 `PersonalAnswerModelSettings` 承载 |
 | `frontend/src/features/course-space/useCourseWorkspaceData.ts` | 课程详情、知识点、学习状态、掌握度、会话、资源、路径、练习和报告的统一 React Query 边界 |
-| `frontend/src/pages/CourseWorkspace.tsx` | 课程会话与课程内容模式的页面级业务编排；`CourseSpacePage` 仅作为路由装配入口 |
+| `frontend/src/features/course-space/useCourseWorkspaceController.ts`、`frontend/src/pages/CourseWorkspace.tsx` | 前者协调课程会话、SSE、资源生成、语音和进度，后者只渲染问答与课程内容视图；`CourseSpacePage` 仅作为路由装配入口 |
 | `frontend/src/features/library/libraryWorkspaceModel.ts` | 资料库筛选、对比、目录和建议课程名称使用的纯归一化逻辑 |
-| `frontend/src/components/library/LibraryCourseDialog.tsx`、`frontend/src/pages/LibraryWorkspace.tsx` | 资料建课弹窗与资料工作区编排；`LibraryPage` 仅作为路由装配入口 |
+| `frontend/src/features/library/useLibraryWorkspaceController.ts`、`frontend/src/pages/LibraryWorkspace.tsx` | 前者协调资料查询、上传、解析、对比和建课动作，后者渲染工作台与详情面板；`LibraryPage` 仅作为路由装配入口 |
+| `frontend/src/components/library/LibraryCourseDialog.tsx` | 从已确认资料生成课程的独立弹窗与 AIJob 进度展示 |
 | `frontend/src/pages` | 登录、注册、学习空间、资料库、课程空间、学习路径、资源工坊、画像、练习、报告、设置和 404；AI 辅导由课程空间直接承载 |
 | `frontend/src/components` | 贴边侧栏、学习空间壳子、学习画布、课程回答详情、资料源簇、命令栏、资源输出区、证据层、Agent 轨迹、局部反馈和轻量 toast |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、reduced motion 和 reduced transparency 基础 |

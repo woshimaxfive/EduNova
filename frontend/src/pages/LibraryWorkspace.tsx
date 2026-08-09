@@ -30,7 +30,7 @@ import {
 } from "../features/library/libraryWorkspaceModel";
 import "../styles/library.css";
 import { PageFrame } from "./PageFrame";
-import { useLibraryWorkspaceController } from "./useLibraryWorkspaceController";
+import { useLibraryWorkspaceController } from "../features/library/useLibraryWorkspaceController";
 
 function ComparisonPointList({ title, points }: { title: string; points: MaterialComparisonPoint[] }) {
   return (

@@ -28,7 +28,7 @@ import {
 } from "../features/course-space/courseConversation";
 import { SecureTutorImages, TutorImagePicker } from "../features/tutor/TutorImageAttachments";
 import "../styles/course-space.css";
-import { useCourseWorkspaceController } from "./useCourseWorkspaceController";
+import { useCourseWorkspaceController } from "../features/course-space/useCourseWorkspaceController";
 
 export function CourseWorkspace() {
   const controller = useCourseWorkspaceController();

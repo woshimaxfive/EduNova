@@ -202,6 +202,15 @@ frontend/src/
 | `frontend/src/api/*.ts` | 按业务域拆分的前端 API 合同模块，默认基础路径 `/api/v1` |
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和短状态信号的纯状态模型 |
 | `frontend/src/features/course-space/courseConversation.ts` | 课程会话展示模型、旧回答清理、推荐问题和闭环跳转参数 |
+| `frontend/src/features/home/homeLearningModel.ts` | 学习主页消息、引用、资源建议和展示状态的纯转换逻辑 |
+| `frontend/src/features/home/useLearningSpaceController.tsx` | 学习主页查询、会话、SSE、上传和动作协调；不直接维护整页 JSX |
+| `frontend/src/components/home/LearningSpaceView.tsx`、`HomeLearningPanels.tsx` | 学习主页主视图，以及洞察、资料和生成课程等覆盖层 |
+| `frontend/src/features/settings/useSettingsController.ts` | 设置分区 URL、账号安全、隐私设置和顶部服务状态协调 |
+| `frontend/src/features/settings/SettingsWorkspace.tsx`、`AccountSettingsSection.tsx`、`PrivacySettingsSection.tsx` | 当前设置工作区及账号、隐私展示；正式模型设置继续由 `PersonalAnswerModelSettings` 承载 |
+| `frontend/src/features/course-space/useCourseWorkspaceData.ts` | 课程详情、知识点、学习状态、掌握度、会话、资源、路径、练习和报告的统一 React Query 边界 |
+| `frontend/src/pages/CourseWorkspace.tsx` | 课程会话与课程内容模式的页面级业务编排；`CourseSpacePage` 仅作为路由装配入口 |
+| `frontend/src/features/library/libraryWorkspaceModel.ts` | 资料库筛选、对比、目录和建议课程名称使用的纯归一化逻辑 |
+| `frontend/src/components/library/LibraryCourseDialog.tsx`、`frontend/src/pages/LibraryWorkspace.tsx` | 资料建课弹窗与资料工作区编排；`LibraryPage` 仅作为路由装配入口 |
 | `frontend/src/pages` | 登录、注册、学习空间、资料库、课程空间、学习路径、资源工坊、画像、练习、报告、设置和 404；AI 辅导由课程空间直接承载 |
 | `frontend/src/components` | 贴边侧栏、学习空间壳子、学习画布、课程回答详情、资料源簇、命令栏、资源输出区、证据层、Agent 轨迹、局部反馈和轻量 toast |
 | `frontend/src/styles/global.css` | 视觉 token、响应式布局、reduced motion 和 reduced transparency 基础 |

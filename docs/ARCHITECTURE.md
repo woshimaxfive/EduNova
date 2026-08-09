@@ -274,6 +274,10 @@ backend/app/
 | `backend/app/services/tutor_home_graph.py` | `HomeTutorGraphRunner`，接管主页上下文、路由、资料检索、联网、规划、回答、Review/Repair 和持久化 |
 | `backend/app/services/tutor_course_graph.py` | `CourseTutorGraphRunner`，接管课程画像、路由、严格 RAG、外部补充、回答、Review 和下一行动 |
 | `backend/app/services/tutor.py` | 主页/课程会话业务服务和安全持久化辅助；为兼容既有 API 与测试导入，继续导出 Tutor 异常、SQLAlchemy 仓储和两个 Graph runner |
+| `backend/app/services/resource_contracts.py` | 资源异常、生成 State、仓储/模型依赖协议、安全引用、生成上下文和共享资源约束 |
+| `backend/app/services/resource_repository.py` | 资源、质量评分、学习任务和课程资料查询的 SQLAlchemy 持久化实现 |
+| `backend/app/services/resource_graph.py` | `ResourceGenerationGraphRunner`，接管资源画像、检索、诊断、规划、并行生成、聚合、审核/修复和持久化 |
+| `backend/app/services/resources.py` | 六类资源和教学视频的生成服务、内容构造、模型增强、质量门禁及旧导入兼容 |
 | `backend/app/services/model_settings.py` | 模型设置服务，负责个人回答模型、服务器回答/生成/向量/重排序/视觉兜底、凭证加密与连接测试 |
 | `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计 |
 | `backend/app/services/embeddings.py` | Embedding 服务，负责讯飞原生与 OpenAI-compatible 动态维度调用、配置指纹和切片向量写入；无配置时只返回关键词 fallback |

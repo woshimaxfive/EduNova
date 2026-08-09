@@ -6,6 +6,8 @@
 
 2026-08-10 继续拆分 Tutor 编排边界：Home 与 Course Graph 分别移入 `tutor_home_graph.py` 和 `tutor_course_graph.py`，共享步骤、上下文预算、降级文案和 Provider 兼容参数移入 `tutor_runtime.py`；`tutor.py` 只保留会话业务服务、安全持久化辅助和旧导入兼容。两个 Graph 类在迁移前后逐行核对一致，旧导入与新类保持同一对象。Tutor 定向回归、后端全量 524 项、Ruff、OpenAPI 漂移、Alembic head、Compose 配置、UTF-8 编码，以及前端全量 282 项、ESLint 和 production build 均通过。本批没有修改 Graph 节点、状态合同、事件协议、API、数据库、模型调用、依赖或用户可见行为，因此未重复浏览器验收。
 
+同日完成资源生成模块第一批边界收口：资源异常、State、依赖协议、安全引用和共享约束移入 `resource_contracts.py`，SQLAlchemy 仓储移入 `resource_repository.py`，`ResourceGenerationGraphRunner` 移入 `resource_graph.py`；`resources.py` 保留生成服务、内容构造、模型增强、质量门禁和旧导入兼容。迁移前后的服务类与 Graph 节点保持一致。资源定向 34 项、后端全量 524 项、Ruff、OpenAPI 漂移、Alembic head、Compose 配置、UTF-8 编码，以及前端全量 282 项、ESLint 和 production build 均通过。本批没有修改资源类型、生成/审核/修复规则、Graph 状态、API、数据库、模型调用、依赖或用户可见行为，因此未重复浏览器验收。
+
 当前已完成 **Phase 53 多课程学习编排、画像引导与课程完成闭环**。用户注册后仍进入主页；基础画像不足时持续显示非阻塞引导，有课程但课程目标或基础不足时引导补充该课程画像。当前课程以用户最近主动进入的未归档课程为准，API 轮询、AIJob、报告生成和后台路径重排不会自动切换。首页突出当前课程主行动，其余课程显示各自进度与“当前学习/其他课程/已完成”状态。
 
 全局画像仅向下游提供可跨课程复用的专业背景、学习偏好、理解习惯、节奏和动力；课程目标、基础与明确困难保存到对应 `course_enrollments`，历史全局字段只作为待确认建议。旧独立路径、练习与报告地址会规范化到课程内路由；路径任务优先进入学习包中第一个未完成资源，无资源时回到课程路径而不是空知识点页面。由统一行动进入知识点时展示“阅读课程或资源 → 可请课程助教换例子 → 完成 3 题检查”的真实完成标准。

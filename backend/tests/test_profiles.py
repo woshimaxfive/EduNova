@@ -114,6 +114,9 @@ class FakeProfileModelService:
             raise RuntimeError("模型响应已用完")
         return self.responses.pop(0)
 
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], _profile: Any) -> str:
+        return self.chat_completion(user, messages)
+
 
 def make_user(user_id: int, display_name: str = "画像学生") -> User:
     return User(

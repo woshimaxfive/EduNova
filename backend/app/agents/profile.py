@@ -14,6 +14,7 @@ from backend.app.models import ProfileEvent, StudentProfile, User
 from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.schemas.profiles import PROFILE_DIMENSIONS, ProfileChatResponse, event_to_api, profile_to_api
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
+from backend.app.services.profiles import ProfileService
 
 
 class ProfileState(TypedDict, total=False):
@@ -51,7 +52,7 @@ class ProfileState(TypedDict, total=False):
 class ProfileGraphRunner:
     workflow = "profile"
 
-    def __init__(self, service: Any) -> None:
+    def __init__(self, service: ProfileService) -> None:
         self.service = service
         self.graph = self._build_graph()
 
@@ -63,21 +64,18 @@ class ProfileGraphRunner:
         task_type: str,
         timeout_seconds: float = 15.0,
     ) -> str:
-        task_call = getattr(self.service.model_service, "chat_completion_for_task", None)
-        if callable(task_call):
-            return task_call(
-                state["user"],
-                messages,
-                ModelTaskProfile(
-                    task_type=task_type,
-                    reasoning="disabled",
-                    output_mode="json_object",
-                    creativity="stable",
-                    timeout_seconds=timeout_seconds,
-                    max_attempts=1,
-                ),
-            )
-        return self.service.model_service.chat_completion(state["user"], messages)
+        return self.service.model_service.chat_completion_for_task(
+            state["user"],
+            messages,
+            ModelTaskProfile(
+                task_type=task_type,
+                reasoning="disabled",
+                output_mode="json_object",
+                creativity="stable",
+                timeout_seconds=timeout_seconds,
+                max_attempts=1,
+            ),
+        )
 
     def update_by_chat(self, user: User, message: str) -> ProfileChatResponse:
         state: ProfileState = {
@@ -412,8 +410,7 @@ class ProfileGraphRunner:
                 profile.updated_reason = self.service._change_summary(self.service._changed_labels(global_updates))
                 profile.updated_at = datetime.now(UTC)
             if course_updates and course_id is not None:
-                enrollment_loader = getattr(self.service.repository, "get_course_enrollment", None)
-                enrollment = enrollment_loader(int(state["user_id"]), int(course_id)) if callable(enrollment_loader) else None
+                enrollment = self.service.repository.get_course_enrollment(int(state["user_id"]), int(course_id))
                 if enrollment is not None:
                     values = dict(enrollment.learning_context_json or {})
                     confidence = dict(enrollment.learning_context_confidence_json or {})

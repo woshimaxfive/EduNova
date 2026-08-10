@@ -32,6 +32,11 @@ from backend.app.services.model_execution import (
 )
 from backend.app.services.model_connection_testing import ModelConnectionTester
 from backend.app.services.model_runtime_config import ModelRuntimeConfigBuilder
+from backend.app.services.model_settings_presenter import (
+    build_model_config_summary,
+    build_model_settings_summary,
+    empty_model_settings_summary,
+)
 from backend.app.services.model_settings_contracts import (
     EmbeddingReindexRequest as EmbeddingReindexRequest,
     ModelChatProvider as ModelChatProvider,
@@ -110,8 +115,14 @@ class ModelSettingsService:
             source = chat_runtime.source if chat_runtime.source != "none" else embedding_runtime.source
             if source == "none":
                 source = rerank_runtime.source
-            return self._summary_from_runtimes(chat_runtime, embedding_runtime, rerank_runtime, source=source)
-        return self._empty_summary()
+            return build_model_settings_summary(
+                runtime=chat_runtime,
+                embedding_runtime=embedding_runtime,
+                rerank_runtime=rerank_runtime,
+                source=source,
+                mask_secret=self._mask_api_key,
+            )
+        return empty_model_settings_summary()
 
     def list_configs(self, user: User) -> ModelSettingsListResponse:
         configs = [self._config_summary(setting) for setting in self.repository.list_for_user(user.id)]
@@ -943,100 +954,21 @@ class ModelSettingsService:
 
     def _rerank_runtime_from_system_settings(self) -> RuntimeModelConfig:
         return self.runtime_config_builder._rerank_runtime_from_system_settings()
+
     def _config_summary(self, setting: ModelSetting) -> ModelConfigSummary:
         runtime = self._runtime_from_user_setting(setting)
         vision_runtime = self._vision_runtime_from_user_setting(setting)
-        capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
         connection_tests = self._parse_connection_tests(setting.connection_test_json)
         embedding_runtime = self._embedding_runtime_from_user_setting(setting)
         rerank_runtime = self._rerank_runtime_from_user_setting(setting)
-        has_embedding = bool(setting.embedding_model)
-        has_rerank = bool(setting.rerank_model)
-        return ModelConfigSummary(
-            id=setting.id,
-            display_name=setting.display_name,
-            preset_id=setting.preset_id,
-            provider=runtime.provider,
-            base_url=runtime.base_url,
-            chat_model=runtime.chat_model,
-            embedding_model=runtime.embedding_model,
-            embedding_provider=embedding_runtime.provider if has_embedding else None,
-            embedding_preset_id=setting.embedding_preset_id if has_embedding else None,
-            embedding_base_url=embedding_runtime.base_url if has_embedding else None,
-            embedding_dimension=embedding_runtime.dimensions if has_embedding else None,
-            has_api_key=bool(runtime.api_key),
-            api_key_masked=self._mask_api_key(runtime.api_key),
-            has_vision_app_id=bool(vision_runtime.app_id),
-            vision_app_id_masked=self._mask_api_key(vision_runtime.app_id),
-            has_vision_api_key=bool(vision_runtime.api_key) if setting.preset_id == "xfyun-vision" else False,
-            vision_api_key_masked=(
-                self._mask_api_key(vision_runtime.api_key) if setting.preset_id == "xfyun-vision" else None
-            ),
-            has_vision_api_secret=bool(vision_runtime.api_secret),
-            has_embedding_api_key=has_embedding and bool(embedding_runtime.api_key),
-            embedding_api_key_masked=self._mask_api_key(embedding_runtime.api_key) if has_embedding else None,
-            has_embedding_app_id=has_embedding and bool(embedding_runtime.app_id),
-            embedding_app_id_masked=self._mask_api_key(embedding_runtime.app_id) if has_embedding else None,
-            has_embedding_api_secret=has_embedding and bool(embedding_runtime.api_secret),
-            rerank_model=rerank_runtime.embedding_model if has_rerank else None,
-            rerank_provider=rerank_runtime.provider if has_rerank else None,
-            rerank_preset_id=setting.rerank_preset_id if has_rerank else None,
-            rerank_base_url=rerank_runtime.base_url if has_rerank else None,
-            rerank_workspace_id=rerank_runtime.workspace_id if has_rerank else None,
-            has_rerank_api_key=has_rerank and bool(rerank_runtime.api_key),
-            rerank_api_key_masked=self._mask_api_key(rerank_runtime.api_key) if has_rerank else None,
-            can_use_model=vision_runtime.can_use_model if capabilities.supports_image_input else runtime.can_use_model,
-            can_use_embedding_model=embedding_runtime.can_use_model,
-            can_use_rerank_model=rerank_runtime.can_use_model,
-            is_default=setting.is_default,
-            is_generation_default=bool(getattr(setting, "is_generation_default", False)),
-            is_embedding_default=setting.is_embedding_default,
-            is_rerank_default=setting.is_rerank_default,
-            is_vision_default=bool(getattr(setting, "is_vision_default", False)),
-            last_test_ok=setting.last_test_ok,
-            last_test_message=setting.last_test_message,
-            last_tested_at=setting.last_tested_at,
+        return build_model_config_summary(
+            setting=setting,
+            runtime=runtime,
+            vision_runtime=vision_runtime,
+            embedding_runtime=embedding_runtime,
+            rerank_runtime=rerank_runtime,
             connection_tests=connection_tests,
-            supports_structured_output=capabilities.structured_output == "json_object",
-            supports_reasoning_control=capabilities.supports_thinking_control,
-            structured_output_verified=bool(connection_tests.get("structured") and connection_tests["structured"].ok),
-        )
-
-    def _summary_from_runtimes(
-        self,
-        runtime: RuntimeModelConfig,
-        embedding_runtime: RuntimeModelConfig,
-        rerank_runtime: RuntimeModelConfig,
-        source: Literal["user", "system"],
-    ) -> ModelSettingsSummary:
-        capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
-        return ModelSettingsSummary(
-            source=source,
-            provider=runtime.provider,
-            base_url=runtime.base_url,
-            chat_model=runtime.chat_model,
-            embedding_model=embedding_runtime.embedding_model,
-            embedding_provider=embedding_runtime.provider,
-            embedding_base_url=embedding_runtime.base_url,
-            embedding_dimension=embedding_runtime.dimensions,
-            has_api_key=bool(runtime.api_key),
-            api_key_masked=self._mask_api_key(runtime.api_key),
-            has_embedding_api_key=bool(embedding_runtime.api_key),
-            embedding_api_key_masked=self._mask_api_key(embedding_runtime.api_key),
-            has_embedding_app_id=bool(embedding_runtime.app_id),
-            embedding_app_id_masked=self._mask_api_key(embedding_runtime.app_id),
-            has_embedding_api_secret=bool(embedding_runtime.api_secret),
-            rerank_model=rerank_runtime.embedding_model,
-            rerank_provider=rerank_runtime.provider,
-            rerank_base_url=rerank_runtime.base_url,
-            rerank_workspace_id=rerank_runtime.workspace_id,
-            has_rerank_api_key=bool(rerank_runtime.api_key),
-            rerank_api_key_masked=self._mask_api_key(rerank_runtime.api_key),
-            can_use_model=runtime.can_use_model,
-            can_use_embedding_model=embedding_runtime.can_use_model,
-            can_use_rerank_model=rerank_runtime.can_use_model,
-            supports_structured_output=capabilities.structured_output == "json_object",
-            supports_reasoning_control=capabilities.supports_thinking_control,
+            mask_secret=self._mask_api_key,
         )
 
     def _system_summary(self) -> ModelSettingsSummary:
@@ -1051,11 +983,12 @@ class ModelSettingsService:
             or rerank_runtime.embedding_model
             or vision_runtime.chat_model
         ):
-            summary = self._summary_from_runtimes(
-                system_runtime,
-                embedding_runtime,
-                rerank_runtime,
+            summary = build_model_settings_summary(
+                runtime=system_runtime,
+                embedding_runtime=embedding_runtime,
+                rerank_runtime=rerank_runtime,
                 source="system",
+                mask_secret=self._mask_api_key,
             )
             return summary.model_copy(
                 update={
@@ -1065,37 +998,7 @@ class ModelSettingsService:
                     "can_use_vision_model": vision_runtime.can_use_model,
                 }
             )
-        return self._empty_summary()
-
-    @staticmethod
-    def _empty_summary() -> ModelSettingsSummary:
-        return ModelSettingsSummary(
-            source="none",
-            provider="openai_compatible",
-            base_url=None,
-            chat_model=None,
-            embedding_model=None,
-            embedding_provider=None,
-            embedding_base_url=None,
-            embedding_dimension=None,
-            has_api_key=False,
-            api_key_masked=None,
-            has_embedding_api_key=False,
-            embedding_api_key_masked=None,
-            rerank_model=None,
-            rerank_provider=None,
-            rerank_base_url=None,
-            rerank_workspace_id=None,
-            has_rerank_api_key=False,
-            rerank_api_key_masked=None,
-            can_use_model=False,
-            can_use_embedding_model=False,
-            can_use_rerank_model=False,
-            vision_model=None,
-            vision_provider=None,
-            vision_base_url=None,
-            can_use_vision_model=False,
-        )
+        return empty_model_settings_summary()
 
     def _apply_settings_payload(self, setting: ModelSetting, payload: SaveModelSettingsRequest) -> None:
         setting.provider = self._normalize_provider(payload.provider)
@@ -1160,9 +1063,9 @@ class ModelSettingsService:
         payload: SaveModelSettingsRequest | UpdateModelConfigRequest,
     ) -> None:
         current_key = self._decrypt_api_key(setting.api_key_ciphertext)
-        current_vision_app_id = self._decrypt_api_key(getattr(setting, "vision_app_id_ciphertext", None))
-        current_vision_api_key = self._decrypt_api_key(getattr(setting, "vision_api_key_ciphertext", None))
-        current_vision_api_secret = self._decrypt_api_key(getattr(setting, "vision_api_secret_ciphertext", None))
+        current_vision_app_id = self._decrypt_api_key(setting.vision_app_id_ciphertext)
+        current_vision_api_key = self._decrypt_api_key(setting.vision_api_key_ciphertext)
+        current_vision_api_secret = self._decrypt_api_key(setting.vision_api_secret_ciphertext)
         current_embedding_key = self._decrypt_api_key(setting.embedding_api_key_ciphertext)
         current_embedding_app_id = self._decrypt_api_key(setting.embedding_app_id_ciphertext)
         current_embedding_secret = self._decrypt_api_key(setting.embedding_api_secret_ciphertext)

@@ -33,7 +33,6 @@ from backend.app.services.code_verifier import CodeVerificationResult
 from backend.app.services.resource_intent import intent_difference_count
 from backend.app.services.resources import (
     ResourceGenerationError,
-    ResourceGenerationService,
     ResourceNotFoundError,
     ResourceValidationError,
 )
@@ -489,6 +488,8 @@ def test_semantic_similarity_uses_configured_embedding_service() -> None:
 
 
 def test_resource_context_prefers_exact_section_and_fallback_content_uses_textbook_facts() -> None:
+    from backend.app.services.resource_content import build_resource_contexts, build_resource_draft
+
     point = make_point()
     chunks = [
         make_chunk(701, content="A* 搜索使用 f(n)=g(n)+h(n) 评价候选状态。"),
@@ -507,8 +508,8 @@ def test_resource_context_prefers_exact_section_and_fallback_content_uses_textbo
     chunks[0].section_title = point.title
     chunks[1].section_title = point.title
 
-    contexts = ResourceGenerationService._safe_resource_contexts(chunks, point, [point])
-    draft = ResourceGenerationService._build_draft(
+    contexts = build_resource_contexts(chunks, point, [point])
+    draft = build_resource_draft(
         resource_type="doc",
         course=make_course(),
         knowledge_point=point,
@@ -545,9 +546,9 @@ def assert_usable_resource_content(resources: list[GeneratedResource]) -> None:
 
 
 def test_resource_json_parser_repairs_multiline_code_strings() -> None:
-    from backend.app.services.resources import ResourceGenerationService
+    from backend.app.services.resource_modeling import ResourceModelingService
 
-    payload = ResourceGenerationService._parse_json_object(
+    payload = ResourceModelingService.parse_json_object(
         '{"artifact":{"kind":"code_lab","files":[{"path":"main.py","content":"print(1)\nprint(2)"}],'
         '"entry_file":"main.py","expected_output":"1\n2"}}'
     )
@@ -558,24 +559,24 @@ def test_resource_json_parser_repairs_multiline_code_strings() -> None:
 
 
 def test_worker_schema_example_does_not_offer_generic_code_to_copy() -> None:
-    from backend.app.services.resources import ResourceGenerationService
+    from backend.app.services.resource_content import build_resource_contexts, build_resource_draft, summarize_resource_profile
+    from backend.app.services.resource_modeling import ResourceModelingService
 
     repo = make_repo()
-    service = make_service(repo)
     course = repo.get_course_for_user(1, 101)
     point = repo.get_knowledge_point(101, 501)
-    contexts = service._safe_resource_contexts(repo.list_course_chunks(101, 501), point, repo.list_knowledge_points(101))
-    draft = service._build_draft(
+    contexts = build_resource_contexts(repo.list_course_chunks(101, 501), point, repo.list_knowledge_points(101))
+    draft = build_resource_draft(
         resource_type="code",
         course=course,
         knowledge_point=point,
         context_points=repo.list_knowledge_points(101),
         contexts=contexts,
-        profile_summary=service._profile_summary(repo.get_profile(1)),
+        profile_summary=summarize_resource_profile(repo.get_profile(1)),
         difficulty="medium",
     )
 
-    example = ResourceGenerationService._worker_schema_example("code", draft)
+    example = ResourceModelingService.worker_schema_example("code", draft)
 
     assert "启发式搜索" in example["files"][0]["content"]
     assert "StudyStep" not in example["files"][0]["content"]

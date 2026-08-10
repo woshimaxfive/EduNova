@@ -12,7 +12,6 @@ from backend.app.models import (
     ResourceQualityScore,
     User,
 )
-from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.providers.openai_compatible import ModelProviderError
 from backend.app.schemas.resources import (
     GenerateResourcesResult,
@@ -28,13 +27,9 @@ from backend.app.services.code_verifier import CodeVerifier
 from backend.app.services.embeddings import EmbeddingService
 from backend.app.services.resource_artifacts import validate_resource_content
 from backend.app.services.resource_content import (
-    build_resource_contexts,
-    build_resource_draft,
     resource_context_keywords,
-    resource_context_label_key,
     safe_resource_excerpt,
     safe_resource_title,
-    summarize_resource_profile,
 )
 from backend.app.services.resource_quality import (
     RESOURCE_PROMPT_VERSION,
@@ -84,7 +79,7 @@ class ResourceGenerationService:
     ) -> None:
         self.repository = repository
         self.model_settings_service = model_settings_service
-        self._modeling = ResourceModelingService(model_settings_service)
+        self.modeling_service = ResourceModelingService(model_settings_service)
         self.trace_recorder = trace_recorder or AgentTraceRecorder(repository_add_log=repository.add_agent_log)
         self.code_verifier = code_verifier
         self.video_curator = video_curator or VideoCurationService()
@@ -267,83 +262,6 @@ class ResourceGenerationService:
         if len(unique_types) > 7:
             raise ResourceValidationError("一次最多生成 7 类资源。")
         return unique_types
-
-    # 兼容现有 Graph 和定向测试使用的内部入口；实现已收口到资源内容模块。
-    _safe_resource_contexts = staticmethod(build_resource_contexts)
-    _context_label_key = staticmethod(resource_context_label_key)
-    _profile_summary = staticmethod(summarize_resource_profile)
-    _build_draft = staticmethod(build_resource_draft)
-
-    def _enhance_resource_with_model(
-        self,
-        *,
-        user: User,
-        resource_type: str,
-        draft: ResourceDraft,
-        contexts: list[ResourceContext],
-        profile_summary: dict[str, Any],
-        learning_goal: str,
-        difficulty: str,
-        artifact_intent: dict[str, Any],
-        history_summaries: list[dict[str, Any]],
-    ) -> tuple[dict[str, Any] | None, bool]:
-        return self._modeling.enhance_resource(
-            user=user,
-            resource_type=resource_type,
-            draft=draft,
-            contexts=contexts,
-            profile_summary=profile_summary,
-            learning_goal=learning_goal,
-            difficulty=difficulty,
-            artifact_intent=artifact_intent,
-            history_summaries=history_summaries,
-        )
-
-    @staticmethod
-    def _worker_schema_example(resource_type: str, draft: ResourceDraft) -> dict[str, Any]:
-        return ResourceModelingService.worker_schema_example(resource_type, draft)
-
-    def _review_resources_with_model(
-        self,
-        *,
-        user: User,
-        payloads: list[dict[str, Any]],
-        contexts: list[ResourceContext],
-        learning_goal: str,
-        history_summaries: list[dict[str, Any]],
-    ) -> tuple[dict[str, dict[str, Any]], bool]:
-        return self._modeling.review_resources(
-            user=user,
-            payloads=payloads,
-            contexts=contexts,
-            learning_goal=learning_goal,
-            history_summaries=history_summaries,
-        )
-
-    def _repair_resource_with_model(
-        self,
-        *,
-        user: User,
-        payload: dict[str, Any],
-    ) -> dict[str, Any] | None:
-        return self._modeling.repair_resource(user=user, payload=payload)
-
-    def _call_model_for_resource(
-        self,
-        user: User,
-        messages: list[dict[str, str]],
-        *,
-        profile: ModelTaskProfile | None = None,
-    ) -> str:
-        return self._modeling.call_model(user, messages, profile=profile)
-
-    @staticmethod
-    def _parse_worker_content(content: str, resource_type: str, draft: ResourceDraft) -> dict[str, Any] | None:
-        return ResourceModelingService.parse_worker_content(content, resource_type, draft)
-
-    @staticmethod
-    def _parse_json_object(content: str) -> dict[str, Any] | None:
-        return ResourceModelingService.parse_json_object(content)
 
     def _quality_gate(
         self,

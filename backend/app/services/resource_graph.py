@@ -19,6 +19,7 @@ from backend.app.services.content_locale import china_first_content_policy
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.resource_artifacts import ArtifactBuildInput, validate_resource_content
+from backend.app.services.resource_content import build_resource_contexts, build_resource_draft, summarize_resource_profile
 from backend.app.services.resource_contracts import (
     ResourceDraft,
     ResourceGenerationError,
@@ -194,7 +195,7 @@ class ResourceGenerationGraphRunner:
             context_metadata = learner_context.trace_metadata()
         else:
             profile = self.service.repository.get_profile(int(state["user_id"]))
-            profile_summary = self.service._profile_summary(profile)
+            profile_summary = summarize_resource_profile(profile)
             learner_context = None
             context_metadata = {"profile_context_used": bool(profile_summary)}
         self._record(
@@ -219,7 +220,7 @@ class ResourceGenerationGraphRunner:
             course.id,
             knowledge_point.id if knowledge_point is not None else None,
         )
-        contexts = self.service._safe_resource_contexts(chunks, knowledge_point, context_points)
+        contexts = build_resource_contexts(chunks, knowledge_point, context_points)
         citations = [context.citation for context in contexts]
         if not citations and knowledge_point is None and not context_points:
             raise ResourceGenerationError("当前课程没有足够依据生成资源。")
@@ -355,7 +356,7 @@ class ResourceGenerationGraphRunner:
         intents: dict[str, dict[str, Any]],
     ) -> dict[str, dict[str, Any]] | None:
         try:
-            raw = self.service._call_model_for_resource(
+            raw = self.service.modeling_service.call_model(
                 state["user"],
                 [
                     {
@@ -520,7 +521,7 @@ class ResourceGenerationGraphRunner:
                 for resource in historical_resources
                 if isinstance(resource.content_json, dict)
             ]
-            draft = self.service._build_draft(
+            draft = build_resource_draft(
                 resource_type=resource_type,
                 course=course,
                 knowledge_point=knowledge_point,
@@ -533,7 +534,7 @@ class ResourceGenerationGraphRunner:
             with model_execution_scope(
                 execution_context_for_state(state, workflow=self.workflow, node_name=f"{worker_name}:{resource_type}")
             ):
-                model_content, model_failed = self.service._enhance_resource_with_model(
+                model_content, model_failed = self.service.modeling_service.enhance_resource(
                     user=state["user"],
                     resource_type=resource_type,
                     draft=draft,
@@ -780,7 +781,7 @@ class ResourceGenerationGraphRunner:
         contexts = list(state.get("contexts", []))
         payloads = list(state.get("resource_payloads", []))
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name="review")):
-            model_reviews, review_model_failed = self.service._review_resources_with_model(
+            model_reviews, review_model_failed = self.service.modeling_service.review_resources(
                 user=state["user"],
                 payloads=[payload for payload in payloads if payload.get("resource_type") != "video"],
                 contexts=contexts,
@@ -880,7 +881,7 @@ class ResourceGenerationGraphRunner:
                 continue
             resource_type = str(payload["resource_type"])
             with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, node_name="repair")):
-                repaired_content = self.service._repair_resource_with_model(
+                repaired_content = self.service.modeling_service.repair_resource(
                     user=state["user"],
                     payload={**payload, "generation_action": state.get("generation_action", "new")},
                 )

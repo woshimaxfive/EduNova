@@ -14,8 +14,15 @@ from backend.app.models import (
     Material,
     User,
 )
+from backend.app.agents.tool_policy import ToolDecision
 from backend.app.schemas.tutor import TutorResourceJob
-from backend.app.services.course_answers import ConversationContext, HomeAnswerReview
+from backend.app.services.course_answers import (
+    ConversationContext,
+    CourseAnswerGeneration,
+    CourseAnswerStream,
+    HomeAnswerReview,
+)
+from backend.app.services.material_retrieval import MaterialRetrievalResult
 
 
 class InvalidSessionScopeError(ValueError):
@@ -103,7 +110,9 @@ class CourseCitationSearcher(Protocol):
 
 
 class MaterialCitationSearcher(Protocol):
-    def search(self, user: User, material_ids: list[int], query: str, top_k: int = 5) -> Any: ...
+    def search(
+        self, user: User, material_ids: list[int], query: str, top_k: int = 5
+    ) -> MaterialRetrievalResult: ...
 
 
 class CourseAnswerGenerator(Protocol):
@@ -118,7 +127,7 @@ class CourseAnswerGenerator(Protocol):
         conversation_context: ConversationContext | None = None,
         plan_summary: str | None = None,
         learner_context: dict[str, Any] | None = None,
-    ) -> Any: ...
+    ) -> CourseAnswerGeneration: ...
 
     def generate(
         self,
@@ -128,7 +137,7 @@ class CourseAnswerGenerator(Protocol):
         conversation_context: ConversationContext | None = None,
         learner_context: dict[str, Any] | None = None,
         reasoning_mode: str = "auto",
-    ) -> Any: ...
+    ) -> CourseAnswerGeneration: ...
 
     def stream(
         self,
@@ -138,7 +147,7 @@ class CourseAnswerGenerator(Protocol):
         conversation_context: ConversationContext | None = None,
         learner_context: dict[str, Any] | None = None,
         reasoning_mode: str = "auto",
-    ) -> Any: ...
+    ) -> CourseAnswerStream: ...
 
     def stream_home(
         self,
@@ -151,9 +160,11 @@ class CourseAnswerGenerator(Protocol):
         conversation_context: ConversationContext | None = None,
         plan_summary: str | None = None,
         learner_context: dict[str, Any] | None = None,
-    ) -> Any: ...
+    ) -> CourseAnswerStream: ...
 
     def plan_home(self, user: User, question: str, citations: list[dict[str, Any]]) -> str: ...
+
+    def plan_course(self, user: User, question: str, citations: list[dict[str, Any]]) -> str: ...
 
     def review_home(
         self,
@@ -205,7 +216,9 @@ class NativeWebSearchProvider(Protocol):
 
 
 class SemanticDecisionProvider(Protocol):
-    def decide(self, **kwargs: Any) -> Any: ...
+    def decide(self, **kwargs: Any) -> ToolDecision: ...
+
+    def assess_course_evidence(self, **kwargs: Any) -> dict[str, Any] | None: ...
 
 
 class ConversationMemoryProvider(Protocol):
@@ -214,6 +227,15 @@ class ConversationMemoryProvider(Protocol):
     ) -> list[dict[str, Any]]: ...
 
     def index_pair(
+        self,
+        *,
+        user: User,
+        session: ChatSession,
+        user_message: ChatMessage,
+        assistant_message: ChatMessage,
+    ) -> bool: ...
+
+    def schedule_pair(
         self,
         *,
         user: User,

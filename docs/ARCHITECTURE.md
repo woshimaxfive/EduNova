@@ -290,6 +290,7 @@ backend/app/
 | `backend/app/services/tutor_contracts.py` | Tutor 异常、仓储/Provider 依赖协议和内部回答结果合同 |
 | `backend/app/services/tutor_repository.py` | Tutor 会话、消息、附件与回答资源任务的 SQLAlchemy 持久化实现 |
 | `backend/app/services/tutor_runtime.py` | Home/Course Tutor 共用的步骤定义、上下文预算、降级文案和 Provider 兼容参数 |
+| `backend/app/services/tutor_routing.py` | Home/Course Tutor 共用的视觉与语义路由投影，把强类型 `ToolDecision` 映射为 Graph State 与安全 trace 元数据 |
 | `backend/app/services/tutor_home_graph.py` | `HomeTutorGraphRunner`，接管主页上下文、路由、资料检索、联网、规划、回答、Review/Repair 和持久化 |
 | `backend/app/services/tutor_course_graph.py` | `CourseTutorGraphRunner`，接管课程画像、路由、严格 RAG、外部补充、回答、Review 和下一行动 |
 | `backend/app/services/tutor_resource_flow.py` | Tutor 语义决策、资源请求确认、资源任务准备与关联 |
@@ -306,13 +307,14 @@ backend/app/
 | `backend/app/services/resource_repository.py` | 资源、质量评分、学习任务和课程资料查询的 SQLAlchemy 持久化实现 |
 | `backend/app/services/resource_content.py` | 课程证据筛选、画像安全摘要、上下文关键词与六类结构化资源的确定性 artifact 底稿 |
 | `backend/app/services/resource_modeling.py` | 资源 Worker、ReviewAgent 与修订 Agent 的提示构造、受控模型调用、结构化响应解析和敏感内容检查 |
-| `backend/app/services/resource_graph.py` | `ResourceGenerationGraphRunner`，接管资源画像、检索、诊断、规划、并行生成、聚合、审核/修复和持久化 |
-| `backend/app/services/resources.py` | 资源公开服务、课程/版本校验、持久化协调、质量门禁、相似度计算及旧内部入口兼容；模型职责转发至 `resource_modeling.py` |
+| `backend/app/services/resource_graph.py` | `ResourceGenerationGraphRunner`，接管资源画像、检索、诊断、规划、并行生成、聚合、审核/修复和持久化，并显式使用 `ResourceModelingService` |
+| `backend/app/services/resources.py` | 资源公开服务、课程/版本校验、持久化协调、质量门禁和相似度计算；不再提供 Graph/测试专用的模型与内容私有转发入口 |
 | `backend/app/services/model_settings_contracts.py` | 模型设置异常、请求/响应 Schema、运行时配置及仓储/Provider 依赖协议 |
 | `backend/app/services/model_settings_repository.py` | 用户模型配置和五类默认配置选择的 SQLAlchemy 持久化实现 |
 | `backend/app/services/model_connection_testing.py` | 回答、结构化、向量、重排序和图片理解的连接探测、结构校验及安全结果归一化 |
 | `backend/app/services/model_runtime_config.py` | 将用户或系统的回答、生成、向量、重排序和视觉配置映射成统一 `RuntimeModelConfig`；解密能力由服务回调提供 |
-| `backend/app/services/model_settings.py` | 模型设置服务，负责配置优先级、模型调用、测试结果持久化与凭证加密，并兼容既有导入和内部入口 |
+| `backend/app/services/model_settings_presenter.py` | 将运行时配置、能力声明和脱敏状态组装为模型设置 API 响应，不选择配置、不解密凭证、不调用 Provider |
+| `backend/app/services/model_settings.py` | 模型设置服务，负责配置优先级、模型调用、测试结果持久化与凭证加密；响应装配委托给 presenter |
 | `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计 |
 | `backend/app/services/embeddings.py` | Embedding 服务，负责讯飞原生与 OpenAI-compatible 动态维度调用、配置指纹和切片向量写入；无配置时只返回关键词 fallback |
 | `backend/app/providers/retrieval.py` | 讯飞签名 Embedding、UTF-8 2KB 分片池化、硅基/百炼 Rerank Provider |

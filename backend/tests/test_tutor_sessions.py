@@ -15,6 +15,9 @@ from backend.app.core.security import create_access_token
 from backend.app.main import create_app
 from backend.app.models import ChatMessage, ChatSession, Material, User
 from backend.app.services.auth import AuthService
+from backend.app.agents.tool_policy import ToolDecision
+from backend.app.services.course_answers import CourseAnswerGeneration, CourseAnswerStream, HomeAnswerReview
+from backend.app.services.material_retrieval import MaterialRetrievalResult
 from backend.app.services.tutor import HomeTutorGraphRunner
 
 
@@ -160,6 +163,21 @@ class FakeTutorRepository:
             None,
         )
 
+    def pending_attachments(self, user_id: int, session_id: int, attachment_ids: list[int]) -> list[Any]:
+        return []
+
+    def bound_attachments(self, user_id: int, session_id: int, message_ids: list[int]) -> list[Any]:
+        return []
+
+    def bind_attachments(self, attachments: list[Any], message_id: int) -> None:
+        return None
+
+    def attachment_map(self, message_ids: list[int]) -> dict[int, list[Any]]:
+        return {}
+
+    def resource_job_map(self, user_id: int, message_ids: list[int]) -> dict[int, list[Any]]:
+        return {}
+
     def link_resource_job(self, user_id: int, session_id: int, message_id: int, job_id: int) -> None:
         message = self.get_assistant_message(user_id, session_id, message_id)
         if message is None:
@@ -233,7 +251,7 @@ class FakeMaterialCitationSearcher:
     embedding_status: str = "local_fallback"
     calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def search(self, user: User, material_ids: list[int], query: str, top_k: int) -> SimpleNamespace:
+    def search(self, user: User, material_ids: list[int], query: str, top_k: int) -> MaterialRetrievalResult:
         self.calls.append(
             {
                 "user_id": user.id,
@@ -242,7 +260,7 @@ class FakeMaterialCitationSearcher:
                 "top_k": top_k,
             }
         )
-        return SimpleNamespace(
+        return MaterialRetrievalResult(
             citations=self.citations,
             retrieval_mode=self.retrieval_mode,
             embedding_status=self.embedding_status,
@@ -272,7 +290,7 @@ class FakeCourseAnswerGenerator:
         citations: list[dict[str, Any]],
         conversation_context: Any | None = None,
         resource_context: dict[str, Any] | None = None,
-    ) -> SimpleNamespace:
+    ) -> CourseAnswerGeneration:
         call: dict[str, Any] = {"user_id": user.id, "question": question, "citations": citations}
         if conversation_context is not None:
             call["conversation_context"] = conversation_context
@@ -281,7 +299,7 @@ class FakeCourseAnswerGenerator:
         self.calls.append(call)
         if self.should_raise is not None:
             raise self.should_raise
-        return SimpleNamespace(content=self.content, trace_id=self.trace_id)
+        return CourseAnswerGeneration(content=self.content, trace_id=self.trace_id)
 
     def generate_home(
         self,
@@ -293,7 +311,7 @@ class FakeCourseAnswerGenerator:
         warnings: list[str] | None = None,
         conversation_context: Any | None = None,
         plan_summary: str | None = None,
-    ) -> SimpleNamespace:
+    ) -> CourseAnswerGeneration:
         call = {
             "user_id": user.id,
             "question": question,
@@ -312,7 +330,7 @@ class FakeCourseAnswerGenerator:
         self.calls.append(call)
         if self.should_raise is not None:
             raise self.should_raise
-        return SimpleNamespace(content=self.content, trace_id=self.trace_id)
+        return CourseAnswerGeneration(content=self.content, trace_id=self.trace_id)
 
     def stream_home(
         self,
@@ -324,7 +342,7 @@ class FakeCourseAnswerGenerator:
         warnings: list[str] | None = None,
         conversation_context: Any | None = None,
         plan_summary: str | None = None,
-    ) -> SimpleNamespace:
+    ) -> CourseAnswerStream:
         self.calls.append(
             {
                 "user_id": user.id,
@@ -339,11 +357,14 @@ class FakeCourseAnswerGenerator:
         )
         if self.should_raise is not None:
             raise self.should_raise
-        return SimpleNamespace(tokens=iter(self.tokens), trace_id=self.trace_id, used_model=self.trace_id is not None)
+        return CourseAnswerStream(tokens=iter(self.tokens), trace_id=self.trace_id, used_model=self.trace_id is not None)
 
     def plan_home(self, user: User, question: str, citations: list[dict[str, Any]]) -> str:
         self.plan_calls.append({"user_id": user.id, "question": question, "citation_count": len(citations)})
         return "目标：直接回答问题\n证据需求：使用可用来源\n回答结构：定义、解释、下一步"
+
+    def plan_course(self, user: User, question: str, citations: list[dict[str, Any]]) -> str:
+        return self.plan_home(user, question, citations)
 
     def review_home(
         self,
@@ -352,7 +373,7 @@ class FakeCourseAnswerGenerator:
         answer: str,
         citations: list[dict[str, Any]],
         warnings: list[str] | None = None,
-    ) -> SimpleNamespace:
+    ) -> HomeAnswerReview | None:
         self.review_calls.append(
             {
                 "user_id": user.id,
@@ -364,7 +385,7 @@ class FakeCourseAnswerGenerator:
         )
         if not self.review_available:
             return None
-        return SimpleNamespace(
+        return HomeAnswerReview(
             review_status=self.review_status,
             confidence=0.9 if self.review_status == "passed" else 0.45,
             risk_flags=self.review_risk_flags,
@@ -398,7 +419,7 @@ class FakeCourseAnswerGenerator:
         citations: list[dict[str, Any]],
         conversation_context: Any | None = None,
         resource_context: dict[str, Any] | None = None,
-    ) -> SimpleNamespace:
+    ) -> CourseAnswerStream:
         self.calls.append(
             {
                 "user_id": user.id,
@@ -411,7 +432,7 @@ class FakeCourseAnswerGenerator:
         )
         if self.should_raise is not None:
             raise self.should_raise
-        return SimpleNamespace(tokens=iter(self.tokens), trace_id=self.trace_id)
+        return CourseAnswerStream(tokens=iter(self.tokens), trace_id=self.trace_id, used_model=self.trace_id is not None)
 
 
 @dataclass
@@ -644,15 +665,15 @@ class FakeSemanticDecisionService:
     calls: list[dict[str, Any]] = field(default_factory=list)
     evidence_calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def decide(self, **kwargs: Any) -> SimpleNamespace:
+    def decide(self, **kwargs: Any) -> ToolDecision:
         self.calls.append(kwargs)
         forced_search = bool(kwargs.get("force_search"))
         forced_deep = bool(kwargs.get("force_deep"))
-        return SimpleNamespace(
+        return ToolDecision(
             search_required=self.search_required or forced_search,
             reasoning_mode="deep" if self.reasoning_mode == "deep" or forced_deep else "auto",
             reason_codes=("semantic_test",),
-            reason_summary="模型语义测试决策。",
+            summary="模型语义测试决策。",
             intent=self.intent,
             search_query=self.search_query or kwargs["question"],
             confidence=0.92,
@@ -667,7 +688,6 @@ class FakeSemanticDecisionService:
             resource_learning_goal=self.resource_learning_goal,
             resource_reason_summary=self.resource_reason_summary,
             response_mode=self.response_mode,
-            warning=None,
         )
 
     def assess_course_evidence(self, **kwargs: Any) -> None:

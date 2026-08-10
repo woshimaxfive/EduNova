@@ -176,8 +176,7 @@ class TutorResponseFlowMixin:
             )
         except Exception as exc:
             raise CourseAnswerGenerationError(str(exc) or "图片理解失败，请稍后重试。") from exc
-        contextualizer = getattr(self.vision_understanding_service, "contextual_question")
-        return contextualizer(question, result), result.model_dump()
+        return self.vision_understanding_service.contextual_question(question, result), result.model_dump()
 
     def _prepare_history_visual_question(
         self,
@@ -190,10 +189,7 @@ class TutorResponseFlowMixin:
         if self.vision_understanding_service is None or not referenced_turn_ids:
             return question, None
         message_ids = [int(item) for item in referenced_turn_ids if str(item).isdigit()]
-        finder = getattr(self.repository, "bound_attachments", None)
-        if not callable(finder):
-            return question, None
-        attachments = finder(user.id, session.id, message_ids)
+        attachments = self.repository.bound_attachments(user.id, session.id, message_ids)
         if not attachments:
             return question, None
         result = self.vision_understanding_service.understand(
@@ -201,11 +197,10 @@ class TutorResponseFlowMixin:
             question=question,
             attachment_ids=[int(item.id) for item in attachments],
         )
-        contextualizer = getattr(self.vision_understanding_service, "contextual_question")
         payload = result.model_dump()
         payload["reused_history_image"] = True
         payload["image_count"] = len(attachments)
-        return contextualizer(question, result), payload
+        return self.vision_understanding_service.contextual_question(question, result), payload
 
     def _material_context_for_message(
         self,
@@ -325,8 +320,8 @@ class TutorResponseFlowMixin:
                 citations=citation_json,
                 conversation_context=conversation_context,
             )
-            trace_id = getattr(stream_result, "trace_id", None)
-            used_model = bool(getattr(stream_result, "used_model", True))
+            trace_id = stream_result.trace_id
+            used_model = stream_result.used_model
             yield self._stream_event(
                 "metadata",
                 session_id=session.id,
@@ -337,7 +332,7 @@ class TutorResponseFlowMixin:
             )
 
             answer_parts: list[str] = []
-            for token in getattr(stream_result, "tokens"):
+            for token in stream_result.tokens:
                 if not isinstance(token, str) or not token:
                     continue
                 answer_parts.append(token)
@@ -391,8 +386,8 @@ class TutorResponseFlowMixin:
                 conversation_context=conversation_context,
             )
             return GeneratedAnswer(
-                content=str(getattr(answer, "content", "") or ""),
-                trace_id=getattr(answer, "trace_id", None),
+                content=answer.content,
+                trace_id=answer.trace_id,
             )
 
         if session.scope != "course" or not citation_json:
@@ -407,8 +402,8 @@ class TutorResponseFlowMixin:
             conversation_context=conversation_context,
         )
         return GeneratedAnswer(
-            content=str(getattr(answer, "content", "") or ""),
-            trace_id=getattr(answer, "trace_id", None),
+            content=answer.content,
+            trace_id=answer.trace_id,
         )
 
     def _persist_message_pair(
@@ -502,8 +497,7 @@ class TutorResponseFlowMixin:
 
         if self.conversation_memory_service is not None:
             try:
-                schedule = getattr(self.conversation_memory_service, "schedule_pair", None)
-                (schedule if callable(schedule) else self.conversation_memory_service.index_pair)(
+                self.conversation_memory_service.schedule_pair(
                     user=user,
                     session=session,
                     user_message=user_message,
@@ -523,18 +517,16 @@ class TutorResponseFlowMixin:
             and profile_signal_updates
         ):
             try:
-                ingest = getattr(self.profile_event_recorder, "ingest_course_question_signal", None)
-                if callable(ingest):
-                    ingest(
-                        user=user,
-                        session=session,
-                        user_message=user_message,
-                        message_text=message_text,
-                        citation_json=course_evidence,
-                        trace_id=trace_id,
-                        suggested_updates=profile_signal_updates,
-                        suggested_confidence=profile_signal_confidence or {},
-                    )
+                self.profile_event_recorder.ingest_course_question_signal(
+                    user=user,
+                    session=session,
+                    user_message=user_message,
+                    message_text=message_text,
+                    citation_json=course_evidence,
+                    trace_id=trace_id,
+                    suggested_updates=profile_signal_updates,
+                    suggested_confidence=profile_signal_confidence or {},
+                )
             except Exception:
                 self.repository.rollback()
 
@@ -542,8 +534,6 @@ class TutorResponseFlowMixin:
 
     def _session_detail(self, session: ChatSession) -> TutorSessionDetail:
         messages = self.repository.list_messages(session.id)
-        mapper = getattr(self.repository, "attachment_map", None)
-        attachment_map = mapper([message.id for message in messages]) if callable(mapper) else {}
-        resource_mapper = getattr(self.repository, "resource_job_map", None)
-        resource_job_map = resource_mapper(session.user_id, [message.id for message in messages]) if callable(resource_mapper) else {}
+        attachment_map = self.repository.attachment_map([message.id for message in messages])
+        resource_job_map = self.repository.resource_job_map(session.user_id, [message.id for message in messages])
         return session_detail_to_api(session, messages, attachment_map, resource_job_map)

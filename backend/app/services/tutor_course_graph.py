@@ -16,6 +16,7 @@ from backend.app.services.content_locale import china_first_content_policy
 from backend.app.services.course_answers import CourseAnswerGenerationError, HOME_MODEL_NOT_CONFIGURED_MESSAGE
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
+from backend.app.services.tutor_routing import project_semantic_route, project_visual_route
 from backend.app.services.tutor_runtime import (
     CONTEXT_MESSAGE_CHAR_LIMIT,
     COURSE_ASSISTANT_REPLY_MODEL_NOT_CONFIGURED,
@@ -302,43 +303,25 @@ class CourseTutorGraphRunner:
         def work():
             visual = state.get("vision_decision")
             if isinstance(visual, dict):
-                search_required = bool(visual.get("search_required")) or bool(state.get("use_web_search"))
-                reasoning_mode = "deep" if bool(state.get("deep_thinking")) else str(visual.get("reasoning_mode") or "auto")
                 intent = str(visual.get("intent") or "visual_learning")
-                summary = "已结合本次图片形成课程检索问题。"
-                updates = {
-                    "intent": intent,
-                    "search_required": search_required,
-                    "reasoning_mode": reasoning_mode,
-                    "source_scope": "mainland_preferred",
-                    "tool_reason_codes": ["vision_understanding"],
-                    "tool_reason_summary": summary,
-                    "semantic_search_query": str(visual.get("standalone_query") or state["message_text"]),
-                    "semantic_decision_mode": "vision_model",
-                    "semantic_decision_confidence": float(visual.get("confidence") or 0),
-                    "semantic_warning": None,
-                    "resource_action": "none",
-                    "resource_types": [],
-                    "response_mode": "answer",
-                    "retrieval_query": str(visual.get("standalone_query") or state["message_text"]),
-                    "standalone_query": str(visual.get("standalone_query") or state["message_text"]),
-                    "uses_history": False,
-                    "referenced_turn_ids": [],
+                projection = project_visual_route(
+                    visual=visual,
+                    message_text=str(state["message_text"]),
+                    force_search=bool(state.get("use_web_search")),
+                    force_deep=bool(state.get("deep_thinking")),
+                    intent=intent,
+                    summary="已结合本次图片形成课程检索问题。",
+                    warnings=list(state.get("warnings", [])),
+                    attachment_count=len(state.get("attachment_ids", [])),
+                )
+                return {
+                    **projection.updates,
                     "course_related": True,
                     "profile_signal_updates": {},
                     "profile_signal_confidence": {},
-                    "warnings": list(state.get("warnings", [])),
-                }
-                return updates, summary, "completed", {
-                    "search_required": search_required,
-                    "reasoning_mode": reasoning_mode,
-                    "semantic_decision_mode": "vision_model",
-                    "semantic_decision_confidence": float(visual.get("confidence") or 0),
-                    "semantic_intent": intent,
+                }, projection.summary, "completed", {
+                    **projection.metadata,
                     "profile_signal_count": 0,
-                    "vision_image_count": len(state.get("attachment_ids", [])),
-                    "vision_provider": str(visual.get("provider") or "unknown"),
-                    "vision_confidence": float(visual.get("confidence") or 0),
                 }
             decision = self.service._semantic_decision(
                 user=state["user"],
@@ -348,7 +331,7 @@ class CourseTutorGraphRunner:
                 force_deep=bool(state.get("deep_thinking")),
                 conversation_context=state.get("conversation_context"),
             )
-            referenced_turn_ids = list(getattr(decision, "referenced_turn_ids", ()))
+            referenced_turn_ids = list(decision.referenced_turn_ids)
             history_message, history_visual = self.service._prepare_history_visual_question(
                 user=state["user"],
                 session=state["session"],
@@ -356,59 +339,24 @@ class CourseTutorGraphRunner:
                 referenced_turn_ids=referenced_turn_ids,
             )
             intent = str(history_visual.get("intent") or "visual_learning") if history_visual else decision.intent
-            search_required = decision.search_required or bool(history_visual and history_visual.get("search_required"))
-            reasoning_mode = "deep" if decision.reasoning_mode == "deep" or bool(history_visual and history_visual.get("reasoning_mode") == "deep") else "auto"
-            standalone_query = str(history_visual.get("standalone_query") or history_message) if history_visual else getattr(decision, "standalone_query", str(state["message_text"]))
-            warnings = list(state.get("warnings", []))
-            if decision.warning and decision.warning not in warnings:
-                warnings.append(decision.warning)
+            projection = project_semantic_route(
+                decision=decision,
+                intent=intent,
+                message_text=str(state["message_text"]),
+                fallback_retrieval_query=str(state.get("retrieval_query") or state["message_text"]),
+                history_message=history_message,
+                history_visual=history_visual,
+                warnings=list(state.get("warnings", [])),
+            )
             updates = {
-                "intent": intent,
-                "search_required": search_required,
-                "reasoning_mode": reasoning_mode,
-                "source_scope": getattr(decision, "source_scope", "mainland_preferred"),
-                "tool_reason_codes": list(decision.reason_codes),
-                "tool_reason_summary": decision.reason_summary,
-                "semantic_search_query": standalone_query if history_visual else decision.search_query,
-                "semantic_decision_mode": decision.decision_mode,
-                "semantic_decision_confidence": decision.confidence,
-                "semantic_warning": decision.warning,
-                "resource_action": getattr(decision, "resource_action", "none"),
-                "resource_types": list(getattr(decision, "resource_types", ())),
-                "resource_difficulty": getattr(decision, "resource_difficulty", "medium"),
-                "resource_topic": getattr(decision, "resource_topic", ""),
-                "resource_learning_goal": getattr(decision, "resource_learning_goal", ""),
-                "resource_reason_summary": getattr(decision, "resource_reason_summary", ""),
-                "response_mode": getattr(decision, "response_mode", "answer"),
-                "retrieval_query": standalone_query if history_visual else (
-                    getattr(decision, "standalone_query", "")
-                    if getattr(decision, "uses_history", False)
-                    else (str(state["message_text"]) if str(decision.decision_mode) in {"model", "model_forced"} else str(state.get("retrieval_query") or state["message_text"]))
-                ),
-                "standalone_query": standalone_query,
-                "message_text": history_message,
-                "vision_decision": history_visual,
-                "uses_history": bool(getattr(decision, "uses_history", False)),
-                "referenced_turn_ids": referenced_turn_ids,
+                **projection.updates,
                 "course_related": decision.course_related,
                 "profile_signal_updates": {} if history_visual else dict(decision.profile_updates),
                 "profile_signal_confidence": {} if history_visual else dict(decision.profile_confidence),
-                "warnings": warnings,
             }
             metadata = {
-                "search_required": search_required,
-                "reasoning_mode": reasoning_mode,
-                "tool_reason_codes": list(decision.reason_codes),
-                "tool_reason_summary": decision.reason_summary,
-                "semantic_decision_mode": decision.decision_mode,
-                "semantic_decision_confidence": decision.confidence,
-                "source_scope": getattr(decision, "source_scope", "mainland_preferred"),
-                "semantic_intent": intent,
+                **projection.metadata,
                 "profile_signal_count": 0 if history_visual else len(decision.profile_updates),
-                "reused_history_image": bool(history_visual),
-                "vision_image_count": int(history_visual.get("image_count", 0)) if history_visual else 0,
-                "vision_provider": str(history_visual.get("provider") or "unknown") if history_visual else None,
-                "vision_confidence": float(history_visual.get("confidence") or 0) if history_visual else None,
             }
             return updates, decision.reason_summary, "completed", metadata
 
@@ -428,7 +376,8 @@ class CourseTutorGraphRunner:
                 message_text=str(state["message_text"]),
                 retrieval_query=str(state["retrieval_query"]),
             )
-            history_citations = list(getattr(state.get("conversation_context"), "history_citations", []))
+            conversation_context = state.get("conversation_context")
+            history_citations = list(conversation_context.history_citations) if conversation_context is not None else []
             citations = [*history_citations, *citations]
             return (
                 {"citation_json": citations, "citations": citations},
@@ -449,7 +398,6 @@ class CourseTutorGraphRunner:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             citations = list(state.get("citation_json", []))
             course_citation_count = sum(1 for item in citations if item.get("source_type") not in {"web", "history"})
-            assessor = getattr(self.service.semantic_decision_service, "assess_course_evidence", None)
             evidence_decision = None
             if (
                 not bool(state.get("search_required"))
@@ -467,12 +415,12 @@ class CourseTutorGraphRunner:
                     "external_search_helpful": False,
                     "confidence": float(state.get("semantic_decision_confidence") or 0),
                 }
-            elif callable(assessor):
+            elif self.service.semantic_decision_service is not None:
                 course = self.service.repository.get_course_for_user(int(state["user_id"]), int(state["course_id"]))
-                evidence_decision = assessor(
+                evidence_decision = self.service.semantic_decision_service.assess_course_evidence(
                     user=state["user"],
                     question=str(state["message_text"]),
-                    course_title=str(getattr(course, "title", "") or ""),
+                    course_title=course.title if course is not None else "",
                     citations=citations,
                 )
             if isinstance(evidence_decision, dict):
@@ -587,11 +535,10 @@ class CourseTutorGraphRunner:
                 return ({"plan_summary": ""}, "资源动作无需重复生成课程回答规划。", "skipped", {"response_mode": "action"})
             if state.get("reasoning_mode") != "deep":
                 return ({"plan_summary": ""}, "模型将自适应处理当前问题。", "skipped", {"reasoning_mode": "auto"})
-            planner = getattr(self.service.course_answer_generator, "plan_course", None)
             plan_summary = ""
-            if callable(planner):
+            if self.service.course_answer_generator is not None:
                 plan_summary = str(
-                    planner(
+                    self.service.course_answer_generator.plan_course(
                         user=state["user"],
                         question=str(state["message_text"]),
                         citations=list(state.get("citation_json", [])),
@@ -652,12 +599,12 @@ class CourseTutorGraphRunner:
                 conversation_context=state.get("conversation_context"),
                 **supported_course_answer_kwargs(self.service.course_answer_generator.generate, state),
             )
-            trace_id = getattr(answer, "trace_id", None) or state["trace_id"]
+            trace_id = answer.trace_id or state["trace_id"]
             return (
                 {
-                    "assistant_reply": str(getattr(answer, "content", "") or ""),
+                    "assistant_reply": answer.content,
                     "trace_id": trace_id,
-                    "used_model": getattr(answer, "trace_id", None) is not None,
+                    "used_model": answer.trace_id is not None,
                 },
                 "已生成带引用的课程回答。",
                 "completed",
@@ -710,12 +657,12 @@ class CourseTutorGraphRunner:
                 conversation_context=state.get("conversation_context"),
                 **supported_course_answer_kwargs(self.service.course_answer_generator.stream, state),
             )
-            trace_id = getattr(stream_result, "trace_id", None) or state["trace_id"]
+            trace_id = stream_result.trace_id or state["trace_id"]
             return (
                 {
-                    "tokens": getattr(stream_result, "tokens"),
+                    "tokens": stream_result.tokens,
                     "trace_id": trace_id,
-                    "used_model": bool(getattr(stream_result, "used_model", True)) and getattr(stream_result, "trace_id", None) is not None,
+                    "used_model": stream_result.used_model and stream_result.trace_id is not None,
                 },
                 "已启动课程导师流式回答。",
                 "completed",

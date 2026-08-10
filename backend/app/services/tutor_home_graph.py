@@ -21,6 +21,7 @@ from backend.app.services.course_answers import (
 )
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
+from backend.app.services.tutor_routing import project_semantic_route, project_visual_route
 from backend.app.services.tutor_runtime import HOME_TUTOR_GRAPH_STEPS, supported_context_kwargs
 
 if TYPE_CHECKING:
@@ -268,41 +269,23 @@ class HomeTutorGraphRunner:
             message = str(state["message_text"])
             visual = state.get("vision_decision")
             if isinstance(visual, dict):
-                search_required = bool(visual.get("search_required")) or bool(state.get("use_web_search"))
-                reasoning_mode = "deep" if bool(state.get("deep_thinking")) else str(visual.get("reasoning_mode") or "auto")
                 intent = "material_question" if state.get("selected_material_ids") else str(visual.get("intent") or "visual_learning")
-                summary = "已结合本次图片形成可审计的学习问题。"
-                updates = {
-                    "intent": intent,
-                    "requires_fresh_info": search_required,
-                    "search_required": search_required,
-                    "reasoning_mode": reasoning_mode,
-                    "source_scope": "mainland_preferred",
-                    "tool_reason_codes": ["vision_understanding"],
-                    "tool_reason_summary": summary,
-                    "semantic_search_query": str(visual.get("standalone_query") or message),
-                    "semantic_decision_mode": "vision_model",
-                    "semantic_decision_confidence": float(visual.get("confidence") or 0),
-                    "semantic_warning": None,
-                    "resource_action": "none",
-                    "resource_types": [],
-                    "response_mode": "answer",
-                    "retrieval_query": str(visual.get("standalone_query") or message),
-                    "standalone_query": str(visual.get("standalone_query") or message),
-                    "uses_history": False,
-                    "referenced_turn_ids": [],
-                    "warnings": list(state.get("warnings", [])),
-                }
-                return updates, summary, "completed", {
-                    "search_required": search_required,
-                    "reasoning_mode": reasoning_mode,
-                    "semantic_decision_mode": "vision_model",
-                    "semantic_decision_confidence": float(visual.get("confidence") or 0),
-                    "semantic_intent": intent,
-                    "vision_image_count": len(state.get("attachment_ids", [])),
-                    "vision_provider": str(visual.get("provider") or "unknown"),
-                    "vision_confidence": float(visual.get("confidence") or 0),
-                }
+                projection = project_visual_route(
+                    visual=visual,
+                    message_text=message,
+                    force_search=bool(state.get("use_web_search")),
+                    force_deep=bool(state.get("deep_thinking")),
+                    intent=intent,
+                    summary="已结合本次图片形成可审计的学习问题。",
+                    warnings=list(state.get("warnings", [])),
+                    attachment_count=len(state.get("attachment_ids", [])),
+                )
+                return (
+                    {**projection.updates, "requires_fresh_info": projection.updates["search_required"]},
+                    projection.summary,
+                    "completed",
+                    projection.metadata,
+                )
             decision = self.service._semantic_decision(
                 user=state["user"],
                 session=state["session"],
@@ -311,7 +294,7 @@ class HomeTutorGraphRunner:
                 force_deep=bool(state.get("deep_thinking")),
                 conversation_context=state.get("conversation_context"),
             )
-            referenced_turn_ids = list(getattr(decision, "referenced_turn_ids", ()))
+            referenced_turn_ids = list(decision.referenced_turn_ids)
             history_message, history_visual = self.service._prepare_history_visual_question(
                 user=state["user"],
                 session=state["session"],
@@ -321,58 +304,23 @@ class HomeTutorGraphRunner:
             intent = "material_question" if state.get("selected_material_ids") else (
                 str(history_visual.get("intent") or "visual_learning") if history_visual else decision.intent
             )
-            search_required = decision.search_required or bool(history_visual and history_visual.get("search_required"))
-            reasoning_mode = "deep" if decision.reasoning_mode == "deep" or bool(history_visual and history_visual.get("reasoning_mode") == "deep") else "auto"
-            standalone_query = str(history_visual.get("standalone_query") or history_message) if history_visual else getattr(decision, "standalone_query", str(state["message_text"]))
-            warnings = list(state.get("warnings", []))
-            if decision.warning and decision.warning not in warnings:
-                warnings.append(decision.warning)
+            projection = project_semantic_route(
+                decision=decision,
+                intent=intent,
+                message_text=str(state["message_text"]),
+                fallback_retrieval_query=str(state.get("retrieval_query") or state["message_text"]),
+                history_message=history_message,
+                history_visual=history_visual,
+                warnings=list(state.get("warnings", [])),
+            )
             updates = {
-                "intent": intent,
+                **projection.updates,
                 "requires_fresh_info": decision.intent in {"current_information", "verification"},
-                "search_required": search_required,
-                "reasoning_mode": reasoning_mode,
-                "source_scope": getattr(decision, "source_scope", "mainland_preferred"),
-                "tool_reason_codes": list(decision.reason_codes),
-                "tool_reason_summary": decision.reason_summary,
-                "semantic_search_query": standalone_query if history_visual else decision.search_query,
-                "semantic_decision_mode": decision.decision_mode,
-                "semantic_decision_confidence": decision.confidence,
-                "semantic_warning": decision.warning,
-                "resource_action": getattr(decision, "resource_action", "none"),
-                "resource_types": list(getattr(decision, "resource_types", ())),
-                "resource_difficulty": getattr(decision, "resource_difficulty", "medium"),
-                "resource_topic": getattr(decision, "resource_topic", ""),
-                "resource_learning_goal": getattr(decision, "resource_learning_goal", ""),
-                "resource_reason_summary": getattr(decision, "resource_reason_summary", ""),
-                "response_mode": getattr(decision, "response_mode", "answer"),
-                "retrieval_query": standalone_query if history_visual else (
-                    getattr(decision, "standalone_query", "")
-                    if getattr(decision, "uses_history", False)
-                    else (str(state["message_text"]) if str(decision.decision_mode) in {"model", "model_forced"} else str(state.get("retrieval_query") or state["message_text"]))
-                ),
-                "standalone_query": standalone_query,
-                "message_text": history_message,
-                "vision_decision": history_visual,
-                "uses_history": bool(getattr(decision, "uses_history", False)),
-                "referenced_turn_ids": referenced_turn_ids,
-                "warnings": warnings,
             }
             metadata = {
-                "search_required": search_required,
-                "reasoning_mode": reasoning_mode,
-                "tool_reason_codes": list(decision.reason_codes),
-                "tool_reason_summary": decision.reason_summary,
-                "semantic_decision_mode": decision.decision_mode,
-                "semantic_decision_confidence": decision.confidence,
-                "source_scope": getattr(decision, "source_scope", "mainland_preferred"),
-                "semantic_intent": intent,
-                "uses_history": bool(getattr(decision, "uses_history", False)),
-                "referenced_turn_count": len(getattr(decision, "referenced_turn_ids", ())),
-                "reused_history_image": bool(history_visual),
-                "vision_image_count": int(history_visual.get("image_count", 0)) if history_visual else 0,
-                "vision_provider": str(history_visual.get("provider") or "unknown") if history_visual else None,
-                "vision_confidence": float(history_visual.get("confidence") or 0) if history_visual else None,
+                **projection.metadata,
+                "uses_history": decision.uses_history,
+                "referenced_turn_count": len(decision.referenced_turn_ids),
             }
             return updates, f"已识别为 {intent}，{decision.reason_summary}。", "completed", metadata
 
@@ -388,10 +336,11 @@ class HomeTutorGraphRunner:
     def _material_retriever_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             selected_ids = list(state.get("selected_material_ids", []))
+            conversation_context = state.get("conversation_context")
+            history_citations = list(conversation_context.history_citations) if conversation_context is not None else []
             if not selected_ids or self.service.material_citation_searcher is None:
                 retrieval_mode = "none"
                 embedding_status = "unavailable"
-                history_citations = list(getattr(state.get("conversation_context"), "history_citations", []))
                 return (
                     {"citation_json": history_citations, "retrieval_mode": retrieval_mode, "embedding_status": embedding_status},
                     "本次未选择资料。" if not selected_ids else "资料检索服务暂不可用。",
@@ -409,10 +358,10 @@ class HomeTutorGraphRunner:
                 query=str(state["retrieval_query"]),
                 top_k=5,
             )
-            citations = [*list(getattr(state.get("conversation_context"), "history_citations", [])), *list(getattr(result, "citations", []))]
-            retrieval_mode = str(getattr(result, "retrieval_mode", "keyword"))
-            embedding_status = str(getattr(result, "embedding_status", "unavailable"))
-            rerank_status = str(getattr(result, "rerank_status", "not_configured"))
+            citations = [*history_citations, *result.citations]
+            retrieval_mode = result.retrieval_mode
+            embedding_status = result.embedding_status
+            rerank_status = result.rerank_status
             return (
                 {
                     "citation_json": citations,
@@ -497,11 +446,10 @@ class HomeTutorGraphRunner:
                 return ({"plan_summary": ""}, "资源动作无需重复生成回答规划。", "skipped", {"response_mode": "action"})
             if state.get("reasoning_mode") != "deep":
                 return ({"plan_summary": ""}, "模型将自适应处理当前问题。", "skipped", {"reasoning_mode": "auto"})
-            planner = getattr(self.service.course_answer_generator, "plan_home", None)
             plan_summary = ""
-            if callable(planner):
+            if self.service.course_answer_generator is not None:
                 plan_summary = str(
-                    planner(
+                    self.service.course_answer_generator.plan_home(
                         user=state["user"],
                         question=str(state["message_text"]),
                         citations=list(state.get("citation_json", [])),
@@ -549,10 +497,7 @@ class HomeTutorGraphRunner:
                 )
 
             if state.get("streaming"):
-                stream_home = getattr(generator, "stream_home", None)
-                if not callable(stream_home):
-                    raise CourseAnswerGenerationError("主页流式回答暂不可用。")
-                stream_result = stream_home(
+                stream_result = generator.stream_home(
                     user=state["user"],
                     question=str(state["message_text"]),
                     citations=list(state.get("citation_json", [])),
@@ -561,10 +506,10 @@ class HomeTutorGraphRunner:
                     warnings=list(state.get("warnings", [])),
                     conversation_context=state.get("conversation_context"),
                     plan_summary=str(state.get("plan_summary") or ""),
-                    **supported_context_kwargs(stream_home, state.get("learner_context")),
+                    **supported_context_kwargs(generator.stream_home, state.get("learner_context")),
                 )
-                reply = self._consume_stream_tokens(state, getattr(stream_result, "tokens", []))
-                used_model = bool(getattr(stream_result, "used_model", True)) and getattr(stream_result, "trace_id", None) is not None
+                reply = self._consume_stream_tokens(state, stream_result.tokens)
+                used_model = stream_result.used_model and stream_result.trace_id is not None
             else:
                 generated = generator.generate_home(
                     user=state["user"],
@@ -577,8 +522,8 @@ class HomeTutorGraphRunner:
                     plan_summary=str(state.get("plan_summary") or ""),
                     **supported_context_kwargs(generator.generate_home, state.get("learner_context")),
                 )
-                reply = str(getattr(generated, "content", "") or "").strip()
-                used_model = getattr(generated, "trace_id", None) is not None
+                reply = generated.content.strip()
+                used_model = generated.trace_id is not None
             if not reply:
                 raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。")
             return (
@@ -627,27 +572,27 @@ class HomeTutorGraphRunner:
                     review_result,
                 )
 
+            conversation_context = state.get("conversation_context")
             deterministic_flags = self._deterministic_risk_flags(
                 question=str(state["message_text"]),
                 answer=reply,
                 citations=list(state.get("citation_json", [])),
                 history_available=bool(
-                    getattr(state.get("conversation_context"), "message_count", 0) > 0
-                    or getattr(state.get("conversation_context"), "history_citations", [])
+                    conversation_context is not None
+                    and (conversation_context.message_count > 0 or conversation_context.history_citations)
                 ),
             )
             model_review = None
-            reviewer = getattr(self.service.course_answer_generator, "review_home", None)
-            if callable(reviewer):
-                model_review = reviewer(
+            if self.service.course_answer_generator is not None:
+                model_review = self.service.course_answer_generator.review_home(
                     user=state["user"],
                     question=str(state["message_text"]),
                     answer=reply,
                     citations=list(state.get("citation_json", [])),
                     warnings=list(state.get("warnings", [])),
                 )
-            raw_model_flags = list(getattr(model_review, "risk_flags", []) or [])
-            model_summary = str(getattr(model_review, "safety_summary", "") or "")
+            raw_model_flags = list(model_review.risk_flags) if model_review is not None else []
+            model_summary = model_review.safety_summary if model_review is not None else ""
             model_flags = [
                 flag
                 for flag in raw_model_flags
@@ -656,7 +601,7 @@ class HomeTutorGraphRunner:
             review_contract_warning = bool(
                 model_review is not None
                 and (
-                    (getattr(model_review, "review_status", "passed") == "revise" and not model_flags)
+                    (model_review.review_status == "revise" and not model_flags)
                     or len(model_flags) != len(raw_model_flags)
                 )
             )
@@ -672,15 +617,11 @@ class HomeTutorGraphRunner:
             else:
                 status = "revise" if risk_flags else "passed"
                 needs_repair = bool(risk_flags)
-            confidence = float(getattr(model_review, "confidence", 0.5 if model_review is None else (0.9 if not risk_flags else 0.45)))
-            safety_summary = str(
-                getattr(
-                    model_review,
-                    "safety_summary",
-                    "模型审核结论不可用或存在矛盾，已完成确定性相关性、来源和隐私检查。"
-                    if model_review is None or review_contract_warning
-                    else "已完成相关性、来源、Markdown 和隐私审核。",
-                )
+            confidence = model_review.confidence if model_review is not None else 0.5
+            safety_summary = (
+                model_review.safety_summary
+                if model_review is not None
+                else "模型审核结论不可用或存在矛盾，已完成确定性相关性、来源和隐私检查。"
             )[:240]
             review_result = {
                 "review_status": status,
@@ -719,10 +660,9 @@ class HomeTutorGraphRunner:
     def _repair_node(self, state: AgentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             risk_flags = list((state.get("review_result") or {}).get("risk_flags", []))
-            repairer = getattr(self.service.course_answer_generator, "repair_home", None)
             repaired = None
-            if callable(repairer):
-                repaired = repairer(
+            if self.service.course_answer_generator is not None:
+                repaired = self.service.course_answer_generator.repair_home(
                     user=state["user"],
                     question=str(state["message_text"]),
                     draft=str(state.get("assistant_reply") or ""),

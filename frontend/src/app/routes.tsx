@@ -5,17 +5,18 @@ import { ProtectedRoute } from "./ProtectedRoute";
 import { PublicOnlyRoute } from "./PublicOnlyRoute";
 import { PATHS } from "./routePaths";
 import { useAuthStore } from "../features/auth/authStore";
-import { LibraryPage } from "../pages/LibraryPage";
-import { LearningPathPage } from "../pages/LearningPathPage";
 import { LearningSpacePage } from "../pages/LearningSpacePage";
 import { LoginPage } from "../pages/LoginPage";
-import { NotFoundPage } from "../pages/NotFoundPage";
-import { PracticePage } from "../pages/PracticePage";
-import { ProfilePage } from "../pages/ProfilePage";
 import { RegisterPage } from "../pages/RegisterPage";
-import { ReportsPage } from "../pages/ReportsPage";
-import { SettingsPage } from "../pages/SettingsPage";
-import { StudioPage } from "../pages/StudioPage";
+import { NotFoundPage } from "../pages/NotFoundPage";
+
+const LibraryPage = lazy(() => import("../pages/LibraryPage").then((module) => ({ default: module.LibraryPage })));
+const LearningPathPage = lazy(() => import("../pages/LearningPathPage").then((module) => ({ default: module.LearningPathPage })));
+const PracticePage = lazy(() => import("../pages/PracticePage").then((module) => ({ default: module.PracticePage })));
+const ProfilePage = lazy(() => import("../pages/ProfilePage").then((module) => ({ default: module.ProfilePage })));
+const ReportsPage = lazy(() => import("../pages/ReportsPage").then((module) => ({ default: module.ReportsPage })));
+const SettingsPage = lazy(() => import("../pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
+const StudioPage = lazy(() => import("../pages/StudioPage").then((module) => ({ default: module.StudioPage })));
 
 const CourseSpacePage = lazy(() =>
   import("../pages/CourseSpacePage").then((module) => ({ default: module.CourseSpacePage }))
@@ -45,18 +46,18 @@ export function AppRoutes() {
       <Route path={PATHS.login} element={publicPage(<LoginPage />)} />
       <Route path={PATHS.register} element={publicPage(<RegisterPage />)} />
       <Route path={PATHS.app} element={protectedPage(<LearningSpacePage />)} />
-      <Route path={PATHS.library} element={protectedPage(<LibraryPage />)} />
-      <Route path={PATHS.path} element={protectedPage(<LearningPathPage />)} />
-      <Route path={PATHS.coursePath} element={protectedPage(<LearningPathPage />)} />
-      <Route path={PATHS.coursePractice} element={protectedPage(<PracticePage />)} />
-      <Route path={PATHS.courseReports} element={protectedPage(<ReportsPage />)} />
+      <Route path={PATHS.library} element={protectedPage(lazyPage(<LibraryPage />))} />
+      <Route path={PATHS.path} element={protectedPage(lazyPage(<LearningPathPage />))} />
+      <Route path={PATHS.coursePath} element={protectedPage(lazyPage(<LearningPathPage />))} />
+      <Route path={PATHS.coursePractice} element={protectedPage(lazyPage(<PracticePage />))} />
+      <Route path={PATHS.courseReports} element={protectedPage(lazyPage(<ReportsPage />))} />
       <Route path={PATHS.courseDetail} element={protectedPage(lazyPage(<CourseSpacePage />))} />
-      <Route path={PATHS.studio} element={protectedPage(<StudioPage />)} />
-      <Route path={PATHS.profile} element={protectedPage(<ProfilePage />)} />
+      <Route path={PATHS.studio} element={protectedPage(lazyPage(<StudioPage />))} />
+      <Route path={PATHS.profile} element={protectedPage(lazyPage(<ProfilePage />))} />
       <Route path="/app/tutor" element={protectedPage(<Navigate to={PATHS.app} replace />)} />
-      <Route path={PATHS.practice} element={protectedPage(<PracticePage />)} />
-      <Route path={PATHS.reports} element={protectedPage(<ReportsPage />)} />
-      <Route path={PATHS.settings} element={protectedPage(<SettingsPage />)} />
+      <Route path={PATHS.practice} element={protectedPage(lazyPage(<PracticePage />))} />
+      <Route path={PATHS.reports} element={protectedPage(lazyPage(<ReportsPage />))} />
+      <Route path={PATHS.settings} element={protectedPage(lazyPage(<SettingsPage />))} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

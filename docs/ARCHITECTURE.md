@@ -50,6 +50,8 @@ Docker Compose 为 PostgreSQL、Redis 和导出文件分别使用固定命名卷
 
 前端使用 React + TypeScript + Vite，定位为学生 AI 学习空间。具体设计基线见 [UI_UX_DESIGN.md](UI_UX_DESIGN.md)，入口与路由设计见 [FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)，课程空间双模式改造见 [COURSE_SPACE_DESIGN.md](COURSE_SPACE_DESIGN.md)。
 
+`/app` 主学习空间与公开登录入口保持同步加载；资料库、学习路径、练习、报告、资源工坊、画像、设置和课程空间均通过路由级 `React.lazy` 按需加载。页面内部的图表、Mermaid、思维导图和浏览器代码环境继续各自按需加载，避免将非当前工作区的页面代码并入初始入口。
+
 第一版前端不采用后台管理式左侧菜单，也不把首屏做成卡片堆。
 
 当前应用区统一使用 `AppSidebar` 贴边工作区外壳：

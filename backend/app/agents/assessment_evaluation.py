@@ -363,22 +363,17 @@ class AssessmentEvaluationMixin:
                     {"role": "system", "content": "你是 AssessmentGraph 错因诊断 Agent。逐题对照题干、正确答案、学生答案和课程证据诊断，不得修改分数，只输出 JSON。" + china_first_content_policy.prompt_instruction()},
                     {"role": "user", "content": f"协议={DIAGNOSIS_PROMPT_VERSION}。可信课程画像提示={personalization}。低分题={json.dumps(rows, ensure_ascii=False)}。每道题必须给出与本题直接相关且不重复套用的错因。返回 {{\"diagnoses\":[{{\"question_id\":\"q1\",\"misconception\":\"\",\"missing_concepts\":[],\"recommended_action\":\"\",\"confidence\":0.0}}]}}。"},
                 ]
-            task_call = getattr(self.service.model_service, "chat_completion_for_task", None)
-            raw = (
-                task_call(
-                    state["user"],
-                    messages,
-                    ModelTaskProfile(
-                        task_type="misconception_diagnosis",
-                        reasoning="disabled",
-                        output_mode="json_object",
-                        creativity="stable",
-                        timeout_seconds=20.0,
-                        max_attempts=1,
-                    ),
-                )
-                if callable(task_call)
-                else self.service.model_service.chat_completion(state["user"], messages)
+            raw = self.service.model_service.chat_completion_for_task(
+                state["user"],
+                messages,
+                ModelTaskProfile(
+                    task_type="misconception_diagnosis",
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="stable",
+                    timeout_seconds=20.0,
+                    max_attempts=1,
+                ),
             )
         except Exception:
             return None

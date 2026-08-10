@@ -43,6 +43,9 @@ class FakeModelService:
         self.calls.append(messages)
         return self.responses.pop(0)
 
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], _profile: Any) -> str:
+        return self.chat_completion(user, messages)
+
 
 class DefaultPracticeGenerationModel:
     def chat_completion(self, _user: User, messages: list[dict[str, str]]) -> str:
@@ -86,6 +89,9 @@ class DefaultPracticeGenerationModel:
             ensure_ascii=False,
         )
 
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], _profile: Any) -> str:
+        return self.chat_completion(user, messages)
+
 
 class DefaultReportModel:
     def chat_completion(self, _user: User, _messages: list[dict[str, str]]) -> str:
@@ -102,6 +108,9 @@ class DefaultReportModel:
             },
             ensure_ascii=False,
         )
+
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], _profile: Any) -> str:
+        return self.chat_completion(user, messages)
 
 
 def make_practice_service(repo: FakePracticeRepository, **kwargs: Any):

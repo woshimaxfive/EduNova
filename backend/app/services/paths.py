@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.agents.runtime import AgentTraceRecorder
+from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.models import (
     Course,
     CourseEnrollment,
@@ -44,7 +45,7 @@ class PathGenerationError(PathValidationError):
 
 
 class PathModelService(Protocol):
-    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], profile: ModelTaskProfile) -> str: ...
 
 
 class PathRepository(Protocol):

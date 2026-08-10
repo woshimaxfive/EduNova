@@ -355,32 +355,18 @@ class ReportGraphRunner:
                         ),
                     },
                 ]
-            task_completion = getattr(self.service.model_service, "chat_completion_for_task", None)
-            if callable(task_completion):
-                raw = task_completion(
-                    state["user"],
-                    messages,
-                    ModelTaskProfile(
-                        task_type="report_generation",
-                        reasoning="disabled",
-                        output_mode="json_object",
-                        creativity="stable",
-                        timeout_seconds=OPTIONAL_GENERATION_TIMEOUT_SECONDS,
-                        max_attempts=1,
-                    ),
-                )
-            else:
-                completion_with_timeout = getattr(self.service.model_service, "chat_completion_with_timeout", None)
-                raw = (
-                    completion_with_timeout(
-                        state["user"],
-                        messages,
-                        timeout_seconds=OPTIONAL_GENERATION_TIMEOUT_SECONDS,
-                        max_attempts=1,
-                    )
-                    if callable(completion_with_timeout)
-                    else self.service.model_service.chat_completion(state["user"], messages)
-                )
+            raw = self.service.model_service.chat_completion_for_task(
+                state["user"],
+                messages,
+                ModelTaskProfile(
+                    task_type="report_generation",
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="stable",
+                    timeout_seconds=OPTIONAL_GENERATION_TIMEOUT_SECONDS,
+                    max_attempts=1,
+                ),
+            )
         except Exception:
             return None
         payload = parse_json_object(raw)

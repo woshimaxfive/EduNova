@@ -9,6 +9,7 @@ from sqlalchemy import case, select
 from sqlalchemy.orm import Session
 
 from backend.app.agents.runtime import AgentTraceRecorder
+from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.models import (
     Course,
@@ -37,7 +38,7 @@ class PracticeGenerationError(PracticeValidationError):
 
 
 class PracticeModelService(Protocol):
-    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], profile: ModelTaskProfile) -> str: ...
 
 
 class PracticePathService(Protocol):

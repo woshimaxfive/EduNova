@@ -562,22 +562,17 @@ class PathPlanningGraphRunner:
                         )[:12000],
                     },
                 ]
-            task_call = getattr(self.service.model_service, "chat_completion_for_task", None)
-            raw = (
-                task_call(
-                    state["user"],
-                    messages,
-                    ModelTaskProfile(
-                        task_type="path_planning",
-                        reasoning="disabled",
-                        output_mode="json_object",
-                        creativity="balanced",
-                        timeout_seconds=PATH_PLANNING_INITIAL_TIMEOUT_SECONDS,
-                        max_attempts=1,
-                    ),
-                )
-                if callable(task_call)
-                else self.service.model_service.chat_completion(state["user"], messages)
+            raw = self.service.model_service.chat_completion_for_task(
+                state["user"],
+                messages,
+                ModelTaskProfile(
+                    task_type="path_planning",
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="balanced",
+                    timeout_seconds=PATH_PLANNING_INITIAL_TIMEOUT_SECONDS,
+                    max_attempts=1,
+                ),
             )
         except Exception:
             logger.warning("path_planning_model_degraded reason=provider_error")
@@ -599,15 +594,12 @@ class PathPlanningGraphRunner:
                 }
             )
             logger.warning("path_planning_model_degraded reason=schema_invalid:%s", ",".join(error_codes[:4]))
-            revision_call = getattr(self.service.model_service, "chat_completion_for_task", None)
-            if not callable(revision_call):
-                return None
             remaining_budget = PATH_PLANNING_TOTAL_MODEL_BUDGET_SECONDS - (perf_counter() - model_started)
             if remaining_budget < 3.0:
                 logger.warning("path_planning_model_degraded reason=revision_budget_exhausted")
                 return None
             try:
-                revised_raw = revision_call(
+                revised_raw = self.service.model_service.chat_completion_for_task(
                     state["user"],
                     [
                         *messages,

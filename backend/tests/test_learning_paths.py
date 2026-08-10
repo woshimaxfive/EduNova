@@ -42,6 +42,9 @@ class FakeModelService:
         self.calls.append(messages)
         return self.responses.pop(0)
 
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], _profile: Any) -> str:
+        return self.chat_completion(user, messages)
+
 
 class DefaultPathModelService:
     def __init__(self) -> None:
@@ -66,6 +69,9 @@ class DefaultPathModelService:
                 }
             )
         return json.dumps({"priority_tasks": choices}, ensure_ascii=False)
+
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], _profile: Any) -> str:
+        return self.chat_completion(user, messages)
 
 
 class TaskProfilePathModelService(DefaultPathModelService):

@@ -389,22 +389,17 @@ class AssessmentGenerationMixin:
                         ),
                     },
                 ]
-            task_call = getattr(self.service.model_service, "chat_completion_for_task", None)
-            raw = (
-                task_call(
-                    state["user"],
-                    messages,
-                    ModelTaskProfile(
-                        task_type="practice_review" if question_mode else "answer_review",
-                        reasoning="disabled",
-                        output_mode="json_object",
-                        creativity="stable",
-                        timeout_seconds=15.0,
-                        max_attempts=1,
-                    ),
-                )
-                if callable(task_call)
-                else self.service.model_service.chat_completion(state["user"], messages)
+            raw = self.service.model_service.chat_completion_for_task(
+                state["user"],
+                messages,
+                ModelTaskProfile(
+                    task_type="practice_review" if question_mode else "answer_review",
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="stable",
+                    timeout_seconds=15.0,
+                    max_attempts=1,
+                ),
             )
             return review_contract(parse_json_object(raw), default_summary="已完成练习结构、分数与隐私审核。")
         except Exception:
@@ -530,30 +525,17 @@ class AssessmentGenerationMixin:
                         ),
                     }
                 )
-            task_call = getattr(self.service.model_service, "chat_completion_for_task", None)
-            completion_with_timeout = getattr(self.service.model_service, "chat_completion_with_timeout", None)
-            raw = (
-                task_call(
-                    state["user"],
-                    messages,
-                    ModelTaskProfile(
-                        task_type="practice_revision" if revision_risks else "practice_generation",
-                        reasoning="disabled",
-                        output_mode="json_object",
-                        creativity="creative",
-                        timeout_seconds=PRACTICE_REVISION_TIMEOUT_SECONDS if revision_risks else OPTIONAL_GENERATION_TIMEOUT_SECONDS,
-                        max_attempts=1,
-                    ),
-                )
-                if callable(task_call)
-                else completion_with_timeout(
-                    state["user"],
-                    messages,
-                    timeout_seconds=OPTIONAL_GENERATION_TIMEOUT_SECONDS,
+            raw = self.service.model_service.chat_completion_for_task(
+                state["user"],
+                messages,
+                ModelTaskProfile(
+                    task_type="practice_revision" if revision_risks else "practice_generation",
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="creative",
+                    timeout_seconds=PRACTICE_REVISION_TIMEOUT_SECONDS if revision_risks else OPTIONAL_GENERATION_TIMEOUT_SECONDS,
                     max_attempts=1,
-                )
-                if callable(completion_with_timeout)
-                else self.service.model_service.chat_completion(state["user"], messages)
+                ),
             )
         except Exception:
             return None

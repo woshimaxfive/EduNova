@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.models import Material, MaterialChunk, User
-from backend.app.services.embeddings import EmbeddingService
+from backend.app.services.embeddings import EmbeddingBatch, EmbeddingService
 from backend.app.services.model_settings import ModelNotConfiguredError
 
 
@@ -385,11 +385,11 @@ class MaterialRetrievalService:
             if targets:
                 batch = self.embedding_service.embed_documents(user, [chunk.content for chunk in targets])
                 self._apply_embeddings(targets, batch)
-                if len(getattr(batch, "vectors", [])) == len(targets):
+                if len(batch.vectors) == len(targets):
                     self.repository.save_chunks()
             query_batch = self.embedding_service.embed_query(user, query)
-            vectors = list(getattr(query_batch, "vectors", []))
-            status = str(getattr(query_batch, "status", "unavailable"))
+            vectors = query_batch.vectors
+            status = query_batch.status
             if len(vectors) == 1 and self._valid_vector(vectors[0]):
                 return status, vectors[0], (profile.provider, profile.model, profile.dimension, profile.profile_hash)
             return status, None, (profile.provider, profile.model, profile.dimension, profile.profile_hash)
@@ -397,10 +397,10 @@ class MaterialRetrievalService:
             return "provider_failed", None, ("", "", 0, "")
 
     @staticmethod
-    def _apply_embeddings(chunks: list[MaterialChunk], batch: Any) -> None:
-        vectors = list(getattr(batch, "vectors", []))
-        dimension = int(getattr(batch, "dimension", 0))
-        profile_hash = str(getattr(batch, "profile_hash", ""))
+    def _apply_embeddings(chunks: list[MaterialChunk], batch: EmbeddingBatch) -> None:
+        vectors = batch.vectors
+        dimension = batch.dimension
+        profile_hash = batch.profile_hash
         if len(vectors) != len(chunks) or dimension <= 0:
             return
         embedded_at = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -408,15 +408,15 @@ class MaterialRetrievalService:
             if not MaterialRetrievalService._valid_vector(vector):
                 continue
             chunk.embedding = vector
-            chunk.embedding_provider = str(getattr(batch, "source", "unknown"))
-            chunk.embedding_model = str(getattr(batch, "model", "unknown"))
+            chunk.embedding_provider = batch.source
+            chunk.embedding_model = batch.model
             chunk.embedding_dimension = dimension
             chunk.embedding_profile_hash = profile_hash
             chunk.embedding_updated_at = datetime.now(UTC)
             chunk.metadata_json = {
                 **(chunk.metadata_json or {}),
-                "embedding_source": str(getattr(batch, "source", "unknown")),
-                "embedding_model": str(getattr(batch, "model", "unknown")),
+                "embedding_source": batch.source,
+                "embedding_model": batch.model,
                 "embedding_dimension": dimension,
                 "embedded_at": embedded_at,
             }

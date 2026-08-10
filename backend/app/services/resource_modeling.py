@@ -358,25 +358,19 @@ class ResourceModelingService:
         *,
         profile: ModelTaskProfile | None = None,
     ) -> str:
-        task_completion = getattr(self.model_settings_service, "chat_completion_for_task", None)
-        if callable(task_completion):
-            return task_completion(
-                user,
-                messages,
-                profile
-                or ModelTaskProfile(
-                    task_type="resource_generation",
-                    reasoning="disabled",
-                    output_mode="json_object",
-                    creativity="creative",
-                    timeout_seconds=RESOURCE_MODEL_TIMEOUT_SECONDS,
-                    max_attempts=1,
-                ),
-            )
-        completion_with_timeout = getattr(self.model_settings_service, "chat_completion_with_timeout", None)
-        if callable(completion_with_timeout):
-            return completion_with_timeout(user, messages, timeout_seconds=RESOURCE_MODEL_TIMEOUT_SECONDS)
-        return self.model_settings_service.chat_completion(user, messages)
+        return self.model_settings_service.chat_completion_for_task(
+            user,
+            messages,
+            profile
+            or ModelTaskProfile(
+                task_type="resource_generation",
+                reasoning="disabled",
+                output_mode="json_object",
+                creativity="creative",
+                timeout_seconds=RESOURCE_MODEL_TIMEOUT_SECONDS,
+                max_attempts=1,
+            ),
+        )
 
     @staticmethod
     def parse_worker_content(content: str, resource_type: str, draft: ResourceDraft) -> dict[str, Any] | None:

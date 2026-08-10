@@ -13,7 +13,7 @@ from backend.app.services.structured_output import parse_json_object
 
 
 class SemanticModelService(Protocol):
-    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], profile: ModelTaskProfile) -> str: ...
 
 
 ProfileDimension = Literal["weak_points", "learning_preference", "learning_goal", "knowledge_foundation"]
@@ -188,21 +188,18 @@ class SemanticDecisionService:
         *,
         task_type: str,
     ) -> str:
-        task_call = getattr(self.model_service, "chat_completion_for_task", None)
-        if callable(task_call):
-            return task_call(
-                user,
-                messages,
-                ModelTaskProfile(
-                    task_type=task_type,
-                    reasoning="disabled",
-                    output_mode="json_object",
-                    creativity="stable",
-                    timeout_seconds=12.0,
-                    max_attempts=1,
-                ),
-            )
-        return self.model_service.chat_completion(user, messages)
+        return self.model_service.chat_completion_for_task(
+            user,
+            messages,
+            ModelTaskProfile(
+                task_type=task_type,
+                reasoning="disabled",
+                output_mode="json_object",
+                creativity="stable",
+                timeout_seconds=12.0,
+                max_attempts=1,
+            ),
+        )
 
     @staticmethod
     def _salvage_resource_decision(value: str) -> ResourceDecisionPayload | None:

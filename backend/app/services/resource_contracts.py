@@ -6,6 +6,7 @@ from typing import Annotated, Any, Protocol
 
 from backend.app.agents.schemas import AgentState
 from backend.app.core.errors import NotFoundDomainError, ValidationDomainError
+from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.models import (
     AgentRunLog,
     Course,
@@ -104,7 +105,7 @@ class ResourceGenerationState(AgentState, total=False):
 
 
 class ResourceModelService(Protocol):
-    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], profile: ModelTaskProfile) -> str: ...
 
 
 class ResourceRepository(Protocol):

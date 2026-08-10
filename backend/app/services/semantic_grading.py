@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class GradingModelService(Protocol):
-    def chat_completion(self, user: User, messages: list[dict[str, str]]) -> str: ...
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], profile: ModelTaskProfile) -> str: ...
 
 
 class ShortAnswerGrade(BaseModel):
@@ -80,22 +80,17 @@ class SemanticShortAnswerGrader:
                         ),
                     },
                 ]
-            task_call = getattr(self.model_service, "chat_completion_for_task", None)
-            raw = (
-                task_call(
-                    user,
-                    messages,
-                    ModelTaskProfile(
-                        task_type="short_answer_grading",
-                        reasoning="disabled",
-                        output_mode="json_object",
-                        creativity="stable",
-                        timeout_seconds=20.0,
-                        max_attempts=1,
-                    ),
-                )
-                if callable(task_call)
-                else self.model_service.chat_completion(user, messages)
+            raw = self.model_service.chat_completion_for_task(
+                user,
+                messages,
+                ModelTaskProfile(
+                    task_type="short_answer_grading",
+                    reasoning="disabled",
+                    output_mode="json_object",
+                    creativity="stable",
+                    timeout_seconds=20.0,
+                    max_attempts=1,
+                ),
             )
         except Exception:
             self.failure_reason = "provider_error"

@@ -319,7 +319,7 @@ backend/app/
 | `backend/app/services/model_runtime_config.py` | 将用户或系统的回答、生成、向量、重排序和视觉配置映射成统一 `RuntimeModelConfig`；解密能力由服务回调提供 |
 | `backend/app/services/model_settings_presenter.py` | 将运行时配置、能力声明和脱敏状态组装为模型设置 API 响应，不选择配置、不解密凭证、不调用 Provider |
 | `backend/app/services/model_settings.py` | 模型设置服务，负责配置优先级、模型调用、测试结果持久化与凭证加密；响应装配委托给 presenter |
-| `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计；报告、练习、路径规划和画像通过 `chat_completion_for_task` 进入该运行时 |
+| `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计；报告、练习、路径规划、画像、语义路由、语义评分和资源建模通过 `chat_completion_for_task` 进入该运行时 |
 | `backend/app/services/embeddings.py` | Embedding 服务，负责讯飞原生与 OpenAI-compatible 动态维度调用、配置指纹和切片向量写入；无配置时只返回关键词 fallback |
 | `backend/app/services/paths.py` | 学习路径服务及其 SQLAlchemy 仓储；课程活跃性与路径资源交互是 `PathRepository` 的必备合同，任务状态更新和资源学习状态不做运行时能力猜测 |
 | `backend/app/providers/retrieval.py` | 讯飞签名 Embedding、UTF-8 2KB 分片池化、硅基/百炼 Rerank Provider |
@@ -328,7 +328,7 @@ backend/app/
 | `backend/app/services/material_contracts.py`、`material_repository.py` | 资料异常、依赖协议与证据合同，以及资料、课程关联、知识切片和对比记录的 SQLAlchemy 仓储 |
 | `backend/app/services/material_comparison_builder.py` | 基于真实课程切片和安全短摘录构造确定性资料对比底稿，不调用模型或写数据库 |
 | `backend/app/services/materials.py` | 个人资料库门面，负责上传保存、目录确认、列表、详情、进度、课程关联和资料对比 Graph 装配，并兼容旧导入路径 |
-| `backend/app/services/material_retrieval.py` | 共享资料分块和主页资料级 RAG，负责上传后切片、既有资料惰性补齐、当前用户选中资料限制、关键词/pgvector 混合排序和安全引用 |
+| `backend/app/services/material_retrieval.py` | 共享资料分块和主页资料级 RAG，负责上传后切片、既有资料惰性补齐、当前用户选中资料限制、关键词/pgvector 混合排序和安全引用；直接使用 `EmbeddingBatch` 的向量、维度、来源、模型与配置指纹合同 |
 | `backend/app/providers/capabilities.py` | Provider 能力注册表，保守声明星火/官方 OpenAI 原生搜索，普通兼容接口不猜测能力 |
 | `backend/app/agents/search_tools.py` | LangChain `@tool` 与 LangGraph `ToolNode` 搜索适配层，供 DeepSeek/普通兼容模型决策后的外部搜索回退使用 |
 | `backend/app/services/web_search.py` | Tavily-compatible 外部联网搜索服务，未配置 Key 时返回 warning，不生成假来源 |

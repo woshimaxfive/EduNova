@@ -15,6 +15,9 @@ class FakeModel:
             raise response
         return response
 
+    def chat_completion_for_task(self, user, messages, _profile):
+        return self.chat_completion(user, messages)
+
 
 def user():
     return SimpleNamespace(id=1)

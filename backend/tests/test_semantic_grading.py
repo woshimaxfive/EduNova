@@ -15,6 +15,9 @@ class FakeModelService:
         self.calls.append(messages)
         return self.response
 
+    def chat_completion_for_task(self, user: User, messages: list[dict[str, str]], _profile: object) -> str:
+        return self.chat_completion(user, messages)
+
 
 def make_user() -> User:
     return User(id=1, account="grader", hashed_password="unused", display_name="评分学生", role="student")

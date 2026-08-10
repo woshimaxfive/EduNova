@@ -195,6 +195,10 @@ class FakeModelSettingsService:
         self.timeout_calls.append(timeout_seconds)
         return self._complete(messages)
 
+    def chat_completion_for_task(self, _user: User, messages: list[dict[str, str]], profile: Any) -> str:
+        self.timeout_calls.append(float(profile.timeout_seconds))
+        return self._complete(messages)
+
     def _complete(self, messages: list[dict[str, str]]) -> str:
         self.calls.append(messages)
         if self.mode == "not_configured":
@@ -641,7 +645,7 @@ def test_generate_six_resource_types_persists_v3_artifacts_quality_scores_and_pa
     assert all(log.metadata_json["artifact_type"] == "generated_resource" for log in repo.agent_logs)
     assert set(result["quality_scores"].keys()) == {resource["id"] for resource in result["resources"]}
     assert len(model_service.calls) == 8
-    assert model_service.timeout_calls == [45.0] * 8
+    assert model_service.timeout_calls == [20.0, *([45.0] * 6), 20.0]
     code_prompt = next(
         "\n".join(message["content"] for message in call)
         for call in model_service.calls

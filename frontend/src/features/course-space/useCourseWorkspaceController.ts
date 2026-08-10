@@ -1,12 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { PATHS } from "../../app/routePaths";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../../api/agents";
-import { getAiJob } from "../../api/aiJobs";
 import { type LearningNextAction } from "../../api/learning";
-import { uploadMaterial } from "../../api/materials";
 import {
   activateCourse,
   getKnowledgePointContent,
@@ -15,66 +13,22 @@ import {
   type CourseWeaknessReviewItem
 } from "../../api/courses";
 import { type RagSearchResultItem } from "../../api/rag";
-import {
-  createTutorSession,
-  deleteTutorSession,
-  getTutorSession,
-  listTutorSessions,
-  renameTutorSession,
-  streamTutorMessage,
-  createTutorResourceGenerationJob,
-  type TutorSessionSummary
-} from "../../api/tutor";
 import { type CourseAnswerPanelKind } from "../../components/course-space/CourseClosedLoopActions";
-import { type CourseContentMode } from "../../components/course-space/CourseContentView";
-import { type CourseWorkspaceMode } from "../../components/course-space/CourseWorkspaceHeader";
 import { useResponsiveSidebarState } from "../../components/layout/useResponsiveSidebarState";
 import { buildCourseLoopSummary, buildStudySteps, calculateMasteryPercent } from "./a3Loop";
 import { invalidateCourseLearningLoop } from "./courseLoopQueries";
 import { useCourseWorkspaceData } from "./useCourseWorkspaceData";
 import { useCourseResourceGeneration } from "./useCourseResourceGeneration";
-import {
-  normalizeCourseWorkspaceParams,
-  parseCourseWorkspaceUrl,
-  sameSearchParams,
-  selectCourseWorkspacePoint,
-  type GraphScope
-} from "./courseWorkspaceState";
+import { useCourseTutorConversation } from "./useCourseTutorConversation";
+import { useCourseWorkspaceUrlState } from "./useCourseWorkspaceUrlState";
 import {
   findBestCitationKnowledgePoint
 } from "./courseRecommendation";
 import {
   buildCourseClosureHref,
-  buildCourseStarterQuestions,
-  courseQuestionTitle,
-  mapCourseSessionsToConversations,
-  mapTutorMessagesToCourseMessages,
-  sanitizeCourseAnswerContent,
-  type CourseMessage
+  buildCourseStarterQuestions
 } from "./courseConversation";
-import { useAiJobs } from "../aiJobs/AiJobProvider";
 import { useLearningNextAction } from "../learning-actions/learningActions";
-import { useBrowserSpeech } from "../speech/useBrowserSpeech";
-import { useTutorImageDraft } from "../tutor/useTutorImageDraft";
-import { appendTutorProgressStage, type TutorResponseProgressState } from "../tutor/tutorResponseProgress";
-import { useTutorPersistedResponseProgress } from "../tutor/useTutorPersistedResponseProgress";
-
-type TutorSessionsResponse = Awaited<ReturnType<typeof listTutorSessions>>;
-type TurnDetailState = {
-  messageId: string;
-  panel: CourseAnswerPanelKind;
-} | null;
-type StudyTarget =
-  | {
-      type: "knowledge";
-      id: string;
-    }
-  | {
-      type: "citation";
-      citation: RagSearchResultItem;
-    };
-
-const COURSE_COMPOSER_MAX_HEIGHT = 154;
 
 export function useCourseWorkspaceController() {
   const { courseId } = useParams();
@@ -91,7 +45,6 @@ export function useCourseWorkspaceController() {
       void queryClient.invalidateQueries({ queryKey: ["learning", "next-action", "global"] });
     }).catch(() => undefined);
   }, [hasRealCourseId, numericCourseId, queryClient]);
-  const initialWorkspaceState = parseCourseWorkspaceUrl(searchParams);
   const {
     courseOverviewQuery,
     courseQuery,
@@ -104,54 +57,12 @@ export function useCourseWorkspaceController() {
     learningStateQuery,
     masteryMapQuery
   } = useCourseWorkspaceData(numericCourseId, hasRealCourseId);
-  const [activeCourseSessionId, setActiveCourseSessionId] = useState<string | null>(null);
-  const [activeTurnDetail, setActiveTurnDetail] = useState<TurnDetailState>(
-    initialWorkspaceState.courseMessageId && initialWorkspaceState.panel
-      ? { messageId: initialWorkspaceState.courseMessageId, panel: initialWorkspaceState.panel }
-      : null
-  );
-  const initialKnowledgePointId = initialWorkspaceState.knowledgePointId;
-  const [courseMode, setCourseMode] = useState<CourseWorkspaceMode>(hasRealCourseId ? initialWorkspaceState.mode : "chat");
-  const [courseContentView, setCourseContentView] = useState<CourseContentMode>(hasRealCourseId ? initialWorkspaceState.view : "overview");
-  const [graphScope, setGraphScope] = useState<GraphScope>(initialWorkspaceState.graphScope);
-  const [graphChapter, setGraphChapter] = useState(initialWorkspaceState.graphChapter);
-  const [isKnowledgeDetailOpen, setIsKnowledgeDetailOpen] = useState(initialWorkspaceState.detailKnowledge);
   const [isProgressDrawerOpen, setIsProgressDrawerOpen] = useState(searchParams.get("open_progress") === "1");
   const [isProgressSyncing, setIsProgressSyncing] = useState(false);
   const [progressSyncWarning, setProgressSyncWarning] = useState<string | null>(null);
-  const [isStudyAssistantOpen, setIsStudyAssistantOpen] = useState(initialWorkspaceState.mentorOpen);
-  const [studyTarget, setStudyTarget] = useState<StudyTarget | null>(
-    initialKnowledgePointId ? { type: "knowledge", id: initialKnowledgePointId } : null
-  );
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
-  const [coursePrompt, setCoursePrompt] = useState("");
-  const [courseMessages, setCourseMessages] = useState<CourseMessage[]>([]);
-  const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
-  const [courseStreamProgress, setCourseStreamProgress] = useState<TutorResponseProgressState | null>(null);
-  const [courseAnswerProgress, setCourseAnswerProgress] = useState<Record<string, TutorResponseProgressState & { durationMs: number }>>({});
-  const [isSearchingCourse, setIsSearchingCourse] = useState(false);
-  const [courseFeedback, setCourseFeedback] = useState<string | null>(null);
-  const imageDraft = useTutorImageDraft(ensureCourseImageSession, setCourseFeedback, handleCourseDocumentFiles);
   const [weaknessFeedback, setWeaknessFeedback] = useState<string | null>(null);
   const [updatingWeaknessItemId, setUpdatingWeaknessItemId] = useState<string | null>(null);
-  const speech = useBrowserSpeech({
-    onTranscript: (transcript) => setCoursePrompt((current) => current.trim() ? `${current.trim()} ${transcript}` : transcript),
-    onNotice: (message) => setCourseFeedback(message)
-  });
-  const optimisticMessageSequence = useRef(0);
-  const courseQuestionInputRef = useRef<HTMLTextAreaElement>(null);
-  const courseChatEndRef = useRef<HTMLDivElement>(null);
-  const { trackJob } = useAiJobs();
-
-  useEffect(() => {
-    const input = courseQuestionInputRef.current;
-    if (!input) return;
-
-    input.style.height = "auto";
-    const nextHeight = Math.min(input.scrollHeight, COURSE_COMPOSER_MAX_HEIGHT);
-    input.style.height = `${nextHeight}px`;
-    input.style.overflowY = input.scrollHeight > COURSE_COMPOSER_MAX_HEIGHT ? "auto" : "hidden";
-  }, [coursePrompt]);
   const apiCourse = courseQuery.data?.data;
   const overviewCourse = courseOverviewQuery.data?.data.course;
   const fallbackCourse = apiCourse ?? overviewCourse;
@@ -164,42 +75,86 @@ export function useCourseWorkspaceController() {
   const weaknessSummary = learningState?.weakness_summary;
   const weaknessItems = (learningState?.weakness_review_queue ?? []).filter((item) => item.status !== "dismissed");
   const activeWeaknessCount = weaknessItems.filter((item) => ["pending", "confirmed", "reviewing"].includes(item.status)).length;
-  const courseSessions = Array.isArray(courseSessionsQuery.data?.data) ? courseSessionsQuery.data.data : [];
-  const latestCourseSessionId = courseSessions[0]?.id ?? null;
-  const requestedCourseSessionId = searchParams.get("course_session_id");
-  const requestedCourseMessageId = searchParams.get("course_message_id");
-  const restorableCourseSessionId = courseSessions.some((session) => session.id === requestedCourseSessionId)
-    ? requestedCourseSessionId
-    : null;
-  const selectedCourseSessionId = hasRealCourseId
-    ? (activeCourseSessionId ?? restorableCourseSessionId ?? latestCourseSessionId)
-    : null;
-  const activeCourseSessionQuery = useQuery({
-    queryKey: ["tutor", "session", selectedCourseSessionId],
-    queryFn: () => getTutorSession(selectedCourseSessionId ?? ""),
-    enabled: hasRealCourseId && Boolean(selectedCourseSessionId),
-    staleTime: 5_000
+  const masteryPoints = useMemo(() => masteryMapQuery.data?.data.points ?? [], [masteryMapQuery.data?.data.points]);
+  const nextActionQuery = useLearningNextAction(hasRealCourseId ? numericCourseId : null);
+  const recommendation: LearningNextAction = nextActionQuery.data?.data ?? {
+    kind: "study_knowledge_point",
+    status: "ready",
+    label: "从课程内容开始学习",
+    description: "先建立课程知识基础，再通过问答和练习形成学习闭环。",
+    course_id: hasRealCourseId ? String(numericCourseId) : null,
+    material_id: null,
+    knowledge_point_id: apiKnowledgePoints[0]?.id ?? null,
+    path_task_id: null,
+    resource_id: null
+  };
+  const activeWeaknessPointIds = weaknessItems
+    .filter((item) => ["confirmed", "reviewing", "pending"].includes(item.status) && item.knowledge_point_id)
+    .map((item) => item.knowledge_point_id as string);
+  const {
+    activeTurnDetail,
+    changeCourseContentView,
+    changeCourseMode,
+    changeGraphChapter,
+    changeGraphScope,
+    changeKnowledgeDetail,
+    courseContentView,
+    courseMode,
+    graphChapter,
+    graphScope,
+    isKnowledgeDetailOpen,
+    isStudyAssistantOpen,
+    openCitationStudy,
+    openKnowledgeStudy,
+    setActiveTurnDetail,
+    setCourseMode,
+    setIsStudyAssistantOpen,
+    setStudyTarget,
+    studyTarget
+  } = useCourseWorkspaceUrlState({
+    enabled: hasRealCourseId,
+    masteryPoints,
+    recommendedPointId: recommendation.knowledge_point_id,
+    activeWeaknessPointIds,
+    searchParams,
+    setSearchParams
   });
-  const sidebarConversations = hasRealCourseId ? mapCourseSessionsToConversations(courseSessions) : [];
-  const activeCourseSessionDetail = activeCourseSessionQuery.data?.data;
-  const activeCourseSessionDetailId = activeCourseSessionDetail?.session?.id ?? null;
-  const persistedCourseMessages =
-    hasRealCourseId && activeCourseSessionDetailId === selectedCourseSessionId
-      ? mapTutorMessagesToCourseMessages(activeCourseSessionDetail?.messages ?? [])
-      : [];
-  const displayedCourseMessages =
-    streamingSessionId !== null
-      ? courseMessages
-      : hasRealCourseId && selectedCourseSessionId && activeCourseSessionDetailId === selectedCourseSessionId
-        ? persistedCourseMessages
-        : courseMessages;
-  const persistedCourseAnswerProgress = useTutorPersistedResponseProgress(
-    displayedCourseMessages
-      .filter((message) => message.role === "assistant")
-      .map((message) => ({ messageId: message.id, traceId: message.traceId })),
-    activeTurnDetail?.messageId
-  );
-  const hasDisplayedCourseMessages = displayedCourseMessages.length > 0;
+  const courseSessions = Array.isArray(courseSessionsQuery.data?.data) ? courseSessionsQuery.data.data : [];
+  const {
+    answerProgress: courseAnswerProgress,
+    chatEndRef: courseChatEndRef,
+    createConversation: createCourseConversation,
+    deleteConversation: deleteCourseConversation,
+    displayedMessages: displayedCourseMessages,
+    feedback: courseFeedback,
+    generateSuggestedResources: generateSuggestedCourseResources,
+    handleComposerKeyDown: handleCourseComposerKeyDown,
+    hasDisplayedMessages: hasDisplayedCourseMessages,
+    imageDraft,
+    inputRef: courseQuestionInputRef,
+    isSending: isSearchingCourse,
+    persistedAnswerProgress: persistedCourseAnswerProgress,
+    prompt: coursePrompt,
+    renameConversation: renameCourseConversation,
+    selectConversation: selectCourseConversation,
+    selectedSessionId: selectedCourseSessionId,
+    sendQuestion: sendCourseQuestion,
+    setPrompt: setCoursePrompt,
+    sidebarConversations,
+    speech,
+    streamProgress: courseStreamProgress,
+    toggleReadMessage
+  } = useCourseTutorConversation({
+    activeTurnMessageId: activeTurnDetail?.messageId ?? null,
+    courseId: numericCourseId,
+    courseMode,
+    enabled: hasRealCourseId,
+    queryClient,
+    resetWorkspace: resetConversationWorkspace,
+    searchParams,
+    sessions: courseSessions,
+    setSearchParams
+  });
   const isCourseLoading = hasRealCourseId && courseQuery.isPending && !fallbackCourse;
   const courseSummary = fallbackCourse
     ? {
@@ -258,57 +213,7 @@ export function useCourseWorkspaceController() {
   const latestReport = latestReportQuery.data?.data ?? null;
   const latestPractice = latestPracticeQuery.data?.data ?? null;
   const latestUserQuestion = [...displayedCourseMessages].reverse().find((message) => message.role === "user")?.content ?? null;
-  const latestMessageSignature = displayedCourseMessages.length > 0
-    ? `${displayedCourseMessages.at(-1)?.id ?? ""}:${displayedCourseMessages.at(-1)?.content.length ?? 0}`
-    : "empty";
   const hasActivePath = Boolean(currentPath?.path) || learningState?.path_summary?.status === "active";
-  const masteryPoints = useMemo(() => masteryMapQuery.data?.data.points ?? [], [masteryMapQuery.data?.data.points]);
-  const nextActionQuery = useLearningNextAction(hasRealCourseId ? numericCourseId : null);
-  const recommendation: LearningNextAction = nextActionQuery.data?.data ?? {
-    kind: "study_knowledge_point",
-    status: "ready",
-    label: "从课程内容开始学习",
-    description: "先建立课程知识基础，再通过问答和练习形成学习闭环。",
-    course_id: hasRealCourseId ? String(numericCourseId) : null,
-    material_id: null,
-    knowledge_point_id: apiKnowledgePoints[0]?.id ?? null,
-    path_task_id: null,
-    resource_id: null
-  };
-  const workspaceSearchSignature = searchParams.toString();
-  const activeWeaknessPointSignature = weaknessItems
-    .filter((item) => ["confirmed", "reviewing", "pending"].includes(item.status) && item.knowledge_point_id)
-    .map((item) => item.knowledge_point_id)
-    .join(",");
-  const recommendedWorkspacePointId = recommendation.knowledge_point_id;
-  useEffect(() => {
-    if (!hasRealCourseId || masteryPoints.length === 0) return;
-    const requested = parseCourseWorkspaceUrl(new URLSearchParams(workspaceSearchSignature));
-    const selectedPointId = selectCourseWorkspacePoint(
-      masteryPoints,
-      requested.knowledgePointId,
-      recommendedWorkspacePointId,
-      activeWeaknessPointSignature ? activeWeaknessPointSignature.split(",") : []
-    );
-    const chapters = new Set(masteryPoints.map((point) => point.chapter?.trim()).filter((value): value is string => Boolean(value)));
-    const normalized = normalizeCourseWorkspaceParams(new URLSearchParams(workspaceSearchSignature), requested, selectedPointId, chapters);
-
-    // URL 是可恢复语义状态的事实来源；这里同时响应浏览器前进、后退和刷新。
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCourseMode(requested.mode);
-    setCourseContentView(requested.view);
-    setGraphScope(requested.graphScope);
-    setGraphChapter(requested.graphChapter && chapters.has(requested.graphChapter) ? requested.graphChapter : "");
-    setIsKnowledgeDetailOpen(requested.detailKnowledge && Boolean(selectedPointId));
-    setIsStudyAssistantOpen(requested.mode === "study" && requested.mentorOpen);
-    if (selectedPointId) setStudyTarget({ type: "knowledge", id: selectedPointId });
-    setActiveTurnDetail(requested.courseMessageId && requested.panel
-      ? { messageId: requested.courseMessageId, panel: requested.panel }
-      : null);
-    if (!sameSearchParams(new URLSearchParams(workspaceSearchSignature), normalized)) {
-      setSearchParams(normalized, { replace: true });
-    }
-  }, [activeWeaknessPointSignature, hasRealCourseId, masteryPoints, recommendedWorkspacePointId, setSearchParams, workspaceSearchSignature]);
   const courseStarterQuestions = buildCourseStarterQuestions(recommendation, apiKnowledgePoints);
   const profileOverlay = learningState?.profile_overlay;
   const hasProfileEvidence = Boolean(
@@ -358,172 +263,11 @@ export function useCourseWorkspaceController() {
     currentGoal: courseLoopSummary.currentGoal
   });
 
-  useEffect(() => {
-    if (courseMode !== "chat" || !hasDisplayedCourseMessages) return;
-    const frame = window.requestAnimationFrame(() => {
-      const requestedTarget = requestedCourseMessageId
-        ? document.getElementById(`course-message-${requestedCourseMessageId}`)
-        : null;
-      const target = requestedTarget ?? courseChatEndRef.current;
-      if (target && typeof target.scrollIntoView === "function") {
-        target.scrollIntoView({ block: requestedTarget ? "center" : "end" });
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [courseMode, hasDisplayedCourseMessages, latestMessageSignature, requestedCourseMessageId, selectedCourseSessionId]);
-
-  function selectCourseConversation(sessionId: string) {
-    if (!hasRealCourseId) {
-      return;
-    }
-
-    speech.stopListening();
-    speech.stopSpeaking();
-    imageDraft.discardAll();
-    setActiveCourseSessionId(sessionId);
-    setStreamingSessionId(null);
-    setCourseMessages([]);
+  function resetConversationWorkspace() {
     setCourseMode("chat");
     setStudyTarget(null);
     setActiveTurnDetail(null);
     setIsStudyAssistantOpen(false);
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("mode", "chat");
-    nextParams.set("view", "overview");
-    nextParams.set("course_session_id", sessionId);
-    nextParams.delete("course_message_id");
-    nextParams.delete("panel");
-    nextParams.delete("detail");
-    nextParams.delete("mentor");
-    setSearchParams(nextParams, { replace: true });
-  }
-
-  async function createCourseConversation() {
-    if (!hasRealCourseId) return;
-    speech.stopListening();
-    speech.stopSpeaking();
-    imageDraft.discardAll();
-    setCoursePrompt("");
-    setCourseMessages([]);
-    setActiveTurnDetail(null);
-    setStudyTarget(null);
-    setCourseMode("chat");
-    try {
-      const created = await createTutorSession({ scope: "course", course_id: numericCourseId, mode: "chat", title: "新建课程对话" });
-      setActiveCourseSessionId(created.data.id);
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set("mode", "chat");
-      nextParams.set("view", "overview");
-      nextParams.set("course_session_id", created.data.id);
-      nextParams.delete("course_message_id");
-      nextParams.delete("knowledge_point_id");
-      nextParams.delete("panel");
-      nextParams.delete("detail");
-      setSearchParams(nextParams, { replace: true });
-      void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
-    } catch {
-      setCourseFeedback("新建课程对话失败，请稍后重试。");
-    }
-  }
-
-  function updateCourseSessionList(updater: (sessions: TutorSessionSummary[]) => TutorSessionSummary[]) {
-    queryClient.setQueryData<TutorSessionsResponse>(["tutor", "sessions", "course", numericCourseId], (current) =>
-      current
-        ? {
-            ...current,
-            data: updater(current.data)
-          }
-        : current
-    );
-  }
-
-  async function renameCourseConversation(conversation: { id: string; title: string }, title: string) {
-    const normalizedTitle = title.trim();
-    if (!hasRealCourseId || !normalizedTitle) {
-      return;
-    }
-
-    try {
-      const renamed = await renameTutorSession(conversation.id, { title: normalizedTitle });
-
-      updateCourseSessionList((sessions) =>
-        sessions.map((session) => (session.id === conversation.id ? { ...session, title: renamed.data.title } : session))
-      );
-      setCourseFeedback(null);
-      void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
-    } catch {
-      setCourseFeedback("会话改名失败，请稍后重试。");
-    }
-  }
-
-  async function deleteCourseConversation(conversation: { id: string }) {
-    if (!hasRealCourseId) {
-      return;
-    }
-
-    try {
-      await deleteTutorSession(conversation.id);
-      updateCourseSessionList((sessions) => sessions.filter((session) => session.id !== conversation.id));
-      queryClient.removeQueries({ queryKey: ["tutor", "session", conversation.id] });
-
-      if (selectedCourseSessionId === conversation.id || activeCourseSessionId === conversation.id) {
-        setActiveCourseSessionId(null);
-        setStreamingSessionId(null);
-        setCourseMessages([]);
-        setCourseMode("chat");
-        setStudyTarget(null);
-        setActiveTurnDetail(null);
-        setIsStudyAssistantOpen(false);
-        const nextParams = new URLSearchParams(searchParams);
-        nextParams.delete("course_session_id");
-        nextParams.delete("course_message_id");
-        nextParams.delete("mentor");
-        setSearchParams(nextParams, { replace: true });
-      }
-
-      setCourseFeedback(null);
-      void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
-    } catch {
-      setCourseFeedback("会话删除失败，请稍后重试。");
-    }
-  }
-
-  function openKnowledgeStudy(pointId: string, view: CourseContentMode = "overview") {
-    setCourseMode("study");
-    setStudyTarget({ type: "knowledge", id: pointId });
-    setCourseContentView(view);
-    setIsKnowledgeDetailOpen(view === "graph");
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("mode", "study");
-    nextParams.set("view", view);
-    nextParams.set("knowledge_point_id", pointId);
-    if (view === "graph") nextParams.set("detail", "knowledge");
-    else nextParams.delete("detail");
-    setSearchParams(nextParams, { replace: true });
-  }
-
-  function openCitationStudy(citation: RagSearchResultItem) {
-    setCourseMode("study");
-    setStudyTarget({ type: "citation", citation });
-    setCourseContentView("overview");
-    if (citation.knowledge_point_id) {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set("mode", "study");
-      nextParams.set("view", "overview");
-      nextParams.set("knowledge_point_id", String(citation.knowledge_point_id));
-      nextParams.delete("detail");
-      setSearchParams(nextParams, { replace: true });
-    }
-  }
-
-  function changeCourseMode(mode: CourseWorkspaceMode) {
-    setCourseMode(mode);
-    if (mode === "chat") setIsStudyAssistantOpen(false);
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("mode", mode);
-    if (mode === "chat") nextParams.delete("mentor");
-    if (mode === "study" && !nextParams.has("view")) nextParams.set("view", "graph");
-    setSearchParams(nextParams, { replace: true });
   }
 
   function changeStudyAssistant(open: boolean) {
@@ -542,39 +286,6 @@ export function useCourseWorkspaceController() {
     } else {
       nextParams.delete("mentor");
     }
-    setSearchParams(nextParams, { replace: true });
-  }
-
-  function changeCourseContentView(view: CourseContentMode) {
-    setCourseContentView(view);
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("mode", "study");
-    nextParams.set("view", view);
-    if (view !== "graph") nextParams.delete("detail");
-    setSearchParams(nextParams, { replace: true });
-  }
-
-  function changeGraphScope(scope: GraphScope) {
-    setGraphScope(scope);
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("graph_scope", scope);
-    if (scope === "focus") nextParams.delete("graph_chapter");
-    setSearchParams(nextParams, { replace: true });
-  }
-
-  function changeGraphChapter(chapter: string) {
-    setGraphChapter(chapter);
-    const nextParams = new URLSearchParams(searchParams);
-    if (chapter) nextParams.set("graph_chapter", chapter);
-    else nextParams.delete("graph_chapter");
-    setSearchParams(nextParams, { replace: true });
-  }
-
-  function changeKnowledgeDetail(open: boolean) {
-    setIsKnowledgeDetailOpen(open);
-    const nextParams = new URLSearchParams(searchParams);
-    if (open) nextParams.set("detail", "knowledge");
-    else nextParams.delete("detail");
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -664,14 +375,6 @@ export function useCourseWorkspaceController() {
     navigate(buildCourseClosureHref(PATHS.reports, numericCourseId, selectedCourseSessionId, messageId));
   }
 
-  function toggleReadMessage(message: CourseMessage) {
-    if (speech.activeSpeechId === message.id) {
-      speech.stopSpeaking();
-      return;
-    }
-    speech.speak(sanitizeCourseAnswerContent(message.content), message.id);
-  }
-
   async function updateWeaknessReviewItem(item: CourseWeaknessReviewItem, action: CourseWeaknessReviewAction) {
     if (!hasRealCourseId || updatingWeaknessItemId !== null) {
       return;
@@ -687,166 +390,6 @@ export function useCourseWorkspaceController() {
       setWeaknessFeedback("弱点状态更新失败，请稍后重试。");
     } finally {
       setUpdatingWeaknessItemId(null);
-    }
-  }
-
-  async function sendCourseQuestion() {
-    const question = coursePrompt.trim();
-
-    if (!question && imageDraft.attachmentIds.length === 0) {
-      setCourseFeedback("先输入课程问题或添加图片。");
-      return;
-    }
-    if (imageDraft.uploading || imageDraft.hasFailed) {
-      setCourseFeedback(imageDraft.uploading ? "图片上传完成后才能发送。" : "请移除上传失败的图片后重试。");
-      return;
-    }
-    if (imageDraft.attachmentIds.length > 0 && !imageDraft.visionReady) {
-      setCourseFeedback("图片草稿已保留，请先配置默认图片理解模型。");
-      return;
-    }
-
-    if (isSearchingCourse) {
-      return;
-    }
-
-    if (!hasRealCourseId) {
-      setCourseFeedback("课程地址无效，请从课程列表重新进入。");
-      return;
-    }
-
-    setIsSearchingCourse(true);
-    const startedAt = Date.now();
-    let progressStages = ["正在准备课程回答"];
-    setCourseStreamProgress({ startedAt, stages: progressStages });
-    setCourseFeedback(null);
-    const previousMessages = displayedCourseMessages;
-
-    try {
-      let sessionId = selectedCourseSessionId;
-
-      if (!sessionId) {
-        const createdSession = await createTutorSession({
-          scope: "course",
-          course_id: numericCourseId,
-          mode: "chat",
-          title: courseQuestionTitle(question || "图片提问")
-        });
-        sessionId = createdSession.data.id;
-      }
-
-      setActiveCourseSessionId(sessionId);
-      setStreamingSessionId(sessionId);
-      optimisticMessageSequence.current += 1;
-      const optimisticId = optimisticMessageSequence.current;
-      const assistantMessageId = `course-assistant-stream-${optimisticId}`;
-      const optimisticMessages: CourseMessage[] = [
-        ...previousMessages,
-        { id: `course-user-stream-${optimisticId}`, role: "user", content: question || "请分析并讲解这张图片", attachments: imageDraft.images.flatMap((image) => image.attachment ? [image.attachment] : []) },
-        { id: assistantMessageId, role: "assistant", content: "", citations: [], attachments: [] }
-      ];
-      setCourseMessages(optimisticMessages);
-
-      const detail = await streamTutorMessage(sessionId, {
-        message: question,
-        ...(imageDraft.attachmentIds.length ? { attachment_ids: imageDraft.attachmentIds } : {})
-      }, {
-        onStatus: (status) => {
-          progressStages = appendTutorProgressStage(progressStages, status.label);
-          setCourseStreamProgress((current) => current ? { ...current, stages: progressStages } : current);
-        },
-        onToken: (content) => {
-          setCourseMessages((current) =>
-            current.map((message) =>
-              message.id === assistantMessageId ? { ...message, content: `${message.content}${content}` } : message
-            )
-          );
-        }
-      });
-      let messages = mapTutorMessagesToCourseMessages(detail.messages);
-
-      const persistedAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-      if (persistedAssistant?.resourceProposal?.action === "generate") {
-        try {
-          const job = await createTutorResourceGenerationJob(detail.session.id, persistedAssistant.id, { course_id: numericCourseId });
-          trackJob(job);
-          const refreshed = await getTutorSession(detail.session.id);
-          messages = mapTutorMessagesToCourseMessages(refreshed.data.messages);
-        } catch (resourceError) {
-          setCourseFeedback(resourceError instanceof Error ? resourceError.message : "回答已保存，但资源任务创建失败，请在回答下方重试。");
-        }
-      }
-
-      setActiveCourseSessionId(detail.session.id);
-      setCourseMessages(messages);
-      setStreamingSessionId(null);
-      setCourseStreamProgress(null);
-      setCoursePrompt("");
-      imageDraft.clearAfterSend();
-      if (persistedAssistant) {
-        setCourseAnswerProgress((current) => ({
-          ...current,
-          [persistedAssistant.id]: { startedAt, stages: progressStages, durationMs: Date.now() - startedAt }
-        }));
-      }
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set("course_session_id", detail.session.id);
-      if (persistedAssistant) nextParams.set("course_message_id", persistedAssistant.id);
-      setSearchParams(nextParams, { replace: true });
-      queryClient.setQueryData(["tutor", "session", detail.session.id], { data: detail, trace_id: null });
-      void queryClient.invalidateQueries({ queryKey: ["tutor", "sessions", "course", numericCourseId] });
-      void invalidateCourseLearningLoop(queryClient, numericCourseId);
-    } catch (error) {
-      setCourseMessages(previousMessages);
-      setStreamingSessionId(null);
-      setCourseStreamProgress(null);
-      setCourseFeedback(error instanceof Error ? error.message : "模型暂不可用，请检查设置或稍后重试。");
-    } finally {
-      setIsSearchingCourse(false);
-    }
-  }
-
-  async function generateSuggestedCourseResources(message: CourseMessage) {
-    if (!selectedCourseSessionId || !hasRealCourseId || !message.resourceProposal) return;
-    try {
-      const job = await createTutorResourceGenerationJob(selectedCourseSessionId, message.id, { course_id: numericCourseId });
-      trackJob(job);
-      const refreshed = await getTutorSession(selectedCourseSessionId);
-      setCourseMessages(mapTutorMessagesToCourseMessages(refreshed.data.messages));
-    } catch (error) {
-      setCourseFeedback(error instanceof Error ? error.message : "资源生成任务创建失败，请稍后再试。");
-    }
-  }
-
-  async function ensureCourseImageSession() {
-    if (selectedCourseSessionId) return selectedCourseSessionId;
-    if (!hasRealCourseId) throw new Error("课程地址无效");
-    const created = await createTutorSession({ scope: "course", course_id: numericCourseId, mode: "chat", title: "图片提问" });
-    setActiveCourseSessionId(created.data.id);
-    return created.data.id;
-  }
-
-  async function handleCourseDocumentFiles(files: File[]) {
-    if (!hasRealCourseId || files.length === 0) return;
-    try {
-      for (const file of files) {
-        const response = await uploadMaterial({ file, courseId: numericCourseId });
-        if (response.data.ingestion_job_id) trackJob(await getAiJob(response.data.ingestion_job_id));
-      }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["materials", "list"] }),
-        queryClient.invalidateQueries({ queryKey: ["courses", "overview", numericCourseId] })
-      ]);
-      setCourseFeedback(null);
-    } catch {
-      setCourseFeedback("资料上传失败，请稍后再试。");
-    }
-  }
-
-  function handleCourseComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void sendCourseQuestion();
     }
   }
 

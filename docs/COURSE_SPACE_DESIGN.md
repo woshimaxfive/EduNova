@@ -116,7 +116,10 @@ Agent trace 只展示安全协作摘要、节点状态和模型调用汇总，�
 
 ## 7. 组件边界
 
-- `CourseSpacePage`：查询、状态装配、SSE 和事件协调。
+- `CourseSpacePage`：只负责课程空间路由装配。
+- `useCourseWorkspaceController`：聚合课程数据、学习进度、回答详情和页面动作，不直接维护会话传输细节。
+- `useCourseWorkspaceUrlState`：维护模式、内容视图、图谱范围、知识点详情和回答详情的 URL 可恢复状态。
+- `useCourseTutorConversation`：维护课程会话选择、SSE 回答、语音、输入区和持久化消息；图片与文档草稿由 `useCourseTutorAttachments` 独立管理。
 - `courseConversation.ts`：会话消息映射、旧回答清理、推荐问题和闭环跳转参数。
 - `CourseWorkspaceHeader`：课程栏与模式切换。
 - `CourseAssistantTurn`：Assistant Markdown 回合。
@@ -127,7 +130,7 @@ Agent trace 只展示安全协作摘要、节点状态和模型调用汇总，�
 - `CourseContentView`：章节目录、知识点概览、图谱和 AI 辅导抽屉。
 - `course-space.css`：课程空间专用布局与视觉样式。
 
-失去用途的 `CourseLoopHero`、`CourseStudyStepRail` 和对应全局样式已经删除，避免课程样式继续在 `global.css` 中叠加覆盖。
+失去用途的 `CourseLoopHero`、`CourseStudyStepRail` 和旧 Phase 6.5 课程全局样式已经删除。课程视觉只在 `course-space.css` 维护，`global.css` 不再保留一套重复覆盖层。
 
 ## 8. 验收要求
 

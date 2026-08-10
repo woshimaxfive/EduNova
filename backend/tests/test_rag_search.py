@@ -46,12 +46,20 @@ class FakeRagRepository:
         *,
         embedding_source: str,
         embedding_model: str,
+        embedding_dimension: int,
+        embedding_profile_hash: str,
         limit: int,
     ) -> list[tuple[KnowledgeChunk, float]]:
         candidates: list[tuple[KnowledgeChunk, float]] = []
         for chunk in self.chunks:
             metadata = chunk.metadata_json or {}
-            if chunk.course_id != course_id or metadata.get("embedding_source") != embedding_source or metadata.get("embedding_model") != embedding_model:
+            if (
+                chunk.course_id != course_id
+                or metadata.get("embedding_source") != embedding_source
+                or metadata.get("embedding_model") != embedding_model
+                or chunk.embedding_dimension != embedding_dimension
+                or chunk.embedding_profile_hash != embedding_profile_hash
+            ):
                 continue
             vector = chunk.embedding or []
             similarity = sum(left * right for left, right in zip(query_vector, vector, strict=True))
@@ -66,6 +74,7 @@ class FakeEmbeddingBatch:
     model: str
     dimension: int
     status: str
+    profile_hash: str = "test-embedding-profile"
 
 
 @dataclass
@@ -76,6 +85,17 @@ class FakeEmbeddingService:
     def embed_texts(self, _user: User, texts: list[str]) -> FakeEmbeddingBatch:
         self.calls.append(texts)
         return self.batches.pop(0)
+
+    def embed_query(self, user: User, text: str) -> FakeEmbeddingBatch:
+        return self.embed_texts(user, [text])
+
+    def apply_embeddings(self, user: User, chunks: list[KnowledgeChunk]) -> FakeEmbeddingBatch:
+        batch = self.embed_texts(user, [chunk.content for chunk in chunks])
+        RagService._apply_batch_to_chunks(batch, chunks)
+        return batch
+
+    def chunk_needs_embedding(self, _user: User, chunk: KnowledgeChunk) -> bool:
+        return chunk.embedding is None
 
     def expected_metadata(self, _user: User) -> tuple[str, str, int]:
         batch = self.batches[0]

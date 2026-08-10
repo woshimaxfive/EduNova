@@ -522,6 +522,7 @@ ReviewAgent 审核
 - Phase 6.1 已让课程会话在有引用且模型配置可用时调用 OpenAI-compatible Chat Completions 生成非流式回答，并把模型内容保存到 `chat_messages.content`，引用继续保存在 `citation_json`。
 - Phase 6.3 已新增课程消息流式路径：后端通过 `event: metadata/token/done/error` 输出 SSE，完成后一次性持久化完整 assistant；失败时不保存半截内容。
 - `EmbeddingService` 始终使用服务器向量配置。讯飞走原生签名 2560 维接口，百炼/硅基/自定义走 OpenAI-compatible `/embeddings`；查询按用户、范围、Provider、模型、维度和配置指纹隔离。
+- `RagService` 以显式仓储、EmbeddingService 和 EmbeddingBatch 协议连接向量检索；SQLAlchemy 与测试替身都必须提供完整的配置指纹、维度和向量候选合同，不通过运行时属性探测或 `TypeError` 回退猜测能力。
 - 课程与主页资料 RAG 均执行关键词 Top 30、向量 Top 30、RRF Top 20、可选 Rerank、最终 Top 5。向量或重排序失败时逐层回退，API 展示 `retrieval_source`、`embedding_status` 和 `rerank_status`。
 - 切换向量默认不会自动消耗额度；`embedding_reindex` AI Job 由用户显式发起，复用 RQ、进度、取消和重试。
 

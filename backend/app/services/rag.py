@@ -35,12 +35,45 @@ class ScoredChunk:
     rerank_status: str = "not_configured"
 
 
-class RagEmbeddingService(Protocol):
-    def embed_texts(self, user: User, texts: list[str]) -> Any: ...
+class RagEmbeddingBatch(Protocol):
+    vectors: list[list[float]]
+    source: str
+    model: str
+    dimension: int
+    status: str
+    profile_hash: str
 
-    def apply_embeddings(self, user: User, chunks: list[KnowledgeChunk]) -> Any: ...
+
+class RagEmbeddingService(Protocol):
+    def embed_query(self, user: User, text: str) -> RagEmbeddingBatch: ...
+
+    def embed_texts(self, user: User, texts: list[str]) -> RagEmbeddingBatch: ...
+
+    def apply_embeddings(self, user: User, chunks: list[KnowledgeChunk]) -> RagEmbeddingBatch: ...
 
     def chunk_needs_embedding(self, user: User, chunk: KnowledgeChunk) -> bool: ...
+
+    def expected_metadata(self, user: User) -> tuple[str, str, int]: ...
+
+
+class RagRepository(Protocol):
+    def get_course_for_user(self, user_id: int, course_id: int) -> Course | None: ...
+
+    def list_searchable_chunks(self, course_id: int) -> list[KnowledgeChunk]: ...
+
+    def save_chunk_embeddings(self, chunks: list[KnowledgeChunk]) -> None: ...
+
+    def vector_candidates(
+        self,
+        course_id: int,
+        query_vector: list[float],
+        *,
+        embedding_source: str,
+        embedding_model: str,
+        embedding_dimension: int,
+        embedding_profile_hash: str,
+        limit: int,
+    ) -> list[tuple[KnowledgeChunk, float]]: ...
 
 
 class RagRerankService(Protocol):
@@ -102,7 +135,7 @@ class RagService:
 
     def __init__(
         self,
-        repository: SqlAlchemyRagRepository,
+        repository: RagRepository,
         embedding_service: RagEmbeddingService | None = None,
         rerank_service: RagRerankService | None = None,
     ) -> None:
@@ -134,27 +167,16 @@ class RagService:
         if query_embedding is not None and query_embedding.get("vector") is not None:
             embedding_status = query_embedding["status"]
             retrieval_mode = "hybrid"
-            vector_search = getattr(self.repository, "vector_candidates", None)
-            if callable(vector_search):
-                try:
-                    rows = vector_search(
-                        course.id,
-                        query_embedding["vector"],
-                        embedding_source=query_embedding["source"],
-                        embedding_model=query_embedding["model"],
-                        embedding_dimension=query_embedding["dimension"],
-                        embedding_profile_hash=query_embedding["profile_hash"],
-                        limit=30,
-                    )
-                except TypeError:
-                    rows = vector_search(
-                        course.id,
-                        query_embedding["vector"],
-                        embedding_source=query_embedding["source"],
-                        embedding_model=query_embedding["model"],
-                        limit=30,
-                    )
-                vector_candidates = {chunk.id: (chunk, max(0.0, 1.0 - distance)) for chunk, distance in rows}
+            rows = self.repository.vector_candidates(
+                course.id,
+                query_embedding["vector"],
+                embedding_source=query_embedding["source"],
+                embedding_model=query_embedding["model"],
+                embedding_dimension=query_embedding["dimension"],
+                embedding_profile_hash=query_embedding["profile_hash"],
+                limit=30,
+            )
+            vector_candidates = {chunk.id: (chunk, max(0.0, 1.0 - distance)) for chunk, distance in rows}
         keyword_rows = sorted(
             [(chunk, self._score_chunk(chunk, cleaned_query, terms)) for chunk in chunks],
             key=lambda item: (-item[1], item[0].id),
@@ -232,16 +254,15 @@ class RagService:
         if self.embedding_service is None:
             return None
         try:
-            embed_query = getattr(self.embedding_service, "embed_query", None)
-            batch = embed_query(user, query) if callable(embed_query) else self.embedding_service.embed_texts(user, [query])
+            batch = self.embedding_service.embed_query(user, query)
         except Exception:
             return None
-        vectors = list(getattr(batch, "vectors", []))
-        status = str(getattr(batch, "status", "unavailable"))
-        source = str(getattr(batch, "source", "unknown"))
-        model = str(getattr(batch, "model", "unknown"))
-        dimension = int(getattr(batch, "dimension", 0))
-        profile_hash = str(getattr(batch, "profile_hash", "")) or sha256(
+        vectors = batch.vectors
+        status = batch.status
+        source = batch.source
+        model = batch.model
+        dimension = batch.dimension
+        profile_hash = batch.profile_hash or sha256(
             f"{source}|{model}|{dimension}".encode("utf-8")
         ).hexdigest()
         if status != "completed":
@@ -254,40 +275,29 @@ class RagService:
         if self.embedding_service is None or not chunks:
             return
         try:
-            expected_metadata = getattr(self.embedding_service, "expected_metadata", None)
-            if callable(expected_metadata):
-                expected_source, expected_model, _ = expected_metadata(user)
-                if expected_source == "local" or expected_model == "keyword-only":
-                    return
-            needs_embedding = getattr(self.embedding_service, "chunk_needs_embedding", None)
-            if callable(needs_embedding):
-                target_chunks = [chunk for chunk in chunks if needs_embedding(user, chunk)]
-            else:
-                target_chunks = [chunk for chunk in chunks if not self._valid_vector(chunk.embedding)]
+            expected_source, expected_model, _ = self.embedding_service.expected_metadata(user)
+            if expected_source == "local" or expected_model == "keyword-only":
+                return
+            target_chunks = [chunk for chunk in chunks if self.embedding_service.chunk_needs_embedding(user, chunk)]
             if not target_chunks:
                 return
 
-            apply_embeddings = getattr(self.embedding_service, "apply_embeddings", None)
-            if callable(apply_embeddings):
-                batch = apply_embeddings(user, target_chunks)
-            else:
-                batch = self.embedding_service.embed_texts(user, [chunk.content for chunk in target_chunks])
-                self._apply_batch_to_chunks(batch, target_chunks)
-            vectors = list(getattr(batch, "vectors", []))
+            batch = self.embedding_service.apply_embeddings(user, target_chunks)
+            vectors = batch.vectors
             if len(vectors) == len(target_chunks):
                 self.repository.save_chunk_embeddings(target_chunks)
         except Exception:
             return
 
     @staticmethod
-    def _apply_batch_to_chunks(batch: Any, chunks: list[KnowledgeChunk]) -> None:
-        vectors = list(getattr(batch, "vectors", []))
+    def _apply_batch_to_chunks(batch: RagEmbeddingBatch, chunks: list[KnowledgeChunk]) -> None:
+        vectors = batch.vectors
         if len(vectors) != len(chunks):
             return
-        source = str(getattr(batch, "source", "unknown"))
-        model = str(getattr(batch, "model", "unknown"))
-        dimension = int(getattr(batch, "dimension", 0))
-        profile_hash = str(getattr(batch, "profile_hash", ""))
+        source = batch.source
+        model = batch.model
+        dimension = batch.dimension
+        profile_hash = batch.profile_hash
         for chunk, vector in zip(chunks, vectors, strict=True):
             if len(vector) != dimension:
                 continue

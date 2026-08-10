@@ -8,6 +8,8 @@
 
 同日完成前端路由加载边界收口：`/app` 主学习空间和公开入口保持同步加载，资料库、学习路径、练习、报告、资源工坊、画像、设置和课程空间改为路由级按需加载；页面内已有的 Mermaid、图表和浏览器代码环境按需加载策略不变。生产构建确认这些二级页面均产生独立 CSS/JS chunk，鉴权、兼容跳转和路由渲染的定向回归、TypeScript、ESLint 和生产构建均通过。本批未改变路由 URL、权限规则、页面功能、API、数据或视觉行为；仅加载时机变化，因此不重复浏览器验收。
 
+同日完成 RAG 检索边界收口：`RagService` 将仓储、EmbeddingService 和 EmbeddingBatch 定义为完整强类型协议，移除内部对 `embed_query`、向量候选、配置指纹和向量持久化能力的 `getattr/callable/TypeError` 兼容探测；SQLAlchemy 实现和测试替身统一提供来源、模型、维度与配置指纹。关键词、向量、RRF、重排序、失败降级和 API 响应保持不变。RAG 定向 12 项、Ruff 和编译检查通过；随后运行后端全量回归与 UTF-8 检查。
+
 同日完成资源生成模块第一批边界收口：资源异常、State、依赖协议、安全引用和共享约束移入 `resource_contracts.py`，SQLAlchemy 仓储移入 `resource_repository.py`，`ResourceGenerationGraphRunner` 移入 `resource_graph.py`；`resources.py` 保留生成服务、内容构造、模型增强、质量门禁和旧导入兼容。迁移前后的服务类与 Graph 节点保持一致。资源定向 34 项、后端全量 524 项、Ruff、OpenAPI 漂移、Alembic head、Compose 配置、UTF-8 编码，以及前端全量 282 项、ESLint 和 production build 均通过。本批没有修改资源类型、生成/审核/修复规则、Graph 状态、API、数据库、模型调用、依赖或用户可见行为，因此未重复浏览器验收。
 
 同日完成资源生成模块第二批内容边界收口：课程切片筛选、画像安全摘要、上下文关键词和确定性 artifact 底稿移入 `resource_content.py`；`resources.py` 通过兼容别名保留现有 Graph 与定向测试入口，并删除已被 v3 结构化 artifact 流程替代、全仓无调用的旧 Markdown 拼装器、批量增强入口和旧解析辅助。资源定向 27 项、后端全量 524 项、后端 Ruff、OpenAPI 漂移、Alembic head、Compose 配置和 UTF-8 编码检查均通过。当前生成、审核、修复、质量门禁、API、数据库和用户可见行为保持不变，因此本批不重复前端测试、构建或浏览器验收。

@@ -2,36 +2,31 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { createCourseBuilderJob, createIdempotencyKey, getAiJob } from "../../api/aiJobs";
 import { getCourseLearningState, getMasteryMap } from "../../api/courses";
 import { getDashboardSummary } from "../../api/dashboard";
-import { getApiErrorMessage } from "../../api/errors";
 import { getLearningNextAction } from "../../api/learning";
-import { listMaterials, uploadMaterial } from "../../api/materials";
+import { listMaterials } from "../../api/materials";
 import {
   createTutorResourceGenerationJob,
   createTutorSession,
-  deleteTutorSession,
   getTutorSession,
-  renameTutorSession,
-  streamTutorMessage,
-  type TutorSessionSummary
+  streamTutorMessage
 } from "../../api/tutor";
-import { buildCoursePath, PATHS } from "../../app/routePaths";
+import { PATHS } from "../../app/routePaths";
 import { isCompactWorkspaceViewport, useResponsiveSidebarState } from "../../components/layout/useResponsiveSidebarState";
 import type { FeedbackTone } from "../../components/feedback/InlineFeedback";
 import { useAiJobs } from "../aiJobs/AiJobProvider";
-import { isRestorableCourseBuilderJob } from "../aiJobs/jobRestoration";
 import { useAuthStore } from "../auth/authStore";
-import { invalidateLearningNextActions, learningActionKeys, useLearningNextAction } from "../learning-actions/learningActions";
+import { learningActionKeys, useLearningNextAction } from "../learning-actions/learningActions";
 import { useBrowserSpeech } from "../speech/useBrowserSpeech";
 import { appendTutorProgressStage, type TutorResponseProgressState } from "../tutor/tutorResponseProgress";
 import { useTutorImageDraft } from "../tutor/useTutorImageDraft";
 import { useTutorPersistedResponseProgress } from "../tutor/useTutorPersistedResponseProgress";
-import { useHomeConversationHistory } from "./useHomeConversationHistory";
+import { useHomeConversationThreads } from "./useHomeConversationThreads";
+import { useHomeCourseBuilder } from "./useHomeCourseBuilder";
+import { useHomeMaterialSelection } from "./useHomeMaterialSelection";
 import {
   HOME_COMPOSER_MAX_HEIGHT,
-  type DashboardSummaryResponse,
   type DashboardSummaryThread,
   type HomeAnswerPanel,
   type HomeMessage,
@@ -61,17 +56,9 @@ export function useLearningSpaceController() {
   const refreshedTutorResourceJobIds = useRef(new Set<string>());
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<HomeMessage[]>([]);
-  const [localHomeThreads, setLocalHomeThreads] = useState<DashboardSummaryThread[]>([]);
-  const [historySearch, setHistorySearch] = useState("");
   const [activeHomeThreadId, setActiveHomeThreadId] = useState<string | null>(() => selectedHomeThreadIdFromNavigation);
   const [isSendingQuestion, setIsSendingQuestion] = useState(false);
-  const [conversationMaterialIds, setConversationMaterialIds] = useState<string[]>([]);
-  const [materialDraftIds, setMaterialDraftIds] = useState<string[]>(() => selectedMaterialIdsFromNavigation);
-  const [courseMaterialIds, setCourseMaterialIds] = useState<string[]>([]);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useResponsiveSidebarState();
-  const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
-  const [courseJobId, setCourseJobId] = useState<string | null>(null);
-  const [isLibraryOpen, setIsLibraryOpen] = useState(() => selectedMaterialIdsFromNavigation.length > 0);
   const [activeAnswerPanel, setActiveAnswerPanel] = useState<HomeAnswerPanel>(
     initialHomePanel === "why" || initialHomePanel === "trace" ? initialHomePanel : "sources"
   );
@@ -81,24 +68,15 @@ export function useLearningSpaceController() {
   const [answerProgress, setAnswerProgress] = useState<Record<string, TutorResponseProgressState & { durationMs: number }>>({});
   const [answerWarnings, setAnswerWarnings] = useState<Record<string, string[]>>({});
   const [composerFeedback, setComposerFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
-  const [courseDialogFeedback, setCourseDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
-  const [materialDialogFeedback, setMaterialDialogFeedback] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const [isCourseDrawerOpen, setIsCourseDrawerOpen] = useState(false);
   const [pendingHomeResourceGeneration, setPendingHomeResourceGeneration] = useState<PendingHomeResourceGeneration | null>(null);
-  const imageDraft = useTutorImageDraft(
-    ensureHomeImageSession,
-    (message) => setComposerFeedback({ message, tone: "warning" }),
-    handleTutorDocumentFiles
-  );
   const speech = useBrowserSpeech({
     onTranscript: (transcript) => setPrompt((current) => current.trim() ? `${current.trim()} ${transcript}` : transcript),
     onNotice: (message, tone) => setComposerFeedback({ message, tone })
   });
   const isListening = speech.isListening;
   const isTranscribing = speech.isTranscribing;
-  const { jobs, trackJob, getJob, cancelJob, retryJob } = useAiJobs();
-  const courseJob = getJob(courseJobId);
-  const isCreatingCourse = Boolean(courseJob && ["queued", "running", "cancelling"].includes(courseJob.status));
+  const { jobs, trackJob } = useAiJobs();
   const hasHomeThread = messages.length > 0;
   function updateHomeAnswerState(messageId: string | null, panel: HomeAnswerPanel = activeAnswerPanel) {
     setExpandedAnswerId(messageId);
@@ -158,8 +136,6 @@ export function useLearningSpaceController() {
     staleTime: 10_000,
     retry: false
   });
-  const historyQuery = useHomeConversationHistory("", Boolean(token));
-  const historySearchQuery = useHomeConversationHistory(historySearch, Boolean(token && historySearch));
   const allMaterialsQuery = useQuery({
     queryKey: ["materials", "list"],
     queryFn: () => listMaterials(),
@@ -184,24 +160,28 @@ export function useLearningSpaceController() {
   );
   const emptyState = dashboardSummary?.empty_state;
   const learnerName = dashboardSummary?.profile_summary.display_name.trim() || "同学";
-  const historyHomeThreads = useMemo(
-    () => (historyQuery.data?.pages ?? []).flatMap((page) => (page.data?.items ?? []).map(({ id, title, updated_at }) => ({ id, title, meta: updated_at.slice(0, 10) }))),
-    [historyQuery.data?.pages]
-  );
   const fallbackHomeThreads = useMemo(
-    () => dashboardSummary?.recent_conversations.map(({ id, title, meta }) => ({ id, title, meta })) ?? [],
+    () => dashboardSummary?.recent_conversations ?? [],
     [dashboardSummary?.recent_conversations]
   );
-  const homeThreads = useMemo(() => {
-    const localIds = new Set(localHomeThreads.map((thread) => thread.id));
-    const serverThreads = historyHomeThreads.length > 0 ? historyHomeThreads : fallbackHomeThreads;
-
-    return [...localHomeThreads, ...serverThreads.filter((thread) => !localIds.has(thread.id))];
-  }, [fallbackHomeThreads, historyHomeThreads, localHomeThreads]);
-  const historySearchThreads = useMemo(
-    () => (historySearchQuery.data?.pages ?? []).flatMap((page) => (page.data?.items ?? []).map(({ id, title, match_snippet }) => ({ id, title, meta: match_snippet || "历史会话" }))),
-    [historySearchQuery.data?.pages]
-  );
+  const conversationThreads = useHomeConversationThreads({
+    activeThreadId: activeHomeThreadId,
+    enabled: Boolean(token),
+    fallbackThreads: fallbackHomeThreads,
+    onDeleteActive: resetHomeEntry,
+    onFeedback: setComposerFeedback
+  });
+  const {
+    deleteConversation: deleteHomeConversation,
+    historyQuery,
+    historySearch,
+    historySearchQuery,
+    historySearchThreads,
+    homeThreads,
+    renameConversation: renameHomeConversation,
+    setHistorySearch,
+    upsertThread: upsertHomeThread
+  } = conversationThreads;
   const materials = useMemo<LibraryMaterial[]>(() => {
     const allMaterials = allMaterialsQuery.data?.data;
     if (allMaterialsQuery.isSuccess && Array.isArray(allMaterials)) {
@@ -209,9 +189,45 @@ export function useLearningSpaceController() {
     }
     return dashboardSummary?.recent_materials ?? [];
   }, [allMaterialsQuery.data?.data, allMaterialsQuery.isSuccess, dashboardSummary?.recent_materials]);
-  const effectiveConversationMaterialIds = useMemo(
-    () => conversationMaterialIds.filter((materialId) => materials.some((material) => material.id === materialId)),
-    [conversationMaterialIds, materials]
+  const materialSelection = useHomeMaterialSelection({
+    activeThreadId: activeHomeThreadId,
+    initialMaterialIds: selectedMaterialIdsFromNavigation,
+    materials,
+    onComposerFeedback: setComposerFeedback
+  });
+  const {
+    closeDialog: closeLibrary,
+    confirmSelection: confirmConversationMaterials,
+    dialogOpen: isLibraryOpen,
+    draftIds: materialDraftIds,
+    effectiveIds: effectiveConversationMaterialIds,
+    feedback: materialDialogFeedback,
+    openDialog: openLibrary,
+    resetSelection: resetMaterialSelection,
+    restoreSelection: restoreMaterialSelection,
+    setDialogOpen: setIsLibraryOpen,
+    toggleDraft: toggleMaterialDraft,
+    uploadDocuments: handleTutorDocumentFiles
+  } = materialSelection;
+  const courseBuilder = useHomeCourseBuilder({ onCloseLibrary: closeLibrary });
+  const {
+    cancelJob,
+    createCourse: createCourseFromSelectedMaterials,
+    dialogOpen: isCourseDialogOpen,
+    feedback: courseDialogFeedback,
+    isCreating: isCreatingCourse,
+    job: courseJob,
+    materialIds: courseMaterialIds,
+    retryJob,
+    resetDialog: resetCourseBuilderDialog,
+    setDialogOpen: setIsCourseDialogOpen,
+    setJobId: setCourseJobId,
+    toggleMaterial: toggleCourseMaterial
+  } = courseBuilder;
+  const imageDraft = useTutorImageDraft(
+    ensureHomeImageSession,
+    (message) => setComposerFeedback({ message, tone: "warning" }),
+    handleTutorDocumentFiles
   );
 
   useEffect(() => {
@@ -223,38 +239,6 @@ export function useLearningSpaceController() {
     input.style.height = `${nextHeight}px`;
     input.style.overflowY = input.scrollHeight > HOME_COMPOSER_MAX_HEIGHT ? "auto" : "hidden";
   }, [prompt]);
-
-  useEffect(() => {
-    if (courseJobId) return;
-    const restored = jobs.find(isRestorableCourseBuilderJob);
-    if (!restored) return;
-    const materialIds = Array.isArray(restored.request.material_ids) ? restored.request.material_ids.map(String) : [];
-    // Restore durable server state after navigation or refresh.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCourseMaterialIds(materialIds);
-    setCourseJobId(restored.job_id);
-    setIsLibraryOpen(false);
-    setIsCourseDialogOpen(true);
-  }, [courseJobId, jobs]);
-
-  useEffect(() => {
-    if (!courseJob) return;
-    if (courseJob.status === "failed") {
-      // Surface the terminal state delivered by the external job runtime.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCourseDialogFeedback({ message: courseJob.error_message ?? "课程生成失败，请稍后重试。", tone: "warning" });
-      return;
-    }
-    const courseId = courseJob.result.course_id;
-    if (courseJob.status === "completed" && (typeof courseId === "string" || typeof courseId === "number")) {
-      setCourseJobId(null);
-      setIsCourseDialogOpen(false);
-      setIsLibraryOpen(false);
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
-      void invalidateLearningNextActions(queryClient);
-      navigate(buildCoursePath(String(courseId)));
-    }
-  }, [courseJob, navigate, queryClient]);
 
   useEffect(() => {
     if (!hasHomeThread) {
@@ -270,156 +254,16 @@ export function useLearningSpaceController() {
     });
   }, [hasHomeThread, messages.length]);
 
-  function openLibrary() {
-    setMaterialDraftIds(effectiveConversationMaterialIds);
-    setMaterialDialogFeedback(null);
-    setIsLibraryOpen(true);
-  }
-
   function openCourseGeneration() {
-    setCourseMaterialIds(effectiveConversationMaterialIds);
-    setIsLibraryOpen(false);
-    setIsCourseDialogOpen(true);
+    courseBuilder.open(effectiveConversationMaterialIds);
   }
 
   function openCourseGenerationFromLibrary() {
-    setCourseMaterialIds(materialDraftIds);
-    setIsLibraryOpen(false);
-    setIsCourseDialogOpen(true);
-  }
-
-  async function handleTutorDocumentFiles(files: File[]) {
-    if (files.length === 0) return;
-    try {
-      for (const file of files) {
-        const response = await uploadMaterial({ file });
-        if (response.data.ingestion_job_id) {
-          trackJob(await getAiJob(response.data.ingestion_job_id));
-        }
-      }
-      await queryClient.invalidateQueries({ queryKey: ["materials", "list"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
-      await invalidateLearningNextActions(queryClient);
-      setComposerFeedback({ message: `${files.length} 份资料已上传，正在后台识别目录和正文切片。`, tone: "success" });
-    } catch (error) {
-      void error;
-      setComposerFeedback({ message: "资料上传失败，请稍后再试。", tone: "warning" });
-    }
-  }
-
-  function toggleMaterialDraft(materialId: string) {
-    setMaterialDraftIds((current) => {
-      if (!current.includes(materialId) && current.length >= 10) {
-        setMaterialDialogFeedback({ message: "单个会话最多选择 10 份参考资料。", tone: "warning" });
-        return current;
-      }
-      const next = current.includes(materialId) ? current.filter((id) => id !== materialId) : [...current, materialId];
-      setMaterialDialogFeedback(null);
-      return next;
-    });
-  }
-
-  function toggleCourseMaterial(materialId: string) {
-    setCourseMaterialIds((current) =>
-      current.includes(materialId) ? current.filter((id) => id !== materialId) : [...current, materialId]
-    );
-  }
-
-  async function confirmConversationMaterials() {
-    const materialIds = materialDraftIds.filter((materialId) => materials.some((material) => material.id === materialId));
-    if (activeHomeThreadId) {
-      try {
-        await renameTutorSession(activeHomeThreadId, { selected_material_ids: materialIds.map(Number) });
-      } catch {
-        setMaterialDialogFeedback({ message: "参考资料保存失败，请稍后重试。", tone: "warning" });
-        return;
-      }
-    }
-    setConversationMaterialIds(materialIds);
-    setMaterialDialogFeedback(null);
-    setIsLibraryOpen(false);
-    void queryClient.invalidateQueries({ queryKey: ["tutor", "home-history"] });
+    courseBuilder.open(materialDraftIds);
   }
 
   function buildHomeSessionTitle(question: string) {
     return Array.from(question).slice(0, 30).join("");
-  }
-
-  function toHomeThread(session: TutorSessionSummary): DashboardSummaryThread {
-    return {
-      id: session.id,
-      title: session.title,
-      meta: "刚刚"
-    };
-  }
-
-  function upsertHomeThread(session: TutorSessionSummary) {
-    setLocalHomeThreads((current) => {
-      const nextThread = toHomeThread(session);
-
-      return [nextThread, ...current.filter((thread) => thread.id !== nextThread.id)];
-    });
-    void queryClient.invalidateQueries({ queryKey: ["tutor", "home-history"] });
-  }
-
-  function updateDashboardHomeThreads(
-    updater: (threads: DashboardSummaryResponse["data"]["recent_conversations"]) => DashboardSummaryResponse["data"]["recent_conversations"]
-  ) {
-    queryClient.setQueryData<DashboardSummaryResponse>(["dashboard", "summary"], (current) =>
-      current
-        ? {
-            ...current,
-            data: {
-              ...current.data,
-              recent_conversations: updater(current.data.recent_conversations)
-            }
-          }
-        : current
-    );
-  }
-
-  function renameCachedHomeThread(sessionId: string, title: string) {
-    setLocalHomeThreads((current) =>
-      current.map((thread) => (thread.id === sessionId ? { ...thread, title } : thread))
-    );
-    updateDashboardHomeThreads((threads) =>
-      threads.map((thread) => (thread.id === sessionId ? { ...thread, title } : thread))
-    );
-  }
-
-  async function renameHomeConversation(conversation: DashboardSummaryThread, title: string) {
-    const normalizedTitle = title.trim();
-    if (!normalizedTitle) {
-      return;
-    }
-
-    try {
-      const renamed = await renameTutorSession(conversation.id, { title: normalizedTitle });
-
-      renameCachedHomeThread(conversation.id, renamed.data.title);
-      setComposerFeedback(null);
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
-      void queryClient.invalidateQueries({ queryKey: ["tutor", "home-history"] });
-    } catch {
-      setComposerFeedback({ message: "会话改名失败，请稍后再试。", tone: "warning" });
-    }
-  }
-
-  async function deleteHomeConversation(conversation: DashboardSummaryThread) {
-    try {
-      await deleteTutorSession(conversation.id);
-      setLocalHomeThreads((current) => current.filter((thread) => thread.id !== conversation.id));
-      updateDashboardHomeThreads((threads) => threads.filter((thread) => thread.id !== conversation.id));
-
-      if (activeHomeThreadId === conversation.id) {
-        resetHomeEntry();
-      }
-
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
-      void queryClient.invalidateQueries({ queryKey: ["tutor", "home-history"] });
-    } catch {
-      setComposerFeedback({ message: "会话删除失败，请稍后再试。", tone: "warning" });
-    }
   }
 
   async function handleSendQuestion() {
@@ -641,12 +485,9 @@ export function useLearningSpaceController() {
     setPrompt("");
     setMessages([]);
     setActiveHomeThreadId(null);
-    setConversationMaterialIds([]);
-    setMaterialDraftIds([]);
-    setCourseMaterialIds([]);
+    resetMaterialSelection();
+    resetCourseBuilderDialog();
     setIsHistoryCollapsed(isCompactWorkspaceViewport());
-    setIsLibraryOpen(false);
-    setIsCourseDialogOpen(false);
     setActiveAnswerPanel("sources");
     setExpandedAnswerId(null);
     setStreamingAnswerId(null);
@@ -654,8 +495,6 @@ export function useLearningSpaceController() {
     setAnswerProgress({});
     setAnswerWarnings({});
     setComposerFeedback(null);
-    setCourseDialogFeedback(null);
-    setMaterialDialogFeedback(null);
     navigate(PATHS.app, { replace: true, state: null });
     window.requestAnimationFrame(() => {
       document.documentElement.scrollTop = 0;
@@ -679,14 +518,13 @@ export function useLearningSpaceController() {
       const detail = await getTutorSession(conversation.id);
 
       setMessages(mapTutorMessages(detail.data.messages));
-      setConversationMaterialIds((detail.data.session.selected_material_ids ?? []).map(String));
-      setMaterialDraftIds((detail.data.session.selected_material_ids ?? []).map(String));
+      restoreMaterialSelection((detail.data.session.selected_material_ids ?? []).map(String));
       navigate(`${PATHS.app}?session_id=${conversation.id}`, { state: null });
     } catch (error) {
       void error;
       setComposerFeedback({ message: "历史对话读取失败，请稍后再试。", tone: "warning" });
     }
-  }, [imageDraft, navigate, speech]);
+  }, [imageDraft, navigate, restoreMaterialSelection, speech]);
 
   useEffect(() => {
     if (!selectedHomeThreadIdFromNavigation) {
@@ -703,45 +541,13 @@ export function useLearningSpaceController() {
 
         setMessages(mapTutorMessages(detail.data.messages));
         setActiveHomeThreadId(selectedHomeThreadIdFromNavigation);
-        setConversationMaterialIds((detail.data.session.selected_material_ids ?? []).map(String));
-        setMaterialDraftIds((detail.data.session.selected_material_ids ?? []).map(String));
+        restoreMaterialSelection((detail.data.session.selected_material_ids ?? []).map(String));
       } catch (error) {
         void error;
         setComposerFeedback({ message: "历史对话读取失败，请稍后再试。", tone: "warning" });
       }
     })();
-  }, [messages.length, selectedHomeThreadIdFromNavigation]);
-
-  async function createCourseFromSelectedMaterials(courseTitle: string) {
-    const selectedMaterialIdsAsNumbers = courseMaterialIds
-      .map((materialId) => Number.parseInt(materialId, 10))
-      .filter((materialId) => Number.isFinite(materialId));
-
-    if (selectedMaterialIdsAsNumbers.length === 0) {
-      setCourseDialogFeedback({ message: "请先选择至少一份资料。", tone: "warning" });
-      return;
-    }
-
-    if (isCreatingCourse) {
-      return;
-    }
-
-    setCourseDialogFeedback(null);
-
-    try {
-      const job = await createCourseBuilderJob(
-        { material_ids: selectedMaterialIdsAsNumbers, course_title: courseTitle.trim() },
-        createIdempotencyKey("home-course")
-      );
-      setCourseJobId(job.job_id);
-      trackJob(job);
-    } catch (error) {
-      setCourseDialogFeedback({
-        message: getApiErrorMessage(error, "课程生成失败，请确认选择的是已解析资料。"),
-        tone: "warning"
-      });
-    }
-  }
+  }, [messages.length, restoreMaterialSelection, selectedHomeThreadIdFromNavigation]);
 
   return {
     isHistoryCollapsed,

@@ -319,6 +319,7 @@ backend/app/
 | `backend/app/services/model_settings.py` | 模型设置服务，负责配置优先级、模型调用、测试结果持久化与凭证加密；响应装配委托给 presenter |
 | `backend/app/services/model_execution.py` | 统一模型执行运行时，负责同配置有限重试、Redis 并发租约、熔断、取消检查和独立安全审计 |
 | `backend/app/services/embeddings.py` | Embedding 服务，负责讯飞原生与 OpenAI-compatible 动态维度调用、配置指纹和切片向量写入；无配置时只返回关键词 fallback |
+| `backend/app/services/paths.py` | 学习路径服务及其 SQLAlchemy 仓储；课程活跃性与路径资源交互是 `PathRepository` 的必备合同，任务状态更新和资源学习状态不做运行时能力猜测 |
 | `backend/app/providers/retrieval.py` | 讯飞签名 Embedding、UTF-8 2KB 分片池化、硅基/百炼 Rerank Provider |
 | `backend/app/services/course_answers.py` | 回答服务，负责主页学习 prompt、资料/网页来源摘要、深度回答指令、课程引用受控 prompt、非流式或流式模型 Provider 调用、未配置和模型失败处理 |
 | `backend/app/services/material_parsers.py` | 资料解析器，负责 TXT/Markdown/PDF/DOCX/PPTX 文本抽取，并明确 OCR、旧版 Office 和扫描件边界 |

@@ -268,8 +268,7 @@ class PathService:
         task = self.repository.get_task_for_user(user.id, task_id)
         if task is None:
             raise PathNotFoundError("学习任务不存在或无权访问。")
-        active_checker = getattr(self.repository, "is_course_active", None)
-        if callable(active_checker) and not active_checker(user.id, int(task.course_id or 0)):
+        if not self.repository.is_course_active(user.id, int(task.course_id or 0)):
             raise PathValidationError("课程已完成归档；请先恢复学习再更新路径任务。")
         resources = self.repository.list_generated_resources(user.id, int(task.course_id or 0))
         resources_by_id = {resource.id: resource for resource in resources}
@@ -367,11 +366,8 @@ class PathService:
         )
 
     def _learning_states(self, user_id: int, path_id: int) -> dict[int, dict[int, str]]:
-        loader = getattr(self.repository, "list_resource_interactions_for_path", None)
-        if not callable(loader):
-            return {}
         states: dict[int, dict[int, str]] = {}
-        for interaction in loader(user_id, path_id):
+        for interaction in self.repository.list_resource_interactions_for_path(user_id, path_id):
             if interaction.path_task_id is None:
                 continue
             task_states = states.setdefault(int(interaction.path_task_id), {})

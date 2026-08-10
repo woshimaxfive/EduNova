@@ -106,6 +106,9 @@ class FakePathRepository:
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return next((course for course in self.courses if course.owner_id == user_id and course.id == course_id), None)
 
+    def is_course_active(self, user_id: int, course_id: int) -> bool:
+        return self.get_course_for_user(user_id, course_id) is not None
+
     def list_knowledge_points(self, course_id: int) -> list[KnowledgePoint]:
         return sorted(
             [point for point in self.knowledge_points if point.course_id == course_id],

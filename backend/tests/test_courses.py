@@ -349,6 +349,18 @@ class FakeEmbeddingService:
             vectors.append(vector)
         return FakeEmbeddingBatch(vectors=vectors)
 
+    def apply_embeddings(self, user: User, chunks: list[KnowledgeChunk]) -> FakeEmbeddingBatch:
+        batch = self.embed_texts(user, [chunk.content for chunk in chunks])
+        for chunk, vector in zip(chunks, batch.vectors, strict=True):
+            chunk.embedding = vector
+            chunk.metadata_json = {
+                **(chunk.metadata_json or {}),
+                "embedding_source": batch.source,
+                "embedding_model": batch.model,
+                "embedding_dimension": batch.dimension,
+            }
+        return batch
+
 
 def as_dict(model: Any) -> dict[str, Any]:
     return model.model_dump() if hasattr(model, "model_dump") else model

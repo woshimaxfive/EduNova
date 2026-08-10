@@ -132,27 +132,6 @@ class CourseContentMixin:
         if self.embedding_service is None or not chunks:
             return
         try:
-            apply_embeddings = getattr(self.embedding_service, "apply_embeddings", None)
-            if callable(apply_embeddings):
-                apply_embeddings(user, chunks)
-                return
-
-            batch = self.embedding_service.embed_texts(user, [chunk.content for chunk in chunks])
-            vectors = list(getattr(batch, "vectors", []))
-            if len(vectors) != len(chunks):
-                return
-            source = str(getattr(batch, "source", "unknown"))
-            model = str(getattr(batch, "model", "unknown"))
-            dimension = int(getattr(batch, "dimension", 1536))
-            for chunk, vector in zip(chunks, vectors, strict=True):
-                if len(vector) != dimension:
-                    continue
-                chunk.embedding = vector
-                chunk.metadata_json = {
-                    **(chunk.metadata_json or {}),
-                    "embedding_source": source,
-                    "embedding_model": model,
-                    "embedding_dimension": dimension,
-                }
+            self.embedding_service.apply_embeddings(user, chunks)
         except Exception:
             return

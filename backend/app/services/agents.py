@@ -54,8 +54,7 @@ class AgentTraceService:
             raise AgentTraceNotFoundError
 
         steps = [agent_log_to_api(log) for log in logs]
-        list_model_calls = getattr(self.repository, "list_model_calls", None)
-        model_calls = list_model_calls(user.id, trace_id) if callable(list_model_calls) else []
+        model_calls = self.repository.list_model_calls(user.id, trace_id)
         if steps and model_calls:
             failed = [item for item in model_calls if item.status != "completed"]
             error_categories = list(dict.fromkeys(item.error_category for item in failed if item.error_category))

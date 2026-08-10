@@ -262,8 +262,7 @@ class CourseLearningStateMixin:
         weaknesses = self.repository.list_weakness_review_items(user.id, course_id)
         active_count = sum(1 for item in weaknesses if item.status in {"pending", "confirmed", "reviewing"})
         due_count = sum(1 for item in weaknesses if is_review_due(item))
-        practice_loader = getattr(self.repository, "list_completed_practices", None)
-        practices = practice_loader(user.id, course_id) if callable(practice_loader) else []
+        practices = self.repository.list_completed_practices(user.id, course_id)
         answers = self.repository.list_practice_answers(user.id, course_id)
         latest_practice = practices[0] if practices else None
         answers_by_session = {
@@ -274,8 +273,7 @@ class CourseLearningStateMixin:
             session_answers and all((item.feedback_json or {}).get("score") is not None for item in session_answers)
             for session_answers in answers_by_session.values()
         )
-        report_loader = getattr(self.repository, "get_latest_report", None)
-        latest_report = report_loader(user.id, course_id) if callable(report_loader) else None
+        latest_report = self.repository.get_latest_report(user.id, course_id)
         report_fresh = bool(
             latest_report
             and latest_practice

@@ -161,9 +161,8 @@ class ProfileGraphRunner:
             profile_values = self.service._empty_profile()
             profile_values.update(profile.profile_json or {})
             dimension_confidence = profile.dimension_confidence_json or {}
-            events = self.service.repository.list_events(int(state["user_id"]), 100)
             metadata = {
-                "profile_applied_version": self.service._count_applied_events(profile.id, events),
+                "profile_applied_version": self.service._count_applied_events(profile.id),
                 "profile_completeness": round(
                     sum(1 for key in profile_values if bool(profile_values.get(key))) / len(profile_values) * 100,
                     2,
@@ -527,7 +526,7 @@ class ProfileGraphRunner:
                 next_question=next_question,
                 next_question_dimension=next_question_dimension,
                 evidence_summary=summary,
-                applied_version=self.service._count_applied_events(profile.id, events),
+                applied_version=self.service._count_applied_events(profile.id),
                 dimension_evidence_summary=self.service._dimension_evidence_summary(profile, events),
             ),
             event=event_to_api(event),

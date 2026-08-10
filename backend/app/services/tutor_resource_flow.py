@@ -236,9 +236,8 @@ class TutorResourceFlowMixin:
             difficulty = "medium"
         knowledge_point_id = None
         topic = str(proposal.get("topic") or "").strip()
-        topic_finder = getattr(self.repository, "find_knowledge_point_for_topic", None)
-        if topic and callable(topic_finder):
-            point = topic_finder(requested_course_id, topic)
+        if topic:
+            point = self.repository.find_knowledge_point_for_topic(requested_course_id, topic)
             if point is None:
                 raise InvalidMaterialContextError(f"所选课程中没有与“{topic}”匹配的知识点，请选择对应课程。")
             knowledge_point_id = point.id

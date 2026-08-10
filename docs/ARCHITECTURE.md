@@ -306,6 +306,7 @@ backend/app/
 | `backend/app/agents/assessment_runtime.py` | Assessment Graph 节点执行、任务进度和安全 trace 记录 |
 | `backend/app/agents/assessment.py` | Assessment Graph 门面、创建/提交/重评入口及旧 State 导入兼容 |
 | `backend/app/services/practice.py`、`courses.py`、`ai_job_lifecycle.py` | 练习会话/难度、课程 enrollment 和 AI Job 课程活跃性均直接使用对应仓储合同；不依赖测试替身私有集合或运行时能力猜测 |
+| `backend/app/services/agents.py`、`course_learning_state.py`、`materials.py`、`profiles.py`、`tutor_resource_flow.py`、`course_content.py` | Agent trace、课程完成度、资料切片、画像证据、资源提案知识点和课程 embedding 的已声明依赖均直接调用；外部解析器、Provider 响应与任务回调仍是有意隔离的动态适配边界 |
 | `backend/app/services/reports.py`、`backend/app/agents/reporting.py` | 学习报告门面、SQLAlchemy 仓储与 Graph 编排；最近练习、路径、任务和资源查询均是 ReportRepository 的必备合同，不在节点内按运行时能力降级 |
 | `backend/app/services/resource_contracts.py` | 资源异常、生成 State、仓储/模型依赖协议、安全引用、生成上下文和共享资源约束 |
 | `backend/app/services/resource_repository.py` | 资源、质量评分、学习任务和课程资料查询的 SQLAlchemy 持久化实现 |

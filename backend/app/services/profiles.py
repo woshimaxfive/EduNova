@@ -162,7 +162,7 @@ class ProfileService:
             next_question=next_question,
             next_question_dimension=next_question_dimension,
             evidence_summary=self._evidence_summary(events),
-            applied_version=self._count_applied_events(profile.id if profile is not None else None, events),
+            applied_version=self._count_applied_events(profile.id if profile is not None else None),
             dimension_evidence_summary=self._dimension_evidence_summary(profile, events),
         )
 
@@ -324,14 +324,8 @@ class ProfileService:
             "last_trace_id": next((event.agent_trace_id for event in events if getattr(event, "agent_trace_id", None)), None),
         }
 
-    def _count_applied_events(self, profile_id: int | None, events: list[ProfileEvent] | None = None) -> int:
-        counter = getattr(self.repository, "count_applied_events_for_profile", None)
-        if callable(counter):
-            return int(counter(profile_id))
-        if profile_id is None:
-            return 0
-        source_events = events or []
-        return sum(1 for event in source_events if getattr(event, "status", None) == "applied")
+    def _count_applied_events(self, profile_id: int | None) -> int:
+        return int(self.repository.count_applied_events_for_profile(profile_id))
 
     @classmethod
     def _dimension_evidence_summary(

@@ -73,6 +73,11 @@ class FakeProfileRepository:
             return 0
         return len([event for event in self.events if event.profile_id == profile_id])
 
+    def count_applied_events_for_profile(self, profile_id: int | None) -> int:
+        if profile_id is None:
+            return 0
+        return len([event for event in self.events if event.profile_id == profile_id and event.status == "applied"])
+
     def flush(self) -> None:
         for profile in self.pending_profiles:
             if profile.id is None:

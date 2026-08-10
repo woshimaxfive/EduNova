@@ -128,9 +128,7 @@ class MaterialService:
             self.repository.add_material(material)
             chunks = [] if defer_ingestion else self.chunking_service.build_chunks(material)
             if chunks:
-                add_material_chunks = getattr(self.repository, "add_material_chunks", None)
-                if callable(add_material_chunks):
-                    add_material_chunks(chunks)
+                self.repository.add_material_chunks(chunks)
             if course is not None:
                 self.repository.add_link(
                     CourseMaterialLink(

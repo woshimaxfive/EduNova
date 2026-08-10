@@ -80,6 +80,9 @@ class FakeRepository:
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return next((item for item in self.courses if item.id == course_id and item.owner_id == user_id), None)
 
+    def is_course_active(self, user_id: int, course_id: int) -> bool:
+        return self.get_course_for_user(user_id, course_id) is not None
+
     def get_active_path_job(self, user_id: int, course_id: int) -> AiJob | None:
         return next(
             (

@@ -37,8 +37,7 @@ class AssessmentGenerationMixin:
             points = self.service.repository.list_knowledge_points(course.id)
             selected = self.service._select_points(points, list(state.get("knowledge_point_ids", [])))
             resources = self.service.repository.list_generated_resources(int(state["user_id"]), course.id)
-            list_chunks = getattr(self.service.repository, "list_knowledge_chunks", None)
-            chunks = list_chunks(course.id) if callable(list_chunks) else []
+            chunks = self.service.repository.list_knowledge_chunks(course.id)
             if not selected:
                 raise PracticeValidationError("当前课程还没有可用于生成练习的知识点。")
             effective_difficulty = self.service.resolve_difficulty(state["user"], course.id, selected, str(state.get("requested_difficulty") or state["difficulty"]))

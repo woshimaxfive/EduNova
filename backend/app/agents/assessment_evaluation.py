@@ -193,8 +193,8 @@ class AssessmentEvaluationMixin:
             if state.get("score") is not None and self.service.path_service is not None:
                 try:
                     result = self.service.path_service.replan_after_assessment(state["user"], int(state["course_id"]), session.id)
-                    status = str(getattr(result, "status", "unchanged"))
-                    path_trace_id = getattr(result, "trace_id", None)
+                    status = result.status
+                    path_trace_id = result.trace_id
                 except Exception:
                     status = "failed"
             session.assessment_json = {**(session.assessment_json or {}), "path_update_status": status, "path_agent_trace_id": path_trace_id}
@@ -204,17 +204,15 @@ class AssessmentEvaluationMixin:
                 try:
                     weak_points = list(dict.fromkeys(item.title for item in state.get("touched_weaknesses", {}).values() if item.title))
                     if weak_points:
-                        ingest = getattr(self.service.profile_service, "ingest_learning_signal", None)
-                        if callable(ingest):
-                            ingest(
-                                user=state["user"],
-                                source_type="practice_assessment",
-                                source_ref_type="practice_session",
-                                source_ref_id=session.id,
-                                suggested_updates={"weak_points": weak_points[:5]},
-                                course_id=int(state["course_id"]),
-                                parent_trace_id=state["trace_id"],
-                            )
+                        self.service.profile_service.ingest_learning_signal(
+                            user=state["user"],
+                            source_type="practice_assessment",
+                            source_ref_type="practice_session",
+                            source_ref_id=session.id,
+                            suggested_updates={"weak_points": weak_points[:5]},
+                            course_id=int(state["course_id"]),
+                            parent_trace_id=state["trace_id"],
+                        )
                 except Exception:
                     pass
             detail = session_to_api(session, self.service.repository.list_answers_for_session(session.id))
@@ -308,8 +306,8 @@ class AssessmentEvaluationMixin:
         if self.service.path_service is not None:
             try:
                 result = self.service.path_service.replan_after_assessment(user, int(session.course_id or 0), session.id)
-                path_status = str(getattr(result, "status", "unchanged"))
-                path_trace_id = getattr(result, "trace_id", None)
+                path_status = result.status
+                path_trace_id = result.trace_id
             except Exception:
                 path_status = "failed"
         session.assessment_json = {
@@ -321,20 +319,18 @@ class AssessmentEvaluationMixin:
         self.service.repository.refresh(session)
         if self.service.profile_service is None or not touched:
             return
-        ingest = getattr(self.service.profile_service, "ingest_learning_signal", None)
-        if callable(ingest):
-            try:
-                ingest(
-                    user=user,
-                    source_type="practice_assessment",
-                    source_ref_type="practice_session",
-                    source_ref_id=session.id,
-                    suggested_updates={"weak_points": list(dict.fromkeys(item.title for item in touched.values()))[:5]},
-                    course_id=int(session.course_id or 0),
-                    parent_trace_id=trace_id,
-                )
-            except Exception:
-                pass
+        try:
+            self.service.profile_service.ingest_learning_signal(
+                user=user,
+                source_type="practice_assessment",
+                source_ref_type="practice_session",
+                source_ref_id=session.id,
+                suggested_updates={"weak_points": list(dict.fromkeys(item.title for item in touched.values()))[:5]},
+                course_id=int(session.course_id or 0),
+                parent_trace_id=trace_id,
+            )
+        except Exception:
+            pass
 
     def _model_diagnoses(self, state: AssessmentState) -> dict[str, dict[str, Any]] | None:
         if self.service.model_service is None:

@@ -18,6 +18,8 @@
 
 同日完成画像 Graph 合同收口：`ProfileGraphRunner` 显式接收 `ProfileService`，结构化画像提取和审核统一使用 `chat_completion_for_task`，课程级画像更新直接使用 `ProfileRepository.get_course_enrollment`。不改变模型可用性判断、画像证据规则、课程与全局画像隔离、API 或数据结构。画像定向 22 项、Ruff 和编译检查通过；随后运行后端全量回归与 UTF-8 检查。
 
+同日完成第 1 轮练习、课程与 AI Job 合同收口：练习生成直接读取课程切片，练习服务直接依赖会话、历史练习和课程作答查询，路径重排使用 `PathReplanResult`，画像信号使用 `PracticeProfileService`；课程 enrollment 与 AI Job 课程活跃性均改为直接仓储调用，测试替身补齐对应行为。课程归档限制、练习难度、路径重排、画像写入、API 和数据结构保持不变。练习评估定向 19 项、课程定向 33 项、AI Job 定向 19 项及 Ruff 均通过；随后运行后端全量回归与 UTF-8 检查。
+
 同日完成资源生成模块第一批边界收口：资源异常、State、依赖协议、安全引用和共享约束移入 `resource_contracts.py`，SQLAlchemy 仓储移入 `resource_repository.py`，`ResourceGenerationGraphRunner` 移入 `resource_graph.py`；`resources.py` 保留生成服务、内容构造、模型增强、质量门禁和旧导入兼容。迁移前后的服务类与 Graph 节点保持一致。资源定向 34 项、后端全量 524 项、Ruff、OpenAPI 漂移、Alembic head、Compose 配置、UTF-8 编码，以及前端全量 282 项、ESLint 和 production build 均通过。本批没有修改资源类型、生成/审核/修复规则、Graph 状态、API、数据库、模型调用、依赖或用户可见行为，因此未重复浏览器验收。
 
 同日完成资源生成模块第二批内容边界收口：课程切片筛选、画像安全摘要、上下文关键词和确定性 artifact 底稿移入 `resource_content.py`；`resources.py` 通过兼容别名保留现有 Graph 与定向测试入口，并删除已被 v3 结构化 artifact 流程替代、全仓无调用的旧 Markdown 拼装器、批量增强入口和旧解析辅助。资源定向 27 项、后端全量 524 项、后端 Ruff、OpenAPI 漂移、Alembic head、Compose 配置和 UTF-8 编码检查均通过。当前生成、审核、修复、质量门禁、API、数据库和用户可见行为保持不变，因此本批不重复前端测试、构建或浏览器验收。

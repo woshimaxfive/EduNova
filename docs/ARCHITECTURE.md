@@ -302,9 +302,10 @@ backend/app/
 | `backend/app/services/tutor.py` | 主页/课程会话门面、依赖装配、会话 CRUD 和公共校验；继续导出 Tutor 异常、SQLAlchemy 仓储和两个 Graph runner |
 | `backend/app/agents/assessment_contracts.py` | 练习评估 State、Prompt 版本和生成超时合同 |
 | `backend/app/agents/assessment_generation.py` | 练习出题、模型审核/修订和确定性题目风险门禁 |
-| `backend/app/agents/assessment_evaluation.py` | 客观/语义评分、错因诊断、弱点同步和练习后路径闭环 |
+| `backend/app/agents/assessment_evaluation.py` | 客观/语义评分、错因诊断、弱点同步和练习后路径闭环；课程切片、路径重排结果和画像信号均使用既有强类型服务合同 |
 | `backend/app/agents/assessment_runtime.py` | Assessment Graph 节点执行、任务进度和安全 trace 记录 |
 | `backend/app/agents/assessment.py` | Assessment Graph 门面、创建/提交/重评入口及旧 State 导入兼容 |
+| `backend/app/services/practice.py`、`courses.py`、`ai_job_lifecycle.py` | 练习会话/难度、课程 enrollment 和 AI Job 课程活跃性均直接使用对应仓储合同；不依赖测试替身私有集合或运行时能力猜测 |
 | `backend/app/services/reports.py`、`backend/app/agents/reporting.py` | 学习报告门面、SQLAlchemy 仓储与 Graph 编排；最近练习、路径、任务和资源查询均是 ReportRepository 的必备合同，不在节点内按运行时能力降级 |
 | `backend/app/services/resource_contracts.py` | 资源异常、生成 State、仓储/模型依赖协议、安全引用、生成上下文和共享资源约束 |
 | `backend/app/services/resource_repository.py` | 资源、质量评分、学习任务和课程资料查询的 SQLAlchemy 持久化实现 |

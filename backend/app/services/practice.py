@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.agents.runtime import AgentTraceRecorder
 from backend.app.providers.model_tasks import ModelTaskProfile
+from backend.app.services.paths import PathReplanResult
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.models import (
     Course,
@@ -42,7 +43,22 @@ class PracticeModelService(Protocol):
 
 
 class PracticePathService(Protocol):
-    def replan_after_assessment(self, user: User, course_id: int, assessment_session_id: int): ...
+    def replan_after_assessment(self, user: User, course_id: int, assessment_session_id: int) -> PathReplanResult: ...
+
+
+class PracticeProfileService(Protocol):
+    def ingest_learning_signal(
+        self,
+        *,
+        user: User,
+        source_type: str,
+        source_ref_type: str,
+        source_ref_id: int,
+        suggested_updates: dict[str, object],
+        suggested_confidence: dict[str, float] | None = None,
+        course_id: int | None = None,
+        parent_trace_id: str | None = None,
+    ) -> object | None: ...
 
 
 class PracticeRepository(Protocol):
@@ -205,7 +221,7 @@ class PracticeService:
         model_service: PracticeModelService | None = None,
         trace_recorder: AgentTraceRecorder | None = None,
         path_service: PracticePathService | None = None,
-        profile_service: object | None = None,
+        profile_service: PracticeProfileService | None = None,
     ) -> None:
         self.repository = repository
         self.model_service = model_service
@@ -243,20 +259,14 @@ class PracticeService:
 
     def get_latest_session(self, user: User, course_id: int) -> PracticeSessionDetail | None:
         self._require_course(user, course_id)
-        getter = getattr(self.repository, "get_latest_practice_session_for_user", None)
-        if not callable(getter):
-            return None
-        session = getter(user.id, course_id)
+        session = self.repository.get_latest_practice_session_for_user(user.id, course_id)
         if session is None:
             return None
         return session_to_api(session, self.repository.list_answers_for_session(session.id))
 
     def list_recent_completed_sessions(self, user: User, course_id: int, limit: int = 5) -> list[PracticeSessionSummary]:
         self._require_course(user, course_id)
-        getter = getattr(self.repository, "list_recent_completed_practice_sessions", None)
-        if not callable(getter):
-            return []
-        return [session_to_summary(session) for session in getter(user.id, course_id, limit)]
+        return [session_to_summary(session) for session in self.repository.list_recent_completed_practice_sessions(user.id, course_id, limit)]
 
     def save_draft(
         self,
@@ -313,8 +323,7 @@ class PracticeService:
         weaknesses = self.repository.list_weakness_review_items(user.id, course_id)
         if any(item.status in {"confirmed", "reviewing"} and item.knowledge_point_id in point_ids for item in weaknesses):
             return "easy"
-        list_answers = getattr(self.repository, "list_answers_for_course", None)
-        answers = list_answers(user.id, course_id) if callable(list_answers) else []
+        answers = self.repository.list_answers_for_course(user.id, course_id)
         scores: list[int] = []
         for answer in answers:
             question = answer.question_json or {}

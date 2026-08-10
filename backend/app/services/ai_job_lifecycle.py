@@ -26,8 +26,7 @@ from backend.app.services.mastery_progress import is_review_due
 
 class AiJobLifecycleMixin:
     def _require_active_course(self, user_id: int, course_id: int) -> None:
-        checker = getattr(self.repository, "is_course_active", None)
-        if callable(checker) and not checker(user_id, course_id):
+        if not self.repository.is_course_active(user_id, course_id):
             raise AiJobConflictError("课程已完成归档；请先恢复学习再创建新的生成任务。")
 
     def _create(

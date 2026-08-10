@@ -239,11 +239,7 @@ class CourseService(CourseContentMixin, CourseLearningStateMixin):
         return course
 
     def _require_enrollment(self, user_id: int, course_id: int) -> CourseEnrollment:
-        getter = getattr(self.repository, "get_enrollment", None)
-        enrollment = getter(user_id, course_id) if callable(getter) else next(
-            (item for item in getattr(self.repository, "enrollments", []) if item.user_id == user_id and item.course_id == course_id),
-            None,
-        )
+        enrollment = self.repository.get_enrollment(user_id, course_id)
         if enrollment is None:
             enrollment = CourseEnrollment(
                 user_id=user_id,
@@ -257,7 +253,4 @@ class CourseService(CourseContentMixin, CourseLearningStateMixin):
         return enrollment
 
     def _list_enrollments(self, user_id: int) -> list[CourseEnrollment]:
-        loader = getattr(self.repository, "list_enrollments", None)
-        if callable(loader):
-            return loader(user_id)
-        return [item for item in getattr(self.repository, "enrollments", []) if item.user_id == user_id]
+        return self.repository.list_enrollments(user_id)

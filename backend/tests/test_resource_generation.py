@@ -1102,8 +1102,10 @@ def test_resource_graph_bounds_worker_concurrency_to_model_runtime_limit() -> No
 
 
 def test_code_generation_prompts_match_verifier_dunder_policy() -> None:
-    generation_source = inspect.getsource(ResourceGenerationService._enhance_resource_with_model)
-    repair_source = inspect.getsource(ResourceGenerationService._repair_resource_with_model)
+    from backend.app.services.resource_modeling import ResourceModelingService
+
+    generation_source = inspect.getsource(ResourceModelingService.enhance_resource)
+    repair_source = inspect.getsource(ResourceModelingService.repair_resource)
 
     assert "不得使用任何双下划线名称或属性" in generation_source
     assert "if __name__ == '__main__'" in generation_source

@@ -305,8 +305,9 @@ backend/app/
 | `backend/app/services/resource_contracts.py` | 资源异常、生成 State、仓储/模型依赖协议、安全引用、生成上下文和共享资源约束 |
 | `backend/app/services/resource_repository.py` | 资源、质量评分、学习任务和课程资料查询的 SQLAlchemy 持久化实现 |
 | `backend/app/services/resource_content.py` | 课程证据筛选、画像安全摘要、上下文关键词与六类结构化资源的确定性 artifact 底稿 |
+| `backend/app/services/resource_modeling.py` | 资源 Worker、ReviewAgent 与修订 Agent 的提示构造、受控模型调用、结构化响应解析和敏感内容检查 |
 | `backend/app/services/resource_graph.py` | `ResourceGenerationGraphRunner`，接管资源画像、检索、诊断、规划、并行生成、聚合、审核/修复和持久化 |
-| `backend/app/services/resources.py` | 六类资源和教学视频的生成服务、模型增强、质量门禁及旧内部入口兼容 |
+| `backend/app/services/resources.py` | 资源公开服务、课程/版本校验、持久化协调、质量门禁、相似度计算及旧内部入口兼容；模型职责转发至 `resource_modeling.py` |
 | `backend/app/services/model_settings_contracts.py` | 模型设置异常、请求/响应 Schema、运行时配置及仓储/Provider 依赖协议 |
 | `backend/app/services/model_settings_repository.py` | 用户模型配置和五类默认配置选择的 SQLAlchemy 持久化实现 |
 | `backend/app/services/model_connection_testing.py` | 回答、结构化、向量、重排序和图片理解的连接探测、结构校验及安全结果归一化 |

@@ -117,8 +117,9 @@ class ReportGraphRunner:
                     raise ReportNotFoundError("练习不存在或无权访问。")
                 practices = [practice]
             else:
-                list_recent = getattr(self.service.repository, "list_recent_completed_practice_sessions", None)
-                practices = list_recent(int(state["user_id"]), course.id, 5) if callable(list_recent) else []
+                practices = self.service.repository.list_recent_completed_practice_sessions(
+                    int(state["user_id"]), course.id, 5
+                )
                 if not practices:
                     latest = self.service.repository.get_latest_completed_practice_session(int(state["user_id"]), course.id)
                     practices = [latest] if latest is not None else []
@@ -134,12 +135,9 @@ class ReportGraphRunner:
             user_id = int(state["user_id"])
             points = self.service.repository.list_knowledge_points(course_id)
             weaknesses = self.service.repository.list_weakness_review_items(user_id, course_id)
-            get_path = getattr(self.service.repository, "get_active_path", None)
-            path = get_path(user_id, course_id) if callable(get_path) else None
-            list_tasks = getattr(self.service.repository, "list_tasks_for_path", None)
-            tasks = list_tasks(path.id) if path is not None and callable(list_tasks) else []
-            list_resources = getattr(self.service.repository, "list_generated_resources", None)
-            resources = list_resources(user_id, course_id) if callable(list_resources) else []
+            path = self.service.repository.get_active_path(user_id, course_id)
+            tasks = self.service.repository.list_tasks_for_path(path.id) if path is not None else []
+            resources = self.service.repository.list_generated_resources(user_id, course_id)
             context_service = context_service_from_repository(self.service.repository)
             learner_context = context_service.course_context(user_id, course_id) if context_service is not None else None
             active_weaknesses = sum(1 for item in weaknesses if item.status in {"confirmed", "reviewing"})

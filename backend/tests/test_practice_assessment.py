@@ -20,6 +20,8 @@ from backend.app.models import (
     GeneratedResource,
     KnowledgeChunk,
     KnowledgePoint,
+    LearningPath,
+    LearningTask,
     PracticeAnswer,
     PracticeSession,
     StudentProfile,
@@ -155,6 +157,12 @@ class FakePracticeRepository:
 
     def list_generated_resources(self, user_id: int, course_id: int) -> list[GeneratedResource]:
         return [resource for resource in self.resources if resource.user_id == user_id and resource.course_id == course_id]
+
+    def get_active_path(self, _user_id: int, _course_id: int) -> LearningPath | None:
+        return None
+
+    def list_tasks_for_path(self, _path_id: int) -> list[LearningTask]:
+        return []
 
     def list_knowledge_chunks(self, course_id: int) -> list[KnowledgeChunk]:
         return [chunk for chunk in self.chunks if chunk.course_id == course_id]

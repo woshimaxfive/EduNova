@@ -313,7 +313,9 @@ backend/app/
 | `backend/app/providers/retrieval.py` | 讯飞签名 Embedding、UTF-8 2KB 分片池化、硅基/百炼 Rerank Provider |
 | `backend/app/services/course_answers.py` | 回答服务，负责主页学习 prompt、资料/网页来源摘要、深度回答指令、课程引用受控 prompt、非流式或流式模型 Provider 调用、未配置和模型失败处理 |
 | `backend/app/services/material_parsers.py` | 资料解析器，负责 TXT/Markdown/PDF/DOCX/PPTX 文本抽取，并明确 OCR、旧版 Office 和扫描件边界 |
-| `backend/app/services/materials.py` | 个人资料库服务，负责上传保存、解析、列表、详情、进度和课程资料关联 |
+| `backend/app/services/material_contracts.py`、`material_repository.py` | 资料异常、依赖协议与证据合同，以及资料、课程关联、知识切片和对比记录的 SQLAlchemy 仓储 |
+| `backend/app/services/material_comparison_builder.py` | 基于真实课程切片和安全短摘录构造确定性资料对比底稿，不调用模型或写数据库 |
+| `backend/app/services/materials.py` | 个人资料库门面，负责上传保存、目录确认、列表、详情、进度、课程关联和资料对比 Graph 装配，并兼容旧导入路径 |
 | `backend/app/services/material_retrieval.py` | 共享资料分块和主页资料级 RAG，负责上传后切片、既有资料惰性补齐、当前用户选中资料限制、关键词/pgvector 混合排序和安全引用 |
 | `backend/app/providers/capabilities.py` | Provider 能力注册表，保守声明星火/官方 OpenAI 原生搜索，普通兼容接口不猜测能力 |
 | `backend/app/agents/search_tools.py` | LangChain `@tool` 与 LangGraph `ToolNode` 搜索适配层，供 DeepSeek/普通兼容模型决策后的外部搜索回退使用 |

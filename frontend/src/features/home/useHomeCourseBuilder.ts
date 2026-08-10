@@ -32,7 +32,6 @@ export function useHomeCourseBuilder({ onCloseLibrary }: HomeCourseBuilderParams
     const restoredMaterialIds = Array.isArray(restored.request.material_ids)
       ? restored.request.material_ids.map(String)
       : [];
-    // Restore durable server state after navigation or refresh.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMaterialIds(restoredMaterialIds);
     setJobId(restored.job_id);
@@ -43,7 +42,6 @@ export function useHomeCourseBuilder({ onCloseLibrary }: HomeCourseBuilderParams
   useEffect(() => {
     if (!job) return;
     if (job.status === "failed") {
-      // Surface the terminal state delivered by the external job runtime.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setFeedback({ message: job.error_message ?? "课程生成失败，请稍后重试。", tone: "warning" });
       return;
@@ -104,8 +102,23 @@ export function useHomeCourseBuilder({ onCloseLibrary }: HomeCourseBuilderParams
     setFeedback(null);
   }
 
+  function closeDialog() {
+    setDialogOpen(false);
+  }
+
+  async function cancelCreation() {
+    if (job) await cancelJob(job.job_id);
+  }
+
+  async function retryCreation() {
+    if (!job) return;
+    const retried = await retryJob(job.job_id);
+    setJobId(retried.job_id);
+  }
+
   return {
-    cancelJob,
+    cancelCreation,
+    closeDialog,
     createCourse,
     dialogOpen,
     feedback,
@@ -114,9 +127,7 @@ export function useHomeCourseBuilder({ onCloseLibrary }: HomeCourseBuilderParams
     materialIds,
     open,
     resetDialog,
-    retryJob,
-    setDialogOpen,
-    setJobId,
+    retryCreation,
     toggleMaterial
   };
 }

@@ -45,7 +45,6 @@ export function LearningSpaceView({ controller }: { controller: LearningSpaceCon
     effectiveConversationMaterialIds,
     answerWarnings,
     updateHomeAnswerState,
-    setPendingHomeResourceGeneration,
     homeQuestionInputRef,
     prompt,
     setPrompt,
@@ -77,19 +76,20 @@ export function LearningSpaceView({ controller }: { controller: LearningSpaceCon
     openCourseGenerationFromLibrary,
     confirmConversationMaterials,
     materialDialogFeedback,
-    setIsLibraryOpen,
+    closeLibrary,
     pendingHomeResourceGeneration,
     generateHomeResource,
+    openResourceGeneration,
+    closeResourceGeneration,
     isCourseDialogOpen,
     courseMaterialIds,
     toggleCourseMaterial,
-    setIsCourseDialogOpen,
+    closeCourseGeneration,
     createCourseFromSelectedMaterials,
     isCreatingCourse,
     courseJob,
-    cancelJob,
-    retryJob,
-    setCourseJobId,
+    cancelCourseCreation,
+    retryCourseCreation,
     courseDialogFeedback,
   } = controller;
   return (
@@ -158,7 +158,7 @@ export function LearningSpaceView({ controller }: { controller: LearningSpaceCon
                       <small>{message.resource_proposal.reason_summary}</small>
                       <button
                         type="button"
-                        onClick={() => activeHomeThreadId && setPendingHomeResourceGeneration({ sessionId: activeHomeThreadId, messageId: message.id })}
+                        onClick={() => openResourceGeneration(message.id)}
                       >
                         选择课程并生成
                       </button>
@@ -347,13 +347,13 @@ export function LearningSpaceView({ controller }: { controller: LearningSpaceCon
           onConfirm={() => void confirmConversationMaterials()}
           allowClear={effectiveConversationMaterialIds.length > 0}
           feedback={materialDialogFeedback}
-          onClose={() => setIsLibraryOpen(false)}
+          onClose={closeLibrary}
         />
       ) : null}
       {isCourseDrawerOpen ? <HomeCourseDrawer onClose={() => setIsCourseDrawerOpen(false)} /> : null}
       {pendingHomeResourceGeneration ? (
         <HomeResourceCourseDialog
-          onClose={() => setPendingHomeResourceGeneration(null)}
+          onClose={closeResourceGeneration}
           onSelect={(courseId) => void generateHomeResource(courseId)}
         />
       ) : null}
@@ -362,13 +362,13 @@ export function LearningSpaceView({ controller }: { controller: LearningSpaceCon
           materials={materials}
           selectedMaterialIds={courseMaterialIds}
           onToggleMaterial={toggleCourseMaterial}
-          onClose={() => setIsCourseDialogOpen(false)}
+          onClose={closeCourseGeneration}
           onCreate={(courseTitle) => void createCourseFromSelectedMaterials(courseTitle)}
           isCreatingCourse={isCreatingCourse}
           initialCourseTitle={typeof courseJob?.request.course_title === "string" ? courseJob.request.course_title : undefined}
           job={courseJob}
-          onCancelJob={() => courseJob && void cancelJob(courseJob.job_id)}
-          onRetryJob={() => courseJob && void retryJob(courseJob.job_id).then((job) => setCourseJobId(job.job_id))}
+          onCancelJob={() => void cancelCourseCreation()}
+          onRetryJob={() => void retryCourseCreation()}
           feedback={courseDialogFeedback}
         />
       ) : null}

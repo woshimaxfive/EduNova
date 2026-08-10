@@ -109,7 +109,6 @@ export function useHomeMaterialSelection({
     openDialog,
     resetSelection,
     restoreSelection,
-    setDialogOpen,
     toggleDraft,
     uploadDocuments
   };

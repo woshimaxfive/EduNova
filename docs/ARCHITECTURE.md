@@ -203,10 +203,11 @@ frontend/src/
 | `frontend/src/features/workspace/workflowState.ts` | 上传建课生命周期和短状态信号的纯状态模型 |
 | `frontend/src/features/course-space/courseConversation.ts` | 课程会话展示模型、旧回答清理、推荐问题和闭环跳转参数 |
 | `frontend/src/features/home/homeLearningModel.ts` | 学习主页消息、引用、资源建议和展示状态的纯转换逻辑 |
-| `frontend/src/features/home/useLearningSpaceController.tsx` | 学习主页查询、SSE、回答详情与页面动作协调；不直接维护整页 JSX |
+| `frontend/src/features/home/useLearningSpaceController.tsx` | 学习主页查询、回答详情、资料/建课入口与页面动作协调；不直接维护整页 JSX |
 | `frontend/src/features/home/useHomeConversationThreads.ts` | 主页会话历史、搜索、本地即时回显、重命名、删除和 Dashboard 缓存同步边界 |
 | `frontend/src/features/home/useHomeMaterialSelection.ts` | 主页参考资料草稿、上传、会话绑定和资料浮层状态边界 |
 | `frontend/src/features/home/useHomeCourseBuilder.ts` | 主页异步建课任务的恢复、提交、完成跳转、取消和重试边界 |
+| `frontend/src/features/home/useHomeTutorConversation.ts` | 主页会话流、SSE 事件、乐观消息、回答进度、资源提案和失败回滚边界 |
 | `frontend/src/components/home/LearningSpaceView.tsx`、`HomeLearningPanels.tsx` | 学习主页主视图，以及洞察、资料和生成课程等覆盖层 |
 | `frontend/src/features/settings/useSettingsController.ts` | 设置分区 URL、账号安全、隐私设置和顶部服务状态协调 |
 | `frontend/src/features/settings/SettingsWorkspace.tsx`、`AccountSettingsSection.tsx`、`PrivacySettingsSection.tsx` | 当前设置工作区及账号、隐私展示；正式模型设置继续由 `PersonalAnswerModelSettings` 承载 |

@@ -663,12 +663,60 @@ def test_short_answer_scope_cannot_be_replaced_by_an_ambiguous_placeholder() -> 
     assert leaked_draft["correct_answer"] not in empty_scope_redacted["prompt"]
     assert "：“”" not in empty_scope_redacted["prompt"]
 
+    dangling_requirement_answer = {
+        **leaked_answer,
+        "prompt": (
+            "请从应用条件角度说明前序遍历的核心含义。"
+            f"要求回答中必须包含对以下概念的直接阐释：{leaked_draft['correct_answer']}。"
+        ),
+    }
+    dangling_requirement_redacted = AssessmentGraphRunner._redact_revised_short_answer_leakage(
+        {"deterministic_questions": [empty_scope_draft]},
+        [dangling_requirement_answer],
+    )[0]
+    assert "以下概念的直接阐释：。" not in dangling_requirement_redacted["prompt"]
+
     incomplete_fingerprint = {**draft, "cognitive_level": "", "scenario_type": "课程辨析", "target_misconception": "", "reasoning_pattern": "证据到结论"}
     fingerprint_risks = AssessmentGraphRunner(service)._question_risks(
         {"deterministic_questions": drafts, "historical_question_summaries": []},
         [incomplete_fingerprint],
     )
     assert "missing_pedagogical_fingerprint:q1:cognitive_level,target_misconception" in fingerprint_risks
+
+
+def test_multiple_choice_evaluation_preserves_punctuation_inside_options() -> None:
+    from backend.app.services.practice import PracticeService
+
+    service = PracticeService(make_repo())
+    options = [
+        "递归实现先记录当前节点，再处理左右孩子",
+        "前序遍历按照“根节点、左子树、右子树”的顺序访问二叉树",
+        "先访问所有兄弟节点",
+    ]
+    question = {
+        "question_type": "multiple_choice",
+        "options": options,
+        "correct_answer": options[:2],
+        "keywords": [],
+        "explanation": "",
+    }
+
+    encoded = service._evaluate_answer(question, json.dumps(options[:2], ensure_ascii=False))
+    legacy = service._evaluate_answer(question, ", ".join(options[:2]))
+
+    assert encoded.is_correct is True
+    assert encoded.feedback["score"] == 100
+    assert legacy.is_correct is True
+    assert legacy.feedback["score"] == 100
+
+    overlapping_question = {
+        **question,
+        "options": ["根节点", "根节点之后访问左子树", "其他顺序"],
+        "correct_answer": ["根节点"],
+    }
+    overlapping = service._evaluate_answer(overlapping_question, "根节点之后访问左子树")
+    assert overlapping.is_correct is False
+
 
 def test_adaptive_practice_uses_profile_and_restores_saved_draft() -> None:
 

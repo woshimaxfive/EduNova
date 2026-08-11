@@ -385,6 +385,29 @@ describe("PracticePage", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("question_id=q3");
   });
 
+  it("stores multiple-choice selections without confusing punctuation inside an option", async () => {
+    const user = userEvent.setup();
+    const calls = installAdapter();
+    renderWithProviders(`${PATHS.practice}?course_id=808&session_id=501&question_id=q2`);
+
+    await user.click(await screen.findByRole("button", { name: /实际代价 g\(n\)/ }));
+    await user.click(screen.getByRole("button", { name: /估计代价 h\(n\)/ }));
+
+    expect(screen.getByRole("button", { name: /实际代价 g\(n\)/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /估计代价 h\(n\)/ })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => {
+      expect(calls).toContainEqual(expect.objectContaining({
+        method: "patch",
+        url: PRACTICE_ENDPOINTS.draft(501),
+        payload: {
+          answers: expect.arrayContaining([
+            { question_id: "q2", answer_text: JSON.stringify(["实际代价 g(n)", "估计代价 h(n)"]) }
+          ])
+        }
+      }));
+    });
+  });
+
   it("confirms incomplete submission and moves back to the first unanswered question when cancelled", async () => {
     const user = userEvent.setup();
     const calls = installAdapter();

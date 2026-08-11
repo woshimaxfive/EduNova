@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import json
 import re
 from typing import Protocol
 
@@ -574,7 +575,7 @@ class PracticeService:
             score = 100 if is_correct else 0
         elif question_type == "multiple_choice":
             expected_values = [str(item) for item in question.get("correct_answer") or []]
-            normalized_answer = {part.strip().casefold() for part in answer_text.replace("，", ",").split(",") if part.strip()}
+            normalized_answer = self._multiple_choice_parts(question, answer_text)
             normalized_expected = {part.casefold() for part in expected_values}
             is_correct = normalized_expected.issubset(normalized_answer)
             score = 100 if is_correct else round(100 * len(normalized_expected.intersection(normalized_answer)) / max(len(normalized_expected), 1))
@@ -608,6 +609,44 @@ class PracticeService:
             "explanation": str(question.get("explanation") or ""),
         }
         return EvaluatedAnswer(question=question, answer_text=answer_text, is_correct=is_correct, feedback=feedback)
+
+    @staticmethod
+    def _multiple_choice_parts(question: dict, answer_text: str) -> set[str]:
+        try:
+            parsed = json.loads(answer_text)
+        except (json.JSONDecodeError, TypeError):
+            parsed = None
+        if isinstance(parsed, list):
+            return {str(part).strip().casefold() for part in parsed if str(part).strip()}
+
+        normalized_text = answer_text.strip().casefold()
+        known_options = sorted({
+            str(option).strip().casefold()
+            for option in question.get("options") or []
+            if str(option).strip()
+        }, key=len, reverse=True)
+
+        def parse_from(offset: int) -> tuple[str, ...] | None:
+            if offset == len(normalized_text):
+                return ()
+            for option in known_options:
+                if not normalized_text.startswith(option, offset):
+                    continue
+                end = offset + len(option)
+                if end == len(normalized_text):
+                    return (option,)
+                for separator in (", ", "，"):
+                    if not normalized_text.startswith(separator, end):
+                        continue
+                    remainder = parse_from(end + len(separator))
+                    if remainder is not None:
+                        return (option, *remainder)
+            return None
+
+        matched_options = parse_from(0)
+        if matched_options is not None:
+            return set(matched_options)
+        return {part.strip().casefold() for part in re.split(r"\s*[,，]\s*", answer_text) if part.strip()}
 
     def _sync_practice_weaknesses(self, user: User, session: PracticeSession, evaluated: list[EvaluatedAnswer]) -> None:
         existing = self.repository.list_weakness_review_items(user.id, int(session.course_id or 0))

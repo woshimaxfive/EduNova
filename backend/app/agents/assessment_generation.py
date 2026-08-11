@@ -206,6 +206,11 @@ class AssessmentGenerationMixin:
             prompt = safe_text(question.get("prompt"), limit=800)
             sanitized = cls._replace_normalized_span(prompt, expected, scope)
             sanitized = cls._keep_single_normalized_term(sanitized, scope, "该概念")
+            sanitized = re.sub(
+                r"要求回答中必须包含对以下概念的直接阐释\s*[：:]\s*[。；;]?",
+                "",
+                sanitized,
+            ).strip()
             if not scope:
                 sanitized = re.sub(
                     r"(?:要求回答中必须体现|答案必须包含)\s*[：:]?\s*[‘’“”\"']*\s*[。；;]?",

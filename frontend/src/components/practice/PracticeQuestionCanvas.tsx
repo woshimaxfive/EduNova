@@ -16,6 +16,14 @@ type PracticeQuestionCanvasProps = {
 };
 
 function answerParts(value: string) {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
+      return parsed.map((item) => item.trim()).filter(Boolean);
+    }
+  } catch {
+    // Older drafts stored multiple selections as comma-separated text.
+  }
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
@@ -48,7 +56,7 @@ export function PracticeQuestionCanvas({
     const next = selected.includes(option)
       ? selected.filter((item) => item !== option)
       : [...selected, option];
-    onAnswer(next.join(", "));
+    onAnswer(JSON.stringify(next));
   }
 
   return (
@@ -118,7 +126,7 @@ export function PracticeQuestionCanvas({
           {reviewExpanded ? (
             <div className="practice-review-detail">
               <dl>
-                <div><dt>你的答案</dt><dd>{feedback.answer_text || "未作答"}</dd></div>
+                <div><dt>你的答案</dt><dd>{answerParts(feedback.answer_text ?? "").join("、") || "未作答"}</dd></div>
                 {correct.length > 0 ? <div><dt>正确答案</dt><dd>{correct.join("、")}</dd></div> : null}
               </dl>
               <div>

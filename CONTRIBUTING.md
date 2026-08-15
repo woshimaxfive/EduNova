@@ -1,6 +1,6 @@
 # 参与贡献
 
-感谢你帮助改进 EduNova。提交改动前，请先阅读 [开发指南](docs/DEVELOPMENT_GUIDE.md)。
+感谢你帮助改进 EduNova。提交改动前，请先阅读 [项目说明](README.md)、[架构说明](docs/ARCHITECTURE.md)和[部署说明](docs/DEPLOYMENT.md)。
 
 ## 基本流程
 
@@ -12,7 +12,7 @@
 
 ## 最小验证
 
-按改动范围运行定向测试。稳定阶段至少运行：
+按改动范围运行定向测试。准备提交稳定改动时至少运行：
 
 ```powershell
 .\scripts\verify_encoding.ps1

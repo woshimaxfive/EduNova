@@ -4,7 +4,7 @@ EduNova 处理学习资料、用户画像和模型凭据，因此安全问题请
 
 ## 报告漏洞
 
-请使用 GitHub 仓库的 **Report a vulnerability** / Private Vulnerability Reporting 提交报告，并尽量包含：
+如果仓库页面提供 **Report a vulnerability**，请优先通过该私密入口提交报告，并尽量包含：
 
 - 受影响版本或提交；
 - 最小复现步骤；
@@ -13,7 +13,7 @@ EduNova 处理学习资料、用户画像和模型凭据，因此安全问题请
 
 报告中不要附带真实 API Key、账号密码、JWT、学生资料或其他个人信息。如凭据可能已经暴露，请先在对应 Provider 撤销或轮换凭据。
 
-维护者在公开仓库前应确认 GitHub Private Vulnerability Reporting 已启用。若私密报告入口暂不可用，请等待维护者提供安全联系渠道，不要改用公开 Issue。
+如果私密入口暂不可用，可以创建一个不含漏洞细节的公开 Issue，仅请求维护者提供私密联系方式；不要在公开讨论中披露复现步骤、利用代码、凭据或个人数据。
 
 ## 支持范围
 

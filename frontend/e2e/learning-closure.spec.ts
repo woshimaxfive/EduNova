@@ -16,10 +16,10 @@ async function confirmUploadedMaterial(page: Page, title: string) {
 test("rules-only Docker environment fails honestly instead of persisting generated templates", async ({ page }) => {
   test.setTimeout(240_000);
   await page.goto("/register");
-  await page.getByLabel("昵称").fill("Phase 38 验收账号");
+  await page.getByLabel("昵称").fill("规则模式端到端账号");
   await page.getByLabel("账号").fill("phase38_e2e");
-  await page.getByLabel("密码", { exact: true }).fill("Phase38Test2026");
-  await page.getByRole("textbox", { name: "确认密码 显示确认密码" }).fill("Phase38Test2026");
+  await page.getByLabel("密码", { exact: true }).fill("RulesOnlyTest2026");
+  await page.getByRole("textbox", { name: "确认密码 显示确认密码" }).fill("RulesOnlyTest2026");
   await page.getByRole("radio", { name: /数据结构与算法/ }).check();
   await page.getByRole("button", { name: "创建并进入" }).click();
   await expect(page).toHaveURL(/\/app$/);
@@ -49,10 +49,10 @@ test("rules-only Docker environment fails honestly instead of persisting generat
 test("material comparison remains an independent evidence tool", async ({ page }) => {
   test.setTimeout(240_000);
   await page.goto("/register");
-  await page.getByLabel("昵称").fill("Phase 16 验收账号");
+  await page.getByLabel("昵称").fill("资料对比端到端账号");
   await page.getByLabel("账号").fill("phase16_e2e");
-  await page.getByLabel("密码", { exact: true }).fill("Phase16Test2026");
-  await page.getByRole("textbox", { name: "确认密码 显示确认密码" }).fill("Phase16Test2026");
+  await page.getByLabel("密码", { exact: true }).fill("MaterialCompareTest2026");
+  await page.getByRole("textbox", { name: "确认密码 显示确认密码" }).fill("MaterialCompareTest2026");
   await page.getByRole("button", { name: "创建并进入" }).click();
   await expect(page).toHaveURL(/\/app$/);
 
@@ -72,7 +72,7 @@ test("material comparison remains an independent evidence tool", async ({ page }
   await expect(generateCourse).toBeEnabled();
   await generateCourse.click();
   const courseDialog = page.getByRole("dialog", { name: "从资料生成课程" });
-  await courseDialog.getByLabel("课程名称").fill("Phase 16 资料对比课");
+  await courseDialog.getByLabel("课程名称").fill("资料对比课程");
   await courseDialog.getByRole("button", { name: /ai-notes\.md/ }).click();
   await courseDialog.getByRole("button", { name: /exam-guide\.md/ }).click();
   await courseDialog.getByRole("button", { name: "生成课程", exact: true }).click();

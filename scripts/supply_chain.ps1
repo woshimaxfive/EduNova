@@ -35,6 +35,7 @@ try {
         $files = & git -c core.quotepath=false ls-files -co --exclude-standard
         foreach ($file in $files) {
             if ($file -eq ".env") { continue }
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { continue }
             $destination = Join-Path $scanRoot $file
             $parent = Split-Path -Parent $destination
             if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }

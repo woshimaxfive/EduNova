@@ -742,7 +742,7 @@ describe("LearningSpacePage", () => {
     expect(calls.map((call) => call.url)).toContain(DASHBOARD_ENDPOINTS.summary);
   });
 
-  it("renders a calm ChatGPT-style learning home without dashboard rails", async () => {
+  it("renders a calm conversation-first learning home without dashboard rails", async () => {
     renderWithDashboardSummary();
 
     expect(document.querySelector(".home-learning-surface")).toBeInTheDocument();

@@ -1,8 +1,8 @@
 # 第三方软件与许可证说明
 
-EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说明作品运行和审查中涉及的主要第三方组件；实际版本与完整依赖树以 `backend/requirements*.txt`、`frontend/package.json`、`frontend/pnpm-lock.yaml`、`code-verifier/package.json`、`code-verifier/package-lock.json` 和 Docker Compose 配置为准。
+EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说明项目运行涉及的主要第三方组件；实际版本与完整依赖树以 `backend/requirements*.txt`、`frontend/package.json`、`frontend/pnpm-lock.yaml`、`code-verifier/package.json`、`code-verifier/package-lock.json` 和 Docker Compose 配置为准。
 
-本作品不复制或分发用户上传资料、模型返回内容、第三方教材、API Key 或 Provider 账号凭证。
+本项目不复制或分发用户上传资料、模型返回内容、第三方教材、API Key 或 Provider 账号凭证。
 
 | 组件 | 用途 | 声明许可证 | 来源 |
 | --- | --- | --- | --- |
@@ -25,4 +25,3 @@ EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说
 
 1. 使用者可通过本源码包中的依赖清单与 Docker Compose 复现本地运行环境。
 2. 各第三方组件仍受其自身许可证约束；本项目的 MIT License 不改变第三方许可证。
-3. 主要依赖、AI Coding 使用范围、人工审查责任和隐私处理，在提交材料中的《EduNova AI Coding 与开源说明》中作了进一步披露。

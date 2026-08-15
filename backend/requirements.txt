@@ -28,6 +28,6 @@ pypdf
 reportlab
 python-docx
 python-pptx
-Pillow==11.3.0
+Pillow==12.3.0
 redis
 rq

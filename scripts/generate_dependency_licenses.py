@@ -29,6 +29,33 @@ PURPOSES = {
     "vitest": "前端测试",
 }
 
+PACKAGE_METADATA_OVERRIDES = {
+    "bcrypt": ("https://github.com/pyca/bcrypt", "Apache-2.0"),
+    "cryptography": ("https://github.com/pyca/cryptography", "Apache-2.0 OR BSD-3-Clause"),
+    "docling-slim": ("https://github.com/docling-project/docling", "MIT"),
+    "json-repair": ("https://github.com/mangiucugna/json_repair", "MIT"),
+    "opencv-python-headless": (
+        "https://github.com/opencv/opencv-python",
+        "MIT build scripts; bundled OpenCV Apache-2.0; bundled third-party licenses vary",
+    ),
+    "pgvector": ("https://github.com/pgvector/pgvector-python", "MIT"),
+    "pip-audit": ("https://github.com/pypa/pip-audit", "Apache-2.0"),
+    "psycopg": ("https://github.com/psycopg/psycopg", "LGPL-3.0-only"),
+    "puremagic": ("https://github.com/cdgriffith/puremagic", "MIT"),
+    "pyjwt": ("https://github.com/jpadilla/pyjwt", "MIT"),
+    "pytest-asyncio": ("https://github.com/pytest-dev/pytest-asyncio", "Apache-2.0"),
+    "ragas": ("https://github.com/vibrantlabsai/ragas", "Apache-2.0"),
+    "redis": ("https://github.com/redis/redis-py", "MIT"),
+    "rq": ("https://github.com/rq/rq", "BSD-2-Clause"),
+    "scipy": ("https://github.com/scipy/scipy", "BSD-3-Clause"),
+    "websockets": ("https://github.com/python-websockets/websockets", "BSD-3-Clause"),
+    "clsx": ("https://github.com/lukeed/clsx", "MIT"),
+    "eslint-plugin-react-refresh": ("https://github.com/ArnaudBarre/eslint-plugin-react-refresh", "MIT"),
+    "globals": ("https://github.com/sindresorhus/globals", "MIT"),
+    "react-markdown": ("https://github.com/remarkjs/react-markdown", "MIT"),
+    "remark-gfm": ("https://github.com/remarkjs/remark-gfm", "MIT"),
+}
+
 
 def _purpose(name: str) -> str:
     return PURPOSES.get(name.casefold(), "项目直接运行、测试或构建依赖")
@@ -41,6 +68,13 @@ def _clean_cell(value: object, limit: int = 160) -> str:
 def _source_link(name: str, url: str) -> str:
     safe_url = url.strip()
     return f"[{name}]({safe_url})" if safe_url.startswith(("https://", "http://")) else "需复核"
+
+
+def _resolved_metadata(name: str, source: str, license_name: object) -> tuple[str, str]:
+    override = PACKAGE_METADATA_OVERRIDES.get(name.casefold())
+    if override:
+        source, license_name = override
+    return _source_link(name, source), _clean_cell(license_name)
 
 
 def _project_urls(package: Any) -> dict[str, str]:
@@ -71,17 +105,23 @@ def python_dependencies() -> list[tuple[str, str, str, str, str]]:
             package = metadata.metadata(name)
             project_urls = _project_urls(package)
             source = project_urls.get("Source") or project_urls.get("Repository") or package.get("Home-page") or ""
+            source_link, license_name = _resolved_metadata(
+                name,
+                source,
+                package.get("License-Expression") or package.get("License") or "需复核",
+            )
             rows.append(
                 (
                     name,
                     metadata.version(name),
-                    _source_link(name, source),
-                    _clean_cell(package.get("License-Expression") or package.get("License") or "需复核"),
+                    source_link,
+                    license_name,
                     _purpose(name),
                 )
             )
         except metadata.PackageNotFoundError:
-            rows.append((name, "未安装", "需复核", "需在构建镜像中复核", _purpose(name)))
+            source_link, license_name = _resolved_metadata(name, "", "需在构建镜像中复核")
+            rows.append((name, "未安装", source_link, license_name, _purpose(name)))
     return rows
 
 
@@ -92,7 +132,8 @@ def node_dependencies(package_dir: Path) -> list[tuple[str, str, str, str, str]]
     for name in sorted(names, key=str.casefold):
         installed_package = package_dir / "node_modules" / name / "package.json"
         if not installed_package.exists():
-            rows.append((name, "未安装", "需复核", "需在构建环境中复核", _purpose(name)))
+            source_link, license_name = _resolved_metadata(name, "", "需在构建环境中复核")
+            rows.append((name, "未安装", source_link, license_name, _purpose(name)))
             continue
         details = json.loads(installed_package.read_text(encoding="utf-8"))
         license_value = details.get("license", "需复核")
@@ -102,12 +143,13 @@ def node_dependencies(package_dir: Path) -> list[tuple[str, str, str, str, str]]
         repository_url = repository.get("url", "") if isinstance(repository, dict) else str(repository or "")
         repository_url = repository_url.removeprefix("git+").removesuffix(".git")
         source = str(details.get("homepage") or repository_url)
+        source_link, license_name = _resolved_metadata(name, source, license_value)
         rows.append(
             (
                 name,
                 str(details.get("version", "需复核")),
-                _source_link(name, source),
-                _clean_cell(license_value),
+                source_link,
+                license_name,
                 _purpose(name),
             )
         )
@@ -125,7 +167,7 @@ def main() -> None:
     lines = [
         "# 直接依赖许可证清单",
         "",
-        "本文件由 `scripts/generate_dependency_licenses.py` 从固定依赖和本地包元数据生成；传递依赖由供应链门禁继续扫描。",
+        "本文件由 `scripts/generate_dependency_licenses.py` 从固定依赖、本地包元数据和已核对的项目元数据生成；传递依赖由供应链检查继续扫描。版本标记为“未安装”的依赖需要在对应构建环境中确认实际解析版本。",
         "",
         "| Python 依赖 | 版本 | 来源 | 声明许可证 | 用途 |",
         "| --- | --- | --- | --- | --- |",

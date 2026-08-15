@@ -1436,7 +1436,7 @@ a {
 
 }
 
-/* Phase 3 closure redesign: learning operating system surface */
+/* Learning workspace surface */
 .app-surface {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.72), transparent 28%),
@@ -1658,7 +1658,7 @@ a {
 
 }
 
-/* Phase 3R3: quiet conversation-first learning home */
+/* Quiet conversation-first learning home */
 .learning-home {
   position: relative;
   display: grid;
@@ -4629,7 +4629,7 @@ a {
   }
 }
 
-/* Phase 3.9: route-wide ChatGPT-style workspace unification */
+/* Route-wide conversation workspace unification */
 .app-workspace-layout {
   position: relative;
   display: grid;

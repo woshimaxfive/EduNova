@@ -12,6 +12,7 @@ from backend.app.db.session import engine
 def create_app() -> FastAPI:
     application = FastAPI(
         title="EduNova",
+        version="1.0.0",
     )
     application.add_exception_handler(ApiError, api_error_handler)
     application.add_exception_handler(DomainError, api_error_handler)

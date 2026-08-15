@@ -627,7 +627,7 @@
   }
 }
 
-/* Phase 50: the course graph is the single high-impact visual surface. */
+/* The course graph is the primary high-impact visual surface. */
 .knowledge-flow-shell {
   min-height: 620px;
   border: 1px solid rgba(20, 67, 62, 0.12);

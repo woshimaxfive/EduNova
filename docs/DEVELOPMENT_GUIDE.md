@@ -178,7 +178,6 @@ Phase 12.2 的最低验收宽度：
 
 - `README.md`
 - `docs/STATUS.md`
-- `docs/PROJECT_BOARD.md`
 - `docs/API.md`
 - `docs/DATABASE_DESIGN.md`
 - `docs/FRONTEND_ROUTING_DESIGN.md`

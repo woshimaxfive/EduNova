@@ -14,8 +14,6 @@ EduNova 在开发过程中使用 AI 辅助完成：
 
 实际开发辅助工具包括 OpenAI Codex。Codex 用于仓库审计、计划、代码与测试修改、文档同步和命令执行；阶段范围、产品语义、真实密钥使用、提交和最终验收由开发者控制。运行时 AI 能力与开发辅助工具分开记录：EduNova 可配置讯飞星火 X2-Flash、讯飞 Embedding，以及其他用户明确配置的 OpenAI-compatible 服务。
 
-赛题原文写有“开发过程中使用的其他 AI 辅助工具，需选用科大讯飞相关工具”。当前仓库不删除或模糊 Codex 的实际使用记录；该句是否禁止非讯飞 AI Coding 工具，标记为赛题群待确认事项，在获得主办方答复前不宣称已经满足这一特定条款。
-
 AI 辅助开发不等于自动接受所有输出。每个阶段必须经过测试、人工方向确认和仓库规则校验。
 
 ## 2. 人工控制点
@@ -48,7 +46,6 @@ AI 辅助开发必须把文档当作项目状态的一部分。代码、接口�
 
 - `README.md`
 - `docs/STATUS.md`
-- `docs/PROJECT_BOARD.md`
 - `docs/API.md`
 - `docs/DATABASE_DESIGN.md`
 - `docs/FRONTEND_ROUTING_DESIGN.md`
@@ -85,7 +82,7 @@ git diff --check
 后续贡献者可以使用 AI 辅助开发，但应遵守：
 
 - 先读 `AGENTS.md`。
-- 先确认 `docs/STATUS.md` 和 `docs/PROJECT_BOARD.md`。
+- 先确认 `docs/STATUS.md`、相关架构文档和当前 Git 状态。
 - 每次只推进一个主目标。
 - 保留测试和浏览器验收证据。
 - 不让 AI 擅自扩大 Phase 范围。

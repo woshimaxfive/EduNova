@@ -1,4 +1,4 @@
-from backend.evals.contest_readiness import build_report, percentile_95
+from backend.evals.release_readiness import build_report, percentile_95
 
 
 def test_percentile_95_uses_nearest_rank() -> None:
@@ -6,7 +6,7 @@ def test_percentile_95_uses_nearest_rank() -> None:
     assert percentile_95([]) is None
 
 
-def test_contest_report_never_claims_unmeasured_live_performance() -> None:
+def test_release_report_never_claims_unmeasured_live_performance() -> None:
     report = build_report()
 
     assert report["quality"]["citation_valid_rate"] == 1
@@ -17,7 +17,7 @@ def test_contest_report_never_claims_unmeasured_live_performance() -> None:
     assert report["status"] == "evidence_gap"
 
 
-def test_contest_report_fails_a_measured_threshold_without_changing_quality() -> None:
+def test_release_report_fails_a_measured_threshold_without_changing_quality() -> None:
     measurements = {
         "non_ai_api_p95": [150],
         "rag_retrieval_p95": [400],

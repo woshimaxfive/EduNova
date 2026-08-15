@@ -1190,18 +1190,18 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.queryByText("AI 辅导回答")).not.toBeInTheDocument();
   });
 
-  it("shows the A3 learning loop in course space without replacing course chat", async () => {
+  it("shows the learning loop in course space without replacing course chat", async () => {
     const user = userEvent.setup();
     renderCoursePage({ learningState: learningStateWithWeakness, currentPath: activePathDetail });
 
     expect(await screen.findByRole("banner", { name: "课程工作区标题栏" })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "A3 学习步骤" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "个性化学习步骤" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /学习进度/ }));
     expect(await screen.findByRole("dialog", { name: "学习进度" })).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "学习进度" })).toHaveTextContent("课程画像");
     expect(screen.getByRole("dialog", { name: "学习进度" })).toHaveTextContent("总画像 + 本课程实时状态");
     expect(screen.getByRole("region", { name: "下一步学习", hidden: true })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "A3 学习步骤" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "个性化学习步骤" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "课程对话空间", hidden: true })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "进入你的学习空间" })).not.toBeInTheDocument();
   });
@@ -1297,7 +1297,7 @@ describe("CourseSpacePage course tutor sessions", () => {
     expect(screen.queryByText(/片段：知识表示/)).not.toBeInTheDocument();
   });
 
-  it("lets the student generate six A3 resource types from course space", async () => {
+  it("lets the student generate six personalized resource types from course space", async () => {
     const user = userEvent.setup();
     const { calls } = renderCoursePage({
       sessions: [makeSession("777", "已有课程历史")],

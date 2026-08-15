@@ -845,7 +845,7 @@ describe("student interaction affordances", () => {
 
       if (url === PROFILE_ENDPOINTS.chat && method === "post") {
         const payload = parsePayload(config.data) as { message: string };
-        const isGoal = payload.message.includes("两周冲刺软件杯演示");
+        const isGoal = payload.message.includes("两周完成课程复习");
         const event: ProfileEventResponse = {
           id: String(events.length + 1),
           dimension: "profile_chat",
@@ -880,7 +880,7 @@ describe("student interaction affordances", () => {
           updated_at: "2026-07-05T09:01:00Z",
           profile_json: {
             ...profile.profile_json,
-            learning_goal: isGoal ? "两周冲刺软件杯演示" : profile.profile_json.learning_goal,
+            learning_goal: isGoal ? "两周完成课程复习" : profile.profile_json.learning_goal,
             weak_points: isGoal ? profile.profile_json.weak_points : ["反向传播推导"]
           }
         };
@@ -911,11 +911,11 @@ describe("student interaction affordances", () => {
     expect(await screen.findByRole("region", { name: "动态学习画像工作台" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "更新目标" })).not.toBeInTheDocument();
 
-    await user.type(screen.getByRole("textbox", { name: "画像问题回答" }), "两周冲刺软件杯演示");
+    await user.type(screen.getByRole("textbox", { name: "画像问题回答" }), "两周完成课程复习");
     await user.click(screen.getByRole("button", { name: "更新画像" }));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect((await screen.findAllByText("两周冲刺软件杯演示")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("两周完成课程复习")).length).toBeGreaterThan(0);
     expect(screen.getByRole("region", { name: "本次画像更新" })).toHaveTextContent("已应用学习目标");
 
     await user.type(screen.getByRole("textbox", { name: "画像问题回答" }), "最担心反向传播推导。");
@@ -925,7 +925,7 @@ describe("student interaction affordances", () => {
     expect((await screen.findAllByText("反向传播推导")).length).toBeGreaterThan(0);
     expect(screen.getByRole("region", { name: "本次画像更新" })).toHaveTextContent("已应用学习难点");
     expect(calls.filter((call) => call.url === PROFILE_ENDPOINTS.chat)).toEqual([
-      { url: PROFILE_ENDPOINTS.chat, method: "post", data: { message: "两周冲刺软件杯演示" } },
+      { url: PROFILE_ENDPOINTS.chat, method: "post", data: { message: "两周完成课程复习" } },
       { url: PROFILE_ENDPOINTS.chat, method: "post", data: { message: "最担心反向传播推导。" } }
     ]);
   });

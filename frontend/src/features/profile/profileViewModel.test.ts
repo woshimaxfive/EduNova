@@ -107,7 +107,7 @@ describe("profileViewModel", () => {
     expect(profileQuestionGuidance(undefined)).toBeNull();
   });
 
-  it("keeps the A3 eight-dimension order and counts applied and candidate evidence", () => {
+  it("keeps the eight-dimension profile order and counts applied and candidate evidence", () => {
     const dimensions = buildProfileDimensions(profile(), [event()]);
     expect(dimensions.map((item) => item.key)).toEqual(PROFILE_DIMENSIONS.map((item) => item.key));
     expect(dimensions.find((item) => item.key === "learning_goal")).toMatchObject({ confidence: 82, appliedCount: 1 });

@@ -4,7 +4,7 @@
 
 ## 1. 测试目标
 
-EduNova 的测试目标不是只证明代码能运行，而是证明系统满足赛题要求、适合比赛演示、能够后续开源部署，并且关键 AI 输出具有可解释性和可信度。
+EduNova 的测试目标不是只证明代码能运行，而是证明系统满足产品要求、适合真实演示和开源部署，并且关键 AI 输出具有可解释性和可信度。
 
 本文档是全项目测试计划。除“当前自动化验证入口”和“浏览器验收记录”外，其他章节描述的是第一版最终应覆盖的测试范围，不代表当前阶段已经全部实现。
 
@@ -85,7 +85,7 @@ Phase 47 增加资源稳定性与主题绑定回归：`uses_history` 被兼容�
 | 导出 | Markdown 同步兼容接口、Markdown/PDF/DOCX 异步学习档案导出 |
 | 快速体验 | 注册内置课程入口、用户数据隔离、资料库隔离和 fallback 标记 |
 | 部署 | Docker Compose 启动、环境变量、Nginx 入口 |
-| 文档 | README、部署说明、开发说明、测试说明、开源说明、答辩问答、用户指南、AI 辅助开发说明和验收证据 |
+| 文档 | README、部署说明、开发说明、测试说明、开源说明、用户指南、AI 辅助开发说明和发布说明 |
 | 前端体验 | `docs/UI_UX_DESIGN.md` 中的布局、状态、动效和响应式约束 |
 | 前端入口 | `docs/FRONTEND_ROUTING_DESIGN.md` 中的登录、注册、首次进入和路由保护 |
 
@@ -267,7 +267,7 @@ cd ..
 - 学习画布、资源输出区、证据层和 Agent 轨迹已进入课程空间或回答展开区素材，不作为首页验收主体。
 - Phase 6.5 后，已登录学生访问 `/app/courses/:courseId` 应默认看到课程问答模式；知识画布、资源生成区、证据与 Agent 轨迹不再作为常驻区域出现，主区不重复渲染课程历史，也不常驻横向知识点条。
 - 2026-07-11 桌面重做后，必须在 1440px 和 1920px 验证：左侧课程历史固定、主滚动条位于浏览器最右侧、输入框固定；每条 Assistant 回答只展开自己的引用和 trace；历史回答生成资源使用对应用户问题；流式临时回答持久化前不显示附件工具栏；学习进度与 AI 辅导抽屉均不压缩正文。
-- 学习进度同步收口后，打开抽屉必须绕过 `staleTime` 刷新学习状态、掌握度、资源、当前路径和最新报告；同步中保留旧内容，任一请求失败显示局部 warning 且再次刷新可恢复。课程栏与抽屉的百分比必须等于知识点 `score` 平均值，不能使用 `CourseSummary.progress_percent` 或 A3 步骤完成数。
+- 学习进度同步收口后，打开抽屉必须绕过 `staleTime` 刷新学习状态、掌握度、资源、当前路径和最新报告；同步中保留旧内容，任一请求失败显示局部 warning 且再次刷新可恢复。课程栏与抽屉的百分比必须等于知识点 `score` 平均值，不能使用 `CourseSummary.progress_percent` 或学习步骤完成数。
 - 资源工坊桌面重做后，必须覆盖成果搜索/六类筛选、`course_id/resource_id` 刷新恢复、空课程/空成果/低依据/读取失败、生成失败保留配置、完成后自动选中，以及质量/引用/轨迹切换资源不串数据。`Escape`、遮罩和关闭按钮均应关闭抽屉，抽屉打开前后中央画布宽度不得变化。
 - 已登录学生访问 `/app/profile` 应从 `/profiles/me` 和 `/profiles/events` 渲染真实 8 维画像与画像事件；所有显式画像更新统一通过自然语言输入调用 `/profiles/chat`，页面不得保留逐字段“更新目标”表单。
 - 画像页必须展示逐维可信度雷达及文本降级、候选/已应用证据、来源类型和事件自己的 ProfileGraph 轨迹。候选事件不得改变雷达数值，切换事件不得串用 trace；抽屉需覆盖工作区、锁定焦点并在关闭后恢复触发位置。
@@ -506,7 +506,7 @@ git status --short --untracked-files=all
 
 ## 6. 性能与体验测试
 
-第一版不追求极限性能，但必须满足比赛演示和日常学习体验。
+第一版不追求极限性能，但必须满足发布演示和日常学习体验。
 
 | 场景 | 目标 |
 | --- | --- |
@@ -621,7 +621,7 @@ cd ..
 | --- | --- | --- |
 | P0 | 阻断提交或演示 | 系统启动失败、登录失败、主链路无法走通 |
 | P1 | 严重影响核心功能 | 六类资源主链路不可用、RAG 无引用、上传建课失败 |
-| P2 | 明显影响体验或答辩 | Agent 轨迹缺失、报告解释不足、页面错位 |
+| P2 | 明显影响体验或演示 | Agent 轨迹缺失、报告解释不足、页面错位 |
 | P3 | 可延后优化 | 局部样式不够漂亮、非核心页面小问题 |
 
 提交前 P0、P1 必须清零。P2 尽量清零，未清零必须记录在测试说明书中。
@@ -630,7 +630,7 @@ cd ..
 
 | 阶段 | 验收标准 |
 | --- | --- |
-| Phase 0 | 编码检查脚本可运行，赛题和计划纳入 Git |
+| Phase 0 | 编码检查脚本可运行，需求和计划纳入 Git |
 | Phase 1A | FastAPI 最小骨架、后端健康检查、pytest、ruff、编码检查通过 |
 | Phase 1B | Docker Compose 草案包含 PostgreSQL、Redis、backend、frontend 和 Nginx；后端服务健康检查通过，前端静态服务和统一入口配置可解析 |
 | Phase 2A | 数据库配置、SQLAlchemy、Alembic 和 pgvector 扩展迁移通过 |
@@ -662,11 +662,11 @@ cd ..
 | Phase 11.2 | 资料对比可演示 |
 | Phase 12 | 快速演示、导出、开源准备和交付基线文档可用 |
 | Phase 13 | 自动化测试、Docker、浏览器验收和产品打磨通过 |
-| Phase 14 | PPT、视频、提交包准备完成 |
+| Phase 14 | 发布说明、演示材料和源码包准备完成 |
 
 ## 12. 提交前最终检查
 
-提交比赛材料前必须完成：
+发布源码前必须完成：
 
 ```powershell
 .\scripts\test.ps1
@@ -753,7 +753,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - Phase 11.2 前端测试覆盖 `MATERIAL_ENDPOINTS.compare` 和 `compareMaterials` 类型化 API 合同；`LibraryPage` 覆盖课程选择、资料筛选、少于两份禁用提示、生成对比成功渲染、局部错误提示，且不影响上传、资料列表和生成课程。
 - Phase 12.1 后端测试覆盖 `/exports/learning-dossier` 无 token 401、非本人课程 404、无报告导出真实空状态、有报告导出课程级 Markdown、路径任务/资源/练习证据进入摘要、文件名安全，以及不泄露完整资料原文、完整作答原文、内部指令、模型请求内容、密钥、登录令牌或完整用户画像。
 - Phase 12.1 前端测试覆盖 `EXPORT_ENDPOINTS.learningDossier` 和 `exportLearningDossier` 类型化 API 合同；`ReportsPage` 覆盖导出按钮、接口调用、Blob 下载、成功提示、失败局部提示和无报告仍可导出。
-- Phase 12.2 文档验收覆盖 `docs/AGENT_DESIGN.md`、`docs/DEVELOPMENT_GUIDE.md`、`docs/OPEN_SOURCE_NOTICE.md`、`docs/DEFENSE_QA.md`、`docs/DEVELOPMENT_REPORT.md`、`docs/TEST_REPORT.md`、`docs/USER_GUIDE.md`、`docs/AI_CODING_USAGE.md`、`LICENSE` 和 `docs/evidence/PHASE_12_2_ACCEPTANCE.md`；新增文档必须与当前实现一致，不把未实现的 PDF/Word、OCR、深度解析、独立 demo reset 或完整 E2E 写成已完成。
+- 发布文档验收覆盖 `docs/AGENT_DESIGN.md`、`docs/DEVELOPMENT_GUIDE.md`、`docs/OPEN_SOURCE_NOTICE.md`、`docs/TEST_REPORT.md`、`docs/USER_GUIDE.md`、`docs/AI_CODING_USAGE.md`、`LICENSE` 和 `THIRD_PARTY_NOTICES.md`；新增文档必须与当前实现一致，不把未实现的 PDF/Word、OCR、深度解析、独立 demo reset 或完整 E2E 写成已完成。
 - Phase 13.1 后端测试覆盖学习产物 nullable `agent_trace_id` 迁移、trace 索引、`/agents/traces/{trace_id}` 扩展响应、资源生成真实节点顺序、ReviewAgent 风险标记、资源持久化 trace、课程问答 SSE metadata、路径/练习/报告/导出 trace 兼容字段和 metadata 脱敏。
 - Phase 13.1 前端测试覆盖课程空间展示真实课堂协作轨迹、资源工坊展示 `ResourceGenerationGraph`、路径/练习/报告页显示轻量 trace 入口、报告空态不误报失败，以及新增 `agent_trace_id` API 合同。
 - Phase 13.2 历史回归继续覆盖基础文档抽取、损坏文件、旧版 Office/图片边界、主页工具和异步导出；Phase 21 进一步要求资料通过精细解析、目录确认和质量门后才可建课。
@@ -820,7 +820,7 @@ Phase 1A 起，仓库提供统一验证脚本：
 - 历史 Phase 11.1 浏览器验收记录保留，不再作为当前产品门禁；当前门禁以持续学习路径收敛验收为准。
 - Phase 11.2 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/library` 桌面与 390px：用两份 Markdown/TXT 资料生成课程后执行资料对比，重复重点、疑似考点、单资料独有点、试题独有点、遗漏复习点、优先顺序和安全引用可见，响应不展示完整资料原文，页面无水平溢出。
 - Phase 12.1 浏览器验收需要优先使用 `agent-browser` 覆盖 `/app/reports` 桌面与 390px：导出学习档案入口可见，点击后出现真实成功或失败局部反馈，报告读取和生成不受影响，页面无水平溢出。
-- Phase 12.2 浏览器验收需要优先使用 `agent-browser` 覆盖桌面和 390px 主链路抽查：注册示例课程、资料库、课程空间问答、资源工坊、学习路径、练习、报告和 Markdown 导出可见；验收结果写入 `docs/evidence/PHASE_12_2_ACCEPTANCE.md`，非阻断问题进入 Phase 13 backlog。
+- 发布浏览器验收需要优先使用 `agent-browser` 覆盖桌面和 390px 主链路抽查：注册示例课程、资料库、课程空间问答、资源工坊、学习路径、练习、报告和 Markdown 导出可见；非阻断问题进入公开 issue 或发布说明。
 - Phase 13.1 浏览器验收需要优先使用 `agent-browser` 覆盖 Docker 入口 `http://127.0.0.1:8080` 桌面和 390px：课程空间课堂协作轨迹、资源工坊 Graph 轨迹、路径/练习/报告 trace 入口可见，页面不展示组件说明式假轨迹且无水平溢出。
 - Docker Compose 配置校验。
 - 当前未接入 OCR、旧版 Office、扫描件解析、真实视频/文生图、个人全局资源和资源正文手工编辑。六类结构化资源、不可覆盖版本族、Markmap/Mermaid/Pyodide、真实 PPTX 以及十条生产 Graph 已进入验证范围；动画图解必须明确标为交互场景，不能作为视频生成能力宣传。
@@ -866,7 +866,7 @@ docker compose down
 7. 示例课程和用户上传课程均能稳定生成；失败时零新增或保留旧成果。
 8. Docker Compose 可启动系统。
 9. P0、P1 缺陷清零。
-10. 文档、PPT、视频和提交包齐全。
+10. 文档、演示材料和发布源码包齐全。
 
 ## 15. Phase 13 前端视觉硬化验收补充
 
@@ -885,11 +885,11 @@ docker compose down
 2. `/app` 桌面侧栏、问候标题、composer、推荐问题和最近学习层级清晰。
 3. `/app` 移动端默认只显示紧凑顶部导航条；展开按钮可打开覆盖式抽屉，抽屉内导航、历史和账号入口可见。
 4. 从移动抽屉进入资料库、资源工坊、学习画像、设置或主页历史后，抽屉自动收起，主内容不被整条桌面侧栏推到页面底部。
-5. `/app/courses/:courseId` 桌面端课程栏、问答主任务、逐回答行动和课程内容层级明确；A3 八步位于学习进度抽屉，不再常驻或横向滚动。
+5. `/app/courses/:courseId` 桌面端课程栏、问答主任务、逐回答行动和课程内容层级明确；八步学习闭环位于学习进度抽屉，不再常驻或横向滚动。
 6. 主页 composer 获得焦点时有可见容器焦点环；Tab 导航时按钮、链接和表单控件有可见 `:focus-visible`。
 7. `prefers-reduced-motion` 下不新增强制动画，现有学习信号动效继续尊重 reduced motion。
 
-验收证据记录在 `docs/evidence/PHASE_13_FRONTEND_VISUAL_HARDENING.md`。
+验收结论记录在当前测试报告和对应发布说明中。
 
 ## 16. 个性化学习路径收敛验收
 
@@ -1037,15 +1037,15 @@ docker compose down
 
 2026-07-15 Phase 27 实际验收：`scripts/test.ps1` 通过后端 387 项、前端 231 项和离线 AI 评测 10 项，同时通过编码、Ruff、Alembic head、OpenAPI、lint、build 与 Compose。Docker 29.6.1 隔离 E2E 通过 pgvector、代码执行隔离和 2 条 Playwright 学习闭环用例，并自动删除临时容器与卷。`agent-browser` 单一会话验证空白账号和内置课程账号：1440px/390px 主页与课程空间均无水平溢出；无语音识别能力时显示键盘降级；真实课程回答可见来源、为什么这样回答、真实协作轨迹，以及朗读暂停、停止和语速控制。外部视频 URL、恶意地址、幂等互动和路径手动完成由自动化测试覆盖；未把无真实搜索结果的情况记录成视频浏览器验收成功。
 
-## Phase 28 赛题就绪评测
+## Phase 28 发布就绪评测
 
-- `python -m backend.evals.contest_readiness` 输出到被忽略的 `output/contest-readiness`，固定检查引用合法率、客观数字一致率和敏感信息/提示词泄漏命中数。
+- `python -m backend.evals.release_readiness` 输出到被忽略的 `output/release-readiness`，固定检查引用合法率、客观数字一致率和敏感信息/提示词泄漏命中数。
 - 性能样本通过 `--measurements` 传入毫秒数组；缺少真实样本时写 `not_measured`，设置 `--require-live` 后证据不全或超阈值都会失败。
 - 目标：非 AI API P95 < 2 秒、RAG P95 < 3 秒、SSE 首状态 < 2 秒、真实模型首 Token < 15 秒、AIJob 创建 < 2 秒、3 秒内可见进度、三类资源批次 < 180 秒。
 - 两组“二叉树遍历”画像至少在讲解角度、难度、模态或顺序中的两项不同；低可信画像不得驱动差异。
 - 最终阶段只运行一次完整门禁、一次 Docker E2E、一次供应链门禁和一次 agent-browser 桌面/390px验收；真实模型与搜索调用总量不超过 20 次，只保存聚合指标。
 
-2026-07-15 Phase 28 实际验收：`scripts/test.ps1` 通过后端 393 项、前端 233 项和离线 AI 评测 10 项，同时通过编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、build 与 Compose。隔离 Docker E2E 通过八服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例。真实调用共 19 次模型和 1 次搜索；`contest_readiness --require-live` 的引用、数字、泄漏与全部规定性能阈值通过。供应链脚本仅运行一次，依赖与 Trivy 漏洞、密钥及 Dockerfile 配置均为 0 命中。`agent-browser` 在桌面和 390px 验证路径学习包、YouTube 安全 iframe、始终可见的原平台链接、报告资源聚合和无水平溢出。临时账号及数据已清理。同步路径规划 53–62 秒及一次 nginx 504 在本阶段作为风险记录，后由 Phase 29 异步路径 AIJob 解决；画像对照中一组模型回退仍保留为稳定性风险。
+2026-07-15 Phase 28 实际验收：`scripts/test.ps1` 通过后端 393 项、前端 233 项和离线 AI 评测 10 项，同时通过编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、build 与 Compose。隔离 Docker E2E 通过八服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例。真实调用共 19 次模型和 1 次搜索；`release_readiness --require-live` 的引用、数字、泄漏与全部规定性能阈值通过。供应链脚本仅运行一次，依赖与 Trivy 漏洞、密钥及 Dockerfile 配置均为 0 命中。`agent-browser` 在桌面和 390px 验证路径学习包、YouTube 安全 iframe、始终可见的原平台链接、报告资源聚合和无水平溢出。临时账号及数据已清理。同步路径规划 53–62 秒及一次 nginx 504 在本阶段作为风险记录，后由 Phase 29 异步路径 AIJob 解决；画像对照中一组模型回退仍保留为稳定性风险。
 
 ## Phase 29 异步路径与国内策略验收
 
@@ -1064,7 +1064,7 @@ docker compose down
 - 打开资源不等于完成资源，播放器结束不等于完成整节；只有用户在路径页确认后才更新路径任务状态。
 - 阶段收口运行完整工程门禁、一次隔离 Docker E2E 和一次 `agent-browser` 桌面/390px验收，不制作交付材料。
 
-2026-07-15 Phase 30 工程门禁：`scripts/test.ps1` 通过后端 404 项、前端 236 项、离线 AI 评测 10 项，以及编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、production build 与 Compose 配置检查。`contest_readiness` 因本轮未提供新的真实 Provider 性能样本输出 `evidence_gap`，该状态不影响代码正确性门禁，也不记录成真实性能通过。
+2026-07-15 Phase 30 工程门禁：`scripts/test.ps1` 通过后端 404 项、前端 236 项、离线 AI 评测 10 项，以及编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、production build 与 Compose 配置检查。`release_readiness` 因本轮未提供新的真实 Provider 性能样本输出 `evidence_gap`，该状态不影响代码正确性门禁，也不记录成真实性能通过。
 
 2026-07-15 Phase 30 实际验收：同一次隔离 Docker E2E 通过八服务健康、pgvector 排序/隔离、代码验证隔离与 2 条 Playwright 用例，结束后删除临时容器、网络和卷。`agent-browser` 单一会话在桌面与 390px 验证当前任务的“本节学习安排”、部分待补齐、Radix 未完成确认、第一项未完成资源选择、单项完成后的“学习下一项”和第二项顺序跳转；页面无横向溢出，控制台无应用错误。真实浏览器发现自动 `opened` 记录与用户操作共用 mutation 会持续禁用按钮，修复为两个独立 mutation 后完成组件定向回归。验收账号及其课程、路径、资源和互动级联数据已精确清理。
 
@@ -1076,7 +1076,7 @@ docker compose down
 
 两组内置课程画像均由普通用户页面创建并达到可信阈值，路径均为 `model_enhanced` 且无 fallback。同一“二叉树遍历”任务：图解备考使用图解/练习策略与 `doc+mindmap+quiz`，工程实践使用递归调用栈/可运行代码策略与 `code+doc+quiz`，满足策略和模态两项可观察差异。
 
-2026-07-16 Phase 31 实际验收：`scripts/test.ps1` 通过后端 425 项、前端 238 项和离线 AI 评测 10 项，以及编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、build 与 Compose。隔离 Docker E2E 通过八服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例，并自动清理容器、网络与卷。`agent-browser` 完成 1440px/390px 练习主动作、Radix 弹窗、焦点恢复和无水平溢出复核；真实主链累计 140 次 Provider 尝试。三个临时账号及上传副本、导出、RQ 任务和派生数据精确删除，原始教材 SHA-256 不变。本轮无新增真实性能样本，`contest_readiness` 的实时性能部分保持 `evidence_gap`。
+2026-07-16 Phase 31 实际验收：`scripts/test.ps1` 通过后端 425 项、前端 238 项和离线 AI 评测 10 项，以及编码、Ruff、Alembic head、非破坏性 OpenAPI、lint、build 与 Compose。隔离 Docker E2E 通过八服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例，并自动清理容器、网络与卷。`agent-browser` 完成 1440px/390px 练习主动作、Radix 弹窗、焦点恢复和无水平溢出复核；真实主链累计 140 次 Provider 尝试。三个临时账号及上传副本、导出、RQ 任务和派生数据精确删除，原始教材 SHA-256 不变。本轮无新增真实性能样本，`release_readiness` 的实时性能部分保持 `evidence_gap`。
 
 ## Phase 33 百炼多模态与证据链验收
 
@@ -1088,7 +1088,7 @@ docker compose down
 
 2026-07-16 Phase 33 实际验收：`scripts/test.ps1` 通过后端 441 项、前端 241 项、离线 AI 评测 10 项，以及编码、Ruff、Alembic `20260716_0028`、非破坏性 OpenAPI、lint、production build 与 Compose。`agent-browser` 完成百炼文本/图片、同图追问、刷新恢复、课程 RAG、外部来源和桌面/390px复核；临时账号与 4 个图片对象已精确清理。Docling 依赖缓存命中，但首次模型层因官方接口三次 504 未通过，未记录成完整镜像构建成功。
 
-2026-07-16 Phase 36 实际验收：后端 446 项、前端 244 项、离线 AI 评测 10 项及编码、Ruff、ESLint、OpenAPI、Alembic、Compose、production build 均通过；`contest_readiness` 实时部分据实保留 `evidence_gap`。受影响 Docker 服务重建并健康。`agent-browser` 独立账号验证练习/报告任务创建、30%/52% 真实 Graph 节点、运行中刷新恢复、完成后持久化结果，以及桌面和 390px 无横向溢出。练习生成约 2 分 22 秒，报告生成约 1 分 28 秒，长模型操作期间不再占用浏览器同步连接。两个临时账号及级联数据已删除。
+2026-07-16 Phase 36 实际验收：后端 446 项、前端 244 项、离线 AI 评测 10 项及编码、Ruff、ESLint、OpenAPI、Alembic、Compose、production build 均通过；`release_readiness` 实时部分据实保留 `evidence_gap`。受影响 Docker 服务重建并健康。`agent-browser` 独立账号验证练习/报告任务创建、30%/52% 真实 Graph 节点、运行中刷新恢复、完成后持久化结果，以及桌面和 390px 无横向溢出。练习生成约 2 分 22 秒，报告生成约 1 分 28 秒，长模型操作期间不再占用浏览器同步连接。两个临时账号及级联数据已删除。
 
 ## Phase 38 模型原生生成与泛化验收
 
@@ -1134,7 +1134,7 @@ docker compose down
 
 2026-07-17 Phase 41 实际验收：定向后端 60 项、课程空间 41 项、报告页 4 项通过；`scripts/test.ps1` 一次通过后端 468 项、前端 246 项、离线评测 10 项及编码、Ruff、Alembic head、OpenAPI、ESLint、production build 与 Compose。仅重建 backend/frontend 镜像，使用临时本地状态做界面回归：3 分历史尝试与 98 分最新再测得到当前掌握度 98%，下一行动为生成路径；课程抽屉显示 0 项待处理、1 项已攻克和下次复习日期，报告显示提升 95 分。1262px 与 390px 的 `scrollWidth` 均等于视口宽度。该状态不是新增模型实测证据，临时账号已删除，Compose 已恢复停机。
 
-## Phase 42 评委视角全页面体验验收
+## Phase 42 使用者视角全页面体验验收
 
 - 普通新账号使用内置课程逐页检查主页、资料库、课程空间、学习路径、资源工坊、练习、画像、报告和设置。
 - 展开与收起侧栏都不得泄出被压缩的正文或无意义操作；移动端侧栏继续保持完整模态、焦点恢复和页面无横向溢出。
@@ -1207,6 +1207,6 @@ docker compose down
 - 课程完成覆盖未完成路径、跳过任务、未评分简答、低掌握度、活动/到期薄弱点、报告过期、达标归档和恢复；归档后历史可读且学习写入被拒绝。
 - 阶段收口运行后端与前端全量、OpenAPI 漂移、Alembic head、编码、构建和 Compose；最后使用一次性账号在桌面与 390px 验证多课程切换、画像引导、引导式学习和归档状态。
 
-2026-07-18 Phase 53 实际验收：`scripts/test.ps1` 通过后端 517 项、前端 274 项、离线 AI 评测 10 项、Ruff、ESLint、TypeScript、production build、Alembic `20260718_0032`、OpenAPI 非破坏检查、UTF-8 编码和 Compose 配置。`agent-browser` 一次性账号从示例课程注册进入主页，完成全局画像和课程画像，再通过真实上传、解析、目录确认和建课得到第二门课程；主动进入两门课程时当前课程随之切换，后台任务未抢占。旧 `/app/practice` 规范化到当前课程，`guided=1` 刷新恢复且 3 题按钮保持选中，报告页如实阻止未达标归档。桌面与 390px 的 `scrollWidth` 等于视口宽度，控制台和页面错误为空。临时账号、两门课程、资料、任务与截图已精确清理；赛题实时性能入口仍输出 `evidence_gap`，本轮未将其冒充通过。
+2026-07-18 Phase 53 实际验收：`scripts/test.ps1` 通过后端 517 项、前端 274 项、离线 AI 评测 10 项、Ruff、ESLint、TypeScript、production build、Alembic `20260718_0032`、OpenAPI 非破坏检查、UTF-8 编码和 Compose 配置。`agent-browser` 一次性账号从示例课程注册进入主页，完成全局画像和课程画像，再通过真实上传、解析、目录确认和建课得到第二门课程；主动进入两门课程时当前课程随之切换，后台任务未抢占。旧 `/app/practice` 规范化到当前课程，`guided=1` 刷新恢复且 3 题按钮保持选中，报告页如实阻止未达标归档。桌面与 390px 的 `scrollWidth` 等于视口宽度，控制台和页面错误为空。临时账号、两门课程、资料、任务与截图已精确清理；发布实时性能入口仍输出 `evidence_gap`，本轮未将其冒充通过。
 
 2026-07-18 Phase 53 封盘前热修：新增资料库非资料类下一行动路由回归，以及报告阶段完成区和仪表盘的结构隔离断言。前端全量 275 项、ESLint、TypeScript 和 Docker production build 通过。真实浏览器确认资料库“完善画像”进入 `/app/profile?onboarding=1`；报告桌面与 390px 的阶段条和仪表盘 `overlap=false`，390px 下 `scrollWidth=innerWidth=390`，控制台与页面错误为空。

@@ -185,7 +185,7 @@ Docker Compose 会把仓库根目录的 `.env` 作为 backend 容器的可选运
 `MODEL_SETTINGS_ENCRYPTION_KEY` 必须使用 Fernet key。
 生产环境必须替换为不可公开的强随机值；没有该值时，后端拒绝保存用户 API Key。
 
-比赛演示建议优先配置讯飞星火 Spark：
+需要演示完整模型能力时，可优先配置讯飞星火 Spark：
 
 ```text
 SYSTEM_MODEL_BASE_URL=https://spark-api-open.xf-yun.com/agent/v1/
@@ -244,7 +244,7 @@ Compose 使用四个固定命名卷：`postgres_data` 保存数据库，`redis_d
 | 服务 | 镜像或构建 | 端口 | 说明 |
 | --- | --- | --- | --- |
 | `postgres` | `pgvector/pgvector:pg16` | `5432` | PostgreSQL + pgvector |
-| `redis` | `redis:7-alpine` | `6379` | 缓存、进度和 RQ 队列，使用固定 `redis_data` 卷 |
+| `redis` | `redis:7.2-alpine` | `6379` | 缓存、进度和 RQ 队列；固定在 BSD-3-Clause 的 7.2 系列并使用 `redis_data` 卷 |
 | `backend` | `docker/backend.Dockerfile` | `8000` | FastAPI 后端 |
 | `ai-worker` | `docker/backend.Dockerfile` | `material_data` | 资料解析、建课、资源和向量重建 RQ Worker |
 | `export-worker` | `docker/backend.Dockerfile` | 无 | 学习档案与 PPTX 导出 RQ Worker |

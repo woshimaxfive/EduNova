@@ -1,16 +1,10 @@
-EduNova Final Submission
+EduNova
 
-Release version: V1.0
-Submission packaging baseline: 2026-07-20
+Release version: 1.0.0
+Release channel: source
 
-Submission package source baseline:
-211527968e2b2dd1c4ded1e353449ef332ce786f
+This file identifies the public source release line. The authoritative source
+revision is the Git commit or release tag that contains this file.
 
-Runtime launcher baseline:
-beb81e8c037060f2cad288722a393ca357ec11c4
-
-Product feature freeze: 2026-07-19
-Changes after the feature freeze only clarify submission packaging, license notices, and judge-friendly launch information.
-
-This file identifies the exact source baseline for the Software Cup submission.
-No API keys, user data, database data, uploaded materials, or model credentials are included.
+No API keys, user data, database data, uploaded materials, model credentials,
+or private delivery materials are included in a public source release.

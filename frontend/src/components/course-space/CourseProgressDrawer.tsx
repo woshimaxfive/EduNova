@@ -6,7 +6,7 @@ import {
   type CourseWeaknessReviewItem,
   type CourseWeaknessSummary
 } from "../../api/courses";
-import { type CourseLoopSummary, type StudyStep } from "../../features/course-space/a3Loop";
+import { type CourseLoopSummary, type StudyStep } from "../../features/course-space/learningLoop";
 import { AgentTraceDisclosure } from "../evidence/AgentTraceDisclosure";
 import { InlineFeedback } from "../feedback/InlineFeedback";
 import { studyStepStatusLabels } from "./courseSpaceLabels";
@@ -102,7 +102,7 @@ export function CourseProgressDrawer({
           </p>
         </section>
 
-        <section className="course-progress-section" aria-label="A3 学习步骤">
+        <section className="course-progress-section" aria-label="个性化学习步骤">
           <div className="course-progress-section-heading">
             <h3>学习步骤</h3>
             <span>依据真实学习行为更新</span>

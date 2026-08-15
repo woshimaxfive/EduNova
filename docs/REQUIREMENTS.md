@@ -4,15 +4,14 @@
 
 ## 1. 文档目的
 
-本文档用于明确 EduNova 第一版的需求范围、功能边界、验收标准和非功能要求。后续开发、测试、答辩文档、演示视频和开源说明都以本文档作为需求基线。
+本文档用于明确 EduNova 第一版的需求范围、功能边界、验收标准和非功能要求。后续开发、测试、用户文档、演示材料和开源说明都以本文档作为需求基线。
 
 相关文档：
 
-- 产品设计：[superpowers/specs/2026-07-01-edunova-product-design.md](superpowers/specs/2026-07-01-edunova-product-design.md)
+- 架构设计：[ARCHITECTURE.md](ARCHITECTURE.md)
 - 前端与交互设计基线：[UI_UX_DESIGN.md](UI_UX_DESIGN.md)
 - 前端路由与入口体验设计：[FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)
-- 实施计划：[superpowers/plans/2026-07-01-edunova-mvp-implementation.md](superpowers/plans/2026-07-01-edunova-mvp-implementation.md)
-- 中文阅读版：[superpowers/plans/2026-07-01-edunova-mvp-implementation-中文阅读版.md](superpowers/plans/2026-07-01-edunova-mvp-implementation-中文阅读版.md)
+- 当前状态：[STATUS.md](STATUS.md)
 - 测试计划：[TEST_PLAN.md](TEST_PLAN.md)
 
 ## 2. 项目背景
@@ -81,7 +80,7 @@ EduNova 面向高校学生，构建一个 AI 个性化学习空间。它提供�
 14. Markdown 学习档案导出。
 15. 隔离的示例课程快速体验。
 16. Docker Compose 部署。
-17. 开源合规、部署、测试、答辩相关文档。
+17. 开源合规、部署、测试和用户相关文档。
 
 ### 4.2 第一版明确不做
 
@@ -405,9 +404,7 @@ EduNova 面向高校学生，构建一个 AI 个性化学习空间。它提供�
 - 中文直接写入，不使用 `\uXXXX`。
 - 提交前运行编码检查脚本。
 
-## 7. 赛题需求映射
-
-逐句状态与证据缺口见 [CONTEST_REQUIREMENT_MATRIX.md](CONTEST_REQUIREMENT_MATRIX.md)。矩阵不把离线替身、计划能力或未运行的真实 Provider 调用标记为完成。
+## 7. 可复现产品场景
 
 ### 7.1 可复现场景验证（不是用户调研样本）
 
@@ -419,7 +416,7 @@ EduNova 面向高校学生，构建一个 AI 个性化学习空间。它提供�
 
 上述场景必须以无版权课程、临时账号和聚合指标验收；不得由文档措辞推导“已提升学习效率”或“用户满意”。
 
-| 赛题要求 | EduNova 对应设计 |
+| 产品能力 | EduNova 对应设计 |
 | --- | --- |
 | 对话式学习画像 | FR-003 |
 | 不少于 6 个画像维度 | EduNova 使用 8 维画像 |
@@ -431,12 +428,12 @@ EduNova 面向高校学生，构建一个 AI 个性化学习空间。它提供�
 | 防幻觉与安全 | FR-006、FR-007、NFR-003、NFR-004 |
 | 流式输出或进度追踪 | NFR-001、Agent 轨迹、上传进度 |
 | 自行构造高校课程知识库 | FR-004 |
-| 文档规范 | 后续开发说明、测试说明、部署说明 |
+| 文档规范 | 开发说明、测试说明、部署说明 |
 | 开源项目标注 | NFR-006 |
 
 ## 8. 验收口径
 
-EduNova 第一版只有在满足以下条件时，才能认为达到提交基线：
+EduNova 第一版只有在满足以下条件时，才能认为达到发布基线：
 
 1. 浏览器中能完整跑通主演示链路。
 2. 内置数据结构与算法课程可正常学习，资料库不出现系统衍生文件。
@@ -447,4 +444,4 @@ EduNova 第一版只有在满足以下条件时，才能认为达到提交基线
 7. 示例课程和确定性 fallback 能稳定跑通核心体验。
 8. Docker Compose 能启动核心服务。
 9. P0、P1 缺陷清零。
-10. 文档、PPT、视频和提交包完整。
+10. 文档、许可证、发布说明和源码包完整。

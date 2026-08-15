@@ -18,7 +18,7 @@ Phase 3A 开发前必须遵守本文档，避免登录页、注册页、首次�
 登录注册页不是普通表单页，也不是营销落地页。它承担三个任务：
 
 1. 让学生快速进入学习。
-2. 让评委第一眼感受到 EduNova 是一个高级 AI 学习空间。
+2. 让使用者第一眼感受到 EduNova 是一个完整的 AI 学习空间。
 3. 让每个注册学生都能通过隔离的示例课程稳定进入主体验链路。
 
 入口体验必须做到：
@@ -149,7 +149,7 @@ P3.15 可用性收口后还要遵守：
 
 ### 5.1 页面定位
 
-登录页是产品第一眼，但不是营销落地页或比赛概念海报。它应直接表现为可信、安静的产品入口。
+登录页是产品第一眼，但不是营销落地页或概念海报。它应直接表现为可信、安静的产品入口。
 
 视觉表达：
 
@@ -467,9 +467,6 @@ Phase 5 以后：
 - `docs/ARCHITECTURE.md`
 - `docs/REQUIREMENTS.md`
 - `docs/TEST_PLAN.md`
-- `docs/PROJECT_BOARD.md`
-- `docs/superpowers/plans/2026-07-01-edunova-mvp-implementation.md`
-- `docs/superpowers/plans/2026-07-01-edunova-mvp-implementation-中文阅读版.md`
 
 ## 15. 当前实现状态
 
@@ -489,7 +486,7 @@ Phase 5 以后：
 - Phase 4.4 已接真实 `/materials`；`LearningSpacePage` 上传按钮会调用 `/materials/upload` 并刷新 `/dashboard/summary`，`LibraryPage` 调用 `/materials` 渲染当前用户资料列表，上传成功后刷新列表和 summary。
 - Phase 5.1 已接真实 `/courses/from-materials`、`/courses`、`/courses/{course_id}`、`/courses/{course_id}/overview` 和 `/courses/{course_id}/knowledge-points`；`LearningSpacePage` 和 `LibraryPage` 的生成课程浮层会调用真实接口，成功后刷新数据并跳转新课程空间。
 - Phase 14 后，课程生成和 `/rag/search` 只把真实外部 embedding 用作 pgvector SQL 候选；`CourseSpacePage` 会显示混合检索、关键词检索、`local_fallback` 或 `provider_failed`，本地 hash 不作为语义命中。
-- Phase 6.5 已把 `CourseSpacePage` 改造为双模式；2026-07-11 桌面重做后，默认问答使用固定课程栏、限宽正文和固定输入，A3 状态进入学习进度抽屉；课程内容复用 Phase 15 的 React Flow 先修图并使用覆盖式 AI 辅导。
+- Phase 6.5 已把 `CourseSpacePage` 改造为双模式；2026-07-11 桌面重做后，默认问答使用固定课程栏、限宽正文和固定输入，学习闭环状态进入学习进度抽屉；课程内容复用 Phase 15 的 React Flow 先修图并使用覆盖式 AI 辅导。
 - Phase 7.1 已把 `ProfilePage` 接入真实 `/profiles/me`、`/profiles/chat` 和 `/profiles/events`；空画像显示待补充，画像证据来自后端事件，课程问答中的明确困惑信号会沉淀为隐私安全的画像候选事件。
 - Phase 13.1 已把 `CourseSpacePage` 的“课堂协作轨迹”接入真实 `/agents/traces/{trace_id}`；存在 `latest_trace_id` 时读取当前用户自己的 `CourseTutorGraph` trace，空 trace 和读取失败只在回答详情局部提示。
 - `StudioPage` 使用宽屏成果工作台展示六类结构化资源、引用、质量分、Graph 轨迹和 PPTX 状态；成果库切换会更新 `resource_id`，生成与详情抽屉覆盖画布而不改变其宽度。`CourseSpacePage` 既可带课程进入资源工坊，也可在回答下方生成并内联预览资源。

@@ -21,6 +21,7 @@ build
 .claude
 .playwright-cli
 .worktrees
+.planning
 .env
 .env.*
 !.env.example
@@ -33,6 +34,8 @@ coverage
 htmlcov
 playwright-report
 test-results
+tmp
+软件著作权申请资料
 *.log
 __pycache__
 **/__pycache__

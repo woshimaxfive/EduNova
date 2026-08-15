@@ -99,12 +99,12 @@ git status --short --branch
 - 文档不包含真实账号、密钥或私有资料。
 - 浏览器验收记录使用临时账号和示例课程。
 
-## 8. Phase 22 第三方组件说明
+## 8. 第三方组件边界
 
 Docling、Radix、sse-starlette、eventsource-parser、openapi-typescript、OpenAI Python SDK、json-repair、OpenTelemetry、boto3、puremagic、Promptfoo、Ragas、ClamAV、Trivy 与 nginx-unprivileged 只承载通用基础设施。EduNova 保留学习闭环、目录与质量门禁、证据绑定、用户隔离和确定性评分。
 
-Phase 25 固定引入 LangChain 1.3.11，仅使用消息裁剪、`@tool` 和工具 Schema；LangGraph 1.2.7 的 `ToolNode` 执行受控外部搜索。项目不引入 LangChain Agent、Memory、默认 VectorStore 或 LangSmith，避免第三方类型扩散到领域实体和公共 API。两者采用 MIT 许可证，最终发布仍以生成的依赖许可证清单为准。
+项目固定使用 LangChain 1.3.11，仅使用消息裁剪、`@tool` 和工具 Schema；LangGraph 1.2.7 的 `ToolNode` 执行受控外部搜索。项目不引入 LangChain Agent、Memory、默认 VectorStore 或 LangSmith，避免第三方类型扩散到领域实体和公共 API。两者采用 MIT 许可证，最终发布仍以生成的依赖许可证清单为准。
 
-Phase 32 的讯飞原生图片理解适配器直接使用 `websockets` 15.0.1（BSD-3-Clause）承载标准 WebSocket 传输；HMAC签名、凭证隔离、结构合同和学习证据边界仍由 EduNova 维护。
+讯飞原生图片理解适配器直接使用 `websockets` 15.0.1（BSD-3-Clause）承载标准 WebSocket 传输；HMAC 签名、凭证隔离、结构合同和学习证据边界仍由 EduNova 维护。
 
 直接依赖及本地安装包的固定版本、来源链接、声明许可证和项目用途由 `docs/DEPENDENCY_LICENSES.md` 生成；发布镜像还必须复核传递依赖和镜像内许可证文件。ClamAV sidecar 与应用镜像分离部署，发布或再分发前需单独核对其 GPL 条款及镜像包含内容。

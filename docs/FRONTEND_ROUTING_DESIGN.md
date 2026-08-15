@@ -466,7 +466,6 @@ Phase 5 以后：
 - `docs/UI_UX_DESIGN.md`
 - `docs/ARCHITECTURE.md`
 - `docs/REQUIREMENTS.md`
-- `docs/TEST_PLAN.md`
 
 ## 15. 当前实现状态
 

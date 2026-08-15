@@ -11,8 +11,6 @@
 - 架构设计：[ARCHITECTURE.md](ARCHITECTURE.md)
 - 前端与交互设计基线：[UI_UX_DESIGN.md](UI_UX_DESIGN.md)
 - 前端路由与入口体验设计：[FRONTEND_ROUTING_DESIGN.md](FRONTEND_ROUTING_DESIGN.md)
-- 当前状态：[STATUS.md](STATUS.md)
-- 测试计划：[TEST_PLAN.md](TEST_PLAN.md)
 
 ## 2. 项目背景
 

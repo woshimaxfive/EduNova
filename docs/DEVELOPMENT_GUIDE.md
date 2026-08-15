@@ -156,7 +156,7 @@ docker compose down
 agent-browser
 ```
 
-Phase 12.2 的最低验收宽度：
+前端布局的最低验收宽度：
 
 - 桌面宽度。
 - `390px` 移动宽度。
@@ -169,7 +169,7 @@ Phase 12.2 的最低验收宽度：
 
 - API 路径、请求、响应和错误码。
 - 数据库表、字段和关系。
-- 功能范围和里程碑状态。
+- 功能范围和当前行为。
 - 测试方式和验收标准。
 - 部署端口、环境变量和启动流程。
 - 安全、隐私和开源边界。
@@ -177,11 +177,9 @@ Phase 12.2 的最低验收宽度：
 常用同步文件：
 
 - `README.md`
-- `docs/STATUS.md`
 - `docs/API.md`
 - `docs/DATABASE_DESIGN.md`
 - `docs/FRONTEND_ROUTING_DESIGN.md`
-- `docs/TEST_PLAN.md`
 - `docs/DEPLOYMENT.md`
 
 ## 9. 安全边界

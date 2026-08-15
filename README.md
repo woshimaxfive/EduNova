@@ -128,7 +128,7 @@ evals/            离线 AI 质量评测
 scripts/          开发、检查与测试脚本
 docker-compose.yml Docker Compose 启动编排
 .env.example      不含真实密钥的配置示例
-VERSION.txt       最终提交源码基线标识
+VERSION.txt       公开源码发布版本标识
 THIRD_PARTY_NOTICES.md 主要第三方组件与许可证说明
 ```
 
@@ -159,11 +159,7 @@ docker compose config
 
 ## 开源与开发辅助说明
 
-主要第三方组件及许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [依赖许可证清单](docs/DEPENDENCY_LICENSES.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)；安全问题按 [安全策略](SECURITY.md) 私密报告。开发过程中使用 AI Coding 工具进行辅助开发；产品设计、范围决策、代码审查、测试与最终验收由维护者负责。
-
-## 项目背景
-
-EduNova 最初源于第十五届中国软件杯 A3 赛题，现作为独立的开源个性化学习项目维护。仓库不再分发赛题原文、答辩材料或竞赛内部交付文档。
+主要第三方组件及许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [依赖许可证清单](docs/DEPENDENCY_LICENSES.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)；安全问题按 [安全策略](SECURITY.md) 私密报告。
 
 ## 许可证
 

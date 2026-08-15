@@ -1,6 +1,6 @@
 # 参与贡献
 
-感谢你帮助改进 EduNova。提交改动前，请先阅读 [AGENTS.md](AGENTS.md) 中的仓库规则和 [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md)。
+感谢你帮助改进 EduNova。提交改动前，请先阅读 [开发指南](docs/DEVELOPMENT_GUIDE.md)。
 
 ## 基本流程
 

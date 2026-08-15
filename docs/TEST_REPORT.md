@@ -8,9 +8,7 @@
 
 Phase 12.2 的验收记录见：
 
-```text
-docs/evidence/PHASE_12_2_ACCEPTANCE.md
-```
+本报告只记录可由当前仓库测试命令复现的结果；历史阶段验收材料不随公开源码分发。
 
 最新封盘验收见第 9 节；Phase 12.2 的数字仅保留为历史记录。
 
@@ -74,7 +72,7 @@ Phase 12.2 主流程：
 - 桌面宽度。
 - `390px` 移动宽度。
 
-验收结论和已知限制记录在 `docs/evidence/PHASE_12_2_ACCEPTANCE.md`。
+验收结论和已知限制记录在本报告与 `docs/STATUS.md`。
 
 ## 5. 隐私和密钥检查
 
@@ -98,13 +96,13 @@ Phase 12.2 主流程：
 
 这些条目是 Phase 14 的历史限制，不再代表当前实现；当前状态以 `STATUS.md` 和下述 Phase 28 记录为准。
 
-## 7. Phase 28 赛题合规与真实证据收口
+## 7. Phase 28 发布合规与真实证据收口
 
 2026-07-15 实际结果：
 
 - `scripts/test.ps1`：后端 393 项、前端 233 项、离线 AI 评测 10 项通过；编码、Ruff、Alembic `20260715_0025`、OpenAPI 漂移、lint、build 和 Compose 均通过。
 - 隔离 Docker E2E：八服务健康，pgvector 与代码执行隔离通过，Playwright 2 项通过，临时容器和卷已清理。
-- 真实调用：19 次模型加 1 次搜索；发现 1 条合格 YouTube 视频。SSE 首状态 44.2ms、首 Token 5269ms、AIJob 创建 38.2ms、进度 1053.6ms、三类资源批次 85837.3ms；`contest_readiness --require-live` 通过。
+- 真实调用：19 次模型加 1 次搜索；发现 1 条合格 YouTube 视频。SSE 首状态 44.2ms、首 Token 5269ms、AIJob 创建 38.2ms、进度 1053.6ms、三类资源批次 85837.3ms；`release_readiness --require-live` 通过。
 - 供应链：仅运行一次；Python、pnpm/npm 审计无已知漏洞，Trivy 漏洞、密钥和 Dockerfile 配置均为 0 命中。Trivy 未从容器外 Python 环境自动解析许可证，直接依赖许可证由项目脚本独立生成并纳入文档。
 - 浏览器：`agent-browser` 验证桌面和 390px 的学习包、真实外部视频 iframe、原平台链接、报告资源使用概览，均无水平溢出。
 - 隐私清理：两个临时账号及级联课程、资源、互动和报告数据已删除，仓库只保留聚合指标。
@@ -121,7 +119,7 @@ Phase 12.2 主流程：
 - 隔离 Docker E2E 通过八服务健康、pgvector、代码执行隔离和 2 条 Playwright 用例。初次重跑先暴露过期的“全部未评分”断言，随后真实暴露任务托盘遮挡页面主动作；更新部分评分验收并把折叠托盘收为右侧中部 44px 标签后，最终主链通过，临时容器、网络和卷全部删除。
 - `agent-browser` 复核 1440px 与 390px，练习设置可点击、Radix 弹窗可关闭、两种宽度均无水平溢出。两组可信画像路径均为模型增强且无 fallback，在策略和资源模态上至少形成两项可见差异。
 - 精确删除 3 个临时账号、2 份上传副本、5 份导出、23 个 RQ 任务、4 门临时课程和全部级联数据；原始 PDF 的字节数、修改时间和 SHA-256 均与验收前一致，仓库不保存教材文件指纹。
-- 本轮未新增真实性能样本，赛题就绪评测的实时性能证据保持 `evidence_gap`，不使用离线结果替代。
+- 本轮未新增真实性能样本，发布就绪评测的实时性能证据保持 `evidence_gap`，不使用离线结果替代。
 
 ## 9. Phase 53 封盘最终验收
 
@@ -132,7 +130,7 @@ Phase 12.2 主流程：
 - UTF-8 无 BOM、Ruff、ESLint、TypeScript、production build、Alembic `20260718_0032`、非破坏性 OpenAPI 与 Docker Compose 配置均通过。backend 镜像已重建，健康检查返回 `{"status":"ok","service":"edunova-api"}`。
 - `agent-browser` 使用一次性账号完成注册与首页进入；1440px 和 390px 下页面 `scrollWidth` 等于 `clientWidth`，页面和控制台错误为空。测试账号已从数据库精确删除。
 - 隔离 Docker E2E 通过 pgvector 排序/隔离、代码执行隔离和 2 条 Playwright 流程。首次执行暴露 E2E 未覆盖 `SYSTEM_GENERATION_*`，使 rules-only 测试继承本机真实后台生成配置；补齐三类 Worker 的显式占位配置后，规则环境诚实失败且不持久化模板路径，重跑 2 项均通过并清理隔离容器和卷。
-- 最终 Docker + 真实 Provider 的 3 组脱敏样本已输入 `contest_readiness --require-live`，离线质量部分通过且证据完整。非 AI API P95 `32ms`、SSE 首状态 `391ms`、AIJob 创建 `62ms`、首次进度 `16ms`、三类资源批次 `82891ms` 达标；RAG P95 `6485ms`（目标 `<=3000ms`）和模型首 Token P95 `22578ms`（目标 `<=15000ms`）未达标，因此总状态为 `failed`。一次性账号及级联数据已精确删除，输出只保留在被忽略的本地 `output/contest-readiness`，不能写作性能通过。
+- 最终 Docker + 真实 Provider 的 3 组脱敏样本已输入 `release_readiness --require-live`，离线质量部分通过且证据完整。非 AI API P95 `32ms`、SSE 首状态 `391ms`、AIJob 创建 `62ms`、首次进度 `16ms`、三类资源批次 `82891ms` 达标；RAG P95 `6485ms`（目标 `<=3000ms`）和模型首 Token P95 `22578ms`（目标 `<=15000ms`）未达标，因此总状态为 `failed`。一次性账号及级联数据已精确删除，输出只保留在被忽略的本地 `output/release-readiness`，不能写作性能通过。
 - 拆分诊断使用一次预热和三次独立新会话：RAG 端到端中位 `4484ms`、最大 `4641ms`；Tutor 首可见内容中位 `20516ms`、最大 `20844ms`，排除了复用会话历史导致的误读。安全轨迹中路由约 `8.7–9.2s`、检索约 `4.3–4.8s`、外部补充判断约 `2.5s`、最终模型输出约 `3.8–4.5s`；路由每次均发生兼容 Provider 的结构化 JSON 修复调用。临时账号和其全部级联数据已精确删除，诊断输出仍只保留聚合耗时与安全阶段名称。
 - 结构兼容性探测 10 次确认初始与修复输出均为合法 JSON，失败稳定集中于无资源动作时的 `resource_difficulty` 占位。仅在 `resource_action=none` 时归一为默认 `medium`，未知真实资源难度仍严格失败。10 次复测有 9 次首次通过、仅 1 次实际资源动作保留修复；最终 Docker、预热后 3 个独立会话的首可见内容为 `11625–12172ms`（中位 `12141ms`），路由 `3761–3789ms`，检索 `4340–4448ms`，最终模型输出 `3464–3894ms`。RAG 中位 `4468ms`、最大 `5344ms` 仍是未解决风险；临时账号及级联数据已精确删除。
 - 边界回归确认真实资源动作给出 `N/A`、`none` 或 `notapplicable` 难度时不再被静默改写为 `medium`，仍触发原有一次修复与保守降级；只有 `resource_action=none` 可收口无业务意义的占位。RAG 限时分段诊断使用新建账号和内置课程，不保存查询或资料：pgvector `3–12ms`、重排序 `352–656ms`、查询 embedding `722–962ms`；184 分块 `para` 批次约 `2.9–3.1s` 后返回可重试 `provider_unavailable`，而 2 条文档嵌入约 `209ms` 可完成、24 条稳定失败。诊断没有修改产品检索架构；`provider_failed` 继续如实触发关键词 fallback。5 个诊断账号及级联数据已精确删除。

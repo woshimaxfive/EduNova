@@ -10,7 +10,7 @@ from typing import Any
 from backend.evals.run import run_offline
 
 
-DEFAULT_OUTPUT = Path("output/contest-readiness/latest.json")
+DEFAULT_OUTPUT = Path("output/release-readiness/latest.json")
 PERFORMANCE_TARGETS_MS = {
     "non_ai_api_p95": 2_000,
     "rag_retrieval_p95": 3_000,
@@ -78,7 +78,7 @@ def build_report(measurements: dict[str, list[float]] | None = None) -> dict[str
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate privacy-safe EduNova contest readiness evidence.")
+    parser = argparse.ArgumentParser(description="Generate privacy-safe EduNova release readiness evidence.")
     parser.add_argument("--measurements", type=Path)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--require-live", action="store_true")

@@ -15,7 +15,7 @@ import {
 import { type RagSearchResultItem } from "../../api/rag";
 import { type CourseAnswerPanelKind } from "../../components/course-space/CourseClosedLoopActions";
 import { useResponsiveSidebarState } from "../../components/layout/useResponsiveSidebarState";
-import { buildCourseLoopSummary, buildStudySteps, calculateMasteryPercent } from "./a3Loop";
+import { buildCourseLoopSummary, buildStudySteps, calculateMasteryPercent } from "./learningLoop";
 import { invalidateCourseLearningLoop } from "./courseLoopQueries";
 import { useCourseWorkspaceData } from "./useCourseWorkspaceData";
 import { useCourseResourceGeneration } from "./useCourseResourceGeneration";

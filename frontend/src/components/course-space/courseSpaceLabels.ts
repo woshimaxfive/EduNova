@@ -1,4 +1,4 @@
-import { type StudyStepStatus } from "../../features/course-space/a3Loop";
+import { type StudyStepStatus } from "../../features/course-space/learningLoop";
 export { resourceTypeLabels } from "../resources/resourceDisplayMeta";
 
 export const studyStepStatusLabels: Record<StudyStepStatus, string> = {

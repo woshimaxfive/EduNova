@@ -1,0 +1,8 @@
+# Verified test-only placeholders retained in historical commits.
+# Keep each exception fingerprint-specific; do not ignore whole files or commits.
+3ba90e431af122d75774ecacf55de75d75d3c6d9:docker-compose.e2e.yml:generic-api-key:14
+3ba90e431af122d75774ecacf55de75d75d3c6d9:docker-compose.e2e.yml:generic-api-key:28
+59ff84453f28607b48942c0cd809c43d476d23bd:docker-compose.e2e.yml:generic-api-key:40
+70b1fbecb0952281d1d39ae44126c4a3aee5322f:backend/tests/test_material_comparison.py:generic-api-key:95
+8ff4d133d46cc11cc21aec7361c343d11f5949ab:backend/tests/test_practice_assessment.py:generic-api-key:331
+d364b3233d6f2808dd46b390839ec611dfdc36b2:backend/tests/test_materials.py:generic-api-key:100

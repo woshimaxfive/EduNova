@@ -13,7 +13,7 @@ import requests
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Measure final live contest-readiness timings.")
+    parser = argparse.ArgumentParser(description="Measure live release-readiness timings.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
     parser.add_argument("--samples", type=int, default=3, choices=range(1, 11))
     parser.add_argument("--output", type=Path, required=True)

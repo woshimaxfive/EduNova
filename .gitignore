@@ -5,6 +5,8 @@
 .claude/
 .playwright-cli/
 .worktrees/
+.planning/
+tmp/
 
 # Python
 __pycache__/

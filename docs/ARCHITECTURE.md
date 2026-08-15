@@ -14,7 +14,7 @@ EduNova 的架构目标是支持一个可演示、可部署、可开源、可扩
 4. RAG、引用、ReviewAgent 贯穿 AI 输出，降低幻觉风险。
 5. 长任务可追踪，前端不长时间白屏。
 6. 数据按用户和课程隔离，便于后续开源多人使用。
-7. Docker Compose 一键部署，便于比赛提交和同学试用。
+7. Docker Compose 一键部署，便于本地试用和可复现发布。
 
 ## 2. 总体架构
 
@@ -706,7 +706,7 @@ http://localhost:8080/api/health
 5. 大模型 Provider 可替换。
 6. 示例课程和用户上传课程在模型成功时都能跑通核心生成链路；模型失败能诚实恢复、重试且不破坏旧成果。
 7. Docker Compose 能启动核心服务。
-8. 主要设计能在答辩时用图和日志解释清楚。
+8. 主要设计能通过架构图、日志和安全轨迹解释清楚。
 
 ## 14. 画像上下文架构
 
@@ -748,7 +748,7 @@ flowchart LR
 - Pydantic 响应合同是 OpenAPI 唯一来源，生成类型只覆盖传输层；Axios、React Query 和 ViewModel 仍由前端维护。
 - OpenTelemetry 只记录 HTTP、SQL、Redis、队列和任务边界的安全元数据；学生可见 Agent trace 继续保存 EduNova 特有的协作证据。
 - `StorageAdapter` 隔离 Local 与 S3-compatible 实现，数据库继续保存字符串对象键并兼容旧本地路径。
-- LangChain 已作为窄适配层进入生产：只使用消息裁剪、`@tool` 与 `ToolNode`；不使用通用 Agent、Memory、默认 VectorStore 或 LangSmith。LlamaIndex、Haystack、Dify 与 RAGFlow 未进入当前生产链路。`docs/superpowers` 中的整套 LangChain 方案仍是历史规划。
+- LangChain 已作为窄适配层进入生产：只使用消息裁剪、`@tool` 与 `ToolNode`；不使用通用 Agent、Memory、默认 VectorStore 或 LangSmith。LlamaIndex、Haystack、Dify 与 RAGFlow 未进入当前生产链路。
 
 ## 18. Phase 23/24 内置能力策略
 

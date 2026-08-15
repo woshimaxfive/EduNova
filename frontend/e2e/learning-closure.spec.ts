@@ -58,30 +58,30 @@ test("material comparison remains an independent evidence tool", async ({ page }
 
   await page.goto("/app/library");
   const uploadInput = page.getByLabel("上传资料文件");
-  const notesPath = resolve("e2e/fixtures/phase16-ai-notes.md");
-  const examPath = resolve("e2e/fixtures/phase16-exam-guide.md");
+  const notesPath = resolve("e2e/fixtures/ai-notes.md");
+  const examPath = resolve("e2e/fixtures/exam-guide.md");
 
   await uploadInput.setInputFiles(notesPath);
-  await expect(page.getByText("phase16-ai-notes.md").first()).toBeVisible();
-  await confirmUploadedMaterial(page, "phase16-ai-notes.md");
+  await expect(page.getByText("ai-notes.md").first()).toBeVisible();
+  await confirmUploadedMaterial(page, "ai-notes.md");
   await uploadInput.setInputFiles(examPath);
-  await expect(page.getByText("phase16-exam-guide.md").first()).toBeVisible();
-  await confirmUploadedMaterial(page, "phase16-exam-guide.md");
+  await expect(page.getByText("exam-guide.md").first()).toBeVisible();
+  await confirmUploadedMaterial(page, "exam-guide.md");
 
   const generateCourse = page.getByRole("button", { name: "生成课程" }).first();
   await expect(generateCourse).toBeEnabled();
   await generateCourse.click();
   const courseDialog = page.getByRole("dialog", { name: "从资料生成课程" });
   await courseDialog.getByLabel("课程名称").fill("Phase 16 资料对比课");
-  await courseDialog.getByRole("button", { name: /phase16-ai-notes\.md/ }).click();
-  await courseDialog.getByRole("button", { name: /phase16-exam-guide\.md/ }).click();
+  await courseDialog.getByRole("button", { name: /ai-notes\.md/ }).click();
+  await courseDialog.getByRole("button", { name: /exam-guide\.md/ }).click();
   await courseDialog.getByRole("button", { name: "生成课程", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/courses\/\d+$/);
 
   await page.goto("/app/library");
   await page.getByRole("button", { name: "资料对比" }).click();
-  await page.getByRole("button", { name: /phase16-ai-notes\.md/ }).click();
-  await page.getByRole("button", { name: /phase16-exam-guide\.md/ }).click();
+  await page.getByRole("button", { name: /ai-notes\.md/ }).click();
+  await page.getByRole("button", { name: /exam-guide\.md/ }).click();
   const comparisonSetup = page.getByRole("region", { name: "资料对比" });
   await expect(comparisonSetup.getByLabel("对比课程")).toHaveValue(/.+/);
   await comparisonSetup.getByRole("button", { name: "生成资料对比" }).click();

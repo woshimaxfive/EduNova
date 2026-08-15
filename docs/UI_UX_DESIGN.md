@@ -545,8 +545,6 @@ Phase 3 不实现真实 AI、真实上传解析、真实资源生成和复杂图
 - `docs/REQUIREMENTS.md`
 - `docs/ARCHITECTURE.md`
 - `docs/API.md`
-- `docs/TEST_PLAN.md`
-- `docs/RISK_REGISTER.md`
 
 文档与实现不一致时，不能标记 Phase 3 完成。
 

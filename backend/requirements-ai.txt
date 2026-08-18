@@ -4,4 +4,4 @@
 docling-slim[cli,format-docx,format-pdf,format-pptx,models-local]==2.113.0
 # Docling 2.113 initializes these PDF pipeline dependencies even when OCR is disabled.
 scipy==1.17.1
-opencv-python-headless==4.13.0.92
+opencv-python-headless==5.0.0.93

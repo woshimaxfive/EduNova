@@ -59,6 +59,42 @@ def test_sdk_adapter_never_retries_after_first_stream_token() -> None:
     assert calls == 1
 
 
+@pytest.mark.parametrize(
+    ("thinking_type", "expected"),
+    [("disabled", False), ("auto", False), ("enabled", True)],
+)
+def test_qwen_streaming_maps_product_thinking_switch_to_enable_thinking(
+    thinking_type: str,
+    expected: bool,
+) -> None:
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content='data: {"choices":[{"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n',
+        )
+
+    provider = OpenAICompatibleChatProvider(httpx.MockTransport(handler))
+    stream = provider.chat_completion_stream(
+        OpenAICompatibleConfig(
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "test-key",
+            "qwen3.7-plus",
+            thinking_type=thinking_type,
+            reasoning_protocol="qwen_enable_thinking",
+        ),
+        [{"role": "user", "content": "问题"}],
+        3,
+    )
+
+    assert list(stream) == ["OK"]
+    assert bodies[0]["enable_thinking"] is expected
+    assert "thinking" not in bodies[0]
+
+
 def test_openai_native_search_uses_responses_and_returns_verifiable_sources() -> None:
     bodies: list[dict] = []
 

@@ -359,11 +359,21 @@ class OpenAICompatibleChatProvider:
     @staticmethod
     def _thinking_body(config: OpenAICompatibleConfig) -> dict[str, Any] | None:
         profile = config.task_profile
-        if config.reasoning_protocol == "qwen_enable_thinking" and profile is not None:
-            if profile.reasoning == "disabled":
-                return {"enable_thinking": False}
-            if profile.reasoning == "deep":
-                return {"enable_thinking": True}
+        if config.reasoning_protocol == "qwen_enable_thinking":
+            if profile is not None:
+                if profile.reasoning == "disabled":
+                    return {"enable_thinking": False}
+                if profile.reasoning == "deep":
+                    return {"enable_thinking": True}
+                return None
+            # The tutoring stream uses ``auto`` for a normal (non-deep) turn.
+            # Qwen's server default may enable thinking in that case, which
+            # adds several seconds before the first visible token.  EduNova's
+            # explicit deep-thinking switch is the product policy boundary:
+            # only ``enabled`` opts into Qwen thinking; ``auto`` and
+            # ``disabled`` keep routine chat fast and deterministic.
+            if config.thinking_type in {"enabled", "disabled", "auto"}:
+                return {"enable_thinking": config.thinking_type == "enabled"}
             return None
         if config.reasoning_protocol == "spark_thinking" and profile is not None:
             spark_type = "enabled" if profile.reasoning == "deep" else "disabled" if profile.reasoning == "disabled" else "auto"

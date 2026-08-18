@@ -223,14 +223,14 @@ export const EMBEDDING_MODEL_PROVIDER_PRESETS: EmbeddingModelProviderPreset[] = 
   {
     id: "qwen",
     name: "阿里云百炼 · 文本向量",
-    description: "百炼 OpenAI-compatible 向量接口，text-embedding-v4 默认使用 1024 维。",
+    description: "百炼 OpenAI-compatible 向量接口，text-embedding-v4 在本项目默认使用 2048 维。",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     embeddingModel: "text-embedding-v4",
     provider: "openai_compatible",
-    dimension: 1024,
+    dimension: 2048,
     apiKeyLabel: "API Key",
     apiKeyPlaceholder: "填入百炼 API Key",
-    modelsHint: "推荐 text-embedding-v4；支持的维度以百炼当前文档与控制台为准。"
+    modelsHint: "推荐 text-embedding-v4 / 2048 维；支持的维度以百炼当前文档与控制台为准。"
   },
   {
     id: "siliconflow-embedding",
@@ -283,14 +283,13 @@ export const RERANK_MODEL_PROVIDER_PRESETS: RerankModelProviderPreset[] = [
   {
     id: "bailian-rerank",
     name: "阿里云百炼 · Qwen3 Rerank",
-    description: "使用百炼 Workspace 兼容接口对文本候选进行精排。",
-    baseUrl: "https://{workspace_id}.cn-beijing.maas.aliyuncs.com/compatible-api/v1",
+    description: "使用百炼公共兼容接口对文本候选进行精排，和百炼聊天/向量可共用 API Key。",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-api/v1",
     rerankModel: "qwen3-rerank",
     provider: "bailian_rerank",
     apiKeyLabel: "API Key",
     apiKeyPlaceholder: "填入百炼 API Key",
-    modelsHint: "需要填写 Workspace ID；额度以百炼控制台为准。",
-    requiresWorkspaceId: true
+    modelsHint: "公共兼容地址无需填写 Workspace ID；额度以百炼控制台为准。"
   },
   {
     id: "custom",

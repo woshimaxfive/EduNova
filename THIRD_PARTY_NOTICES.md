@@ -12,7 +12,7 @@ EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说
 | FastAPI、Pydantic、SQLAlchemy、Alembic | API、数据校验、ORM 与迁移 | MIT | https://fastapi.tiangolo.com / https://docs.pydantic.dev / https://www.sqlalchemy.org / https://alembic.sqlalchemy.org |
 | LangChain、LangGraph | 模型与状态化工作流适配 | MIT | https://github.com/langchain-ai/langchain / https://github.com/langchain-ai/langgraph |
 | PostgreSQL、pgvector | 关系数据与向量检索 | PostgreSQL License | https://www.postgresql.org / https://github.com/pgvector/pgvector |
-| Redis 7.2、RQ | 队列、进度与后台任务 | BSD-3-Clause、BSD-2-Clause | https://redis.io / https://python-rq.org |
+| Redis 8.0、RQ | 队列、进度与后台任务 | BSD-3-Clause、BSD-2-Clause | https://redis.io / https://python-rq.org |
 | Docling | 文档结构提取 | MIT | https://github.com/docling-project/docling |
 | Pyodide | 隔离式 Python 代码验证运行时 | MPL-2.0 | https://pyodide.org |
 | Nginx | 统一 Web 入口与反向代理 | BSD-2-Clause | https://nginx.org |

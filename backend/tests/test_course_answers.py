@@ -380,6 +380,50 @@ def test_course_review_receives_evidence_text_for_claim_level_grounding() -> Non
     assert "逐条对照" in model.calls[0][0]["content"]
 
 
+def test_course_review_contract_separates_source_facts_from_generated_learning_actions() -> None:
+    model = FakeModelSettingsService(
+        '{"review_status":"passed","confidence":0.9,"risk_flags":[],"safety_summary":"事实引用与学习行动边界清晰。"}'
+    )
+    service = CourseAnswerService(model)
+
+    result = service.review_home(
+        user=object(),
+        question="请比较分类和回归，并制定三步复习方案；所有事实只依据资料。",
+        answer=(
+            "资料明确说明分类预测离散类别，回归预测连续数值。\n\n"
+            "复习建议（基于当前资料生成）：第一步背诵定义，第二步做关键词映射，第三步完成自测。"
+        ),
+        citations=[{**_citation(), "content": "分类预测离散类别，回归预测连续数值。"}],
+    )
+
+    prompt = model.calls[0][0]["content"]
+    assert result is not None
+    assert result.review_status == "passed"
+    assert "复习步骤、练习建议或行动计划" in prompt
+    assert "不得仅因未出现在 sources 中就判定 citation_mismatch" in prompt
+
+
+def test_course_review_with_no_sources_does_not_infer_course_attribution() -> None:
+    model = FakeModelSettingsService(
+        '{"review_status":"passed","confidence":0.8,"risk_flags":[],"safety_summary":"回答未声称课程资料依据。"}'
+    )
+    service = CourseAnswerService(model)
+
+    result = service.review_home(
+        user=object(),
+        question="请比较决策树和神经网络，并制定复习计划。",
+        answer="决策树便于解释，神经网络适合学习复杂模式。复习建议：先比较假设，再做两道练习。",
+        citations=[],
+    )
+
+    payload = json.loads(model.calls[0][-1]["content"])
+    prompt = model.calls[0][0]["content"]
+    assert payload["sources"] == []
+    assert result is not None
+    assert result.risk_flags == []
+    assert "当 sources 为空时" in prompt
+
+
 def test_course_repair_contract_does_not_hide_facts_present_in_evidence() -> None:
     model = FakeModelSettingsService("<final_answer>资料明确说明辛亥革命的局限是社会改造仍不充分。</final_answer>")
     service = CourseAnswerService(model)
@@ -394,6 +438,25 @@ def test_course_repair_contract_does_not_hide_facts_present_in_evidence() -> Non
 
     assert repaired == "资料明确说明辛亥革命的局限是社会改造仍不充分。"
     assert "不得把证据已明确写出的内容误报" in model.calls[0][0]["content"]
+
+
+def test_course_repair_contract_keeps_generated_learning_actions_explicit() -> None:
+    model = FakeModelSettingsService(
+        "<final_answer>资料明确说明分类预测离散类别，回归预测连续数值。\n\n复习建议（基于当前资料生成）：先辨别预测目标，再做分类与回归练习。</final_answer>"
+    )
+    service = CourseAnswerService(model)
+
+    repaired = service.repair_home(
+        user=object(),
+        question="请比较分类和回归并制定复习方案。",
+        draft="分类预测离散类别，回归预测连续数值。复习建议：先辨别预测目标。",
+        citations=[{**_citation(), "content": "分类预测离散类别，回归预测连续数值。"}],
+        risk_flags=["citation_mismatch"],
+    )
+
+    assert repaired is not None
+    assert "复习建议（基于当前资料生成）" in repaired
+    assert "行动计划属于助手生成的学习行动" in model.calls[0][0]["content"]
 
 
 def test_course_answer_stream_includes_conversation_context() -> None:

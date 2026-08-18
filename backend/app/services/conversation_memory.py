@@ -7,6 +7,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from backend.app.models import ChatMessage, ChatSession, ConversationMemoryEntry, User, UserPrivacySetting
 from backend.app.services.embeddings import EmbeddingService
@@ -126,32 +127,57 @@ class ConversationMemoryService:
     ) -> bool:
         if not self.get_settings(user).conversation_memory_enabled or self.embedding_service is None:
             return False
-        if self.db.scalar(
-            select(ConversationMemoryEntry.id).where(
-                ConversationMemoryEntry.assistant_message_id == assistant_message.id
-            )
-        ) is not None:
-            return False
         summary = self._safe_summary(user_message.content, assistant_message.content)
         batch = self.embedding_service.embed_documents(user, [summary])
         if batch.status != "completed" or len(batch.vectors) != 1 or not batch.profile_hash:
             return False
-        self.db.add(
-            ConversationMemoryEntry(
-                user_id=user.id,
-                session_id=session.id,
-                user_message_id=user_message.id,
-                assistant_message_id=assistant_message.id,
-                summary=summary,
-                embedding=batch.vectors[0],
-                embedding_provider=batch.source,
-                embedding_model=batch.model,
-                embedding_dimension=batch.dimension,
-                embedding_profile_hash=batch.profile_hash,
+        existing = self.db.scalar(
+            select(ConversationMemoryEntry).where(
+                ConversationMemoryEntry.assistant_message_id == assistant_message.id
             )
         )
+        if existing is not None:
+            if self._matches_profile(existing, batch):
+                return False
+            # pgvector is intentionally unbounded here so profiles can migrate
+            # between dimensions. Explicitly mark the value dirty before flush;
+            # otherwise SQLAlchemy may compare old/new arrays element by element
+            # and fail when their lengths differ.
+            existing.summary = summary
+            existing.embedding = batch.vectors[0]
+            flag_modified(existing, "embedding")
+            existing.embedding_provider = batch.source
+            existing.embedding_model = batch.model
+            existing.embedding_dimension = batch.dimension
+            existing.embedding_profile_hash = batch.profile_hash
+        else:
+            self.db.add(
+                ConversationMemoryEntry(
+                    user_id=user.id,
+                    session_id=session.id,
+                    user_message_id=user_message.id,
+                    assistant_message_id=assistant_message.id,
+                    summary=summary,
+                    embedding=batch.vectors[0],
+                    embedding_provider=batch.source,
+                    embedding_model=batch.model,
+                    embedding_dimension=batch.dimension,
+                    embedding_profile_hash=batch.profile_hash,
+                )
+            )
         self.db.commit()
         return True
+
+    @staticmethod
+    def _matches_profile(entry: ConversationMemoryEntry, batch: Any) -> bool:
+        return (
+            entry.embedding_provider == batch.source
+            and entry.embedding_model == batch.model
+            and entry.embedding_dimension == batch.dimension
+            and entry.embedding_profile_hash == batch.profile_hash
+            and isinstance(entry.embedding, list)
+            and len(entry.embedding) == batch.dimension
+        )
 
     def schedule_pair(
         self,

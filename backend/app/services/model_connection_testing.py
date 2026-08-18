@@ -283,11 +283,13 @@ class ModelConnectionTester:
                     except (TypeError, ValueError) as exc:
                         raise ModelProviderError("模型未返回完整的结构化结果。", code="invalid_response") from exc
                 else:
+                    capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
                     chat_config = OpenAICompatibleConfig(
                         base_url=runtime.base_url or "",
                         api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
                         chat_model=runtime.chat_model or "",
-                        thinking_type="disabled" if runtime.preset_id == "spark" else None,
+                        reasoning_protocol=capabilities.reasoning_protocol,
+                        thinking_type="disabled" if runtime.preset_id in {"spark", "qwen"} else None,
                     )
                     self.execution_runtime.execute(
                         user_id=user_id,

@@ -447,9 +447,12 @@ class AiJobExecutionMixin:
             return {"embedded_chunk_count": 0, "embedding_dimension": profile.dimension, "warnings": []}
         embedding_service = EmbeddingService(model_service)
         completed = 0
-        for start in range(0, total, 24):
+        # Bailian's text-embedding-v4 endpoint currently accepts at most eight
+        # inputs per request in this deployment. Keeping the reindex batch
+        # bounded also prevents one provider limit from aborting a full rebuild.
+        for start in range(0, total, 8):
             context.check_cancelled()
-            batch_targets = targets[start : start + 24]
+            batch_targets = targets[start : start + 8]
             batch = embedding_service.embed_documents(user, [chunk.content for chunk in batch_targets])
             if len(batch.vectors) != len(batch_targets):
                 raise AiJobValidationError("向量服务未返回完整结果，可稍后重试。")

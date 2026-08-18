@@ -660,7 +660,7 @@ def test_legacy_combined_config_keeps_fields_but_embedding_runtime_is_server_man
     assert provider.calls[1]["config"].api_key == "sk-system-secret"
 
 
-def test_thinking_parameter_is_only_forwarded_to_spark_chat_configs() -> None:
+def test_thinking_parameter_is_forwarded_to_verified_spark_and_qwen_chat_configs() -> None:
     module = load_model_settings_module()
     user = make_user()
 
@@ -685,6 +685,27 @@ def test_thinking_parameter_is_only_forwarded_to_spark_chat_configs() -> None:
     )
     spark_service.chat_completion(user, [{"role": "user", "content": "复杂分析"}], thinking_type="enabled")
 
+    qwen_provider = FakeProvider()
+    qwen_service = module.ModelSettingsService(
+        repository=FakeModelSettingsRepository(settings_by_user={}),
+        settings=make_settings(),
+        provider=qwen_provider,
+        execution_runtime=ImmediateExecutionRuntime(),
+    )
+    qwen_service.create_config(
+        user,
+        module.SaveModelConfigRequest(
+            display_name="百炼回答",
+            preset_id="qwen",
+            provider="openai_compatible",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            api_key="qwen-secret",
+            chat_model="qwen3.7-plus",
+            make_default=True,
+        ),
+    )
+    qwen_service.chat_completion(user, [{"role": "user", "content": "复杂分析"}], thinking_type="auto")
+
     custom_provider = FakeProvider()
     custom_service = module.ModelSettingsService(
         repository=FakeModelSettingsRepository(settings_by_user={}),
@@ -708,6 +729,9 @@ def test_thinking_parameter_is_only_forwarded_to_spark_chat_configs() -> None:
 
     assert spark_provider.calls is not None
     assert spark_provider.calls[0]["config"].thinking_type == "enabled"
+    assert qwen_provider.calls is not None
+    assert qwen_provider.calls[0]["config"].thinking_type == "auto"
+    assert qwen_provider.calls[0]["config"].reasoning_protocol == "qwen_enable_thinking"
     assert custom_provider.calls is not None
     assert custom_provider.calls[0]["config"].thinking_type is None
 
@@ -971,6 +995,8 @@ def test_connection_test_can_target_one_config_and_persist_safe_status() -> None
     assert isinstance(stored.last_tested_at, datetime)
     assert provider.calls is not None
     assert provider.calls[0]["config"].chat_model == "lite"
+    assert provider.calls[0]["config"].thinking_type == "disabled"
+    assert provider.calls[0]["config"].reasoning_protocol == "spark_thinking"
 
 
 def test_connection_tests_persist_chat_and_embedding_independently() -> None:
@@ -1047,6 +1073,7 @@ def test_structured_connection_test_persists_verified_capability_and_disables_qw
     assert isinstance(result["latency_ms"], int)
     assert config.task_profile.reasoning == "disabled"
     assert config.task_profile.output_mode == "json_object"
+    assert config.reasoning_protocol == "qwen_enable_thinking"
     assert summary["structured_output_verified"] is True
     assert summary["supports_reasoning_control"] is True
 

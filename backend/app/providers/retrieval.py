@@ -238,10 +238,14 @@ class HttpRerankProvider:
     def _url(config: RerankRequestConfig) -> str:
         base = config.base_url.rstrip("/")
         if config.provider == "bailian_rerank":
-            if not config.workspace_id:
+            parsed = urlparse(base)
+            is_public_dashscope = parsed.hostname in {"dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com"}
+            if "{workspace_id}" in base and not config.workspace_id:
                 raise ModelProviderError("百炼重排序缺少 Workspace ID。", code="not_configured")
             if "{workspace_id}" in base:
                 base = base.replace("{workspace_id}", config.workspace_id)
+            elif not config.workspace_id and not is_public_dashscope:
+                raise ModelProviderError("百炼重排序缺少 Workspace ID。", code="not_configured")
             return f"{base}/reranks"
         return f"{base}/rerank"
 

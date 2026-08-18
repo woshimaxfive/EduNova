@@ -36,7 +36,7 @@ describe("model provider presets", () => {
     expect(getEmbeddingProviderPreset("qwen")).toMatchObject({
       baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
       embeddingModel: "text-embedding-v4",
-      dimension: 1024
+      dimension: 2048
     });
     expect(getEmbeddingProviderPreset("xfyun-embedding")).toMatchObject({
       provider: "xfyun_embedding",
@@ -48,6 +48,11 @@ describe("model provider presets", () => {
       dimension: 1024
     });
     expect(getRerankProviderPreset("siliconflow-rerank").rerankModel).toBe("BAAI/bge-reranker-v2-m3");
+    expect(getRerankProviderPreset("bailian-rerank")).toMatchObject({
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-api/v1",
+      rerankModel: "qwen3-rerank",
+      provider: "bailian_rerank"
+    });
   });
 
   it("infers legacy saved connections without mixing unsupported provider capabilities", () => {
@@ -61,6 +66,7 @@ describe("model provider presets", () => {
     expect(inferRerankProviderPresetId("https://api.siliconflow.cn/v1", "siliconflow-rerank")).toBe(
       "siliconflow-rerank"
     );
+    expect(inferRerankProviderPresetId("https://dashscope.aliyuncs.com/compatible-api/v1")).toBe("bailian-rerank");
     expect(inferRerankProviderPresetId(null, null)).toBe("none");
   });
 });

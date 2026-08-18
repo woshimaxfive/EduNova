@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from typing import Iterator, Literal
+from urllib.parse import urlparse
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -600,11 +601,13 @@ class ModelSettingsService:
         runtime = self.resolve_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
             raise ModelNotConfiguredError(MODEL_NOT_CONFIGURED_MESSAGE)
+        capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
         config = OpenAICompatibleConfig(
             base_url=runtime.base_url,
             api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
             chat_model=runtime.chat_model,
-            thinking_type=thinking_type if runtime.preset_id == "spark" else None,
+            reasoning_protocol=capabilities.reasoning_protocol,
+            thinking_type=thinking_type if runtime.preset_id in {"spark", "qwen"} else None,
         )
         return self.execution_runtime.execute(
             user_id=user.id,
@@ -704,11 +707,13 @@ class ModelSettingsService:
         runtime = self.resolve_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
             raise ModelNotConfiguredError(MODEL_NOT_CONFIGURED_MESSAGE)
+        capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
         config = OpenAICompatibleConfig(
             base_url=runtime.base_url,
             api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
             chat_model=runtime.chat_model,
-            thinking_type=thinking_type if runtime.preset_id == "spark" else None,
+            reasoning_protocol=capabilities.reasoning_protocol,
+            thinking_type=thinking_type if runtime.preset_id in {"spark", "qwen"} else None,
         )
         return self.execution_runtime.execute_stream(
             user_id=user.id,
@@ -1244,7 +1249,9 @@ class ModelSettingsService:
         if normalized not in {"siliconflow_rerank", "bailian_rerank", "openai_compatible"}:
             return False
         if normalized == "bailian_rerank" and not cls._is_real_value(workspace_id):
-            return False
+            parsed = urlparse((base_url or "").strip())
+            if parsed.hostname not in {"dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com"}:
+                return False
         return cls._is_real_value(base_url) and cls._is_real_api_key(api_key) and cls._is_real_value(model)
 
     @staticmethod

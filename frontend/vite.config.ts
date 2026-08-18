@@ -34,6 +34,87 @@ export default defineConfig({
       }
     }
   },
+  build: {
+    // Mermaid's generated parser is one lazy-loaded third-party module
+    // (currently about 663 kB) that cannot be split internally. Keep the
+    // warning just above that measured boundary so future growth remains
+    // visible while the initial and other optional chunks stay actionable.
+    chunkSizeWarningLimit: 680,
+    // Keep heavyweight optional capabilities out of the route and shared
+    // chunks. These groups are deliberately package-based so a dependency
+    // upgrade cannot silently pull a new feature into the initial bundle.
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: "echarts",
+              test: /node_modules[\\/]echarts[\\/]/,
+              priority: 30,
+              minSize: 8 * 1024,
+              maxSize: 320 * 1024,
+              entriesAware: false,
+              includeDependenciesRecursively: false
+            },
+            {
+              name: "mermaid",
+              test: /node_modules[\\/]mermaid[\\/]/,
+              priority: 30,
+              minSize: 8 * 1024,
+              maxSize: 320 * 1024,
+              entriesAware: false,
+              includeDependenciesRecursively: false
+            },
+            {
+              name: "mermaid-parser",
+              test: (moduleId) => moduleId.includes("@mermaid-js") && moduleId.includes("parser"),
+              priority: 30,
+              minSize: 8 * 1024,
+              maxSize: 320 * 1024,
+              entriesAware: false,
+              includeDependenciesRecursively: false
+            },
+            {
+              name: "markmap",
+              test: /node_modules[\\/]markmap-(?:lib|view)[\\/]/,
+              priority: 30,
+              minSize: 8 * 1024,
+              maxSize: 260 * 1024,
+              entriesAware: false,
+              includeDependenciesRecursively: false
+            },
+            {
+              name: "code-editor",
+              test: /node_modules[\\/](@codemirror|@uiw)[\\/]/,
+              priority: 30,
+              minSize: 8 * 1024,
+              maxSize: 260 * 1024,
+              entriesAware: false,
+              includeDependenciesRecursively: false
+            },
+            {
+              name: "graph-runtime",
+              test: /node_modules[\\/]cytoscape[\\/]/,
+              priority: 30,
+              minSize: 8 * 1024,
+              maxSize: 260 * 1024,
+              entriesAware: false,
+              includeDependenciesRecursively: false
+            },
+            {
+              name: "math-rendering",
+              test: /node_modules[\\/]katex[\\/]/,
+              priority: 20,
+              minSize: 8 * 1024,
+              maxSize: 260 * 1024,
+              entriesAware: false,
+              includeDependenciesRecursively: false
+            }
+          ]
+        }
+      }
+    }
+  },
   test: {
     environment: "jsdom",
     globals: true,

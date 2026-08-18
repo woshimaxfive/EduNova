@@ -169,13 +169,27 @@ def test_siliconflow_and_bailian_rerank_urls_and_order() -> None:
         2,
         5,
     )
+    public_bailian_items = provider.rerank(
+        RerankRequestConfig(
+            provider="bailian_rerank",
+            base_url="https://dashscope.aliyuncs.com/compatible-api/v1",
+            api_key="key",
+            model="qwen3-rerank",
+        ),
+        "查询",
+        ["文档一", "文档二", "文档三"],
+        2,
+        5,
+    )
 
     assert urls == [
         "https://api.siliconflow.cn/v1/rerank",
         "https://ws-123.cn-beijing.maas.aliyuncs.com/compatible-api/v1/reranks",
+        "https://dashscope.aliyuncs.com/compatible-api/v1/reranks",
     ]
     assert [(item.index, item.score) for item in silicon_items] == [(1, 0.91), (0, 0.73)]
     assert bailian_items == silicon_items
+    assert public_bailian_items == silicon_items
 
 
 def test_rerank_provider_uses_rerank_specific_safe_errors() -> None:

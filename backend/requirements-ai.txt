@@ -1,7 +1,7 @@
 -r requirements.txt
 
 # Isolated to the AI worker because PDF layout models materially increase image size.
-docling-slim[cli,format-docx,format-pdf,format-pptx,models-local]==2.113.0
+docling-slim[cli,format-docx,format-pdf,format-pptx,models-local]==2.120.1
 # Docling 2.113 initializes these PDF pipeline dependencies even when OCR is disabled.
-scipy==1.17.1
+scipy==1.18.0
 opencv-python-headless==4.13.0.92

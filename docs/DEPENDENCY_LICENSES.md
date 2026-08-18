@@ -1,6 +1,6 @@
 # 直接依赖许可证清单
 
-本文件由 `scripts/generate_dependency_licenses.py` 从固定依赖、本地包元数据和已核对的项目元数据生成；传递依赖由供应链检查继续扫描。版本标记为“未安装”的依赖需要在对应构建环境中确认实际解析版本。
+本文件由 `scripts/generate_dependency_licenses.py` 从依赖声明、本地包元数据和已核对的项目元数据生成；传递依赖由供应链检查继续扫描。版本直接取自对应 requirements 文件；标记为“未固定”的依赖需要在发布前明确版本。
 
 | Python 依赖 | 版本 | 来源 | 声明许可证 | 用途 |
 | --- | --- | --- | --- | --- |
@@ -15,7 +15,7 @@
 | langchain | 1.3.11 | [langchain](https://github.com/langchain-ai/langchain) | MIT | 项目直接运行、测试或构建依赖 |
 | langgraph | 1.2.7 | [langgraph](https://github.com/langchain-ai/langgraph/tree/main/libs/langgraph) | MIT | 学习闭环状态图编排 |
 | openai | 2.45.0 | [openai](https://github.com/openai/openai-python) | Apache-2.0 | OpenAI-compatible 模型协议适配 |
-| opencv-python-headless | 未安装 | [opencv-python-headless](https://github.com/opencv/opencv-python) | MIT build scripts; bundled OpenCV Apache-2.0; bundled third-party licenses vary | 项目直接运行、测试或构建依赖 |
+| opencv-python-headless | 4.13.0.92 | [opencv-python-headless](https://github.com/opencv/opencv-python) | MIT build scripts; bundled OpenCV Apache-2.0; bundled third-party licenses vary | 项目直接运行、测试或构建依赖 |
 | opentelemetry-exporter-otlp-proto-http | 1.43.0 | [opentelemetry-exporter-otlp-proto-http](https://github.com/open-telemetry/opentelemetry-python) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | opentelemetry-instrumentation-fastapi | 0.64b0 | [opentelemetry-instrumentation-fastapi](https://github.com/open-telemetry/opentelemetry-python-contrib) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | opentelemetry-instrumentation-httpx | 0.64b0 | [opentelemetry-instrumentation-httpx](https://github.com/open-telemetry/opentelemetry-python-contrib) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
@@ -35,12 +35,12 @@
 | python-docx | 1.2.0 | [python-docx](https://github.com/python-openxml/python-docx) | MIT | 项目直接运行、测试或构建依赖 |
 | python-multipart | 0.0.32 | [python-multipart](https://github.com/Kludex/python-multipart) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | python-pptx | 1.0.2 | [python-pptx](https://github.com/scanny/python-pptx) | MIT | 项目直接运行、测试或构建依赖 |
-| ragas | 未安装 | [ragas](https://github.com/vibrantlabsai/ragas) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
+| ragas | 0.4.3 | [ragas](https://github.com/vibrantlabsai/ragas) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | redis | 8.0.1 | [redis](https://github.com/redis/redis-py) | MIT | 项目直接运行、测试或构建依赖 |
 | reportlab | 5.0.0 | [reportlab](https://www.reportlab.com/) | BSD license (see license.txt for details), Copyright (c) 2000-2025, ReportLab Inc. | 项目直接运行、测试或构建依赖 |
 | rq | 2.10.0 | [rq](https://github.com/rq/rq) | BSD-2-Clause | 项目直接运行、测试或构建依赖 |
 | ruff | 0.15.20 | [ruff](https://github.com/astral-sh/ruff) | MIT | 项目直接运行、测试或构建依赖 |
-| scipy | 未安装 | [scipy](https://github.com/scipy/scipy) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
+| scipy | 1.17.1 | [scipy](https://github.com/scipy/scipy) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
 | SQLAlchemy | 2.0.51 | [SQLAlchemy](https://www.sqlalchemy.org) | MIT | 数据访问与事务 |
 | sse-starlette | 3.4.5 | [sse-starlette](https://github.com/sysid/sse-starlette) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
 | uvicorn | 0.49.0 | [uvicorn](https://github.com/Kludex/uvicorn) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |

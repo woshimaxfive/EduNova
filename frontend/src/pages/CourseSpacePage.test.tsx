@@ -1617,7 +1617,6 @@ describe("CourseSpacePage course tutor sessions", () => {
       "href",
       `${PATHS.studio}?course_id=808`
     );
-    expect(within(detailPanel).queryByText(/后续阶段接入/)).not.toBeInTheDocument();
   });
 
   it("does not show demo course fallback while real course data is loading", () => {

@@ -19,7 +19,7 @@ flowchart LR
     A --> S
 ```
 
-系统由八个 Compose 服务组成：`postgres`、`redis`、`backend`、`ai-worker`、`export-worker`、`code-verifier`、`frontend` 和 `nginx`。本地 Web 入口通过 Nginx 提供，Backend 端口可用于查看 API 文档；生产环境应只公开 Nginx，数据库、队列、Backend 和代码验证服务保留在内部网络。
+系统由八个默认 Compose 服务组成：`postgres`、`redis`、`backend`、`ai-worker`、`export-worker`、`code-verifier`、`frontend` 和 `nginx`；启用 `security` profile 后会增加一个可选的 ClamAV 扫描服务。本地 Web 入口通过 Nginx 提供，Backend 端口可用于查看 API 文档；生产环境应只公开 Nginx，数据库、队列、Backend 和代码验证服务保留在内部网络。
 
 ## 2. 前端
 

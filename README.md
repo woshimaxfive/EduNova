@@ -9,6 +9,8 @@ EduNova 是面向高校学生的个性化学习系统。它把课程资料、学
 → 练习诊断与薄弱点 → 再测与下一行动 → 学习报告与课程归档
 ```
 
+![EduNova 首页概览](docs/assets/edunova-home.png)
+
 ## 核心能力
 
 - **对话式动态画像**：通过自然语言与学习行为形成 8 个维度的学习画像，并区分全局偏好与课程级目标、基础和薄弱点。
@@ -132,6 +134,18 @@ VERSION.txt       公开源码发布版本标识
 THIRD_PARTY_NOTICES.md 主要第三方组件与许可证说明
 ```
 
+## 文档导航
+
+- [用户指南](docs/USER_GUIDE.md)：从注册、建课到学习闭环的使用路径
+- [系统架构](docs/ARCHITECTURE.md)：服务边界、数据流和核心约束
+- [API 文档](docs/API.md)：HTTP 接口和调用合同
+- [数据库设计](docs/DATABASE_DESIGN.md)：实体、迁移和隔离规则
+- [Agent 设计](docs/AGENT_DESIGN.md)：LangGraph 工作流与质量门禁
+- [RAG 设计](docs/RAG_DESIGN.md)：课程检索、引用和降级策略
+- [部署指南](docs/DEPLOYMENT.md)：本地运行与生产加固
+- [隐私说明](docs/PRIVACY.md) 与 [安全策略](docs/SECURITY.md)：数据边界和安全报告
+- [依赖许可证清单](docs/DEPENDENCY_LICENSES.md)：直接依赖的版本与许可证
+
 ## 验证命令
 
 ```powershell
@@ -154,6 +168,8 @@ docker compose config
 .git/、.env、node_modules/、.venv/、dist/、storage/、var/、output/
 缓存、日志、真实上传资料、导出文件、截图、测试账号数据、API Key
 ```
+
+`docs/assets/` 中的公开产品预览图是文档的一部分，可以保留；其他运行截图和测试资料不要打包。
 
 建议从稳定 tag 或经过验证的 `main` 提交导出源码包，确保发布内容与 GitHub 版本一致。
 

@@ -1,11 +1,3 @@
-.superpowers/
-.agents/
-.codex/
-.codegraph/
-.claude/
-.playwright-cli/
-.worktrees/
-.planning/
 tmp/
 
 # Python
@@ -43,6 +35,3 @@ var/uploads/
 *.log
 logs/
 output/
-
-# Local software copyright application materials
-软件著作权申请资料/

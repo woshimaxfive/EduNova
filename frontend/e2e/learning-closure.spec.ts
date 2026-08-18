@@ -76,7 +76,7 @@ test("material comparison remains an independent evidence tool", async ({ page }
   await courseDialog.getByRole("button", { name: /ai-notes\.md/ }).click();
   await courseDialog.getByRole("button", { name: /exam-guide\.md/ }).click();
   await courseDialog.getByRole("button", { name: "生成课程", exact: true }).click();
-  await expect(page).toHaveURL(/\/app\/courses\/\d+$/);
+  await expect(page).toHaveURL(/\/app\/courses\/\d+(?:\?.*)?$/);
 
   await page.goto("/app/library");
   await page.getByRole("button", { name: "资料对比" }).click();

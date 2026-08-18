@@ -27,14 +27,21 @@ docker compose up -d --build
 docker compose ps
 ```
 
-首次启动前必须修改 `.env` 中的数据库密码、JWT 密钥和模型配置加密密钥。需要 AI 功能时，再配置相应 Provider。
+Windows 一键启动会为本机 `.env` 自动生成数据库密码、JWT 密钥和模型配置加密密钥。手动启动时必须自行修改这些占位值；需要 AI 功能时，再配置相应 Provider。
+
+若升级前已创建 PostgreSQL 数据卷，先初始化 `.env`，再执行以下命令同步数据库角色密码。该操作不会删除课程、用户或其他数据库内容：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\initialize_env.ps1 -Path .env
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\sync_postgres_password.ps1 -Path .env
+```
 
 ## 3. 服务
 
 | 服务 | 默认实现 | 用途 |
 | --- | --- | --- |
 | `postgres` | `pgvector/pgvector:pg16` | 关系数据和向量检索 |
-| `redis` | `redis:7.2-alpine` | RQ 队列和短期运行状态 |
+| `redis` | `redis:8.0-alpine` | RQ 队列和短期运行状态 |
 | `backend` | FastAPI | HTTP API、SSE 和领域服务 |
 | `ai-worker` | RQ Worker | 资料解析与 AI 工作流 |
 | `export-worker` | RQ Worker | 文档、课件和报告导出 |
@@ -43,7 +50,7 @@ docker compose ps
 | `nginx` | Nginx | 统一入口与反向代理 |
 | `clamav` | `clamav/clamav:1.4`（`security` profile） | 可选的恶意文件扫描 |
 
-生产部署只需公开 Nginx 端口。PostgreSQL、Redis、Backend、Worker 和代码验证服务应留在内部网络。
+默认宿主机端口只绑定 `127.0.0.1`。生产部署只需通过受保护的入口公开 Nginx；PostgreSQL、Redis、Backend、Worker 和代码验证服务应留在内部网络。
 
 ## 4. 必填配置
 

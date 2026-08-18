@@ -10,10 +10,13 @@ if not exist ".env" (
   echo First run: creating a local .env from .env.example...
   copy /y ".env.example" ".env" >nul
   if errorlevel 1 goto :env_failed
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='.env'; $t=Get-Content -Raw -Encoding utf8 $p; $jwt=[Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 })); $fernet=([Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))).Replace('+','-').Replace('/','_'); $t=$t.Replace('JWT_SECRET=change-this-local-development-secret', 'JWT_SECRET='+$jwt).Replace('MODEL_SETTINGS_ENCRYPTION_KEY=replace-with-fernet-key', 'MODEL_SETTINGS_ENCRYPTION_KEY='+$fernet); [System.IO.File]::WriteAllText((Join-Path (Get-Location) $p), $t, (New-Object System.Text.UTF8Encoding($false)))"
-  if errorlevel 1 goto :env_failed
-  echo Local random security values were generated. Add your own AI provider credentials to .env to enable AI features.
 )
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\initialize_env.ps1" -Path ".env"
+if errorlevel 1 goto :env_failed
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\sync_postgres_password.ps1" -Path ".env"
+if errorlevel 1 goto :env_failed
+echo Add your own AI provider credentials to .env to enable AI features.
 
 echo.
 echo Building and starting EduNova. The first run downloads images, dependencies, and document models...

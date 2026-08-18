@@ -21,6 +21,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      - dependency-name: typescript
+        versions:
+          - ">=6.0.0"
 
   - package-ecosystem: pip
     directory: "/backend"

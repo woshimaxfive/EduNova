@@ -21,7 +21,7 @@ opentelemetry-instrumentation-sqlalchemy==0.64b0
 opentelemetry-instrumentation-redis==0.64b0
 boto3==1.43.47
 puremagic==2.2.0
-cryptography==49.0.0
+cryptography==50.0.0
 langchain==1.3.11
 langgraph==1.2.7
 pypdf==6.14.2

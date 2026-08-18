@@ -10,14 +10,16 @@ from backend.app.db.session import engine
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
     application = FastAPI(
-        title="EduNova",
+        title=settings.app_name,
         version="1.0.0",
+        debug=settings.app_debug,
     )
     application.add_exception_handler(ApiError, api_error_handler)
     application.add_exception_handler(DomainError, api_error_handler)
     application.include_router(api_router, prefix="/api/v1")
-    configure_observability(application, engine, get_settings())
+    configure_observability(application, engine, settings)
 
     @application.get("/api/health", tags=["health"], response_model=HealthResponse)
     async def health() -> dict[str, str]:

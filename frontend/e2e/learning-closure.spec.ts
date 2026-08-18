@@ -17,7 +17,7 @@ test("rules-only Docker environment fails honestly instead of persisting generat
   test.setTimeout(240_000);
   await page.goto("/register");
   await page.getByLabel("昵称").fill("规则模式端到端账号");
-  await page.getByLabel("账号").fill("phase38_e2e");
+  await page.getByLabel("账号").fill("e2e_learning_a");
   await page.getByLabel("密码", { exact: true }).fill("RulesOnlyTest2026");
   await page.getByRole("textbox", { name: "确认密码 显示确认密码" }).fill("RulesOnlyTest2026");
   await page.getByRole("radio", { name: /数据结构与算法/ }).check();
@@ -50,7 +50,7 @@ test("material comparison remains an independent evidence tool", async ({ page }
   test.setTimeout(240_000);
   await page.goto("/register");
   await page.getByLabel("昵称").fill("资料对比端到端账号");
-  await page.getByLabel("账号").fill("phase16_e2e");
+  await page.getByLabel("账号").fill("e2e_learning_b");
   await page.getByLabel("密码", { exact: true }).fill("MaterialCompareTest2026");
   await page.getByRole("textbox", { name: "确认密码 显示确认密码" }).fill("MaterialCompareTest2026");
   await page.getByRole("button", { name: "创建并进入" }).click();

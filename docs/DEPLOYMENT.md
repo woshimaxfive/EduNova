@@ -41,6 +41,7 @@ docker compose ps
 | `code-verifier` | Pyodide 服务 | 隔离执行受支持的 Python 代码 |
 | `frontend` | React 静态站点 | 浏览器界面 |
 | `nginx` | Nginx | 统一入口与反向代理 |
+| `clamav` | `clamav/clamav:1.4`（`security` profile） | 可选的恶意文件扫描 |
 
 生产部署只需公开 Nginx 端口。PostgreSQL、Redis、Backend、Worker 和代码验证服务应留在内部网络。
 

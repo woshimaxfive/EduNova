@@ -86,8 +86,20 @@ def _project_urls(package: Any) -> dict[str, str]:
     return result
 
 
+def _declared_requirement(value: str) -> tuple[str, str]:
+    """Return a requirement name and its exact declared version when available."""
+    match = re.match(
+        r"^([A-Za-z0-9][A-Za-z0-9_.-]*)(?:\[[^\]]+\])?\s*==\s*([^;#\s]+)",
+        value,
+    )
+    if match:
+        return match.group(1), match.group(2)
+    return re.split(r"[<>=!~\[]", value, maxsplit=1)[0].strip(), "未固定"
+
+
 def python_dependencies() -> list[tuple[str, str, str, str, str]]:
     names: set[str] = set()
+    declared_versions: dict[str, str] = {}
     for filename in (
         "requirements.txt",
         "requirements-ai.txt",
@@ -98,9 +110,12 @@ def python_dependencies() -> list[tuple[str, str, str, str, str]]:
             value = line.strip()
             if not value or value.startswith(("#", "-r")):
                 continue
-            names.add(re.split(r"[<>=!~\[]", value, maxsplit=1)[0].strip())
+            name, version = _declared_requirement(value)
+            names.add(name)
+            declared_versions[name.casefold()] = version
     rows = []
     for name in sorted(names, key=str.casefold):
+        declared_version = declared_versions.get(name.casefold(), "未固定")
         try:
             package = metadata.metadata(name)
             project_urls = _project_urls(package)
@@ -113,7 +128,7 @@ def python_dependencies() -> list[tuple[str, str, str, str, str]]:
             rows.append(
                 (
                     name,
-                    metadata.version(name),
+                    declared_version,
                     source_link,
                     license_name,
                     _purpose(name),
@@ -121,7 +136,7 @@ def python_dependencies() -> list[tuple[str, str, str, str, str]]:
             )
         except metadata.PackageNotFoundError:
             source_link, license_name = _resolved_metadata(name, "", "需在构建镜像中复核")
-            rows.append((name, "未安装", source_link, license_name, _purpose(name)))
+            rows.append((name, declared_version, source_link, license_name, _purpose(name)))
     return rows
 
 
@@ -167,7 +182,7 @@ def main() -> None:
     lines = [
         "# 直接依赖许可证清单",
         "",
-        "本文件由 `scripts/generate_dependency_licenses.py` 从固定依赖、本地包元数据和已核对的项目元数据生成；传递依赖由供应链检查继续扫描。版本标记为“未安装”的依赖需要在对应构建环境中确认实际解析版本。",
+        "本文件由 `scripts/generate_dependency_licenses.py` 从依赖声明、本地包元数据和已核对的项目元数据生成；传递依赖由供应链检查继续扫描。版本直接取自对应 requirements 文件；标记为“未固定”的依赖需要在发布前明确版本。",
         "",
         "| Python 依赖 | 版本 | 来源 | 声明许可证 | 用途 |",
         "| --- | --- | --- | --- | --- |",

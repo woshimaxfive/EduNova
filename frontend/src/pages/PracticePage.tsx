@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { getKnowledgePoints, listCourses } from "../api/courses";
+import { getApiErrorMessage } from "../api/errors";
 import { createIdempotencyKey, createPracticeGenerationJob, type AiJob } from "../api/aiJobs";
 import {
   getLatestPracticeSession,
@@ -73,6 +74,10 @@ export function PracticePage() {
   const [practiceJobId, setPracticeJobId] = useState<string | null>(null);
   const lastSavedDraftRef = useRef("");
   const activeDraftSessionRef = useRef("");
+  const draftRevisionRef = useRef(0);
+  const latestDraftSnapshotRef = useRef("");
+  const draftRequestSequenceRef = useRef(0);
+  const draftAbortRef = useRef<AbortController | null>(null);
   const handledPracticeJobRef = useRef<string | null>(null);
   const { jobs, trackJob } = useAiJobs();
   const requestedSessionId = Number(searchParams.get("session_id") ?? "");
@@ -210,6 +215,8 @@ export function PracticePage() {
     setSearchParams(nextParams, { replace: true });
   }, [hasRequestedSession, restoredSession, searchParams, setSearchParams]);
 
+  useEffect(() => () => draftAbortRef.current?.abort(), []);
+
   useEffect(() => {
     if (!activeSession?.questions.length || activeSession.questions.some((question) => question.id === requestedQuestionId)) return;
     const nextParams = new URLSearchParams(searchParams);
@@ -224,19 +231,45 @@ export function PracticePage() {
     if (!activeSession || activeSession.status !== "in_progress") return;
     const snapshot = JSON.stringify(effectiveAnswers);
     if (activeDraftSessionRef.current !== activeSession.id) {
+      draftAbortRef.current?.abort();
       activeDraftSessionRef.current = activeSession.id;
       lastSavedDraftRef.current = snapshot;
+      latestDraftSnapshotRef.current = snapshot;
+      draftRevisionRef.current = activeSession.draft_revision ?? 0;
+      draftRequestSequenceRef.current = 0;
       return;
     }
+    latestDraftSnapshotRef.current = snapshot;
     if (snapshot === lastSavedDraftRef.current) return;
     const timeout = window.setTimeout(() => {
+      const revision = draftRevisionRef.current + 1;
+      const requestSequence = draftRequestSequenceRef.current + 1;
+      const controller = new AbortController();
+      draftAbortRef.current?.abort();
+      draftAbortRef.current = controller;
+      draftRevisionRef.current = revision;
+      draftRequestSequenceRef.current = requestSequence;
       setDraftStatus("saving");
       void savePracticeDraft(Number(activeSession.id), {
+        revision,
         answers: activeSession.questions.map((question) => ({ question_id: question.id, answer_text: effectiveAnswers[question.id] ?? "" }))
-      }).then(() => {
+      }, { signal: controller.signal }).then(() => {
+        if (
+          activeDraftSessionRef.current !== activeSession.id
+          || latestDraftSnapshotRef.current !== snapshot
+          || draftRequestSequenceRef.current !== requestSequence
+        ) return;
         lastSavedDraftRef.current = snapshot;
         setDraftStatus("saved");
-      }).catch(() => setDraftStatus("error"));
+      }).catch((error: unknown) => {
+        if (
+          controller.signal.aborted
+          || activeDraftSessionRef.current !== activeSession.id
+          || draftRequestSequenceRef.current !== requestSequence
+        ) return;
+        setDraftStatus("error");
+        setLocalError(getApiErrorMessage(error, "草稿保存失败，当前输入仍保留。"));
+      });
     }, 650);
     return () => window.clearTimeout(timeout);
   }, [activeSession, effectiveAnswers]);
@@ -262,10 +295,12 @@ export function PracticePage() {
   const submitMutation = useMutation({
     mutationFn: () => {
       if (!activeSession) throw new Error("missing session");
+      draftAbortRef.current?.abort();
       return submitPracticeAnswers(Number(activeSession.id), {
         answers: activeSession.questions.map((question) => ({
           question_id: question.id,
-          answer_text: isAnswered(effectiveAnswers[question.id]) ? effectiveAnswers[question.id] : "未作答"
+          answer_text: effectiveAnswers[question.id] ?? "",
+          answered: isAnswered(effectiveAnswers[question.id])
         }))
       });
     },
@@ -286,9 +321,9 @@ export function PracticePage() {
       setSearchParams(nextParams, { replace: true });
       void invalidateCourseLearningLoop(queryClient, numericCourseId);
     },
-    onError: () => {
+    onError: (error) => {
       setConfirmIncomplete(false);
-      setLocalError("答案提交失败，请检查作答后重试。");
+      setLocalError(getApiErrorMessage(error, "答案提交失败，请检查作答后重试。"));
     }
   });
 
@@ -305,7 +340,7 @@ export function PracticePage() {
         void invalidateCourseLearningLoop(queryClient, numericCourseId);
       }
     },
-    onError: () => setLocalError("简答题重评失败，原有评分结果已保留。")
+    onError: (error) => setLocalError(getApiErrorMessage(error, "简答题重评失败，原有评分结果已保留。"))
   });
 
   function selectQuestion(questionId: string) {

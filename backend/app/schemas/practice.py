@@ -23,6 +23,7 @@ class CreatePracticeSessionRequest(BaseModel):
 class SubmitPracticeAnswerItem(BaseModel):
     question_id: str
     answer_text: str = Field(max_length=2000)
+    answered: bool | None = None
 
     @field_validator("answer_text")
     @classmethod
@@ -35,6 +36,7 @@ class SubmitPracticeAnswersRequest(BaseModel):
 
 
 class SavePracticeDraftRequest(BaseModel):
+    revision: int = Field(ge=1)
     answers: list[SubmitPracticeAnswerItem] = Field(default_factory=list)
 
 
@@ -45,6 +47,7 @@ class PracticeQuestion(BaseModel):
     knowledge_point_title: str
     prompt: str
     options: list[str]
+    option_ids: list[str] = Field(default_factory=list)
     correct_answer: str | list[str] | None
     keywords: list[str]
     explanation: str
@@ -65,6 +68,7 @@ class PracticeFeedback(BaseModel):
     matched_keywords: list[str]
     missing_keywords: list[str]
     explanation: str
+    unanswered: bool = False
     diagnosis: "PracticeDiagnosis | None" = None
 
 
@@ -111,6 +115,7 @@ class PracticeSessionDetail(BaseModel):
     requested_difficulty: PracticeDifficulty = "medium"
     effective_difficulty: Literal["easy", "medium", "hard"] = "medium"
     draft_saved_at: str | None = None
+    draft_revision: int = Field(default=0, ge=0)
     questions: list[PracticeQuestion]
     answers: list[PracticeAnswerResponse]
     closure_update: PracticeClosureUpdate | None = None
@@ -164,6 +169,7 @@ def session_to_api(session: PracticeSession, answers: list[PracticeAnswer]) -> P
         requested_difficulty=requested_difficulty,
         effective_difficulty=effective_difficulty,
         draft_saved_at=str(assessment.get("draft_saved_at")) if assessment.get("draft_saved_at") else None,
+        draft_revision=int(assessment.get("draft_revision") or 0),
         questions=questions,
         answers=answer_items,
         closure_update=_closure_update(getattr(session, "assessment_json", None)),
@@ -200,13 +206,17 @@ def session_questions(session: PracticeSession, answers: list[PracticeAnswer]) -
 
 
 def public_question(question: dict, *, reveal_answer: bool = False) -> dict:
-    return {**question, "correct_answer": question.get("correct_answer") if reveal_answer else None}
+    options = [str(item) for item in question.get("options") or []]
+    option_ids = [str(item) for item in question.get("option_ids") or []]
+    if len(option_ids) != len(options):
+        option_ids = [chr(ord("A") + index) for index in range(len(options))]
+    return {**question, "options": options, "option_ids": option_ids, "correct_answer": question.get("correct_answer") if reveal_answer else None}
 
 
 def answer_to_api(answer: PracticeAnswer) -> PracticeAnswerResponse:
     feedback = answer.feedback_json or {}
     return PracticeAnswerResponse(
-        question_id=str((answer.question_json or {}).get("id") or ""),
+        question_id=str(answer.question_id or (answer.question_json or {}).get("id") or ""),
         answer_text=answer.answer_text,
         is_correct=answer.is_correct,
         feedback=PracticeFeedback(
@@ -219,6 +229,7 @@ def answer_to_api(answer: PracticeAnswer) -> PracticeAnswerResponse:
             matched_keywords=[str(item) for item in feedback.get("matched_keywords") or []],
             missing_keywords=[str(item) for item in feedback.get("missing_keywords") or []],
             explanation=str(feedback.get("explanation") or ""),
+            unanswered=bool(feedback.get("unanswered")),
             diagnosis=_diagnosis(feedback.get("diagnosis")),
         ),
     )

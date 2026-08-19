@@ -134,7 +134,8 @@ def test_chat_image_upload_creates_one_material_asset_and_keeps_it_when_draft_is
     service.get = get_attachment
     service.delete(user=SimpleNamespace(id=7), attachment_id=attachment.id)
     assert material.storage_path in storage.objects
-    assert storage.deleted == []
+    assert len(storage.deleted) == 1
+    assert storage.deleted[0].startswith("tmp/materials/")
 
 
 class _FakeAttachmentService:

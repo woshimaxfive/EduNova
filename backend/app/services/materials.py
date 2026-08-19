@@ -35,7 +35,7 @@ from backend.app.services.material_contracts import (
 from backend.app.services.material_comparison_builder import MaterialComparisonBuilder
 from backend.app.services.material_repository import SqlAlchemyMaterialRepository as SqlAlchemyMaterialRepository
 from backend.app.services.material_retrieval import MaterialChunkingService
-from backend.app.services.storage import StorageAdapter, build_storage
+from backend.app.services.storage import StorageAdapter, build_storage, promote_storage_object
 from backend.app.services.upload_security import MalwareScanner, UploadSecurityError, build_malware_scanner, validate_upload_type
 
 
@@ -96,7 +96,7 @@ class MaterialService:
             parse_status, extracted_text = "pending", None
         else:
             parse_status, extracted_text = self._extract_text(extension, content)
-        relative_path = self._store_file(user.id, clean_name, content, content_type)
+        relative_path, temporary_path = self._store_file(user.id, clean_name, content, content_type)
         agent_trace_id = make_trace_id()
         metadata = {
             "size_bytes": len(content),
@@ -104,6 +104,8 @@ class MaterialService:
             "extension": extension.lstrip(".").upper() or "FILE",
             "detail": self._detail_for_status(parse_status, extension),
             "agent_trace_id": agent_trace_id,
+            "storage_state": "pending_promotion",
+            "temporary_storage_key": temporary_path,
         }
         material = Material(
             user_id=user.id,
@@ -142,7 +144,20 @@ class MaterialService:
             self.repository.refresh(material)
         except Exception:
             self.repository.rollback()
+            # 文件已先写入存储；数据库事务失败时立即补偿删除，避免产生
+            # 无法被业务记录引用的私有孤儿对象。清理失败不覆盖原始数据库错误。
+            try:
+                self.storage.delete(temporary_path)
+            except Exception:
+                pass
             raise
+
+        # 正式对象提升发生在 DB 提交之后。失败时保留 metadata 中的 pending
+        # 状态和临时键，巡检可以安全地重试，而不是丢失用户唯一副本。
+        try:
+            self._promote_file(material, temporary_path)
+        except Exception:
+            pass
 
         return self._build_upload_result(material, course.id if course is not None else None)
 
@@ -516,10 +531,26 @@ class MaterialService:
             return "uploaded", None
         return "uploaded", None
 
-    def _store_file(self, user_id: int, filename: str, content: bytes, content_type: str) -> str:
+    def _store_file(self, user_id: int, filename: str, content: bytes, content_type: str) -> tuple[str, str]:
         extension = self._extension(filename)
         relative_path = Path(f"user_{user_id}") / f"{uuid4().hex}{extension}"
-        return self.storage.put_bytes(relative_path.as_posix(), content, content_type=content_type)
+        temporary_path = Path("tmp/materials") / f"{uuid4().hex}-{relative_path.name}"
+        self.storage.put_bytes(temporary_path.as_posix(), content, content_type=content_type)
+        return relative_path.as_posix(), temporary_path.as_posix()
+
+    def _promote_file(self, material: Material, temporary_path: str) -> None:
+        metadata = dict(material.metadata_json or {})
+        if not self.storage.exists(material.storage_path):
+            promote_storage_object(self.storage, temporary_path, material.storage_path, content_type=material.content_type)
+        metadata.pop("temporary_storage_key", None)
+        metadata["storage_state"] = "ready"
+        material.metadata_json = metadata
+        try:
+            self.repository.commit()
+            self.repository.refresh(material)
+        except Exception:
+            self.repository.rollback()
+            raise
 
     def _build_upload_result(self, material: Material, course_id: int | None) -> MaterialUploadResult:
         item = self._build_list_item(material)

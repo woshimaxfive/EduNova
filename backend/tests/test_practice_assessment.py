@@ -184,7 +184,8 @@ class FakePracticeRepository:
         self.sessions.append(session)
         return session
 
-    def get_practice_session_for_user(self, user_id: int, session_id: int) -> PracticeSession | None:
+    def get_practice_session_for_user(self, user_id: int, session_id: int, *, for_update: bool = False) -> PracticeSession | None:
+        del for_update
         return next((session for session in self.sessions if session.id == session_id and session.user_id == user_id), None)
 
     def get_latest_completed_practice_session(self, user_id: int, course_id: int) -> PracticeSession | None:
@@ -268,6 +269,20 @@ class FakePracticeRepository:
 
     def refresh(self, _instance: object) -> None:
         return None
+
+    def claim_practice_submission(self, user_id: int, session_id: int) -> bool:
+        session = next(
+            (
+                item
+                for item in self.sessions
+                if item.id == session_id and item.user_id == user_id and item.status == "in_progress"
+            ),
+            None,
+        )
+        if session is None:
+            return False
+        session.status = "completed"
+        return True
 
 
 def make_user(user_id: int = 1) -> User:
@@ -717,6 +732,10 @@ def test_multiple_choice_evaluation_preserves_punctuation_inside_options() -> No
     overlapping = service._evaluate_answer(overlapping_question, "根节点之后访问左子树")
     assert overlapping.is_correct is False
 
+    overselected = service._evaluate_answer(question, json.dumps(options, ensure_ascii=False))
+    assert overselected.is_correct is False
+    assert overselected.feedback["score"] == 67
+
 
 def test_adaptive_practice_uses_profile_and_restores_saved_draft() -> None:
 
@@ -735,6 +754,7 @@ def test_adaptive_practice_uses_profile_and_restores_saved_draft() -> None:
         service.save_draft(
             make_user(),
             int(created["id"]),
+            1,
             [{"question_id": question_id, "answer_text": "先写下启发函数的作用"}],
         )
     )
@@ -744,8 +764,35 @@ def test_adaptive_practice_uses_profile_and_restores_saved_draft() -> None:
     assert created["effective_difficulty"] == "easy"
     assert created["questions"][0]["difficulty"] == "easy"
     assert saved["draft_saved_at"] is not None
+    assert saved["draft_revision"] == 1
     assert latest["id"] == created["id"]
     assert latest["answers"][0]["answer_text"] == "先写下启发函数的作用"
+
+
+def test_save_draft_rejects_stale_or_duplicate_question_versions() -> None:
+    from backend.app.services.practice import PracticeConflictError, PracticeValidationError
+
+    repo = make_repo()
+    service = make_practice_service(repo)
+    created = as_dict(service.create_session(make_user(), 101, [401], 1, "easy"))
+    question_id = created["questions"][0]["id"]
+
+    service.save_draft(make_user(), int(created["id"]), 2, [{"question_id": question_id, "answer_text": "新答案"}])
+
+    with pytest.raises(PracticeConflictError, match="版本已过期"):
+        service.save_draft(make_user(), int(created["id"]), 1, [{"question_id": question_id, "answer_text": "旧答案"}])
+    with pytest.raises(PracticeValidationError, match="不能重复填写"):
+        service.save_draft(
+            make_user(),
+            int(created["id"]),
+            3,
+            [
+                {"question_id": question_id, "answer_text": "答案一"},
+                {"question_id": question_id, "answer_text": "答案二"},
+            ],
+        )
+
+    assert repo.list_answers_for_session(int(created["id"]))[0].answer_text == "新答案"
 
 
 def test_submit_practice_answers_scores_and_writes_confirmed_weakness_items() -> None:
@@ -782,9 +829,44 @@ def test_submit_practice_answers_scores_and_writes_confirmed_weakness_items() ->
     assert repo.weakness_items[0].status == "confirmed"
     assert repo.weakness_items[0].knowledge_point_id == 401
 
-    service.submit_answers(make_user(), session_id, answers)
+    from backend.app.services.practice import PracticeConflictError
+
+    with pytest.raises(PracticeConflictError):
+        service.submit_answers(make_user(), session_id, answers)
 
     assert len(repo.weakness_items) == 1
+
+
+def test_submit_answers_requires_exact_question_coverage_and_unique_question_ids() -> None:
+    from backend.app.services.practice import PracticeValidationError
+
+    repo = make_repo()
+    service = make_practice_service(repo)
+    created = as_dict(service.create_session(make_user(), 101, [401, 402], 3, "medium"))
+    session_id = int(created["id"])
+    question_ids = [question["id"] for question in created["questions"]]
+
+    with pytest.raises(PracticeValidationError, match="缺少 2 道题"):
+        service.submit_answers(
+            make_user(),
+            session_id,
+            [{"question_id": question_ids[0], "answer_text": "错误选项"}],
+        )
+
+    with pytest.raises(PracticeValidationError, match="不能重复填写"):
+        service.submit_answers(
+            make_user(),
+            session_id,
+            [
+                {"question_id": question_ids[0], "answer_text": "错误选项"},
+                {"question_id": question_ids[0], "answer_text": "错误选项"},
+                {"question_id": question_ids[2], "answer_text": "错误选项"},
+            ],
+        )
+
+    assert repo.sessions[0].status == "in_progress"
+    assert repo.sessions[0].score is None
+    assert all(answer.answer_text is None for answer in repo.list_answers_for_session(session_id))
 
 
 def test_submit_answers_validates_empty_answers_and_user_scope() -> None:
@@ -803,6 +885,26 @@ def test_submit_answers_validates_empty_answers_and_user_scope() -> None:
 
     with pytest.raises(PracticeNotFoundError):
         service.submit_answers(make_user(2), session_id, [{"question_id": created["questions"][0]["id"], "answer_text": "A"}])
+
+
+def test_submit_answers_records_explicit_unanswered_without_creating_weakness() -> None:
+    repo = make_repo()
+    service = make_practice_service(repo)
+    created = as_dict(service.create_session(make_user(), 101, [401, 402], 3, "medium"))
+    stored_questions = repo.list_answers_for_session(int(created["id"]))
+    answers = [
+        {"question_id": created["questions"][0]["id"], "answer_text": "", "answered": False},
+        {"question_id": created["questions"][1]["id"], "answer_text": ", ".join(stored_questions[1].question_json["correct_answer"]), "answered": True},
+        {"question_id": created["questions"][2]["id"], "answer_text": "", "answered": False},
+    ]
+
+    result = as_dict(service.submit_answers(make_user(), int(created["id"]), answers))
+
+    assert result["score"] == 33
+    assert result["answers"][0]["feedback"]["unanswered"] is True
+    assert result["answers"][0]["answer_text"] == ""
+    assert result["answers"][2]["feedback"]["unanswered"] is True
+    assert repo.weakness_items == []
 
 
 def test_generate_and_read_latest_report_uses_practice_and_learning_state_evidence() -> None:

@@ -42,6 +42,7 @@ class AiJobExecutionMixin:
         self.repository.refresh(job)
         context = AgentJobContext(int(job.id))
         try:
+            context.check_cancelled()
             user = self.repository.get_user(int(job.user_id))
             if user is None:
                 raise AiJobNotFoundError("任务用户不存在。")
@@ -61,6 +62,7 @@ class AiJobExecutionMixin:
                 result = self._run_report_generation(user, job, context)
             else:
                 raise AiJobValidationError("不支持的 AI 任务类型。")
+            context.check_cancelled()
             refreshed = self.repository.get_job(job_id, for_update=True) or job
             if refreshed.status in {"cancelling", "cancelled"} or refreshed.cancel_requested_at is not None:
                 raise AiJobCancelled("任务已取消。")
@@ -472,6 +474,7 @@ class AiJobExecutionMixin:
                     "embedding_profile_hash": batch.profile_hash,
                 }
                 self.repository.db.add(chunk)
+            context.check_cancelled()
             self.repository.db.commit()
             completed += len(batch_targets)
             context.after_node(

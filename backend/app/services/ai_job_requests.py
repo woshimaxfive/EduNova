@@ -8,7 +8,6 @@ from typing import Callable
 from sqlalchemy import select
 
 from backend.app.models import (
-    ModelSetting,
     PracticeAnswer,
     PracticeSession,
     User,
@@ -401,20 +400,21 @@ class AiJobRequestMixin:
         config_id: int | None,
         idempotency_key: str | None,
     ) -> AiJobResponse:
-        setting = self.repository.db.scalar(
-            select(ModelSetting).where(
-                ModelSetting.user_id == user.id,
-                ModelSetting.is_embedding_default.is_(True),
-            )
-        )
-        if setting is None or not setting.embedding_model:
-            raise AiJobValidationError("请先保存并设定默认向量配置。")
-        if config_id is not None and int(setting.id) != config_id:
-            raise AiJobValidationError("只能使用当前默认向量配置重建索引。")
+        del config_id
+        from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
+        from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
+
+        runtime = ModelSettingsService(
+            repository=SqlAlchemyModelSettingsRepository(self.repository.db),
+            settings=self.settings,
+            provider=OpenAICompatibleChatProvider(),
+        ).resolve_embedding_runtime_config(user)
+        if not runtime.can_use_model:
+            raise AiJobValidationError("系统尚未配置可用的向量模型。")
         return self._create(
             user,
             workflow="embedding_reindex",
             course_id=None,
-            request_json={"config_id": int(setting.id), "scope": "all_user_chunks"},
+            request_json={"scope": "all_user_chunks", "runtime_scope": "system"},
             idempotency_key=idempotency_key,
         )

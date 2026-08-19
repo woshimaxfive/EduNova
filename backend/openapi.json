@@ -7070,6 +7070,11 @@
               }
             ],
             "title": "Score"
+          },
+          "unanswered": {
+            "default": false,
+            "title": "Unanswered",
+            "type": "boolean"
           }
         },
         "required": [
@@ -7147,6 +7152,13 @@
           "knowledge_point_title": {
             "title": "Knowledge Point Title",
             "type": "string"
+          },
+          "option_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Option Ids",
+            "type": "array"
           },
           "options": {
             "items": {
@@ -7231,6 +7243,12 @@
           "created_at": {
             "title": "Created At",
             "type": "string"
+          },
+          "draft_revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Draft Revision",
+            "type": "integer"
           },
           "draft_saved_at": {
             "anyOf": [
@@ -8781,8 +8799,16 @@
             },
             "title": "Answers",
             "type": "array"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
           }
         },
+        "required": [
+          "revision"
+        ],
         "title": "SavePracticeDraftRequest",
         "type": "object"
       },
@@ -9034,6 +9060,17 @@
             "maxLength": 2000,
             "title": "Answer Text",
             "type": "string"
+          },
+          "answered": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answered"
           },
           "question_id": {
             "title": "Question Id",

@@ -9,7 +9,6 @@ from sqlalchemy import select
 from backend.app.api.errors import make_trace_id
 from backend.app.models import (
     AiJob,
-    ModelSetting,
     User,
     WeaknessReviewItem,
 )
@@ -25,6 +24,24 @@ from backend.app.services.mastery_progress import is_review_due
 
 
 class AiJobLifecycleMixin:
+    def _create_retry_job(
+        self,
+        user: User,
+        original: AiJob,
+        *,
+        next_attempt: int,
+        **kwargs: Any,
+    ) -> AiJobResponse:
+        """在同一数据库提交中创建重试任务并消耗额度。"""
+        caller_before_commit = kwargs.pop("before_commit", None)
+
+        def before_commit(job: AiJob) -> None:
+            if caller_before_commit is not None:
+                caller_before_commit(job)
+            original.attempt_count = next_attempt
+
+        return self._create(user, attempt_count=next_attempt, before_commit=before_commit, **kwargs)
+
     def _require_active_course(self, user_id: int, course_id: int) -> None:
         if not self.repository.is_course_active(user_id, course_id):
             raise AiJobConflictError("课程已完成归档；请先恢复学习再创建新的生成任务。")
@@ -144,42 +161,42 @@ class AiJobLifecycleMixin:
             self.repository.rollback()
             raise AiJobConflictError("该任务已达到最大重试次数。")
         next_attempt = int(original.attempt_count or 0) + 1
-        original.attempt_count = next_attempt
-        self.repository.commit()
         request = dict(original.request_json or {})
         if original.workflow == "embedding_reindex":
-            config_id = int(request["config_id"]) if request.get("config_id") else None
-            setting = self.repository.db.scalar(
-                select(ModelSetting).where(
-                    ModelSetting.user_id == user.id,
-                    ModelSetting.id == config_id,
-                    ModelSetting.is_embedding_default.is_(True),
-                )
-            )
-            if setting is None or not setting.embedding_model:
-                raise AiJobValidationError("当前默认向量配置已变化，请重新发起重建任务。")
-            return self._create(
+            from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
+            from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
+
+            runtime = ModelSettingsService(
+                repository=SqlAlchemyModelSettingsRepository(self.repository.db),
+                settings=self.settings,
+                provider=OpenAICompatibleChatProvider(),
+            ).resolve_embedding_runtime_config(user)
+            if not runtime.can_use_model:
+                raise AiJobValidationError("系统向量配置已不可用，请联系管理员后重试。")
+            return self._create_retry_job(
                 user,
+                original,
                 workflow="embedding_reindex",
                 course_id=None,
                 request_json=request,
                 idempotency_key=f"retry-{original.id}-{uuid4().hex}",
                 retry_of_job_id=original.id,
-                attempt_count=next_attempt,
+                next_attempt=next_attempt,
             )
         if original.workflow == "material_ingestion":
             material_id = int(request.get("material_id") or 0)
             materials = self.repository.get_materials_for_user(user.id, [material_id])
             if len(materials) != 1:
                 raise AiJobNotFoundError("资料不存在或无权访问。")
-            return self._create(
+            return self._create_retry_job(
                 user,
+                original,
                 workflow="material_ingestion",
                 course_id=None,
                 request_json=request,
                 idempotency_key=f"retry-{original.id}-{uuid4().hex}",
                 retry_of_job_id=original.id,
-                attempt_count=next_attempt,
+                next_attempt=next_attempt,
             )
         if original.workflow == "course_builder":
             material_ids = [int(item) for item in request.get("material_ids", [])]
@@ -188,27 +205,29 @@ class AiJobLifecycleMixin:
                 raise AiJobNotFoundError("资料不存在或无权访问。")
             if any(material.parse_status != "completed" or material.ingestion_status != "confirmed" for material in materials):
                 raise AiJobConflictError("请先完成资料精细解析并确认目录，再重新生成课程。")
-            return self._create(
+            return self._create_retry_job(
                 user,
+                original,
                 workflow=original.workflow,
                 course_id=None,
                 request_json=request,
                 idempotency_key=f"retry-{original.id}-{uuid4().hex}",
                 retry_of_job_id=original.id,
-                attempt_count=next_attempt,
+                next_attempt=next_attempt,
             )
         if original.workflow == "path_planning":
             course_id = int(request.get("course_id") or original.course_id or 0)
             if self.repository.get_course_for_user(user.id, course_id) is None:
                 raise AiJobNotFoundError("课程不存在或无权访问。")
-            return self._create(
+            return self._create_retry_job(
                 user,
+                original,
                 workflow="path_planning",
                 course_id=course_id,
                 request_json=request,
                 idempotency_key=f"retry-{original.id}-{uuid4().hex}",
                 retry_of_job_id=original.id,
-                attempt_count=next_attempt,
+                next_attempt=next_attempt,
             )
         if original.workflow in {"practice_generation", "report_generation"}:
             course_id = int(request.get("course_id") or original.course_id or 0)
@@ -233,14 +252,15 @@ class AiJobLifecycleMixin:
                 session = self.repository.get_practice_session_for_user(user.id, int(request["practice_session_id"]))
                 if session is None or int(session.course_id) != course_id:
                     raise AiJobNotFoundError("练习不存在或无权访问。")
-            return self._create(
+            return self._create_retry_job(
                 user,
+                original,
                 workflow=original.workflow,
                 course_id=course_id,
                 request_json=request,
                 idempotency_key=f"retry-{original.id}-{uuid4().hex}",
                 retry_of_job_id=original.id,
-                attempt_count=next_attempt,
+                next_attempt=next_attempt,
             )
         course_id = int(request["course_id"])
         if self.repository.get_course_for_user(user.id, course_id) is None:
@@ -257,14 +277,15 @@ class AiJobLifecycleMixin:
             )
             if source_resource is None or source_resource.course_id != course_id:
                 raise AiJobNotFoundError("来源资源不存在或无权访问。")
-        return self._create(
+        return self._create_retry_job(
             user,
+            original,
             workflow=original.workflow,
             course_id=course_id,
             request_json=request,
             idempotency_key=f"retry-{original.id}-{uuid4().hex}",
             retry_of_job_id=original.id,
-            attempt_count=next_attempt,
+            next_attempt=next_attempt,
         )
 
     def delete_job(self, user: User, job_id: int) -> None:

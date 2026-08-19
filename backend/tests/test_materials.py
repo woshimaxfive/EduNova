@@ -251,6 +251,21 @@ def test_txt_upload_creates_completed_material_with_extracted_text(tmp_path: Pat
     assert repo.materials[0].storage_path.startswith("user_1/")
 
 
+def test_upload_cleans_stored_file_when_database_commit_fails(tmp_path: Path) -> None:
+    class FailingCommitRepository(FakeMaterialRepository):
+        def commit(self) -> None:
+            raise RuntimeError("database unavailable")
+
+    repo = FailingCommitRepository()
+    service = make_service(repo, tmp_path)
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        upload_bytes(service, make_user(), "rollback.txt", b"rollback", "text/plain")
+
+    storage_root = Path(make_settings(tmp_path).material_storage_dir)
+    assert not [path for path in storage_root.rglob("*") if path.is_file()]
+
+
 def test_markdown_upload_is_lightly_parsed(tmp_path: Path) -> None:
     repo = FakeMaterialRepository()
     user = make_user()

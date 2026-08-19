@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.errors import make_trace_id
 from backend.app.core.config import Settings
 from backend.app.models import ChatMessageAttachment, ChatSession, Material, User
-from backend.app.services.storage import StorageAdapter, StorageError, build_storage
+from backend.app.services.storage import StorageAdapter, StorageError, build_storage, promote_storage_object
 from backend.app.services.upload_security import (
     MalwareScanner,
     UploadSecurityError,
@@ -82,8 +82,10 @@ class TutorAttachmentService:
         digest = sha256(normalized).hexdigest()
         suffix = ".png" if mime_type == "image/png" else ".jpg"
         key = f"user_{user.id}/{uuid4().hex}{suffix}"
+        temporary_key = f"tmp/materials/{uuid4().hex}-{Path(key).name}"
         try:
-            stored_key = self.material_storage.put_bytes(key, normalized, content_type=mime_type)
+            self.material_storage.put_bytes(temporary_key, normalized, content_type=mime_type)
+            stored_key = key
         except StorageError as exc:
             raise TutorAttachmentError("图片保存失败，请稍后重试。") from exc
         trace_id = make_trace_id()
@@ -101,6 +103,8 @@ class TutorAttachmentService:
                 "extension": suffix.lstrip(".").upper(),
                 "detail": "已入库，可用于图片提问",
                 "agent_trace_id": trace_id,
+                "storage_state": "pending_promotion",
+                "temporary_storage_key": temporary_key,
                 "width": width,
                 "height": height,
             },
@@ -132,8 +136,20 @@ class TutorAttachmentService:
             self.db.refresh(attachment)
         except Exception:
             self.db.rollback()
-            self.material_storage.delete(stored_key)
+            self.material_storage.delete(temporary_key)
             raise
+        try:
+            promote_storage_object(self.material_storage, temporary_key, stored_key, content_type=mime_type)
+            material.metadata_json = {
+                **(material.metadata_json or {}),
+                "storage_state": "ready",
+                "temporary_storage_key": None,
+            }
+            self.db.add(material)
+            self.db.commit()
+        except Exception:
+            # 保留已提交的 material 及临时键，后续巡检可重试 promote。
+            self.db.rollback()
         return attachment
 
     def attach_material(self, *, user: User, session_id: int, material_id: int) -> ChatMessageAttachment:

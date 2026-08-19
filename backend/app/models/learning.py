@@ -368,6 +368,7 @@ class PracticeAnswer(IdMixin, CreatedAtMixin, Base):
     __tablename__ = "practice_answers"
     __table_args__ = (
         Index("ix_practice_answers_session", "session_id"),
+        UniqueConstraint("session_id", "question_id", name="uq_practice_answers_session_question"),
     )
 
     session_id: Mapped[int] = mapped_column(
@@ -380,6 +381,7 @@ class PracticeAnswer(IdMixin, CreatedAtMixin, Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+    question_id: Mapped[str] = mapped_column(String(80), nullable=False)
     question_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     answer_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     feedback_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)

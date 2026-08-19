@@ -15,7 +15,16 @@ from backend.app.schemas.practice import CreatePracticeSessionRequest, SavePract
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 from backend.app.services.ai_jobs import AiJobService, RqAiJobQueue, SqlAlchemyAiJobRepository
 from backend.app.services.profiles import ProfileService, SqlAlchemyProfileRepository
-from backend.app.services.practice import PracticeGenerationError, PracticeNotFoundError, PracticeService, PracticeValidationError, SqlAlchemyPracticeRepository
+from backend.app.services.practice import (
+    DuplicatePracticeQuestionError,
+    IncompletePracticeSubmissionError,
+    PracticeConflictError,
+    PracticeGenerationError,
+    PracticeNotFoundError,
+    PracticeService,
+    PracticeValidationError,
+    SqlAlchemyPracticeRepository,
+)
 
 
 router = APIRouter(prefix="/practice", tags=["practice"])
@@ -135,9 +144,11 @@ def save_practice_draft(
     service: PracticeService = Depends(get_practice_service),
 ) -> dict:
     try:
-        result = service.save_draft(current_user, session_id, payload.answers)
+        result = service.save_draft(current_user, session_id, payload.revision, payload.answers)
     except PracticeNotFoundError as exc:
         raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc
+    except PracticeConflictError as exc:
+        raise ApiError(status.HTTP_409_CONFLICT, "CONFLICT", str(exc)) from exc
     except PracticeValidationError as exc:
         raise ApiError(status.HTTP_400_BAD_REQUEST, "VALIDATION_ERROR", str(exc)) from exc
     return api_response(result.model_dump())
@@ -154,6 +165,12 @@ def submit_practice_answers(
         result = service.submit_answers(current_user, session_id, payload.answers)
     except PracticeNotFoundError as exc:
         raise ApiError(status.HTTP_404_NOT_FOUND, "NOT_FOUND", str(exc)) from exc
+    except PracticeConflictError as exc:
+        raise ApiError(status.HTTP_409_CONFLICT, "PRACTICE_ALREADY_COMPLETED", str(exc)) from exc
+    except DuplicatePracticeQuestionError as exc:
+        raise ApiError(status.HTTP_400_BAD_REQUEST, exc.code, str(exc)) from exc
+    except IncompletePracticeSubmissionError as exc:
+        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, exc.code, str(exc)) from exc
     except PracticeValidationError as exc:
         raise ApiError(status.HTTP_400_BAD_REQUEST, "VALIDATION_ERROR", str(exc)) from exc
     return api_response(result.model_dump())

@@ -6,7 +6,7 @@ import json
 import re
 from typing import Protocol
 
-from sqlalchemy import case, select
+from sqlalchemy import case, select, update
 from sqlalchemy.orm import Session
 
 from backend.app.agents.runtime import AgentTraceRecorder
@@ -33,6 +33,22 @@ class PracticeNotFoundError(Exception):
 
 class PracticeValidationError(Exception):
     pass
+
+
+class PracticeConflictError(PracticeValidationError):
+    """练习资源已经被另一个状态变更占用或完成。"""
+
+
+class PracticeSubmissionError(PracticeValidationError):
+    code = "VALIDATION_ERROR"
+
+
+class DuplicatePracticeQuestionError(PracticeSubmissionError):
+    code = "DUPLICATE_QUESTION_ID"
+
+
+class IncompletePracticeSubmissionError(PracticeSubmissionError):
+    code = "INCOMPLETE_SUBMISSION"
 
 
 class PracticeGenerationError(PracticeValidationError):
@@ -73,7 +89,7 @@ class PracticeRepository(Protocol):
 
     def add_practice_session(self, session: PracticeSession) -> PracticeSession: ...
 
-    def get_practice_session_for_user(self, user_id: int, session_id: int) -> PracticeSession | None: ...
+    def get_practice_session_for_user(self, user_id: int, session_id: int, *, for_update: bool = False) -> PracticeSession | None: ...
 
     def get_latest_practice_session_for_user(self, user_id: int, course_id: int) -> PracticeSession | None: ...
 
@@ -96,6 +112,8 @@ class PracticeRepository(Protocol):
     def rollback(self) -> None: ...
 
     def refresh(self, instance: object) -> None: ...
+
+    def claim_practice_submission(self, user_id: int, session_id: int) -> bool: ...
 
 
 class SqlAlchemyPracticeRepository:
@@ -135,8 +153,11 @@ class SqlAlchemyPracticeRepository:
         self.db.flush()
         return session
 
-    def get_practice_session_for_user(self, user_id: int, session_id: int) -> PracticeSession | None:
-        return self.db.scalar(select(PracticeSession).where(PracticeSession.id == session_id, PracticeSession.user_id == user_id))
+    def get_practice_session_for_user(self, user_id: int, session_id: int, *, for_update: bool = False) -> PracticeSession | None:
+        query = select(PracticeSession).where(PracticeSession.id == session_id, PracticeSession.user_id == user_id)
+        if for_update:
+            query = query.with_for_update()
+        return self.db.scalar(query)
 
     def get_latest_practice_session_for_user(self, user_id: int, course_id: int) -> PracticeSession | None:
         return self.db.scalar(
@@ -203,6 +224,18 @@ class SqlAlchemyPracticeRepository:
 
     def refresh(self, instance: object) -> None:
         self.db.refresh(instance)
+
+    def claim_practice_submission(self, user_id: int, session_id: int) -> bool:
+        result = self.db.execute(
+            update(PracticeSession)
+            .where(
+                PracticeSession.id == session_id,
+                PracticeSession.user_id == user_id,
+                PracticeSession.status == "in_progress",
+            )
+            .values(status="completed")
+        )
+        return bool(result.rowcount)
 
 
 @dataclass(frozen=True)
@@ -273,26 +306,37 @@ class PracticeService:
         self,
         user: User,
         session_id: int,
+        revision: int,
         answers: list[SubmitPracticeAnswerItem | dict],
     ) -> PracticeSessionDetail:
-        session = self._require_session(user, session_id)
+        session = self._require_session(user, session_id, for_update=True)
         if session.status != "in_progress":
             raise PracticeValidationError("已完成练习不能修改草稿。")
+        assessment = session.assessment_json if isinstance(session.assessment_json, dict) else {}
+        current_revision = int(assessment.get("draft_revision") or 0)
+        if revision <= current_revision:
+            raise PracticeConflictError("草稿版本已过期，请刷新后继续作答。")
         rows = self.repository.list_answers_for_session(session.id)
-        by_question = {str((row.question_json or {}).get("id") or ""): row for row in rows}
+        by_question = {str(row.question_id or (row.question_json or {}).get("id") or ""): row for row in rows}
         submitted: dict[str, str] = {}
         for item in answers:
             payload = item.model_dump() if hasattr(item, "model_dump") else dict(item)
             question_id = str(payload.get("question_id") or "")
             if question_id not in by_question:
                 raise PracticeValidationError("草稿包含不属于当前练习的题目。")
+            if question_id in submitted:
+                raise DuplicatePracticeQuestionError("草稿中不能重复填写同一道题。")
             submitted[question_id] = " ".join(str(payload.get("answer_text") or "").split())[:2000]
         for question_id, answer_text in submitted.items():
             by_question[question_id].answer_text = answer_text
             by_question[question_id].feedback_json = {}
             by_question[question_id].is_correct = None
         now = datetime.now(UTC)
-        session.assessment_json = {**(session.assessment_json or {}), "draft_saved_at": now.isoformat().replace("+00:00", "Z")}
+        session.assessment_json = {
+            **assessment,
+            "draft_saved_at": now.isoformat().replace("+00:00", "Z"),
+            "draft_revision": revision,
+        }
         session.updated_at = now
         try:
             self.repository.commit()
@@ -308,6 +352,9 @@ class PracticeService:
         session_id: int,
         answers: list[SubmitPracticeAnswerItem | dict],
     ) -> PracticeSessionDetail:
+        session = self._require_session(user, session_id)
+        if session.status == "completed":
+            raise PracticeConflictError("练习已经完成，不能重复提交；如需补充简答题请使用重新评分。")
         from backend.app.agents.assessment import AssessmentGraphRunner
 
         return AssessmentGraphRunner(self).submit_answers(user=user, session_id=session_id, answers=answers)
@@ -370,8 +417,8 @@ class PracticeService:
             raise PracticeNotFoundError("课程不存在或无权访问。")
         return course
 
-    def _require_session(self, user: User, session_id: int) -> PracticeSession:
-        session = self.repository.get_practice_session_for_user(user.id, session_id)
+    def _require_session(self, user: User, session_id: int, *, for_update: bool = False) -> PracticeSession:
+        session = self.repository.get_practice_session_for_user(user.id, session_id, for_update=for_update)
         if session is None:
             raise PracticeNotFoundError("练习不存在或无权访问。")
         return session
@@ -551,19 +598,45 @@ class PracticeService:
         return list(dict.fromkeys(item for item in sentences if len(item) >= 8))
 
     @staticmethod
-    def _normalize_answers(answers: list[SubmitPracticeAnswerItem | dict]) -> list[dict[str, str]]:
-        normalized: list[dict[str, str]] = []
+    def _normalize_answers(answers: list[SubmitPracticeAnswerItem | dict]) -> list[dict[str, str | bool]]:
+        normalized: list[dict[str, str | bool]] = []
         for answer in answers:
             if isinstance(answer, SubmitPracticeAnswerItem):
-                normalized.append({"question_id": answer.question_id, "answer_text": answer.answer_text})
+                answer_text = answer.answer_text
+                answered = answer.answered if answer.answered is not None else answer_text.strip() != "未作答"
+                normalized.append({"question_id": answer.question_id, "answer_text": answer_text, "answered": answered})
             else:
+                answer_text = str(answer.get("answer_text") or "")
+                answered_value = answer.get("answered")
+                answered = bool(answered_value) if answered_value is not None else answer_text.strip() != "未作答"
                 normalized.append(
                     {
                         "question_id": str(answer.get("question_id") or ""),
-                        "answer_text": str(answer.get("answer_text") or ""),
+                        "answer_text": answer_text,
+                        "answered": answered,
                     }
                 )
         return normalized
+
+    @staticmethod
+    def _unanswered_evaluated(question: dict) -> EvaluatedAnswer:
+        return EvaluatedAnswer(
+            question=question,
+            answer_text="",
+            is_correct=False,
+            feedback={
+                "score": 0,
+                "grading_status": "deterministic",
+                "message": "本题未作答，未将其作为知识掌握错误生成诊断。",
+                "matched_concepts": [],
+                "missing_concepts": [],
+                "confidence": None,
+                "matched_keywords": [],
+                "missing_keywords": [],
+                "explanation": str(question.get("explanation") or ""),
+                "unanswered": True,
+            },
+        )
 
     def _evaluate_answer(self, question: dict, answer_text: str) -> EvaluatedAnswer:
         question_type = question.get("question_type")
@@ -571,14 +644,15 @@ class PracticeService:
         matched = [keyword for keyword in keywords if keyword and keyword.casefold() in answer_text.casefold()]
         if question_type == "single_choice":
             expected = str(question.get("correct_answer") or "")
-            is_correct = answer_text.strip().casefold() == expected.casefold()
+            is_correct = self._choice_answer_text(question, answer_text).casefold() == expected.casefold()
             score = 100 if is_correct else 0
         elif question_type == "multiple_choice":
             expected_values = [str(item) for item in question.get("correct_answer") or []]
             normalized_answer = self._multiple_choice_parts(question, answer_text)
             normalized_expected = {part.casefold() for part in expected_values}
-            is_correct = normalized_expected.issubset(normalized_answer)
-            score = 100 if is_correct else round(100 * len(normalized_expected.intersection(normalized_answer)) / max(len(normalized_expected), 1))
+            intersection_size = len(normalized_expected.intersection(normalized_answer))
+            is_correct = normalized_expected == normalized_answer
+            score = 100 if is_correct else round(100 * intersection_size / max(len(normalized_expected), len(normalized_answer), 1))
         else:
             return EvaluatedAnswer(
                 question=question,
@@ -616,8 +690,11 @@ class PracticeService:
             parsed = json.loads(answer_text)
         except (json.JSONDecodeError, TypeError):
             parsed = None
+        option_ids = [str(value).strip() for value in question.get("option_ids") or []]
+        options = [str(value).strip() for value in question.get("options") or []]
+        by_id = {option_id.casefold(): option.casefold() for option_id, option in zip(option_ids, options, strict=False) if option_id and option}
         if isinstance(parsed, list):
-            return {str(part).strip().casefold() for part in parsed if str(part).strip()}
+            return {by_id.get(str(part).strip().casefold(), str(part).strip().casefold()) for part in parsed if str(part).strip()}
 
         normalized_text = answer_text.strip().casefold()
         known_options = sorted({
@@ -647,6 +724,16 @@ class PracticeService:
         if matched_options is not None:
             return set(matched_options)
         return {part.strip().casefold() for part in re.split(r"\s*[,，]\s*", answer_text) if part.strip()}
+
+    @staticmethod
+    def _choice_answer_text(question: dict, answer_text: str) -> str:
+        candidate = answer_text.strip()
+        option_ids = [str(value).strip() for value in question.get("option_ids") or []]
+        options = [str(value).strip() for value in question.get("options") or []]
+        for option_id, option in zip(option_ids, options, strict=False):
+            if option_id.casefold() == candidate.casefold():
+                return option
+        return candidate
 
     def _sync_practice_weaknesses(self, user: User, session: PracticeSession, evaluated: list[EvaluatedAnswer]) -> None:
         existing = self.repository.list_weakness_review_items(user.id, int(session.course_id or 0))

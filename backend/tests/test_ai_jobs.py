@@ -575,6 +575,19 @@ def test_retry_creates_linked_job_and_revalidates_scope() -> None:
         service.retry_job(user, int(retried.job_id))
 
 
+def test_failed_retry_validation_does_not_consume_retry_quota() -> None:
+    user = make_user()
+    repository = FakeRepository(users=[user], materials=[make_material()])
+    service = make_service(repository, FakeQueue(fail_enqueue=True))
+    original = service.create_course_builder_job(user, material_ids=[11], course_title="课程", idempotency_key="validation-quota")
+    repository.materials.clear()
+
+    with pytest.raises(AiJobNotFoundError):
+        service.retry_job(user, int(original.job_id))
+
+    assert repository.jobs[0].attempt_count == 0
+
+
 def test_same_failed_job_cannot_be_retried_more_than_three_times() -> None:
     user = make_user()
     repository = FakeRepository(users=[user], materials=[make_material()])

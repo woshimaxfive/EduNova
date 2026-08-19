@@ -23,7 +23,13 @@ from backend.app.schemas.practice import session_to_api
 from backend.app.services.content_locale import china_first_content_policy
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.mastery_progress import is_review_due
-from backend.app.services.practice import EvaluatedAnswer, PracticeValidationError
+from backend.app.services.practice import (
+    DuplicatePracticeQuestionError,
+    EvaluatedAnswer,
+    IncompletePracticeSubmissionError,
+    PracticeConflictError,
+    PracticeValidationError,
+)
 from backend.app.services.semantic_grading import SemanticShortAnswerGrader
 
 
@@ -63,19 +69,44 @@ class AssessmentEvaluationMixin:
     def _score_node(self, state: AssessmentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
             normalized = self.service._normalize_answers(list(state.get("submitted_answers", [])))
-            by_id = {str(question["id"]): question for question in state.get("questions", [])}
+            questions = list(state.get("questions", []))
+            expected_ids = [str(question.get("id") or "") for question in questions]
+            if not expected_ids or any(not question_id for question_id in expected_ids):
+                raise PracticeValidationError("当前练习题目编号无效，无法提交。")
+            if len(expected_ids) != len(set(expected_ids)):
+                raise PracticeValidationError("当前练习包含重复题目编号，无法提交。")
+
+            submitted_ids = [str(answer.get("question_id") or "") for answer in normalized]
+            if len(submitted_ids) != len(set(submitted_ids)):
+                raise DuplicatePracticeQuestionError("提交中不能重复填写同一道题。")
+            expected_set = set(expected_ids)
+            submitted_set = set(submitted_ids)
+            missing_ids = expected_set - submitted_set
+            extra_ids = submitted_set - expected_set
+            if missing_ids or extra_ids:
+                detail: list[str] = []
+                if missing_ids:
+                    detail.append(f"缺少 {len(missing_ids)} 道题")
+                if extra_ids:
+                    detail.append(f"包含 {len(extra_ids)} 道不属于当前练习的题")
+                raise IncompletePracticeSubmissionError("提交题目必须与当前练习完全一致：" + "，".join(detail) + "。")
+
+            by_id = {str(question["id"]): question for question in questions}
             evaluated: list[EvaluatedAnswer] = []
             for answer in normalized:
                 question = by_id.get(answer["question_id"])
                 if question is None:
                     raise PracticeValidationError("提交的题目不属于当前练习。")
                 answer_text = safe_text(answer["answer_text"], limit=2000)
+                if not bool(answer.get("answered")):
+                    evaluated.append(self.service._unanswered_evaluated(question))
+                    continue
                 if not answer_text:
                     raise PracticeValidationError("答案不能为空。")
                 evaluated.append(self.service._evaluate_answer(question, answer_text))
             if not evaluated:
                 raise PracticeValidationError("至少提交一道题。")
-            short_answers = [item for item in evaluated if item.feedback.get("grading_status") == "ungraded"]
+            short_answers = [item for item in evaluated if item.feedback.get("grading_status") == "ungraded" and not item.feedback.get("unanswered")]
             grades = SemanticShortAnswerGrader(self.service.model_service).grade(
                 user=state["user"],
                 items=[self._grading_item(item.question, item.answer_text) for item in short_answers],
@@ -106,7 +137,7 @@ class AssessmentEvaluationMixin:
             diagnoses = {
                 str(item.question.get("id")): self._diagnosis_from_evaluation(item)
                 for item in state.get("evaluated", [])
-                if item.feedback.get("score") is not None and item.feedback["score"] < 60
+                if item.feedback.get("score") is not None and item.feedback["score"] < 60 and not item.feedback.get("unanswered")
             }
             model_used = any(item.feedback.get("grading_status") == "model" for item in state.get("evaluated", []))
             mode = "semantic_grading" if model_used else "deterministic_source"
@@ -116,7 +147,7 @@ class AssessmentEvaluationMixin:
 
     def _sync_weaknesses_node(self, state: AssessmentState) -> dict[str, Any]:
         def work() -> tuple[dict[str, Any], str, str, dict[str, Any]]:
-            rows_by_question = {str((row.question_json or {}).get("id")): row for row in state.get("answer_rows", [])}
+            rows_by_question = {str(row.question_id or (row.question_json or {}).get("id")): row for row in state.get("answer_rows", [])}
             evaluated_by_question = {str(item.question.get("id")): item for item in state.get("evaluated", [])}
             for question_id, evaluated in evaluated_by_question.items():
                 row = rows_by_question[question_id]
@@ -140,9 +171,9 @@ class AssessmentEvaluationMixin:
             diagnoses = {
                 str(item.question.get("id")): self._diagnosis_from_evaluation(item)
                 for item in state.get("evaluated", [])
-                if item.feedback.get("score") is not None and item.feedback["score"] < 60
+                if item.feedback.get("score") is not None and item.feedback["score"] < 60 and not item.feedback.get("unanswered")
             }
-            rows_by_question = {str((row.question_json or {}).get("id")): row for row in state.get("answer_rows", [])}
+            rows_by_question = {str(row.question_id or (row.question_json or {}).get("id")): row for row in state.get("answer_rows", [])}
             for question_id, diagnosis in diagnoses.items():
                 row = rows_by_question[question_id]
                 diagnosis["evidence_ref"] = {"type": "practice_answer", "id": str(row.id)}
@@ -159,7 +190,8 @@ class AssessmentEvaluationMixin:
         started = perf_counter()
         session = state["session"]
         try:
-            session.status = "completed"
+            if not self.service.repository.claim_practice_submission(int(state["user_id"]), int(session.id)):
+                raise PracticeConflictError("练习已经完成，不能重复提交；如需补充简答题请使用重新评分。")
             session.score = Decimal(str(state["score"])) if state.get("score") is not None else None
             session.agent_trace_id = state["trace_id"]
             session.updated_at = datetime.now(UTC)
@@ -412,7 +444,7 @@ class AssessmentEvaluationMixin:
         recommended: list[int] = []
         touched: dict[str, WeaknessReviewItem] = {}
         for evaluated in state.get("evaluated", []):
-            if evaluated.feedback.get("score") is None or evaluated.feedback["score"] >= 60:
+            if evaluated.feedback.get("score") is None or evaluated.feedback["score"] >= 60 or evaluated.feedback.get("unanswered"):
                 continue
             question_id = str(evaluated.question.get("id"))
             row = rows_by_question[question_id]
@@ -576,7 +608,7 @@ class AssessmentEvaluationMixin:
         evaluated_by_id = {str(item.question.get("id")): item for item in state.get("evaluated", [])}
         risks: list[str] = []
         for row in state.get("answer_rows", []):
-            question_id = str((row.question_json or {}).get("id"))
+            question_id = str(row.question_id or (row.question_json or {}).get("id"))
             evaluated = evaluated_by_id.get(question_id)
             if evaluated is None or row.answer_text is None:
                 continue

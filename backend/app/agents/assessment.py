@@ -93,7 +93,7 @@ class AssessmentGraphRunner(AssessmentGenerationMixin, AssessmentEvaluationMixin
             return session_to_api(session, rows)
         evaluated = [self._semantic_evaluated(row.question_json or {}, str(row.answer_text), grades[str((row.question_json or {}).get("id"))]) for row in pending]
         diagnoses = {str(item.question.get("id")): self._diagnosis_from_evaluation(item) for item in evaluated if item.feedback.get("score") is not None and item.feedback["score"] < 60}
-        by_question = {str((row.question_json or {}).get("id")): row for row in rows}
+        by_question = {str(row.question_id or (row.question_json or {}).get("id")): row for row in rows}
         for item in evaluated:
             question_id = str(item.question.get("id"))
             row = by_question[question_id]

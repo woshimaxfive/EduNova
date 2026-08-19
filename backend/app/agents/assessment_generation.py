@@ -298,6 +298,7 @@ class AssessmentGenerationMixin:
             persisted_questions = [
                 {
                     **question,
+                    "option_ids": [chr(ord("A") + index) for index, _ in enumerate(question.get("options") or [])],
                     "generation_mode": state.get("generation_mode", "deterministic_source"),
                     "review_mode": state.get("review_mode", "rules_only"),
                     "review_result": dict(state.get("review_result") or {}),
@@ -320,6 +321,7 @@ class AssessmentGenerationMixin:
                 PracticeAnswer(
                     session_id=session.id,
                     user_id=int(state["user_id"]),
+                    question_id=str(question["id"]),
                     question_json=question,
                     answer_text=None,
                     feedback_json={},

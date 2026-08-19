@@ -593,7 +593,8 @@ def test_personal_chat_default_does_not_override_server_embedding_runtime() -> N
 
     assert configs["default_config_id"] == spark["id"]
     assert configs["default_chat_config_id"] == spark["id"]
-    assert configs["default_embedding_config_id"] == qwen_embedding["id"]
+    assert configs["default_embedding_config_id"] is None
+    assert qwen_embedding["is_embedding_default"] is False
     assert chat_runtime.base_url == "https://spark-api-open.xf-yun.com/v1"
     assert chat_runtime.chat_model == "lite"
     assert chat_runtime.api_key == "spark-secret"
@@ -1699,8 +1700,8 @@ def test_model_settings_routes_use_documented_envelopes() -> None:
     assert configs_response.json()["data"]["default_chat_config_id"] == embedding_config_id
     assert configs_response.json()["data"]["default_embedding_config_id"] is None
     assert "sk-user-secret" not in str(configs_response.json())
-    assert embedding_default_response.status_code == 200
-    assert embedding_default_response.json()["data"]["default_embedding_config_id"] == embedding_config_id
+    assert embedding_default_response.status_code == 400
+    assert embedding_default_response.json()["error"]["code"] == "MODEL_SETTINGS_INVALID"
     assert create_response.status_code == 200
     assert create_response.json()["data"]["display_name"] == "本地 Ollama"
     assert default_response.status_code == 200

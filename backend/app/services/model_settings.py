@@ -129,8 +129,6 @@ class ModelSettingsService:
         configs = [self._config_summary(setting) for setting in self.repository.list_for_user(user.id)]
         default_chat_config = next((config for config in configs if config.is_default), None)
         default_generation_config = next((config for config in configs if config.is_generation_default), None)
-        default_embedding_config = next((config for config in configs if config.is_embedding_default), None)
-        default_rerank_config = next((config for config in configs if config.is_rerank_default), None)
         default_vision_config = next((config for config in configs if config.is_vision_default), None)
         return ModelSettingsListResponse(
             configs=configs,
@@ -138,8 +136,8 @@ class ModelSettingsService:
             default_config_id=default_chat_config.id if default_chat_config else None,
             default_chat_config_id=default_chat_config.id if default_chat_config else None,
             default_generation_config_id=default_generation_config.id if default_generation_config else None,
-            default_embedding_config_id=default_embedding_config.id if default_embedding_config else None,
-            default_rerank_config_id=default_rerank_config.id if default_rerank_config else None,
+            default_embedding_config_id=None,
+            default_rerank_config_id=None,
             default_vision_config_id=default_vision_config.id if default_vision_config else None,
         )
 
@@ -178,8 +176,6 @@ class ModelSettingsService:
         self._ensure_unique_display_name(user.id, payload.display_name)
         has_chat_default = any(candidate.is_default for candidate in existing_configs)
         has_generation_default = any(candidate.is_generation_default for candidate in existing_configs)
-        has_embedding_default = any(candidate.is_embedding_default for candidate in existing_configs)
-        has_rerank_default = any(candidate.is_rerank_default for candidate in existing_configs)
         capabilities = provider_capabilities(
             preset_id=payload.preset_id,
             base_url=payload.base_url,
@@ -193,10 +189,8 @@ class ModelSettingsService:
             and (payload.make_default or (not has_chat_default and not capabilities.supports_image_input)),
             is_generation_default=bool(payload.chat_model)
             and (payload.make_generation_default or (not has_generation_default and not capabilities.supports_image_input)),
-            is_embedding_default=bool(payload.embedding_model)
-            and (payload.make_embedding_default or not has_embedding_default),
-            is_rerank_default=bool(payload.rerank_model)
-            and (payload.make_rerank_default or not has_rerank_default),
+            is_embedding_default=False,
+            is_rerank_default=False,
             is_vision_default=bool(payload.chat_model) and payload.make_vision_default,
         )
         self._apply_settings_payload(setting, payload)
@@ -206,10 +200,6 @@ class ModelSettingsService:
             self.repository.unset_defaults_for_user(user.id)
         if setting.is_generation_default:
             self.repository.unset_generation_defaults_for_user(user.id)
-        if setting.is_embedding_default:
-            self.repository.unset_embedding_defaults_for_user(user.id)
-        if setting.is_rerank_default:
-            self.repository.unset_rerank_defaults_for_user(user.id)
         if setting.is_vision_default:
             self.repository.unset_vision_defaults_for_user(user.id)
         self._save_and_commit(setting)
@@ -333,15 +323,9 @@ class ModelSettingsService:
             self.repository.unset_generation_defaults_for_user(user.id, except_setting_id=config_id)
             setting.is_generation_default = True
         if payload.make_embedding_default:
-            if not setting.embedding_model:
-                raise ModelSettingsValidationError("该配置没有向量模型，不能设为向量默认。")
-            self.repository.unset_embedding_defaults_for_user(user.id, except_setting_id=config_id)
-            setting.is_embedding_default = True
+            raise ModelSettingsValidationError("向量模型由系统统一配置，不能设置用户级默认。")
         if payload.make_rerank_default:
-            if not setting.rerank_model:
-                raise ModelSettingsValidationError("该配置没有重排序模型，不能设为重排序默认。")
-            self.repository.unset_rerank_defaults_for_user(user.id, except_setting_id=config_id)
-            setting.is_rerank_default = True
+            raise ModelSettingsValidationError("重排序模型由系统统一配置，不能设置用户级默认。")
         if payload.make_vision_default:
             if not setting.chat_model:
                 raise ModelSettingsValidationError("该配置没有模型，不能设为图片理解默认。")
@@ -438,22 +422,12 @@ class ModelSettingsService:
         return self.list_configs(user)
 
     def set_embedding_default_config(self, user: User, config_id: int) -> ModelSettingsListResponse:
-        setting = self._get_user_setting_or_raise(user, config_id)
-        if not setting.embedding_model:
-            raise ModelSettingsValidationError("该配置没有向量模型，不能设为向量默认。")
-        setting.is_embedding_default = True
-        self.repository.unset_embedding_defaults_for_user(user.id, except_setting_id=config_id)
-        self._save_and_commit(setting)
-        return self.list_configs(user)
+        del user, config_id
+        raise ModelSettingsValidationError("向量模型由系统统一配置，不能设置用户级默认。")
 
     def set_rerank_default_config(self, user: User, config_id: int) -> ModelSettingsListResponse:
-        setting = self._get_user_setting_or_raise(user, config_id)
-        if not setting.rerank_model:
-            raise ModelSettingsValidationError("该配置没有重排序模型，不能设为重排序默认。")
-        setting.is_rerank_default = True
-        self.repository.unset_rerank_defaults_for_user(user.id, except_setting_id=config_id)
-        self._save_and_commit(setting)
-        return self.list_configs(user)
+        del user, config_id
+        raise ModelSettingsValidationError("重排序模型由系统统一配置，不能设置用户级默认。")
 
     def set_vision_default_config(self, user: User, config_id: int) -> ModelSettingsListResponse:
         setting = self._get_user_setting_or_raise(user, config_id)

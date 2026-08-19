@@ -82,9 +82,28 @@ Authorization: Bearer <access-token>
 - 429：调用或任务并发受限；
 - 5xx：服务或外部依赖异常。
 
+练习正式交卷还定义稳定错误码：`DUPLICATE_QUESTION_ID`（重复题号，400）、`INCOMPLETE_SUBMISSION`（缺题或混入未知题，422）和 `PRACTICE_ALREADY_COMPLETED`（已完成会话再次交卷，409）。
+
 ## 7. 兼容性
 
 - `/api/v1` 是当前公共 API 版本前缀。
 - OpenAPI 是前后端传输合同的事实来源。
 - 数据库 JSON 字段读取时保留安全默认值，以兼容旧记录。
 - 删除或改变公共字段前应提供迁移和前端兼容期。
+
+## 8. 练习提交与草稿版本
+
+- `PATCH /api/v1/practice/sessions/{session_id}/draft` 是草稿保存接口，允许只保存部分题目；请求必须携带递增的 `revision`。服务端只接受高于当前版本的草稿，旧版本返回 `409`，防止网络乱序覆盖新输入。
+- `POST /api/v1/practice/sessions/{session_id}/answers` 是正式交卷接口，提交题目集合必须与当前练习完全一致，不能缺题、增加未知题或重复题号。
+- 每个答案可带 `answered`：`false` 明确表示未作答；旧客户端的 `"未作答"` 会兼容转换。未作答按 0 分计入总分，但不会被当作知识性错误写入弱点诊断。
+- `PracticeAnswer.question_id` 与 `(session_id, question_id)` 唯一约束是提交和重评的权威身份；不再依赖题目 JSON 内嵌 ID。
+- 选择题返回稳定 `option_ids`（`A`、`B`…）；客户端应提交选项 ID。服务端仍接受旧版文本答案，以便历史草稿过渡。
+- 多选题要求用户答案集合与标准答案集合严格相等；多选错选不会被判为满分。
+- 练习完成后再次正式提交返回 `409`，不会覆盖原成绩或答案；简答题需要重新评分时使用 `/regrade`。
+- AI 任务重试只有在新任务成功创建后才消耗原任务的重试次数；输入校验失败不消耗额度。
+
+## 9. 检索、存储与取消边界
+
+- embedding 和 rerank 是系统级检索基础设施：用户模型配置不能成为其默认路由；`/model/embedding/reindex-jobs` 只使用当前系统向量配置，`config_id` 仅为兼容字段。
+- 上传资料、图片附件和导出文件先写入临时对象键；数据库提交后才提升为正式对象键。提升失败会保留可追踪的 `pending_promotion` 状态和临时键，供任务重试或巡检恢复。
+- AI 任务在启动、工作流返回和向量批次落盘前检查取消请求；取消任务不能再被标为 `completed`。

@@ -400,6 +400,7 @@ describe("PracticePage", () => {
         method: "patch",
         url: PRACTICE_ENDPOINTS.draft(501),
         payload: {
+          revision: 1,
           answers: expect.arrayContaining([
             { question_id: "q2", answer_text: JSON.stringify(["实际代价 g(n)", "估计代价 h(n)"]) }
           ])
@@ -427,9 +428,9 @@ describe("PracticePage", () => {
       url: PRACTICE_ENDPOINTS.answers(501),
       payload: {
         answers: [
-          { question_id: "q1", answer_text: "估计剩余代价" },
-          { question_id: "q2", answer_text: "未作答" },
-          { question_id: "q3", answer_text: "未作答" }
+          { question_id: "q1", answer_text: "估计剩余代价", answered: true },
+          { question_id: "q2", answer_text: "", answered: false },
+          { question_id: "q3", answer_text: "", answered: false }
         ]
       }
     }));

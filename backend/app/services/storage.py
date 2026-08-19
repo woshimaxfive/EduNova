@@ -15,6 +15,7 @@ class StorageAdapter(Protocol):
     def read_bytes(self, key: str) -> bytes: ...
     def exists(self, key: str) -> bool: ...
     def delete(self, key: str) -> None: ...
+    def promote(self, source_key: str, destination_key: str) -> str: ...
     def local_path(self, key: str) -> Path | None: ...
 
 
@@ -46,6 +47,16 @@ class LocalStorageAdapter:
         path = self._resolve_compatible(key)
         if path.is_file():
             path.unlink()
+
+    def promote(self, source_key: str, destination_key: str) -> str:
+        source = self._resolve_compatible(source_key)
+        destination_key = self._logical_key(destination_key)
+        destination = self._resolve(destination_key)
+        if not source.is_file():
+            raise StorageError("临时对象不存在，无法提升为正式对象。")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        source.replace(destination)
+        return destination_key
 
     def _resolve_compatible(self, key: str) -> Path:
         candidate = Path(key)
@@ -106,6 +117,17 @@ class S3StorageAdapter:
         logical = LocalStorageAdapter._logical_key(key)
         self.client.delete_object(Bucket=self.bucket, Key=self._object_key(logical))
 
+    def promote(self, source_key: str, destination_key: str) -> str:
+        source = LocalStorageAdapter._logical_key(source_key)
+        destination = LocalStorageAdapter._logical_key(destination_key)
+        self.client.copy_object(
+            Bucket=self.bucket,
+            Key=self._object_key(destination),
+            CopySource={"Bucket": self.bucket, "Key": self._object_key(source)},
+        )
+        self.client.delete_object(Bucket=self.bucket, Key=self._object_key(source))
+        return destination
+
     def _object_key(self, logical: str) -> str:
         return f"{self.prefix}/{logical}" if self.prefix else logical
 
@@ -129,3 +151,18 @@ def build_storage(settings: Settings, *, kind: str) -> StorageAdapter:
         aws_secret_access_key=settings.s3_secret_access_key or None,
     )
     return S3StorageAdapter(client, settings.s3_bucket, prefix=kind)
+
+
+def promote_storage_object(storage: StorageAdapter, source_key: str, destination_key: str, *, content_type: str | None = None) -> str:
+    """Promote an object, retaining compatibility with narrow in-memory test adapters.
+
+    Production adapters implement server-side/local promotion. The fallback is
+    deliberately copy-then-delete so it never loses the only temporary copy.
+    """
+    promote = getattr(storage, "promote", None)
+    if callable(promote):
+        return str(promote(source_key, destination_key))
+    content = storage.read_bytes(source_key)
+    stored = storage.put_bytes(destination_key, content, content_type=content_type)
+    storage.delete(source_key)
+    return stored

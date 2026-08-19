@@ -23,6 +23,7 @@ export type SubmitPracticeAnswersRequest = {
   answers: Array<{
     question_id: string;
     answer_text: string;
+    answered?: boolean;
   }>;
 };
 
@@ -33,9 +34,11 @@ export type PracticeQuestion = {
   knowledge_point_title: string;
   prompt: string;
   options: string[];
+  option_ids?: string[];
   correct_answer: string | string[] | null;
   keywords: string[];
   explanation: string;
+  unanswered?: boolean;
   difficulty: string;
   citation_refs?: string[];
   generation_mode?: string;
@@ -53,6 +56,7 @@ export type PracticeAnswerFeedback = {
   matched_keywords: string[];
   missing_keywords: string[];
   explanation: string;
+  unanswered?: boolean;
   diagnosis?: {
     misconception: string;
     missing_concepts: string[];
@@ -83,6 +87,7 @@ export type PracticeSessionDetail = {
   requested_difficulty: "adaptive" | "easy" | "medium" | "hard";
   effective_difficulty: "easy" | "medium" | "hard";
   draft_saved_at?: string | null;
+  draft_revision?: number;
   questions: PracticeQuestion[];
   answers: PracticeAnswerResult[];
   closure_update?: {
@@ -133,8 +138,12 @@ export async function listRecentCompletedPracticeSessions(courseId: number, limi
   return response.data;
 }
 
-export async function savePracticeDraft(sessionId: number, payload: SubmitPracticeAnswersRequest) {
-  const response = await apiClient.patch<ApiEnvelope<PracticeSessionDetail>>(PRACTICE_ENDPOINTS.draft(sessionId), payload);
+export async function savePracticeDraft(
+  sessionId: number,
+  payload: SubmitPracticeAnswersRequest & { revision: number },
+  options: { signal?: AbortSignal } = {}
+) {
+  const response = await apiClient.patch<ApiEnvelope<PracticeSessionDetail>>(PRACTICE_ENDPOINTS.draft(sessionId), payload, options);
   return response.data;
 }
 

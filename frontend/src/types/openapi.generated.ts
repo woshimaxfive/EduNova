@@ -4276,6 +4276,11 @@ export interface components {
             missing_keywords: string[];
             /** Score */
             score: number | null;
+            /**
+             * Unanswered
+             * @default false
+             */
+            unanswered: boolean;
         };
         /** PracticeQuestion */
         PracticeQuestion: {
@@ -4300,6 +4305,8 @@ export interface components {
             knowledge_point_id: string | null;
             /** Knowledge Point Title */
             knowledge_point_title: string;
+            /** Option Ids */
+            option_ids?: string[];
             /** Options */
             options: string[];
             /** Prompt */
@@ -4330,6 +4337,11 @@ export interface components {
             course_id: string;
             /** Created At */
             created_at: string;
+            /**
+             * Draft Revision
+             * @default 0
+             */
+            draft_revision: number;
             /** Draft Saved At */
             draft_saved_at?: string | null;
             /**
@@ -4849,6 +4861,8 @@ export interface components {
         SavePracticeDraftRequest: {
             /** Answers */
             answers?: components["schemas"]["SubmitPracticeAnswerItem"][];
+            /** Revision */
+            revision: number;
         };
         /** SendTutorMessageRequest */
         SendTutorMessageRequest: {
@@ -4959,6 +4973,8 @@ export interface components {
         SubmitPracticeAnswerItem: {
             /** Answer Text */
             answer_text: string;
+            /** Answered */
+            answered?: boolean | null;
             /** Question Id */
             question_id: string;
         };

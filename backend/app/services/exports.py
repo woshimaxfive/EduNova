@@ -27,7 +27,7 @@ from backend.app.models import (
 )
 from backend.app.schemas.exports import ExportJobResponse, LearningDossierExport, LearningDossierSourceSummary
 from backend.app.schemas.reports import empty_report, iso_timestamp
-from backend.app.services.storage import StorageAdapter, build_storage
+from backend.app.services.storage import StorageAdapter, build_storage, promote_storage_object
 
 
 class ExportNotFoundError(NotFoundDomainError):
@@ -385,6 +385,24 @@ class ExportService:
             raise ExportNotFoundError("导出任务不存在。")
         if job.status == "completed":
             return self._job_response(job)
+        if job.status == "pending_storage":
+            temporary_key = str((job.metadata_json or {}).get("temporary_storage_key") or "")
+            if not temporary_key or not job.file_path:
+                self._mark_job_failed(job, "导出对象存储状态不完整，请重新导出。")
+                return self._job_response(job)
+            try:
+                if not self.storage.exists(job.file_path):
+                    promote_storage_object(self.storage, temporary_key, job.file_path, content_type=job.content_type)
+                job.status = "completed"
+                job.error_message = None
+                job.completed_at = datetime.now(UTC)
+                job.updated_at = job.completed_at
+                job.metadata_json = {**(job.metadata_json or {}), "storage_state": "ready", "temporary_storage_key": None}
+                self.repository.commit()
+                self.repository.refresh(job)
+            except Exception:
+                self.repository.rollback()
+            return self._job_response(job)
 
         try:
             job.status = "running"
@@ -392,12 +410,19 @@ class ExportService:
             self.repository.commit()
             rendered = self._render_export_job(job)
             file_key = f"job-{job.id}-{rendered.filename}"
-            stored_key = self.storage.put_bytes(file_key, rendered.content, content_type=rendered.content_type)
-            job.status = "completed"
+            temporary_key = f"tmp/exports/{job.id}-{rendered.filename}"
+            self.storage.put_bytes(temporary_key, rendered.content, content_type=rendered.content_type)
             job.filename = rendered.filename
             job.content_type = rendered.content_type
-            job.file_path = stored_key
+            job.file_path = file_key
+            job.status = "pending_storage"
+            job.metadata_json = {**(job.metadata_json or {}), "storage_state": "pending_promotion", "temporary_storage_key": temporary_key}
             job.error_message = None
+            self.repository.commit()
+            self.repository.refresh(job)
+            promote_storage_object(self.storage, temporary_key, file_key, content_type=rendered.content_type)
+            job.status = "completed"
+            job.metadata_json = {**(job.metadata_json or {}), "storage_state": "ready", "temporary_storage_key": None}
             job.completed_at = datetime.now(UTC)
             job.updated_at = job.completed_at
             self.repository.commit()
@@ -406,7 +431,14 @@ class ExportService:
             self.repository.rollback()
             failed_job = self.repository.get_export_job(job_id)
             if failed_job is not None:
-                self._mark_job_failed(failed_job, "学习档案导出失败，请稍后重试。")
+                metadata = dict(failed_job.metadata_json or {})
+                if failed_job.status == "pending_storage" and metadata.get("temporary_storage_key"):
+                    failed_job.error_message = "导出文件已生成，正在等待对象存储提升。"
+                    failed_job.updated_at = datetime.now(UTC)
+                    self.repository.commit()
+                    self.repository.refresh(failed_job)
+                else:
+                    self._mark_job_failed(failed_job, "学习档案导出失败，请稍后重试。")
                 job = failed_job
         return self._job_response(job)
 

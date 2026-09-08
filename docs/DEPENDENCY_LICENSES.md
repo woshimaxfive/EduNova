@@ -7,7 +7,7 @@
 | alembic | 1.18.5 | [alembic](https://github.com/sqlalchemy/alembic/) | MIT | 数据库迁移 |
 | bcrypt | 5.0.0 | [bcrypt](https://github.com/pyca/bcrypt) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | boto3 | 1.43.47 | [boto3](https://github.com/boto/boto3) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
-| cryptography | 49.0.0 | [cryptography](https://github.com/pyca/cryptography) | Apache-2.0 OR BSD-3-Clause | 项目直接运行、测试或构建依赖 |
+| cryptography | 50.0.1 | [cryptography](https://github.com/pyca/cryptography) | Apache-2.0 OR BSD-3-Clause | 项目直接运行、测试或构建依赖 |
 | docling-slim | 2.113.0 | [docling-slim](https://github.com/docling-project/docling) | MIT | 项目直接运行、测试或构建依赖 |
 | fastapi | 0.138.2 | [fastapi](https://github.com/fastapi/fastapi) | MIT | 后端 API 与 OpenAPI |
 | httpx | 0.28.1 | [httpx](https://github.com/encode/httpx) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
@@ -29,7 +29,7 @@
 | puremagic | 2.2.0 | [puremagic](https://github.com/cdgriffith/puremagic) | MIT | 项目直接运行、测试或构建依赖 |
 | pydantic-settings | 2.14.2 | [pydantic-settings](https://github.com/pydantic/pydantic-settings) | MIT | 项目直接运行、测试或构建依赖 |
 | PyJWT | 2.13.0 | [PyJWT](https://github.com/jpadilla/pyjwt) | MIT | 项目直接运行、测试或构建依赖 |
-| pypdf | 6.14.2 | [pypdf](https://github.com/py-pdf/pypdf) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
+| pypdf | 6.16.1 | [pypdf](https://github.com/py-pdf/pypdf) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
 | pytest | 9.1.1 | [pytest](https://github.com/pytest-dev/pytest) | MIT | 项目直接运行、测试或构建依赖 |
 | pytest-asyncio | 1.4.0 | [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | python-docx | 1.2.0 | [python-docx](https://github.com/python-openxml/python-docx) | MIT | 项目直接运行、测试或构建依赖 |
@@ -41,6 +41,7 @@
 | rq | 2.10.0 | [rq](https://github.com/rq/rq) | BSD-2-Clause | 项目直接运行、测试或构建依赖 |
 | ruff | 0.15.20 | [ruff](https://github.com/astral-sh/ruff) | MIT | 项目直接运行、测试或构建依赖 |
 | scipy | 1.17.1 | [scipy](https://github.com/scipy/scipy) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
+| setuptools | 83.0.0 | [setuptools](https://github.com/pypa/setuptools) | MIT | AI worker 的 PyTorch 运行依赖；固定安全版本 |
 | SQLAlchemy | 2.0.51 | [SQLAlchemy](https://www.sqlalchemy.org) | MIT | 数据访问与事务 |
 | sse-starlette | 3.4.5 | [sse-starlette](https://github.com/sysid/sse-starlette) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
 | uvicorn | 0.49.0 | [uvicorn](https://github.com/Kludex/uvicorn) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |

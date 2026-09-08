@@ -24,6 +24,12 @@ from backend.app.services.auth import AuthService
 
 FERNET_TEST_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
+# Synthetic fixture produced by cryptography 49.0.0, never a real provider key.
+LEGACY_FERNET_CIPHERTEXT = (
+    "gAAAAABqn2-x8LK4bcHWwSZSEhZFIr43SgORhqQDQE5di5vNPcsf_EDCsEUHBXdeshs7o3MgxfR_"
+    "7QMSW18vZg-iXtMZdfQZ7yW0UIYtl0Xw-HijZK5R2K4="
+)
+
 
 def load_model_settings_module():
     try:
@@ -377,6 +383,28 @@ def test_system_embedding_connection_can_use_a_different_provider_endpoint() -> 
     assert embedding_runtime.base_url == "https://embedding.example.local/v1"
     assert embedding_runtime.api_key == "embedding-system-secret"
     assert embedding_runtime.embedding_model == "embedding-system-model"
+
+
+def test_model_settings_decrypts_legacy_fernet_ciphertext_without_rewriting() -> None:
+    module = load_model_settings_module()
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=FakeProvider())
+
+    assert service._decrypt_api_key(LEGACY_FERNET_CIPHERTEXT) == "edunova-synthetic-legacy-key"
+    assert repo.committed is False
+
+
+def test_model_settings_rejects_tampered_fernet_ciphertext() -> None:
+    module = load_model_settings_module()
+    service = module.ModelSettingsService(
+        repository=FakeModelSettingsRepository(settings_by_user={}),
+        settings=make_settings(),
+        provider=FakeProvider(),
+    )
+    payload = bytearray(base64.urlsafe_b64decode(LEGACY_FERNET_CIPHERTEXT))
+    payload[-1] ^= 1
+
+    assert service._decrypt_api_key(base64.urlsafe_b64encode(payload).decode("ascii")) is None
 
 
 def test_save_user_model_settings_encrypts_key_and_user_config_wins() -> None:

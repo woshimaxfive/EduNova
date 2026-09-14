@@ -98,6 +98,17 @@ def get_current_path(
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
 
 
+@router.post("/tasks/{task_id}/resources/{resource_id}/practice")
+def create_bound_task_practice(
+    task_id: int,
+    resource_id: int,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db_session),
+) -> dict:
+    from backend.app.services.task_practice import TaskPracticeService
+    return api_response(TaskPracticeService(db).create(current_user, task_id, resource_id).model_dump())
+
+
 @router.patch("/tasks/{task_id}")
 def update_path_task(
     task_id: int,
@@ -111,6 +122,15 @@ def update_path_task(
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
     except PathValidationError as exc:
         raise ApiError(400, "VALIDATION_ERROR", str(exc)) from exc
+
+
+@router.get("/tasks/{task_id}")
+def get_path_task_version(
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    service: PathService = Depends(get_path_service),
+) -> dict:
+    return api_response(service.get_task_version(current_user, task_id).model_dump())
 
 
 @router.get("/drafts")

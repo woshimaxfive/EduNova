@@ -220,10 +220,11 @@ def record_resource_interaction(
 @router.get("/{resource_id}/learning-state")
 def get_resource_learning_state(
     resource_id: int,
+    path_task_id: int | None = Query(default=None, gt=0),
     current_user: User = Depends(get_current_user),
     service: ResourceInteractionService = Depends(get_resource_interaction_service),
 ) -> dict:
     try:
-        return api_response(service.state(current_user, resource_id).model_dump())
+        return api_response(service.state(current_user, resource_id, path_task_id).model_dump())
     except ResourceInteractionNotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc

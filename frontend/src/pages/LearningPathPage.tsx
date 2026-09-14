@@ -121,7 +121,7 @@ export function LearningPathPage() {
       const bundleResourceId = variables.task.learning_bundle?.items.find((item) => (
         item.resource_id && item.learning_status !== "completed"
       ))?.resource_id ?? variables.task.learning_bundle?.items.find((item) => item.resource_id)?.resource_id;
-      const resourceId = bundleResourceId ?? variables.task.recommended_resources[0]?.id ?? variables.task.recommended_resource_ids[0];
+      const resourceId = bundleResourceId;
       if (resourceId) {
         navigate(`${PATHS.studio}?course_id=${effectiveCourseId}&resource_id=${resourceId}&path_task_id=${variables.task.id}`);
       }

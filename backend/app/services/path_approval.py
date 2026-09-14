@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from backend.app.core.errors import ConflictDomainError, NotFoundDomainError, ValidationDomainError
 from backend.app.models import User
 from backend.app.schemas.paths import LearningPathDetail, LearningPathResponse, path_to_api
+from backend.app.services.task_resource_binding import binding_status
 
 
 class PathApprovalMixin:
@@ -52,6 +53,14 @@ class PathApprovalMixin:
                 raise ConflictDomainError("当前计划已变化，请生成新草稿后确认。")
             if not self.repository.list_tasks_for_path(path.id):
                 raise ValidationDomainError("空计划不能批准。")
+            resources = {item.id: item for item in self.repository.list_generated_resources(user.id, course_id)}
+            for task in self.repository.list_tasks_for_path(path.id):
+                for item in (task.learning_bundle_json or {}).get("items", []):
+                    if isinstance(item, dict) and item.get("resource_id") is not None:
+                        raw_id = str(item["resource_id"])
+                        resource = resources.get(int(raw_id)) if raw_id.isdigit() else None
+                        if binding_status(task, item, resource) != "verified":
+                            raise ConflictDomainError("草稿资源缺失、未经验证或版本已变化，请重新生成草稿。")
             self.repository.archive_active_paths(user.id, course_id)
             path.status = "active"
             path.approval_status = "approved"

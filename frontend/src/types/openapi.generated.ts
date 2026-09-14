@@ -869,7 +869,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Path Task Version */
+        get: operations["get_path_task_version_api_v1_paths_tasks__task_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -890,6 +891,23 @@ export interface paths {
         put?: never;
         /** Create Path Task Resource Job */
         post: operations["create_path_task_resource_job_api_v1_paths_tasks__task_id__resource_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/paths/tasks/{task_id}/resources/{resource_id}/practice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Bound Task Practice */
+        post: operations["create_bound_task_practice_api_v1_paths_tasks__task_id__resources__resource_id__practice_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3324,6 +3342,11 @@ export interface components {
         /** LearningBundleItem */
         LearningBundleItem: {
             /**
+             * Binding Status
+             * @default legacy_unverified
+             */
+            binding_status: string;
+            /**
              * Learning Status
              * @default not_started
              * @enum {string}
@@ -3333,6 +3356,8 @@ export interface components {
             resource_id?: string | null;
             /** Resource Type */
             resource_type: string;
+            /** Resource Version */
+            resource_version?: number | null;
             /** Role */
             role: string;
             /**
@@ -4444,6 +4469,10 @@ export interface components {
             requested_difficulty: "easy" | "medium" | "hard" | "adaptive";
             /** Score */
             score: number | null;
+            /** Source Binding */
+            source_binding?: {
+                [key: string]: unknown;
+            } | null;
             /** Status */
             status: string;
             /** Targeted Weakness Id */
@@ -4722,6 +4751,10 @@ export interface components {
              * @default 0
              */
             event_count: number;
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            }[];
             /** Feedback */
             feedback?: ("helpful" | "too_easy" | "too_hard" | "not_helpful") | null;
             /**
@@ -11120,6 +11153,111 @@ export interface operations {
             };
         };
     };
+    get_path_task_version_api_v1_paths_tasks__task_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_LearningPathTaskResponse_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
     update_path_task_api_v1_paths_tasks__task_id__patch: {
         parameters: {
             query?: never;
@@ -11250,6 +11388,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_AiJobResponse_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    create_bound_task_practice_api_v1_paths_tasks__task_id__resources__resource_id__practice_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                task_id: number;
+                resource_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_PracticeSessionDetail_"];
                 };
             };
             /** @description Bad Request */
@@ -13999,7 +14243,9 @@ export interface operations {
     };
     get_resource_learning_state_api_v1_resources__resource_id__learning_state_get: {
         parameters: {
-            query?: never;
+            query?: {
+                path_task_id?: number | null;
+            };
             header?: {
                 authorization?: string | null;
             };

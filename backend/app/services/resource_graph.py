@@ -39,6 +39,7 @@ from backend.app.services.resource_intent import (
 )
 from backend.app.services.resource_quality import RESOURCE_PROMPT_VERSION, meaningful_model_delta
 from backend.app.services.structured_output import parse_json_object
+from backend.app.services.task_resource_binding import resource_snapshot
 from backend.app.services.video_resources import VideoCurationError
 from backend.app.services.ai_job_contracts import AiJobCancelled, AiJobTimeoutError
 
@@ -1072,7 +1073,7 @@ class ResourceGenerationGraphRunner:
 
         path_task_id = state.get("path_task_id")
         if path_task_id is not None and resources:
-            task = self.service.repository.get_learning_task_for_user(int(state["user_id"]), int(path_task_id))
+            task = self.service.repository.get_learning_task_for_user(int(state["user_id"]), int(path_task_id), for_update=True)
             if task is None or task.course_id != course.id:
                 raise ResourceNotFoundError("学习路径任务不存在或无权访问。")
             if self.service.repository.is_path_draft(task.path_id):
@@ -1085,10 +1086,18 @@ class ResourceGenerationGraphRunner:
             # value with the persisted bundle and actually write the association.
             bundle_items = [dict(item) if isinstance(item, dict) else item for item in list(bundle.get("items") or [])]
             by_type = {item.resource_type: item for item in resources}
+            planned_types = {str(item.get("resource_type")) for item in bundle_items if isinstance(item, dict)}
+            if not set(by_type).issubset(planned_types):
+                raise ResourceValidationError("生成类型不属于该任务的学习安排。")
             for item in bundle_items:
                 generated = by_type.get(str(item.get("resource_type") or "")) if isinstance(item, dict) else None
                 if generated is not None:
+                    if item.get("resource_id") is not None:
+                        raise ResourceValidationError("任务已绑定具体资源版本；请创建新计划版本，不能覆盖原绑定。")
+                    if generated.review_status != "passed":
+                        raise ResourceValidationError("资源未通过证据审核，不能绑定学习任务。")
                     item["resource_id"] = generated.id
+                    item["binding"] = resource_snapshot(generated)
                     item["status"] = "ready"
             task.learning_bundle_json = {**bundle, "items": bundle_items}
 

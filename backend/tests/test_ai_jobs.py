@@ -384,7 +384,7 @@ def test_path_task_resource_job_uses_only_missing_bundle_types_and_reuses_active
     assert queue.enqueued == [1]
 
 
-def test_path_task_resource_job_reuses_recommended_resource_when_legacy_bundle_id_is_missing() -> None:
+def test_path_task_resource_job_does_not_invent_missing_legacy_binding() -> None:
     user = make_user()
     ready = GeneratedResource(
         id=71,
@@ -411,7 +411,7 @@ def test_path_task_resource_job_reuses_recommended_resource_when_legacy_bundle_i
         idempotency_key="legacy-bundle",
     )
 
-    assert job.request["resource_types"] == ["quiz"]
+    assert job.request["resource_types"] == ["doc", "quiz"]
 
 
 def test_path_task_resource_job_rejects_archived_completed_empty_and_ready_bundles() -> None:

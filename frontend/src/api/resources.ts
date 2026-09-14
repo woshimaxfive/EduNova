@@ -341,7 +341,8 @@ export async function recordResourceInteraction(
   return response.data;
 }
 
-export async function getResourceLearningState(resourceId: number) {
-  const response = await apiClient.get<ApiEnvelope<ResourceLearningState>>(RESOURCE_ENDPOINTS.learningState(resourceId));
+export async function getResourceLearningState(resourceId: number, pathTaskId?: number | null) {
+  const response = await apiClient.get<ApiEnvelope<ResourceLearningState>>(RESOURCE_ENDPOINTS.learningState(resourceId),
+    pathTaskId ? { params: { path_task_id: pathTaskId } } : undefined);
   return response.data;
 }

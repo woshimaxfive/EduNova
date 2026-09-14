@@ -448,6 +448,8 @@ def test_learning_bundle_status_comes_from_scoped_resource_interactions() -> Non
     service = make_path_service(repo)
     generated = as_dict(service.generate_path(make_user(), course_id=101))
     task = repo.tasks[0]
+    # This fixture represents historical explicit links without verified snapshots.
+    task.learning_bundle_json.pop("binding_contract", None)
     task.learning_bundle_json = {
         **task.learning_bundle_json,
         "items": [
@@ -522,7 +524,7 @@ def test_learning_bundle_status_comes_from_scoped_resource_interactions() -> Non
     ]
 
 
-def test_learning_bundle_recovers_resource_links_from_recommended_ids_for_legacy_data() -> None:
+def test_learning_bundle_does_not_invent_resource_links_from_legacy_recommendations() -> None:
     repo = make_repo()
     service = make_path_service(repo)
     service.generate_path(make_user(), course_id=101)
@@ -536,9 +538,9 @@ def test_learning_bundle_recovers_resource_links_from_recommended_ids_for_legacy
     current = as_dict(service.get_current_path(make_user(), 101))
     bundle = current["tasks"][0]["learning_bundle"]
 
-    assert bundle["ready_count"] == 1
-    assert bundle["items"][0]["resource_id"] == "802"
-    assert bundle["items"][0]["status"] == "available"
+    assert bundle["ready_count"] == 0
+    assert bundle["items"][0]["resource_id"] is None
+    assert bundle["items"][0]["binding_status"] == "unbound"
 
 
 def test_update_task_status_is_user_scoped_and_validated() -> None:

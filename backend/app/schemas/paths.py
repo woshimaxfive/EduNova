@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from backend.app.models import GeneratedResource, LearningPath, LearningTask
 from backend.app.schemas.personalization import PersonalizationFreshnessResponse
+from backend.app.services.task_resource_binding import binding_status
 
 
 PathTaskStatus = Literal["todo", "doing", "completed"]
@@ -37,6 +38,8 @@ class LearningBundleItem(BaseModel):
     role: str
     resource_id: str | None = None
     status: str = "recommended"
+    binding_status: str = "legacy_unverified"
+    resource_version: int | None = None
     learning_status: Literal["not_started", "in_progress", "completed"] = "not_started"
 
 
@@ -148,33 +151,21 @@ def task_to_api(
     raw_bundle = task.learning_bundle_json or {}
     states = learning_states or {}
     bundle_items = []
-    used_bundle_resource_ids: set[int] = set()
     for item in raw_bundle.get("items", []) if isinstance(raw_bundle.get("items"), list) else []:
         if not isinstance(item, dict):
             continue
         resource_type = str(item.get("resource_type") or "doc")
         raw_resource_id = item.get("resource_id")
         resource = resources_by_id.get(int(raw_resource_id)) if str(raw_resource_id).isdigit() else None
-        if resource is None or resource.status != "completed" or resource.resource_type != resource_type:
-            resource = next(
-                (
-                    resources_by_id[resource_id]
-                    for resource_id in resource_ids
-                    if resource_id not in used_bundle_resource_ids
-                    and resource_id in resources_by_id
-                    and resources_by_id[resource_id].status == "completed"
-                    and resources_by_id[resource_id].resource_type == resource_type
-                ),
-                None,
-            )
-        resource_id = resource.id if resource is not None and resource.status == "completed" else None
-        if resource_id is not None:
-            used_bundle_resource_ids.add(resource_id)
+        state = binding_status(task, item, resource)
+        resource_id = resource.id if resource is not None and state in {"verified", "legacy_unverified"} else None
         bundle_items.append(LearningBundleItem(
             resource_type=resource_type,
             role=str(item.get("role") or "辅助当前学习目标"),
             resource_id=str(resource_id) if resource_id is not None else None,
-            status="available" if resource_id is not None else str(item.get("status") or "recommended"),
+            status="available" if resource_id is not None else state,
+            binding_status=state,
+            resource_version=resource.version_number if resource is not None else None,
             learning_status=states.get(int(resource_id), "not_started") if str(resource_id).isdigit() else "not_started",
         ))
     ready_count = sum(1 for item in bundle_items if item.resource_id is not None)

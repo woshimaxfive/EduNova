@@ -10,7 +10,6 @@ import { AGENT_ENDPOINTS } from "../api/agents";
 import { AI_JOB_ENDPOINTS } from "../api/aiJobs";
 import { apiClient } from "../api/client";
 import { COURSE_ENDPOINTS } from "../api/courses";
-import { PATH_ENDPOINTS } from "../api/paths";
 import { RESOURCE_ENDPOINTS, type GeneratedResource, type ResourceQualityScore } from "../api/resources";
 import { StudioPage } from "./StudioPage";
 import { makeCompletedAiJob } from "../test/aiJobs";
@@ -110,6 +109,22 @@ function makeQuality(resourceId = "901"): ResourceQualityScore[] {
 }
 
 describe("StudioPage resource generation", () => {
+  it.each(["resource_id=999", "resource_id=901&path_task_id=61"])("does not substitute unrelated resources for %s", async (query) => {
+    apiClient.defaults.adapter = async (config) => {
+      const url = config.url ?? "";
+      const data = url === COURSE_ENDPOINTS.list
+        ? [{ id: "808", title: "课程", status: "ready" }]
+        : url === RESOURCE_ENDPOINTS.list
+          ? [makeResource()]
+          : url === "/paths/tasks/61"
+            ? { id: "61", course_id: "808", path_id: "71", learning_bundle: { items: [{ resource_id: "999", resource_type: "doc" }] } }
+            : [];
+      return { data: { data }, status: 200, statusText: "OK", headers: {}, config };
+    };
+    renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808&${query}`);
+    expect(await screen.findByRole("heading", { name: "资源暂时没有读取成功" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "资源完整内容" })).not.toBeInTheDocument();
+  });
   beforeEach(() => {
     previousAdapter = apiClient.defaults.adapter;
   });
@@ -774,12 +789,9 @@ describe("StudioPage resource generation", () => {
       if (url === RESOURCE_ENDPOINTS.list) {
         return { data: { data: resources, page: 1, page_size: 2, total: 2 }, status: 200, statusText: "OK", headers: {}, config };
       }
-      if (url === PATH_ENDPOINTS.current) {
+      if (url === "/paths/tasks/61") {
         return {
           data: { data: {
-            course_id: "808", status: "active", message: "当前学习路径进行中。",
-            path: { id: "71", course_id: "808", title: "路径", goal: "掌握搜索", status: "active", plan_json: {}, created_at: "2026-07-05T09:00:00Z", updated_at: "2026-07-05T09:00:00Z" },
-            tasks: [{
               id: "61", path_id: "71", course_id: "808", knowledge_point_id: "401", title: "本节任务", task_type: "learn", reason: "按顺序学习",
               recommended_resource_ids: ["901", "902"], recommended_resources: [], status: "doing", created_at: "2026-07-05T09:00:00Z", updated_at: "2026-07-05T09:00:00Z",
               learning_bundle: {
@@ -790,8 +802,6 @@ describe("StudioPage resource generation", () => {
                   { resource_type: "quiz", role: "练习", resource_id: "902", status: "ready", learning_status: "not_started" }
                 ]
               }
-            }],
-            evidence_summary: { knowledge_point_count: 1, confirmed_or_reviewing_weakness_count: 0, pending_weakness_count: 0, resource_count: 2, basis: [] }
           } },
           status: 200, statusText: "OK", headers: {}, config
         };

@@ -212,6 +212,7 @@ class ResourceInteraction(IdMixin, CreatedAtMixin, Base):
         BigInteger, ForeignKey("learning_tasks.id", ondelete="SET NULL"), nullable=True
     )
     event_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    evidence_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
     progress_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
     feedback: Mapped[str | None] = mapped_column(String(30), nullable=True)
 

@@ -184,12 +184,6 @@ class AiJobRequestMixin:
         raw_items = bundle.get("items") if isinstance(bundle.get("items"), list) else []
         if not raw_items:
             raise AiJobValidationError("当前任务没有可生成的本节学习安排。")
-        recommended_resources = {
-            int(resource_id): resource
-            for resource_id in task.recommended_resource_ids or []
-            if str(resource_id).isdigit()
-            and (resource := self.repository.get_resource_for_user(user.id, int(resource_id))) is not None
-        }
         missing_types: list[str] = []
         for item in raw_items:
             if not isinstance(item, dict):
@@ -209,13 +203,8 @@ class AiJobRequestMixin:
                 and resource.status == "completed"
                 and resource.resource_type == resource_type
             )
-            if not ready:
-                ready = any(
-                    resource.course_id == task.course_id
-                    and resource.status == "completed"
-                    and resource.resource_type == resource_type
-                    for resource in recommended_resources.values()
-                )
+            if resource_id is not None and not ready:
+                raise AiJobConflictError("绑定资源已缺失或不可用，请生成新计划版本，不可隐式换绑。")
             if not ready and resource_type not in missing_types:
                 missing_types.append(resource_type)
         if not missing_types:

@@ -218,7 +218,7 @@ class FakeInteractionDb:
 
 def test_manual_resource_completion_does_not_complete_the_linked_path_task() -> None:
     user = User(id=1, account="student001", display_name="学生", hashed_password="hash")
-    resource = GeneratedResource(id=8, user_id=1, course_id=3, resource_type="doc", title="讲解")
+    resource = GeneratedResource(id=8, user_id=1, course_id=3, resource_type="doc", title="讲解", status="completed", review_status="passed")
     task = LearningTask(
         id=9,
         path_id=2,

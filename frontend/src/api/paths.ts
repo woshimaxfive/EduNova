@@ -98,6 +98,11 @@ export async function getCurrentPath(courseId: number) {
   return response.data;
 }
 
+export async function getPathTask(taskId: number) {
+  const response = await apiClient.get<ApiEnvelope<LearningPathTask>>(`/paths/tasks/${taskId}`);
+  return response.data;
+}
+
 export async function updatePathTask(taskId: number, payload: UpdatePathTaskRequest) {
   const response = await apiClient.patch<ApiEnvelope<LearningPathTask>>(PATH_ENDPOINTS.updateTask(taskId), payload);
   return response.data;

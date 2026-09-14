@@ -43,6 +43,12 @@ EduNova 使用 PostgreSQL、SQLAlchemy、Alembic 和 pgvector。本文档说明�
 
 `student_profiles` 保存可复用画像，`profile_events` 保存经过约束的画像证据。课程目标、课程基础、弱点、掌握度和路径通过 enrollment 与课程级表表达。
 
+`20260914_0036` 为 `resource_interactions` 添加非空 JSONB `evidence_json`，旧行默认空对象，禁止追认历史精确来源。有非空证据时降级拒绝删除该列，应备份并前向修复。隔离 PostgreSQL 检查升级、旧行默认值、降级/再升级和拒绝丢证据。
+
+任务继续复用 `learning_bundle_json.items` 的固定资源 ID，新增 binding 快照（版本族/序号、内容与引用摘要）和 `binding_contract=1`。没有引入平行版本系统；原资源、任务和交互外键保持不变。生成提交锁定任务行，仅填充空槽，不覆盖已有版本。活动创建锁定资源行以串行化重复 event_id；批准仍使用课程行锁。
+
+绑定测验通过任务行锁保证相同任务/资源只创建一个 PracticeSession。`assessment_json.source_binding` 与 `PracticeAnswer.question_json.source_binding` 保存相同来源，原题引用和答案随题目快照保存；后续评分继续使用既有 AssessmentGraph、提交认领和事务，不直接从资源阅读推断掌握。已归档计划的既有测验不自动切换到新版本。
+
 掌握度和报告中的确定性数字由练习、任务和资源互动记录计算，不把模型自然语言直接当作正式评分。
 
 ## 5. 资源版本

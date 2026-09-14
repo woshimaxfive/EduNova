@@ -110,6 +110,7 @@ class ResourceInteractionRequest(BaseModel):
 
 
 class ResourceLearningStateResponse(BaseModel):
+    evidence: list[dict] = Field(default_factory=list)
     resource_id: str
     path_task_id: str | None = None
     opened: bool = False

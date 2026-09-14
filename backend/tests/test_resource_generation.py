@@ -96,7 +96,7 @@ class FakeResourceRepository:
     def get_profile(self, user_id: int) -> StudentProfile | None:
         return self.profiles.get(user_id)
 
-    def get_learning_task_for_user(self, user_id: int, task_id: int) -> LearningTask | None:
+    def get_learning_task_for_user(self, user_id: int, task_id: int, *, for_update: bool = False) -> LearningTask | None:
         return next(
             (task for task in self.learning_tasks if task.id == task_id and task.user_id == user_id),
             None,

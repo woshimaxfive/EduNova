@@ -27,6 +27,7 @@ from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.services.paths import PathGenerationError
 from backend.app.services.ai_job_contracts import AiJobCancelled, AiJobTimeoutError
 from backend.app.core.errors import ConflictDomainError
+from backend.app.services.task_resource_binding import resource_snapshot
 
 
 logger = logging.getLogger(__name__)
@@ -823,7 +824,7 @@ class PathPlanningGraphRunner:
         resources: list[GeneratedResource],
         profile: dict[str, Any],
     ) -> dict[str, Any]:
-        resources_by_id = {resource.id: resource for resource in resources if resource.status == "completed"}
+        resources_by_id = {resource.id: resource for resource in resources if resource.status == "completed" and resource.review_status == "passed"}
         feedback = profile.get("resource_feedback") if isinstance(profile.get("resource_feedback"), dict) else {}
         selected_types = task.bundle_types or deterministic_bundle_types(feedback)
         selected_types = tuple(rank_resource_types(selected_types, feedback))
@@ -841,7 +842,7 @@ class PathPlanningGraphRunner:
         for resource_type in selected_types:
             available = next(
                 (item for item in preferred_resources if item.resource_type == resource_type),
-                next((item for item in resources_by_id.values() if item.resource_type == resource_type), None),
+                None,
             )
             items.append(
                 {
@@ -849,10 +850,12 @@ class PathPlanningGraphRunner:
                     "resource_id": available.id if available is not None else None,
                     "role": role_labels[resource_type],
                     "status": "available" if available is not None else "recommended",
+                    "binding": resource_snapshot(available) if available is not None else None,
                 }
             )
         model_enhanced = task.generation_mode in {"model_generated", "model_enhanced"}
         return {
+            "binding_contract": 1,
             "strategy": task.teaching_strategy if model_enhanced else "安全默认组合",
             "teaching_strategy": task.teaching_strategy,
             "learning_problem": task.learning_problem,

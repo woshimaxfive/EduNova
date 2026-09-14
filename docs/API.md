@@ -11,7 +11,16 @@ EduNova 后端使用 FastAPI，默认 API 前缀为 `/api/v1`。机器可读合�
 - 草稿不改变 `/paths/current`，不能更新任务进度、生成任务资源或记录任务活动；批准后才激活。已批准计划后续重规划只生成草稿，原计划继续生效。
 - 为兼容现有客户端，未指定 `draft` 且没有已批准当前计划时仍走旧生成模式，明确标记 `legacy`，不伪装为已批准。当前前端尚未接入新批准入口；可通过 API 验收。
 
-批准不表示评估通过或已掌握。资源精确版本/证据绑定与完整成功学习闭环不由批准接口自动实现。
+批准不表示评估通过或已掌握。任务资源与评估的来源合同如下；学习闭环的掌握判定仍由原服务端流程负责。
+
+### 任务、资源与评估来源
+
+- `GET /paths/tasks/{task_id}` 读取任务所属计划版本，包含已归档版本；草稿任务不可执行。工作台使用此接口，不把旧任务替换为当前计划任务。
+- `learning_bundle.items` 返回 `binding_status` 和 `resource_version`。新绑定记录固定资源 ID、版本族/序号以及内容和引用的 SHA-256；只有审核 passed 且快照匹配的资源才为 verified。旧明确关联保留 legacy_unverified；无 ID 的旧推荐不猜补。缺失、越权、未审核和快照冲突不返回可打开的资源 ID。
+- 已绑定版本不被生成请求覆盖，缺失时返回冲突并要求新计划版本。可为尚未绑定的槽位生成资源，保存时锁定任务、复核并绑定；禁止删除带验证快照的任务来源资源。课程/账号隐私删除仍遵循既有级联规则。
+- `POST /paths/tasks/{task_id}/resources/{resource_id}/practice` 从已批准计划的 verified quiz 创建练习，不重新生成原题；校验原题 ID、选项/答案和课程引用，返回既有 PracticeSessionDetail。相同任务/资源的并发或重复请求返回同一 session；使用原 `/practice/sessions/{session_id}/submit` 提交接口评分。
+- 练习响应 `source_binding` 和持久化原题保留计划、任务、资源快照与评分合同。该资源原本可查看参考答案，因此来源记录明确包含答案可见性，不作为独立盲测证明。旧练习不补造来源。
+- `GET /resources/{resource_id}/learning-state?path_task_id=...` 读取该任务的活动状态；省略任务参数只读取独立资源活动。返回的 evidence 保存活动来源快照；历史空证据标记 legacy_unverified。相同 event_id 必须对应同一任务、资源和事件内容；阅读/手动完成活动不改变掌握度，也不自动完成路径任务。
 
 ## 1. 在线文档
 

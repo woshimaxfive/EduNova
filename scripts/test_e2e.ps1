@@ -47,6 +47,9 @@ try {
   Write-Host "== Verify isolated code execution policy =="
   Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.code_verifier_check"))
 
+  Write-Host "== Validate exact task resource evidence binding =="
+  Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.task_binding_check"))
+
   Write-Host "== Run learning closure Playwright E2E =="
   Push-Location "$repoRoot\frontend"
   try {

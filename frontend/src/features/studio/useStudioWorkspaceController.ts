@@ -5,7 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { getAgentTrace, mapAgentTraceStepToEvent } from "../../api/agents";
 import type { AiJob } from "../../api/aiJobs";
 import { getCourseLearningState, getKnowledgePoints, getMasteryMap, listCourses } from "../../api/courses";
-import { getCurrentPath } from "../../api/paths";
+import { getPathTask } from "../../api/paths";
 import {
   deleteResource,
   getResourceQuality,
@@ -110,20 +110,22 @@ export function useStudioWorkspaceController() {
     [resourcesQuery.data]
   );
   const currentPathQuery = useQuery({
-    queryKey: courseLoopQueryKeys.currentPath(effectiveCourseId ?? 0),
-    queryFn: () => getCurrentPath(effectiveCourseId ?? 0),
+    queryKey: ["paths", "task", numericPathTaskId],
+    queryFn: () => getPathTask(numericPathTaskId ?? 0),
     enabled: effectiveCourseId !== null && numericPathTaskId !== null,
     staleTime: 5_000
   });
-  const pathTask = currentPathQuery.data?.data.tasks.find((task) => Number(task.id) === numericPathTaskId) ?? null;
+  const pathTask = currentPathQuery.data?.data.course_id === String(effectiveCourseId) ? currentPathQuery.data.data : null;
   const bundleItems = pathTask?.learning_bundle?.items ?? [];
   const preferredBundleResourceId = bundleItems.find(
     (item) => item.resource_id && item.learning_status !== "completed"
   )?.resource_id ?? bundleItems.find((item) => item.resource_id)?.resource_id ?? null;
-  const selectedResource = resources.find((resource) => resource.id === selectedResourceId)
-    ?? resources.find((resource) => resource.id === preferredBundleResourceId)
-    ?? resources[0]
-    ?? null;
+  const requestedResourceId = selectedResourceId ?? preferredBundleResourceId;
+  const selectedResource = numericPathTaskId !== null
+    ? resources.find((resource) => resource.id === requestedResourceId && bundleItems.some((item) => item.resource_id === resource.id)) ?? null
+    : selectedResourceId !== null
+      ? resources.find((resource) => resource.id === selectedResourceId) ?? null
+      : resources[0] ?? null;
   const selectedBundleIndex = bundleItems.findIndex((item) => item.resource_id === selectedResource?.id);
   const selectedBundleItem = selectedBundleIndex >= 0 ? bundleItems[selectedBundleIndex] : null;
   const nextBundleItem = selectedBundleIndex >= 0
@@ -344,9 +346,12 @@ export function useStudioWorkspaceController() {
   function retryWorkspaceData() {
     void coursesQuery.refetch();
     void resourcesQuery.refetch();
+    if (numericPathTaskId !== null) void currentPathQuery.refetch();
   }
 
-  const dataError = coursesQuery.isError || resourcesQuery.isError;
+  const dataError = coursesQuery.isError || resourcesQuery.isError
+    || (numericPathTaskId !== null && (currentPathQuery.isError || (!currentPathQuery.isPending && !selectedResource)))
+    || (selectedResourceId !== null && !resourcesQuery.isPending && !selectedResource);
   const nextActionQuery = useLearningNextAction(effectiveCourseId);
   const resourcesLoading = effectiveCourseId !== null && resourcesQuery.isPending && resources.length === 0;
 

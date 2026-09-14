@@ -196,7 +196,12 @@ class ResourceGenerationService:
         if resource is None:
             raise ResourceNotFoundError("资源不存在或无权访问。")
 
-        for task in self.repository.list_learning_tasks_for_user(user.id):
+        tasks = self.repository.list_learning_tasks_for_user(user.id)
+        for task in tasks:
+            if any(isinstance(item, dict) and item.get("binding") and str(item.get("resource_id")) == str(resource.id)
+                   for item in (task.learning_bundle_json or {}).get("items", [])):
+                raise ResourceValidationError("该资源版本已绑定学习计划，不能删除来源证据。")
+        for task in tasks:
             task.recommended_resource_ids = [
                 value for value in (task.recommended_resource_ids or []) if str(value) != str(resource.id)
             ]

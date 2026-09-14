@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.errors import NotFoundDomainError, ValidationDomainError
 from backend.app.models import GeneratedResource, LearningPath, LearningTask, ResourceInteraction, User
 from backend.app.schemas.resources import ResourceInteractionRequest, ResourceLearningStateResponse
+from backend.app.services.task_resource_binding import binding_status, exact_item, resource_snapshot
 
 
 class ResourceInteractionNotFoundError(NotFoundDomainError):
@@ -26,7 +27,7 @@ class ResourceInteractionService:
         resource_id: int,
         payload: ResourceInteractionRequest,
     ) -> ResourceLearningStateResponse:
-        resource = self._resource(user.id, resource_id)
+        resource = self._resource(user.id, resource_id, for_update=True)
         existing = self.db.scalar(
             select(ResourceInteraction).where(
                 ResourceInteraction.user_id == user.id,
@@ -34,9 +35,13 @@ class ResourceInteractionService:
             )
         )
         if existing is not None:
-            if existing.resource_id != resource.id:
-                raise ResourceInteractionValidationError("event_id 已用于其他资源。")
-            return self.state(user, resource_id)
+            if (existing.resource_id != resource.id or existing.path_task_id != payload.path_task_id
+                    or existing.event_type != payload.event_type or existing.progress_percent != payload.progress_percent
+                    or existing.feedback != payload.feedback):
+                raise ResourceInteractionValidationError("event_id 已用于不同资源、任务或活动内容。")
+            result = self.state(user, resource_id, payload.path_task_id)
+            self.db.rollback()
+            return result
 
         task = self._task(user.id, resource, payload.path_task_id)
         interaction = ResourceInteraction(
@@ -48,6 +53,10 @@ class ResourceInteractionService:
             event_type=payload.event_type,
             progress_percent=payload.progress_percent,
             feedback=payload.feedback,
+            evidence_json={"schema_version": 1, "kind": "resource_activity", "path_id": task.path_id if task else None,
+                           "task_id": task.id if task else None, "resource": resource_snapshot(resource),
+                           "binding_status": binding_status(task, exact_item(task, resource.id) or {}, resource) if task else "standalone",
+                           "mastery_claim": False},
         )
         self.db.add(interaction)
         try:
@@ -55,9 +64,9 @@ class ResourceInteractionService:
         except Exception:
             self.db.rollback()
             raise
-        return self.state(user, resource_id)
+        return self.state(user, resource_id, payload.path_task_id)
 
-    def state(self, user: User, resource_id: int) -> ResourceLearningStateResponse:
+    def state(self, user: User, resource_id: int, path_task_id: int | None = None) -> ResourceLearningStateResponse:
         resource = self._resource(user.id, resource_id)
         events = list(
             self.db.scalars(
@@ -68,10 +77,8 @@ class ResourceInteractionService:
         )
         progress = 0
         feedback = None
-        path_task_id = None
+        events = [event for event in events if event.path_task_id == path_task_id]
         for event in events:
-            if event.path_task_id is not None:
-                path_task_id = str(event.path_task_id)
             if event.progress_percent is not None:
                 progress = max(progress, event.progress_percent)
             if event.feedback is not None:
@@ -81,7 +88,8 @@ class ResourceInteractionService:
             progress = 100
         return ResourceLearningStateResponse(
             resource_id=str(resource.id),
-            path_task_id=path_task_id,
+            path_task_id=str(path_task_id) if path_task_id is not None else None,
+            evidence=[event.evidence_json or {"binding_status": "legacy_unverified"} for event in events],
             opened=any(event.event_type == "opened" for event in events),
             started=any(event.event_type == "started" for event in events),
             completed=completed,
@@ -91,13 +99,14 @@ class ResourceInteractionService:
             updated_at=(events[-1].created_at.isoformat() if events else None),
         )
 
-    def _resource(self, user_id: int, resource_id: int) -> GeneratedResource:
-        resource = self.db.scalar(
-            select(GeneratedResource).where(
+    def _resource(self, user_id: int, resource_id: int, *, for_update: bool = False) -> GeneratedResource:
+        statement = select(GeneratedResource).where(
                 GeneratedResource.id == resource_id,
                 GeneratedResource.user_id == user_id,
             )
-        )
+        if for_update:
+            statement = statement.with_for_update().execution_options(populate_existing=True)
+        resource = self.db.scalar(statement)
         if resource is None:
             raise ResourceInteractionNotFoundError("资源不存在或无权访问。")
         return resource
@@ -117,12 +126,7 @@ class ResourceInteractionService:
             raise ResourceInteractionValidationError("资源与学习路径任务不属于同一课程。")
         if self.db.scalar(select(LearningPath.id).where(LearningPath.id == task.path_id, LearningPath.status == "draft")) is not None:
             raise ResourceInteractionValidationError("请先确认计划，再记录草稿任务活动。")
-        bundle_ids = {
-            int(item.get("resource_id"))
-            for item in list((task.learning_bundle_json or {}).get("items") or [])
-            if isinstance(item, dict) and str(item.get("resource_id") or "").isdigit()
-        }
-        allowed_ids = {int(item) for item in list(task.recommended_resource_ids or []) if str(item).isdigit()} | bundle_ids
-        if resource.id not in allowed_ids:
+        item = exact_item(task, resource.id)
+        if item is None or binding_status(task, item, resource) not in {"verified", "legacy_unverified"}:
             raise ResourceInteractionValidationError("该资源未关联到指定学习路径任务。")
         return task

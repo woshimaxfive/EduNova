@@ -312,6 +312,15 @@ class PathService(PathApprovalMixin):
         learning_states = self._learning_states(user.id, task.path_id).get(task.id, {})
         return task_to_api(task, resources_by_id, learning_states)
 
+    def get_task_version(self, user: User, task_id: int) -> object:
+        task = self.repository.get_task_for_user(user.id, task_id)
+        if task is None:
+            raise PathNotFoundError("学习任务不存在或无权访问。")
+        detail = self.get_path_version(user, task.path_id)
+        if detail.status == "draft":
+            raise PathValidationError("请先确认计划，再执行草稿任务。")
+        return next(item for item in detail.tasks if item.id == str(task_id))
+
     def _require_course(self, user: User, course_id: int) -> Course:
         course = self.repository.get_course_for_user(user.id, course_id)
         if course is None:

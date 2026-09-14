@@ -105,6 +105,7 @@ class PracticeAnswerResponse(BaseModel):
 
 
 class PracticeSessionDetail(BaseModel):
+    source_binding: dict | None = None
     id: str
     course_id: str
     title: str
@@ -159,6 +160,7 @@ def session_to_api(session: PracticeSession, answers: list[PracticeAnswer]) -> P
     if effective_difficulty not in {"easy", "medium", "hard"}:
         effective_difficulty = "medium"
     return PracticeSessionDetail(
+        source_binding=assessment.get("source_binding"),
         id=str(session.id),
         course_id=str(session.course_id),
         title=session.title,

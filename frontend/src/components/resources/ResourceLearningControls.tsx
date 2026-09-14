@@ -31,8 +31,8 @@ export function ResourceLearningControls({ resource }: { resource: GeneratedReso
   const rawTaskId = searchParams.get("path_task_id");
   const pathTaskId = rawTaskId && /^\d+$/.test(rawTaskId) ? Number.parseInt(rawTaskId, 10) : null;
   const stateQuery = useQuery({
-    queryKey: ["resources", "learning-state", resource.id],
-    queryFn: () => getResourceLearningState(resourceId),
+    queryKey: ["resources", "learning-state", resource.id, pathTaskId],
+    queryFn: () => getResourceLearningState(resourceId, pathTaskId),
     enabled: Number.isFinite(resourceId)
   });
   const recordInteraction = (input: { eventType: "opened" | "started" | "completed" | "feedback"; feedback?: ResourceFeedback }) =>

@@ -170,6 +170,8 @@ RESPONSE_MODELS: dict[str, Any] = {
     "create_path_generation_job": ApiEnvelope[AiJobResponse],
     "create_path_task_resource_job": ApiEnvelope[AiJobResponse],
     "get_current_path": ApiEnvelope[LearningPathDetail],
+    "get_path_task_version": ApiEnvelope[LearningPathTaskResponse],
+    "create_bound_task_practice": ApiEnvelope[PracticeSessionDetail],
     "list_path_drafts": ApiEnvelope[list[LearningPathResponse]],
     "get_path_version": ApiEnvelope[LearningPathDetail],
     "approve_path_version": ApiEnvelope[LearningPathDetail],

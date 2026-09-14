@@ -49,8 +49,11 @@ class SqlAlchemyResourceRepository:
     def get_profile(self, user_id: int) -> StudentProfile | None:
         return self.db.scalar(select(StudentProfile).where(StudentProfile.user_id == user_id))
 
-    def get_learning_task_for_user(self, user_id: int, task_id: int) -> LearningTask | None:
-        return self.db.scalar(select(LearningTask).where(LearningTask.id == task_id, LearningTask.user_id == user_id))
+    def get_learning_task_for_user(self, user_id: int, task_id: int, *, for_update: bool = False) -> LearningTask | None:
+        statement = select(LearningTask).where(LearningTask.id == task_id, LearningTask.user_id == user_id)
+        if for_update:
+            statement = statement.with_for_update().execution_options(populate_existing=True)
+        return self.db.scalar(statement)
 
     def add_resource(self, resource: GeneratedResource) -> GeneratedResource:
         self.db.add(resource)

@@ -115,6 +115,15 @@ class FakePathRepository:
     def is_course_active(self, user_id: int, course_id: int) -> bool:
         return self.get_course_for_user(user_id, course_id) is not None
 
+    def lock_course(self, user_id: int, course_id: int) -> Course | None:
+        return self.get_course_for_user(user_id, course_id)
+
+    def get_path_for_user(self, user_id: int, path_id: int) -> LearningPath | None:
+        return next((path for path in self.paths if path.id == path_id and path.user_id == user_id), None)
+
+    def list_drafts(self, user_id: int, course_id: int) -> list[LearningPath]:
+        return [path for path in self.paths if path.user_id == user_id and path.course_id == course_id and path.status == "draft"]
+
     def list_knowledge_points(self, course_id: int) -> list[KnowledgePoint]:
         return sorted(
             [point for point in self.knowledge_points if point.course_id == course_id],

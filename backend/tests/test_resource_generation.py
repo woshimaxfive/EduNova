@@ -51,6 +51,9 @@ class TokenAuthRepository:
 
 @dataclass
 class FakeResourceRepository:
+    def is_path_draft(self, path_id: int) -> bool:
+        return False
+
     courses: list[Course] = field(default_factory=list)
     knowledge_points: list[KnowledgePoint] = field(default_factory=list)
     chunks: list[KnowledgeChunk] = field(default_factory=list)

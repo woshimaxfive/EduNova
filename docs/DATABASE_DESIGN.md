@@ -37,6 +37,10 @@ EduNova 使用 PostgreSQL、SQLAlchemy、Alembic 和 pgvector。本文档说明�
 
 ## 4. 学习状态
 
+`20260914_0035` 为 `learning_paths` 增加 `approval_status` 与 `approved_at`。旧记录保留 `legacy`、确认时间为空，不修改 `plan_json`、任务状态或历史成绩。新增草稿使用 `status=draft`；批准后变为 active/approved，旧 active 路径归档。批准与路径生成的持久化阶段锁定同一课程行，并核对基础路径 ID，避免两个确认或生成覆盖当前版本；模型调用期间不持有这把锁。
+
+迁移前需备份数据库并停止旧版本 worker 写入。升级采用 Alembic 正常版本追踪。降级仅在所有记录仍是 legacy 时允许删除新列；已有草稿或批准信息时主动拒绝降级，应保留数据做前向修复，不能为回滚应用而抹除用户确认。隔离 PostgreSQL 回归覆盖旧 JSON 保留、升级—降级—再升级及双会话竞争批准。
+
 `student_profiles` 保存可复用画像，`profile_events` 保存经过约束的画像证据。课程目标、课程基础、弱点、掌握度和路径通过 enrollment 与课程级表表达。
 
 掌握度和报告中的确定性数字由练习、任务和资源互动记录计算，不把模型自然语言直接当作正式评分。

@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.core.errors import NotFoundDomainError, ValidationDomainError
-from backend.app.models import GeneratedResource, LearningTask, ResourceInteraction, User
+from backend.app.models import GeneratedResource, LearningPath, LearningTask, ResourceInteraction, User
 from backend.app.schemas.resources import ResourceInteractionRequest, ResourceLearningStateResponse
 
 
@@ -115,6 +115,8 @@ class ResourceInteractionService:
         )
         if task is None or task.course_id != resource.course_id:
             raise ResourceInteractionValidationError("资源与学习路径任务不属于同一课程。")
+        if self.db.scalar(select(LearningPath.id).where(LearningPath.id == task.path_id, LearningPath.status == "draft")) is not None:
+            raise ResourceInteractionValidationError("请先确认计划，再记录草稿任务活动。")
         bundle_ids = {
             int(item.get("resource_id"))
             for item in list((task.learning_bundle_json or {}).get("items") or [])

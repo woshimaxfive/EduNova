@@ -1,6 +1,17 @@
 # EduNova API
 
-EduNova 后端使用 FastAPI，默认 API 前缀为 `/api/v1`。当前生成合同包含 99 个路径；机器可读合同以 `backend/openapi.json` 为准。
+EduNova 后端使用 FastAPI，默认 API 前缀为 `/api/v1`。机器可读合同以 `backend/openapi.json` 为准。
+
+### 计划草稿与批准
+
+- `POST /paths/generation-jobs` 传 `{"course_id":101,"draft":true}` 生成待确认草稿；从 Job 结果的 `path_id` 查询具体版本。
+- `GET /paths/drafts?course_id=101` 列出最近 50 个待确认草稿；`GET /paths/{path_id}` 读取该版本及任务，含历史版本。
+- `POST /paths/{path_id}/approve` 必须传 `expected_active_path_id`（首次无当前计划时显式传 `null`）。该值必须与草稿的 `plan_json.revision_of` 和当前生效计划一致，否则返回 409。重复批准同一仍生效的版本保持幂等。
+- 计划返回 `approval_status`（`legacy`、`draft`、`approved`）与 `approved_at`。路径 ID 是版本身份，`schema_version` 只是结构版本，不能当批准记录。
+- 草稿不改变 `/paths/current`，不能更新任务进度、生成任务资源或记录任务活动；批准后才激活。已批准计划后续重规划只生成草稿，原计划继续生效。
+- 为兼容现有客户端，未指定 `draft` 且没有已批准当前计划时仍走旧生成模式，明确标记 `legacy`，不伪装为已批准。当前前端尚未接入新批准入口；可通过 API 验收。
+
+批准不表示评估通过或已掌握。资源精确版本/证据绑定与完整成功学习闭环不由批准接口自动实现。
 
 ## 1. 在线文档
 

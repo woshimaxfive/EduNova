@@ -32,7 +32,7 @@ from backend.app.schemas.materials import (
     MaterialProgress,
     MaterialUploadResult,
 )
-from backend.app.schemas.paths import LearningPathDetail, LearningPathTaskResponse
+from backend.app.schemas.paths import LearningPathDetail, LearningPathResponse, LearningPathTaskResponse
 from backend.app.schemas.practice import PracticeSessionDetail, PracticeSessionSummary
 from backend.app.schemas.profiles import ProfileChatResponse, ProfileEventResponse, StudentProfileResponse
 from backend.app.schemas.rag import RagSearchResponse
@@ -170,6 +170,9 @@ RESPONSE_MODELS: dict[str, Any] = {
     "create_path_generation_job": ApiEnvelope[AiJobResponse],
     "create_path_task_resource_job": ApiEnvelope[AiJobResponse],
     "get_current_path": ApiEnvelope[LearningPathDetail],
+    "list_path_drafts": ApiEnvelope[list[LearningPathResponse]],
+    "get_path_version": ApiEnvelope[LearningPathDetail],
+    "approve_path_version": ApiEnvelope[LearningPathDetail],
     "update_path_task": ApiEnvelope[LearningPathTaskResponse],
     "create_practice_session": ApiEnvelope[PracticeSessionDetail],
     "create_practice_generation_job": ApiEnvelope[AiJobResponse],

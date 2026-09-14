@@ -79,6 +79,19 @@ def test_pilot_executes_real_graph_and_keeps_wire_contract(pilot):
     assert len(pilot.model.calls) == calls
 
 
+@pytest.mark.parametrize("pilot", ["path_planning"], indirect=True)
+def test_path_job_runs_real_graph_as_draft(pilot):
+    pilot.job.request_json = {**pilot.job.request_json, "draft": True}
+    response = pilot.service.run_job(pilot.job.id)
+    assert response.status == "completed", response.error_message
+    path = pilot.domain.paths[0]
+    assert response.result["path_id"] == str(path.id)
+    assert path.status == "draft"
+    assert path.approval_status == "draft"
+    assert path.approved_at is None
+    assert pilot.domain.get_active_path(1, 101) is None
+
+
 @pytest.mark.parametrize("change", ["owner", "archive", "input", "scope"])
 def test_execution_revalidates_before_model_or_domain_write(pilot, monkeypatch, change):
     if change == "owner":

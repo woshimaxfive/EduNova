@@ -10,6 +10,7 @@ from backend.app.models import (
     KnowledgeChunk,
     KnowledgePoint,
     LearningTask,
+    LearningPath,
     ResourceQualityScore,
     StudentProfile,
 )
@@ -55,6 +56,11 @@ class SqlAlchemyResourceRepository:
         self.db.add(resource)
         self.db.flush()
         return resource
+
+    def is_path_draft(self, path_id: int) -> bool:
+        return self.db.scalar(select(LearningPath.id).where(
+            LearningPath.id == path_id, LearningPath.status == "draft",
+        )) is not None
 
     def add_quality_score(self, score: ResourceQualityScore) -> ResourceQualityScore:
         self.db.add(score)

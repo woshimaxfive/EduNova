@@ -189,6 +189,8 @@ class FakeInteractionDb:
         self.committed = False
 
     def scalar(self, _statement):  # type: ignore[no-untyped-def]
+        if "learning_paths" in str(_statement):
+            return None
         self.scalar_count += 1
         cycle = (self.scalar_count - 1) % 4
         if cycle == 0:

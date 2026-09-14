@@ -11,7 +11,7 @@ from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.models import User
 from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
-from backend.app.schemas.paths import GeneratePathRequest, UpdatePathTaskRequest
+from backend.app.schemas.paths import ApprovePathRequest, GeneratePathRequest, UpdatePathTaskRequest
 from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 from backend.app.services.ai_jobs import AiJobService
 from backend.app.services.paths import PathGenerationError, PathNotFoundError, PathService, PathValidationError, SqlAlchemyPathRepository
@@ -44,6 +44,7 @@ def generate_path(
             service.generate_path(
                 current_user,
                 course_id=payload.course_id,
+                draft=payload.draft,
             ).model_dump()
         )
     except PathNotFoundError as exc:
@@ -65,6 +66,7 @@ def create_path_generation_job(
         current_user,
         course_id=payload.course_id,
         idempotency_key=idempotency_key,
+        draft=payload.draft,
     )
     return api_response(result.model_dump(mode="json"))
 
@@ -109,3 +111,37 @@ def update_path_task(
         raise ApiError(404, "NOT_FOUND", str(exc)) from exc
     except PathValidationError as exc:
         raise ApiError(400, "VALIDATION_ERROR", str(exc)) from exc
+
+
+@router.get("/drafts")
+def list_path_drafts(
+    course_id: int = Query(...),
+    current_user: User = Depends(get_current_user),
+    service: PathService = Depends(get_path_service),
+) -> dict:
+    try:
+        return api_response([path.model_dump() for path in service.list_drafts(current_user, course_id)])
+    except PathNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+
+
+@router.get("/{path_id}")
+def get_path_version(
+    path_id: int,
+    current_user: User = Depends(get_current_user),
+    service: PathService = Depends(get_path_service),
+) -> dict:
+    try:
+        return api_response(service.get_path_version(current_user, path_id).model_dump())
+    except PathNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+
+
+@router.post("/{path_id}/approve")
+def approve_path_version(
+    path_id: int,
+    payload: ApprovePathRequest,
+    current_user: User = Depends(get_current_user),
+    service: PathService = Depends(get_path_service),
+) -> dict:
+    return api_response(service.approve_path(current_user, path_id, payload.expected_active_path_id).model_dump())

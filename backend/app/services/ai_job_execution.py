@@ -333,6 +333,7 @@ class AiJobExecutionMixin:
                 else None
             ),
             previous_path=previous,
+            draft=bool(request.get("draft")),
             trace_id=job.agent_trace_id,
             job_context=context,
         )

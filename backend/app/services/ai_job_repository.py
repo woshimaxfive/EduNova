@@ -161,6 +161,11 @@ class SqlAlchemyAiJobRepository:
         self.db.flush()
         return job
 
+    def is_path_draft(self, path_id: int) -> bool:
+        return self.db.scalar(select(LearningPath.id).where(
+            LearningPath.id == path_id, LearningPath.status == "draft",
+        )) is not None
+
     def has_message_for_user(self, user_id: int, message_id: int) -> bool:
         return self.db.scalar(select(ChatMessage.id).where(
             ChatMessage.id == message_id, ChatMessage.user_id == user_id,

@@ -15,6 +15,11 @@ PathTaskType = Literal["review", "learn", "resource"]
 
 class GeneratePathRequest(BaseModel):
     course_id: int
+    draft: bool = False
+
+
+class ApprovePathRequest(BaseModel):
+    expected_active_path_id: int | None = Field(..., gt=0)
 
 
 class UpdatePathTaskRequest(BaseModel):
@@ -73,6 +78,8 @@ class LearningPathResponse(BaseModel):
     status: str
     agent_trace_id: str | None = None
     plan_json: dict
+    approval_status: Literal["legacy", "draft", "approved"] = "legacy"
+    approved_at: str | None = None
     personalization: PersonalizationFreshnessResponse | None = None
     created_at: str
     updated_at: str
@@ -124,6 +131,8 @@ def path_to_api(
         status=path.status,
         agent_trace_id=getattr(path, "agent_trace_id", None),
         plan_json=path.plan_json or {},
+        approval_status=getattr(path, "approval_status", None) or "legacy",
+        approved_at=iso_timestamp(getattr(path, "approved_at", None)),
         personalization=personalization,
         created_at=iso_timestamp(path.created_at) or "",
         updated_at=iso_timestamp(path.updated_at) or "",

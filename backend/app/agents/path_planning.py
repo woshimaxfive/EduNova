@@ -26,6 +26,7 @@ from backend.app.services.resource_feedback import (
 from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.services.paths import PathGenerationError
 from backend.app.services.ai_job_contracts import AiJobCancelled, AiJobTimeoutError
+from backend.app.core.errors import ConflictDomainError
 
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,7 @@ class PathPlanningState(TypedDict, total=False):
     path: LearningPath
     detail: Any
     job_context: Any
+    draft: bool
 
 
 class PathPlanningGraphRunner:
@@ -121,6 +123,7 @@ class PathPlanningGraphRunner:
         previous_path: LearningPath | None = None,
         trace_id: str | None = None,
         job_context: Any | None = None,
+        draft: bool = False,
     ) -> PathReplanResult:
         effective_trace_id = trace_id or make_trace_id()
         state: PathPlanningState = {
@@ -136,6 +139,7 @@ class PathPlanningGraphRunner:
             "warnings": [],
             "repair_count": 0,
             "job_context": job_context,
+            "draft": draft,
         }
         with model_execution_scope(execution_context_for_state(state, workflow=self.workflow, purpose=trigger)):
             result = self.graph.invoke(state)
@@ -234,6 +238,7 @@ class PathPlanningGraphRunner:
             previous_plan = state["previous_path"].plan_json if state.get("previous_path") is not None else {}
             reused_path = bool(
                 state.get("trigger") == "manual"
+                and not state.get("draft")
                 and state.get("previous_path") is not None
                 and previous_plan.get("generation_mode") == "model_generated"
                 and previous_plan.get("planning_input_hash") == planning_input_hash
@@ -333,14 +338,22 @@ class PathPlanningGraphRunner:
         active_weaknesses = [item for item in weaknesses if item.status in {"confirmed", "reviewing"}]
         previous = state.get("previous_path")
         try:
-            self.service.repository.archive_active_paths(int(state["user_id"]), int(state["course_id"]))
+            if self.service.repository.lock_course(int(state["user_id"]), course.id) is None:
+                raise ConflictDomainError("课程范围已变化，请重新生成计划。")
+            current = self.service.repository.get_active_path(int(state["user_id"]), course.id)
+            if (current.id if current is not None else None) != (previous.id if previous is not None else None):
+                raise ConflictDomainError("当前计划已变化，请重新生成草稿。")
+            draft = bool(state.get("draft")) or getattr(current, "approval_status", None) == "approved"
+            if not draft:
+                self.service.repository.archive_active_paths(int(state["user_id"]), int(state["course_id"]))
             path = self.service.repository.add_path(
                 LearningPath(
                     user_id=int(state["user_id"]),
                     course_id=int(state["course_id"]),
                     title=f"{course.title} 学习路径",
                     goal=effective_goal,
-                    status="active",
+                    status="draft" if draft else "active",
+                    approval_status="draft" if draft else "legacy",
                     agent_trace_id=state["trace_id"],
                     plan_json={
                         "schema_version": 5,

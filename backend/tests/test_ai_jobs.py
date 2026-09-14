@@ -44,6 +44,9 @@ class FakeQueue:
 
 @dataclass
 class FakeRepository:
+    def is_path_draft(self, path_id: int) -> bool:
+        return any(path.id == path_id and path.status == "draft" for path in self.paths)
+
     users: list[User] = field(default_factory=list)
     materials: list[Material] = field(default_factory=list)
     courses: list[Course] = field(default_factory=list)

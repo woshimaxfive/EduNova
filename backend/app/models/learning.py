@@ -6,6 +6,7 @@ from decimal import Decimal
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -86,6 +87,7 @@ class LearningPath(IdMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_learning_paths_user_course_status", "user_id", "course_id", "status"),
         Index("ix_learning_paths_agent_trace_id", "agent_trace_id"),
+        CheckConstraint("approval_status IN ('legacy', 'draft', 'approved')", name="ck_learning_paths_approval_status"),
     )
 
     user_id: Mapped[int] = mapped_column(
@@ -103,6 +105,8 @@ class LearningPath(IdMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
     agent_trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     plan_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    approval_status: Mapped[str] = mapped_column(String(20), nullable=False, default="legacy", server_default="legacy")
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class LearningTask(IdMixin, TimestampMixin, Base):

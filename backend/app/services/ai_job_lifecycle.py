@@ -68,6 +68,8 @@ class AiJobLifecycleMixin:
             request = capability.validate_input(request_json, course_id)
             validate_capability_scope(self.repository, user.id, request)
             request_json = request.model_dump(mode="json")
+            if workflow == "path_planning" and not request_json.get("draft"):
+                request_json.pop("draft", None)
         if self.repository.lock_user(user.id) is None:
             raise AiJobNotFoundError("任务用户不存在。")
         existing = self.repository.get_by_idempotency(user.id, key)

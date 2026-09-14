@@ -23,6 +23,7 @@ class PathPlanningInput(BaseModel):
     course_id: PositiveId
     trigger: Literal["manual", "assessment"] = "manual"
     assessment_session_id: PositiveId | None = None
+    draft: bool = False
 
 
 class ResourceGenerationInput(GenerateResourcesRequest):
@@ -120,6 +121,8 @@ def validate_capability_scope(repository: Any, user_id: int, request: PathPlanni
             raise AiJobNotFoundError("学习任务不存在或不属于当前课程。")
         if task.knowledge_point_id != request.knowledge_point_id:
             raise AiJobValidationError("学习任务知识点不一致。")
+        if repository.is_path_draft(task.path_id):
+            raise AiJobValidationError("请先确认计划，再生成草稿任务资源。")
     if request.tutor_message_id is not None:
         if not repository.has_message_for_user(user_id, request.tutor_message_id):
             raise AiJobNotFoundError("来源回答不存在或无权访问。")

@@ -330,6 +330,7 @@ class AiJobRequestMixin:
         idempotency_key: str | None,
         trigger: str = "manual",
         assessment_session_id: int | None = None,
+        draft: bool = False,
     ) -> AiJobResponse:
         if self.repository.get_course_for_user(user.id, course_id) is None:
             raise AiJobNotFoundError("课程不存在或无权访问。")
@@ -338,6 +339,8 @@ class AiJobRequestMixin:
             raise AiJobValidationError("不支持的路径规划触发方式。")
         active = self.repository.get_active_path_job(user.id, course_id)
         if active is not None:
+            if bool((active.request_json or {}).get("draft")) != draft:
+                raise AiJobConflictError("已有不同模式的计划任务，请等待其结束后重试。")
             return ai_job_to_api(active, max_retries=self.max_retries)
         return self._create(
             user,
@@ -347,6 +350,7 @@ class AiJobRequestMixin:
                 "course_id": course_id,
                 "trigger": trigger,
                 "assessment_session_id": assessment_session_id,
+                "draft": draft,
             },
             idempotency_key=idempotency_key,
         )

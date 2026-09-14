@@ -30,6 +30,7 @@ from backend.app.schemas.paths import (
 )
 from backend.app.schemas.personalization import PersonalizationFreshnessResponse
 from backend.app.services.learner_context import context_service_from_repository
+from backend.app.services.path_approval import PathApprovalMixin
 
 
 class PathNotFoundError(Exception):
@@ -49,6 +50,12 @@ class PathModelService(Protocol):
 
 
 class PathRepository(Protocol):
+    def lock_course(self, user_id: int, course_id: int) -> Course | None: ...
+
+    def get_path_for_user(self, user_id: int, path_id: int) -> LearningPath | None: ...
+
+    def list_drafts(self, user_id: int, course_id: int) -> list[LearningPath]: ...
+
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None: ...
 
     def is_course_active(self, user_id: int, course_id: int) -> bool: ...
@@ -89,6 +96,22 @@ class SqlAlchemyPathRepository:
     def get_course_for_user(self, user_id: int, course_id: int) -> Course | None:
         return self.db.scalar(select(Course).where(Course.id == course_id, Course.owner_id == user_id))
 
+    def lock_course(self, user_id: int, course_id: int) -> Course | None:
+        return self.db.scalar(select(Course).where(
+            Course.id == course_id, Course.owner_id == user_id,
+        ).with_for_update().execution_options(populate_existing=True))
+
+    def get_path_for_user(self, user_id: int, path_id: int) -> LearningPath | None:
+        return self.db.scalar(select(LearningPath).where(
+            LearningPath.id == path_id, LearningPath.user_id == user_id,
+        ).execution_options(populate_existing=True))
+
+    def list_drafts(self, user_id: int, course_id: int) -> list[LearningPath]:
+        return list(self.db.scalars(select(LearningPath).where(
+            LearningPath.user_id == user_id, LearningPath.course_id == course_id,
+            LearningPath.status == "draft", LearningPath.approval_status == "draft",
+        ).order_by(LearningPath.id.desc()).limit(50)))
+
     def is_course_active(self, user_id: int, course_id: int) -> bool:
         return self.db.scalar(select(CourseEnrollment.id).where(
             CourseEnrollment.user_id == user_id,
@@ -128,6 +151,7 @@ class SqlAlchemyPathRepository:
         return self.db.scalar(
             select(LearningPath)
             .where(LearningPath.user_id == user_id, LearningPath.course_id == course_id, LearningPath.status == "active")
+            .execution_options(populate_existing=True)
             .order_by(LearningPath.updated_at.desc(), LearningPath.id.desc())
         )
 
@@ -208,7 +232,7 @@ class PathReplanResult:
     preserved_task_count: int = 0
 
 
-class PathService:
+class PathService(PathApprovalMixin):
     valid_statuses = {"todo", "doing", "completed"}
 
     def __init__(
@@ -221,13 +245,14 @@ class PathService:
         self.model_service = model_service
         self.trace_recorder = trace_recorder
 
-    def generate_path(self, user: User, course_id: int) -> LearningPathDetail:
+    def generate_path(self, user: User, course_id: int, *, draft: bool = False) -> LearningPathDetail:
         from backend.app.agents.path_planning import PathPlanningGraphRunner
 
         return PathPlanningGraphRunner(self).run(
             user=user,
             course_id=course_id,
             trigger="manual",
+            draft=draft,
         ).detail  # type: ignore[return-value]
 
     def replan_after_assessment(self, user: User, course_id: int, assessment_session_id: int) -> PathReplanResult:
@@ -269,6 +294,9 @@ class PathService:
         task = self.repository.get_task_for_user(user.id, task_id)
         if task is None:
             raise PathNotFoundError("学习任务不存在或无权访问。")
+        path = self.repository.get_path_for_user(user.id, task.path_id)
+        if path is not None and path.status == "draft":
+            raise PathValidationError("请先确认计划，再执行草稿中的任务。")
         if not self.repository.is_course_active(user.id, int(task.course_id or 0)):
             raise PathValidationError("课程已完成归档；请先恢复学习再更新路径任务。")
         resources = self.repository.list_generated_resources(user.id, int(task.course_id or 0))
@@ -358,7 +386,7 @@ class PathService:
             message=(
                 "已根据练习结果更新学习路径。"
                 if path.status == "active" and trigger == "assessment"
-                else ("当前学习路径进行中。" if path.status == "active" else "学习路径已归档。")
+                else ("当前学习路径进行中。" if path.status == "active" else "计划草稿待确认。" if path.status == "draft" else "学习路径已归档。")
             ),
             agent_trace_id=getattr(path, "agent_trace_id", None),
             path=path_to_api(path, self._path_freshness(user.id, path)),

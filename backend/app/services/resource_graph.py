@@ -1075,6 +1075,8 @@ class ResourceGenerationGraphRunner:
             task = self.service.repository.get_learning_task_for_user(int(state["user_id"]), int(path_task_id))
             if task is None or task.course_id != course.id:
                 raise ResourceNotFoundError("学习路径任务不存在或无权访问。")
+            if self.service.repository.is_path_draft(task.path_id):
+                raise ResourceValidationError("请先确认计划，再保存草稿任务资源。")
             resource_ids = list(dict.fromkeys([*list(task.recommended_resource_ids or []), *[item.id for item in resources]]))
             task.recommended_resource_ids = resource_ids
             bundle = dict(task.learning_bundle_json or {})

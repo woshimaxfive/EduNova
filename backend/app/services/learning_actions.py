@@ -24,6 +24,7 @@ from backend.app.models import (
 from backend.app.schemas.learning import LearningNextAction
 from backend.app.services.courses import CourseService
 from backend.app.services.mastery_progress import is_review_due
+from backend.app.services.task_progress import TaskProgressService
 
 
 class LearningActionCourseNotFoundError(LookupError):
@@ -126,8 +127,26 @@ class LearningNextActionService:
                 .order_by(LearningTask.created_at.asc(), LearningTask.id.asc())
             )
         ) if path is not None else []
-        current_task = next((task for task in tasks if task.status == "doing"), None)
-        current_task = current_task or next((task for task in tasks if task.status in {"todo", "pending"}), None)
+        if path is not None and getattr(path, "approval_status", None) == "approved":
+            for task in tasks:
+                progress = TaskProgressService(self.db, self.course_service).get(user, task.id)
+                if progress.next_step == "continue_learning":
+                    continue
+                descriptions = {
+                    "resolve_binding": "资源来源缺失或未验证，请生成新计划并确认，不会自动替换资源。",
+                    "study_resource": "根据该版本的必需活动继续学习；用户勾选不等于评估通过。",
+                    "take_assessment": "完成绑定测验，由服务端评分后更新知识点掌握度。",
+                    "review_assessment": "本次评估尚未通过，请复盘原题，再安排新的针对性练习。",
+                }
+                return self._action("continue_path_task", f"继续任务：{task.title}", descriptions[progress.next_step],
+                                    status="blocked" if progress.blocked_reasons else "ready", course_id=course.id,
+                                    knowledge_point_id=task.knowledge_point_id, path_task_id=task.id,
+                                    resource_id=int(progress.next_resource_id) if progress.next_resource_id else None)
+            # Approved plans advance using evidence, regardless of historical user marks.
+            current_task = None
+        else:
+            current_task = next((task for task in tasks if task.status == "doing"), None)
+            current_task = current_task or next((task for task in tasks if task.status in {"todo", "pending"}), None)
         if current_task is not None:
             resource_id = self._first_resource_id(current_task)
             return self._action(
@@ -205,7 +224,7 @@ class LearningNextActionService:
             .where(AssessmentReport.user_id == user.id, AssessmentReport.course_id == course.id)
             .order_by(AssessmentReport.created_at.desc(), AssessmentReport.id.desc())
         )
-        path_completed = bool(tasks) and all(task.status == "completed" for task in tasks)
+        path_completed = bool(tasks) and (getattr(path, "approval_status", None) == "approved" or all(task.status == "completed" for task in tasks))
         if path_completed and latest_practice is not None and self._report_is_stale(latest_report, latest_practice):
             return self._action(
                 "update_report",

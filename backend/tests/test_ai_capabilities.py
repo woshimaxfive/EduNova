@@ -79,6 +79,60 @@ def test_pilot_executes_real_graph_and_keeps_wire_contract(pilot):
     assert len(pilot.model.calls) == calls
 
 
+@pytest.mark.parametrize("failure,expected", [(AiJobCancelled, "cancelled"), (AiJobTimeoutError, "failed")])
+def test_postcommit_stop_preserves_artifact_and_retry_reuses_it(pilot, monkeypatch, failure, expected):
+    runner = getattr(pilot.service, f"_run_{pilot.workflow}")
+    def run_then_stop(*args):
+        result = runner(*args)
+        def stop():
+            raise failure("提交后停止")
+        monkeypatch.setattr(pilot.context, "check_cancelled", stop)
+        return result
+    monkeypatch.setattr(pilot.service, f"_run_{pilot.workflow}", run_then_stop)
+    response = pilot.service.run_job(pilot.job.id)
+    assert response.status == expected
+    assert response.result["domain_committed"] is True
+    calls = len(pilot.model.calls)
+    if pilot.workflow == "path_planning":
+        pilot.repo.db.scalar = lambda statement: pilot.domain.paths[0]
+        original_ids = [path.id for path in pilot.domain.paths]
+    else:
+        pilot.repo.resources = pilot.domain.resources
+        original_ids = [resource.id for resource in pilot.domain.resources]
+    monkeypatch.setattr(pilot.context, "check_cancelled", lambda: None)
+    retry = pilot.service.retry_job(pilot.repo.users[0], pilot.job.id)
+    recovered = pilot.service.run_job(int(retry.job_id))
+    assert recovered.status == "completed", recovered.error_message
+    assert len(pilot.model.calls) == calls
+    assert ([path.id for path in pilot.domain.paths] if pilot.workflow == "path_planning" else [resource.id for resource in pilot.domain.resources]) == original_ids
+
+
+def test_worker_loss_recovers_by_original_trace_without_job_receipt(pilot):
+    response = pilot.service.run_job(pilot.job.id)
+    assert response.status == "completed"
+    calls = len(pilot.model.calls)
+    pilot.job.status = "failed"
+    pilot.job.error_code = "WORKER_LOST"
+    pilot.job.result_json = {}
+    if pilot.workflow == "path_planning":
+        pilot.repo.paths = pilot.domain.paths
+        pilot.repo.db.scalar = lambda statement: pilot.domain.paths[0]
+    else:
+        pilot.repo.resources = pilot.domain.resources
+    retry = pilot.service.retry_job(pilot.repo.users[0], pilot.job.id)
+    recovered = pilot.service.run_job(int(retry.job_id))
+    assert recovered.status == "completed", recovered.error_message
+    assert len(pilot.model.calls) == calls
+    assert "未重新执行" in recovered.result["warnings"][-1]
+    # Losing the recovery worker itself must still reach the first domain commit.
+    interrupted_retry = pilot.repo.get_job(int(retry.job_id))
+    interrupted_retry.status = "failed"
+    interrupted_retry.result_json = {}
+    second = pilot.service.retry_job(pilot.repo.users[0], interrupted_retry.id)
+    assert pilot.service.run_job(int(second.job_id)).status == "completed"
+    assert len(pilot.model.calls) == calls
+
+
 @pytest.mark.parametrize("pilot", ["path_planning"], indirect=True)
 def test_path_job_runs_real_graph_as_draft(pilot):
     pilot.job.request_json = {**pilot.job.request_json, "draft": True}

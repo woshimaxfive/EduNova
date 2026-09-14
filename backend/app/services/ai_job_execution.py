@@ -23,6 +23,7 @@ from backend.app.services.ai_job_contracts import (
 )
 from backend.app.services.ai_job_runtime import AgentJobContext
 from backend.app.services.ai_capabilities import AI_CAPABILITIES, validate_capability_scope
+from backend.app.services.ai_job_recovery import recover_committed_result
 
 
 class AiJobExecutionMixin:
@@ -46,6 +47,7 @@ class AiJobExecutionMixin:
             int(job.id),
             timeout_seconds=self.settings.ai_job_timeout_seconds if capability is not None else None,
         )
+        committed_result = None
         try:
             context.check_cancelled()
             user = self.repository.get_user(int(job.user_id))
@@ -54,7 +56,10 @@ class AiJobExecutionMixin:
             if capability is not None:
                 request = capability.validate_input(job.request_json, job.course_id)
                 validate_capability_scope(self.repository, user.id, request)
-            if job.workflow == "course_builder":
+            recovered = recover_committed_result(self.repository, job)
+            if recovered is not None:
+                result = recovered
+            elif job.workflow == "course_builder":
                 result = self._run_course_builder(user, job, context)
             elif job.workflow == "resource_generation":
                 result = self._run_resource_generation(user, job, context)
@@ -70,9 +75,10 @@ class AiJobExecutionMixin:
                 result = self._run_report_generation(user, job, context)
             else:
                 raise AiJobValidationError("不支持的 AI 任务类型。")
-            context.check_cancelled()
             if capability is not None:
                 result = capability.validate_output(result, int(job.course_id))
+                committed_result = result
+            context.check_cancelled()
             refreshed = self.repository.get_job(job_id, for_update=True) or job
             if refreshed.status in {"cancelling", "cancelled"} or refreshed.cancel_requested_at is not None:
                 raise AiJobCancelled("任务已取消。")
@@ -104,6 +110,8 @@ class AiJobExecutionMixin:
             cancelled.completed_at = now
             cancelled.heartbeat_at = now
             cancelled.updated_at = now
+            if committed_result is not None:
+                cancelled.result_json = {**committed_result, "domain_committed": True}
             self.repository.commit()
             return ai_job_to_api(cancelled, max_retries=self.max_retries)
         except Exception as exc:
@@ -111,6 +119,8 @@ class AiJobExecutionMixin:
             if job.workflow == "material_ingestion":
                 self._mark_material_ingestion_failed(job, exc)
             failed = self.repository.get_job(job_id, for_update=True) or job
+            if committed_result is not None:
+                failed.result_json = {**committed_result, "domain_committed": True}
             self._mark_failed(failed, self._safe_error_code(exc), self._safe_error_message(exc))
             return ai_job_to_api(failed, max_retries=self.max_retries)
 

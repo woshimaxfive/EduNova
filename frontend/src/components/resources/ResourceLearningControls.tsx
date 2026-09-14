@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
+import { TaskEvidenceProgress } from "./TaskEvidenceProgress";
 
 import {
   getResourceLearningState,
@@ -59,12 +60,13 @@ export function ResourceLearningControls({ resource }: { resource: GeneratedReso
   });
 
   useEffect(() => {
-    if (!Number.isFinite(resourceId) || openedResource.current === resource.id) return;
-    openedResource.current = resource.id;
+    const identity = `${resource.id}:${pathTaskId ?? "standalone"}`;
+    if (!Number.isFinite(resourceId) || openedResource.current === identity) return;
+    openedResource.current = identity;
     openedMutation.mutate({ eventType: "opened" });
   // The mutation is intentionally excluded so one visible resource produces one opened event.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resource.id, resourceId]);
+  }, [resource.id, resourceId, pathTaskId]);
 
   const state = stateQuery.data?.data;
   return (
@@ -91,6 +93,7 @@ export function ResourceLearningControls({ resource }: { resource: GeneratedReso
         ))}
       </div>
       {actionMutation.isError || openedMutation.isError ? <p className="form-error">学习状态未保存，请重试。</p> : null}
+      {pathTaskId && resource.course_id ? <TaskEvidenceProgress taskId={pathTaskId} resourceId={resourceId} courseId={resource.course_id} isQuiz={resource.resource_type === "quiz"} /> : null}
     </section>
   );
 }

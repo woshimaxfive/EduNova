@@ -880,6 +880,23 @@ export interface paths {
         patch: operations["update_path_task_api_v1_paths_tasks__task_id__patch"];
         trace?: never;
     };
+    "/api/v1/paths/tasks/{task_id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Path Task Progress */
+        get: operations["get_path_task_progress_api_v1_paths_tasks__task_id__progress_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/paths/tasks/{task_id}/resource-jobs": {
         parameters: {
             query?: never;
@@ -2155,6 +2172,12 @@ export interface components {
         /** ApiEnvelope[StudentProfileResponse] */
         ApiEnvelope_StudentProfileResponse_: {
             data: components["schemas"]["StudentProfileResponse"];
+            /** Trace Id */
+            trace_id: string;
+        };
+        /** ApiEnvelope[TaskProgress] */
+        ApiEnvelope_TaskProgress_: {
+            data: components["schemas"]["TaskProgress"];
             /** Trace Id */
             trace_id: string;
         };
@@ -5091,6 +5114,53 @@ export interface components {
         SubmitPracticeAnswersRequest: {
             /** Answers */
             answers: components["schemas"]["SubmitPracticeAnswerItem"][];
+        };
+        /** TaskProgress */
+        TaskProgress: {
+            /** Activity Completed */
+            activity_completed: boolean;
+            /** Assessment Passed */
+            assessment_passed: boolean;
+            /** Assessment Session Ids */
+            assessment_session_ids?: string[];
+            /** Blocked Reasons */
+            blocked_reasons?: string[];
+            /**
+             * Completed Activity Count
+             * @default 0
+             */
+            completed_activity_count: number;
+            /** Event Ids */
+            event_ids?: string[];
+            /** Mastered */
+            mastered: boolean;
+            /** Mastery Score */
+            mastery_score?: number | null;
+            /**
+             * Mastery Status
+             * @default not_started
+             */
+            mastery_status: string;
+            /** Next Resource Id */
+            next_resource_id?: string | null;
+            /** Next Step */
+            next_step: string;
+            /** Path Id */
+            path_id: string;
+            /**
+             * Required Activity Count
+             * @default 0
+             */
+            required_activity_count: number;
+            /**
+             * Rule Version
+             * @default task-progress-v1
+             */
+            rule_version: string;
+            /** Task Id */
+            task_id: string;
+            /** User Reported Completed */
+            user_reported_completed: boolean;
         };
         /** TutorGeneratedResource */
         TutorGeneratedResource: {
@@ -11282,6 +11352,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_LearningPathTaskResponse_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_path_task_progress_api_v1_paths_tasks__task_id__progress_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_TaskProgress_"];
                 };
             };
             /** @description Bad Request */

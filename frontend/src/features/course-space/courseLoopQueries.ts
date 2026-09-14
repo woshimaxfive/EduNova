@@ -27,6 +27,7 @@ export function courseLoopKeys(courseId: number) {
 
 export async function invalidateCourseLearningLoop(queryClient: QueryClient, courseId: number) {
   await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["paths", "task-progress"] }),
     invalidateLearningNextActions(queryClient, courseId),
     ...courseLoopKeys(courseId).map((queryKey) => queryClient.invalidateQueries({ queryKey, exact: true }))
   ]);

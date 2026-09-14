@@ -44,6 +44,10 @@ class FakeQueue:
 
 @dataclass
 class FakeRepository:
+    def committed_pilot_artifacts(self, job):
+        values = self.paths if job.workflow == "path_planning" else self.resources
+        return [item for item in values if item.user_id == job.user_id and item.course_id == job.course_id and item.agent_trace_id == job.agent_trace_id]
+
     def is_path_draft(self, path_id: int) -> bool:
         return any(path.id == path_id and path.status == "draft" for path in self.paths)
 

@@ -92,3 +92,9 @@ EduNova 使用 PostgreSQL、SQLAlchemy、Alembic 和 pgvector。本文档说明�
 - 部署配置和独立保存的加密密钥。
 
 Redis 队列不是唯一事实来源，可以在数据库与文件恢复后重新建立运行状态。
+
+## 11. 任务证据投影与恢复
+
+任务进度由已批准 `learning_paths`、`learning_tasks.learning_bundle_json` 的资源快照、`resource_interactions.evidence_json`、`practice_sessions.assessment_json.source_binding` 与既有掌握度计算只读聚合，不新增可被前端直接写入的掌握度字段。历史 `learning_tasks.status=completed` 仍保留用户报告语义。资源活动与评估来源不匹配时不能闭合任务。
+
+路径/资源的领域事务与 AIJob 状态事务保持分离。提交后取消或超时保留产物，任务回写中记录原结果引用；worker 中断缺少回写时，显式重试使用原 `agent_trace_id` 查询同用户、同课程的领域产物。恢复验证状态与绑定，不替换原版本、不重新评分；没有已提交产物才重新执行，冲突需要用户明确创建新请求。本机制不替代其他工作流自己的恢复策略，也不提供通用快照、分支或重放引擎。

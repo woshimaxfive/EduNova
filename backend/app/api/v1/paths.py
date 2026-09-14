@@ -130,7 +130,20 @@ def get_path_task_version(
     current_user: User = Depends(get_current_user),
     service: PathService = Depends(get_path_service),
 ) -> dict:
-    return api_response(service.get_task_version(current_user, task_id).model_dump())
+    try:
+        return api_response(service.get_task_version(current_user, task_id).model_dump())
+    except PathNotFoundError as exc:
+        raise ApiError(404, "NOT_FOUND", str(exc)) from exc
+    except PathValidationError as exc:
+        raise ApiError(400, "VALIDATION_ERROR", str(exc)) from exc
+
+
+@router.get("/tasks/{task_id}/progress")
+def get_path_task_progress(task_id: int, current_user: User = Depends(get_current_user), db=Depends(get_db_session)) -> dict:
+    from backend.app.services.courses import CourseService
+    from backend.app.services.course_repository import SqlAlchemyCourseRepository
+    from backend.app.services.task_progress import TaskProgressService
+    return api_response(TaskProgressService(db, CourseService(SqlAlchemyCourseRepository(db))).get(current_user, task_id).model_dump())
 
 
 @router.get("/drafts")

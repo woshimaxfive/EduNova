@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Generic, TypeVar
 
+from backend.app.schemas.task_progress import TaskProgress
+
 from fastapi import APIRouter
 from fastapi.datastructures import DefaultPlaceholder
 from pydantic import BaseModel
@@ -171,6 +173,7 @@ RESPONSE_MODELS: dict[str, Any] = {
     "create_path_task_resource_job": ApiEnvelope[AiJobResponse],
     "get_current_path": ApiEnvelope[LearningPathDetail],
     "get_path_task_version": ApiEnvelope[LearningPathTaskResponse],
+    "get_path_task_progress": ApiEnvelope[TaskProgress],
     "create_bound_task_practice": ApiEnvelope[PracticeSessionDetail],
     "list_path_drafts": ApiEnvelope[list[LearningPathResponse]],
     "get_path_version": ApiEnvelope[LearningPathDetail],

@@ -27,6 +27,14 @@ class SqlAlchemyAiJobRepository:
     def get_user(self, user_id: int) -> User | None:
         return self.db.get(User, user_id)
 
+    def committed_pilot_artifacts(self, job: AiJob):
+        """Find domain commits even if a worker died before writing its job result."""
+        model = LearningPath if job.workflow == "path_planning" else GeneratedResource
+        return list(self.db.scalars(select(model).where(
+            model.user_id == job.user_id, model.course_id == job.course_id,
+            model.agent_trace_id == job.agent_trace_id,
+        ).order_by(model.id)))
+
     def lock_user(self, user_id: int) -> User | None:
         return self.db.scalar(select(User).where(User.id == user_id).with_for_update())
 

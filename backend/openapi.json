@@ -1123,6 +1123,23 @@
         "title": "ApiEnvelope[StudentProfileResponse]",
         "type": "object"
       },
+      "ApiEnvelope_TaskProgress_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TaskProgress"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "trace_id"
+        ],
+        "title": "ApiEnvelope[TaskProgress]",
+        "type": "object"
+      },
       "ApiEnvelope_TutorImageAttachment_": {
         "properties": {
           "data": {
@@ -9203,6 +9220,112 @@
           "answers"
         ],
         "title": "SubmitPracticeAnswersRequest",
+        "type": "object"
+      },
+      "TaskProgress": {
+        "properties": {
+          "activity_completed": {
+            "title": "Activity Completed",
+            "type": "boolean"
+          },
+          "assessment_passed": {
+            "title": "Assessment Passed",
+            "type": "boolean"
+          },
+          "assessment_session_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assessment Session Ids",
+            "type": "array"
+          },
+          "blocked_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked Reasons",
+            "type": "array"
+          },
+          "completed_activity_count": {
+            "default": 0,
+            "title": "Completed Activity Count",
+            "type": "integer"
+          },
+          "event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Event Ids",
+            "type": "array"
+          },
+          "mastered": {
+            "title": "Mastered",
+            "type": "boolean"
+          },
+          "mastery_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mastery Score"
+          },
+          "mastery_status": {
+            "default": "not_started",
+            "title": "Mastery Status",
+            "type": "string"
+          },
+          "next_resource_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Resource Id"
+          },
+          "next_step": {
+            "title": "Next Step",
+            "type": "string"
+          },
+          "path_id": {
+            "title": "Path Id",
+            "type": "string"
+          },
+          "required_activity_count": {
+            "default": 0,
+            "title": "Required Activity Count",
+            "type": "integer"
+          },
+          "rule_version": {
+            "default": "task-progress-v1",
+            "title": "Rule Version",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "user_reported_completed": {
+            "title": "User Reported Completed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "task_id",
+          "path_id",
+          "user_reported_completed",
+          "activity_completed",
+          "assessment_passed",
+          "mastered",
+          "next_step"
+        ],
+        "title": "TaskProgress",
         "type": "object"
       },
       "TutorGeneratedResource": {
@@ -18133,6 +18256,144 @@
           }
         },
         "summary": "Update Path Task",
+        "tags": [
+          "paths"
+        ]
+      }
+    },
+    "/api/v1/paths/tasks/{task_id}/progress": {
+      "get": {
+        "operationId": "get_path_task_progress_api_v1_paths_tasks__task_id__progress_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_TaskProgress_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Path Task Progress",
         "tags": [
           "paths"
         ]

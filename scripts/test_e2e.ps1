@@ -50,6 +50,9 @@ try {
   Write-Host "== Validate exact task resource evidence binding =="
   Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.task_binding_check"))
 
+  Write-Host "== Prepare controlled provider learning closure =="
+  Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.learning_closure_check", "seed"))
+
   Write-Host "== Run learning closure Playwright E2E =="
   Push-Location "$repoRoot\frontend"
   try {
@@ -59,6 +62,7 @@ try {
   finally {
     Pop-Location
   }
+  Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.learning_closure_check", "verify"))
 }
 finally {
   Write-Host "== Remove isolated E2E containers and volumes =="

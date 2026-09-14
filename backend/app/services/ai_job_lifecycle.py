@@ -64,10 +64,12 @@ class AiJobLifecycleMixin:
         if existing is not None:
             return ai_job_to_api(existing, max_retries=self.max_retries)
         capability = AI_CAPABILITIES.get(workflow)
+        if capability is None:
+            raise AiJobValidationError("不支持的 AI 任务能力。")
         if capability is not None:
             request = capability.validate_input(request_json, course_id)
             validate_capability_scope(self.repository, user.id, request)
-            request_json = request.model_dump(mode="json")
+            request_json = request.model_dump(mode="json", exclude_unset=workflow not in {"path_planning", "resource_generation"})
             if workflow == "path_planning" and not request_json.get("draft"):
                 request_json.pop("draft", None)
         if self.repository.lock_user(user.id) is None:

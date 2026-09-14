@@ -63,6 +63,7 @@ try {
     Pop-Location
   }
   Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.learning_closure_check", "verify"))
+  Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.run_history_check"))
 }
 finally {
   Write-Host "== Remove isolated E2E containers and volumes =="

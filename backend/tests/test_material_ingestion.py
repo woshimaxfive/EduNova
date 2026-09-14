@@ -72,6 +72,8 @@ def test_material_ingestion_graph_preserves_sections_and_requires_confirmation(t
     ).run(user=make_user(), material=material, trace_id="trace-ingestion")
 
     chunks = [item for item in session.added if isinstance(item, MaterialChunk)]
+    from backend.app.services.ai_capabilities import AI_CAPABILITIES
+    assert AI_CAPABILITIES["material_ingestion"].validate_output(result, None) == result
     assert result["ingestion_status"] == "awaiting_confirmation"
     assert material.parse_status == "completed"
     assert material.ingestion_status == "awaiting_confirmation"

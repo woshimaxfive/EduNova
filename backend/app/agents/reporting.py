@@ -280,6 +280,9 @@ class ReportGraphRunner:
         return self._run_node(state, "repair", 6, "按审核风险回退到确定性报告", work)
 
     def _persist_node(self, state: ReportState) -> dict[str, Any]:
+        job_context = state.get("job_context")
+        if job_context is not None:
+            job_context.before_node("persist", "保存审核通过的学习报告")
         started = perf_counter()
         latest = state.get("latest_practice")
         learner_context = state.get("learner_context")
@@ -308,6 +311,8 @@ class ReportGraphRunner:
         )
         try:
             self.service.repository.add_assessment_report(report)
+            if job_context is not None:
+                job_context.check_cancelled()
             self.service.repository.commit()
             self.service.repository.refresh(report)
             detail = report_to_api(report, self.service._report_freshness(int(state["user_id"]), report))

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from fastapi import Depends, Query, Request, Response
+from fastapi import Depends, Header, Query, Request, Response
 from sse_starlette import EventSourceResponse
 
 from backend.app.api.contracts import TypedAPIRouter as APIRouter
@@ -12,6 +12,8 @@ from backend.app.core.config import get_settings
 from backend.app.db.session import SessionLocal, get_db_session
 from backend.app.models import User
 from backend.app.services.ai_jobs import AiJobNotFoundError, AiJobService, RqAiJobQueue, SqlAlchemyAiJobRepository
+from backend.app.schemas.run_history import SnapshotOperationRequest, BranchRunRequest
+from backend.app.services.run_history import RunHistoryService
 
 
 router = APIRouter(prefix="/ai-jobs", tags=["ai-jobs"])
@@ -52,6 +54,27 @@ def cancel_ai_job(
     service: AiJobService = Depends(get_ai_job_service),
 ) -> dict:
     return api_response(service.cancel_job(current_user, job_id).model_dump(mode="json"))
+
+
+@router.post("/{job_id}/snapshot")
+def capture_run_snapshot(job_id: int, current_user: User = Depends(get_current_user), service: AiJobService = Depends(get_ai_job_service)) -> dict:
+    return api_response(RunHistoryService(service).capture(current_user, job_id).model_dump())
+
+
+@router.get("/{job_id}/replay")
+def replay_run_snapshot(job_id: int, current_user: User = Depends(get_current_user), service: AiJobService = Depends(get_ai_job_service)) -> dict:
+    return api_response(RunHistoryService(service).replay(current_user, job_id).model_dump())
+
+
+@router.post("/{job_id}/branch")
+def branch_run_snapshot(job_id: int, payload: BranchRunRequest, current_user: User = Depends(get_current_user), service: AiJobService = Depends(get_ai_job_service)) -> dict:
+    return api_response(RunHistoryService(service).branch(current_user, job_id, payload).model_dump())
+
+
+@router.post("/{job_id}/reexecute", status_code=202)
+def reexecute_run_snapshot(job_id: int, payload: SnapshotOperationRequest, idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=1, max_length=80),
+                          current_user: User = Depends(get_current_user), service: AiJobService = Depends(get_ai_job_service)) -> dict:
+    return api_response(RunHistoryService(service).reexecute(current_user, job_id, payload.expected_digest, idempotency_key).model_dump())
 
 
 @router.post("/{job_id}/retry", status_code=202)

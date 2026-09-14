@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Generic, TypeVar
 
 from backend.app.schemas.task_progress import TaskProgress
+from backend.app.schemas.run_history import RunSnapshot, RuntimeCatalog
 
 from fastapi import APIRouter
 from fastapi.datastructures import DefaultPlaceholder
@@ -122,6 +123,11 @@ ERROR_RESPONSES = {
 
 
 RESPONSE_MODELS: dict[str, Any] = {
+    "get_runtime_capabilities": ApiEnvelope[RuntimeCatalog],
+    "capture_run_snapshot": ApiEnvelope[RunSnapshot],
+    "replay_run_snapshot": ApiEnvelope[RunSnapshot],
+    "branch_run_snapshot": ApiEnvelope[LearningPathDetail],
+    "reexecute_run_snapshot": ApiEnvelope[AiJobResponse],
     "get_agent_trace": ApiEnvelope[AgentTraceResponse],
     "list_ai_jobs": ApiEnvelope[AiJobListResponse],
     "get_ai_job": ApiEnvelope[AiJobResponse],

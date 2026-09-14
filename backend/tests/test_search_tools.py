@@ -29,3 +29,10 @@ def test_external_search_runs_through_langgraph_tool_node_once() -> None:
     assert service.calls == [("最新课程资料", 5)]
     assert result["warning"] is None
     assert result["citations"][0]["url"] == "https://example.test/source"
+
+
+def test_invalid_search_input_does_not_call_external_service_or_invent_evidence() -> None:
+    service = FakeSearchService()
+    result = SearchToolExecutor(service).search("")
+    assert not service.calls
+    assert result["citations"] == [] and result["warning"]

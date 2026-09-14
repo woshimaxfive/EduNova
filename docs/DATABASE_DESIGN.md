@@ -95,6 +95,10 @@ Redis 队列不是唯一事实来源，可以在数据库与文件恢复后重�
 
 ## 11. 任务证据投影与恢复
 
+运行历史扩展复用 `ai_jobs.progress_json.snapshot` 保存一次终态元数据，不新增数据库表或迁移。快照以整个 JSON 值替换持久化，包含 schema_version、任务/Trace/父运行身份、产物引用、输入及路径内容 SHA256、脱敏步骤、用量计数和整体摘要。捕获时锁定 Job 行，重复捕获保持原值；摘要用于一致性检测，不是防数据库管理员篡改的签名。删除 Job 会一并删除其快照，不宣称永久审计存档。
+
+Session 沿用领域会话与 AIJob 执行身份；快照不序列化 ORM 对象、模型上下文或成绩。读取重放不修复 Job 状态，不写领域事实。计划分支在课程行锁内检查当前路径 ID 和源内容摘要，以 `plan_json.branch_snapshot` 实现并发幂等，创建 draft、记录 revision_of/branched_from，复制任务蓝图及固定资源引用但重置任务状态；不复制交互、练习、评分或掌握事实。新执行使用原队列、幂等键和权限门禁，在 progress_json 记录 reexecuted_from/source_snapshot，retry_of_job_id 保持空值。旧任务没有快照仍可读，可显式捕获终态元数据，不能补造历史批准或学习证据。
+
 任务进度由已批准 `learning_paths`、`learning_tasks.learning_bundle_json` 的资源快照、`resource_interactions.evidence_json`、`practice_sessions.assessment_json.source_binding` 与既有掌握度计算只读聚合，不新增可被前端直接写入的掌握度字段。历史 `learning_tasks.status=completed` 仍保留用户报告语义。资源活动与评估来源不匹配时不能闭合任务。
 
 路径/资源的领域事务与 AIJob 状态事务保持分离。提交后取消或超时保留产物，任务回写中记录原结果引用；worker 中断缺少回写时，显式重试使用原 `agent_trace_id` 查询同用户、同课程的领域产物。恢复验证状态与绑定，不替换原版本、不重新评分；没有已提交产物才重新执行，冲突需要用户明确创建新请求。本机制不替代其他工作流自己的恢复策略，也不提供通用快照、分支或重放引擎。

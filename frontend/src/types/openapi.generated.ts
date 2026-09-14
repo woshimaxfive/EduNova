@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Runtime Capabilities */
+        get: operations["get_runtime_capabilities_api_v1_agents_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents/traces/{trace_id}": {
         parameters: {
             query?: never;
@@ -73,6 +90,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai-jobs/{job_id}/branch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Branch Run Snapshot */
+        post: operations["branch_run_snapshot_api_v1_ai_jobs__job_id__branch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai-jobs/{job_id}/cancel": {
         parameters: {
             query?: never;
@@ -107,6 +141,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai-jobs/{job_id}/reexecute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reexecute Run Snapshot */
+        post: operations["reexecute_run_snapshot_api_v1_ai_jobs__job_id__reexecute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-jobs/{job_id}/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Replay Run Snapshot */
+        get: operations["replay_run_snapshot_api_v1_ai_jobs__job_id__replay_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai-jobs/{job_id}/retry": {
         parameters: {
             query?: never;
@@ -118,6 +186,23 @@ export interface paths {
         put?: never;
         /** Retry Ai Job */
         post: operations["retry_ai_job_api_v1_ai_jobs__job_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-jobs/{job_id}/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Capture Run Snapshot */
+        post: operations["capture_run_snapshot_api_v1_ai_jobs__job_id__snapshot_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2163,6 +2248,18 @@ export interface components {
             /** Trace Id */
             trace_id: string;
         };
+        /** ApiEnvelope[RunSnapshot] */
+        ApiEnvelope_RunSnapshot_: {
+            data: components["schemas"]["RunSnapshot"];
+            /** Trace Id */
+            trace_id: string;
+        };
+        /** ApiEnvelope[RuntimeCatalog] */
+        ApiEnvelope_RuntimeCatalog_: {
+            data: components["schemas"]["RuntimeCatalog"];
+            /** Trace Id */
+            trace_id: string;
+        };
         /** ApiEnvelope[SpeechTranscriptionResult] */
         ApiEnvelope_SpeechTranscriptionResult_: {
             data: components["schemas"]["SpeechTranscriptionResult"];
@@ -2384,6 +2481,13 @@ export interface components {
         Body_upload_tutor_attachment_api_v1_tutor_sessions__session_id__attachments_post: {
             /** File */
             file: string;
+        };
+        /** BranchRunRequest */
+        BranchRunRequest: {
+            /** Expected Active Path Id */
+            expected_active_path_id: number | null;
+            /** Expected Digest */
+            expected_digest: string;
         };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {
@@ -4868,6 +4972,90 @@ export interface components {
              */
             too_hard: number;
         };
+        /** RunSnapshot */
+        RunSnapshot: {
+            /** Artifact Refs */
+            artifact_refs: {
+                [key: string]: unknown;
+            };
+            /** Captured At */
+            captured_at: string;
+            /** Course Id */
+            course_id: string | null;
+            /** Digest */
+            digest: string;
+            /** Error Code */
+            error_code: string | null;
+            /** Job Id */
+            job_id: string;
+            /** Parent Job Id */
+            parent_job_id: string | null;
+            /** Path Content Hash */
+            path_content_hash?: string | null;
+            /** Request Hash */
+            request_hash: string;
+            /**
+             * Schema Version
+             * @default 1
+             * @constant
+             */
+            schema_version: 1;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "failed" | "cancelled";
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /** Telemetry */
+            telemetry: {
+                [key: string]: number;
+            };
+            /** Trace Id */
+            trace_id: string;
+            /** Workflow */
+            workflow: string;
+        };
+        /** RuntimeCapability */
+        RuntimeCapability: {
+            /** Boundary */
+            boundary: string;
+            /** Branch */
+            branch: boolean;
+            /** Input Contract */
+            input_contract: string;
+            /** Name */
+            name: string;
+            /** Output Contract */
+            output_contract: string;
+            /** Reexecute */
+            reexecute: boolean;
+            /** Replay */
+            replay: boolean;
+            /** Snapshot */
+            snapshot: boolean;
+            /** Transport */
+            transport: string;
+        };
+        /** RuntimeCatalog */
+        RuntimeCatalog: {
+            /** Provider Contracts */
+            provider_contracts: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
+            /** Tool Contracts */
+            tool_contracts: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
+            /** Workflows */
+            workflows: components["schemas"]["RuntimeCapability"][];
+        };
         /** SaveModelConfigRequest */
         SaveModelConfigRequest: {
             /** Api Key */
@@ -5031,6 +5219,11 @@ export interface components {
              * @default false
              */
             use_web_search: boolean;
+        };
+        /** SnapshotOperationRequest */
+        SnapshotOperationRequest: {
+            /** Expected Digest */
+            expected_digest: string;
         };
         /** SpeechSynthesisRequest */
         SpeechSynthesisRequest: {
@@ -5513,6 +5706,109 @@ export interface operations {
             };
         };
     };
+    get_runtime_capabilities_api_v1_agents_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_RuntimeCatalog_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
     get_agent_trace_api_v1_agents_traces__trace_id__get: {
         parameters: {
             query?: never;
@@ -5932,6 +6228,115 @@ export interface operations {
             };
         };
     };
+    branch_run_snapshot_api_v1_ai_jobs__job_id__branch_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BranchRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_LearningPathDetail_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
     cancel_ai_job_api_v1_ai_jobs__job_id__cancel_post: {
         parameters: {
             query?: never;
@@ -6142,6 +6547,221 @@ export interface operations {
             };
         };
     };
+    reexecute_run_snapshot_api_v1_ai_jobs__job_id__reexecute_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+            };
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SnapshotOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_AiJobResponse_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    replay_run_snapshot_api_v1_ai_jobs__job_id__replay_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_RunSnapshot_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
     retry_ai_job_api_v1_ai_jobs__job_id__retry_post: {
         parameters: {
             query?: never;
@@ -6162,6 +6782,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_AiJobResponse_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    capture_run_snapshot_api_v1_ai_jobs__job_id__snapshot_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_RunSnapshot_"];
                 };
             };
             /** @description Bad Request */

@@ -106,3 +106,11 @@ Trace 可以保存工作流、步骤、耗时、Provider/模型标识、引用�
 - Provider 原始响应；
 - 明文 API Key、JWT 或密码；
 - 模型原始推理内容。
+
+## 9. 能力适配与运行历史
+
+七类后台能力统一使用内部 Pydantic 输入/输出合同和执行前权限复核，仍由原 LangGraph runner 执行。同步辅导、画像、交卷和资料对照保留原领域请求/响应与 Trace 适配；不能通过通用重执行入口绕过评分、画像或资料确认规则。练习与报告生成在持久化节点前及提交前检查取消，评分仍由原服务端规则决定。
+
+运行会话复用现有领域会话/AIJob 身份，终态快照仅保存元数据和固定产物引用。选择复用 SQLAlchemy JSONB、标准库摘要和既有课程行锁，不新增队列、检查点服务或依赖；项目只维护计划分支与事实隔离的领域规则。LangGraph 原生 checkpoint 适合工作流恢复，但其 replay 可能重新执行节点，因此用户历史回放只读取快照，不调用 graph。参见 [LangGraph persistence](https://docs.langchain.com/oss/python/langgraph/persistence) 与 [SQLAlchemy JSON mutation tracking](https://docs.sqlalchemy.org/en/20/orm/extensions/mutable.html)。
+
+分支创建未批准的计划版本，复制任务蓝图而不复制成绩；重新执行创建新 AIJob，重试沿用原恢复机制。具体操作、冲突与保留期见 API 和数据库文档。Provider 目录沿用已安装适配器的能力声明，实际可用性仍由原连接测试和运行时验证裁决，不把静态声明当作真实模型联调结果。没有新增外发字段、部署组件或第三方许可，质量与性能仍需独立的真实 Provider 样本。

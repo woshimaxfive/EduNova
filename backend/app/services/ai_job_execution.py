@@ -76,8 +76,9 @@ class AiJobExecutionMixin:
             else:
                 raise AiJobValidationError("不支持的 AI 任务类型。")
             if capability is not None:
-                result = capability.validate_output(result, int(job.course_id))
-                committed_result = result
+                result = capability.validate_output(result, job.course_id)
+                if job.workflow in {"path_planning", "resource_generation"}:
+                    committed_result = result
             context.check_cancelled()
             refreshed = self.repository.get_job(job_id, for_update=True) or job
             if refreshed.status in {"cancelling", "cancelled"} or refreshed.cancel_requested_at is not None:

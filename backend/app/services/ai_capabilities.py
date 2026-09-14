@@ -1,4 +1,4 @@
-"""Internal contracts for the two pilot AIJob capabilities, not a second runtime.
+"""Internal contracts for existing AIJob capabilities, not a second runtime.
 
 Validation never commits: AIJob owns scheduling/terminal state and the existing
 LangGraph runners retain their domain persistence and model execution policies.
@@ -13,6 +13,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from backend.app.schemas.resources import GenerateResourcesRequest, ResourceType
 from backend.app.services.ai_job_contracts import AiJobNotFoundError, AiJobValidationError
+from backend.app.services.ai_extended_capabilities import (
+    CourseBuilderInput, CourseBuilderOutput, MaterialIngestionInput, MaterialIngestionOutput,
+    PracticeGenerationInput, PracticeGenerationOutput, ReportGenerationInput, ReportGenerationOutput,
+    EmbeddingReindexInput, EmbeddingReindexOutput,
+)
 
 PositiveId = Annotated[int, Field(strict=True, gt=0)]
 WireId = Annotated[str, Field(pattern=r"^[1-9][0-9]*$")]
@@ -67,43 +72,76 @@ class CapabilityOutputError(AiJobValidationError):
 
 @dataclass(frozen=True)
 class AiCapability:
-    input_model: type[PathPlanningInput] | type[ResourceGenerationInput]
-    output_model: type[PathPlanningOutput] | type[ResourceGenerationOutput]
+    input_model: type[BaseModel]
+    output_model: type[BaseModel]
 
-    def validate_input(self, payload: Any, course_id: int | None) -> PathPlanningInput | ResourceGenerationInput:
+    def validate_input(self, payload: Any, course_id: int | None) -> BaseModel:
         try:
             request = self.input_model.model_validate(payload)
         except ValidationError:
             # Never expose validation input (potentially private text) in job errors.
             raise CapabilityInputError("AI 任务输入不符合能力合同。") from None
-        if request.course_id != course_id:
+        if getattr(request, "course_id", None) != course_id:
             raise CapabilityInputError("AI 任务课程范围不一致。")
         return request
 
-    def validate_output(self, payload: Any, course_id: int) -> dict[str, Any]:
+    def validate_output(self, payload: Any, course_id: int | None) -> dict[str, Any]:
         try:
             result = self.output_model.model_validate(payload)
         except ValidationError:
             raise CapabilityOutputError("AI 任务结果不符合能力合同。") from None
-        if int(result.course_id) != course_id:
+        if course_id is not None and int(result.course_id) != course_id:
             raise CapabilityOutputError("AI 任务结果课程范围不一致。")
         # Preserve legacy wire types: path course is int, resource course is str.
-        return result.model_dump(mode="json")
+        return result.model_dump(mode="json", exclude_unset=self.output_model not in {PathPlanningOutput, ResourceGenerationOutput})
 
 
 AI_CAPABILITIES = MappingProxyType({
     "path_planning": AiCapability(PathPlanningInput, PathPlanningOutput),
     "resource_generation": AiCapability(ResourceGenerationInput, ResourceGenerationOutput),
+    "course_builder": AiCapability(CourseBuilderInput, CourseBuilderOutput),
+    "material_ingestion": AiCapability(MaterialIngestionInput, MaterialIngestionOutput),
+    "practice_generation": AiCapability(PracticeGenerationInput, PracticeGenerationOutput),
+    "report_generation": AiCapability(ReportGenerationInput, ReportGenerationOutput),
+    "embedding_reindex": AiCapability(EmbeddingReindexInput, EmbeddingReindexOutput),
 })
 
 
-def validate_capability_scope(repository: Any, user_id: int, request: PathPlanningInput | ResourceGenerationInput) -> None:
+def validate_capability_scope(repository: Any, user_id: int, request: BaseModel) -> None:
     """Recheck queued/retried work against current deterministic authorization."""
+    if isinstance(request, EmbeddingReindexInput):
+        return  # The runner resolves only the system embedding runtime.
+    if isinstance(request, (CourseBuilderInput, MaterialIngestionInput)):
+        ids = request.material_ids if isinstance(request, CourseBuilderInput) else [request.material_id]
+        materials = repository.get_materials_for_user(user_id, ids)
+        if len(materials) != len(set(ids)):
+            raise AiJobNotFoundError("资料不存在或无权访问。")
+        if isinstance(request, CourseBuilderInput) and any(item.parse_status != "completed" or item.ingestion_status != "confirmed" for item in materials):
+            raise AiJobValidationError("课程来源资料尚未完成解析和确认。")
+        return
     course_id = request.course_id
     if repository.get_course_for_user(user_id, course_id) is None:
         raise AiJobNotFoundError("课程不存在或无权访问。")
     if not repository.is_course_active(user_id, course_id):
         raise AiJobValidationError("课程已完成归档；请先恢复学习。")
+    if isinstance(request, PracticeGenerationInput):
+        if any(repository.get_knowledge_point(course_id, point_id) is None for point_id in request.knowledge_point_ids):
+            raise AiJobNotFoundError("知识点不存在或不属于当前课程。")
+        if request.weakness_item_id is not None:
+            from sqlalchemy import select
+            from backend.app.models import WeaknessReviewItem
+            from backend.app.services.mastery_progress import is_review_due
+            item = repository.db.scalar(select(WeaknessReviewItem).where(WeaknessReviewItem.id == request.weakness_item_id,
+                WeaknessReviewItem.user_id == user_id, WeaknessReviewItem.course_id == course_id))
+            if item is None or item.knowledge_point_id not in request.knowledge_point_ids or (item.status not in {"confirmed", "reviewing"} and not is_review_due(item)):
+                raise AiJobNotFoundError("待复习弱点不存在或当前不可用。")
+        return
+    if isinstance(request, ReportGenerationInput):
+        if request.practice_session_id is not None:
+            session = repository.get_practice_session_for_user(user_id, request.practice_session_id)
+            if session is None or session.course_id != course_id:
+                raise AiJobNotFoundError("练习不存在或不属于当前课程。")
+        return
     if isinstance(request, PathPlanningInput):
         if request.assessment_session_id is not None:
             session = repository.get_practice_session_for_user(user_id, request.assessment_session_id)

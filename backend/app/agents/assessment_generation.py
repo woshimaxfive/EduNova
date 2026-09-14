@@ -273,6 +273,9 @@ class AssessmentGenerationMixin:
             result = f"{result[:source_start]}{replacement}{result[source_end:]}"
 
     def _create_persist_node(self, state: AssessmentState) -> dict[str, Any]:
+        job_context = state.get("job_context")
+        if job_context is not None:
+            job_context.before_node("persist", "保存审核通过的练习")
         started = perf_counter()
         now = datetime.now(UTC)
         course = state["course"]
@@ -336,6 +339,8 @@ class AssessmentGenerationMixin:
                 target_weakness.next_review_at = now + timedelta(days=3)
                 target_weakness.updated_at = now
             self.service.repository.replace_answers_for_session(session.id, placeholders)
+            if job_context is not None:
+                job_context.check_cancelled()
             self.service.repository.commit()
             self.service.repository.refresh(session)
             detail = session_to_api(session, self.service.repository.list_answers_for_session(session.id))

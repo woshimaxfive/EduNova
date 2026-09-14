@@ -8,6 +8,13 @@ from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import BaseTool, tool
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import END, START, MessagesState, StateGraph
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class SearchWebInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    query: str = Field(min_length=1, max_length=2000)
+    max_results: int = Field(default=5, ge=1, le=8)
 
 
 class SearchService(Protocol):
@@ -15,7 +22,7 @@ class SearchService(Protocol):
 
 
 def create_search_web_tool(service: SearchService) -> BaseTool:
-    @tool("search_web", response_format="content_and_artifact")
+    @tool("search_web", response_format="content_and_artifact", args_schema=SearchWebInput)
     def search_web(query: str, max_results: int = 5) -> tuple[str, dict[str, Any]]:
         """Search the public web for verifiable current sources using only the necessary query."""
         result = service.search(query, max_results=max(1, min(max_results, 8)))
@@ -49,7 +56,7 @@ class SearchToolExecutor:
         output = self.graph.invoke({
             "messages": [AIMessage(content="", tool_calls=[{
                 "name": self.tool.name,
-                "args": {"query": query, "max_results": max_results},
+                "args": {"query": query, "max_results": max(1, min(max_results, 8))},
                 "id": call_id,
                 "type": "tool_call",
             }])]
@@ -57,5 +64,5 @@ class SearchToolExecutor:
         messages = output.get("messages", []) if isinstance(output, dict) else []
         for message in reversed(messages):
             if isinstance(message, ToolMessage) and message.tool_call_id == call_id:
-                return dict(message.artifact) if isinstance(message.artifact, dict) else {}
-        return {}
+                return dict(message.artifact) if isinstance(message.artifact, dict) else {"citations": [], "warning": "检索工具未返回可验证证据。"}
+        return {"citations": [], "warning": "检索工具未返回结果。"}

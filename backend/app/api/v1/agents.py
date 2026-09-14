@@ -18,6 +18,12 @@ from backend.app.services.agents import (
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 
+@router.get("/capabilities")
+def get_runtime_capabilities(current_user: User = Depends(get_current_user)) -> dict:
+    from backend.app.services.runtime_catalog import runtime_catalog
+    return api_response(runtime_catalog().model_dump())
+
+
 def get_agent_trace_service(db=Depends(get_db_session)) -> AgentTraceService:
     return AgentTraceService(SqlAlchemyAgentTraceRepository(db))
 

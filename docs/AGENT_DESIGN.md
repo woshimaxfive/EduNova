@@ -62,6 +62,24 @@ EduNova 使用 LangGraph 表达需要多步骤状态、工具调用和质量审�
 
 刷新、重试和 Worker 重启后，以数据库中的 Job 和产物状态恢复。
 
+### 5.1 计划与资源能力边界
+
+`services/ai_capabilities.py` 为 `path_planning`、`resource_generation` 提供内部 Pydantic 输入/结果合同。入队（包括重试）和实际执行前校验参数及用户/课程范围，执行前重新确认课程未归档，并检查知识点、任务、来源资源、评估、来源回答与引用归属。资源合同复用已有 API 请求模型；其余工作流暂保持原入口。
+
+原 LangGraph runner 继续执行，未增加队列、检查点或重试引擎。Job 结果写入前验证返回结构和课程范围，保留既有 JSON 字段及 ID 类型。错误码 `CAPABILITY_INPUT_INVALID`、`CAPABILITY_OUTPUT_INVALID` 只返回固定安全提示，不回显原始输入或结果。
+
+运行约束沿用现有分层策略：
+
+| 层 | 约束 |
+| --- | --- |
+| AIJob / RQ | 排队、用户活动任务上限、有限任务重试与 worker 硬超时 |
+| AgentJobContext | 两条能力使用 `ai_job_timeout_seconds` 的协作 deadline，在节点和模型取消检查点停止；超时为 `JOB_TIMEOUT`，取消保持 `cancelled` |
+| 模型运行时 | 已有并发额度、单次超时、有限重试与熔断；计划保留 45 秒模型预算，资源保留类型级审核/修订限制 |
+
+协作 deadline 不会强制中断正在阻塞的 Provider 请求；该请求仍受 Provider 超时及 RQ 硬超时约束。调用指标沿用 `model_task_summary`，不将用量统计宣称为全任务 token/费用硬额度。
+
+能力校验不提交事务，评分、掌握度、引用审核和产物持久化仍由领域服务负责。业务产物提交和 Job 终态提交仍是原有独立边界：结果合同失败或提交后取消不能撤销已提交产物，也不能声称实现了跨事务原子回滚。批准版本和任务—资源版本绑定不由本层补造。
+
 ## 6. 质量门禁
 
 工作流根据产物类型检查：

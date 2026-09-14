@@ -22,6 +22,7 @@ from backend.app.services.ai_job_contracts import (
     AiJobValidationError,
 )
 from backend.app.services.ai_job_runtime import AgentJobContext
+from backend.app.services.ai_capabilities import AI_CAPABILITIES, validate_capability_scope
 
 
 class AiJobExecutionMixin:
@@ -40,12 +41,19 @@ class AiJobExecutionMixin:
         job.updated_at = now
         self.repository.commit()
         self.repository.refresh(job)
-        context = AgentJobContext(int(job.id))
+        capability = AI_CAPABILITIES.get(job.workflow)
+        context = AgentJobContext(
+            int(job.id),
+            timeout_seconds=self.settings.ai_job_timeout_seconds if capability is not None else None,
+        )
         try:
             context.check_cancelled()
             user = self.repository.get_user(int(job.user_id))
             if user is None:
                 raise AiJobNotFoundError("任务用户不存在。")
+            if capability is not None:
+                request = capability.validate_input(job.request_json, job.course_id)
+                validate_capability_scope(self.repository, user.id, request)
             if job.workflow == "course_builder":
                 result = self._run_course_builder(user, job, context)
             elif job.workflow == "resource_generation":
@@ -63,6 +71,8 @@ class AiJobExecutionMixin:
             else:
                 raise AiJobValidationError("不支持的 AI 任务类型。")
             context.check_cancelled()
+            if capability is not None:
+                result = capability.validate_output(result, int(job.course_id))
             refreshed = self.repository.get_job(job_id, for_update=True) or job
             if refreshed.status in {"cancelling", "cancelled"} or refreshed.cancel_requested_at is not None:
                 raise AiJobCancelled("任务已取消。")

@@ -21,6 +21,7 @@ from backend.app.services.ai_job_contracts import (
     AiJobValidationError,
 )
 from backend.app.services.mastery_progress import is_review_due
+from backend.app.services.ai_capabilities import AI_CAPABILITIES, validate_capability_scope
 
 
 class AiJobLifecycleMixin:
@@ -62,6 +63,11 @@ class AiJobLifecycleMixin:
         existing = self.repository.get_by_idempotency(user.id, key)
         if existing is not None:
             return ai_job_to_api(existing, max_retries=self.max_retries)
+        capability = AI_CAPABILITIES.get(workflow)
+        if capability is not None:
+            request = capability.validate_input(request_json, course_id)
+            validate_capability_scope(self.repository, user.id, request)
+            request_json = request.model_dump(mode="json")
         if self.repository.lock_user(user.id) is None:
             raise AiJobNotFoundError("任务用户不存在。")
         existing = self.repository.get_by_idempotency(user.id, key)

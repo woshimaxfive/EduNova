@@ -40,6 +40,7 @@ from backend.app.services.resource_intent import (
 from backend.app.services.resource_quality import RESOURCE_PROMPT_VERSION, meaningful_model_delta
 from backend.app.services.structured_output import parse_json_object
 from backend.app.services.video_resources import VideoCurationError
+from backend.app.services.ai_job_contracts import AiJobCancelled, AiJobTimeoutError
 
 if TYPE_CHECKING:
     from backend.app.services.resources import ResourceGenerationService
@@ -391,6 +392,8 @@ class ResourceGenerationGraphRunner:
                     max_attempts=1,
                 ),
             )
+        except (AiJobCancelled, AiJobTimeoutError):
+            raise
         except Exception:
             return None
         payload = parse_json_object(raw)
@@ -623,7 +626,7 @@ class ResourceGenerationGraphRunner:
             )
             return {"worker_results": [result]}
         except Exception as exc:
-            if exc.__class__.__name__ == "AiJobCancelled":
+            if isinstance(exc, (AiJobCancelled, AiJobTimeoutError)):
                 raise
             self._record(
                 state,

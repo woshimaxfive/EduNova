@@ -2,19 +2,25 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from time import monotonic
 
 from sqlalchemy import select
 
 from backend.app.db.session import SessionLocal
 from backend.app.models import AiJob
 from backend.app.schemas.ai_jobs import iso_timestamp
-from backend.app.services.ai_job_contracts import AiJobCancelled
+from backend.app.services.ai_job_contracts import AiJobCancelled, AiJobTimeoutError
 
 
 class AgentJobContext:
-    def __init__(self, job_id: int, *, session_factory=SessionLocal) -> None:
+    def __init__(self, job_id: int, *, session_factory=SessionLocal, timeout_seconds: float | None = None) -> None:
         self.job_id = job_id
         self.session_factory = session_factory
+        self.deadline = monotonic() + timeout_seconds if timeout_seconds is not None else None
+
+    def _check_deadline(self) -> None:
+        if self.deadline is not None and monotonic() >= self.deadline:
+            raise AiJobTimeoutError("AI 任务执行超时。")
 
     def before_node(self, stage: str, label: str | None = None) -> None:
         with self.session_factory() as db:
@@ -31,6 +37,7 @@ class AgentJobContext:
                 job.updated_at = now
                 db.commit()
                 raise AiJobCancelled("任务已取消。")
+            self._check_deadline()
             job.heartbeat_at = datetime.now(UTC)
             job.stage = stage
             if label:
@@ -42,6 +49,7 @@ class AgentJobContext:
             job = db.scalar(select(AiJob).where(AiJob.id == self.job_id).with_for_update())
             if job is None or job.status in {"cancelling", "cancelled"} or job.cancel_requested_at is not None:
                 raise AiJobCancelled("任务已取消。")
+            self._check_deadline()
             job.heartbeat_at = datetime.now(UTC)
             db.commit()
 

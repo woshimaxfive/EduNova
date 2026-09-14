@@ -25,6 +25,7 @@ from backend.app.services.resource_feedback import (
 )
 from backend.app.providers.model_tasks import ModelTaskProfile
 from backend.app.services.paths import PathGenerationError
+from backend.app.services.ai_job_contracts import AiJobCancelled, AiJobTimeoutError
 
 
 logger = logging.getLogger(__name__)
@@ -574,6 +575,8 @@ class PathPlanningGraphRunner:
                     max_attempts=1,
                 ),
             )
+        except (AiJobCancelled, AiJobTimeoutError):
+            raise
         except Exception:
             logger.warning("path_planning_model_degraded reason=provider_error")
             return None
@@ -625,6 +628,8 @@ class PathPlanningGraphRunner:
                 if set(revised_payload or {}) == {"output"} and isinstance((revised_payload or {}).get("output"), dict):
                     revised_payload = revised_payload["output"]
                 decision = PathPlanningDecision.model_validate(revised_payload)
+            except (AiJobCancelled, AiJobTimeoutError):
+                raise
             except Exception:
                 logger.warning("path_planning_model_degraded reason=revision_failed")
                 return None

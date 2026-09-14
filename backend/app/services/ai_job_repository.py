@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from backend.app.models import (
     AiJob,
+    ChatMessage,
+    KnowledgeChunk,
     Course,
     CourseEnrollment,
     GeneratedResource,
@@ -158,6 +160,17 @@ class SqlAlchemyAiJobRepository:
         self.db.add(job)
         self.db.flush()
         return job
+
+    def has_message_for_user(self, user_id: int, message_id: int) -> bool:
+        return self.db.scalar(select(ChatMessage.id).where(
+            ChatMessage.id == message_id, ChatMessage.user_id == user_id,
+        )) is not None
+
+    def has_course_chunks(self, course_id: int, chunk_ids: list[int]) -> bool:
+        found = set(self.db.scalars(select(KnowledgeChunk.id).where(
+            KnowledgeChunk.course_id == course_id, KnowledgeChunk.id.in_(chunk_ids),
+        )))
+        return found == set(chunk_ids)
 
     def commit(self) -> None:
         self.db.commit()

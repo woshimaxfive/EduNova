@@ -37,6 +37,10 @@ class AiJobCancelled(Exception):
     pass
 
 
+class AiJobTimeoutError(Exception):
+    code = "JOB_TIMEOUT"
+
+
 class AiJobQueue(Protocol):
     def enqueue(self, job_id: int) -> str: ...
 

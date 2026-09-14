@@ -88,6 +88,7 @@ class AiJobService(AiJobRequestMixin, AiJobLifecycleMixin, AiJobExecutionMixin):
     def _safe_error_message(exc: Exception) -> str:
         code = AiJobService._safe_error_code(exc)
         runtime_messages = {
+            "JOB_TIMEOUT": "AI 任务执行超时，可稍后重试。",
             "authentication_failed": "模型配置认证失败，请检查模型设置后重试。",
             "context_too_long": "任务上下文过长，请缩小资料或生成范围。",
             "rate_limited": "模型服务请求较多，可稍后重试。",

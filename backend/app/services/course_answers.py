@@ -30,8 +30,14 @@ class CourseAnswerGeneration:
 
 
 @dataclass(frozen=True)
+class CourseAnswerProgress:
+    stage: str
+    label: str
+
+
+@dataclass(frozen=True)
 class CourseAnswerStream:
-    tokens: Iterator[str]
+    tokens: Iterator[str | CourseAnswerProgress]
     trace_id: str | None
     used_model: bool
 
@@ -417,6 +423,7 @@ class CourseAnswerService:
         reasoning_mode: str = "auto",
         plan_summary: str | None = None,
         resource_context: dict[str, Any] | None = None,
+        include_progress: bool = False,
     ) -> CourseAnswerStream:
         if not citations:
             return CourseAnswerStream(
@@ -445,12 +452,23 @@ class CourseAnswerService:
         except ModelProviderError as exc:
             raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
 
-        def guarded_tokens() -> Iterator[str]:
+        def guarded_tokens() -> Iterator[str | CourseAnswerProgress]:
             try:
-                content = "".join(tokens)
+                parts: list[str] = []
+                for token in tokens:
+                    if not token:
+                        continue
+                    if include_progress and not parts:
+                        yield CourseAnswerProgress("answer_receiving", "正在接收回答，完成核对后展示")
+                    parts.append(token)
+                content = "".join(parts)
             except ModelProviderError as exc:
                 raise CourseAnswerGenerationError("模型暂不可用，请检查设置或稍后重试。") from exc
+            if include_progress:
+                yield CourseAnswerProgress("answer_checking", "正在核对回答与课程依据")
             sanitized = self._sanitize_course_answer(content)
+            if include_progress and self.unsupported_evidence_claims(sanitized, citations):
+                yield CourseAnswerProgress("answer_repairing", "正在修订缺少依据的表述")
             yield self._ground_course_answer(
                 user=user,
                 question=question,

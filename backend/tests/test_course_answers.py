@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from backend.app.services.course_answers import ConversationContext, CourseAnswerService
+from backend.app.services.course_answers import ConversationContext, CourseAnswerProgress, CourseAnswerService
 
 
 class FakeModelSettingsService:
@@ -58,6 +58,42 @@ class SequentialModelSettingsService(FakeModelSettingsService):
         self.calls.append(messages)
         content = next(self.contents)
         return iter([content])
+
+
+def test_course_progress_never_releases_unchecked_content() -> None:
+    model = SequentialModelSettingsService([
+        "访问仅需 999 纳秒。",
+        "Cache 保存近期常用数据。",
+    ])
+    stream = CourseAnswerService(model).stream(
+        user=object(), question="解释缓存", citations=[_citation()], include_progress=True,
+    )
+    events = list(stream.tokens)
+    assert [item.stage for item in events if isinstance(item, CourseAnswerProgress)] == [
+        "answer_receiving", "answer_checking", "answer_repairing",
+    ]
+    assert all(isinstance(item, CourseAnswerProgress) for item in events[:-1])
+    assert events[-1] == "Cache 保存近期常用数据。"
+    assert "999" not in repr(events)
+    assert len(model.calls) == 2
+
+
+def test_course_progress_does_not_leak_partial_answer_on_provider_failure() -> None:
+    from backend.app.providers.openai_compatible import ModelProviderError
+    from backend.app.services.course_answers import CourseAnswerGenerationError
+    import pytest
+
+    class InterruptedModel(FakeModelSettingsService):
+        def chat_completion_stream(self, **kwargs):
+            yield "未核对的正文"
+            raise ModelProviderError("interrupted")
+
+    stream = CourseAnswerService(InterruptedModel("")).stream(
+        user=object(), question="解释缓存", citations=[_citation()], include_progress=True,
+    )
+    assert isinstance(next(stream.tokens), CourseAnswerProgress)
+    with pytest.raises(CourseAnswerGenerationError):
+        next(stream.tokens)
 
 
 def test_course_answer_removes_echoed_model_context() -> None:

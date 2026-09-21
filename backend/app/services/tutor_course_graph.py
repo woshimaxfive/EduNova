@@ -13,7 +13,7 @@ from backend.app.agents.tool_policy import decide_tool_capabilities
 from backend.app.models import ChatSession, User
 from backend.app.schemas.tutor import TutorSessionDetail
 from backend.app.services.content_locale import china_first_content_policy
-from backend.app.services.course_answers import CourseAnswerGenerationError, HOME_MODEL_NOT_CONFIGURED_MESSAGE
+from backend.app.services.course_answers import CourseAnswerGenerationError, CourseAnswerProgress, HOME_MODEL_NOT_CONFIGURED_MESSAGE
 from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.model_execution import execution_context_for_state, model_execution_scope
 from backend.app.services.tutor_routing import project_semantic_route, project_visual_route
@@ -131,6 +131,9 @@ class CourseTutorGraphRunner:
 
             answer_parts: list[str] = []
             for token in state.get("tokens", []):
+                if isinstance(token, CourseAnswerProgress):
+                    yield {"event": "status", "data": {"stage": token.stage, "label": token.label}}
+                    continue
                 if not isinstance(token, str) or not token:
                     continue
                 answer_parts.append(token)

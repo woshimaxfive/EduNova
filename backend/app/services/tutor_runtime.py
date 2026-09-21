@@ -66,6 +66,8 @@ def supported_course_answer_kwargs(callable_value: Any, state: AgentState) -> di
             kwargs["plan_summary"] = str(state.get("plan_summary") or "")
         if "resource_context" in signature(callable_value).parameters:
             kwargs["resource_context"] = state.get("resource_context")
+        if "include_progress" in signature(callable_value).parameters:
+            kwargs["include_progress"] = True
     except (TypeError, ValueError):
         pass
     return kwargs

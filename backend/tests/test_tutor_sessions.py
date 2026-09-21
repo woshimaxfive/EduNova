@@ -1990,6 +1990,32 @@ def test_stream_course_message_emits_tokens_and_persists_final_messages() -> Non
     assert repo.agent_logs[7].metadata_json["risk_flags"] == []
 
 
+def test_course_stream_progress_is_status_not_persisted_answer() -> None:
+    from backend.app.services.course_answers import CourseAnswerProgress
+
+    module = load_tutor_module()
+    user = make_user(1)
+    repo = FakeTutorRepository(allowed_course_ids={7})
+    service = module.TutorSessionService(
+        repo,
+        course_citation_searcher=FakeCourseCitationSearcher(results=[{
+            "chunk_id": 501, "course_id": 7, "material_id": 301,
+            "content": "启发式搜索利用启发函数。", "source_title": "讲义", "score": 9.5,
+        }]),
+        course_answer_generator=FakeCourseAnswerGenerator(tokens=[
+            CourseAnswerProgress("answer_checking", "正在核对回答与课程依据"), "核对后的回答",
+        ]),
+    )
+    session = service.create_session(user=user, scope="course", course_id=7, mode="chat", title="课程答疑")
+    events = list(service.stream_message(user=user, session_id=session.id, content="解释启发式搜索"))
+    assert any(event == {"event": "status", "data": {
+        "stage": "answer_checking", "label": "正在核对回答与课程依据",
+    }} for event in events)
+    assert [event["data"]["content"] for event in events if event["event"] == "token"] == ["核对后的回答"]
+    assert repo.messages[1].content == "核对后的回答"
+    assert events[-1]["event"] == "done"
+
+
 def test_stream_course_resource_action_skips_answer_planner_and_review_model_calls() -> None:
     module = load_tutor_module()
     user = make_user(1)

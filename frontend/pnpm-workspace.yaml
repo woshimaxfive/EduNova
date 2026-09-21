@@ -1,0 +1,3 @@
+# The OpenAPI tool pins the affected patch; keep its major version unchanged.
+overrides:
+  'js-yaml@>=4.0.0 <4.3.2': 4.3.2

@@ -6,9 +6,10 @@ from difflib import SequenceMatcher
 from typing import Any, Iterable
 
 from backend.app.services.resource_artifacts import validate_resource_content
+from backend.app.services.resource_safety import sensitive_output_flags
 
 
-RESOURCE_PROMPT_VERSION = "resource-v4.2"
+RESOURCE_PROMPT_VERSION = "resource-v4.5"
 RESOURCE_REVIEW_PROMPT_VERSION = "resource-review-v4.0"
 STRICT_MODEL_TYPES = {"quiz", "code", "animation"}
 EVIDENCE_FALLBACK_TYPES = {"doc", "mindmap", "slide"}
@@ -64,8 +65,7 @@ def quality_risks(
     risks = list(validate_resource_content(resource_type, content))
     artifact = content.get("artifact")
     text = f"{content.get('markdown') or ''}\n{artifact_text(artifact)}"
-    lowered = text.casefold()
-    if any(marker.casefold() in lowered for marker in FORBIDDEN_OUTPUT_MARKERS):
+    if sensitive_output_flags(text, FORBIDDEN_OUTPUT_MARKERS):
         risks.append("sensitive_output")
 
     evidence_rows = [str(term) for term in evidence_terms]

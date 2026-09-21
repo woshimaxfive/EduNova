@@ -11,12 +11,14 @@ from backend.app.services.resource_artifacts import artifact_to_markdown
 from backend.app.services.resource_content import safe_resource_title
 from backend.app.services.resource_contracts import (
     RESOURCE_MODEL_TIMEOUT_SECONDS,
-    SENSITIVE_MARKERS,
     ResourceContext,
     ResourceDraft,
     ResourceModelService,
+    ResourceOutputFormatError,
+    ResourceSensitiveOutputError,
 )
 from backend.app.services.resource_quality import RESOURCE_PROMPT_VERSION, RESOURCE_REVIEW_PROMPT_VERSION
+from backend.app.services.resource_safety import sensitive_output_flags
 from backend.app.services.structured_output import parse_json_object
 
 
@@ -41,7 +43,13 @@ class ResourceModelingService:
     ) -> tuple[dict[str, Any] | None, bool]:
         requirements = {
             "doc": "输出 document artifact，至少包含概念、依据、步骤、易错点和复习动作五个具体章节。",
-            "mindmap": "输出 mindmap artifact，Markmap 和树节点必须表达资料中的真实概念关系。",
+            "mindmap": (
+                "输出 mindmap artifact，markmap_markdown 必须是以 # 根主题开头的非空 Markdown 字符串；"
+                "tree 必须是单个根节点对象，每个节点包含唯一字符串 id、非空 title 和 children 数组，叶节点 children 为 []。"
+                "两种表示必须具有一致的概念层级，表达资料中的真实概念关系，不得只返回其中一种。"
+                "artifact 还必须包含非空 citation_refs 整数数组，与 kind、tree、markmap_markdown 同级；"
+                "Markdown 中的 [编号] 不能替代这个机器可读字段。"
+            ),
             "quiz": "输出 quiz artifact，至少三道互不重复且可由引用回答的题，选项必须合理。",
             "code": (
                 "输出 code_lab artifact，Python 必须直接演示当前知识点并给出精确预期输出。"
@@ -89,11 +97,12 @@ class ResourceModelingService:
                         f"协议版本：{RESOURCE_PROMPT_VERSION}",
                         "课程短摘录：",
                         *[
-                            f"- {context.citation.section_title} / {context.citation.source_title}: {context.excerpt}"
+                            f"- [{context.citation.chunk_id}] {context.citation.section_title} / {context.citation.source_title}: {context.excerpt}"
                             for context in contexts
                         ],
                         "字段协议（所有占位内容都必须替换为当前知识点的真实内容）：",
                         json.dumps(self.worker_schema_example(resource_type, draft), ensure_ascii=False)[:7000],
+                        "citation_refs 只能使用课程短摘录方括号中的真实切片编号，按内容选择对应依据；不得改成从1开始的序号或树节点id。",
                         "只返回 {\"artifact\":{...},\"summary\":\"...\",\"learning_objectives\":[\"...\"]}。",
                         "内容必须体现教学意图中的学习问题、教学策略、案例方向和成功标准。",
                         "不要使用 Markdown 代码块；JSON 字符串中的换行必须正确转义；artifact.kind 必须与结构示例完全一致。",
@@ -118,8 +127,11 @@ class ResourceModelingService:
         except (ModelNotConfiguredError, ModelProviderError):
             return None, True
         candidate = self.parse_worker_content(response, resource_type, draft)
-        if candidate is None or self.contains_sensitive(json.dumps(candidate, ensure_ascii=False)):
-            return None, False
+        if candidate is None:
+            raise ResourceOutputFormatError("模型产物字段或格式无效，未保存。")
+        risk_flags = sensitive_output_flags(json.dumps(candidate, ensure_ascii=False))
+        if risk_flags:
+            raise ResourceSensitiveOutputError("模型产物未通过敏感内容检查，未保存。", risk_flags=risk_flags)
         return candidate, False
 
     @staticmethod
@@ -309,8 +321,11 @@ class ResourceModelingService:
                             },
                             ensure_ascii=False,
                         )[:3500],
-                        "安全课程证据：",
-                        *draft.source.excerpt_lines[:3],
+                        "安全课程证据（citation_refs 只能使用方括号中的真实切片编号，不得重新编号）：",
+                        *draft.source.excerpt_lines,
+                        "修订字段协议（补齐缺失字段，所有占位内容必须替换）：",
+                        json.dumps(self.worker_schema_example(str(payload["resource_type"]), draft), ensure_ascii=False),
+                        "artifact.citation_refs 必须是非空整数数组，与 artifact.kind 同级；正文中的 [编号] 不能替代该字段。",
                         (
                             "代码资源只能使用 collections、dataclasses、functools、heapq、itertools、math、random、statistics、typing；"
                             "能不用 import 时优先不用；不得使用 numpy、文件、网络、动态执行或 JS 互操作，也不得出现任何"
@@ -394,6 +409,9 @@ class ResourceModelingService:
             return None
         if artifact.get("kind") != draft.content_json.get("artifact", {}).get("kind"):
             return None
+        objectives = payload.get("learning_objectives", [])
+        if not isinstance(objectives, list) or any(not isinstance(item, str) for item in objectives):
+            return None
         candidate = {
             **draft.content_json,
             "schema_version": 3,
@@ -401,7 +419,7 @@ class ResourceModelingService:
             "summary": safe_resource_title(payload.get("summary")) or draft.content_json.get("summary"),
             "learning_objectives": [
                 safe_resource_title(item)
-                for item in payload.get("learning_objectives", [])
+                for item in objectives
                 if safe_resource_title(item)
             ][:6] or draft.content_json.get("learning_objectives", []),
         }
@@ -456,5 +474,4 @@ class ResourceModelingService:
 
     @staticmethod
     def contains_sensitive(value: str) -> bool:
-        lowered = value.lower()
-        return any(marker in lowered or marker in value for marker in SENSITIVE_MARKERS)
+        return bool(sensitive_output_flags(value))

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import pytest
+import numpy as np
 from fastapi.testclient import TestClient
 
 from backend.app.api.v1.deps import get_auth_service
@@ -14,6 +15,15 @@ from backend.app.models import Course, CourseMaterial, KnowledgeChunk, Knowledge
 from backend.app.providers.retrieval import RerankItem
 from backend.app.services.auth import AuthService
 from backend.app.services.rag import RagCourseNotFoundError, RagService
+from backend.app.services.embeddings import EmbeddingService
+
+
+def test_persisted_pgvector_array_is_a_valid_existing_embedding():
+    assert EmbeddingService._valid_vector(np.array([1.0, 2.0], dtype=np.float32), 2)
+    assert EmbeddingService._valid_vector([1.0, 2.0], 2)
+    assert not EmbeddingService._valid_vector(np.array([[1.0, 2.0]]), 2)
+    assert not EmbeddingService._valid_vector(np.array([]), 0)
+    assert not EmbeddingService._valid_vector(np.array([1.0]), 2)
 
 
 @dataclass

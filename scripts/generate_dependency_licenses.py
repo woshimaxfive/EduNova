@@ -27,9 +27,11 @@ PURPOSES = {
     "zustand": "轻量客户端状态",
     "vite": "前端构建",
     "vitest": "前端测试",
+    "setuptools": "AI worker 的 PyTorch 运行依赖；固定安全版本",
 }
 
 PACKAGE_METADATA_OVERRIDES = {
+    "setuptools": ("https://github.com/pypa/setuptools", "MIT"),
     "bcrypt": ("https://github.com/pyca/bcrypt", "Apache-2.0"),
     "cryptography": ("https://github.com/pyca/cryptography", "Apache-2.0 OR BSD-3-Clause"),
     "docling-slim": ("https://github.com/docling-project/docling", "MIT"),

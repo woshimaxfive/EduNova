@@ -109,7 +109,7 @@ def build_resource_draft(
         for context in contexts
     ] or ["- 当前课程知识点摘要"]
     excerpt_lines = [
-        f"- {context.citation.section_title}：{context.excerpt}"
+        f"- [{context.citation.chunk_id}] {context.citation.section_title}：{context.excerpt}"
         for context in contexts
         if context.excerpt
     ] or [f"- {topic}：请先补充课程资料以提高依据。"]

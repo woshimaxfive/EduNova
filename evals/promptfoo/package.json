@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "scripts": {
+    "check:deps": "node check_dependency_compat.cjs",
     "eval": "node --env-file=promptfoo.env node_modules/promptfoo/dist/src/main.js eval -c promptfooconfig.yaml --no-cache --no-progress-bar --no-share --no-write"
   },
   "devDependencies": {

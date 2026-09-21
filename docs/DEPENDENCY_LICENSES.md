@@ -11,6 +11,7 @@
 | docling-slim | 2.113.0 | [docling-slim](https://github.com/docling-project/docling) | MIT | 项目直接运行、测试或构建依赖 |
 | fastapi | 0.138.2 | [fastapi](https://github.com/fastapi/fastapi) | MIT | 后端 API 与 OpenAPI |
 | httpx | 0.28.1 | [httpx](https://github.com/encode/httpx) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
+| httpx2 | 2.11.0 | [httpx2](https://github.com/pydantic/httpx2) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
 | json-repair | 0.61.4 | [json-repair](https://github.com/mangiucugna/json_repair) | MIT | 项目直接运行、测试或构建依赖 |
 | langchain | 1.3.11 | [langchain](https://github.com/langchain-ai/langchain) | MIT | 项目直接运行、测试或构建依赖 |
 | langgraph | 1.2.7 | [langgraph](https://github.com/langchain-ai/langgraph/tree/main/libs/langgraph) | MIT | 学习闭环状态图编排 |
@@ -93,11 +94,11 @@
 | react-router-dom | 7.18.2 | [react-router-dom](https://github.com/remix-run/react-router) | MIT | 项目直接运行、测试或构建依赖 |
 | remark-gfm | 4.0.1 | [remark-gfm](https://github.com/remarkjs/remark-gfm) | MIT | 项目直接运行、测试或构建依赖 |
 | tailwindcss | 4.3.3 | [tailwindcss](https://tailwindcss.com) | MIT | 项目直接运行、测试或构建依赖 |
-| typescript | 6.0.3 | [typescript](https://www.typescriptlang.org/) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
+| typescript | 5.9.3 | [typescript](https://www.typescriptlang.org/) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | typescript-eslint | 8.67.0 | [typescript-eslint](https://typescript-eslint.io/packages/typescript-eslint) | MIT | 项目直接运行、测试或构建依赖 |
 | vite | 8.2.1 | [vite](https://vite.dev) | MIT | 前端构建 |
 | vite-plugin-static-copy | 4.1.1 | [vite-plugin-static-copy](https://github.com/sapphi-red/vite-plugin-static-copy#readme) | MIT | 项目直接运行、测试或构建依赖 |
-| vitest | 4.1.10 | [vitest](https://vitest.dev) | MIT | 前端测试 |
+| vitest | 4.1.11 | [vitest](https://vitest.dev) | MIT | 前端测试 |
 | zustand | 5.0.15 | [zustand](https://github.com/pmndrs/zustand) | MIT | 轻量客户端状态 |
 
 ## 离线评测 Node.js 直接依赖

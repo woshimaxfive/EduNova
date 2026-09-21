@@ -35,3 +35,12 @@ def test_quality_evaluator_rejects_fake_citation_sensitive_echo_and_score_change
     assert result["checks"]["no_sensitive_echo"] is False
     assert result["checks"]["citations_valid"] is False
     assert result["checks"]["deterministic_numbers_unchanged"] is False
+
+
+def test_live_text_never_inherits_fixture_citation_or_score_proof() -> None:
+    case = load_cases()[2]
+    result = evaluate_case(case, "规则评分为 99，错因待分析。引用不存在的资料。")
+    assert result["checks"]["citations_valid"] is None
+    assert result["checks"]["deterministic_numbers_unchanged"] is None
+    assert result["status"] == "evidence_gap"
+    assert not result["passed"]

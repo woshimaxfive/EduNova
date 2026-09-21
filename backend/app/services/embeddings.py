@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+import numpy as np
+
 from backend.app.models import KnowledgeChunk, User
 from backend.app.providers.openai_compatible import ModelProviderError
 from backend.app.services.model_settings import ModelNotConfiguredError, ModelSettingsService
@@ -137,8 +139,11 @@ class EmbeddingService:
         return profile.provider, profile.model, profile.dimension
 
     @staticmethod
-    def _valid_vector(vector: list[float] | None, dimension: int | None = None) -> bool:
-        return isinstance(vector, list) and bool(vector) and (dimension is None or len(vector) == dimension)
+    def _valid_vector(vector: list[float] | np.ndarray | None, dimension: int | None = None) -> bool:
+        if not isinstance(vector, (list, np.ndarray)):
+            return False
+        values = np.asarray(vector)
+        return values.ndim == 1 and values.size > 0 and (dimension is None or values.size == dimension)
 
     @staticmethod
     def _keyword_fallback() -> EmbeddingBatch:

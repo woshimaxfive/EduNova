@@ -231,6 +231,21 @@ def test_course_answer_removes_inline_source_metadata() -> None:
     assert "符号知识表达：知识表示关注" in result.content
 
 
+def test_course_answer_and_stream_preserve_nested_python_indentation() -> None:
+    code = "def pair_count(n):\n    count = 0\n    for i in range(n):\n        for j in range(i):\n            count += 1\n    return count"
+    original = f"计算总执行次数：\n\n```python\n{code}\n```\n\n- 分析\n    - 求和\n匹配度：2.65"
+    service = CourseAnswerService(FakeModelSettingsService(original))
+
+    result = service.generate(user=object(), question="解释循环计数", citations=[_citation()])
+    streamed = "".join(service.stream(user=object(), question="解释循环计数", citations=[_citation()]).tokens)
+
+    for answer in (result.content, streamed):
+        assert code in answer
+        assert "\n    - 求和" in answer
+        assert "匹配度：" not in answer
+        compile(answer.split("```python\n", 1)[1].split("```", 1)[0], "answer.py", "exec")
+
+
 def test_course_answer_removes_numbered_source_detail_section() -> None:
     service = CourseAnswerService(FakeModelSettingsService(_numbered_source_detail_answer()))
 

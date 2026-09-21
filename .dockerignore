@@ -23,6 +23,7 @@ uploads
 var
 logs
 output
+docs/local
 coverage
 htmlcov
 playwright-report

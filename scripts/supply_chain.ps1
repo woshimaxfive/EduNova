@@ -18,7 +18,10 @@ try {
 
     Push-Location evals\promptfoo
     try {
-        pnpm audit --audit-level high --prod
+        node check_dependency_compat.cjs
+        if ($LASTEXITCODE -ne 0) { throw "Evaluation dependency compatibility check failed" }
+        # Promptfoo is a devDependency; --prod would audit zero packages.
+        pnpm audit --audit-level high
         if ($LASTEXITCODE -ne 0) { throw "Promptfoo dependency audit failed" }
     } finally {
         Pop-Location
@@ -29,7 +32,8 @@ try {
 
     # Scan only versioned and pending source files. Traversing Windows bind-mounted
     # node_modules makes a repository scan both slow and nondeterministic.
-    $scanRoot = Join-Path ([System.IO.Path]::GetTempPath()) "edunova-trivy-$PID"
+    $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+    $scanRoot = Join-Path $tempRoot ("edunova-trivy-" + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $scanRoot | Out-Null
     try {
         $files = & git -c core.quotepath=false ls-files -co --exclude-standard
@@ -67,6 +71,11 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Trivy vulnerability scan failed" }
     } finally {
         if (Test-Path -LiteralPath $scanRoot) {
+            $resolvedScanRoot = (Resolve-Path -LiteralPath $scanRoot).Path
+            if ([System.IO.Path]::GetDirectoryName($resolvedScanRoot) -ne $tempRoot.TrimEnd('\', '/') -or
+                [System.IO.Path]::GetFileName($resolvedScanRoot) -notlike 'edunova-trivy-*') {
+                throw "Refusing cleanup outside the verified scan directory."
+            }
             Remove-Item -LiteralPath $scanRoot -Recurse -Force
         }
     }

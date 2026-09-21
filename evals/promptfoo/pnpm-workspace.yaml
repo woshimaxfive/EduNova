@@ -1,6 +1,13 @@
 allowBuilds:
   '@playwright/browser-chromium': set this to true or false
-  '@swc/core': set this to true or false
+  '@swc/core': false
   onnxruntime-node: set this to true or false
   protobufjs: set this to true or false
   sharp: set this to true or false
+
+# Retain the established evaluation CLI and apply its YAML security patch.
+overrides:
+  'js-yaml@>=5.0.0 <5.2.2': 5.2.2
+  'adm-zip@<0.6.1': 0.6.1
+  'sharp@<0.35.4': 0.35.4
+  'csv-parse@<7.0.2': 7.0.2

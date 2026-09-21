@@ -32,10 +32,18 @@ def evaluate_case(case: dict[str, Any], candidate: str | None = None) -> dict[st
         "deterministic_numbers_unchanged": case.get("deterministic_score") is None
         or case.get("deterministic_score") == case.get("reported_score"),
     }
+    if candidate is not None:
+        # Fixture metadata describes the fixture answer, never a newly generated answer.
+        # Raw text alone cannot verify citation ownership or the persisted server score.
+        checks["citations_valid"] = None
+        checks["deterministic_numbers_unchanged"] = None
+    status = ("failed" if any(value is False for value in checks.values())
+              else "evidence_gap" if any(value is None for value in checks.values()) else "passed")
     return {
         "id": case["id"],
         "workflow": case["workflow"],
-        "passed": all(checks.values()),
+        "passed": status == "passed",
+        "status": status,
         "checks": checks,
     }
 
@@ -81,6 +89,8 @@ def main() -> int:
         "passed": all(item["passed"] for item in results),
         "case_count": len(results),
         "results": results,
+        "status": ("failed" if any(item["status"] == "failed" for item in results)
+                   else "passed" if all(item["passed"] for item in results) else "evidence_gap"),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

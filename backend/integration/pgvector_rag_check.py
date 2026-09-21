@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from sqlalchemy import delete
+from types import SimpleNamespace
 
 from backend.app.db.session import SessionLocal
 from backend.app.models import Course, CourseMaterial, KnowledgeChunk, KnowledgePoint, User
 from backend.app.services.rag import SqlAlchemyRagRepository
+from backend.app.services.embeddings import EmbeddingService
 
 
 def _vector(first: float, second: float = 0.0) -> list[float]:
@@ -133,8 +135,14 @@ def run_check() -> None:
         assert [chunk.id for chunk, _distance in rows] == [near.id, middle.id, far.id]
         assert [distance for _chunk, distance in rows] == sorted(distance for _chunk, distance in rows)
         assert repository.get_course_for_user(owner.id, other_course.id) is None
+        # Force DB hydration: an identity-map list would hide pgvector's ndarray result.
+        db.expire(near, ["embedding"])
         persisted = db.get(KnowledgeChunk, near.id)
-        assert persisted is not None and len(persisted.embedding or []) == 1536
+        assert persisted is not None and len(persisted.embedding) == 1536
+        runtime = SimpleNamespace(can_use_model=True, embedding_model="test-embedding",
+                                  provider="openai_compatible", dimensions=1536, profile_hash=profile_hash)
+        embedding_service = EmbeddingService(SimpleNamespace(resolve_embedding_runtime_config=lambda user: runtime))
+        assert not embedding_service.chunk_needs_embedding(owner, persisted)
         print("pgvector cosine ranking and isolation check passed")
     finally:
         db.rollback()

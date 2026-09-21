@@ -589,6 +589,18 @@ def test_worker_schema_example_does_not_offer_generic_code_to_copy() -> None:
     assert "StudyStep" not in example["files"][0]["content"]
 
 
+@pytest.mark.parametrize("objectives", [None, "解释概念", {"goal": "解释概念"}, [12]])
+def test_worker_parser_rejects_malformed_objectives(objectives: object) -> None:
+    from backend.app.services.resource_modeling import ResourceModelingService
+
+    draft = SimpleNamespace(
+        content_json={"artifact": {"kind": "mindmap"}},
+    )
+    response = json.dumps({"artifact": typed_artifact("mindmap"), "learning_objectives": objectives}, ensure_ascii=False)
+
+    assert ResourceModelingService.parse_worker_content(response, "mindmap", draft) is None
+
+
 def test_resources_route_requires_login() -> None:
     client = TestClient(create_app())
 
@@ -833,6 +845,10 @@ def test_generate_applies_partial_model_enhancement_and_rejects_missing_strict_t
     assert "f(n)=g(n)+h(n)" in doc.content_json["markdown"]
     assert result["failed_resource_types"] == ["quiz"]
     assert len(model_service.calls) == 4
+    failures = [log for log in repo.agent_logs if log.step_index == 5 and log.status == "failed"]
+    assert len(failures) == 1
+    assert failures[0].metadata_json["error_code"] == "ResourceOutputFormatError"
+    assert "missing markdown" not in json.dumps(failures[0].metadata_json)
 
 
 def test_review_agent_rejects_then_repairs_once_before_persisting() -> None:
@@ -856,6 +872,19 @@ def test_review_agent_rejects_then_repairs_once_before_persisting() -> None:
     assert resource.content_json["metadata"]["repair_count"] == 1
     assert "已修订" in resource.content_json["markdown"]
     assert any(log.agent_name == "RepairAgent" and log.metadata_json["repair_count"] == 1 for log in repo.agent_logs)
+    generation_and_repair = [
+        "\n".join(message["content"] for message in call)
+        for call in model_service.calls
+        if "资源 Worker" in call[0]["content"] or "修订 Agent" in call[0]["content"]
+    ]
+    assert len(generation_and_repair) == 2
+    for prompt in generation_and_repair:
+        from backend.app.services.resource_content import safe_resource_excerpt
+
+        for chunk in repo.chunks[:2]:
+            assert f"[{chunk.id}] {chunk.section_title}" in prompt
+            assert safe_resource_excerpt(chunk.content) in prompt
+        assert "[801]" not in prompt
 
 
 def test_generate_rejects_sensitive_model_output_without_persisting_template() -> None:
@@ -873,6 +902,9 @@ def test_generate_rejects_sensitive_model_output_without_persisting_template() -
         )
 
     assert repo.resources == []
+    failure = next(row for row in repo.agent_logs if row.status == "failed" and row.agent_name == "DocWorker")
+    assert failure.metadata_json["risk_flags"] == ["sensitive_system_prompt_zh", "sensitive_credential_prefix"]
+    assert "sk-real-secret" not in json.dumps(failure.metadata_json)
 
 
 def test_code_resource_is_not_persisted_when_execution_output_does_not_match() -> None:

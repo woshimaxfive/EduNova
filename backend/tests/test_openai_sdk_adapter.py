@@ -9,11 +9,54 @@ from backend.app.providers.openai_compatible import (
     ModelProviderError,
     OpenAICompatibleChatProvider,
     OpenAICompatibleConfig,
+    OpenAICompatibleEmbeddingConfig,
 )
 
 
 def config() -> OpenAICompatibleConfig:
     return OpenAICompatibleConfig("https://model.example/v1", "test-key", "test-model")
+
+
+def test_model_studio_embedding_batches_preserve_order_and_limit(monkeypatch):
+    sizes = []
+    def handler(request):
+        body = json.loads(request.content)
+        sizes.append(len(body["input"]))
+        rows = [{"object": "embedding", "index": i, "embedding": [float(text), 1.0]}
+                for i, text in enumerate(body["input"])]
+        return httpx.Response(200, json={"object": "list", "model": "text-embedding-v4", "data": list(reversed(rows)),
+                                        "usage": {"prompt_tokens": 1, "total_tokens": 1}})
+    provider = OpenAICompatibleChatProvider(httpx.MockTransport(handler))
+    clients = []
+    original_client = provider._client
+    def track_client(*args):
+        client = original_client(*args)
+        clients.append(client)
+        return client
+    monkeypatch.setattr(provider, "_client", track_client)
+    cfg = OpenAICompatibleEmbeddingConfig("https://dashscope.aliyuncs.com/compatible-mode/v1", "test-key", "text-embedding-v4")
+    result = provider.embed_texts(cfg, [str(i) for i in range(23)], 10)
+    assert sizes == [10, 10, 3]
+    assert [row[0] for row in result] == list(range(23))
+    assert len(clients) == 1
+    assert clients[0].is_closed()
+
+
+def test_embedding_later_batch_failure_never_returns_partial_vectors():
+    calls = []
+    def handler(request):
+        calls.append(1)
+        if len(calls) == 2:
+            return httpx.Response(400, json={"error": {"message": "rejected"}})
+        body = json.loads(request.content)
+        return httpx.Response(200, json={"object": "list", "model": "text-embedding-v4",
+            "data": [{"object": "embedding", "index": i, "embedding": [1.0, 2.0]} for i in range(len(body["input"]))],
+            "usage": {"prompt_tokens": 1, "total_tokens": 1}})
+    provider = OpenAICompatibleChatProvider(httpx.MockTransport(handler))
+    cfg = OpenAICompatibleEmbeddingConfig("https://dashscope.aliyuncs.com/compatible-mode/v1", "test-key", "text-embedding-v4")
+    with pytest.raises(ModelProviderError):
+        provider.embed_texts(cfg, ["synthetic"] * 11, 10)
+    assert len(calls) == 2
 
 
 def test_sdk_adapter_disables_internal_retries() -> None:
@@ -23,6 +66,41 @@ def test_sdk_adapter_disables_internal_retries() -> None:
         assert client.max_retries == 0
     finally:
         client.close()
+
+
+@pytest.mark.parametrize("elapsed, expected_calls", [(2.0, 2), (11.0, 1)])
+def test_embedding_dimension_fallback_preserves_remaining_budget(monkeypatch, elapsed, expected_calls):
+    clock = [0.0]
+    requests = []
+    monkeypatch.setattr("backend.app.providers.openai_compatible.perf_counter", lambda: clock[0])
+
+    def handler(request):
+        requests.append(request)
+        if len(requests) == 1:
+            clock[0] = elapsed
+            return httpx.Response(400, json={"error": {"message": "unsupported dimensions"}})
+        return httpx.Response(200, json={"data": [{"index": 0, "embedding": [1.0, 2.0]}]})
+
+    provider = OpenAICompatibleChatProvider(httpx.MockTransport(handler))
+    cfg = OpenAICompatibleEmbeddingConfig("https://model.example/v1", "test-key", "embedding")
+    if expected_calls == 1:
+        with pytest.raises(ModelProviderError) as raised:
+            provider.embed_texts(cfg, ["synthetic"], 10, dimensions=2)
+        assert raised.value.code == "timeout"
+    else:
+        assert provider.embed_texts(cfg, ["synthetic"], 10, dimensions=2) == [[1.0, 2.0]]
+        assert requests[1].extensions["timeout"]["read"] == 8.0
+        assert "dimensions" not in json.loads(requests[1].content)
+    assert len(requests) == expected_calls
+
+
+def test_embedding_empty_input_does_not_open_client(monkeypatch):
+    provider = OpenAICompatibleChatProvider()
+    def unexpected_client(*args):
+        pytest.fail("empty input must not create a client")
+    monkeypatch.setattr(provider, "_client", unexpected_client)
+    cfg = OpenAICompatibleEmbeddingConfig("https://model.example/v1", "test-key", "embedding")
+    assert provider.embed_texts(cfg, [], 10) == []
 
 
 def test_sdk_adapter_preserves_retry_after() -> None:

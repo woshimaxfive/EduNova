@@ -38,17 +38,6 @@ QUALITY_SCORE_NAMES = (
 )
 RESOURCE_MODEL_TIMEOUT_SECONDS = 45.0
 RESOURCE_EXCERPT_LIMIT = 96
-SENSITIVE_MARKERS = (
-    "系统提示词",
-    "system prompt",
-    "模型输入",
-    "model input",
-    "api key",
-    "sk-",
-    "资料原文",
-    "source text",
-    "raw prompt",
-)
 RESOURCE_TYPE_LABELS = {
     "doc": "讲解文档",
     "mindmap": "思维导图",
@@ -70,6 +59,22 @@ class ResourceValidationError(ValidationDomainError):
 
 class ResourceGenerationError(ValidationDomainError):
     pass
+
+
+class ResourceOutputFormatError(ResourceGenerationError):
+    """The provider returned an unusable artifact, without retaining its raw output."""
+
+
+class ResourceSensitiveOutputError(ResourceGenerationError):
+    """The generated artifact failed the existing sensitive-content guard."""
+
+    def __init__(self, message: str, *, risk_flags: list[str] | None = None) -> None:
+        super().__init__(message)
+        self.risk_flags = list(risk_flags or [])
+
+
+class ResourceUnchangedOutputError(ResourceGenerationError):
+    """The generated artifact has no meaningful change from the structural draft."""
 
 
 def resource_failure_message(resource_type: str, error: Exception) -> str:

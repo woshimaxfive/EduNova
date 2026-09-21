@@ -23,6 +23,8 @@ from backend.app.services.resource_content import build_resource_contexts, build
 from backend.app.services.resource_contracts import (
     ResourceDraft,
     ResourceGenerationError,
+    ResourceSensitiveOutputError,
+    ResourceUnchangedOutputError,
     ResourceGenerationState,
     ResourceNotFoundError,
     ResourceValidationError,
@@ -554,7 +556,7 @@ class ResourceGenerationGraphRunner:
             if model_content is None:
                 raise ResourceGenerationError(f"{resource_type} 模型生成失败，未保存规则模板。")
             if not model_delta:
-                raise ResourceGenerationError(f"{resource_type} 模型产物与结构底稿无有效差异，未保存。")
+                raise ResourceUnchangedOutputError(f"{resource_type} 模型产物与结构底稿无有效差异，未保存。")
             candidate_content = model_content
             semantic_similarity, semantic_status = self._semantic_diversity(
                 state,
@@ -639,6 +641,7 @@ class ResourceGenerationGraphRunner:
                 metadata={
                     "resource_type": resource_type,
                     "error_code": exc.__class__.__name__,
+                    **({"risk_flags": exc.risk_flags} if isinstance(exc, ResourceSensitiveOutputError) else {}),
                     **(
                         {"video_curation": dict(exc.diagnostics)}
                         if isinstance(exc, VideoCurationError)

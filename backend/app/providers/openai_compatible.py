@@ -6,6 +6,7 @@ import json
 import re
 from time import perf_counter
 from typing import Any, Iterator
+from urllib.parse import urlparse
 
 import httpx
 from openai import (
@@ -215,18 +216,53 @@ class OpenAICompatibleChatProvider:
         timeout_seconds: float,
         dimensions: int | None = None,
     ) -> list[list[float]]:
+        # Model Studio v4 accepts at most 10 texts per synchronous request.
+        # Keep this transport constraint out of retrieval and domain transactions.
+        host = (urlparse(config.base_url).hostname or "").lower()
+        is_model_studio = host in {
+            "dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com", "dashscope-us.aliyuncs.com",
+        } or host.endswith(".maas.aliyuncs.com")
+        batch_size = 10 if is_model_studio and config.embedding_model == "text-embedding-v4" else max(1, len(texts))
+        started = perf_counter()
+        vectors: list[list[float]] = []
+        if not texts:
+            return vectors
+        # Reuse the SDK HTTP connection pool across batches within this call.
+        # Do not share authenticated clients between users or retain them globally.
+        with self._client(config.base_url, config.api_key, timeout_seconds) as client:
+            for offset in range(0, len(texts), batch_size):
+                remaining = timeout_seconds - (perf_counter() - started)
+                if remaining <= 0:
+                    raise ModelProviderError("向量批次调用超时。", code="timeout", retryable=True)
+                vectors.extend(self._embed_batch(client, config, texts[offset:offset + batch_size], remaining, dimensions))
+        if vectors and len({len(vector) for vector in vectors}) != 1:
+            raise ModelProviderError("模型服务返回了跨批次不一致的向量维度。", code="invalid_response", retryable=True)
+        return vectors
+
+    def _embed_batch(
+        self,
+        client: OpenAI,
+        config: OpenAICompatibleEmbeddingConfig,
+        texts: list[str],
+        timeout_seconds: float,
+        dimensions: int | None,
+    ) -> list[list[float]]:
         try:
-            with self._client(config.base_url, config.api_key, timeout_seconds) as client:
-                try:
-                    response = client.embeddings.create(
-                        model=config.embedding_model,
-                        input=texts,
-                        dimensions=dimensions,
-                    )
-                except BadRequestError:
-                    if dimensions is None:
-                        raise
-                    response = client.embeddings.create(model=config.embedding_model, input=texts)
+            started = perf_counter()
+            try:
+                response = client.embeddings.create(
+                    model=config.embedding_model,
+                    input=texts,
+                    dimensions=dimensions,
+                    timeout=timeout_seconds,
+                )
+            except BadRequestError:
+                if dimensions is None:
+                    raise
+                remaining = timeout_seconds - (perf_counter() - started)
+                if remaining <= 0:
+                    raise ModelProviderError("向量批次调用超时。", code="timeout", retryable=True)
+                response = client.embeddings.create(model=config.embedding_model, input=texts, timeout=remaining)
         except APIError as exc:
             raise self._sdk_error(exc) from exc
 

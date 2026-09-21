@@ -442,9 +442,13 @@ class SemanticDecisionService:
     ) -> list[dict[str, str]]:
         system = (
             "你是 EduNova 的语义路由 Agent。只输出 JSON，不输出解释或思维链。"
+            "使用紧凑 JSON，不添加缩进或换行；原因摘要只写一句必要理由，不重复问题和字段内容。"
             "根据真实语义判断是否需要联网和深度推理，不依赖关键词机械匹配。"
             "需要联网的典型情况包括时效事实、真实性核实、外部资源或视频/课程/论文推荐；"
             "普通稳定知识解释不联网。复杂比较、诊断、规划、多证据综合使用 deep，其余 auto。"
+            "教材概念定义、常规特点归纳、两种基础概念的直接对照属于普通解释，使用 auto；"
+            "不要仅因问题要求‘比较、区别、总结、举例’就升级 deep。只有需要多步推导、"
+            "约束权衡、复杂故障诊断或跨证据综合的比较与规划才使用 deep。"
             "课程空间中，普通提问和为什么本身不是薄弱证据；只有学生明确表达不会、困难、反复出错、"
             "学习偏好、学习目标或已有基础时才输出 profile_signals，explicit 必须为 true。"
             "profile_signals 只允许 weak_points、learning_preference、learning_goal、knowledge_foundation。"

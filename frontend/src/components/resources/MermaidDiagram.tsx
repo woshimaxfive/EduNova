@@ -42,7 +42,8 @@ export function MermaidDiagram({ source, label }: MermaidDiagramProps) {
           result.bindFunctions?.(host);
           setError(false);
         }
-      } catch {
+      } catch (cause) {
+        console.error("Mermaid rendering failed", cause);
         if (!cancelled) {
           setError(true);
         }
@@ -56,8 +57,8 @@ export function MermaidDiagram({ source, label }: MermaidDiagramProps) {
     };
   }, [reactId, source]);
 
-  if (error) {
-    return (
+  return <>
+    {error ? (
       <div className="resource-diagram-fallback" role="status">
         <p>这幅过程图暂时无法渲染，文字讲解仍可继续使用。</p>
         <details>
@@ -65,8 +66,7 @@ export function MermaidDiagram({ source, label }: MermaidDiagramProps) {
           <pre>{source}</pre>
         </details>
       </div>
-    );
-  }
-
-  return <div className="resource-mermaid-canvas" ref={hostRef} role="img" aria-label={label} />;
+    ) : null}
+    <div className="resource-mermaid-canvas" ref={hostRef} style={error ? { display: "none" } : undefined} role="img" aria-label={label} />
+  </>;
 }

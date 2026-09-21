@@ -14,6 +14,7 @@ import {
 } from "../../api/resources";
 import { ResourceRenderer } from "./ResourceRenderer";
 import { normalizeMindmapMarkdown } from "./mindmapMarkdown";
+import { MermaidDiagram } from "./MermaidDiagram";
 
 vi.mock("markmap-lib", () => ({
   Transformer: class {
@@ -93,6 +94,20 @@ function renderWithQuery(ui: ReactNode) {
 }
 
 describe("ResourceRenderer", () => {
+  it("recovers the diagram canvas when a failed scene is replaced by a valid scene", async () => {
+    vi.mocked(mermaid.parse).mockRejectedValueOnce(new Error("Invalid scene"));
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const { rerender } = render(<MermaidDiagram source="invalid" label="失败场景" />);
+      expect(await screen.findByRole("status")).toHaveTextContent("无法渲染");
+      rerender(<MermaidDiagram source="flowchart LR\n A --> B" label="恢复场景" />);
+      await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+      expect(screen.getByRole("img", { name: "恢复场景" })).toBeVisible();
+      expect(document.querySelector(".resource-mermaid-canvas svg")).not.toBeNull();
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
   beforeEach(() => {
     vi.mocked(listResourceExportJobs).mockResolvedValue({ data: [], trace_id: "trace_exports" });
     vi.mocked(createResourceExportJob).mockResolvedValue({

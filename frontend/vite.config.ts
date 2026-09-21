@@ -45,6 +45,9 @@ export default defineConfig({
     // upgrade cannot silently pull a new feature into the initial bundle.
     rolldownOptions: {
       output: {
+        // Manual library groups can form cross-chunk cycles. Preserve module
+        // initialization order for CodeMirror, Mermaid and shared dependencies.
+        strictExecutionOrder: true,
         // Leave Markmap on automatic splitting: separating its browser facade
         // from plugin initializers creates a cycle that fails only in production.
         codeSplitting: {

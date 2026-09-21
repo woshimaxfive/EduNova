@@ -10,6 +10,7 @@ from backend.app.services.model_settings import ModelNotConfiguredError
 from backend.app.services.resource_artifacts import artifact_to_markdown
 from backend.app.services.resource_content import safe_resource_title
 from backend.app.services.resource_contracts import (
+    RESOURCE_DOCUMENT_TIMEOUT_SECONDS,
     RESOURCE_MODEL_TIMEOUT_SECONDS,
     ResourceContext,
     ResourceDraft,
@@ -120,7 +121,7 @@ class ResourceModelingService:
                     reasoning="disabled",
                     output_mode="json_object",
                     creativity="creative",
-                    timeout_seconds=RESOURCE_MODEL_TIMEOUT_SECONDS,
+                    timeout_seconds=RESOURCE_DOCUMENT_TIMEOUT_SECONDS if resource_type == "doc" else RESOURCE_MODEL_TIMEOUT_SECONDS,
                     max_attempts=1,
                 ),
             )

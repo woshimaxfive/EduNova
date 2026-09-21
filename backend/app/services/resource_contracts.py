@@ -37,6 +37,9 @@ QUALITY_SCORE_NAMES = (
     "type_correctness",
 )
 RESOURCE_MODEL_TIMEOUT_SECONDS = 45.0
+# A document contains five complete teaching sections; keep its generation
+# bounded independently of short answers and the other resource workers.
+RESOURCE_DOCUMENT_TIMEOUT_SECONDS = 90.0
 RESOURCE_EXCERPT_LIMIT = 96
 RESOURCE_TYPE_LABELS = {
     "doc": "讲解文档",

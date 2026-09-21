@@ -660,7 +660,7 @@ def test_generate_six_resource_types_persists_v3_artifacts_quality_scores_and_pa
     assert all(log.metadata_json["artifact_type"] == "generated_resource" for log in repo.agent_logs)
     assert set(result["quality_scores"].keys()) == {resource["id"] for resource in result["resources"]}
     assert len(model_service.calls) == 8
-    assert model_service.timeout_calls == [20.0, *([45.0] * 6), 20.0]
+    assert sorted(model_service.timeout_calls) == [20.0, 20.0, *([45.0] * 5), 90.0]
     code_prompt = next(
         "\n".join(message["content"] for message in call)
         for call in model_service.calls

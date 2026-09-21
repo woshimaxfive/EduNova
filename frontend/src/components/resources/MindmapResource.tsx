@@ -14,12 +14,14 @@ export function MindmapResource({ artifact }: { artifact: ResourceMindmapArtifac
   const svgRef = useRef<SVGSVGElement | null>(null);
   const instanceRef = useRef<MarkmapInstance | null>(null);
   const [renderError, setRenderError] = useState(false);
+  const [renderAttempt, setRenderAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
     async function renderMarkmap() {
       try {
+        setRenderError(false);
         const [{ Transformer }, { Markmap }] = await Promise.all([import("markmap-lib"), import("markmap-view")]);
         if (cancelled || !svgRef.current) {
           return;
@@ -42,7 +44,8 @@ export function MindmapResource({ artifact }: { artifact: ResourceMindmapArtifac
         );
         await instanceRef.current.fit();
         setRenderError(false);
-      } catch {
+      } catch (error) {
+        console.error("Mindmap rendering failed", error);
         if (!cancelled) {
           setRenderError(true);
         }
@@ -55,7 +58,7 @@ export function MindmapResource({ artifact }: { artifact: ResourceMindmapArtifac
       instanceRef.current?.destroy();
       instanceRef.current = null;
     };
-  }, [artifact.markmap_markdown]);
+  }, [artifact.markmap_markdown, renderAttempt]);
 
   async function openFullscreen() {
     const container = svgRef.current?.parentElement;
@@ -85,10 +88,13 @@ export function MindmapResource({ artifact }: { artifact: ResourceMindmapArtifac
         </div>
       </div>
       {renderError ? (
-        <pre className="resource-diagram-fallback">{artifact.markmap_markdown}</pre>
-      ) : (
-        <svg ref={svgRef} className="resource-markmap-canvas" role="img" aria-label="知识点思维导图" />
-      )}
+        <div>
+          <p role="alert">思维导图绘制失败，原始内容已保留。</p>
+          <button type="button" className="icon-text-button" onClick={() => setRenderAttempt((value) => value + 1)}>重新绘制</button>
+          <pre className="resource-diagram-fallback">{artifact.markmap_markdown}</pre>
+        </div>
+      ) : null}
+      <svg ref={svgRef} style={renderError ? { display: "none" } : undefined} className="resource-markmap-canvas" role="img" aria-label="知识点思维导图" />
     </div>
   );
 }

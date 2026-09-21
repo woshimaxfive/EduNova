@@ -45,6 +45,8 @@ export default defineConfig({
     // upgrade cannot silently pull a new feature into the initial bundle.
     rolldownOptions: {
       output: {
+        // Leave Markmap on automatic splitting: separating its browser facade
+        // from plugin initializers creates a cycle that fails only in production.
         codeSplitting: {
           groups: [
             {
@@ -71,15 +73,6 @@ export default defineConfig({
               priority: 30,
               minSize: 8 * 1024,
               maxSize: 320 * 1024,
-              entriesAware: false,
-              includeDependenciesRecursively: false
-            },
-            {
-              name: "markmap",
-              test: /node_modules[\\/]markmap-(?:lib|view)[\\/]/,
-              priority: 30,
-              minSize: 8 * 1024,
-              maxSize: 260 * 1024,
               entriesAware: false,
               includeDependenciesRecursively: false
             },

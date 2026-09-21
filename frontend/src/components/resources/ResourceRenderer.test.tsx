@@ -190,6 +190,25 @@ describe("ResourceRenderer", () => {
     expect(await screen.findByRole("img", { name: "验证结果过程图解" })).toBeInTheDocument();
   });
 
+  it("retains mindmap source after a rendering failure and can retry on the same canvas", async () => {
+    const { Markmap } = await import("markmap-view");
+    vi.mocked(Markmap.create).mockImplementationOnce(() => { throw new Error("initialization failed"); });
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      renderWithQuery(<ResourceRenderer resource={makeResource("mindmap", {
+        kind: "mindmap", markmap_markdown: "# 保留内容\n## 子节点",
+        tree: { id: "root", title: "保留内容", children: [] }, citation_refs: []
+      })} />);
+      expect(await screen.findByRole("alert")).toHaveTextContent("绘制失败");
+      expect(screen.getByText("# 保留内容", { exact: false })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "重新绘制" }));
+      await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+      expect(screen.getByRole("img", { name: "知识点思维导图" })).toBeVisible();
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+
   it("shows a student-friendly fallback instead of raw Mermaid source", async () => {
     vi.mocked(mermaid.render).mockClear();
     vi.mocked(mermaid.parse).mockResolvedValueOnce(false as never);

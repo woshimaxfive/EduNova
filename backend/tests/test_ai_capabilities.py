@@ -74,6 +74,14 @@ def test_pilot_executes_real_graph_and_keeps_wire_contract(pilot):
     assert pilot.context.timeout_seconds == pilot.service.settings.ai_job_timeout_seconds
     assert response.result["course_id"] == (101 if pilot.workflow == "path_planning" else "101")
     assert pilot.domain.paths if pilot.workflow == "path_planning" else pilot.domain.resources
+    if pilot.workflow == "resource_generation":
+        expected = list(dict.fromkeys(
+            int(citation["chunk_id"])
+            for resource in pilot.domain.resources
+            for citation in resource.citation_json
+        ))[:8]
+        assert expected, "The real graph must retain its course evidence."
+        assert response.result["evidence_chunk_ids"] == expected
     calls = len(pilot.model.calls)
     assert pilot.service.run_job(pilot.job.id).status == "completed"
     assert len(pilot.model.calls) == calls
@@ -124,6 +132,9 @@ def test_worker_loss_recovers_by_original_trace_without_job_receipt(pilot):
     assert recovered.status == "completed", recovered.error_message
     assert len(pilot.model.calls) == calls
     assert "未重新执行" in recovered.result["warnings"][-1]
+    if pilot.workflow == "resource_generation":
+        assert recovered.result["evidence_chunk_ids"] == response.result["evidence_chunk_ids"]
+        assert recovered.result["evidence_chunk_ids"]
     # Losing the recovery worker itself must still reach the first domain commit.
     interrupted_retry = pilot.repo.get_job(int(retry.job_id))
     interrupted_retry.status = "failed"

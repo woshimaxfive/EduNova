@@ -15,6 +15,7 @@ export type PathTaskStatus = "todo" | "doing" | "completed";
 
 export type GeneratePathRequest = {
   course_id: number;
+  draft?: boolean;
 };
 
 export type UpdatePathTaskRequest = {
@@ -27,6 +28,8 @@ export type LearningPath = {
   title: string;
   goal: string;
   status: "active" | "archived" | string;
+  approval_status?: "legacy" | "draft" | "approved";
+  approved_at?: string | null;
   agent_trace_id?: string | null;
   plan_json: Record<string, unknown>;
   personalization?: PersonalizationFreshness | null;
@@ -100,6 +103,23 @@ export async function getCurrentPath(courseId: number) {
 
 export async function getPathTask(taskId: number) {
   const response = await apiClient.get<ApiEnvelope<LearningPathTask>>(`/paths/tasks/${taskId}`);
+  return response.data;
+}
+
+export async function listPathDrafts(courseId: number) {
+  const response = await apiClient.get<ApiEnvelope<LearningPath[]>>("/paths/drafts", { params: { course_id: courseId } });
+  return response.data;
+}
+
+export async function getPathVersion(pathId: string) {
+  const response = await apiClient.get<ApiEnvelope<LearningPathDetail>>(`/paths/${pathId}`);
+  return response.data;
+}
+
+export async function approvePath(pathId: string, expectedActivePathId: number | null) {
+  const response = await apiClient.post<ApiEnvelope<LearningPathDetail>>(`/paths/${pathId}/approve`, {
+    expected_active_path_id: expectedActivePathId
+  });
   return response.data;
 }
 

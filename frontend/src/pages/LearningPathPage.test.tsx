@@ -149,6 +149,7 @@ function installBaseAdapter(options: {
     const url = config.url ?? "";
     const payload = parsePayload(config.data);
     options.calls?.push({ method, url, payload });
+    if (url === "/paths/drafts") return { data: { data: [] }, status: 200, statusText: "OK", headers: {}, config };
     if (url === COURSE_ENDPOINTS.list) return { data: courseListResponse, status: 200, statusText: "OK", headers: {}, config };
     if (url === PATH_ENDPOINTS.current) {
       const data = !hasPath
@@ -281,7 +282,7 @@ describe("LearningPathPage", () => {
     expect(screen.queryByText("AI 当前推荐")).not.toBeInTheDocument();
   });
 
-  it("queues path planning with one click and only sends the course id", async () => {
+  it("queues a draft and displays durable job progress", async () => {
     const user = userEvent.setup();
     const calls: Array<{ method: string; url: string; payload: unknown }> = [];
     installBaseAdapter({ empty: true, calls });
@@ -290,7 +291,9 @@ describe("LearningPathPage", () => {
     expect(await screen.findByText("还没有个性化学习路径")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "一键生成学习路径" }));
     expect((await screen.findAllByRole("button", { name: "正在规划" })).every((button) => button.hasAttribute("disabled"))).toBe(true);
-    expect(calls).toContainEqual(expect.objectContaining({ method: "post", url: AI_JOB_ENDPOINTS.pathPlanning, payload: { course_id: 808 } }));
+    expect(calls).toContainEqual(expect.objectContaining({ method: "post", url: AI_JOB_ENDPOINTS.pathPlanning, payload: { course_id: 808, draft: true } }));
+    expect(screen.getByText("学习路径规划已排队")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "取消" })).toBeInTheDocument();
     expect(screen.queryByText("学习周期")).not.toBeInTheDocument();
   });
 

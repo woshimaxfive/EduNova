@@ -5,6 +5,14 @@ from typing import Protocol
 from backend.app.core.errors import ConflictDomainError, NotFoundDomainError, ValidationDomainError
 
 
+def resource_evidence_chunk_ids(resources):
+    """Bounded summary of persisted output citations, never request context."""
+    return list(dict.fromkeys(
+        int(citation["chunk_id"])
+        for resource in resources
+        for citation in (resource.citation_json or [])
+        if str(citation.get("chunk_id", "")).isdigit() and int(citation["chunk_id"]) > 0
+    ))[:8]
 
 
 ACTIVE_STATUSES = {"queued", "running", "cancelling"}

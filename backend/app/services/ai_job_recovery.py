@@ -3,7 +3,7 @@
 from sqlalchemy import select
 
 from backend.app.models import LearningPath
-from backend.app.services.ai_job_contracts import AiJobConflictError
+from backend.app.services.ai_job_contracts import AiJobConflictError, resource_evidence_chunk_ids
 from backend.app.services.task_resource_binding import binding_status, exact_item
 
 
@@ -51,7 +51,7 @@ def recover_committed_result(repository, job, *, visited=frozenset()):
             point_id = next(iter(point_ids))
             saved = {"course_id": str(original.course_id), "knowledge_point_id": str(point_id) if point_id else None,
                      "path_task_id": str(request["path_task_id"]) if request.get("path_task_id") else None,
-                     "evidence_chunk_ids": list(request.get("evidence_chunk_ids") or []),
+                     "evidence_chunk_ids": resource_evidence_chunk_ids(artifacts),
                      "resource_ids": [str(item.id) for item in artifacts],
                      "failed_resource_types": [kind for kind in request.get("resource_types", []) if kind not in types], "warnings": [warning]}
     saved.pop("model_task_summary", None)
@@ -72,6 +72,7 @@ def recover_committed_result(repository, job, *, visited=frozenset()):
             if task_id
             else None
         )
+        recovered_resources = []
         for resource_id in saved.get("resource_ids", []):
             resource = repository.get_resource_for_user(job.user_id, int(resource_id))
             if (
@@ -87,4 +88,6 @@ def recover_committed_result(repository, job, *, visited=frozenset()):
                 != "verified"
             ):
                 raise AiJobConflictError("已提交资源与任务版本不一致，不能自动恢复。")
+            recovered_resources.append(resource)
+        saved["evidence_chunk_ids"] = resource_evidence_chunk_ids(recovered_resources)
     return saved

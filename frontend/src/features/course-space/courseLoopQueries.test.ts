@@ -10,6 +10,7 @@ describe("course learning loop query identity", () => {
       ["courses", "mastery-map", 808],
       ["resources", "course", 808],
       ["paths", "current", 808],
+      ["paths", "drafts", 808],
       ["reports", "latest", 808],
       ["practice", "latest", 808],
       ["practice", "recent", 808],

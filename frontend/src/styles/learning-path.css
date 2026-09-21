@@ -964,3 +964,14 @@
     transition: none;
   }
 }
+.path-draft-review {
+  padding: 20px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border-color, #d9dce3);
+  border-radius: 12px;
+}
+
+.path-draft-review ol {
+  max-height: 360px;
+  overflow-y: auto;
+}

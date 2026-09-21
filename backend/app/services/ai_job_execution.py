@@ -20,6 +20,7 @@ from backend.app.services.ai_job_contracts import (
     AiJobCancelled,
     AiJobNotFoundError,
     AiJobValidationError,
+    resource_evidence_chunk_ids,
 )
 from backend.app.services.ai_job_runtime import AgentJobContext
 from backend.app.services.ai_capabilities import AI_CAPABILITIES, validate_capability_scope
@@ -248,9 +249,6 @@ class AiJobExecutionMixin:
         request = dict(job.request_json or {})
         course = service._require_course(user, int(request["course_id"]))
         knowledge_point_id = request.get("knowledge_point_id")
-        matched_evidence_chunk_ids = [
-            int(item) for item in request.get("evidence_chunk_ids", []) if str(item).isdigit()
-        ][:8]
         if knowledge_point_id is None and request.get("tutor_message_id") is not None:
             context.before_node("resolve_context", "正在匹配课程知识点")
             query = str(request.get("learning_goal") or "").strip()
@@ -264,7 +262,7 @@ class AiJobExecutionMixin:
                 ).search(user=user, course_id=course.id, query=query, top_k=3)
             except Exception as exc:
                 raise AiJobValidationError("暂时无法把对话主题匹配到课程知识点，请稍后重试。") from exc
-            matched, matched_evidence_chunk_ids = self._select_tutor_resource_match(search_result.results)
+            matched, _ = self._select_tutor_resource_match(search_result.results)
             if matched is None:
                 raise AiJobValidationError("没有在所选课程中找到与本次对话匹配的知识点。")
             knowledge_point_id = int(matched.knowledge_point_id)
@@ -292,7 +290,7 @@ class AiJobExecutionMixin:
         return {
             "course_id": str(course.id),
             "knowledge_point_id": str(knowledge_point.id) if knowledge_point is not None else None,
-            "evidence_chunk_ids": matched_evidence_chunk_ids,
+            "evidence_chunk_ids": resource_evidence_chunk_ids(result.resources),
             "path_task_id": str(request["path_task_id"]) if request.get("path_task_id") is not None else None,
             "resource_ids": [resource.id for resource in result.resources],
             "failed_resource_types": result.failed_resource_types,

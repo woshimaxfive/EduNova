@@ -20,6 +20,8 @@ import { PageFrame } from "./PageFrame";
 import { CourseReturnLink } from "../components/course-space/CourseReturnLink";
 import { PATHS, buildCoursePathWorkspacePath } from "../app/routePaths";
 import "../styles/learning-path.css";
+import { PathDraftReview } from "../features/learning-path/PathDraftReview";
+import { AiJobProgress } from "../components/feedback/AiJobProgress";
 
 function parsePositiveId(value: string | null) {
   if (!value) return null;
@@ -103,7 +105,7 @@ export function LearningPathPage() {
 
   const generateMutation = useMutation({
     mutationFn: (courseId: number) => createPathPlanningJob(
-      { course_id: courseId },
+      { course_id: courseId, draft: true },
       createIdempotencyKey(`path-${courseId}`)
     ),
     onSuccess: (job) => {
@@ -199,6 +201,9 @@ export function LearningPathPage() {
             }}
           />
           <WorkspacePane rail={<PathStatusRail filter={pathFilter} tasks={tasks} onChange={setPathFilter} />}>
+            {pathJobActive && pathJob ? <AiJobProgress job={pathJob} onCancel={() => void cancelJob(pathJob.job_id).catch(() => setFeedback("取消失败，请稍后重试。"))} /> : null}
+            {effectiveCourseId ? <PathDraftReview key={effectiveCourseId} courseId={effectiveCourseId}
+              activePathId={pathDetail?.path?.id ?? null} currentReady={currentPathQuery.isSuccess && !currentPathQuery.isFetching} /> : null}
             <PathTaskCanvas
               pathDetail={pathDetail}
               tasks={tasks}

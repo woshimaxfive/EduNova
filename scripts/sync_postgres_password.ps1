@@ -43,7 +43,7 @@ if ($postgresUser -notmatch '^[A-Za-z_][A-Za-z0-9_]*$' -or $postgresDatabase -no
   throw "POSTGRES_USER and POSTGRES_DB must be PostgreSQL identifiers."
 }
 
-& docker compose up -d postgres
+& docker compose up -d --wait --wait-timeout 90 postgres
 if ($LASTEXITCODE -ne 0) {
   throw "PostgreSQL could not be started."
 }

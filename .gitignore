@@ -31,6 +31,10 @@ storage/
 var/uploads/
 *.db
 
+# Local research and planning (not part of source releases)
+/docs/local/
+/.planning/
+
 # Logs
 *.log
 logs/

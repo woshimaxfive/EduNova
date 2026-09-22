@@ -1240,7 +1240,11 @@ class ModelSettingsService:
     @staticmethod
     def _is_real_api_key(value: str | None) -> bool:
         cleaned = (value or "").strip()
-        return bool(cleaned) and cleaned not in {"replace-with-your-own-key", "example-key"}
+        return bool(cleaned) and cleaned not in {
+            "replace-with-your-own-key",
+            "replace-with-your-bailian-api-key",
+            "example-key",
+        }
 
     @staticmethod
     def _allows_empty_api_key(base_url: str | None) -> bool:

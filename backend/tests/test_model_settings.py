@@ -24,6 +24,13 @@ from backend.app.services.auth import AuthService
 
 FERNET_TEST_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
+
+@pytest.mark.parametrize("value", [None, "", "replace-with-your-own-key", "replace-with-your-bailian-api-key", "example-key"])
+def test_example_api_keys_are_not_real_credentials(value: str | None) -> None:
+    from backend.app.services.model_settings import ModelSettingsService
+
+    assert not ModelSettingsService._is_real_api_key(value)
+
 # Synthetic fixture produced by cryptography 49.0.0, never a real provider key.
 LEGACY_FERNET_CIPHERTEXT = (
     "gAAAAABqn2-x8LK4bcHWwSZSEhZFIr43SgORhqQDQE5di5vNPcsf_EDCsEUHBXdeshs7o3MgxfR_"
@@ -357,6 +364,25 @@ def test_model_settings_uses_system_configuration_without_leaking_key() -> None:
     assert "sk-system-secret" not in str(summary)
     assert runtime.api_key == "sk-system-secret"
     assert runtime.source == "system"
+
+
+def test_example_environment_does_not_enable_remote_models() -> None:
+    module = load_model_settings_module()
+    settings = Settings(_env_file=Path(__file__).resolve().parents[2] / ".env.example")
+    service = module.ModelSettingsService(
+        repository=FakeModelSettingsRepository(settings_by_user={}),
+        settings=settings,
+        provider=FakeProvider(),
+    )
+    user = make_user()
+    for resolve in (
+        service.resolve_runtime_config,
+        service.resolve_generation_runtime_config,
+        service.resolve_embedding_runtime_config,
+        service.resolve_rerank_runtime_config,
+        service.resolve_vision_runtime_config,
+    ):
+        assert not resolve(user).can_use_model
 
 
 def test_system_embedding_connection_can_use_a_different_provider_endpoint() -> None:

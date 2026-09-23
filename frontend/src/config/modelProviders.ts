@@ -39,47 +39,6 @@ export const CHAT_MODEL_PROVIDER_PRESETS: ChatModelProviderPreset[] = [
     modelsHint: "默认 Spark X2-Flash（spark-x）；额度与可用能力以讯飞控制台为准。"
   },
   {
-    id: "xfyun-vision",
-    name: "讯飞开放平台 · 图片理解",
-    description: "讯飞原生图片理解服务，使用独立的 APPID、APIKey 和 APISecret，通过官方 WebSocket 协议调用。",
-    baseUrl: "wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image",
-    chatModel: "imagev3",
-    apiKeyLabel: "APIKey",
-    apiKeyPlaceholder: "填入图片理解服务的 APIKey",
-    modelsHint: "已通过 EduNova 完整视觉结构合同验证；凭证来自讯飞开放平台图片理解服务。",
-    requiresXfyunCredentials: true
-  },
-  {
-    id: "openai-vision",
-    name: "OpenAI 图片理解",
-    description: "使用官方 OpenAI Chat Completions 图像输入协议；模型名按账号实际权限填写。",
-    baseUrl: "https://api.openai.com/v1",
-    chatModel: "",
-    apiKeyLabel: "API Key",
-    apiKeyPlaceholder: "填入 OpenAI API Key",
-    modelsHint: "协议已验证；具体模型与图片额度以 OpenAI 控制台为准。"
-  },
-  {
-    id: "hunyuan-vision",
-    name: "腾讯混元图片理解",
-    description: "OpenAI-compatible 图片理解兼容候选，需按腾讯控制台填写地址、模型和密钥。",
-    baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
-    chatModel: "",
-    apiKeyLabel: "API Key",
-    apiKeyPlaceholder: "填入腾讯混元 API Key",
-    modelsHint: "兼容候选；通过真实图片连接测试后再设为默认。"
-  },
-  {
-    id: "custom-vision",
-    name: "自定义图片理解服务",
-    description: "适合支持 OpenAI text + image_url 协议的校内网关或其它视觉模型服务。",
-    baseUrl: "",
-    chatModel: "",
-    apiKeyLabel: "API Key",
-    apiKeyPlaceholder: "填入图片理解服务 API Key",
-    modelsHint: "兼容候选；不会自动假定普通文本模型支持图片。"
-  },
-  {
     id: "deepseek",
     name: "DeepSeek",
     description: "DeepSeek 官方 OpenAI-compatible 接口，适合通用问答、推理与课程 RAG。",
@@ -186,13 +145,7 @@ export const CHAT_MODEL_PROVIDER_PRESETS: ChatModelProviderPreset[] = [
   }
 ];
 
-export const VISION_MODEL_PROVIDER_PRESETS = CHAT_MODEL_PROVIDER_PRESETS.filter((preset) =>
-  ["xfyun-vision", "openai-vision", "hunyuan-vision", "custom-vision"].includes(preset.id)
-);
-
-export const TEXT_CHAT_MODEL_PROVIDER_PRESETS = CHAT_MODEL_PROVIDER_PRESETS.filter((preset) =>
-  !VISION_MODEL_PROVIDER_PRESETS.some((visionPreset) => visionPreset.id === preset.id)
-);
+export const TEXT_CHAT_MODEL_PROVIDER_PRESETS = CHAT_MODEL_PROVIDER_PRESETS;
 
 export const EMBEDDING_MODEL_PROVIDER_PRESETS: EmbeddingModelProviderPreset[] = [
   {
@@ -307,9 +260,7 @@ export function getChatProviderPreset(presetId: string | null | undefined) {
   return CHAT_MODEL_PROVIDER_PRESETS.find((preset) => preset.id === presetId) ?? CHAT_MODEL_PROVIDER_PRESETS[0];
 }
 
-export function isVisionProviderPreset(presetId: string | null | undefined) {
-  return ["xfyun-vision", "openai-vision", "hunyuan-vision", "custom-vision"].includes(presetId ?? "");
-}
+
 
 export function getEmbeddingProviderPreset(presetId: string | null | undefined) {
   return EMBEDDING_MODEL_PROVIDER_PRESETS.find((preset) => preset.id === presetId)

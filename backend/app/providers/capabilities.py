@@ -20,7 +20,7 @@ class ProviderCapabilities:
     structured_output: StructuredOutputKind = "prompt_only"
     verified_structured_output: bool = False
     supports_image_input: bool = False
-    vision_protocol: Literal["openai_chat_completions", "xfyun_websocket", "none"] = "none"
+    vision_protocol: Literal["openai_chat_completions", "none"] = "none"
     verified_vision: bool = False
     vision_mime_types: tuple[str, ...] = ()
     vision_max_images: int = 0
@@ -30,15 +30,6 @@ class ProviderCapabilities:
 def provider_capabilities(*, preset_id: str | None, base_url: str | None) -> ProviderCapabilities:
     preset = (preset_id or "").strip().lower()
     host = (urlparse(base_url or "").hostname or "").lower()
-    if preset == "xfyun-vision" or host == "spark-api.cn-huabei-1.xf-yun.com":
-        return ProviderCapabilities(
-            supports_image_input=True,
-            vision_protocol="xfyun_websocket",
-            verified_vision=True,
-            vision_mime_types=("image/png", "image/jpeg"),
-            vision_max_images=3,
-            vision_max_image_bytes=4 * 1024 * 1024,
-        )
     if preset == "openai-vision":
         return ProviderCapabilities(
             native_search="openai",

@@ -48,4 +48,14 @@ describe("personal main model capabilities", () => {
     expect(screen.getByRole("button", { name: "验证回答服务连接" })).toBeDisabled();
     expect(testModelSettings).not.toHaveBeenCalled();
   });
+
+  it("allows probing the server main model before image support is verified", async () => {
+    const response = await vi.mocked(getModelSettings)();
+    vi.mocked(getModelSettings).mockResolvedValue({
+      ...response, data: { ...response.data, source: "system" }
+    });
+    mount();
+    await screen.findByText(/待验证主模型图片能力/);
+    expect(screen.getByRole("button", { name: "验证图片理解服务连接" })).toBeEnabled();
+  });
 });

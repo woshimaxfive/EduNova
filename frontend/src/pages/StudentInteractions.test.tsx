@@ -1713,7 +1713,6 @@ describe("student interaction affordances", () => {
       default_generation_config_id: null,
       default_embedding_config_id: null,
       default_rerank_config_id: null,
-      default_vision_config_id: null,
       system_summary: {
         source: "system",
         provider: "openai_compatible",
@@ -1732,9 +1731,9 @@ describe("student interaction affordances", () => {
         rerank_base_url: "https://system-rerank.example.local/v1",
         rerank_model: "system-rerank",
         can_use_rerank_model: true,
-        vision_provider: "xfyun_vision",
-        vision_base_url: "wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image",
-        vision_model: "imagev3",
+        vision_provider: "openai_compatible",
+        vision_base_url: "https://system-model.example.local/v1",
+        vision_model: "system-chat",
         can_use_vision_model: true
       }
     };

@@ -12,7 +12,6 @@ export const SETTINGS_ENDPOINTS = {
   generationDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/generation-default`,
   embeddingDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/embedding-default`,
   rerankDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/rerank-default`,
-  visionDefaultConfig: (configId: number) => `/settings/model/configs/${configId}/vision-default`,
   embeddingReindexJobs: "/settings/model/embedding/reindex-jobs",
   privacy: "/settings/privacy",
   conversationMemory: "/settings/privacy/conversation-memory"
@@ -29,9 +28,6 @@ export type ModelSettingsRequest = {
   base_url: string;
   api_key?: string;
   chat_model?: string;
-  vision_app_id?: string;
-  vision_api_key?: string;
-  vision_api_secret?: string;
   embedding_provider?: ModelSettingsProvider;
   embedding_base_url?: string;
   embedding_api_key?: string;
@@ -55,7 +51,6 @@ export type ModelConfigRequest = ModelSettingsRequest & {
   make_generation_default?: boolean;
   make_embedding_default?: boolean;
   make_rerank_default?: boolean;
-  make_vision_default?: boolean;
 };
 
 export type ModelConfigUpdateRequest = Partial<ModelSettingsRequest> & {
@@ -66,7 +61,6 @@ export type ModelConfigUpdateRequest = Partial<ModelSettingsRequest> & {
   is_default?: boolean;
   make_default?: boolean;
   make_generation_default?: boolean;
-  make_vision_default?: boolean;
 };
 
 export type ModelSettingsSummary = {
@@ -80,11 +74,6 @@ export type ModelSettingsSummary = {
   embedding_dimension?: number | null;
   has_api_key: boolean;
   api_key_masked: string | null;
-  has_vision_app_id?: boolean;
-  vision_app_id_masked?: string | null;
-  has_vision_api_key?: boolean;
-  vision_api_key_masked?: string | null;
-  has_vision_api_secret?: boolean;
   has_embedding_api_key?: boolean;
   embedding_api_key_masked?: string | null;
   has_embedding_app_id?: boolean;
@@ -103,7 +92,7 @@ export type ModelSettingsSummary = {
   vision_provider?: string | null;
   vision_base_url?: string | null;
   can_use_vision_model?: boolean;
-  vision_status?: "not_configured" | "unverified" | "verified" | "unavailable" | "server_managed";
+  vision_status?: "not_configured" | "unverified" | "verified" | "unavailable";
   supports_structured_output?: boolean;
   supports_reasoning_control?: boolean;
 };
@@ -118,7 +107,6 @@ export type ModelConfigSummary = ModelSettingsSummary & {
   is_generation_default?: boolean;
   is_embedding_default: boolean;
   is_rerank_default?: boolean;
-  is_vision_default?: boolean;
   last_test_ok: boolean | null;
   last_test_message: string | null;
   last_tested_at: string | null;
@@ -146,7 +134,6 @@ export type ModelSettingsListResponse = {
   default_generation_config_id?: number | null;
   default_embedding_config_id: number | null;
   default_rerank_config_id?: number | null;
-  default_vision_config_id?: number | null;
   system_summary: ModelSettingsSummary;
 };
 
@@ -233,13 +220,6 @@ export async function setDefaultEmbeddingConfig(configId: number) {
 export async function setDefaultRerankConfig(configId: number) {
   const response = await apiClient.post<ApiEnvelope<ModelSettingsListResponse>>(
     SETTINGS_ENDPOINTS.rerankDefaultConfig(configId)
-  );
-  return response.data;
-}
-
-export async function setDefaultVisionConfig(configId: number) {
-  const response = await apiClient.post<ApiEnvelope<ModelSettingsListResponse>>(
-    SETTINGS_ENDPOINTS.visionDefaultConfig(configId)
   );
   return response.data;
 }

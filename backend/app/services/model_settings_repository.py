@@ -41,13 +41,6 @@ class SqlAlchemyModelSettingsRepository:
             .order_by(ModelSetting.updated_at.desc(), ModelSetting.id.desc())
         )
 
-    def get_vision_default_for_user(self, user_id: int) -> ModelSetting | None:
-        return self.db.scalar(
-            select(ModelSetting)
-            .where(ModelSetting.user_id == user_id, ModelSetting.is_vision_default.is_(True))
-            .order_by(ModelSetting.updated_at.desc(), ModelSetting.id.desc())
-        )
-
     def list_for_user(self, user_id: int) -> list[ModelSetting]:
         return list(
             self.db.scalars(
@@ -58,7 +51,6 @@ class SqlAlchemyModelSettingsRepository:
                     ModelSetting.is_generation_default.desc(),
                     ModelSetting.is_embedding_default.desc(),
                     ModelSetting.is_rerank_default.desc(),
-                    ModelSetting.is_vision_default.desc(),
                     ModelSetting.updated_at.desc(),
                     ModelSetting.id.desc(),
                 )

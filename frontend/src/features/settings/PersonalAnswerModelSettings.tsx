@@ -78,9 +78,8 @@ export function PersonalAnswerModelSettings() {
   const dirty = draft !== null;
   const testing = testMutation.isPending || visionMutation.isPending;
   const visionLabel = summary?.vision_status === "verified" ? "主模型图片验证通过，使用同一组凭证。"
-    : summary?.vision_status === "server_managed" ? "使用部署者配置的图片服务。"
     : summary?.vision_status === "unavailable" ? "图片验证未通过，可重试；不自动切换服务器模型。"
-    : summary?.source === "user" ? "待验证主模型图片能力；验证前仅使用文本。" : "未配置图片服务。";
+    : summary?.can_use_model ? "待验证主模型图片能力；验证前仅使用文本。" : "请先配置主模型。";
 
   const requiresKey = !preset.allowEmptyApiKey && !summary?.has_api_key;
   const canSave = Boolean(currentDraft.baseUrl.trim() && currentDraft.chatModel.trim() && (!requiresKey || currentDraft.apiKey.trim()));
@@ -123,7 +122,7 @@ export function PersonalAnswerModelSettings() {
         </footer>
         <ConnectionTestCard operation="chat" model={summary?.chat_model ?? null} result={dirty ? null : testResult} disabled={testing || dirty || saveMutation.isPending || !summary?.can_use_model} pending={testMutation.isPending} dirty={dirty} onTest={() => testMutation.mutate()} />
         <p>图片验证会向当前模型发送一张合成测试图片，可能产生少量模型费用。连接失败不等于模型不支持图片。</p>
-        <ConnectionTestCard operation="vision" model={summary?.source === "user" ? summary.chat_model : summary?.vision_model ?? null} result={dirty ? null : visionResult} disabled={testing || dirty || saveMutation.isPending || (summary?.source === "user" ? !summary.can_use_model : !summary?.can_use_vision_model)} pending={visionMutation.isPending} dirty={dirty} onTest={() => visionMutation.mutate()} />
+        <ConnectionTestCard operation="vision" model={summary?.chat_model ?? null} result={dirty ? null : visionResult} disabled={testing || dirty || saveMutation.isPending || !summary?.can_use_model} pending={visionMutation.isPending} dirty={dirty} onTest={() => visionMutation.mutate()} />
       </section> : null}
     </section>
   );

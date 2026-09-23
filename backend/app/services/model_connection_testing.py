@@ -25,7 +25,6 @@ from backend.app.providers.retrieval import (
     XFYUN_EMBEDDING_DIMENSION,
     XfyunEmbeddingProvider,
 )
-from backend.app.providers.xfyun_vision import XfyunVisionConfig, XfyunVisionProvider
 from backend.app.services.model_execution import (
     ModelExecutionContext,
     ModelExecutionRuntime,
@@ -80,14 +79,12 @@ class ModelConnectionTester:
         execution_runtime: ModelExecutionRuntime,
         xfyun_embedding_provider: XfyunEmbeddingProvider,
         rerank_provider: HttpRerankProvider,
-        xfyun_vision_provider: XfyunVisionProvider,
     ) -> None:
         self.settings = settings
         self.provider = provider
         self.execution_runtime = execution_runtime
         self.xfyun_embedding_provider = xfyun_embedding_provider
         self.rerank_provider = rerank_provider
-        self.xfyun_vision_provider = xfyun_vision_provider
 
     def test(
         self,
@@ -191,38 +188,19 @@ class ModelConnectionTester:
                         bypass_circuit=True,
                     )
                 elif operation == "vision":
-                    capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
-                    if not capabilities.supports_image_input:
-                        raise ModelProviderError("该配置未声明图片理解能力。", code="not_configured")
-                    if capabilities.vision_protocol == "xfyun_websocket":
+                    visual_config = OpenAICompatibleConfig(
+                        base_url=runtime.base_url or "",
+                        api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+                        chat_model=runtime.chat_model or "",
+                    )
 
-                        def call() -> str:
-                            return self.xfyun_vision_provider.vision_completion(
-                                XfyunVisionConfig(
-                                    base_url=runtime.base_url or "",
-                                    app_id=runtime.app_id or "",
-                                    api_key=runtime.api_key or "",
-                                    api_secret=runtime.api_secret or "",
-                                    domain=runtime.chat_model or "imagev3",
-                                ),
-                                prompt=VISION_CONNECTION_TEST_PROMPT,
-                                image_data_urls=[_vision_connection_test_image()],
-                                timeout_seconds=self.settings.model_request_timeout_seconds,
-                            )
-                    else:
-                        visual_config = OpenAICompatibleConfig(
-                            base_url=runtime.base_url or "",
-                            api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
-                            chat_model=runtime.chat_model or "",
+                    def call() -> str:
+                        return self.provider.vision_completion(
+                            visual_config,
+                            prompt=VISION_CONNECTION_TEST_PROMPT,
+                            image_data_urls=[_vision_connection_test_image()],
+                            timeout_seconds=self.settings.model_request_timeout_seconds,
                         )
-
-                        def call() -> str:
-                            return self.provider.vision_completion(
-                                visual_config,
-                                prompt=VISION_CONNECTION_TEST_PROMPT,
-                                image_data_urls=[_vision_connection_test_image()],
-                                timeout_seconds=self.settings.model_request_timeout_seconds,
-                            )
 
                     raw_vision = self.execution_runtime.execute(
                         user_id=user_id,

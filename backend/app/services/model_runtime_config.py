@@ -4,7 +4,6 @@ from collections.abc import Callable
 
 from backend.app.core.config import Settings
 from backend.app.models import ModelSetting
-from backend.app.providers.capabilities import provider_capabilities
 from backend.app.providers.retrieval import XFYUN_EMBEDDING_DIMENSION
 from backend.app.services.model_settings_contracts import RuntimeModelConfig
 
@@ -32,27 +31,6 @@ class ModelRuntimeConfigBuilder:
         self._can_use_model = can_use_model
         self._can_use_embedding_model = can_use_embedding_model
         self._can_use_rerank_model = can_use_rerank_model
-
-    def _vision_runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
-        capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
-        if capabilities.vision_protocol == "xfyun_websocket":
-            app_id = self._decrypt_api_key(getattr(setting, "vision_app_id_ciphertext", None))
-            api_key = self._decrypt_api_key(getattr(setting, "vision_api_key_ciphertext", None))
-            api_secret = self._decrypt_api_key(getattr(setting, "vision_api_secret_ciphertext", None))
-            return RuntimeModelConfig(
-                source="user",
-                provider="xfyun_vision",
-                base_url=setting.base_url,
-                api_key=api_key,
-                chat_model=setting.chat_model,
-                embedding_model=None,
-                can_use_model=bool(setting.base_url and setting.chat_model and app_id and api_key and api_secret),
-                config_id=setting.id,
-                preset_id=setting.preset_id,
-                app_id=app_id,
-                api_secret=api_secret,
-            )
-        return self._runtime_from_user_setting(setting)
 
     def _runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
         api_key = self._decrypt_api_key(setting.api_key_ciphertext)
@@ -118,38 +96,6 @@ class ModelRuntimeConfigBuilder:
             embedding_model=None,
             can_use_model=self._can_use_model(provider, base_url, api_key, model),
             preset_id=preset_id,
-        )
-
-    def _vision_runtime_from_system_settings(self) -> RuntimeModelConfig:
-        provider = self._normalize_provider(self.settings.system_vision_provider.strip() or "xfyun_vision")
-        base_url = self.settings.system_vision_base_url.strip()
-        model = self.settings.system_vision_model.strip() or "imagev3"
-        uses_xfyun_websocket = provider == "xfyun_vision"
-        if uses_xfyun_websocket:
-            app_id = self.settings.system_vision_app_id.strip() or self.settings.system_embedding_app_id.strip()
-            api_key = self.settings.system_vision_api_key.strip() or self.settings.system_embedding_api_key.strip()
-            api_secret = (
-                self.settings.system_vision_api_secret.strip() or self.settings.system_embedding_api_secret.strip()
-            )
-            preset_id = "xfyun-vision"
-            can_use_model = bool(base_url and app_id and api_key and api_secret and model)
-        else:
-            app_id = ""
-            api_key = self.settings.system_vision_api_key.strip()
-            api_secret = ""
-            preset_id = "qwen" if "dashscope.aliyuncs.com" in base_url.lower() else "custom-vision"
-            can_use_model = self._can_use_model(provider, base_url, api_key, model)
-        return RuntimeModelConfig(
-            source="system",
-            provider=provider,
-            base_url=base_url or None,
-            api_key=api_key or None,
-            chat_model=model,
-            embedding_model=None,
-            can_use_model=can_use_model,
-            preset_id=preset_id,
-            app_id=(app_id or None) if uses_xfyun_websocket else None,
-            api_secret=(api_secret or None) if uses_xfyun_websocket else None,
         )
 
     def _embedding_runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:

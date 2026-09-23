@@ -28,7 +28,7 @@ from backend.app.providers.retrieval import (
     XFYUN_EMBEDDING_DIMENSION,
     XfyunEmbeddingProvider,
 )
-from backend.app.providers.xfyun_vision import XfyunVisionConfig, XfyunVisionProvider
+from backend.app.services.vision_probe_state import VisionProbeState
 from backend.app.services.model_execution import (
     ModelExecutionRuntime,
     current_model_execution_context,
@@ -84,14 +84,14 @@ class ModelSettingsService:
         execution_runtime: ModelExecutionRuntime | None = None,
         xfyun_embedding_provider: XfyunEmbeddingProvider | None = None,
         rerank_provider: HttpRerankProvider | None = None,
-        xfyun_vision_provider: XfyunVisionProvider | None = None,
+        vision_probe_state: VisionProbeState | None = None,
     ) -> None:
         self.repository = repository
         self.settings = settings
         self.provider = provider or OpenAICompatibleChatProvider()
         self.xfyun_embedding_provider = xfyun_embedding_provider or XfyunEmbeddingProvider()
         self.rerank_provider = rerank_provider or HttpRerankProvider()
-        self.xfyun_vision_provider = xfyun_vision_provider or XfyunVisionProvider()
+        self.vision_probe_state = vision_probe_state or VisionProbeState(settings.redis_url)
         self.execution_runtime = execution_runtime or ModelExecutionRuntime(settings)
         self.runtime_config_builder = ModelRuntimeConfigBuilder(
             settings=self.settings,
@@ -107,7 +107,6 @@ class ModelSettingsService:
             execution_runtime=self.execution_runtime,
             xfyun_embedding_provider=self.xfyun_embedding_provider,
             rerank_provider=self.rerank_provider,
-            xfyun_vision_provider=self.xfyun_vision_provider,
         )
 
     def get_summary(self, user: User) -> ModelSettingsSummary:
@@ -140,7 +139,6 @@ class ModelSettingsService:
         configs = [self._config_summary(setting) for setting in self.repository.list_for_user(user.id)]
         default_chat_config = next((config for config in configs if config.is_default), None)
         default_generation_config = next((config for config in configs if config.is_generation_default), None)
-        default_vision_config = next((config for config in configs if config.is_vision_default), None)
         return ModelSettingsListResponse(
             configs=configs,
             system_summary=self._system_summary(),
@@ -149,7 +147,6 @@ class ModelSettingsService:
             default_generation_config_id=default_generation_config.id if default_generation_config else None,
             default_embedding_config_id=None,
             default_rerank_config_id=None,
-            default_vision_config_id=default_vision_config.id if default_vision_config else None,
         )
 
     def save(self, user: User, payload: SaveModelSettingsRequest) -> ModelSettingsSummary:
@@ -187,32 +184,24 @@ class ModelSettingsService:
         self._ensure_unique_display_name(user.id, payload.display_name)
         has_chat_default = any(candidate.is_default for candidate in existing_configs)
         has_generation_default = any(candidate.is_generation_default for candidate in existing_configs)
-        capabilities = provider_capabilities(
-            preset_id=payload.preset_id,
-            base_url=payload.base_url,
-        )
         setting = ModelSetting(
             user_id=user.id,
             display_name=payload.display_name,
             preset_id=payload.preset_id or None,
             provider="openai_compatible",
             is_default=bool(payload.chat_model)
-            and (payload.make_default or (not has_chat_default and not capabilities.supports_image_input)),
+            and (payload.make_default or not has_chat_default),
             is_generation_default=bool(payload.chat_model)
-            and (payload.make_generation_default or (not has_generation_default and not capabilities.supports_image_input)),
+            and (payload.make_generation_default or not has_generation_default),
             is_embedding_default=False,
             is_rerank_default=False,
-            is_vision_default=bool(payload.chat_model) and payload.make_vision_default,
+            is_vision_default=False,
         )
         self._apply_settings_payload(setting, payload)
-        if setting.is_vision_default and not capabilities.supports_image_input:
-            raise ModelSettingsValidationError("该配置未声明图片理解能力。")
         if setting.is_default:
             self.repository.unset_defaults_for_user(user.id)
         if setting.is_generation_default:
             self.repository.unset_generation_defaults_for_user(user.id)
-        if setting.is_vision_default:
-            self.repository.unset_vision_defaults_for_user(user.id)
         self._save_and_commit(setting)
         return self._config_summary(setting)
 
@@ -252,12 +241,6 @@ class ModelSettingsService:
             setting.base_url = payload.base_url
         if payload.chat_model is not None:
             setting.chat_model = payload.chat_model or None
-        if payload.vision_app_id:
-            setting.vision_app_id_ciphertext = self._encrypt_api_key(payload.vision_app_id)
-        if payload.vision_api_key:
-            setting.vision_api_key_ciphertext = self._encrypt_api_key(payload.vision_api_key)
-        if payload.vision_api_secret:
-            setting.vision_api_secret_ciphertext = self._encrypt_api_key(payload.vision_api_secret)
         if payload.embedding_provider is not None:
             setting.embedding_provider = self._normalize_provider(payload.embedding_provider)
         if payload.embedding_preset_id is not None:
@@ -337,14 +320,6 @@ class ModelSettingsService:
             raise ModelSettingsValidationError("向量模型由系统统一配置，不能设置用户级默认。")
         if payload.make_rerank_default:
             raise ModelSettingsValidationError("重排序模型由系统统一配置，不能设置用户级默认。")
-        if payload.make_vision_default:
-            if not setting.chat_model:
-                raise ModelSettingsValidationError("该配置没有模型，不能设为图片理解默认。")
-            capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
-            if not capabilities.supports_image_input:
-                raise ModelSettingsValidationError("该配置未声明图片理解能力。")
-            self.repository.unset_vision_defaults_for_user(user.id, except_setting_id=config_id)
-            setting.is_vision_default = True
         if not setting.chat_model and not setting.embedding_model and not setting.rerank_model:
             raise ModelSettingsValidationError("回答、向量和重排序模型至少填写一项。")
         if setting.is_default and not setting.chat_model:
@@ -364,7 +339,6 @@ class ModelSettingsService:
         was_generation_default = setting.is_generation_default
         was_embedding_default = setting.is_embedding_default
         was_rerank_default = setting.is_rerank_default
-        was_vision_default = setting.is_vision_default
         try:
             self.repository.delete(setting)
             if was_default:
@@ -391,23 +365,6 @@ class ModelSettingsService:
                 if next_rerank:
                     next_rerank.is_rerank_default = True
                     self.repository.save(next_rerank)
-            if was_vision_default:
-                remaining = [candidate for candidate in self.repository.list_for_user(user.id) if candidate.id != config_id]
-                next_vision = next(
-                    (
-                        candidate
-                        for candidate in remaining
-                        if candidate.chat_model
-                        and provider_capabilities(
-                            preset_id=candidate.preset_id,
-                            base_url=candidate.base_url,
-                        ).supports_image_input
-                    ),
-                    None,
-                )
-                if next_vision:
-                    next_vision.is_vision_default = True
-                    self.repository.save(next_vision)
             self.repository.commit()
         except Exception:
             self.repository.rollback()
@@ -439,18 +396,6 @@ class ModelSettingsService:
     def set_rerank_default_config(self, user: User, config_id: int) -> ModelSettingsListResponse:
         del user, config_id
         raise ModelSettingsValidationError("重排序模型由系统统一配置，不能设置用户级默认。")
-
-    def set_vision_default_config(self, user: User, config_id: int) -> ModelSettingsListResponse:
-        setting = self._get_user_setting_or_raise(user, config_id)
-        if not setting.chat_model:
-            raise ModelSettingsValidationError("该配置没有模型，不能设为图片理解默认。")
-        capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
-        if not capabilities.supports_image_input:
-            raise ModelSettingsValidationError("该配置未声明图片理解能力。")
-        setting.is_vision_default = True
-        self.repository.unset_vision_defaults_for_user(user.id, except_setting_id=config_id)
-        self._save_and_commit(setting)
-        return self.list_configs(user)
 
     def resolve_runtime_config(self, user: User) -> RuntimeModelConfig:
         user_setting = self.repository.get_default_for_user(user.id)
@@ -509,37 +454,22 @@ class ModelSettingsService:
         )
 
     def resolve_vision_runtime_config(self, user: User) -> RuntimeModelConfig:
-        setting = self.repository.get_default_for_user(user.id)
-        if setting is not None:
-            runtime = self._runtime_from_user_setting(setting)
-            # Never treat a provider-wide capability as proof for a specific
-            # model, and never silently bill the server when a personal model
-            # has not passed the image probe.
-            return replace(runtime, can_use_model=runtime.can_use_model and self._vision_status(user) == "verified")
-        system_runtime = self._vision_runtime_from_system_settings()
-        if system_runtime.can_use_model:
-            return system_runtime
-        return RuntimeModelConfig(
-            source="none",
-            provider="xfyun_vision",
-            base_url=None,
-            api_key=None,
-            chat_model=None,
-            embedding_model=None,
-            can_use_model=False,
-        )
+        runtime = self.resolve_runtime_config(user)
+        return replace(runtime, can_use_model=runtime.can_use_model and self._vision_status(user) == "verified")
 
     def _vision_status(self, user: User) -> str:
+        runtime = self.resolve_runtime_config(user)
+        if not runtime.can_use_model:
+            return "not_configured"
+        fingerprint = self._vision_connection_fingerprint(runtime)
         setting = self.repository.get_default_for_user(user.id)
         if setting is None:
-            return "server_managed" if self._vision_runtime_from_system_settings().can_use_model else "not_configured"
-        if not self._runtime_from_user_setting(setting).can_use_model:
-            return "not_configured"
+            return self.vision_probe_state.status(user.id, fingerprint)
         snapshot = self._parse_connection_tests(setting.connection_test_json).get("vision")
         raw = (setting.connection_test_json or {}).get("vision", {})
         if (
-            snapshot is None or snapshot.model != setting.chat_model
-            or raw.get("connection_fingerprint") != self._vision_connection_fingerprint(self._runtime_from_user_setting(setting))
+            snapshot is None or snapshot.model != runtime.chat_model
+            or raw.get("connection_fingerprint") != fingerprint
         ):
             return "unverified"
         return "verified" if snapshot.ok else "unavailable"
@@ -553,45 +483,30 @@ class ModelSettingsService:
     def vision_completion(self, user: User, *, prompt: str, image_data_urls: list[str]) -> str:
         runtime = self.resolve_vision_runtime_config(user)
         if not runtime.can_use_model or runtime.base_url is None or runtime.chat_model is None:
-            raise ModelNotConfiguredError("当前未配置可用图片理解模型。")
+            raise ModelNotConfiguredError("当前主模型尚未通过图片验证，请先在设置中验证图片能力。")
         capabilities = provider_capabilities(preset_id=runtime.preset_id, base_url=runtime.base_url)
-        if capabilities.vision_protocol == "xfyun_websocket":
-            def call() -> str:
-                return self.xfyun_vision_provider.vision_completion(
-                    XfyunVisionConfig(
-                        base_url=runtime.base_url or "",
-                        app_id=runtime.app_id or "",
-                        api_key=runtime.api_key or "",
-                        api_secret=runtime.api_secret or "",
-                        domain=runtime.chat_model or "imagev3",
-                    ),
-                    prompt=prompt,
-                    image_data_urls=image_data_urls[:3],
-                    timeout_seconds=self.settings.vision_request_timeout_seconds,
-                )
-        else:
-            vision_profile = ModelTaskProfile(
-                task_type="vision_understanding",
-                reasoning="disabled",
-                output_mode=("json_object" if capabilities.structured_output == "json_object" else "text"),
-                creativity="stable",
+        vision_profile = ModelTaskProfile(
+            task_type="vision_understanding",
+            reasoning="disabled",
+            output_mode=("json_object" if capabilities.structured_output == "json_object" else "text"),
+            creativity="stable",
+            timeout_seconds=self.settings.vision_request_timeout_seconds,
+            max_attempts=1,
+        )
+        visual_config = OpenAICompatibleConfig(
+            base_url=runtime.base_url,
+            api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
+            chat_model=runtime.chat_model,
+            reasoning_protocol=capabilities.reasoning_protocol,
+            task_profile=vision_profile,
+        )
+        def call() -> str:
+            return self.provider.vision_completion(
+                visual_config,
+                prompt=prompt,
+                image_data_urls=image_data_urls[:3],
                 timeout_seconds=self.settings.vision_request_timeout_seconds,
-                max_attempts=1,
             )
-            visual_config = OpenAICompatibleConfig(
-                base_url=runtime.base_url,
-                api_key=runtime.api_key or LOCAL_PLACEHOLDER_API_KEY,
-                chat_model=runtime.chat_model,
-                reasoning_protocol=capabilities.reasoning_protocol,
-                task_profile=vision_profile,
-            )
-            def call() -> str:
-                return self.provider.vision_completion(
-                    visual_config,
-                    prompt=prompt,
-                    image_data_urls=image_data_urls[:3],
-                    timeout_seconds=self.settings.vision_request_timeout_seconds,
-                )
         return self.execution_runtime.execute(
             user_id=user.id,
             provider_source=runtime.source,
@@ -874,8 +789,16 @@ class ModelSettingsService:
             setting = self.repository.get_default_for_user(user.id)
             if setting is not None:
                 return self.test_config_connection(user, setting.id, operation)
-        runtime = self._runtime_for_operation(user, operation)
-        return self._test_runtime(runtime, user_id=user.id, operation=operation)
+        runtime = self.resolve_runtime_config(user) if operation == "vision" else self._runtime_for_operation(user, operation)
+        result = self._test_runtime(runtime, user_id=user.id, operation=operation)
+        if operation == "vision" and runtime.can_use_model:
+            recorded = self.vision_probe_state.record(user.id, self._vision_connection_fingerprint(runtime), result.ok)
+            if not recorded:
+                return result.model_copy(update={
+                    "ok": False, "code": "provider_error", "retryable": True,
+                    "message": "图片测试已结束，但验证状态未能保存，请检查 Redis 后重试。",
+                })
+        return result
 
     def test_config_connection(
         self,
@@ -934,18 +857,7 @@ class ModelSettingsService:
             return self._embedding_runtime_from_user_setting(setting)
         if operation == "rerank":
             return self._rerank_runtime_from_user_setting(setting)
-        if operation == "vision":
-            runtime = self._vision_runtime_from_user_setting(setting)
-            capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
-            if not capabilities.supports_image_input:
-                # This route is an explicit user-requested capability probe,
-                # not permission to send arbitrary attachments to an unknown model.
-                return replace(runtime, preset_id="custom-vision")
-            return runtime
         return self._runtime_from_user_setting(setting)
-
-    def _vision_runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
-        return self.runtime_config_builder._vision_runtime_from_user_setting(setting)
 
     def _runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
         return self.runtime_config_builder._runtime_from_user_setting(setting)
@@ -955,9 +867,6 @@ class ModelSettingsService:
 
     def _generation_runtime_from_system_settings(self) -> RuntimeModelConfig:
         return self.runtime_config_builder._generation_runtime_from_system_settings()
-
-    def _vision_runtime_from_system_settings(self) -> RuntimeModelConfig:
-        return self.runtime_config_builder._vision_runtime_from_system_settings()
 
     def _embedding_runtime_from_user_setting(self, setting: ModelSetting) -> RuntimeModelConfig:
         return self.runtime_config_builder._embedding_runtime_from_user_setting(setting)
@@ -973,14 +882,12 @@ class ModelSettingsService:
 
     def _config_summary(self, setting: ModelSetting) -> ModelConfigSummary:
         runtime = self._runtime_from_user_setting(setting)
-        vision_runtime = self._vision_runtime_from_user_setting(setting)
         connection_tests = self._parse_connection_tests(setting.connection_test_json)
         embedding_runtime = self._embedding_runtime_from_user_setting(setting)
         rerank_runtime = self._rerank_runtime_from_user_setting(setting)
         return build_model_config_summary(
             setting=setting,
             runtime=runtime,
-            vision_runtime=vision_runtime,
             embedding_runtime=embedding_runtime,
             rerank_runtime=rerank_runtime,
             connection_tests=connection_tests,
@@ -991,13 +898,11 @@ class ModelSettingsService:
         system_runtime = self._runtime_from_system_settings()
         embedding_runtime = self._embedding_runtime_from_system_settings()
         rerank_runtime = self._rerank_runtime_from_system_settings()
-        vision_runtime = self._vision_runtime_from_system_settings()
         if (
             system_runtime.base_url
             or system_runtime.chat_model
             or embedding_runtime.embedding_model
             or rerank_runtime.embedding_model
-            or vision_runtime.chat_model
         ):
             summary = build_model_settings_summary(
                 runtime=system_runtime,
@@ -1006,14 +911,7 @@ class ModelSettingsService:
                 source="system",
                 mask_secret=self._mask_api_key,
             )
-            return summary.model_copy(
-                update={
-                    "vision_model": vision_runtime.chat_model,
-                    "vision_provider": vision_runtime.provider,
-                    "vision_base_url": vision_runtime.base_url,
-                    "can_use_vision_model": vision_runtime.can_use_model,
-                }
-            )
+            return summary
         return empty_model_settings_summary()
 
     def _apply_settings_payload(self, setting: ModelSetting, payload: SaveModelSettingsRequest) -> None:
@@ -1042,12 +940,6 @@ class ModelSettingsService:
             setting.rerank_preset_id = payload.rerank_preset_id if setting.rerank_model else None
         if payload.api_key:
             setting.api_key_ciphertext = self._encrypt_api_key(payload.api_key)
-        if payload.vision_app_id:
-            setting.vision_app_id_ciphertext = self._encrypt_api_key(payload.vision_app_id)
-        if payload.vision_api_key:
-            setting.vision_api_key_ciphertext = self._encrypt_api_key(payload.vision_api_key)
-        if payload.vision_api_secret:
-            setting.vision_api_secret_ciphertext = self._encrypt_api_key(payload.vision_api_secret)
         if setting.embedding_model:
             if payload.embedding_api_key:
                 setting.embedding_api_key_ciphertext = self._encrypt_api_key(payload.embedding_api_key)
@@ -1079,9 +971,6 @@ class ModelSettingsService:
         payload: SaveModelSettingsRequest | UpdateModelConfigRequest,
     ) -> None:
         current_key = self._decrypt_api_key(setting.api_key_ciphertext)
-        current_vision_app_id = self._decrypt_api_key(setting.vision_app_id_ciphertext)
-        current_vision_api_key = self._decrypt_api_key(setting.vision_api_key_ciphertext)
-        current_vision_api_secret = self._decrypt_api_key(setting.vision_api_secret_ciphertext)
         current_embedding_key = self._decrypt_api_key(setting.embedding_api_key_ciphertext)
         current_embedding_app_id = self._decrypt_api_key(setting.embedding_app_id_ciphertext)
         current_embedding_secret = self._decrypt_api_key(setting.embedding_api_secret_ciphertext)
@@ -1101,14 +990,7 @@ class ModelSettingsService:
             or (bool(payload.api_key) and payload.api_key != current_key)
             or (payload.chat_model is not None and payload.chat_model != setting.chat_model)
         )
-        vision_changed = (
-            chat_changed
-            or (payload.base_url is not None and payload.base_url != setting.base_url)
-            or (payload.chat_model is not None and payload.chat_model != setting.chat_model)
-            or (bool(payload.vision_app_id) and payload.vision_app_id != current_vision_app_id)
-            or (bool(payload.vision_api_key) and payload.vision_api_key != current_vision_api_key)
-            or (bool(payload.vision_api_secret) and payload.vision_api_secret != current_vision_api_secret)
-        )
+        vision_changed = chat_changed
         embedding_changed = (
             (
                 payload.embedding_provider is not None

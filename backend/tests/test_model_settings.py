@@ -4,7 +4,6 @@ import base64
 import importlib
 from dataclasses import dataclass
 from datetime import datetime
-from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -12,7 +11,6 @@ from typing import Any
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from PIL import Image
 
 from backend.app.api.v1.deps import get_auth_service
 from backend.app.core.config import Settings
@@ -257,29 +255,6 @@ class FakeProvider:
 class ImmediateExecutionRuntime:
     def execute(self, *, call, **_kwargs):
         return call()
-
-
-@dataclass
-class FakeXfyunVisionProvider:
-    calls: list[dict[str, Any]]
-
-    def vision_completion(
-        self,
-        config: Any,
-        *,
-        prompt: str,
-        image_data_urls: list[str],
-        timeout_seconds: float,
-    ) -> str:
-        self.calls.append(
-            {
-                "config": config,
-                "prompt": prompt,
-                "image_data_urls": image_data_urls,
-                "timeout_seconds": timeout_seconds,
-            }
-        )
-        return '{"visual_summary":"ok"}'
 
 
 @dataclass
@@ -1336,25 +1311,6 @@ def test_openai_compatible_provider_posts_chat_completions_and_reads_content() -
     assert requests[0].read()
 
 
-def test_xfyun_native_vision_builds_signed_websocket_url_and_accepts_png() -> None:
-    from backend.app.providers.xfyun_vision import XfyunVisionConfig, XfyunVisionProvider
-
-    config = XfyunVisionConfig(
-        base_url="wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image",
-        app_id="app-id",
-        api_key="api-key",
-        api_secret="api-secret",
-    )
-    image_buffer = BytesIO()
-    Image.new("RGB", (32, 32), "white").save(image_buffer, format="PNG")
-    png_data_url = "data:image/png;base64," + base64.b64encode(image_buffer.getvalue()).decode("ascii")
-
-    signed_url = XfyunVisionProvider._signed_url(config)
-    assert signed_url.startswith("wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image?")
-    assert "authorization=" in signed_url
-    assert XfyunVisionProvider._image_base64(png_data_url) == png_data_url.split(",", 1)[1]
-
-
 def test_model_settings_serializes_saved_vision_connection_snapshot() -> None:
     module = load_model_settings_module()
 
@@ -1372,139 +1328,6 @@ def test_model_settings_serializes_saved_vision_connection_snapshot() -> None:
 
     assert parsed["vision"].ok is True
     assert parsed["vision"].model == "vision-model"
-
-
-def test_system_vision_uses_server_fallback_without_personal_config() -> None:
-    module = load_model_settings_module()
-    service = module.ModelSettingsService(
-        repository=FakeModelSettingsRepository({}),
-        settings=make_settings(
-            system_vision_provider="xfyun_vision",
-            system_vision_base_url="wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image",
-            system_vision_model="imagev3",
-            system_vision_app_id="vision-app",
-            system_vision_api_key="vision-key",
-            system_vision_api_secret="vision-secret",
-        ),
-        provider=FakeProvider(),
-    )
-
-    user = SimpleNamespace(id=7)
-    runtime = service.resolve_vision_runtime_config(user)
-    summary = service.list_configs(user).system_summary
-
-    assert runtime.source == "system"
-    assert runtime.preset_id == "xfyun-vision"
-    assert runtime.can_use_model is True
-    assert summary.can_use_vision_model is True
-    assert summary.vision_model == "imagev3"
-
-
-def test_system_vision_supports_bailian_openai_compatible_fallback() -> None:
-    module = load_model_settings_module()
-    service = module.ModelSettingsService(
-        repository=FakeModelSettingsRepository({}),
-        settings=make_settings(
-            system_vision_provider="openai_compatible",
-            system_vision_base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-            system_vision_model="qwen3.7-plus",
-            system_vision_api_key="sk-bailian-secret",
-            system_vision_app_id="",
-            system_vision_api_secret="",
-        ),
-        provider=FakeProvider(),
-    )
-
-    user = SimpleNamespace(id=7)
-    runtime = service.resolve_vision_runtime_config(user)
-    summary = service.list_configs(user).system_summary
-
-    assert runtime.source == "system"
-    assert runtime.provider == "openai_compatible"
-    assert runtime.preset_id == "qwen"
-    assert runtime.can_use_model is True
-    assert runtime.app_id is None
-    assert runtime.api_secret is None
-    assert summary.can_use_vision_model is True
-    assert summary.vision_model == "qwen3.7-plus"
-
-
-def test_bailian_system_vision_does_not_reuse_xfyun_embedding_credentials() -> None:
-    module = load_model_settings_module()
-    service = module.ModelSettingsService(
-        repository=FakeModelSettingsRepository({}),
-        settings=make_settings(
-            system_vision_provider="openai_compatible",
-            system_vision_base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-            system_vision_model="qwen3.7-plus",
-            system_vision_api_key="",
-            system_embedding_api_key="xfyun-embedding-key",
-            system_embedding_app_id="xfyun-app",
-            system_embedding_api_secret="xfyun-secret",
-        ),
-        provider=FakeProvider(),
-    )
-
-    runtime = service.resolve_vision_runtime_config(SimpleNamespace(id=7))
-
-    assert runtime.source == "none"
-    assert runtime.can_use_model is False
-
-
-def test_bailian_system_vision_uses_independent_timeout() -> None:
-    module = load_model_settings_module()
-    provider = FakeProvider(content='{"visual_summary":"ok"}', calls=[])
-    service = module.ModelSettingsService(
-        repository=FakeModelSettingsRepository({}),
-        settings=make_settings(
-            system_vision_provider="openai_compatible",
-            system_vision_base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-            system_vision_model="qwen3.7-plus",
-            system_vision_api_key="sk-bailian-secret",
-            vision_request_timeout_seconds=45,
-        ),
-        provider=provider,
-        execution_runtime=ImmediateExecutionRuntime(),
-    )
-
-    result = service.vision_completion(
-        SimpleNamespace(id=7),
-        prompt="分析图片",
-        image_data_urls=["data:image/png;base64,AA=="],
-    )
-
-    assert result == '{"visual_summary":"ok"}'
-    assert provider.calls is not None
-    assert provider.calls[0]["timeout_seconds"] == 45
-
-
-def test_xfyun_system_vision_uses_independent_timeout() -> None:
-    module = load_model_settings_module()
-    vision_provider = FakeXfyunVisionProvider(calls=[])
-    service = module.ModelSettingsService(
-        repository=FakeModelSettingsRepository({}),
-        settings=make_settings(
-            system_vision_provider="xfyun_vision",
-            system_vision_base_url="wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image",
-            system_vision_model="imagev3",
-            system_vision_app_id="vision-app",
-            system_vision_api_key="vision-key",
-            system_vision_api_secret="vision-secret",
-            vision_request_timeout_seconds=35,
-        ),
-        provider=FakeProvider(),
-        execution_runtime=ImmediateExecutionRuntime(),
-        xfyun_vision_provider=vision_provider,
-    )
-
-    result = service.vision_completion(
-        SimpleNamespace(id=7),
-        prompt="分析图片",
-        image_data_urls=["data:image/png;base64,AA=="],
-    )
-
-    assert result == '{"visual_summary":"ok"}'
-    assert vision_provider.calls[0]["timeout_seconds"] == 35
 
 
 def test_openai_compatible_provider_streams_chat_completion_deltas() -> None:

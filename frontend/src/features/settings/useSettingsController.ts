@@ -8,6 +8,7 @@ import {
   clearConversationMemory,
   getPrivacySettings,
   listModelConfigs,
+  getModelSettings,
   updatePrivacySettings
 } from "../../api/settings";
 import { PATHS } from "../../app/routePaths";
@@ -42,6 +43,7 @@ export function useSettingsController() {
     queryFn: listModelConfigs,
     staleTime: 30_000
   });
+  const modelSummaryQuery = useQuery({ queryKey: ["settings", "model"], queryFn: getModelSettings });
   const privacyQuery = useQuery({
     queryKey: ["settings", "privacy"],
     queryFn: getPrivacySettings,
@@ -54,12 +56,10 @@ export function useSettingsController() {
   const defaultGenerationConfigId = settingsList?.default_generation_config_id ?? null;
   const defaultEmbeddingConfigId = settingsList?.default_embedding_config_id ?? null;
   const defaultRerankConfigId = settingsList?.default_rerank_config_id ?? null;
-  const defaultVisionConfigId = settingsList?.default_vision_config_id ?? null;
   const defaultChatConfig = configs.find((config) => config.id === defaultChatConfigId) ?? null;
   const defaultGenerationConfig = configs.find((config) => config.id === defaultGenerationConfigId) ?? null;
   const defaultEmbeddingConfig = configs.find((config) => config.id === defaultEmbeddingConfigId) ?? null;
   const defaultRerankConfig = configs.find((config) => config.id === defaultRerankConfigId) ?? null;
-  const defaultVisionConfig = configs.find((config) => config.id === defaultVisionConfigId) ?? null;
   const systemSummary = settingsList?.system_summary ?? null;
   const effectiveChatReady = defaultChatConfig?.can_use_model ?? systemSummary?.can_use_model ?? false;
   const effectiveGenerationReady = defaultGenerationConfig?.can_use_model ?? effectiveChatReady;
@@ -69,9 +69,7 @@ export function useSettingsController() {
   const effectiveRerankReady = defaultRerankConfig?.can_use_rerank_model
     ?? systemSummary?.can_use_rerank_model
     ?? false;
-  const effectiveVisionReady = Boolean(
-    defaultVisionConfig?.can_use_model || systemSummary?.can_use_vision_model
-  );
+  const effectiveVisionReady = Boolean(modelSummaryQuery.data?.data?.can_use_vision_model);
   const starterModeLabel = authUser?.starterMode === "data_structures" ? "数据结构与算法开始" : "空白开始";
 
   function selectSection(section: SettingsSection) {

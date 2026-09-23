@@ -220,7 +220,6 @@ RESPONSE_MODELS: dict[str, Any] = {
     "set_generation_default_model_config": ApiEnvelope[ModelSettingsListResponse],
     "set_embedding_default_model_config": ApiEnvelope[ModelSettingsListResponse],
     "set_rerank_default_model_config": ApiEnvelope[ModelSettingsListResponse],
-    "set_vision_default_model_config": ApiEnvelope[ModelSettingsListResponse],
     "test_model_config": ApiEnvelope[ModelConnectionTestResponse],
     "test_model_settings": ApiEnvelope[ModelConnectionTestResponse],
     "create_embedding_reindex_job": ApiEnvelope[AiJobResponse],

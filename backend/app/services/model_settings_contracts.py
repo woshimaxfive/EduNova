@@ -102,9 +102,6 @@ class SaveModelSettingsRequest(BaseModel):
     base_url: str = Field(min_length=1, max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
     chat_model: str | None = Field(default=None, max_length=120)
-    vision_app_id: str | None = Field(default=None, max_length=500)
-    vision_api_key: str | None = Field(default=None, max_length=500)
-    vision_api_secret: str | None = Field(default=None, max_length=500)
     embedding_provider: Literal["openai_compatible", "xfyun_embedding"] | None = None
     embedding_base_url: str | None = Field(default=None, max_length=500)
     embedding_api_key: str | None = Field(default=None, max_length=500)
@@ -122,9 +119,6 @@ class SaveModelSettingsRequest(BaseModel):
         "base_url",
         "api_key",
         "chat_model",
-        "vision_app_id",
-        "vision_api_key",
-        "vision_api_secret",
         "embedding_base_url",
         "embedding_api_key",
         "embedding_app_id",
@@ -158,7 +152,6 @@ class SaveModelConfigRequest(SaveModelSettingsRequest):
     make_generation_default: bool = False
     make_embedding_default: bool = False
     make_rerank_default: bool = False
-    make_vision_default: bool = False
 
     @field_validator("display_name", "preset_id", "embedding_preset_id", "rerank_preset_id", mode="before")
     @classmethod
@@ -176,9 +169,6 @@ class UpdateModelConfigRequest(BaseModel):
     api_key: str | None = Field(default=None, max_length=500)
     chat_model: str | None = Field(default=None, max_length=120)
     make_generation_default: bool = False
-    vision_app_id: str | None = Field(default=None, max_length=500)
-    vision_api_key: str | None = Field(default=None, max_length=500)
-    vision_api_secret: str | None = Field(default=None, max_length=500)
     embedding_provider: Literal["openai_compatible", "xfyun_embedding"] | None = None
     embedding_preset_id: str | None = Field(default=None, max_length=80)
     embedding_base_url: str | None = Field(default=None, max_length=500)
@@ -196,7 +186,6 @@ class UpdateModelConfigRequest(BaseModel):
     make_default: bool | None = None
     make_embedding_default: bool | None = None
     make_rerank_default: bool | None = None
-    make_vision_default: bool | None = None
 
     @field_validator(
         "display_name",
@@ -204,9 +193,6 @@ class UpdateModelConfigRequest(BaseModel):
         "base_url",
         "api_key",
         "chat_model",
-        "vision_app_id",
-        "vision_api_key",
-        "vision_api_secret",
         "embedding_preset_id",
         "embedding_base_url",
         "embedding_api_key",
@@ -280,7 +266,7 @@ class ModelSettingsSummary(BaseModel):
     vision_provider: str | None = None
     vision_base_url: str | None = None
     can_use_vision_model: bool = False
-    vision_status: Literal["not_configured", "unverified", "verified", "unavailable", "server_managed"] = "not_configured"
+    vision_status: Literal["not_configured", "unverified", "verified", "unavailable"] = "not_configured"
     supports_structured_output: bool = False
     supports_reasoning_control: bool = False
 
@@ -300,11 +286,6 @@ class ModelConfigSummary(BaseModel):
     embedding_dimension: int | None = None
     has_api_key: bool
     api_key_masked: str | None
-    has_vision_app_id: bool = False
-    vision_app_id_masked: str | None = None
-    has_vision_api_key: bool = False
-    vision_api_key_masked: str | None = None
-    has_vision_api_secret: bool = False
     has_embedding_api_key: bool = False
     embedding_api_key_masked: str | None = None
     has_embedding_app_id: bool = False
@@ -324,7 +305,6 @@ class ModelConfigSummary(BaseModel):
     is_generation_default: bool = False
     is_embedding_default: bool
     is_rerank_default: bool = False
-    is_vision_default: bool = False
     last_test_ok: bool | None
     last_test_message: str | None
     last_tested_at: datetime | None
@@ -342,7 +322,6 @@ class ModelSettingsListResponse(BaseModel):
     default_generation_config_id: int | None = None
     default_embedding_config_id: int | None
     default_rerank_config_id: int | None = None
-    default_vision_config_id: int | None = None
 
 
 class ModelConnectionTestResponse(BaseModel):

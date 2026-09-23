@@ -1588,23 +1588,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/settings/model/configs/{config_id}/vision-default": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Set Vision Default Model Config */
-        post: operations["set_vision_default_model_config_api_v1_settings_model_configs__config_id__vision_default_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/settings/model/embedding/reindex-jobs": {
         parameters: {
             query?: never;
@@ -4100,21 +4083,6 @@ export interface components {
              * @default false
              */
             has_rerank_api_key: boolean;
-            /**
-             * Has Vision Api Key
-             * @default false
-             */
-            has_vision_api_key: boolean;
-            /**
-             * Has Vision Api Secret
-             * @default false
-             */
-            has_vision_api_secret: boolean;
-            /**
-             * Has Vision App Id
-             * @default false
-             */
-            has_vision_app_id: boolean;
             /** Id */
             id: number;
             /** Is Default */
@@ -4131,11 +4099,6 @@ export interface components {
              * @default false
              */
             is_rerank_default: boolean;
-            /**
-             * Is Vision Default
-             * @default false
-             */
-            is_vision_default: boolean;
             /** Last Test Message */
             last_test_message: string | null;
             /** Last Test Ok */
@@ -4179,10 +4142,6 @@ export interface components {
              * @default false
              */
             supports_structured_output: boolean;
-            /** Vision Api Key Masked */
-            vision_api_key_masked?: string | null;
-            /** Vision App Id Masked */
-            vision_app_id_masked?: string | null;
         };
         /** ModelConnectionTestRequest */
         ModelConnectionTestRequest: {
@@ -4281,8 +4240,6 @@ export interface components {
             default_generation_config_id?: number | null;
             /** Default Rerank Config Id */
             default_rerank_config_id?: number | null;
-            /** Default Vision Config Id */
-            default_vision_config_id?: number | null;
             system_summary: components["schemas"]["ModelSettingsSummary"];
         };
         /** ModelSettingsSummary */
@@ -4379,7 +4336,7 @@ export interface components {
              * @default not_configured
              * @enum {string}
              */
-            vision_status: "not_configured" | "unverified" | "verified" | "unavailable" | "server_managed";
+            vision_status: "not_configured" | "unverified" | "verified" | "unavailable";
         };
         /** OkResponse */
         OkResponse: {
@@ -5108,11 +5065,6 @@ export interface components {
              * @default false
              */
             make_rerank_default: boolean;
-            /**
-             * Make Vision Default
-             * @default false
-             */
-            make_vision_default: boolean;
             /** Preset Id */
             preset_id?: string | null;
             /**
@@ -5132,12 +5084,6 @@ export interface components {
             rerank_provider?: ("siliconflow_rerank" | "bailian_rerank" | "openai_compatible") | null;
             /** Rerank Workspace Id */
             rerank_workspace_id?: string | null;
-            /** Vision Api Key */
-            vision_api_key?: string | null;
-            /** Vision Api Secret */
-            vision_api_secret?: string | null;
-            /** Vision App Id */
-            vision_app_id?: string | null;
         };
         /** SaveModelSettingsRequest */
         SaveModelSettingsRequest: {
@@ -5176,12 +5122,6 @@ export interface components {
             rerank_provider?: ("siliconflow_rerank" | "bailian_rerank" | "openai_compatible") | null;
             /** Rerank Workspace Id */
             rerank_workspace_id?: string | null;
-            /** Vision Api Key */
-            vision_api_key?: string | null;
-            /** Vision Api Secret */
-            vision_api_secret?: string | null;
-            /** Vision App Id */
-            vision_app_id?: string | null;
         };
         /** SavePracticeDraftRequest */
         SavePracticeDraftRequest: {
@@ -5605,8 +5545,6 @@ export interface components {
             make_generation_default: boolean;
             /** Make Rerank Default */
             make_rerank_default?: boolean | null;
-            /** Make Vision Default */
-            make_vision_default?: boolean | null;
             /** Preset Id */
             preset_id?: string | null;
             /** Provider */
@@ -5623,12 +5561,6 @@ export interface components {
             rerank_provider?: ("siliconflow_rerank" | "bailian_rerank" | "openai_compatible") | null;
             /** Rerank Workspace Id */
             rerank_workspace_id?: string | null;
-            /** Vision Api Key */
-            vision_api_key?: string | null;
-            /** Vision Api Secret */
-            vision_api_secret?: string | null;
-            /** Vision App Id */
-            vision_app_id?: string | null;
         };
         /** UpdatePathTaskRequest */
         UpdatePathTaskRequest: {
@@ -16437,111 +16369,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_ModelConnectionTestResponse_"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorEnvelope"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorEnvelope"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorEnvelope"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorEnvelope"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorEnvelope"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorEnvelope"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorEnvelope"];
-                };
-            };
-            /** @description Bad Gateway */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorEnvelope"];
-                };
-            };
-            /** @description Service Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorEnvelope"];
-                };
-            };
-        };
-    };
-    set_vision_default_model_config_api_v1_settings_model_configs__config_id__vision_default_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                config_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiEnvelope_ModelSettingsListResponse_"];
                 };
             };
             /** @description Bad Request */

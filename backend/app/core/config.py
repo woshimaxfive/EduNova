@@ -41,12 +41,6 @@ class Settings(BaseSettings):
     system_rerank_api_key: str = ""
     system_rerank_model: str = ""
     system_rerank_workspace_id: str = ""
-    system_vision_provider: str = "xfyun_vision"
-    system_vision_base_url: str = "wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image"
-    system_vision_app_id: str = ""
-    system_vision_api_key: str = ""
-    system_vision_api_secret: str = ""
-    system_vision_model: str = "imagev3"
     vision_request_timeout_seconds: float = 60.0
     system_speech_provider: str = "xfyun"
     system_speech_app_id: str = ""

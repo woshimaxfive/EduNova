@@ -23,8 +23,8 @@ def _png_bytes(size: tuple[int, int] = (24, 16)) -> bytes:
 
 def test_vision_capabilities_are_explicit_and_do_not_assume_text_models() -> None:
     xfyun = provider_capabilities(preset_id="xfyun-vision", base_url=None)
-    assert xfyun.supports_image_input is True
-    assert xfyun.vision_protocol == "xfyun_websocket"
+    assert xfyun.supports_image_input is False
+    assert xfyun.vision_protocol == "none"
     assert provider_capabilities(preset_id="openai-vision", base_url=None).verified_vision is True
     qwen = provider_capabilities(
         preset_id="qwen",

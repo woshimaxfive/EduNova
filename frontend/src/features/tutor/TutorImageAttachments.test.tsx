@@ -32,9 +32,9 @@ describe("TutorImagePicker", () => {
         can_use_model: false,
         can_use_embedding_model: false,
         can_use_rerank_model: false,
-        vision_provider: "xfyun_vision",
-        vision_base_url: "wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image",
-        vision_model: "imagev3",
+        vision_provider: "openai_compatible",
+        vision_base_url: "https://main.example/v1",
+        vision_model: "main-model",
         can_use_vision_model: true
     })).toBe(true);
     expect(hasUsableVisionModel()).toBe(false);
@@ -55,7 +55,7 @@ describe("TutorImagePicker", () => {
 
     render(<MemoryRouter><TutorImagePicker draft={draft} /></MemoryRouter>);
 
-    const link = screen.getByRole("link", { name: "配置图片理解模型" });
+    const link = screen.getByRole("link", { name: "验证主模型图片能力" });
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noreferrer");
   });

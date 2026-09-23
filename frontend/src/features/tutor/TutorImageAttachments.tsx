@@ -52,7 +52,7 @@ export function TutorImagePicker({
       </button> : null}
       {showControls && !draft.visionReady ? (
         <Link to={`${PATHS.settings}?section=model`} target="_blank" rel="noreferrer">
-          配置图片理解模型
+          验证主模型图片能力
         </Link>
       ) : null}
       {showControls && isPickerOpen ? (

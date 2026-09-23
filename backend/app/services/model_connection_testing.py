@@ -65,7 +65,7 @@ class _StructuredConnectionContract(BaseModel):
 
 def _vision_connection_test_image() -> str:
     image = Image.new("RGB", (512, 192), "white")
-    ImageDraw.Draw(image).text((32, 72), "EduNova Vision 32", fill="black")
+    ImageDraw.Draw(image).text((32, 72), "EduNova Vision 32", fill="black", font_size=32)
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
@@ -236,10 +236,13 @@ class ModelConnectionTester:
                         bypass_circuit=True,
                     )
                     try:
-                        _VisionConnectionContract.model_validate(repair_json(raw_vision))
+                        parsed_vision = _VisionConnectionContract.model_validate(repair_json(raw_vision))
+                        recognized = parsed_vision.extracted_text.casefold()
+                        if "edunova" not in recognized or "32" not in recognized:
+                            raise ValueError("测试图中文字未被识别")
                     except (TypeError, ValueError) as exc:
                         raise ModelProviderError(
-                            "图片理解服务未返回完整的结构化结果。",
+                            "图片验证未通过：需要正确识别测试图文字并返回完整结构化结果。",
                             code="invalid_response",
                         ) from exc
                 elif operation == "structured":

@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { listMaterials, type MaterialListItem } from "../../api/materials";
-import { listModelConfigs, type ModelSettingsListResponse } from "../../api/settings";
+import { getModelSettings, type ModelSettingsSummary } from "../../api/settings";
 import {
   attachTutorMaterial,
   deleteTutorAttachment,
@@ -20,10 +20,8 @@ export type DraftTutorImage = {
   error?: string;
 };
 
-export function hasUsableVisionModel(settings?: ModelSettingsListResponse): boolean {
-  if (!settings) return false;
-  const defaultVisionConfig = settings.configs?.find((config) => config.id === settings.default_vision_config_id);
-  return Boolean(defaultVisionConfig?.can_use_model || settings.system_summary?.can_use_vision_model);
+export function hasUsableVisionModel(settings?: ModelSettingsSummary): boolean {
+  return Boolean(settings?.can_use_vision_model);
 }
 
 export function useTutorImageDraft(
@@ -33,7 +31,7 @@ export function useTutorImageDraft(
 ) {
   const queryClient = useQueryClient();
   const [images, setImages] = useState<DraftTutorImage[]>([]);
-  const settingsQuery = useQuery({ queryKey: ["settings", "model-configs"], queryFn: listModelConfigs, staleTime: 30_000 });
+  const settingsQuery = useQuery({ queryKey: ["settings", "model"], queryFn: getModelSettings, staleTime: 30_000 });
   const materialsQuery = useQuery({ queryKey: ["materials", "list"], queryFn: () => listMaterials(), staleTime: 30_000 });
   const imagesRef = useRef<DraftTutorImage[]>([]);
   useEffect(() => { imagesRef.current = images; }, [images]);
@@ -51,6 +49,7 @@ export function useTutorImageDraft(
     if (documentFiles.length > 0 && onDocumentFiles) await onDocumentFiles(documentFiles);
     if (images.length + imageFiles.length > 3) { onNotice("每条消息最多添加 3 张图片。"); return; }
     if (imageFiles.length === 0) return;
+    if (!hasUsableVisionModel(settingsQuery.data?.data)) { onNotice("请先在设置中验证主模型的图片能力；普通文档仍可上传。"); return; }
     const drafts = imageFiles.map((file) => ({
       key: crypto.randomUUID(), filename: file.name, previewUrl: URL.createObjectURL(file),
       attachment: null, status: "uploading" as const
@@ -76,6 +75,7 @@ export function useTutorImageDraft(
   }
 
   async function addMaterial(material: MaterialListItem) {
+    if (!hasUsableVisionModel(settingsQuery.data?.data)) { onNotice("请先在设置中验证主模型的图片能力。"); return; }
     if (images.some((image) => image.attachment?.material_id === material.id)) return;
     if (images.length >= 3) { onNotice("每条消息最多添加 3 张图片。"); return; }
     const key = crypto.randomUUID();

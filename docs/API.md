@@ -2,6 +2,15 @@
 
 EduNova 后端使用 FastAPI，默认 API 前缀为 `/api/v1`。机器可读合同以 `backend/openapi.json` 为准。
 
+### 个人主模型与图片验证
+
+- 个人主模型用于回答和生成；个人配置存在但不可用时，不自动切换到服务器凭证。
+- `POST /settings/model/test` 传 `{"operation":"vision"}` 会使用当前个人主模型发送合成测试图片，可能产生少量模型调用费用。验证同时检查测试图文字识别和业务结构化输出，失败不等同于模型永远不支持图片。
+- 验证通过后，个人图片理解复用同一地址、模型和密钥；未验证或验证失败时，后端不执行个人图片理解，也不隐式调用服务器图片服务。没有个人主模型时，保留部署者原有的独立视觉配置。
+- `GET /settings/model` 返回实际路由的 `can_use_vision_model` 与 `vision_status`：`not_configured`、`unverified`、`verified`、`unavailable`、`server_managed`。`server_managed` 表示配置来源，不表示已完成图片质量验收。
+- 图片验证记录绑定连接信息；更换模型、地址、凭证后需要重测。瞬时错误可重试。客户端使用此摘要判断当前用户能否看图，不从服务器配置列表自行推断兜底。
+- 普通文档上传不受图片能力开关影响。向量、重排序和语音的本地化属于后续独立适配，当前条目不表示这些能力已经本地化。
+
 ### 计划草稿与批准
 
 - `POST /paths/generation-jobs` 传 `{"course_id":101,"draft":true}` 生成待确认草稿；从 Job 结果的 `path_id` 查询具体版本。

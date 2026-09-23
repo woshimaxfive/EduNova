@@ -6832,6 +6832,18 @@
               }
             ],
             "title": "Vision Provider"
+          },
+          "vision_status": {
+            "default": "not_configured",
+            "enum": [
+              "not_configured",
+              "unverified",
+              "verified",
+              "unavailable",
+              "server_managed"
+            ],
+            "title": "Vision Status",
+            "type": "string"
           }
         },
         "required": [

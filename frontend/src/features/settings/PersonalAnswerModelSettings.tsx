@@ -43,6 +43,7 @@ export function PersonalAnswerModelSettings() {
   const [draft, setDraft] = useState<AnswerModelDraft | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<ModelConnectionTestResponse | null>(null);
+  const [visionResult, setVisionResult] = useState<ModelConnectionTestResponse | null>(null);
   const summary = modelQuery.data?.data ?? null;
   const currentDraft = draft ?? draftFromSummary(summary ?? {
     source: "none", provider: "openai_compatible", base_url: null, chat_model: null, embedding_model: null,
@@ -55,6 +56,8 @@ export function PersonalAnswerModelSettings() {
     onSuccess: async () => {
       setFeedback(null);
       setDraft(null);
+      setTestResult(null);
+      setVisionResult(null);
       await queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
     },
     onError: (error) => setFeedback(getApiErrorMessage(error, "回答模型保存失败，请检查地址、模型和密钥。"))
@@ -64,6 +67,20 @@ export function PersonalAnswerModelSettings() {
     onSuccess: (response) => setTestResult(response.data),
     onError: (error) => setFeedback(getApiErrorMessage(error, "连接验证失败，请稍后重试。"))
   });
+  const visionMutation = useMutation({
+    mutationFn: () => testModelSettings("vision"),
+    onSuccess: async (response) => {
+      setVisionResult(response.data);
+      await queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
+    },
+    onError: (error) => setFeedback(getApiErrorMessage(error, "图片能力验证失败，可稍后重试。"))
+  });
+  const dirty = draft !== null;
+  const testing = testMutation.isPending || visionMutation.isPending;
+  const visionLabel = summary?.vision_status === "verified" ? "主模型图片验证通过，使用同一组凭证。"
+    : summary?.vision_status === "server_managed" ? "使用部署者配置的图片服务。"
+    : summary?.vision_status === "unavailable" ? "图片验证未通过，可重试；不自动切换服务器模型。"
+    : summary?.source === "user" ? "待验证主模型图片能力；验证前仅使用文本。" : "未配置图片服务。";
 
   const requiresKey = !preset.allowEmptyApiKey && !summary?.has_api_key;
   const canSave = Boolean(currentDraft.baseUrl.trim() && currentDraft.chatModel.trim() && (!requiresKey || currentDraft.apiKey.trim()));
@@ -79,14 +96,14 @@ export function PersonalAnswerModelSettings() {
       <header className="settings-panel-heading">
         <div>
           <h2>回答模型</h2>
-          <p>个人设置只影响你的回答与后台生成任务。</p>
+          <p>一组主模型配置用于回答与后台生成；通过图片验证后也用于看图。</p>
         </div>
       </header>
 
       <div className="personal-model-routing" aria-label="模型路由说明">
-        <article><Robot size={19} weight="duotone" /><div><strong>日常回答</strong><span>{summary?.source === "user" ? `当前使用你的 ${summary.chat_model}` : "未配置个人模型时使用服务器 X2-Flash"}</span></div></article>
-        <article><CheckCircle size={19} weight="duotone" /><div><strong>资源、路径、练习与报告</strong><span>{summary?.source === "user" ? "跟随你的回答模型" : "使用服务器千问"}</span></div></article>
-        <article><Key size={19} weight="duotone" /><div><strong>图片理解与资料检索</strong><span>由服务器托管，不使用个人密钥。</span></div></article>
+        <article><Robot size={19} weight="duotone" /><div><strong>日常回答</strong><span>{summary?.can_use_model ? `当前使用${summary.source === "user" ? "你的" : "服务器的"} ${summary.chat_model}` : "尚未配置可用主模型"}</span></div></article>
+        <article><CheckCircle size={19} weight="duotone" /><div><strong>资源、路径、练习与报告</strong><span>{summary?.source === "user" ? "跟随你的回答模型" : "由部署者配置生成模型；未单独配置时跟随主模型"}</span></div></article>
+        <article><Key size={19} weight="duotone" /><div><strong>图片理解与资料检索</strong><span>{visionLabel} 资料检索由服务器管理。</span></div></article>
       </div>
 
       {modelQuery.isPending ? <div className="settings-query-state" role="status">正在读取回答模型配置...</div> : null}
@@ -100,11 +117,13 @@ export function PersonalAnswerModelSettings() {
         <div className="personal-model-provider"><strong>{preset.name}</strong><span>{preset.description}</span></div>
         <InlineFeedback message={feedback} tone="warning" className="settings-inline-feedback" />
         <footer className="settings-editor-actions">
-          <span>{summary?.source === "user" ? `已保存密钥 ${summary.api_key_masked ?? ""}` : "服务器默认始终可作为兜底"}</span>
-          <button type="button" className="secondary-action" onClick={() => testMutation.mutate()} disabled={!summary?.can_use_model || testMutation.isPending}>{testMutation.isPending ? "验证中" : "验证回答连接"}</button>
+          <span>{summary?.source === "user" ? `个人连接不会自动回退到服务器凭证 ${summary.api_key_masked ?? ""}` : "未设置个人模型时，是否可用取决于服务器配置"}</span>
+          <button type="button" className="secondary-action" onClick={() => testMutation.mutate()} disabled={!summary?.can_use_model || testing || dirty || saveMutation.isPending}>{testMutation.isPending ? "验证中" : "验证回答连接"}</button>
           <button type="button" className="primary-action" onClick={() => saveMutation.mutate({ provider: "openai_compatible", base_url: currentDraft.baseUrl.trim(), chat_model: currentDraft.chatModel.trim(), ...(currentDraft.apiKey.trim() ? { api_key: currentDraft.apiKey.trim() } : {}) })} disabled={!canSave || saveMutation.isPending}><FloppyDisk size={16} weight="bold" />{saveMutation.isPending ? "保存中" : "保存回答模型"}</button>
         </footer>
-        <ConnectionTestCard operation="chat" model={summary?.chat_model ?? null} result={testResult} disabled={testMutation.isPending} pending={testMutation.isPending} dirty={false} onTest={() => testMutation.mutate()} />
+        <ConnectionTestCard operation="chat" model={summary?.chat_model ?? null} result={dirty ? null : testResult} disabled={testing || dirty || saveMutation.isPending || !summary?.can_use_model} pending={testMutation.isPending} dirty={dirty} onTest={() => testMutation.mutate()} />
+        <p>图片验证会向当前模型发送一张合成测试图片，可能产生少量模型费用。连接失败不等于模型不支持图片。</p>
+        <ConnectionTestCard operation="vision" model={summary?.source === "user" ? summary.chat_model : summary?.vision_model ?? null} result={dirty ? null : visionResult} disabled={testing || dirty || saveMutation.isPending || (summary?.source === "user" ? !summary.can_use_model : !summary?.can_use_vision_model)} pending={visionMutation.isPending} dirty={dirty} onTest={() => visionMutation.mutate()} />
       </section> : null}
     </section>
   );

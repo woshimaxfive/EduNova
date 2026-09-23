@@ -280,6 +280,7 @@ class ModelSettingsSummary(BaseModel):
     vision_provider: str | None = None
     vision_base_url: str | None = None
     can_use_vision_model: bool = False
+    vision_status: Literal["not_configured", "unverified", "verified", "unavailable", "server_managed"] = "not_configured"
     supports_structured_output: bool = False
     supports_reasoning_control: bool = False
 

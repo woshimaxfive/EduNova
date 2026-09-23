@@ -103,6 +103,7 @@ export type ModelSettingsSummary = {
   vision_provider?: string | null;
   vision_base_url?: string | null;
   can_use_vision_model?: boolean;
+  vision_status?: "not_configured" | "unverified" | "verified" | "unavailable" | "server_managed";
   supports_structured_output?: boolean;
   supports_reasoning_control?: boolean;
 };

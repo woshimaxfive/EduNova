@@ -7,15 +7,8 @@ import { TutorImagePicker } from "./TutorImageAttachments";
 import { hasUsableVisionModel, type useTutorImageDraft } from "./useTutorImageDraft";
 
 describe("TutorImagePicker", () => {
-  it("没有个人视觉默认时接受服务器图片理解兜底", () => {
+  it("使用后端解析的当前图片能力，而不是自行选择服务器兜底", () => {
     expect(hasUsableVisionModel({
-      configs: [],
-      default_config_id: null,
-      default_chat_config_id: null,
-      default_embedding_config_id: null,
-      default_rerank_config_id: null,
-      default_vision_config_id: null,
-      system_summary: {
         source: "system",
         provider: "openai_compatible",
         base_url: null,
@@ -43,8 +36,8 @@ describe("TutorImagePicker", () => {
         vision_base_url: "wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image",
         vision_model: "imagev3",
         can_use_vision_model: true
-      }
     })).toBe(true);
+    expect(hasUsableVisionModel()).toBe(false);
   });
 
   it("在新标签打开视觉模型设置，避免卸载当前图片草稿", () => {

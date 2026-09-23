@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
+import json
 from typing import Iterator, Literal
 from urllib.parse import urlparse
 
@@ -116,14 +118,23 @@ class ModelSettingsService:
             source = chat_runtime.source if chat_runtime.source != "none" else embedding_runtime.source
             if source == "none":
                 source = rerank_runtime.source
-            return build_model_settings_summary(
+            summary = build_model_settings_summary(
                 runtime=chat_runtime,
                 embedding_runtime=embedding_runtime,
                 rerank_runtime=rerank_runtime,
                 source=source,
                 mask_secret=self._mask_api_key,
             )
-        return empty_model_settings_summary()
+        else:
+            summary = empty_model_settings_summary()
+        vision = self.resolve_vision_runtime_config(user)
+        return summary.model_copy(update={
+            "vision_model": vision.chat_model,
+            "vision_provider": vision.provider,
+            "vision_base_url": vision.base_url,
+            "can_use_vision_model": vision.can_use_model,
+            "vision_status": self._vision_status(user),
+        })
 
     def list_configs(self, user: User) -> ModelSettingsListResponse:
         configs = [self._config_summary(setting) for setting in self.repository.list_for_user(user.id)]
@@ -154,8 +165,8 @@ class ModelSettingsService:
         self._clear_changed_connection_tests(setting, payload)
         self._apply_settings_payload(setting, payload)
         setting.is_default = True
-        # Personal settings intentionally cover answers only. Other capabilities
-        # are server-managed so credentials and runtime choices stay consistent.
+        # Answers and generation share this connection. Image use requires an
+        # explicit probe; embedding and reranking remain server-managed.
         setting.is_generation_default = False
         setting.is_embedding_default = False
         setting.is_rerank_default = False
@@ -445,8 +456,7 @@ class ModelSettingsService:
         user_setting = self.repository.get_default_for_user(user.id)
         if user_setting is not None:
             user_runtime = self._runtime_from_user_setting(user_setting)
-            if user_runtime.can_use_model:
-                return user_runtime
+            return user_runtime
 
         system_runtime = self._runtime_from_system_settings()
         if system_runtime.can_use_model:
@@ -463,7 +473,7 @@ class ModelSettingsService:
 
     def resolve_generation_runtime_config(self, user: User) -> RuntimeModelConfig:
         user_runtime = self.resolve_runtime_config(user)
-        if user_runtime.source == "user" and user_runtime.can_use_model:
+        if user_runtime.source == "user":
             return user_runtime
         system_runtime = self._generation_runtime_from_system_settings()
         if system_runtime.can_use_model:
@@ -499,6 +509,13 @@ class ModelSettingsService:
         )
 
     def resolve_vision_runtime_config(self, user: User) -> RuntimeModelConfig:
+        setting = self.repository.get_default_for_user(user.id)
+        if setting is not None:
+            runtime = self._runtime_from_user_setting(setting)
+            # Never treat a provider-wide capability as proof for a specific
+            # model, and never silently bill the server when a personal model
+            # has not passed the image probe.
+            return replace(runtime, can_use_model=runtime.can_use_model and self._vision_status(user) == "verified")
         system_runtime = self._vision_runtime_from_system_settings()
         if system_runtime.can_use_model:
             return system_runtime
@@ -511,6 +528,27 @@ class ModelSettingsService:
             embedding_model=None,
             can_use_model=False,
         )
+
+    def _vision_status(self, user: User) -> str:
+        setting = self.repository.get_default_for_user(user.id)
+        if setting is None:
+            return "server_managed" if self._vision_runtime_from_system_settings().can_use_model else "not_configured"
+        if not self._runtime_from_user_setting(setting).can_use_model:
+            return "not_configured"
+        snapshot = self._parse_connection_tests(setting.connection_test_json).get("vision")
+        raw = (setting.connection_test_json or {}).get("vision", {})
+        if (
+            snapshot is None or snapshot.model != setting.chat_model
+            or raw.get("connection_fingerprint") != self._vision_connection_fingerprint(self._runtime_from_user_setting(setting))
+        ):
+            return "unverified"
+        return "verified" if snapshot.ok else "unavailable"
+
+    @staticmethod
+    def _vision_connection_fingerprint(runtime: RuntimeModelConfig) -> str:
+        # Stored internally only, never exposed as part of the API snapshot.
+        identity = [runtime.provider, runtime.base_url, runtime.chat_model, runtime.api_key, runtime.app_id, runtime.api_secret]
+        return hashlib.sha256(json.dumps(identity).encode("utf-8")).hexdigest()
 
     def vision_completion(self, user: User, *, prompt: str, image_data_urls: list[str]) -> str:
         runtime = self.resolve_vision_runtime_config(user)
@@ -832,6 +870,10 @@ class ModelSettingsService:
         user: User,
         operation: ModelConnectionOperation = "chat",
     ) -> ModelConnectionTestResponse:
+        if operation == "vision":
+            setting = self.repository.get_default_for_user(user.id)
+            if setting is not None:
+                return self.test_config_connection(user, setting.id, operation)
         runtime = self._runtime_for_operation(user, operation)
         return self._test_runtime(runtime, user_id=user.id, operation=operation)
 
@@ -842,6 +884,7 @@ class ModelSettingsService:
         operation: ModelConnectionOperation = "chat",
     ) -> ModelConnectionTestResponse:
         setting = self._get_user_setting_or_raise(user, config_id)
+        vision_fingerprint = self._vision_connection_fingerprint(self._runtime_from_user_setting(setting))
         runtime = self._runtime_for_setting(setting, operation)
         result = self._test_runtime(runtime, user_id=user.id, operation=operation)
         tests = dict(setting.connection_test_json or {})
@@ -857,6 +900,8 @@ class ModelSettingsService:
             latency_ms=result.latency_ms,
             reasoning_tokens=result.reasoning_tokens,
         ).model_dump(mode="json")
+        if operation == "vision":
+            tests[operation]["connection_fingerprint"] = vision_fingerprint
         setting.connection_test_json = tests
         if operation == "chat":
             setting.last_test_ok = result.ok
@@ -893,17 +938,9 @@ class ModelSettingsService:
             runtime = self._vision_runtime_from_user_setting(setting)
             capabilities = provider_capabilities(preset_id=setting.preset_id, base_url=setting.base_url)
             if not capabilities.supports_image_input:
-                return RuntimeModelConfig(
-                    source=runtime.source,
-                    provider=runtime.provider,
-                    base_url=runtime.base_url,
-                    api_key=runtime.api_key,
-                    chat_model=runtime.chat_model,
-                    embedding_model=runtime.embedding_model,
-                    can_use_model=False,
-                    config_id=runtime.config_id,
-                    preset_id=runtime.preset_id,
-                )
+                # This route is an explicit user-requested capability probe,
+                # not permission to send arbitrary attachments to an unknown model.
+                return replace(runtime, preset_id="custom-vision")
             return runtime
         return self._runtime_from_user_setting(setting)
 
@@ -1065,7 +1102,7 @@ class ModelSettingsService:
             or (payload.chat_model is not None and payload.chat_model != setting.chat_model)
         )
         vision_changed = (
-            preset_changed
+            chat_changed
             or (payload.base_url is not None and payload.base_url != setting.base_url)
             or (payload.chat_model is not None and payload.chat_model != setting.chat_model)
             or (bool(payload.vision_app_id) and payload.vision_app_id != current_vision_app_id)

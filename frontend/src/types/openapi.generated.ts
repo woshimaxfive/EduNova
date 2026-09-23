@@ -4374,6 +4374,12 @@ export interface components {
             vision_model?: string | null;
             /** Vision Provider */
             vision_provider?: string | null;
+            /**
+             * Vision Status
+             * @default not_configured
+             * @enum {string}
+             */
+            vision_status: "not_configured" | "unverified" | "verified" | "unavailable" | "server_managed";
         };
         /** OkResponse */
         OkResponse: {

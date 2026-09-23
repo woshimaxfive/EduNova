@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from backend.app.models import Course, KnowledgeChunk, User
 from backend.app.schemas.rag import RagSearchResponse, RagSearchResultItem
 from backend.app.services.model_settings import ModelNotConfiguredError
+from backend.app.services.embeddings import EmbeddingService
 
 
 class RagCourseNotFoundError(Exception):
@@ -278,7 +279,13 @@ class RagService:
             expected_source, expected_model, _ = self.embedding_service.expected_metadata(user)
             if expected_source == "local" or expected_model == "keyword-only":
                 return
-            target_chunks = [chunk for chunk in chunks if self.embedding_service.chunk_needs_embedding(user, chunk)]
+            # Lazy retrieval may fill missing vectors, but must not migrate an
+            # existing profile as a side effect of asking a question.
+            target_chunks = [
+                chunk for chunk in chunks
+                if not EmbeddingService._valid_vector(chunk.embedding)
+                and self.embedding_service.chunk_needs_embedding(user, chunk)
+            ]
             if not target_chunks:
                 return
 

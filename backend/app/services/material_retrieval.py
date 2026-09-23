@@ -372,15 +372,10 @@ class MaterialRetrievalService:
             profile = self.embedding_service.expected_profile(user)
             if profile is None:
                 return "local_fallback", None, ("", "", 0, "")
-            expected_source, expected_model, expected_dimension = profile.provider, profile.model, profile.dimension
             targets = [
                 chunk
                 for chunk in chunks
-                if not self._valid_vector(chunk.embedding)
-                or chunk.embedding_provider != expected_source
-                or chunk.embedding_model != expected_model
-                or chunk.embedding_dimension != expected_dimension
-                or chunk.embedding_profile_hash != profile.profile_hash
+                if not EmbeddingService._valid_vector(chunk.embedding)
             ]
             if targets:
                 batch = self.embedding_service.embed_documents(user, [chunk.content for chunk in targets])

@@ -1,0 +1,5 @@
+# Optional CPU-only retrieval inference. Does not install Torch or a reranker.
+fastembed==0.8.1
+onnxruntime==1.30.0
+tokenizers==0.23.2
+huggingface-hub==1.32.0

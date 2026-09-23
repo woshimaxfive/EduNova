@@ -15,6 +15,8 @@ EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说
 | Redis 8.0 | 队列与进度存储 | RSALv2、SSPLv1 或 AGPLv3（三选一） | https://redis.io/legal/licenses/ |
 | RQ | 后台任务 | BSD-2-Clause | https://python-rq.org |
 | Docling | 文档结构提取 | MIT | https://github.com/docling-project/docling |
+| FastEmbed、ONNX Runtime（可选） | 本地 CPU 向量验证 | Apache-2.0、MIT | https://github.com/qdrant/fastembed / https://github.com/microsoft/onnxruntime |
+| BAAI/bge-small-zh-v1.5（可选下载） | 中文 512 维向量模型 | MIT | https://huggingface.co/BAAI/bge-small-zh-v1.5 |
 | Pyodide | 隔离式 Python 代码验证运行时 | MPL-2.0 | https://pyodide.org |
 | Nginx | 统一 Web 入口与反向代理 | BSD-2-Clause | https://nginx.org |
 

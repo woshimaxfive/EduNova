@@ -25,8 +25,10 @@ from backend.app.models.learning import (
 )
 from backend.app.models.material import CourseMaterialLink, Material, MaterialChunk, MaterialComparisonRun
 from backend.app.models.user import User
+from backend.app.models.embedding_archive import ChunkEmbeddingArchive
 
 __all__ = [
+    "ChunkEmbeddingArchive",
     "AgentRunLog",
     "AiJob",
     "AssessmentReport",

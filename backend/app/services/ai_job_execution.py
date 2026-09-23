@@ -436,6 +436,7 @@ class AiJobExecutionMixin:
 
     def _run_embedding_reindex(self, user: User, job: AiJob, context: AgentJobContext) -> dict[str, Any]:
         from backend.app.providers.openai_compatible import OpenAICompatibleChatProvider
+        from backend.app.services.embedding_archive import EmbeddingArchiveService
         from backend.app.services.embeddings import EmbeddingService
         from backend.app.services.model_settings import ModelSettingsService, SqlAlchemyModelSettingsRepository
 
@@ -468,6 +469,7 @@ class AiJobExecutionMixin:
         if total == 0:
             return {"embedded_chunk_count": 0, "embedding_dimension": profile.dimension, "warnings": []}
         embedding_service = EmbeddingService(model_service)
+        archive_service = EmbeddingArchiveService(self.repository.db)
         completed = 0
         # Bailian's text-embedding-v4 endpoint currently accepts at most eight
         # inputs per request in this deployment. Keeping the reindex batch
@@ -475,25 +477,26 @@ class AiJobExecutionMixin:
         for start in range(0, total, 8):
             context.check_cancelled()
             batch_targets = targets[start : start + 8]
-            batch = embedding_service.embed_documents(user, [chunk.content for chunk in batch_targets])
-            if len(batch.vectors) != len(batch_targets):
-                raise AiJobValidationError("向量服务未返回完整结果，可稍后重试。")
-            now = datetime.now(UTC)
-            for chunk, vector in zip(batch_targets, batch.vectors, strict=True):
-                chunk.embedding = vector
-                chunk.embedding_provider = batch.source
-                chunk.embedding_model = batch.model
-                chunk.embedding_dimension = batch.dimension
-                chunk.embedding_profile_hash = batch.profile_hash
-                chunk.embedding_updated_at = now
-                chunk.metadata_json = {
-                    **(chunk.metadata_json or {}),
-                    "embedding_source": batch.source,
-                    "embedding_model": batch.model,
-                    "embedding_dimension": batch.dimension,
-                    "embedding_profile_hash": batch.profile_hash,
-                }
-                self.repository.db.add(chunk)
+            # Snapshot text before calling the provider. No row lock spans AI calls.
+            snapshots = [(chunk, chunk.content, archive_service.content_hash(chunk.content)) for chunk in batch_targets]
+            cached = [archive_service.cached(user.id, chunk, profile, content_hash=digest)
+                      for chunk, _, digest in snapshots]
+            missing = [text for (_, text, _), vector in zip(snapshots, cached, strict=True) if vector is None]
+            if missing:
+                batch = embedding_service.embed_documents(user, missing)
+                if (len(batch.vectors) != len(missing) or batch.status != "completed"
+                        or (batch.source, batch.model, batch.dimension, batch.profile_hash)
+                        != (profile.provider, profile.model, profile.dimension, profile.profile_hash)):
+                    raise AiJobValidationError("向量服务结果不完整或模型配置已变化，未替换本批索引。")
+                generated = iter(batch.vectors)
+            else:
+                generated = iter(())
+            context.check_cancelled()
+            for (chunk, _, digest), vector in zip(snapshots, cached, strict=True):
+                archive_service.replace(
+                    user.id, chunk, content_hash=digest, profile=profile,
+                    vector=next(generated) if vector is None else vector,
+                )
             context.check_cancelled()
             self.repository.db.commit()
             completed += len(batch_targets)

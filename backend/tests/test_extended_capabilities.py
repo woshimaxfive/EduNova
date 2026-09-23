@@ -124,6 +124,9 @@ def test_embedding_actual_runner_contract_preserves_optional_wire_fields(monkeyp
     adapter = SimpleNamespace(expected_profile=lambda user: profile,
         embed_documents=lambda user, texts: EmbeddingBatch([[1.0, 0.0, 0.0] for _ in texts], "synthetic", "vector", 3, "completed", "profile"))
     monkeypatch.setattr("backend.app.services.embeddings.EmbeddingService", lambda model: adapter)
+    archive = SimpleNamespace(content_hash=lambda text: "synthetic-content",
+                              cached=lambda *args, **kwargs: None, replace=Mock())
+    monkeypatch.setattr("backend.app.services.embedding_archive.EmbeddingArchiveService", lambda db: archive)
     monkeypatch.setattr("backend.app.services.model_settings.ModelSettingsService", lambda **kwargs: None)
     monkeypatch.setattr("backend.app.services.ai_job_execution.AgentJobContext", lambda *args, **kwargs: RecordingContext(1))
     service = jobs.make_service(repo)

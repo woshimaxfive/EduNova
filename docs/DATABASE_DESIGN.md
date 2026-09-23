@@ -9,6 +9,7 @@ EduNova 使用 PostgreSQL、SQLAlchemy、Alembic 和 pgvector。本文档说明�
 | 账号与课程 | `users`、`courses`、`course_enrollments` |
 | 资料库 | `materials`、`material_chunks`、`course_material_links`、`material_comparison_runs` |
 | 课程知识 | `course_materials`、`knowledge_points`、`knowledge_chunks` |
+| 向量归档 | `chunk_embedding_archives` |
 | 学习画像 | `student_profiles`、`profile_events` |
 | 路径与弱点 | `learning_paths`、`learning_tasks`、`weakness_review_queue` |
 | 学习资源 | `generated_resources`、`resource_interactions`、`resource_quality_scores` |
@@ -34,6 +35,8 @@ EduNova 使用 PostgreSQL、SQLAlchemy、Alembic 和 pgvector。本文档说明�
 `materials` 保存原始资料元数据、解析状态和版本化目录；章节切片保存在 `material_chunks`。课程建立后，兼容课程来源保存在 `course_materials`，检索切片保存在 `knowledge_chunks`。
 
 引用只保存必要的资料、章节、页码、切片和检索状态。完整原文保留在受控文件或切片记录中，不复制到日志和 Trace。
+
+`20260923_0037` 增加向量归档表。每条归档只关联课程切片或资料切片之一，以切片 ID、内容摘要、模型 profile 唯一定位；模型标识、维度、向量与原生成时间一并保存。显式重建在同一批事务中归档旧向量、更新当前向量，锁定切片及所有者记录；模型调用不持有行锁。恢复复用同内容/profile 的历史向量。归档随切片级联删除，非空归档表禁止降级删除。普通检索不覆盖已有有效向量，仍按当前 profile 过滤候选。
 
 ## 4. 学习状态
 

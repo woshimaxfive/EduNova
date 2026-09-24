@@ -308,7 +308,10 @@ class MaterialRetrievalService:
                 continue
             by_id[chunk.id] = chunk
             rrf[chunk.id] = rrf.get(chunk.id, 0.0) + 1.0 / (60 + rank)
-        merged = sorted(rrf, key=lambda chunk_id: (-rrf[chunk_id], chunk_id))[:20]
+        # Match course retrieval: insertion order is only the final tie-breaker.
+        merged = sorted(rrf, key=lambda chunk_id: (
+            -rrf[chunk_id], -keyword_scores.get(chunk_id, 0.0), chunk_id,
+        ))[:20]
         rerank_scores: dict[int, float] = {}
         rerank_status = "not_configured"
         if self.rerank_service is not None and merged:

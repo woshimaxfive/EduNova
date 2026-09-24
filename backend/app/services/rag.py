@@ -194,7 +194,11 @@ class RagService:
         for rank, (chunk, _) in enumerate(vector_rows, start=1):
             by_id[chunk.id] = chunk
             rrf_scores[chunk.id] = rrf_scores.get(chunk.id, 0.0) + 1.0 / (60 + rank)
-        merged = sorted(rrf_scores, key=lambda chunk_id: (-rrf_scores[chunk_id], chunk_id))[:20]
+        # Reciprocal ranks can tie when the two retrievers swap rank 1 and 2.
+        # Prefer existing lexical evidence before the arbitrary insertion ID.
+        merged = sorted(rrf_scores, key=lambda chunk_id: (
+            -rrf_scores[chunk_id], -keyword_scores.get(chunk_id, 0.0), chunk_id,
+        ))[:20]
         rerank_scores: dict[int, float] = {}
         rerank_status = "not_configured"
         if self.rerank_service is not None and merged:

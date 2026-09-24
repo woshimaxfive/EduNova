@@ -1279,6 +1279,9 @@ def test_report_graph_aggregates_recent_trend_without_allowing_model_to_change_n
     assert report["report"]["quality"]["review_mode"] == "embedded_model_and_rules"
     assert len(model.calls) == 1
     assert "不得出现阿拉伯数字" in model.calls[0][1]["content"]
+    assert "course_knowledge_point_count" in model.calls[0][1]["content"]
+    assert '"graded_knowledge_point_count": 0' in model.calls[0][1]["content"]
+    assert "未评估不等于已掌握" in model.calls[0][1]["content"]
     assert [log.agent_name for log in logs] == [
         "collect_practice",
         "collect_mastery",
@@ -1311,3 +1314,36 @@ def test_report_graph_rejects_numeric_inconsistency_without_persisting_template_
 
     assert len(model.calls) == 1
     assert repo.reports == []
+
+
+@pytest.mark.parametrize("summary", ["当前展现出极高掌握水平。", "你具有高能力储备。", "你已全面掌握课程内容。"])
+def test_report_rejects_unqualified_mastery_without_replacing_previous_report(summary: str) -> None:
+    from backend.app.services.reports import ReportGenerationError, ReportService
+
+    repo = make_repo()
+    practice = make_practice_service(repo)
+    session = practice.create_session(make_user(), 101, [401], 1, "easy")
+    practice.submit_answers(make_user(), int(session.id), [{"question_id": "q1", "answer_text": "错误选项"}])
+    safe_model = FakeModelService(responses=[json.dumps({
+        "summary": "当前记录仅反映已练内容，其他知识点仍需评估。",
+        "next_step_suggestions": ["补充不同知识点的练习"],
+    }, ensure_ascii=False)])
+    ReportService(repo, model_service=safe_model).generate_report(make_user(), 101)
+    previous = list(repo.reports)
+    model = FakeModelService(responses=[json.dumps({
+        "summary": summary,
+        "next_step_suggestions": ["继续学习"],
+        "quality_review": {"review_status": "passed", "confidence": 0.9, "risk_flags": [], "safety_summary": "通过"},
+    }, ensure_ascii=False)])
+    with pytest.raises(ReportGenerationError, match="unsupported_mastery_generalization"):
+        ReportService(repo, model_service=model).generate_report(make_user(), 101)
+    assert repo.reports == previous
+
+
+def test_report_scope_warning_is_not_mistaken_for_mastery_claim() -> None:
+    from backend.app.agents.reporting import ReportGraphRunner
+
+    report = {"summary": "本次作答不代表全面掌握课程内容。", "next_step_suggestions": ["补充未评估内容"]}
+    assert "unsupported_mastery_generalization" not in ReportGraphRunner._report_risks({
+        "report_json": report, "deterministic_report": {},
+    })

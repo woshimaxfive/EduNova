@@ -20,8 +20,8 @@ from backend.app.services.learner_context import context_service_from_repository
 from backend.app.services.content_locale import china_first_content_policy
 
 
-REPORT_PROMPT_VERSION = "report-v3.2"
-REPORT_REVIEW_PROMPT_VERSION = "report-review-v3.2-embedded"
+REPORT_PROMPT_VERSION = "report-v3.3"
+REPORT_REVIEW_PROMPT_VERSION = "report-review-v3.3-embedded"
 OPTIONAL_GENERATION_TIMEOUT_SECONDS = 30.0
 
 
@@ -330,7 +330,20 @@ class ReportGraphRunner:
         if self.service.model_service is None:
             return None
         deterministic = state["deterministic_report"]
+        course_point_ids = {str(point.id) for point in state.get("points", [])}
+        graded_point_ids = {
+            str((answer.question_json or {}).get("knowledge_point_id"))
+            for answers in state.get("answers_by_session", {}).values()
+            for answer in answers
+            if answer.answer_text is not None and (answer.feedback_json or {}).get("score") is not None
+        } & course_point_ids
         evidence = {
+            "scope": {
+                "course_knowledge_point_count": len(course_point_ids),
+                "graded_knowledge_point_count": len(graded_point_ids),
+                "unassessed_knowledge_point_count": len(course_point_ids - graded_point_ids),
+                "conclusion_boundary": "仅解释本报告所含练习及知识点，不推断整门课程或学习者整体能力。",
+            },
             "score": state.get("score"),
             "mastery_update": deterministic.get("mastery_update"),
             "trend": deterministic.get("trend"),
@@ -352,6 +365,9 @@ class ReportGraphRunner:
                             f"可信课程画像提示={personalization}。不可变证据={json.dumps(evidence, ensure_ascii=False)}。"
                             "summary 和 next_step_suggestions 不得出现阿拉伯数字、中文数字、百分比、次数或时长；"
                             "所有统计数字由确定性指标区单独展示，叙事只解释趋势、薄弱点和下一步策略。"
+                            "总结必须限定为已作答且有评分证据的知识点；未评估不等于已掌握。"
+                            "不得由局部高分推断整门课程、整体能力或高能力储备，不使用极高掌握水平等笼统评价。"
+                            "缺少评分证据时只描述练习记录并建议补充评估；趋势为insufficient时不得声称提升或退步。"
                             "生成后在同一次响应中自审数字一致性、证据边界、隐私和是否编造学习记录；"
                             "发现风险时 review_status 必须为 revise。"
                             "返回 {\"summary\":\"\",\"next_step_suggestions\":[],"
@@ -420,6 +436,12 @@ class ReportGraphRunner:
             *safe_string_list(report.get("next_step_suggestions"), limit=4, item_limit=240),
         ])
         narrative_numbers = {int(value) for value in re.findall(r"(?<![A-Za-z])\d{1,4}(?![A-Za-z])", narrative_text)}
+        # A small deterministic backstop for unqualified claims observed in reports.
+        # The prompt carries the general scope rule; this is not a semantic classifier.
+        for sentence in re.split(r"[。！？；.!?;\n]", narrative_text):
+            if re.search(r"极高掌握水平|高能力储备|全面掌握|完全掌握|精通整门|整体能力(?:很强|优秀|突出)", sentence):
+                if not re.search(r"不能|不可|不足以|不代表|尚未|未能|无法|不应", sentence):
+                    risks.append("unsupported_mastery_generalization")
         if narrative_numbers - allowed_numbers:
             risks.append("numeric_inconsistency")
         valid_answer_ids = {

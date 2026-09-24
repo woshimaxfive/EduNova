@@ -26,7 +26,7 @@ EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说
 
 主模型通过可配置Adapter接入外部服务，图片理解跟随主模型；账号和凭证不随源码分发。默认向量、排序及语音在本地运行，SearXNG搜索仍访问外部网站。历史检索Provider适配保留兼容，默认配置不使用其凭证。
 
-本地语音采用Sherpa-ONNX 1.13.8（仓库Apache-2.0；当前预编译包包含espeak-ng/piper等GPL组件）、SenseVoice（FunASR MODEL_LICENSE 1.1）和Kokoro（模型Apache-2.0）。不得将整套运行时标注为纯MIT/Apache。固定来源、模型许可、分发义务和试验边界见[本地语音说明](docs/LOCAL_SPEECH.md)；本仓库不分发预构建语音镜像。
+本地语音采用Sherpa-ONNX 1.13.8（仓库Apache-2.0；当前预编译包包含espeak-ng/piper等GPL组件）、SenseVoice（FunASR MODEL_LICENSE 1.1）；朗读改用浏览器本地中文声音，不再下载或加载Kokoro。不得将整套运行时标注为纯MIT/Apache。固定来源、模型许可、分发义务和试验边界见[本地语音说明](docs/LOCAL_SPEECH.md)；本仓库不分发预构建语音镜像。
 
 ## 合规边界
 

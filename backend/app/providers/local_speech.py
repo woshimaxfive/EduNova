@@ -43,9 +43,3 @@ class LocalSpeechProvider:
             return text.strip()
         except (KeyError, TypeError, ValueError) as exc:
             raise LocalSpeechError("本地语音未返回有效识别结果。", "SPEECH_EMPTY_TRANSCRIPT", 422) from exc
-
-    def synthesize_wav(self, text: str) -> bytes:
-        audio = self._request("/synthesis", json={"text": text}).content
-        if len(audio) < 44 or audio[:4] != b"RIFF" or audio[8:12] != b"WAVE":
-            raise LocalSpeechError("本地语音未返回有效音频。", "SPEECH_INVALID_OUTPUT", 502)
-        return audio

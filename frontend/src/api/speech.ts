@@ -34,11 +34,3 @@ export async function transcribeSpeech(audio: Blob): Promise<SpeechTranscription
     throw error;
   }
 }
-
-export async function synthesizeSpeech(text: string): Promise<Blob> {
-  const response = await apiClient.post<Blob>("/speech/synthesis", { text }, {
-    responseType: "blob",
-    timeout: MODEL_OPERATION_TIMEOUT_MS
-  });
-  return response.data;
-}

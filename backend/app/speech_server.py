@@ -4,15 +4,13 @@ import os
 from pathlib import Path
 from threading import BoundedSemaphore
 
-from fastapi import FastAPI, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
-from backend.app.providers.local_speech_worker import engine, synthesize, transcribe
+from backend.app.providers.local_speech_worker import engine, transcribe
 
 ROOT = Path(os.environ.get("LOCAL_SPEECH_MODEL_DIR", "/models"))
 THREADS = max(1, min(int(os.environ.get("LOCAL_SPEECH_THREADS", "2")), 4))
-SPEAKER = 3
 SLOT = BoundedSemaphore(1)
 MAX_PCM_BYTES = 60 * 16000 * 2
 
@@ -21,15 +19,10 @@ MAX_PCM_BYTES = 60 * 16000 * 2
 async def lifespan(_app):
     # Fail startup when files are missing; never auto-download or contact a provider.
     await run_in_threadpool(engine, "asr", ROOT, THREADS)
-    await run_in_threadpool(engine, "tts", ROOT, THREADS)
     yield
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
-
-
-class TextInput(BaseModel):
-    text: str = Field(min_length=1, max_length=180)
 
 
 def guarded(operation, *args):
@@ -59,12 +52,3 @@ async def transcription(request: Request):
     if not text:
         raise HTTPException(422, "没有识别到有效语音，请重试。")
     return {"transcript": text}
-
-
-@app.post("/synthesis")
-def synthesis(payload: TextInput):
-    text = payload.text.strip()
-    if not text:
-        raise HTTPException(400, "朗读文本为空。")
-    audio = guarded(synthesize, text, ROOT, THREADS, SPEAKER)
-    return Response(audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})

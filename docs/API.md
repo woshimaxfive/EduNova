@@ -13,7 +13,7 @@ EduNova 后端使用 FastAPI，默认 API 前缀为 `/api/v1`。机器可读合�
 - 图片验证记录绑定连接信息；更换模型、地址、凭证后需要重测。瞬时错误可重试。客户端使用此摘要判断当前用户能否看图，不从服务器配置列表自行推断兜底。
 - 普通文档上传不受图片能力开关影响。默认向量、检索排序和语音在本地处理；搜索使用本地SearXNG访问互联网，无需外部搜索Key。
 
-语音接口保留登录校验：`POST /api/v1/speech/transcriptions` 接收最长60秒的16kHz单声道16位PCM，返回 `provider=sherpa_onnx`；`POST /api/v1/speech/synthesis` 接收1至180字符，响应改为 `audio/wav`（原为MP3）。长内容由前端分段。繁忙429、无有效识别422、不可用503、超时504均不触发云端回退，详见[本地语音](LOCAL_SPEECH.md)。
+语音接口保留登录校验：`POST /api/v1/speech/transcriptions` 接收最长60秒的16kHz单声道16位PCM，返回 `provider=sherpa_onnx`。朗读改为浏览器本地中文声音；旧 `POST /api/v1/speech/synthesis` 标记弃用并返回410/`SPEECH_SYNTHESIS_RETIRED`，不再合成音频。识别繁忙429、空识别422、不可用503、超时504均不触发云端回退，详见[本地语音](LOCAL_SPEECH.md)。
 
 ### 计划草稿与批准
 

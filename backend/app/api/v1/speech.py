@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from fastapi import Depends, File, Response, UploadFile
+from fastapi import Depends, File, UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api.contracts import TypedAPIRouter as APIRouter
+from backend.app.api.contracts import ApiErrorEnvelope
 from backend.app.api.errors import ApiError, api_response
 from backend.app.api.v1.deps import get_current_user
 from backend.app.core.config import get_settings
 from backend.app.models import User
-from backend.app.schemas.speech import SpeechSynthesisRequest
 from backend.app.services.speech import SpeechService, SpeechServiceError
 
 
@@ -35,23 +35,6 @@ async def transcribe_speech(
     return api_response(result.model_dump())
 
 
-@router.post(
-    "/synthesis",
-    response_class=Response,
-    response_model=None,
-    responses={200: {"content": {"audio/wav": {}}}},
-)
-def synthesize_speech(
-    payload: SpeechSynthesisRequest,
-    _current_user: User = Depends(get_current_user),
-    service: SpeechService = Depends(get_speech_service),
-) -> Response:
-    try:
-        audio = service.synthesize(payload.text)
-    except SpeechServiceError as exc:
-        raise ApiError(exc.status_code, exc.code, str(exc)) from exc
-    return Response(
-        content=audio,
-        media_type="audio/wav",
-        headers={"Cache-Control": "private, no-store", "X-Speech-Provider": "sherpa_onnx"},
-    )
+@router.post("/synthesis", deprecated=True, status_code=410, response_model=ApiErrorEnvelope)
+def retired_synthesis(_current_user: User = Depends(get_current_user)) -> None:
+    raise ApiError(410, "SPEECH_SYNTHESIS_RETIRED", "朗读已改为浏览器本地声音，请更新前端页面。")

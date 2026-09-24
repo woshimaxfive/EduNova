@@ -17,6 +17,12 @@ def test_all_json_operations_have_bounded_response_schemas() -> None:
             if path.endswith(STREAM_OR_DOWNLOAD_SUFFIXES):
                 continue
             responses = operation.get("responses", {})
+            if operation.get("deprecated") and "410" in responses and not any(
+                str(code).isdigit() and 200 <= int(code) < 300 for code in responses
+            ):
+                schema = responses["410"].get("content", {}).get("application/json", {}).get("schema", {})
+                assert schema.get("$ref", "").endswith("/ApiErrorEnvelope")
+                continue
             success_code, success = next(
                 ((code, response) for code, response in responses.items() if str(code).isdigit() and 200 <= int(code) < 300),
                 (None, None),

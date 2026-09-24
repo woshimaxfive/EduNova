@@ -1666,8 +1666,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Synthesize Speech */
-        post: operations["synthesize_speech_api_v1_speech_synthesis_post"];
+        /**
+         * Retired Synthesis
+         * @deprecated
+         */
+        post: operations["retired_synthesis_api_v1_speech_synthesis_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5170,11 +5173,6 @@ export interface components {
         SnapshotOperationRequest: {
             /** Expected Digest */
             expected_digest: string;
-        };
-        /** SpeechSynthesisRequest */
-        SpeechSynthesisRequest: {
-            /** Text */
-            text: string;
         };
         /** SpeechTranscriptionResult */
         SpeechTranscriptionResult: {
@@ -16982,7 +16980,7 @@ export interface operations {
             };
         };
     };
-    synthesize_speech_api_v1_speech_synthesis_post: {
+    retired_synthesis_api_v1_speech_synthesis_post: {
         parameters: {
             query?: never;
             header?: {
@@ -16991,21 +16989,8 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SpeechSynthesisRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "audio/wav": unknown;
-                };
-            };
             /** @description Bad Request */
             400: {
                 headers: {
@@ -17044,6 +17029,15 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Successful Response */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SpeechRequestError, synthesizeSpeech, transcribeSpeech } from "../../api/speech";
+import { SpeechRequestError, transcribeSpeech } from "../../api/speech";
 import { useBrowserSpeech } from "./useBrowserSpeech";
 
 vi.mock("../../api/speech", () => ({
@@ -10,13 +10,16 @@ vi.mock("../../api/speech", () => ({
       super(message);
     }
   },
-  transcribeSpeech: vi.fn(),
-  synthesizeSpeech: vi.fn()
+  transcribeSpeech: vi.fn()
 }));
 
 describe("useBrowserSpeech server enhancement", () => {
   const trackStop = vi.fn();
-  const audioPlay = vi.fn();
+  const localVoice = { name: "Local Chinese", lang: "zh-CN", localService: true } as SpeechSynthesisVoice;
+  let voices: SpeechSynthesisVoice[];
+  let synthesis: SpeechSynthesis;
+  let utterances: SpeechSynthesisUtterance[];
+  let autoEnd: boolean;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -49,23 +52,27 @@ describe("useBrowserSpeech server enhancement", () => {
       }
     }
     Object.defineProperty(globalThis, "MediaRecorder", { configurable: true, value: FakeMediaRecorder });
-    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:speech") });
-    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
-    class FakeAudio {
-      onended: (() => void) | null = null;
+    voices = [localVoice];
+    utterances = [];
+    autoEnd = true;
+    synthesis = Object.assign(new EventTarget(), {
+      getVoices: () => voices, cancel: vi.fn(), pause: vi.fn(), resume: vi.fn(),
+      speak: vi.fn((u: SpeechSynthesisUtterance) => {
+        utterances.push(u);
+        if (autoEnd) queueMicrotask(() => u.onend?.({} as SpeechSynthesisEvent));
+      })
+    }) as unknown as SpeechSynthesis;
+    vi.stubGlobal("speechSynthesis", synthesis);
+    vi.stubGlobal("SpeechSynthesisUtterance", class {
+      onend: (() => void) | null = null;
       onerror: (() => void) | null = null;
-      pause = vi.fn();
-      play = () => {
-        audioPlay();
-        queueMicrotask(() => this.onended?.());
-        return Promise.resolve();
-      };
-    }
-    Object.defineProperty(globalThis, "Audio", { configurable: true, value: FakeAudio });
+      constructor(public text: string) {}
+    });
   });
 
   afterEach(() => {
     Reflect.deleteProperty(navigator, "mediaDevices");
+    vi.unstubAllGlobals();
   });
 
   it("records with MediaRecorder, converts to PCM, and writes the transcript", async () => {
@@ -97,15 +104,12 @@ describe("useBrowserSpeech server enhancement", () => {
     ));
   });
 
-  it("plays server-generated audio for read aloud", async () => {
-    vi.mocked(synthesizeSpeech).mockResolvedValue(new Blob(["wav"], { type: "audio/wav" }));
+  it("reads with an explicitly local Chinese voice", async () => {
     const { result } = renderHook(() => useBrowserSpeech({ onTranscript: vi.fn(), onNotice: vi.fn() }));
-
-    await act(async () => result.current.speak("## 你好 [来源1]", "message-1"));
-
-    expect(synthesizeSpeech).toHaveBeenCalledWith("你好");
-    expect(audioPlay).toHaveBeenCalledTimes(1);
-    expect(result.current.activeSpeechId).toBe(null);
+    await act(async () => result.current.speak("## 你好 [来源1]", "one"));
+    expect(utterances[0]?.text).toBe("你好");
+    expect(utterances[0]?.voice).toBe(localVoice);
+    expect(result.current.activeSpeechId).toBeNull();
   });
 
   it("does not call browser cloud recognition when the microphone fails", async () => {
@@ -120,29 +124,67 @@ describe("useBrowserSpeech server enhancement", () => {
     Reflect.deleteProperty(window, "webkitSpeechRecognition");
   });
 
-  it("does not use browser online voices after local synthesis fails and allows retry", async () => {
-    const cloudSpeak = vi.fn();
-    Object.defineProperty(window, "speechSynthesis", { configurable: true, value: { speak: cloudSpeak } });
-    vi.mocked(synthesizeSpeech).mockRejectedValueOnce(new Error("unavailable"))
-      .mockResolvedValueOnce(new Blob(["wav"], { type: "audio/wav" }));
-    const onNotice = vi.fn();
-    const { result } = renderHook(() => useBrowserSpeech({ onTranscript: vi.fn(), onNotice }));
-    await act(async () => result.current.speak("测试", "test"));
-    expect(cloudSpeak).not.toHaveBeenCalled();
-    expect(onNotice).toHaveBeenCalledWith("本地朗读暂不可用，请稍后重试。", "warning");
-    await act(async () => result.current.speak("重试", "test"));
-    expect(audioPlay).toHaveBeenCalledTimes(1);
-    Reflect.deleteProperty(window, "speechSynthesis");
+  it("rejects online-only voices without sending text", async () => {
+    voices = [{ ...localVoice, localService: false }];
+    const notice = vi.fn();
+    const { result } = renderHook(() => useBrowserSpeech({ onTranscript: vi.fn(), onNotice: notice }));
+    await act(async () => result.current.speak("测试", "one"));
+    expect(synthesis.speak).not.toHaveBeenCalled();
+    expect(notice).toHaveBeenCalledWith(expect.stringContaining("未检测到本地中文声音"), "warning");
   });
 
-  it("starts long read-aloud in short chunks instead of waiting for the full answer", async () => {
-    vi.mocked(synthesizeSpeech).mockResolvedValue(new Blob(["wav"], { type: "audio/wav" }));
+  it("waits for asynchronous voiceschanged", async () => {
+    voices = [];
     const { result } = renderHook(() => useBrowserSpeech({ onTranscript: vi.fn(), onNotice: vi.fn() }));
+    await act(async () => {
+      const pending = result.current.speak("测试", "one");
+      voices = [localVoice];
+      synthesis.dispatchEvent(new Event("voiceschanged"));
+      await pending;
+    });
+    expect(utterances[0]?.voice).toBe(localVoice);
+  });
 
-    await act(async () => result.current.speak("这是需要朗读的学习回答。".repeat(30), "message-long"));
+  it("pauses, resumes and stops without continuing queued segments", async () => {
+    autoEnd = false;
+    const { result } = renderHook(() => useBrowserSpeech({ onTranscript: vi.fn(), onNotice: vi.fn() }));
+    let pending: Promise<void>;
+    act(() => { pending = result.current.speak("学习回答。".repeat(100), "long"); });
+    act(() => result.current.pauseOrResumeSpeaking());
+    expect(synthesis.pause).toHaveBeenCalledOnce();
+    expect(result.current.isSpeechPaused).toBe(true);
+    act(() => result.current.pauseOrResumeSpeaking());
+    expect(synthesis.resume).toHaveBeenCalledOnce();
+    await act(async () => { result.current.stopSpeaking(); await pending; });
+    expect(utterances).toHaveLength(1);
+    expect(result.current.activeSpeechId).toBeNull();
+  });
 
-    expect(vi.mocked(synthesizeSpeech).mock.calls.length).toBeGreaterThan(1);
-    expect(vi.mocked(synthesizeSpeech).mock.calls[0]?.[0].length).toBeLessThanOrEqual(40);
-    expect(audioPlay.mock.calls.length).toBe(vi.mocked(synthesizeSpeech).mock.calls.length);
+  it("finishes long text in ordered bounded segments", async () => {
+    const { result } = renderHook(() => useBrowserSpeech({ onTranscript: vi.fn(), onNotice: vi.fn() }));
+    const text = "这是学习回答。".repeat(60);
+    await act(async () => result.current.speak(text, "long"));
+    expect(utterances.length).toBeGreaterThan(1);
+    expect(utterances.every(u => u.text.length <= 180 && u.voice === localVoice)).toBe(true);
+    expect(utterances.map(u => u.text).join("")).toBe(text);
+  });
+
+  it("clears native paused state before starting another answer", async () => {
+    Object.defineProperty(synthesis, "paused", { configurable: true, value: true });
+    const { result } = renderHook(() => useBrowserSpeech({ onTranscript: vi.fn(), onNotice: vi.fn() }));
+    await act(async () => result.current.speak("新回答", "next"));
+    expect(synthesis.resume).toHaveBeenCalled();
+    expect(utterances[0]?.text).toBe("新回答");
+  });
+
+  it("cancels pending voice discovery on unmount", async () => {
+    voices = [];
+    const { result, unmount } = renderHook(() => useBrowserSpeech({ onTranscript: vi.fn(), onNotice: vi.fn() }));
+    const pending = result.current.speak("测试", "one");
+    unmount();
+    voices = [localVoice];
+    synthesis.dispatchEvent(new Event("voiceschanged"));
+    await pending;
+    expect(synthesis.speak).not.toHaveBeenCalled();
   });
 });

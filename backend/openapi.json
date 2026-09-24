@@ -9168,21 +9168,6 @@
         "title": "SnapshotOperationRequest",
         "type": "object"
       },
-      "SpeechSynthesisRequest": {
-        "properties": {
-          "text": {
-            "maxLength": 180,
-            "minLength": 1,
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "text"
-        ],
-        "title": "SpeechSynthesisRequest",
-        "type": "object"
-      },
       "SpeechTranscriptionResult": {
         "properties": {
           "duration_ms": {
@@ -25625,7 +25610,8 @@
     },
     "/api/v1/speech/synthesis": {
       "post": {
-        "operationId": "synthesize_speech_api_v1_speech_synthesis_post",
+        "deprecated": true,
+        "operationId": "retired_synthesis_api_v1_speech_synthesis_post",
         "parameters": [
           {
             "in": "header",
@@ -25644,23 +25630,7 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SpeechSynthesisRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
-          "200": {
-            "content": {
-              "audio/wav": {}
-            },
-            "description": "Successful Response"
-          },
           "400": {
             "content": {
               "application/json": {
@@ -25711,6 +25681,16 @@
             },
             "description": "Conflict"
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -25752,7 +25732,7 @@
             "description": "Service Unavailable"
           }
         },
-        "summary": "Synthesize Speech",
+        "summary": "Retired Synthesis",
         "tags": [
           "speech"
         ]

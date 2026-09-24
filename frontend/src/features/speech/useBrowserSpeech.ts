@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { SpeechRequestError, synthesizeSpeech, transcribeSpeech } from "../../api/speech";
+import { SpeechRequestError, transcribeSpeech } from "../../api/speech";
 
 type AudioCapture = {
   recorder: MediaRecorder;
@@ -64,7 +64,7 @@ async function decodeRecordingToPcm16k(recording: Blob): Promise<Blob> {
   }
 }
 
-function splitSpeechForPlayback(content: string, maxCharacters = 40): string[] {
+function splitSpeechForPlayback(content: string, maxCharacters = 180): string[] {
   const sentences = content.match(/[^。！？；.!?;]+[。！？；.!?;]?/g) ?? [content];
   const chunks: string[] = [];
   let current = "";
@@ -94,8 +94,7 @@ export function useBrowserSpeech(options: {
 }) {
   const optionsRef = useRef(options);
   const captureRef = useRef<AudioCapture | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioUrlRef = useRef<string | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const playbackTokenRef = useRef(0);
   const playbackResolveRef = useRef<(() => void) | null>(null);
   const [isListening, setIsListening] = useState(false);
@@ -111,29 +110,21 @@ export function useBrowserSpeech(options: {
     playbackTokenRef.current += 1;
     playbackResolveRef.current?.();
     playbackResolveRef.current = null;
-    audioRef.current?.pause();
-    audioRef.current = null;
-    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-    audioUrlRef.current = null;
+    window.speechSynthesis?.cancel();
+    if (window.speechSynthesis?.paused) window.speechSynthesis.resume();
+    utteranceRef.current = null;
     setActiveSpeechId(null);
     setIsSpeechPaused(false);
   }, []);
 
   const pauseOrResumeSpeaking = useCallback(() => {
     if (!activeSpeechId || typeof window === "undefined") return;
-    if (audioRef.current) {
-      if (audioRef.current.paused) {
-        void audioRef.current.play().then(() => setIsSpeechPaused(false)).catch(() => {
-          optionsRef.current.onNotice("朗读继续播放失败，请重新朗读。", "warning");
-          stopSpeaking();
-        });
-      } else {
-        audioRef.current.pause();
-        setIsSpeechPaused(true);
-      }
-      return;
-    }
-  }, [activeSpeechId, stopSpeaking]);
+    const synthesis = window.speechSynthesis;
+    if (!synthesis || !utteranceRef.current) return;
+    if (isSpeechPaused) synthesis.resume();
+    else synthesis.pause();
+    setIsSpeechPaused(!isSpeechPaused);
+  }, [activeSpeechId, isSpeechPaused]);
 
   const finishServerRecording = useCallback(async () => {
     const capture = captureRef.current;
@@ -220,45 +211,63 @@ export function useBrowserSpeech(options: {
     const cleaned = cleanSpeechText(content);
     if (!cleaned) return;
     stopSpeaking();
-    const parts = splitSpeechForPlayback(cleaned);
-    const playbackToken = ++playbackTokenRef.current;
+    const synthesis = window.speechSynthesis;
+    if (!synthesis || typeof SpeechSynthesisUtterance === "undefined") {
+      optionsRef.current.onNotice("当前浏览器不支持本地朗读，请使用 Chrome 或 Edge 并安装中文语音。", "warning");
+      return;
+    }
+    const token = playbackTokenRef.current;
+    const chooseVoice = () => {
+      const local = synthesis.getVoices().filter((voice) => voice.localService && /^zh[-_]/i.test(voice.lang));
+      return local.find((voice) => /^zh[-_]CN$/i.test(voice.lang)) ?? local[0];
+    };
+    let voice = chooseVoice();
+    if (!voice) {
+      // Voice lists may arrive asynchronously. Never select a remote/default voice.
+      await new Promise<void>((resolve) => {
+        const finish = () => {
+          window.clearTimeout(timeout);
+          synthesis.removeEventListener("voiceschanged", changed);
+          resolve();
+        };
+        const changed = () => { if (chooseVoice()) finish(); };
+        const timeout = window.setTimeout(finish, 1500);
+        synthesis.addEventListener("voiceschanged", changed);
+        playbackResolveRef.current = finish;
+        changed();
+      });
+      if (token !== playbackTokenRef.current) return;
+      playbackResolveRef.current = null;
+      voice = chooseVoice();
+    }
+    if (!voice) {
+      optionsRef.current.onNotice("未检测到本地中文声音，请先在系统中安装中文语音；不会使用在线声音。", "warning");
+      return;
+    }
     setActiveSpeechId(speechId);
     setIsSpeechPaused(false);
     try {
-      const requestPart = async (text: string) => {
-        try {
-          return { blob: await synthesizeSpeech(text), error: null };
-        } catch (error) {
-          return { blob: null, error };
-        }
-      };
-      let pending = requestPart(parts[0] ?? cleaned);
-      for (let partIndex = 0; partIndex < parts.length; partIndex += 1) {
-        const result = await pending;
-        if (result.error || !result.blob) throw result.error ?? new Error("speech synthesis returned no audio");
-        const blob = result.blob;
-        if (playbackToken !== playbackTokenRef.current) return;
-        if (partIndex + 1 < parts.length) pending = requestPart(parts[partIndex + 1] ?? "");
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        audioUrlRef.current = url;
+      for (const part of splitSpeechForPlayback(cleaned)) {
+        if (token !== playbackTokenRef.current) return;
+        const utterance = new SpeechSynthesisUtterance(part);
+        utterance.voice = voice;
+        utterance.lang = voice.lang;
+        utterance.rate = 1;
+        utteranceRef.current = utterance;
         await new Promise<void>((resolve, reject) => {
           playbackResolveRef.current = resolve;
-          audio.onended = () => resolve();
-          audio.onerror = () => reject(new Error("audio playback failed"));
-          void audio.play().catch(reject);
+          utterance.onend = () => resolve();
+          utterance.onerror = () => reject(new Error("Local speech playback failed"));
+          synthesis.speak(utterance);
         });
+        if (token !== playbackTokenRef.current) return;
         playbackResolveRef.current = null;
-        audio.pause();
-        URL.revokeObjectURL(url);
-        audioRef.current = null;
-        audioUrlRef.current = null;
-        if (playbackToken !== playbackTokenRef.current) return;
       }
+      utteranceRef.current = null;
       setActiveSpeechId(null);
+      setIsSpeechPaused(false);
     } catch {
-      if (playbackToken !== playbackTokenRef.current) return;
+      if (token !== playbackTokenRef.current) return;
       stopSpeaking();
       optionsRef.current.onNotice("本地朗读暂不可用，请稍后重试。", "warning");
     }
@@ -271,8 +280,10 @@ export function useBrowserSpeech(options: {
       if (capture.recorder.state !== "inactive") capture.recorder.stop();
       capture.stream.getTracks().forEach((track) => track.stop());
     }
-    audioRef.current?.pause();
-    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    playbackTokenRef.current += 1;
+    playbackResolveRef.current?.();
+    window.speechSynthesis?.cancel();
+    utteranceRef.current = null;
   }, []);
 
   return {

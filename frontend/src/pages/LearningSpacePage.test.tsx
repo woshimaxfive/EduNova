@@ -1122,7 +1122,10 @@ describe("LearningSpacePage", () => {
       configurable: true,
       value: {
         cancel: cancelSpy,
-        speak: speakSpy
+        speak: speakSpy,
+        getVoices: () => [],
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
       }
     });
     Object.defineProperty(globalThis, "SpeechSynthesisUtterance", {
@@ -1145,9 +1148,9 @@ describe("LearningSpacePage", () => {
     await user.click(screen.getByRole("button", { name: "发送" }));
     await user.click(await screen.findByRole("button", { name: "朗读回答" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("本地朗读暂不可用，请稍后重试。");
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("未检测到本地中文声音"), { timeout: 3000 });
     expect(speakSpy).not.toHaveBeenCalled();
-    expect(cancelSpy).not.toHaveBeenCalled();
+    expect(cancelSpy).toHaveBeenCalled();
   });
 
   it("shows a non-blocking warning when the browser does not support voice input", async () => {

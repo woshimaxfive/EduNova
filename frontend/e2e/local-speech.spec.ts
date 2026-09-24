@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
-test("authenticated local speech transcribes public PCM and plays generated WAV", async ({ page, request }) => {
+test("local recognition and browser-only offline read aloud", async ({ page, request }) => {
   test.setTimeout(120_000);
   const login = await request.post("/api/v1/auth/login", {
     data: { account: "e2e_evidence_loop", password: "SyntheticLoop2026" }
@@ -31,24 +31,40 @@ test("authenticated local speech transcribes public PCM and plays generated WAV"
   const data = (await transcript.json()).data;
   expect(data.provider).toBe("sherpa_onnx");
   expect(data.transcript).toContain("九点");
-  const playback = await page.evaluate(async (token) => {
-    const response = await fetch("/api/v1/speech/synthesis", {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ text: "数据结构是一门课程。" })
-    });
-    if (!response.ok) throw new Error(`Local speech returned ${response.status}`);
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    try {
-      await audio.play();
-      await new Promise<void>((resolve, reject) => {
-        audio.onended = () => resolve();
-        audio.onerror = () => reject(new Error("WAV playback failed"));
+  const retired = await request.post("/api/v1/speech/synthesis", { headers, data: { text: "测试" } });
+  expect(retired.status()).toBe(410);
+  await page.context().setOffline(true);
+  const playback = await page.evaluate(async () => {
+    const synthesis = window.speechSynthesis;
+    const choose = () => synthesis.getVoices().find(v => v.localService && /^zh[-_]/i.test(v.lang));
+    let voice = choose();
+    if (!voice) {
+      await new Promise<void>(resolve => {
+        const done = () => { clearTimeout(timer); synthesis.removeEventListener("voiceschanged", done); resolve(); };
+        const timer = setTimeout(done, 1500);
+        synthesis.addEventListener("voiceschanged", done);
       });
-      return { type: blob.type, seconds: audio.currentTime };
-    } finally { audio.pause(); URL.revokeObjectURL(url); }
-  }, token);
-  expect(playback.type).toBe("audio/wav");
-  expect(playback.seconds).toBeGreaterThan(1);
+      voice = choose();
+    }
+    if (!voice) return { available: false, completed: false };
+    return await new Promise<{ available: boolean; completed: boolean }>((resolve, reject) => {
+      const utterance = new SpeechSynthesisUtterance("数据结构是一门课程。");
+      utterance.voice = voice!;
+      utterance.lang = voice!.lang;
+      Object.assign(window, { speechSmokeUtterance: utterance });
+      utterance.onend = () => {
+        Reflect.deleteProperty(window, "speechSmokeUtterance");
+        resolve({ available: true, completed: true });
+      };
+      utterance.onerror = event => {
+        Reflect.deleteProperty(window, "speechSmokeUtterance");
+        reject(new Error(event.error));
+      };
+      synthesis.speak(utterance);
+    });
+  });
+  await page.context().setOffline(false);
+  console.info("Offline browser speech result:", playback);
+  if (playback.available) expect(playback.completed).toBe(true);
+  else test.info().annotations.push({ type: "browser-capability", description: "No installed local Chinese voice; rejection is covered by hook tests." });
 });

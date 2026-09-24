@@ -13,10 +13,7 @@ MODELS = (
     ("sensevoice", "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09",
      "355f4d4884d8afd08aef04b9007a8556d7b463b2", ["model.int8.onnx", "tokens.txt", "README.md", "test_wavs/zh.wav"],
      {"model.int8.onnx": "12ca1a2ae7ecf3e0019ef2822307ee0b5cadc9196569e379b4c4026f8205276d"}),
-    ("kokoro", "csukuangfj/kokoro-int8-multi-lang-v1_1",
-     "155831f1b4ba23b1f5c058be6a61df90cefb2a37", ["*"],
-     {"model.int8.onnx": "bda15858163726a492d02a9a727bc263551b86ac77f90812c4b30ff41d380e26",
-      "voices.bin": "e64a5a581d8c2a350d848f51c3121657cd83aa07ed6109172177345874a7244c"}),
+
 )
 
 
@@ -28,12 +25,7 @@ def main() -> None:
     for name, repo, revision, patterns, hashes in MODELS:
         target = root / name
         marker = target / ".prepared-revision"
-        required = ["tokens.txt", "model.int8.onnx"]
-        if name == "kokoro":
-            required += ["voices.bin", "lexicon-us-en.txt", "lexicon-zh.txt", "espeak-ng-data/phondata",
-                         "date-zh.fst", "number-zh.fst", "phone-zh.fst", "LICENSE"]
-        else:
-            required += ["test_wavs/zh.wav"]
+        required = ["tokens.txt", "model.int8.onnx", "test_wavs/zh.wav"]
         ready = marker.is_file() and marker.read_text(encoding="utf-8") == revision
         ready = ready and all((target / filename).is_file() for filename in required)
         if ready:

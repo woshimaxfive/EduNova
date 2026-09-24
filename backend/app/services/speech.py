@@ -27,12 +27,3 @@ class SpeechService:
         except LocalSpeechError as exc:
             raise SpeechServiceError(str(exc), code=exc.code, status_code=exc.status_code) from exc
         return SpeechTranscriptionResult(transcript=transcript, duration_ms=round(len(audio) / 32))
-
-    def synthesize(self, text: str) -> bytes:
-        normalized = " ".join(text.split()).strip()
-        if not normalized or len(normalized) > 180:
-            raise SpeechServiceError("每段朗读需为1至180字，请分段朗读。", code="INVALID_SPEECH_TEXT", status_code=400)
-        try:
-            return self.provider.synthesize_wav(normalized)
-        except LocalSpeechError as exc:
-            raise SpeechServiceError(str(exc), code=exc.code, status_code=exc.status_code) from exc

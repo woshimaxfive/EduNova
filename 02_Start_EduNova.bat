@@ -16,7 +16,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\initialize_env.ps1"
 if errorlevel 1 goto :env_failed
 powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\sync_postgres_password.ps1" -Path ".env"
 if errorlevel 1 goto :env_failed
-echo Add your own AI provider credentials to .env to enable AI features.
+echo Configure your main AI model in the app Settings after startup, or in .env.
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\prepare_local_runtime.ps1"
 if errorlevel 1 goto :failed

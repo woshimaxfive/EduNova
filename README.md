@@ -57,63 +57,32 @@ EduNova 是面向高校学生的个性化学习系统。它把课程资料、学
 
 ```text
 03_Stop_EduNova.bat       停止服务并保留本机学习数据
-04_Reset_Demo_Data.bat    删除本机演示数据，不可恢复
+04_Reset_Demo_Data.bat    删除项目数据卷中的全部学习数据，不可恢复
 ```
 
-`02_Start_EduNova.bat` 默认启动免Key联网搜索，无需填写搜索Key；`06` 保留为兼容入口。详情见[搜索部署说明](docs/KEYLESS_SEARCH.md)。搜索服务在本机运行，但查询仍会发送给外部搜索引擎。
+**日常停止请用 `03`，不要用 `04`。** 重置不区分演示数据和自己的学习数据，使用前必须备份。
 
-### 手动启动
+`05` 和 `06` 仅是 `02` 的兼容别名，不需要逐个运行。各入口的用途和副作用见[脚本说明](scripts/README.md)。
 
-### 1. 配置环境变量
+### 启动后要配置什么
 
-复制示例文件：
+1. 注册账号，可选择“空白开始”或内置的“数据结构与算法”课程。
+2. 在设置页填写主模型的地址、模型名和 API Key，并测试连接；也可由部署者在 `.env` 中配置系统主模型。
+3. 图片理解跟随主模型，图片能力测试通过后开放。无需再配置独立识图、向量、重排序、搜索或语音 Key。
 
-```powershell
-Copy-Item .env.example .env
-```
+不填主模型也能启动、注册和查看内置课程，但 AI 问答、路径与资源生成需要有效模型，不会自动生成演示答案。
 
-首次使用至少修改 `.env` 中的以下安全项：
+| 默认能力 | 准备与限制 |
+| --- | --- |
+| 本地向量与排序 | 启动脚本准备约 95 MB 向量权重；旧索引不会隐式覆盖，需在设置中按重建流程迁移。见[本地检索](docs/LOCAL_EMBEDDING.md)。 |
+| 免 Key 联网搜索 | 本地 SearXNG 仍需访问外部搜索引擎，受网络与上游可用性影响。见[联网搜索](docs/KEYLESS_SEARCH.md)。 |
+| 语音输入与朗读 | 启动脚本准备约 238 MB 识别权重；朗读使用浏览器本地中文声音，受设备、权限和声音安装情况影响。见[本地语音](docs/LOCAL_SPEECH.md)。 |
 
-```text
-POSTGRES_PASSWORD=
-JWT_SECRET=
-MODEL_SETTINGS_ENCRYPTION_KEY=
-```
+Windows 首次启动无需宿主机 Python，但需要联网下载镜像、依赖及模型；后续复用校验通过的权重。旧部署运行前先备份数据库和 `.env`：启动脚本会清理退役的外部检索、搜索和语音配置，保留主模型配置。
 
-如需启用 AI 功能，配置主模型即可使用对话与生成；图片理解跟随主模型，通过图片能力测试后开放。`02_Start_EduNova.bat` 自动准备本地向量和语音模型，无需额外Key或宿主机Python。首次需联网下载依赖、约95MB向量模型及约238MB语音识别模型，后续校验通过即复用；启动前进行断网推理检查。准备成功后，启动脚本清理本机 `.env` 的旧向量/重排序、搜索及语音配置，保留主模型。05入口仅为兼容别名。旧索引不会在启动时隐式覆盖，可通过设置中的重建任务归档后迁移。联网搜索使用本地SearXNG，不需Key但仍需互联网。朗读使用浏览器本地中文声音，无需下载TTS模型；语音使用及许可边界见[本地语音说明](docs/LOCAL_SPEECH.md)。
+### 手动安装、升级与自定义端口
 
-不填写模型凭证也可以启动系统、注册账号并查看内置课程；AI 对话和学习路径、资源生成仍需有效的模型配置，不会自动生成演示答案。`.env.example` 中的 API Key 都是占位值。修改 `.env` 后重新执行启动脚本以更新容器配置；可在页面的模型设置中测试连接。不要将真实 `.env` 放进源码包。
-
-### 2. 启动服务
-
-先准备本地模型（Windows无需宿主机Python）：`powershell -File scripts/prepare_local_runtime.ps1`。其他系统按[本地检索说明](docs/LOCAL_EMBEDDING.md)和[本地语音说明](docs/LOCAL_SPEECH.md)准备固定权重。旧部署执行配置清理前先备份数据库。
-
-```powershell
-docker compose up -d --build
-docker compose ps
-```
-
-首次构建需要下载依赖和文档解析模型，耗时取决于网络与机器配置。服务健康后访问：
-
-```text
-http://127.0.0.1:8080
-```
-
-注册时可选择“空白开始”或内置的“数据结构与算法”课程；也可上传自己的 Markdown、TXT、PDF、DOCX 或 PPTX 资料后创建课程。
-
-### 3. 停止服务
-
-```powershell
-docker compose down
-```
-
-### 4. 清空本地演示数据（可选，且不可恢复）
-
-```powershell
-docker compose down -v
-```
-
-该命令会删除本机数据库、上传资料、聊天附件、导出文件与缓存，但不会删除源码和 Docker 镜像。
+请按[部署指南](docs/DEPLOYMENT.md)执行完整步骤，包括安全配置初始化、本地模型准备及旧配置迁移。不要覆盖已有 `.env`，也不要跳过模型准备直接启动。修改 `.env` 后需要重新创建相关容器使配置生效。
 
 ## 推荐演示路径
 
@@ -133,7 +102,8 @@ frontend/         React 前端、组件、路由与前端测试
 code-verifier/    Pyodide 隔离代码验证服务
 docker/           Dockerfile 与 Nginx 配置
 evals/            离线 AI 质量评测
-scripts/          开发、检查与测试脚本
+scripts/          启动辅助、检查与测试脚本（见 scripts/README.md）
+docs/             公共使用与技术文档（见 docs/README.md）
 docker-compose.yml Docker Compose 启动编排
 .env.example      不含真实密钥的配置示例
 VERSION.txt       公开源码发布版本标识
@@ -142,6 +112,8 @@ THIRD_PARTY_NOTICES.md 主要第三方组件与许可证说明
 
 ## 文档导航
 
+- [完整文档索引](docs/README.md)：按使用、部署和开发任务查找文档与代码
+- [脚本说明](scripts/README.md)：BAT 入口、维护脚本及数据安全边界
 - [用户指南](docs/USER_GUIDE.md)：从注册、建课到学习闭环的使用路径
 - [系统架构](docs/ARCHITECTURE.md)：服务边界、数据流和核心约束
 - [API 文档](docs/API.md)：HTTP 接口和调用合同
@@ -149,21 +121,16 @@ THIRD_PARTY_NOTICES.md 主要第三方组件与许可证说明
 - [Agent 设计](docs/AGENT_DESIGN.md)：LangGraph 工作流与质量门禁
 - [RAG 设计](docs/RAG_DESIGN.md)：课程检索、引用和降级策略
 - [部署指南](docs/DEPLOYMENT.md)：本地运行与生产加固
-- [隐私说明](docs/PRIVACY.md) 与 [安全策略](docs/SECURITY.md)：数据边界和安全报告
+- [隐私说明](docs/PRIVACY.md) 与 [安全设计](docs/SECURITY.md)：数据边界和技术安全机制；漏洞报告见[安全政策](SECURITY.md)
 - [依赖许可证清单](docs/DEPENDENCY_LICENSES.md)：直接依赖的版本与许可证
 
 ## 验证命令
 
 ```powershell
-# 前端
-Set-Location frontend
-pnpm lint
-pnpm test
-pnpm build
-
-# 回到仓库根目录后执行 Docker 配置检查
-Set-Location ..
-docker compose config
+# 在已安装开发依赖的仓库根目录执行；验证范围见 CONTRIBUTING.md
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify_encoding.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test.ps1
+docker compose config --quiet
 ```
 
 ## 发布源码包说明
@@ -172,6 +139,7 @@ docker compose config
 
 ```text
 .git/、.env、node_modules/、.venv/、dist/、storage/、var/、output/
+.planning/、docs/local/、本地研究和开发过程资料
 缓存、日志、真实上传资料、导出文件、截图、测试账号数据、API Key
 ```
 

@@ -1,6 +1,6 @@
 # 参与贡献
 
-感谢你帮助改进 EduNova。提交改动前，请先阅读 [项目说明](README.md)、[架构说明](docs/ARCHITECTURE.md)和[部署说明](docs/DEPLOYMENT.md)。
+感谢你帮助改进 EduNova。提交改动前，请先阅读 [项目说明](README.md)、[文档索引](docs/README.md)、[架构说明](docs/ARCHITECTURE.md)和[脚本说明](scripts/README.md)。
 
 ## 基本流程
 

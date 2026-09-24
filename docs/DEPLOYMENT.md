@@ -18,16 +18,24 @@ Windows 可以依次运行：
 02_Start_EduNova.bat
 ```
 
-手动启动：
+Windows 手动启动（只在 `.env` 不存在时复制，避免覆盖已有密钥）：
 
 ```powershell
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/initialize_env.ps1 -Path .env
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync_postgres_password.ps1 -Path .env
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare_local_runtime.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/migrate_local_retrieval_env.ps1 -Path .env
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/migrate_local_search_env.ps1 -Path .env
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/migrate_local_speech_env.ps1 -Path .env
 docker compose config --quiet
 docker compose up -d --build
 docker compose ps
 ```
 
-Windows 一键启动会为本机 `.env` 自动生成数据库密码、JWT 密钥和模型配置加密密钥。手动启动时必须自行修改这些占位值；需要 AI 功能时，再配置相应 Provider。
+每条命令成功后再执行下一条；发生错误应停止，不要跳过模型准备。Windows 一键入口会自动检查各步骤退出码。初始化生成数据库密码、JWT、配置加密密钥和 SearXNG 内部密钥，不附带主模型 API Key。AI 功能可在设置页配置主模型，或由部署者配置系统主模型。
+
+首次准备会下载本地向量及语音识别权重并执行离线推理检查。Linux/macOS 请按[本地检索](LOCAL_EMBEDDING.md)和[本地语音](LOCAL_SPEECH.md)准备权重，同时设置下面的安全项，再运行 Compose；不要仅执行 `up` 就认为已完成首次安装。旧部署先备份数据库和 `.env`，迁移脚本会清除已退役的外部检索、搜索和语音配置。
 
 若升级前已创建 PostgreSQL 数据卷，先初始化 `.env`，再执行以下命令同步数据库角色密码。该操作不会删除课程、用户或其他数据库内容：
 
@@ -48,6 +56,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\sync_postgres_passwo
 | `code-verifier` | Pyodide 服务 | 隔离执行受支持的 Python 代码 |
 | `frontend` | React 静态站点 | 浏览器界面 |
 | `nginx` | Nginx | 统一入口与反向代理 |
+| `searxng` | SearXNG | 免 Key 联网搜索，仍访问外部上游 |
+| `speech` | 本地 SenseVoiceSmall | 语音识别，模型权重只读挂载 |
 | `clamav` | `clamav/clamav:1.4`（`security` profile） | 可选的恶意文件扫描 |
 
 默认宿主机端口只绑定 `127.0.0.1`。生产部署只需通过受保护的入口公开 Nginx；PostgreSQL、Redis、Backend、Worker 和代码验证服务应留在内部网络。
@@ -60,13 +70,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\sync_postgres_passwo
 POSTGRES_PASSWORD=<strong-password>
 JWT_SECRET=<random-secret>
 MODEL_SETTINGS_ENCRYPTION_KEY=<fernet-compatible-key>
+SEARXNG_SECRET=<random-secret>
 ```
 
 `.env.example` 列出了全部配置，主要分为：
 
 - 服务端口和运行环境；
 - 数据库、Redis 和队列；
-- Chat、Generation、Embedding、Rerank、Vision、Speech Provider；
+- 主模型对话/生成配置（图片能力跟随主模型），本地向量及语音运行参数；
 - 模型超时、重试、并发和审计保留；
 - 上传、文档解析和对象存储；
 - ClamAV、OpenTelemetry 和日志。
@@ -163,16 +174,16 @@ git diff --check
 
 涉及 Provider 的质量和性能结论必须使用当前环境的新样本；未运行的检查应明确标记为未验证。
 
-### A 阶段维护配置
+## 12. 模型与版本维护边界
 
-聊天和生成示例配置使用 `qwen3.8-flash`；视觉、向量和重排序独立配置，已有个人模型配置仍可覆盖系统配置。仅修改 `.env.example` 不会改写部署环境的 `.env`。
+聊天和生成示例配置使用 `qwen3.8-flash`，个人主模型配置可覆盖系统配置。图片能力复用主模型，本地向量、RRF 排序、SearXNG 搜索及本地语音不要求额外服务 Key。仅修改 `.env.example` 不会改写部署环境的 `.env`。搜索免 Key 不等于离线，也不保证上游始终可用。
 
 可执行 `python -m scripts.check_live_models` 以合成输入探测当前系统聊天、生成和向量连接。这会产生真实模型调用费用，输出不含密钥，结果默认保存在忽略目录 `output/release-readiness/`。连接成功不代表教学质量、完整学习闭环或性能验收通过。
 
 离线夹具中的引用归属和服务端分数不作为新模型回答的证据。仅得到真实回答文本时，这两项保持未验证；发布检查区分离线质量、诊断耗时和完整真实验收，证据不足仍为 `evidence_gap`，不能因为探测成功宣布发布通过。
 
-百炼 `text-embedding-v4` 使用每批最多10条的串行调用，单次调用复用连接并共享剩余超时，不跨用户缓存连接。数据库读取的 NumPy 向量参与已有索引复用检查，避免重复索引。资源生成和修订均传入真实引用编号；敏感内容错误只记录规则名，不保存原始响应。
+资源生成和修订均传入真实引用编号；敏感内容错误只记录规则名，不保存原始响应。模型连接成功、少量演示成功与系统性教学质量/性能评测是不同的验证层级。
 
-回退 Git 只恢复受跟踪源码，不回退 `.env`、已安装依赖、镜像和数据库。A 阶段迁移头为 `20260914_0036`；已执行后续迁移的数据库不可直接认定兼容，必须先备份并单独确认迁移策略，禁止为启动旧代码直接删除数据卷。现有个人数据库不用于回归，回归使用隔离 E2E 项目。
+回退 Git 只恢复受跟踪源码，不回退 `.env`、已安装依赖、镜像和数据库。用 `python -m alembic heads` 核对源码迁移头，用 `python -m alembic current` 核对目标数据库；已执行后续迁移的数据库不可直接认定兼容。先备份并确认迁移策略，禁止为启动旧代码直接删除数据卷。回归使用隔离 E2E 项目，不使用个人数据库。
 
 前端和评测工具安装时保留各自的 `pnpm-workspace.yaml` 与锁文件。评测依赖兼容检查使用 `pnpm check:deps`；Promptfoo 位于开发依赖，审计不能使用 `--prod` 排除它。SWC 安装脚本明确禁用，当前评测入口不需要编译自定义 TypeScript 插件。

@@ -13,6 +13,7 @@ import {
 import { TEXT_CHAT_MODEL_PROVIDER_PRESETS, getChatProviderPreset } from "../../config/modelProviders";
 import { InlineFeedback } from "../../components/feedback/InlineFeedback";
 import { ConnectionTestCard } from "./ConnectionTestCard";
+import { ModelCatalogPicker } from "./ModelCatalogPicker";
 
 type AnswerModelDraft = {
   presetId: string;
@@ -114,6 +115,13 @@ export function PersonalAnswerModelSettings() {
         <label className="personal-model-wide"><span>回答 Base URL</span><input aria-label="回答 Base URL" value={currentDraft.baseUrl} onChange={(event) => setDraft({ ...currentDraft, baseUrl: event.target.value })} /></label>
         <label className="personal-model-wide"><span>{preset.apiKeyLabel}</span><input aria-label="回答 API Key" type="password" autoComplete="off" value={currentDraft.apiKey} placeholder={summary?.has_api_key ? "留空保留已保存密钥" : preset.apiKeyPlaceholder} onChange={(event) => setDraft({ ...currentDraft, apiKey: event.target.value })} /></label>
         <div className="personal-model-provider"><strong>{preset.name}</strong><span>{preset.description}</span></div>
+        <ModelCatalogPicker
+          key={JSON.stringify([currentDraft.presetId, currentDraft.baseUrl, currentDraft.apiKey])}
+          baseUrl={currentDraft.baseUrl}
+          apiKey={currentDraft.apiKey}
+          canUseSavedKey={summary?.source === "user" && summary.has_api_key && summary.base_url?.replace(/\/+$/, "") === currentDraft.baseUrl.trim().replace(/\/+$/, "")}
+          onSelect={(chatModel) => setDraft({ ...currentDraft, chatModel })}
+        />
         <InlineFeedback message={feedback} tone="warning" className="settings-inline-feedback" />
         <footer className="settings-editor-actions">
           <span>{summary?.source === "user" ? `个人连接不会自动回退到服务器凭证 ${summary.api_key_masked ?? ""}` : "未设置个人模型时，是否可用取决于服务器配置"}</span>

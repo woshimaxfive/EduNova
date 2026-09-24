@@ -2,11 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getModelSettings, testModelSettings } from "../../api/settings";
+import { fetchModelCatalog, getModelSettings, saveModelSettings, testModelSettings } from "../../api/settings";
 import { PersonalAnswerModelSettings } from "./PersonalAnswerModelSettings";
 
 vi.mock("../../api/settings", () => ({
-  getModelSettings: vi.fn(), saveModelSettings: vi.fn(), testModelSettings: vi.fn()
+  getModelSettings: vi.fn(), saveModelSettings: vi.fn(), testModelSettings: vi.fn(), fetchModelCatalog: vi.fn()
 }));
 
 function mount() {
@@ -38,6 +38,43 @@ describe("personal main model capabilities", () => {
     fireEvent.click(screen.getByRole("button", { name: "验证图片理解服务连接" }));
     await waitFor(() => expect(testModelSettings).toHaveBeenCalledWith("vision"));
     expect(await screen.findByText("请求超时，可重试")).toBeInTheDocument();
+  });
+
+  it("fetches with a saved personal key, filters and fills without saving or probing", async () => {
+    vi.mocked(fetchModelCatalog).mockResolvedValue({ data: { models: ["model-alpha", "model-beta"] } } as Awaited<ReturnType<typeof fetchModelCatalog>>);
+    mount();
+    await screen.findByText(/待验证主模型图片能力/);
+    fireEvent.click(screen.getByRole("button", { name: "获取模型列表" }));
+    await screen.findByRole("combobox", { name: "选择模型" });
+    expect(fetchModelCatalog).toHaveBeenCalledWith({ base_url: "https://personal.example/v1" });
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索模型" }), { target: { value: "beta" } });
+    expect(screen.queryByRole("option", { name: "model-alpha" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "选择模型" }), { target: { value: "model-beta" } });
+    expect(screen.getByRole("textbox", { name: "回答模型" })).toHaveValue("model-beta");
+    expect(saveModelSettings).not.toHaveBeenCalled();
+    expect(testModelSettings).not.toHaveBeenCalled();
+  });
+
+  it("discards pending results when the address changes and requires a new key", async () => {
+    let resolve!: (response: Awaited<ReturnType<typeof fetchModelCatalog>>) => void;
+    vi.mocked(fetchModelCatalog).mockReturnValue(new Promise((done) => { resolve = done; }));
+    mount();
+    await screen.findByText(/待验证主模型图片能力/);
+    fireEvent.click(screen.getByRole("button", { name: "获取模型列表" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "回答 Base URL" }), { target: { value: "https://other.example/v1" } });
+    expect(screen.getByRole("button", { name: "获取模型列表" })).toBeDisabled();
+    resolve({ data: { models: ["stale-model"] } } as Awaited<ReturnType<typeof fetchModelCatalog>>);
+    await waitFor(() => expect(screen.queryByText("stale-model")).not.toBeInTheDocument());
+  });
+
+  it("keeps manual editing available when model discovery fails", async () => {
+    vi.mocked(fetchModelCatalog).mockRejectedValue(new Error("unavailable"));
+    mount();
+    await screen.findByText(/待验证主模型图片能力/);
+    fireEvent.click(screen.getByRole("button", { name: "获取模型列表" }));
+    await screen.findByRole("alert");
+    fireEvent.change(screen.getByRole("textbox", { name: "回答模型" }), { target: { value: "manual-model" } });
+    expect(screen.getByRole("textbox", { name: "回答模型" })).toHaveValue("manual-model");
   });
 
   it("requires saving edited connection fields before testing", async () => {

@@ -1327,6 +1327,11 @@
   .settings-privacy-list article > a { grid-column: 2; justify-self: start; }
 }
 
+.model-catalog { display: grid; gap: 10px; min-width: 0; }
+.model-catalog > button { justify-self: start; }
+.model-catalog > p { margin: 0; color: var(--text-muted); font-size: 13px; }
+.model-catalog > label { display: grid; gap: 6px; min-width: 0; }
+
 @media (prefers-reduced-motion: reduce) {
   .settings-dialog-overlay,
   .settings-dialog {

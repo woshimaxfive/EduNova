@@ -1467,6 +1467,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/model/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Fetch Model Catalog */
+        post: operations["fetch_model_catalog_api_v1_settings_model_catalog_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/model/configs": {
         parameters: {
             query?: never;
@@ -2165,6 +2182,12 @@ export interface components {
         /** ApiEnvelope[MaterialUploadResult] */
         ApiEnvelope_MaterialUploadResult_: {
             data: components["schemas"]["MaterialUploadResult"];
+            /** Trace Id */
+            trace_id: string;
+        };
+        /** ApiEnvelope[ModelCatalogResponse] */
+        ApiEnvelope_ModelCatalogResponse_: {
+            data: components["schemas"]["ModelCatalogResponse"];
             /** Trace Id */
             trace_id: string;
         };
@@ -4026,6 +4049,18 @@ export interface components {
             title: string;
             /** Type */
             type: string;
+        };
+        /** ModelCatalogRequest */
+        ModelCatalogRequest: {
+            /** Api Key */
+            api_key?: string | null;
+            /** Base Url */
+            base_url: string;
+        };
+        /** ModelCatalogResponse */
+        ModelCatalogResponse: {
+            /** Models */
+            models: string[];
         };
         /** ModelConfigSummary */
         ModelConfigSummary: {
@@ -15414,6 +15449,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_ModelSettingsSummary_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    fetch_model_catalog_api_v1_settings_model_catalog_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelCatalogRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_ModelCatalogResponse_"];
                 };
             };
             /** @description Bad Request */

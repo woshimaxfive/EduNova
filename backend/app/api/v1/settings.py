@@ -28,6 +28,9 @@ from backend.app.services.conversation_memory import (
     UpdatePrivacySettingsRequest,
 )
 from backend.app.services.embeddings import EmbeddingService
+from backend.app.services.model_catalog import (
+    ModelCatalogClient, ModelCatalogError, ModelCatalogRequest, personal_catalog_key,
+)
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -39,6 +42,24 @@ def get_model_settings_service(db=Depends(get_db_session)) -> ModelSettingsServi
         settings=get_settings(),
         provider=OpenAICompatibleChatProvider(),
     )
+
+
+@router.post("/model/catalog")
+def fetch_model_catalog(
+    payload: ModelCatalogRequest,
+    current_user: User = Depends(get_current_user),
+    service: ModelSettingsService = Depends(get_model_settings_service),
+) -> dict:
+    try:
+        key = personal_catalog_key(service, current_user, payload)
+        result = ModelCatalogClient().fetch(payload.base_url, key)
+    except ModelSettingsValidationError as exc:
+        raise ApiError(status_code=400, code="MODEL_SETTINGS_INVALID", message=str(exc)) from exc
+    except ModelSettingsConfigurationError as exc:
+        raise ApiError(status_code=500, code="CONFIGURATION_ERROR", message=str(exc)) from exc
+    except ModelCatalogError as exc:
+        raise ApiError(status_code=502, code="MODEL_CATALOG_UNAVAILABLE", message=str(exc)) from exc
+    return api_response(result.model_dump())
 
 
 def get_settings_ai_job_service(db=Depends(get_db_session)) -> AiJobService:

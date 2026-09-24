@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Generic, TypeVar
 
 from backend.app.schemas.task_progress import TaskProgress
+from backend.app.services.model_catalog import ModelCatalogResponse
 from backend.app.schemas.run_history import RunSnapshot, RuntimeCatalog
 
 from fastapi import APIRouter
@@ -222,6 +223,7 @@ RESPONSE_MODELS: dict[str, Any] = {
     "set_rerank_default_model_config": ApiEnvelope[ModelSettingsListResponse],
     "test_model_config": ApiEnvelope[ModelConnectionTestResponse],
     "test_model_settings": ApiEnvelope[ModelConnectionTestResponse],
+    "fetch_model_catalog": ApiEnvelope[ModelCatalogResponse],
     "create_embedding_reindex_job": ApiEnvelope[AiJobResponse],
     "get_privacy_settings": ApiEnvelope[PrivacySettingsResponse],
     "update_privacy_settings": ApiEnvelope[PrivacySettingsResponse],

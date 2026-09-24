@@ -2,6 +2,11 @@ import { apiClient } from "./client";
 import { type ApiEnvelope } from "../types/api";
 import { type AiJob } from "./aiJobs";
 
+export async function fetchModelCatalog(payload: { base_url: string; api_key?: string }) {
+  const response = await apiClient.post<ApiEnvelope<{ models: string[] }>>("/settings/model/catalog", payload);
+  return response.data;
+}
+
 export const SETTINGS_ENDPOINTS = {
   model: "/settings/model",
   testModel: "/settings/model/test",

@@ -48,6 +48,7 @@ try {
     foreach ($service in @("backend", "ai-worker")) {
       Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", $service, "python", "-m", "backend.integration.local_embedding_check"))
     }
+    Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.local_material_retrieval_check"))
   }
 
   Write-Host "== Verify PostgreSQL/pgvector cosine ranking =="

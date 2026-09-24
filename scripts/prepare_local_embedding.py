@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from backend.app.providers.local_embeddings import MODEL_REVISION, MODEL_SHA256
+from backend.app.providers.local_embeddings import LocalEmbeddingProvider, MODEL_REVISION, MODEL_SHA256
 
 
 def main() -> None:
@@ -17,6 +17,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-dir", default="storage/models/bge-small-zh-v1.5")
     args = parser.parse_args()
+    if LocalEmbeddingProvider.prepared(args.model_dir):
+        with (Path(args.model_dir) / "model_optimized.onnx").open("rb") as stream:
+            if file_digest(stream, "sha256").hexdigest() == MODEL_SHA256:
+                print("本地模型已存在并通过校验，无需下载。")
+                return
     destination = snapshot_download(
         "Qdrant/bge-small-zh-v1.5", revision=MODEL_REVISION,
         allow_patterns=["*.json", "*.txt", "model_optimized.onnx", "README.md"],

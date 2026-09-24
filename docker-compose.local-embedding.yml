@@ -13,6 +13,10 @@ services:
       SYSTEM_RERANK_API_KEY: ""
       SYSTEM_RERANK_MODEL: ""
       SYSTEM_RERANK_WORKSPACE_ID: ""
+      # Speech is independent in local mode; never borrow embedding credentials.
+      SYSTEM_SPEECH_APP_ID: ${SYSTEM_SPEECH_APP_ID:-}
+      SYSTEM_SPEECH_API_KEY: ${SYSTEM_SPEECH_API_KEY:-}
+      SYSTEM_SPEECH_API_SECRET: ${SYSTEM_SPEECH_API_SECRET:-}
     volumes:
       - type: bind
         source: ./storage/models/bge-small-zh-v1.5

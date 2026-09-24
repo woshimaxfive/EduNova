@@ -32,6 +32,14 @@
 
 ## 可选接入实际服务
 
+Windows 用户可双击 `05_Start_Local_Retrieval.bat`，复用原启动流程并自动构建本地运行时、准备固定权重、断网试跑后启动。无需宿主机 Python。已校验权重重复启动不下载；准备失败不会切换现有容器。停止仍使用 `03_Stop_EduNova.bat`。后续启动本地模式请继续用05入口；02入口保留原外部配置，二者不是自动记忆的开关。
+
+2026-09-24 隔离全栈轻负载实测：8个容器空闲内存合计约387 MiB；backend与AI worker各额外启动一个本地推理检查进程，完成3个合成查询并保留模型时，合计约854 MiB（`docker stats --no-stream`）。这不是请求进程原位加载的对比，也不是峰值；不包含Docker/WSL虚拟机、浏览器开销或PDF解析、高并发工作负载，不能据此建议1GB服务器。原有Docker内存建议不变。
+
+新增真实PostgreSQL检查覆盖：合成Markdown正文分块、本地512维向量落库、重新读取后检索及章节引用、跨用户拒绝；使用真实推理与pgvector，仅替换调用审计/Redis协调层。它从已解析资料开始，不替代文件上传解析验收。`-LocalEmbedding` E2E已包含此检查。
+
+本地覆盖明确禁止语音借用向量凭证。需要讯飞语音时请独立配置 `SYSTEM_SPEECH_APP_ID/API_KEY/API_SECRET`。确认05入口正常后，可清空 `.env` 中的 `SYSTEM_EMBEDDING_*` 与 `SYSTEM_RERANK_*` 外部配置，保留主模型和需要的独立语音配置；不要删除旧向量数据。清空后02入口不能恢复原外部检索，除非重新配置外部服务。本地模式会覆盖embedding provider，不要求 `.env` 保留向量Key。
+
 本地运行时设置 `SYSTEM_EMBEDDING_PROVIDER=fastembed_local`，可选 `LOCAL_EMBEDDING_MODEL_DIR`（默认上文目录）及 `LOCAL_EMBEDDING_THREADS`（默认2，范围1–8）。不需要向量Key；此模式不读取主模型/外部向量凭证，固定模型revision参与索引profile。文件缺失时检索退回关键词；损坏或推理失败时报告失败，不下载或转用付费服务。
 
 完成上文模型准备后，可选择Docker覆盖配置：

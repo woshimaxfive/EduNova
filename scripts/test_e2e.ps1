@@ -1,5 +1,3 @@
-param([switch] $LocalEmbedding = $true)
-
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (git rev-parse --show-toplevel).Trim()
@@ -11,9 +9,6 @@ $composeArgs = @(
   "-f", "$repoRoot\docker-compose.e2e.yml"
 )
 $baseUrl = if ($env:E2E_BASE_URL) { $env:E2E_BASE_URL } else { "http://127.0.0.1:18080" }
-if ($LocalEmbedding) {
-  $composeArgs += @("-f", "$repoRoot\docker-compose.local-embedding.yml")
-}
 
 function Invoke-CheckedCommand {
   param(
@@ -43,13 +38,11 @@ try {
     throw "E2E health check returned $($health.StatusCode)."
   }
 
-  if ($LocalEmbedding) {
-    Write-Host "== Verify real local embeddings in backend and AI worker =="
-    foreach ($service in @("backend", "ai-worker")) {
-      Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", $service, "python", "-m", "backend.integration.local_embedding_check"))
-    }
-    Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.local_material_retrieval_check"))
+  Write-Host "== Verify real local embeddings in backend and AI worker =="
+  foreach ($service in @("backend", "ai-worker")) {
+    Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", $service, "python", "-m", "backend.integration.local_embedding_check"))
   }
+  Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.local_material_retrieval_check"))
 
   Write-Host "== Verify PostgreSQL/pgvector cosine ranking =="
   Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "speech", "python", "-m", "backend.integration.local_speech_check"))

@@ -30,28 +30,23 @@
 
 ## 默认启动与旧数据迁移
 
-Windows用户双击 `02_Start_EduNova.bat`：构建本地运行时、准备固定权重、断网试跑后启动。无需宿主机Python。已校验权重重复启动不下载；准备失败不会切换现有容器。停止使用 `03_Stop_EduNova.bat`。非Windows部署先准备权重，再执行默认Compose。
+安装与启动统一按[部署指南](DEPLOYMENT.md)操作。已校验权重重复启动不下载；模型准备失败会停止后续启动步骤。
 
-新增真实PostgreSQL检查覆盖：合成Markdown正文分块、本地512维向量落库、重新读取后检索及章节引用、跨用户拒绝；使用真实推理与pgvector，仅替换调用审计/Redis协调层。它从已解析资料开始，不替代文件上传解析验收。`-LocalEmbedding` E2E已包含此检查。
+E2E 默认检查合成Markdown正文分块、本地512维向量落库、重新读取后的检索、章节引用及跨用户拒绝。该检索检查从已解析资料开始，不替代文件上传解析验证。
 
 启动脚本在模型准备成功后执行 `scripts/migrate_local_retrieval_env.ps1`：移除旧外部向量/重排序字段，设置本地provider并保留主模型。语音现已使用独立本地服务，不再复制或借用向量凭证；02随后单独清理旧语音配置。本地模式禁止旧重排序凭证生效；不删除数据库历史配置列或向量归档。
 
 本地运行时设置 `SYSTEM_EMBEDDING_PROVIDER=fastembed_local`，可选 `LOCAL_EMBEDDING_MODEL_DIR`（默认上文目录）及 `LOCAL_EMBEDDING_THREADS`（默认2，范围1–8）。不需要向量Key；此模式不读取主模型/外部向量凭证，固定模型revision参与索引profile。文件缺失时检索退回关键词；损坏或推理失败时报告失败，不下载或转用付费服务。
 
-完成模型准备后，默认Docker配置即可使用：
+默认配置为后端和AI worker安装推理依赖，并只读挂载同一份权重；关闭外部重排序。每个进程有独立模型内存；缺少模型目录时拒绝启动。既有索引通过设置页重建任务迁移：先备份数据库，再提交重建；失败需检查任务详情，不删除旧数据或评分记录。
 
-```powershell
-docker compose up --build -d
-```
-
-默认配置为后端和AI worker安装推理依赖，并只读挂载同一份权重；关闭外部重排序。每个进程有独立模型内存；缺少模型目录时拒绝启动。原 `docker-compose.local-embedding.yml` 仅保留兼容入口。既有索引通过现有设置页重建任务迁移：先备份数据库，再提交重建；任务按批次归档旧向量后替换，失败需检查任务详情，不删除旧数据或评分记录。
-
-运行时集成检查（只使用合成内容，不访问数据库）：
+单独验证本地推理（只使用合成内容，不访问数据库）：
 
 ```powershell
 .venv/Scripts/python.exe -m backend.integration.local_embedding_check
-./scripts/test_e2e.ps1 -LocalEmbedding
 ```
+
+完整集成检查运行 `./scripts/test_e2e.ps1`，使用并清理隔离测试数据库和数据卷，详见[脚本说明](../scripts/README.md)。
 
 这是运行通路验证，不是泛化质量验收。默认部署已采用本地方案；新领域质量对照与高负载资源验收仍未完成，不将轻负载快照宣传为性能上限。
 

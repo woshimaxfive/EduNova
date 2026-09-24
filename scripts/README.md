@@ -13,8 +13,6 @@
 
 双击后窗口关闭太快时，可在 PowerShell 中执行 `cmd /c 01_Check_Environment.bat` 或 `cmd /c 02_Start_EduNova.bat` 查看结果。`02` 的健康检查和浏览器入口使用默认端口 `8080`；自定义端口请走[手动部署流程](../docs/DEPLOYMENT.md)。
 
-`docker-compose.local-embedding.yml` 和 `docker-compose.search.yml` 仅保留旧命令兼容性，对应服务已经并入主编排，无需再叠加这些文件。
-
 ## 启动过程中的辅助脚本
 
 | 脚本 | 作用 |
@@ -35,13 +33,18 @@
 | --- | --- |
 | `verify_encoding.ps1` | 检查受管理文本及未忽略新文件的 UTF-8 无 BOM 编码，包含 BAT/CMD。 |
 | `test.ps1` | 综合回归入口：后端、前端、类型/构建、合同和配置等检查。 |
-| `test_e2e.ps1` | 启动并清理隔离的 `edunova-e2e` Docker 项目及其测试数据卷；会构建镜像，需要本地模型。 |
+| `test_e2e.ps1` | 启动并清理隔离的 `edunova-e2e` Docker 项目及其测试数据卷；会构建镜像，默认验证本地检索与语音，需要准备模型。 |
 | `test_local_search_setup.ps1`、`test_local_speech_setup.ps1` | 使用临时合成配置测试旧配置迁移，不改真实 `.env`。 |
 | `run_ai_eval.ps1` | AI 评测入口；执行前检查参数与评测范围。 |
 | `check_openapi.py`、`export_openapi.py` | 检查或导出 OpenAPI 合同。 |
 | `supply_chain.ps1`、`generate_dependency_licenses.py` | 供应链检查与许可证清单维护；可能需要联网。 |
 | `check_live_models.py` | 检查真实模型服务，可能产生调用费用。 |
-| `diagnose_live_performance.py`、`diagnose_rag_latency.py`、`diagnose_semantic_structure.py`、`measure_release_performance.py` | 定向诊断或性能取证；先检查参数，可能访问模型、数据库或现有环境，不作为普通启动步骤。 |
+| `diagnose_live_performance.py` | 通过 HTTP 分析 RAG/辅导的预热、首个状态、首段正文和总耗时。 |
+| `diagnose_rag_latency.py` | 在后端环境拆分检索、模型等内部阶段耗时。 |
+| `diagnose_semantic_structure.py` | 在后端环境检查模型返回的语义路由 JSON 格式及结构合同。 |
+| `measure_release_performance.py` | 采集发布评测使用的跨接口耗时样本。 |
+
+上述诊断与性能采样工具会创建合成账号或数据，并可能产生真实模型费用；运行前检查参数与目标环境，优先使用隔离部署。它们不是启动步骤，报告也不属于公开源码。
 
 常用回归命令：
 

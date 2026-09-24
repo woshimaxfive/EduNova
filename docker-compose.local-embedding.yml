@@ -1,3 +1,0 @@
-# Compatibility overlay: local retrieval is now part of docker-compose.yml.
-# Keep old compose commands working without reintroducing retired credentials.
-services: {}

@@ -1,2 +1,0 @@
-# Compatibility overlay: keyless search is now part of docker-compose.yml.
-services: {}

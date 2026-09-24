@@ -4,11 +4,11 @@
 
 ## 启动与迁移
 
-Windows 运行 `02_Start_EduNova.bat`。启动脚本构建识别服务、准备固定版本权重、校验SHA256，并在断网容器验证公开录音和静音处理；成功后清理旧 `SYSTEM_SPEECH_*` 配置。保留主模型和学习数据。
+安装与启动统一按[部署指南](DEPLOYMENT.md)操作。语音模型准备包含固定版本权重、SHA256校验与断网推理检查；旧 `SYSTEM_SPEECH_*` 配置由迁移脚本清理。
 
 首次下载约238MB的SenseVoice模型及配套文件。脚本 `scripts/prepare_local_speech.py` 不再下载Kokoro，服务也不再加载TTS模型。已有Kokoro缓存不会自动删除用户文件；确认不再使用后可单独清理 `storage/models/speech/kokoro`。模型、录音和.env均不得入Git。
 
-手动准备：`powershell -File scripts/prepare_local_runtime.ps1`，然后运行语音配置迁移脚本和 `docker compose up -d --build`。非Windows可以在已有huggingface-hub/httpx环境运行相同Python准备脚本。
+非Windows可以在已有huggingface-hub/httpx环境运行 `scripts/prepare_local_speech.py` 准备模型，再按部署指南配置服务。
 
 ## 使用
 

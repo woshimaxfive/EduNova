@@ -4,20 +4,13 @@ SearXNG默认随项目作为独立容器运行，通过现有WebSearchService/ht
 
 ## 启动
 
-Windows运行 `02_Start_EduNova.bat`，自动初始化并启动搜索。也可在已准备.env及本地向量、语音模型后执行：
+搜索随主编排启动，无需单独部署。首次安装、升级与停止统一按[部署指南](DEPLOYMENT.md)操作。服务运行后可检查搜索连接：
 
 ```powershell
-./scripts/initialize_env.ps1
-./scripts/migrate_local_search_env.ps1
-docker compose up -d --build --wait
 docker compose exec -T backend python -m backend.integration.keyless_search_check
 ```
 
-初始化自动生成随机SearXNG内部签名密钥，不是购买的API Key。搜索容器不映射宿主机端口，仅供后端通过Docker网络访问。迁移脚本移除 `.env` 中旧搜索提供方、端点和Key，保留主模型、语音及其他设置；默认Compose强制使用本地搜索并清空旧Key，Tavily适配已移除。搜索失败不会转用模型原生联网或付费接口。`docker-compose.search.yml` 仅保留为空兼容覆盖文件。03停止入口会停止同项目全部服务；手动停止使用：
-
-```powershell
-docker compose down
-```
+初始化自动生成随机SearXNG内部签名密钥，不是购买的API Key。搜索容器不映射宿主机端口，仅供后端通过Docker网络访问。迁移脚本移除 `.env` 中旧搜索提供方、端点和Key，保留其他设置。搜索失败不会转用模型原生联网或付费接口。
 
 ## 使用边界
 

@@ -272,6 +272,9 @@ export function useStudioWorkspaceController() {
     else next.set("course_id", String(courseId));
     if (resourceId) next.set("resource_id", resourceId);
     else next.delete("resource_id");
+    if (pathTaskId && !bundleItems.some((item) => item.resource_id === resourceId)) {
+      next.delete("path_task_id");
+    }
     setSearchParams(next, { replace: true });
   }
 
@@ -287,12 +290,14 @@ export function useStudioWorkspaceController() {
     if (courseId === null) next.delete("course_id");
     else next.set("course_id", String(courseId));
     next.delete("resource_id");
+    next.delete("path_task_id");
     next.delete("course_session_id");
     next.delete("mentor");
     setSearchParams(next, { replace: true });
   }
 
   function selectResource(resourceId: string) {
+    generation.clearFeedback();
     setSelectedResourceId(resourceId);
     setUrlSelection(effectiveCourseId, resourceId);
   }

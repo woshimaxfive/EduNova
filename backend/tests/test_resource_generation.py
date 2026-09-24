@@ -480,6 +480,30 @@ def resource_by_type(resources: list[GeneratedResource], resource_type: str) -> 
     return next(resource for resource in resources if resource.resource_type == resource_type)
 
 
+@pytest.mark.parametrize("goal", [
+    "生成3道单选题，检查A* 搜索的理解，并查找一个相关入门教学视频。",
+    "生成三道练习题，检查当前知识点的理解。",
+])
+def test_resource_goal_instructions_do_not_become_course_topics(goal: str) -> None:
+    repo = make_repo()
+    result = make_service(repo).generate_resources(
+        make_user(), course_id=101, knowledge_point_id=501,
+        resource_types=["doc"], learning_goal=goal, difficulty="medium",
+    )
+    assert len(as_dict(result)["resources"]) == 1
+    assert repo.committed
+
+
+def test_explicit_unrelated_resource_topic_is_still_rejected() -> None:
+    repo = make_repo()
+    with pytest.raises(ResourceGenerationError, match="所选课程没有"):
+        make_service(repo).generate_resources(
+            make_user(), course_id=101, knowledge_point_id=501,
+            resource_types=["doc"], learning_goal="生成量子力学讲义", difficulty="medium",
+        )
+    assert not repo.resources
+
+
 def test_semantic_similarity_uses_configured_embedding_service() -> None:
     service = make_service(make_repo(), FakeSemanticModelSettingsService())
 

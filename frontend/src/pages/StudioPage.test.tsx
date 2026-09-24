@@ -129,6 +129,26 @@ describe("StudioPage resource generation", () => {
     previousAdapter = apiClient.defaults.adapter;
   });
 
+  it("leaves task context when the user explicitly selects a different library resource", async () => {
+    apiClient.defaults.adapter = async (config) => {
+      const url = config.url ?? "";
+      const data = url === COURSE_ENDPOINTS.list
+        ? [{ id: "808", title: "课程", status: "ready" }]
+        : url === RESOURCE_ENDPOINTS.list
+          ? [makeResource()]
+          : url === "/paths/tasks/61"
+            ? { id: "61", course_id: "808", path_id: "71", learning_bundle: { items: [{ resource_id: "999", resource_type: "doc" }] } }
+            : [];
+      return { data: { data }, status: 200, statusText: "OK", headers: {}, config };
+    };
+    renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808&resource_id=999&path_task_id=61`);
+    const open = await screen.findByRole("button", { name: /^打开成果 / });
+    await userEvent.setup().click(open);
+    await waitFor(() => expect(screen.getByTestId("studio-location")).not.toHaveTextContent("path_task_id"));
+    expect(screen.getByTestId("studio-location")).toHaveTextContent("resource_id=901");
+    expect(await screen.findByRole("region", { name: "资源完整内容" })).toBeInTheDocument();
+  });
+
   afterEach(() => {
     apiClient.defaults.adapter = previousAdapter;
   });

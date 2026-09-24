@@ -344,10 +344,14 @@ class ResourceGenerationGraphRunner:
 
     @staticmethod
     def _requested_dialogue_topic(learning_goal: str) -> str | None:
-        match = re.search(r"(?:生成|制作|创建|出)\s*(.+?)\s*(?:的)?\s*(?:资源|讲义|笔记|思维导图|脑图|题目|练习|测验|代码|课件|PPT|动画|视频)", learning_goal, re.IGNORECASE)
+        # Infer only a topic in the same clause. Free-form goals may specify a
+        # quantity and several actions; those are not course topic names.
+        match = re.search(r"(?:生成|制作|创建|出)\s*([^，。！？!?；;\n]+?)\s*(?:的)?\s*(?:资源|讲义|笔记|思维导图|脑图|题目|练习|测验|代码|课件|PPT|动画|视频)", learning_goal, re.IGNORECASE)
         if match is None:
             return None
         topic = re.sub(r"\s+", "", match.group(1)).strip("，。！？!?：:")
+        if re.match(r"(?:\d+|[一二三四五六七八九十几两]+)(?:道|个|份|套|张|段|篇|节)", topic):
+            return None
         return topic[:80] if topic else None
 
     @staticmethod

@@ -281,6 +281,7 @@ def make_settings(**overrides: Any) -> Settings:
         "_env_file": None,
         "jwt_secret": "model-settings-test-secret-with-more-than-32-bytes",
         "system_model_provider": "openai_compatible",
+        "system_embedding_provider": "",
         "system_model_base_url": "https://model.example.local/v1",
         "system_model_api_key": "sk-system-secret",
         "system_chat_model": "system-chat",
@@ -353,11 +354,13 @@ def test_example_environment_does_not_enable_remote_models() -> None:
     for resolve in (
         service.resolve_runtime_config,
         service.resolve_generation_runtime_config,
-        service.resolve_embedding_runtime_config,
         service.resolve_rerank_runtime_config,
         service.resolve_vision_runtime_config,
     ):
         assert not resolve(user).can_use_model
+    embedding = service.resolve_embedding_runtime_config(user)
+    assert embedding.provider == "fastembed_local"
+    assert embedding.api_key is None and embedding.base_url is None
 
 
 def test_system_embedding_connection_can_use_a_different_provider_endpoint() -> None:

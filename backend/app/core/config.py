@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     system_generation_base_url: str = ""
     system_generation_api_key: str = ""
     system_generation_model: str = ""
-    system_embedding_provider: str = ""
+    system_embedding_provider: str = "fastembed_local"
     system_embedding_base_url: str = ""
     system_embedding_api_key: str = ""
     system_embedding_app_id: str = ""

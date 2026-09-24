@@ -24,6 +24,16 @@ def prepare_files(path):
         (path / name).write_bytes(b"synthetic")
 
 
+def test_default_local_retrieval_ignores_stale_rerank_credentials(tmp_path):
+    settings = Settings(_env_file=None, local_embedding_model_dir=str(tmp_path),
+                        system_rerank_provider="bailian_rerank", system_rerank_api_key="synthetic-old",
+                        system_rerank_base_url="https://example.com", system_rerank_model="old")
+    service = ModelSettingsService(FakeModelSettingsRepository({}), settings, provider=Mock())
+    assert service.resolve_embedding_runtime_config(make_user()).provider == "fastembed_local"
+    rerank = service.resolve_rerank_runtime_config(make_user())
+    assert not rerank.can_use_model and rerank.api_key is None
+
+
 def test_local_missing_weights_never_borrows_cloud_credentials(tmp_path):
     service = make_service(tmp_path, system_model_api_key="synthetic-cloud-secret")
     runtime = service.resolve_embedding_runtime_config(make_user())

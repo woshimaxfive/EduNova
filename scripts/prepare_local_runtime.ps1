@@ -3,11 +3,11 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
 try {
   # Reuse the serving image; no host Python installation or extra downloader image.
-  docker compose -f docker-compose.yml -f docker-compose.local-embedding.yml build backend
+  docker compose build backend
   if ($LASTEXITCODE -ne 0) { throw "Local runtime build failed." }
   $modelDir = Join-Path $repoRoot "storage/models/bge-small-zh-v1.5"
   New-Item -ItemType Directory -Force -Path $modelDir | Out-Null
-  $composeConfig = docker compose -f docker-compose.yml -f docker-compose.local-embedding.yml config --format json | ConvertFrom-Json
+  $composeConfig = docker compose config --format json | ConvertFrom-Json
   if ($LASTEXITCODE -ne 0) { throw "Compose configuration failed." }
   $imageName = "$($composeConfig.name)-backend"
   docker run --rm --user 0 --entrypoint python `

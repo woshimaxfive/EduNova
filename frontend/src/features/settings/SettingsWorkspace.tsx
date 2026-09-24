@@ -34,7 +34,7 @@ export function SettingsWorkspace(controller: SettingsController) {
             <span className={effectiveChatReady ? "ready" : "inactive"}>回答{effectiveChatReady ? "正常" : "未连接"}</span>
             <span className={effectiveGenerationReady ? "ready" : "inactive"}>生成{effectiveGenerationReady ? "正常" : "未连接"}</span>
             <span className={effectiveEmbeddingReady ? "ready" : "inactive"}>向量{effectiveEmbeddingReady ? "正常" : "未连接"}</span>
-            <span className={effectiveRerankReady ? "ready" : "inactive"}>重排序{effectiveRerankReady ? "正常" : "未连接"}</span>
+            <span className="ready">{effectiveRerankReady ? "重排序正常" : "融合排序"}</span>
             <span className={effectiveVisionReady ? "ready" : "inactive"}>图片理解{effectiveVisionReady ? "正常" : "未连接"}</span>
           </div>
         </header>

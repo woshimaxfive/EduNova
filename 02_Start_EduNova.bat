@@ -18,16 +18,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\sync_postgres_passw
 if errorlevel 1 goto :env_failed
 echo Add your own AI provider credentials to .env to enable AI features.
 
-set "EDUNOVA_COMPOSE=-f docker-compose.yml"
-if /I "%~1"=="local" (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\prepare_local_runtime.ps1"
-  if errorlevel 1 goto :failed
-  set "EDUNOVA_COMPOSE=-f docker-compose.yml -f docker-compose.local-embedding.yml"
-)
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\prepare_local_runtime.ps1"
+if errorlevel 1 goto :failed
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\migrate_local_retrieval_env.ps1" -Path ".env"
+if errorlevel 1 goto :env_failed
 
 echo.
 echo Building and starting EduNova. The first run downloads images, dependencies, and document models...
-docker compose %EDUNOVA_COMPOSE% up -d --build
+docker compose up -d --build
 if errorlevel 1 goto :failed
 
 echo Waiting for the health check...

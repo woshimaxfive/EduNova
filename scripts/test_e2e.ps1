@@ -1,4 +1,4 @@
-param([switch] $LocalEmbedding)
+param([switch] $LocalEmbedding = $true)
 
 $ErrorActionPreference = "Stop"
 

@@ -199,6 +199,9 @@ class ModelRuntimeConfigBuilder:
         )
 
     def _rerank_runtime_from_system_settings(self) -> RuntimeModelConfig:
+        if self.settings.system_embedding_provider.strip() == "fastembed_local":
+            return RuntimeModelConfig(source="none", provider="fastembed_local", base_url=None,
+                                      api_key=None, chat_model=None, embedding_model=None, can_use_model=False)
         provider = self.settings.system_rerank_provider.strip()
         base_url = self.settings.system_rerank_base_url.strip() or None
         api_key = self.settings.system_rerank_api_key.strip() or None

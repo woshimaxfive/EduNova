@@ -26,7 +26,7 @@ class WebSearchService:
         # A local search selection must not silently invoke a billed model tool.
         return self.settings.web_search_provider.strip().lower() == "searxng"
 
-    def search(self, query: str, max_results: int | None = None) -> WebSearchResult:
+    def search(self, query: str, max_results: int | None = None, *, category: str = "general") -> WebSearchResult:
         cleaned_query = " ".join(query.split())
         if not cleaned_query:
             return WebSearchResult(warning="联网搜索问题为空。")
@@ -45,7 +45,7 @@ class WebSearchService:
         }
 
         try:
-            response = self._searxng(cleaned_query) if provider == "searxng" else self._post(payload)
+            response = self._searxng(cleaned_query, category) if provider == "searxng" else self._post(payload)
             response.raise_for_status()
             data = response.json()
         except Exception:
@@ -61,9 +61,25 @@ class WebSearchService:
         ) else None
         return WebSearchResult(citations=citations, warning=warning)
 
-    def _searxng(self, query: str) -> httpx.Response:
+    def search_videos(self, query: str, max_results: int = 8) -> WebSearchResult:
+        return self.search(query, max_results, category="videos")
+
+    def read_sources(self, citations: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+        from backend.app.services.web_reader import WebPageReader
+
+        reader = WebPageReader()
+        enriched = [dict(item) for item in citations]
+        for item in enriched[:2]:
+            result = reader.read(str(item.get("url") or ""), query)
+            item["read_status"] = result.status
+            if result.text:
+                item["content"] = result.text
+        return enriched
+
+    def _searxng(self, query: str, category: str = "general") -> httpx.Response:
         # Endpoint is server configuration, never supplied by a user/model tool.
-        payload = {"q": query[:2000], "format": "json", "categories": "general"}
+        payload = {"q": query[:2000], "format": "json",
+                   "categories": "videos" if category == "videos" else "general"}
         if self.client is not None:
             return self.client.post(self.settings.web_search_endpoint, data=payload, timeout=10,
                                     follow_redirects=False)

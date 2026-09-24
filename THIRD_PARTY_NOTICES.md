@@ -20,6 +20,7 @@ EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说
 | Pyodide | 隔离式 Python 代码验证运行时 | MPL-2.0 | https://pyodide.org |
 | Nginx | 统一 Web 入口与反向代理 | BSD-2-Clause | https://nginx.org |
 | SearXNG（可选独立容器） | 免Key联网搜索聚合 | AGPL-3.0-or-later | https://github.com/searxng/searxng |
+| Trafilatura、HTTPCore | 本地网页正文提取、受限公开网页读取 | Apache-2.0、BSD-3-Clause | https://github.com/adbar/trafilatura / https://github.com/encode/httpcore |
 
 ## 运行时服务说明
 

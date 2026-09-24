@@ -58,3 +58,34 @@ def test_tavily_still_requires_explicit_key():
                                       web_search_api_key=""), client).search("测试")
     assert result.warning == "联网搜索未配置。"
     client.post.assert_not_called()
+
+
+def test_video_search_uses_dedicated_category_without_site_restriction():
+    def handler(request):
+        assert b"categories=videos" in request.content
+        assert b"site%3A" not in request.content
+        return httpx.Response(200, json={"results": []})
+    assert service(handler).search_videos("Python 列表推导式").warning
+
+
+def test_tutor_preserves_body_excerpt_and_failure_status():
+    class Context(TutorContextMixin):
+        native_web_search_provider = None
+        web_search_service = service(lambda _: httpx.Response(200, json={"results": [
+            {"title": "课程", "url": "https://example.org/", "content": "搜索摘要"},
+            {"title": "课程2", "url": "https://example.net/", "content": "搜索摘要2"},
+        ]}))
+
+        @staticmethod
+        def _safe_snippet(value, limit):
+            return value[:limit]
+
+    context = Context()
+    def read_sources(items, query):
+        return [{**items[0], "content": "正文依据", "read_status": "read"},
+                {**items[1], "read_status": "http_error"}]
+    context.web_search_service.read_sources = read_sources
+    warnings = []
+    citations = context._web_search_citations("学习", warnings)
+    assert citations[0]["content"] == "正文依据" and citations[0]["snippet"] == "搜索摘要"
+    assert "content" not in citations[1] and warnings

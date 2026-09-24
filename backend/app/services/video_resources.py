@@ -76,6 +76,24 @@ class VideoCurationService:
         warnings: list[str] = []
         diagnostics = {"searches": 0, "candidates": 0, "invalid_candidates": 0, "topic_rejections": 0}
         related_candidates: list[CuratedVideo] = []
+        video_search = getattr(self.search_service, "search_videos", None)
+        if callable(video_search):
+            diagnostics["searches"] += 1
+            result = video_search(" ".join(str(topic).split())[:120], max_results=8)
+            candidates = []
+            for item in list(getattr(result, "citations", []) or []):
+                diagnostics["candidates"] += 1
+                candidate = normalize_video(item)
+                if candidate is None:
+                    diagnostics["invalid_candidates"] += 1
+                elif video_matches_topic(candidate, topic):
+                    candidates.append(candidate)
+                else:
+                    diagnostics["topic_rejections"] += 1
+            if candidates:
+                return min(candidates, key=lambda item: item.platform != "bilibili")
+            if getattr(result, "warning", None):
+                warnings.append(str(result.warning))
         for platform in ("bilibili", "youtube"):
             for query, allow_related in self._search_queries(topic, profile_summary, platform=platform):
                 diagnostics["searches"] += 1

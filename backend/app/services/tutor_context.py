@@ -123,6 +123,14 @@ class TutorContextMixin:
         raw_citations = tool_result.get("citations", [])
         if not isinstance(raw_citations, list):
             return []
+        reader = getattr(self.web_search_service, "read_sources", None)
+        if callable(reader) and raw_citations:
+            try:
+                raw_citations = reader(raw_citations, message_text)
+                if any(item.get("read_status") not in {None, "read"} for item in raw_citations):
+                    warnings.append("部分来源正文未能读取，仅保留搜索摘要，尚未核实全文。")
+            except Exception:
+                warnings.append("来源正文暂不可用，仅保留搜索摘要，尚未核实全文。")
         citations: list[dict[str, Any]] = []
         for item in raw_citations[:5]:
             if not isinstance(item, dict):
@@ -136,6 +144,10 @@ class TutorContextMixin:
                 "url": url,
                 "snippet": snippet,
             }
+            if item.get("content") and item.get("read_status") == "read":
+                citation["content"] = self._safe_snippet(str(item["content"]), 1800)
+            if item.get("read_status"):
+                citation["read_status"] = str(item["read_status"])
             for key in ("search_backend", "evidence_role", "retrieved_at"):
                 if item.get(key):
                     citation[key] = str(item[key])

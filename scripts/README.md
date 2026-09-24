@@ -10,8 +10,6 @@
 | `02_Start_EduNova.bat` | 初始化本机配置、准备本地模型、迁移旧配置、构建并启动服务。首次需要联网。 |
 | `03_Stop_EduNova.bat` | 停止服务，保留数据卷。 |
 | `04_Reset_Demo_Data.bat` | **删除项目数据卷中的全部学习数据**，不只删除演示账号；包括数据库、上传资料、附件、导出与缓存。不可恢复，先备份。 |
-| `05_Start_Local_Retrieval.bat` | 兼容旧入口，实际调用 `02`；无需额外执行。 |
-| `06_Start_Keyless_Search.bat` | 兼容旧入口，实际调用 `02`；无需额外执行。 |
 
 双击后窗口关闭太快时，可在 PowerShell 中执行 `cmd /c 01_Check_Environment.bat` 或 `cmd /c 02_Start_EduNova.bat` 查看结果。`02` 的健康检查和浏览器入口使用默认端口 `8080`；自定义端口请走[手动部署流程](../docs/DEPLOYMENT.md)。
 

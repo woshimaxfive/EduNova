@@ -132,6 +132,17 @@ class ModelRuntimeConfigBuilder:
         )
 
     def _embedding_runtime_from_system_settings(self) -> RuntimeModelConfig:
+        if self.settings.system_embedding_provider.strip() == "fastembed_local":
+            from importlib.util import find_spec
+            from backend.app.providers.local_embeddings import LocalEmbeddingProvider, MODEL_NAME, MODEL_DIMENSION, MODEL_REVISION
+
+            return RuntimeModelConfig(
+                source="system", provider="fastembed_local", base_url=None, api_key=None,
+                chat_model=None, embedding_model=f"{MODEL_NAME}@{MODEL_REVISION}",
+                can_use_model=(find_spec("fastembed") is not None
+                               and LocalEmbeddingProvider.prepared(self.settings.local_embedding_model_dir)),
+                dimensions=MODEL_DIMENSION,
+            )
         has_separate_connection = bool(self.settings.system_embedding_base_url.strip())
         provider = self.settings.system_embedding_provider.strip() or self.settings.system_model_provider
         base_url = self.settings.system_embedding_base_url.strip() or self.settings.system_model_base_url.strip()

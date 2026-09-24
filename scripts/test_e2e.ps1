@@ -1,3 +1,5 @@
+param([switch] $LocalEmbedding)
+
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (git rev-parse --show-toplevel).Trim()
@@ -9,6 +11,9 @@ $composeArgs = @(
   "-f", "$repoRoot\docker-compose.e2e.yml"
 )
 $baseUrl = if ($env:E2E_BASE_URL) { $env:E2E_BASE_URL } else { "http://127.0.0.1:18080" }
+if ($LocalEmbedding) {
+  $composeArgs += @("-f", "$repoRoot\docker-compose.local-embedding.yml")
+}
 
 function Invoke-CheckedCommand {
   param(
@@ -36,6 +41,13 @@ try {
   $health = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/health" -TimeoutSec 10
   if ($health.StatusCode -ne 200) {
     throw "E2E health check returned $($health.StatusCode)."
+  }
+
+  if ($LocalEmbedding) {
+    Write-Host "== Verify real local embeddings in backend and AI worker =="
+    foreach ($service in @("backend", "ai-worker")) {
+      Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", $service, "python", "-m", "backend.integration.local_embedding_check"))
+    }
   }
 
   Write-Host "== Verify PostgreSQL/pgvector cosine ranking =="

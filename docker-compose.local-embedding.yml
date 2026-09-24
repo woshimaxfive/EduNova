@@ -1,0 +1,33 @@
+# Opt-in: prepare fixed weights first; never download from a serving request.
+services:
+  backend:
+    build:
+      target: local-backend
+    environment: &local-embedding-environment
+      SYSTEM_EMBEDDING_PROVIDER: fastembed_local
+      LOCAL_EMBEDDING_MODEL_DIR: /opt/edunova/embedding
+      LOCAL_EMBEDDING_THREADS: "2"
+      HF_HUB_OFFLINE: "1"
+      SYSTEM_RERANK_PROVIDER: ""
+      SYSTEM_RERANK_BASE_URL: ""
+      SYSTEM_RERANK_API_KEY: ""
+      SYSTEM_RERANK_MODEL: ""
+      SYSTEM_RERANK_WORKSPACE_ID: ""
+    volumes:
+      - type: bind
+        source: ./storage/models/bge-small-zh-v1.5
+        target: /opt/edunova/embedding
+        read_only: true
+        bind:
+          create_host_path: false
+  ai-worker:
+    build:
+      target: local-ai-worker
+    environment: *local-embedding-environment
+    volumes:
+      - type: bind
+        source: ./storage/models/bge-small-zh-v1.5
+        target: /opt/edunova/embedding
+        read_only: true
+        bind:
+          create_host_path: false

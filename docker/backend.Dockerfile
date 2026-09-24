@@ -81,4 +81,16 @@ EXPOSE 8000
 
 CMD ["sh", "-c", "python -m alembic upgrade head && python -m backend.app.cli sync-builtin-courses && python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000"]
 
+FROM runtime AS local-backend
+USER root
+RUN --mount=type=cache,id=edunova-pip,target=/root/.cache/pip \
+    python -m pip install -r /app/backend/requirements-local-embedding.txt && python -m pip check
+USER edunova
+
+FROM ai-worker AS local-ai-worker
+USER root
+RUN --mount=type=cache,id=edunova-pip,target=/root/.cache/pip \
+    python -m pip install -r /app/backend/requirements-local-embedding.txt && python -m pip check
+USER edunova
+
 FROM runtime AS backend

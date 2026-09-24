@@ -427,7 +427,7 @@ class ModelSettingsService:
 
     def resolve_embedding_runtime_config(self, user: User) -> RuntimeModelConfig:
         system_runtime = self._embedding_runtime_from_system_settings()
-        if system_runtime.can_use_model:
+        if system_runtime.can_use_model or system_runtime.provider == "fastembed_local":
             return system_runtime
         return RuntimeModelConfig(
             source="none",
@@ -703,10 +703,19 @@ class ModelSettingsService:
         input_type: Literal["document", "query"] = "document",
     ) -> list[list[float]]:
         runtime = self.resolve_embedding_runtime_config(user)
-        if not runtime.can_use_model or runtime.base_url is None or runtime.embedding_model is None:
+        if not runtime.can_use_model or runtime.embedding_model is None:
             raise ModelNotConfiguredError("当前未配置可用向量模型。")
         requested_dimensions = dimensions or runtime.dimensions
         def call_provider() -> list[list[float]]:
+            if runtime.provider == "fastembed_local":
+                from backend.app.providers.local_embeddings import LocalEmbeddingProvider
+
+                return LocalEmbeddingProvider().embed(
+                    texts, model_path=self.settings.local_embedding_model_dir,
+                    threads=self.settings.local_embedding_threads, input_type=input_type,
+                )
+            if runtime.base_url is None:
+                raise ModelNotConfiguredError("当前未配置可用向量服务地址。")
             if runtime.provider == "xfyun_embedding":
                 config = EmbeddingRequestConfig(
                     provider=runtime.provider,

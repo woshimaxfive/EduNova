@@ -1,6 +1,6 @@
 # 本地向量验证（实验入口）
 
-本目录说明的是可重复的离线验证入口，**尚未切换线上检索默认模型**，也没有把模型权重打包到 Git 或默认 Docker 镜像。普通用户暂时不需要执行这些步骤。
+本目录说明可选的本地检索部署与离线验证入口，**尚未切换线上检索默认模型**，也没有把模型权重打包到 Git 或默认 Docker 镜像。普通用户暂时不需要执行这些步骤。
 
 ## 准备和验证
 
@@ -27,8 +27,29 @@
 - 显式重建会先将当前向量及其模型标识保存在 `chunk_embedding_archives`，再替换当前检索向量，两者在同一批事务提交。切回原配置后再次提交重建，内容和 profile 一致的片段直接恢复归档向量，不调用外部模型；不同 profile 不混合检索。归档随原片段删除，不会保留已删除用户的资料。
 - 重建仍按每批最多 8 个片段提交，取消或失败仅回滚尚未提交的批次，已完成批次保留。旧向量缺少模型信息、返回维度错误、数值无效、调用期间内容变化时拒绝替换；不会凭空补齐旧模型身份。
 - 升级先备份数据库并执行 Alembic 迁移。历史向量存在时迁移拒绝降级删表。归档会额外占磁盘，近似随片段数、已使用 profile 数和维度增长；不会自动清除旧版本。
-- 本地模型目前仍是实验适配器，尚未接入默认模型配置；Docker 默认打包、外部质量对照和整体部署内存验收尚待完成，不建议切换生产默认值。
+- 本地模型已接入可选运行时与Docker构建目标，尚未切换默认模型配置；外部质量对照和整体部署内存验收尚待完成，不建议直接切换生产默认值。
 
-## 来源
+## 可选接入实际服务
+
+本地运行时设置 `SYSTEM_EMBEDDING_PROVIDER=fastembed_local`，可选 `LOCAL_EMBEDDING_MODEL_DIR`（默认上文目录）及 `LOCAL_EMBEDDING_THREADS`（默认2，范围1–8）。不需要向量Key；此模式不读取主模型/外部向量凭证，固定模型revision参与索引profile。文件缺失时检索退回关键词；损坏或推理失败时报告失败，不下载或转用付费服务。
+
+完成上文模型准备后，可选择Docker覆盖配置：
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.local-embedding.yml up --build -d
+```
+
+覆盖配置仅为后端和AI worker安装可选推理依赖，并只读挂载同一份权重；同时关闭外部重排序，使用已有关键词与向量融合，不暗中调用旧重排Key。每个进程仍有独立模型内存；权重不进入镜像和Git。缺少宿主机模型目录时拒绝启动，不自动创建空目录。旧部署只有显式使用该覆盖文件才切换，不自动重建旧索引。移除覆盖配置、重新创建服务即可恢复原Provider；需要旧向量时按前文显式重建恢复。
+
+运行时集成检查（只使用合成内容，不访问数据库）：
+
+```powershell
+.venv/Scripts/python.exe -m backend.integration.local_embedding_check
+./scripts/test_e2e.ps1 -LocalEmbedding
+```
+
+这是运行通路验证，不是泛化质量验收。默认部署、独立检索评测和整套资源验收仍需完成。
+
+## 来源与许可证
 
 模型为 [BAAI/bge-small-zh-v1.5](https://huggingface.co/BAAI/bge-small-zh-v1.5)，MIT；固定 ONNX 导出来自 [Qdrant/bge-small-zh-v1.5](https://huggingface.co/Qdrant/bge-small-zh-v1.5/tree/46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59)。推理使用 [FastEmbed](https://github.com/qdrant/fastembed)（Apache-2.0）与 ONNX Runtime（MIT）。本次只复用推理适配，不引入 Qdrant 数据库或替换 LangGraph、pgvector、权限和引用体系。

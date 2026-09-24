@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     system_embedding_api_secret: str = ""
     system_embedding_model: str = "example-embedding-model"
     system_embedding_dimension: int | None = None
+    local_embedding_model_dir: str = "storage/models/bge-small-zh-v1.5"
+    local_embedding_threads: int = Field(default=2, ge=1, le=8)
     system_rerank_provider: str = ""
     system_rerank_base_url: str = ""
     system_rerank_api_key: str = ""

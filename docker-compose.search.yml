@@ -1,23 +1,2 @@
-# Optional keyless search. No host port is exposed.
-services:
-  searxng:
-    image: searxng/searxng@sha256:bcfaed4091d59f7ce85670bd701a2d0295872196dc19908a3965a8353b149f83
-    environment:
-      SEARXNG_SECRET: ${SEARXNG_SECRET:?Run scripts/initialize_env.ps1 first}
-    volumes:
-      - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-  backend:
-    environment: &search-environment
-      WEB_SEARCH_PROVIDER: searxng
-      WEB_SEARCH_ENDPOINT: http://searxng:8080/search
-      WEB_SEARCH_API_KEY: ""
-    depends_on:
-      searxng:
-        condition: service_healthy
-  ai-worker:
-    environment: *search-environment
+# Compatibility overlay: keyless search is now part of docker-compose.yml.
+services: {}

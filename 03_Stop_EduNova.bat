@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-rem Also stop the optional search service belonging to this Compose project.
+rem Stop all project services, including local search; keep data volumes.
 docker compose down --remove-orphans
 if errorlevel 1 (
   echo.

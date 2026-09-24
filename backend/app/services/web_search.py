@@ -23,29 +23,20 @@ class WebSearchService:
 
     @property
     def prefer_external_search(self) -> bool:
-        # A local search selection must not silently invoke a billed model tool.
-        return self.settings.web_search_provider.strip().lower() == "searxng"
+        # Even stale/invalid configuration must never fall back to a billed model tool.
+        return True
 
     def search(self, query: str, max_results: int | None = None, *, category: str = "general") -> WebSearchResult:
         cleaned_query = " ".join(query.split())
         if not cleaned_query:
             return WebSearchResult(warning="联网搜索问题为空。")
         provider = self.settings.web_search_provider.strip().lower()
-        if provider not in {"tavily", "searxng"}:
-            return WebSearchResult(warning="联网搜索提供方不受支持。")
-        if provider == "tavily" and not self.settings.web_search_api_key.strip():
-            return WebSearchResult(warning="联网搜索未配置。")
+        if provider != "searxng":
+            return WebSearchResult(warning="联网搜索仅支持免Key的 SearXNG，请更新本地启动配置。")
 
         limit = max(1, min(max_results or self.settings.web_search_max_results, 8))
-        payload = {
-            "api_key": self.settings.web_search_api_key,
-            "query": cleaned_query,
-            "max_results": limit,
-            "include_answer": False,
-        }
-
         try:
-            response = self._searxng(cleaned_query, category) if provider == "searxng" else self._post(payload)
+            response = self._searxng(cleaned_query, category)
             response.raise_for_status()
             data = response.json()
         except Exception:
@@ -85,12 +76,6 @@ class WebSearchService:
                                     follow_redirects=False)
         with httpx.Client(timeout=10, follow_redirects=False) as client:
             return client.post(self.settings.web_search_endpoint, data=payload)
-
-    def _post(self, payload: dict[str, Any]) -> httpx.Response:
-        if self.client is not None:
-            return self.client.post(self.settings.web_search_endpoint, json=payload, timeout=10)
-        with httpx.Client(timeout=10) as client:
-            return client.post(self.settings.web_search_endpoint, json=payload)
 
     @staticmethod
     def _parse_results(data: Any, limit: int) -> list[dict[str, str]]:

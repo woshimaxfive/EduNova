@@ -22,6 +22,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\prepare_local_runti
 if errorlevel 1 goto :failed
 powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\migrate_local_retrieval_env.ps1" -Path ".env"
 if errorlevel 1 goto :env_failed
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\migrate_local_search_env.ps1" -Path ".env"
+if errorlevel 1 goto :env_failed
 
 echo.
 echo Building and starting EduNova. The first run downloads images, dependencies, and document models...

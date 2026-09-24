@@ -1,4 +1,16 @@
 services:
+  searxng:
+    image: searxng/searxng@sha256:bcfaed4091d59f7ce85670bd701a2d0295872196dc19908a3965a8353b149f83
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?Run scripts/initialize_env.ps1 first}
+    volumes:
+      - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
   postgres:
     image: pgvector/pgvector:pg16
     environment:
@@ -51,9 +63,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-this-local-development-secret}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
-      WEB_SEARCH_PROVIDER: ${WEB_SEARCH_PROVIDER:-tavily}
-      WEB_SEARCH_ENDPOINT: ${WEB_SEARCH_ENDPOINT:-https://api.tavily.com/search}
-      WEB_SEARCH_API_KEY: ${WEB_SEARCH_API_KEY:-}
+      WEB_SEARCH_PROVIDER: searxng
+      WEB_SEARCH_ENDPOINT: http://searxng:8080/search
+      WEB_SEARCH_API_KEY: ""
       WEB_SEARCH_MAX_RESULTS: ${WEB_SEARCH_MAX_RESULTS:-5}
       EXPORT_DIR: ${EXPORT_DIR:-storage/exports}
       EXPORT_QUEUE_NAME: ${EXPORT_QUEUE_NAME:-edunova_exports}
@@ -123,6 +135,8 @@ services:
       - material_data:/app/var/uploads/materials
       - chat_attachment_data:/app/var/uploads/chat-attachments
     depends_on:
+      searxng:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -164,9 +178,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-this-local-development-secret}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
-      WEB_SEARCH_PROVIDER: ${WEB_SEARCH_PROVIDER:-tavily}
-      WEB_SEARCH_ENDPOINT: ${WEB_SEARCH_ENDPOINT:-https://api.tavily.com/search}
-      WEB_SEARCH_API_KEY: ${WEB_SEARCH_API_KEY:-}
+      WEB_SEARCH_PROVIDER: searxng
+      WEB_SEARCH_ENDPOINT: http://searxng:8080/search
+      WEB_SEARCH_API_KEY: ""
       WEB_SEARCH_MAX_RESULTS: ${WEB_SEARCH_MAX_RESULTS:-5}
       EXPORT_DIR: ${EXPORT_DIR:-storage/exports}
       EXPORT_QUEUE_NAME: ${EXPORT_QUEUE_NAME:-edunova_exports}
@@ -246,6 +260,10 @@ services:
       CODE_VERIFIER_TIMEOUT_SECONDS: ${CODE_VERIFIER_TIMEOUT_SECONDS:-40}
       EDUNOVA_DOCUMENT_PARSER: ${EDUNOVA_DOCUMENT_PARSER:-docling}
       DOCLING_ARTIFACTS_PATH: /opt/docling/models
+      WEB_SEARCH_PROVIDER: searxng
+      WEB_SEARCH_ENDPOINT: http://searxng:8080/search
+      WEB_SEARCH_API_KEY: ""
+      WEB_SEARCH_MAX_RESULTS: ${WEB_SEARCH_MAX_RESULTS:-5}
       DOCLING_DOCUMENT_TIMEOUT_SECONDS: ${DOCLING_DOCUMENT_TIMEOUT_SECONDS:-120}
       STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}

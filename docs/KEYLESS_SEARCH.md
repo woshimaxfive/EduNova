@@ -1,21 +1,22 @@
 # 免Key联网搜索
 
-SearXNG作为独立可选容器运行，通过现有WebSearchService/httpx接入，不替换LangGraph。正文读取采用本地Trafilatura提取及HTTPCore受限连接，不需要额外API Key。搜索结果仍是带URL的外部补充引用，不是课程教材或评分证据。
+SearXNG默认随项目作为独立容器运行，通过现有WebSearchService/httpx接入，不替换LangGraph。正文读取采用本地Trafilatura提取及HTTPCore受限连接，不需要额外API Key。搜索结果仍是带URL的外部补充引用，不是课程教材或评分证据。
 
 ## 启动
 
-Windows运行 `06_Start_Keyless_Search.bat`；脚本先执行02初始化，再启动搜索覆盖配置。也可在已准备.env和本地向量模型后执行：
+Windows运行 `02_Start_EduNova.bat`，自动初始化并启动搜索；`06` 是兼容别名，不再启动第二套配置。也可在已准备.env和本地向量模型后执行：
 
 ```powershell
 ./scripts/initialize_env.ps1
-docker compose -f docker-compose.yml -f docker-compose.search.yml up -d --build --wait
-docker compose -f docker-compose.yml -f docker-compose.search.yml exec -T backend python -m backend.integration.keyless_search_check
+./scripts/migrate_local_search_env.ps1
+docker compose up -d --build --wait
+docker compose exec -T backend python -m backend.integration.keyless_search_check
 ```
 
-初始化只新增随机SearXNG内部密钥，不是购买的API Key。搜索容器不映射宿主机端口；仅供后端通过Docker网络访问。覆盖配置清空搜索API Key，并明确选择SearXNG；该模式跳过模型原生联网工具，失败不会转用Tavily或厂商付费搜索。02仍是基本学习启动，后续需要搜索请使用06入口。03停止入口也会停止同项目的搜索容器；手动停止搜索版使用：
+初始化自动生成随机SearXNG内部签名密钥，不是购买的API Key。搜索容器不映射宿主机端口，仅供后端通过Docker网络访问。迁移脚本移除 `.env` 中旧搜索提供方、端点和Key，保留主模型、语音及其他设置；默认Compose强制使用本地搜索并清空旧Key，Tavily适配已移除。搜索失败不会转用模型原生联网或付费接口。`docker-compose.search.yml` 仅保留为空兼容覆盖文件。03停止入口会停止同项目全部服务；手动停止使用：
 
 ```powershell
-docker compose -f docker-compose.yml -f docker-compose.search.yml down
+docker compose down
 ```
 
 ## 边界与试验
@@ -32,7 +33,7 @@ docker compose -f docker-compose.yml -f docker-compose.search.yml down
 
 只允许HTTP(S)标准端口，无登录凭证、Cookie、环境代理；连接时检查全部DNS结果并固定已校验的公网IP，TLS仍验证原域名。最多3次请求，每跳重新检查；不执行JavaScript、不加载子资源、不解压压缩响应，不读取私网、环回、云元数据、保留地址。单次网络操作最多2秒、读取循环预算6秒；操作系统DNS解析和正文提取不是硬实时可取消操作，因此不是严格6秒SLA。失败不会切换付费接口。
 
-如果本机代理使用 `198.18.0.0/15` Fake-IP DNS，正文读取会安全失败并保留摘要。需由部署方为后端使用真实公网解析（例如在代理中将相应域名排除Fake-IP）；不要为此放开保留地址检查。当前开发机及Docker都复现该限制，即使指定容器DNS仍被代理接管。独立已知URL下载试验中Python官方中文页正文提取成功；这不等于当前安全网络链路已通过。动态页面、403/429、验证码和无正文页均可能读取失败。
+如果本机代理使用 `198.18.0.0/15` Fake-IP DNS，正文读取会安全失败并保留摘要。需由部署方为后端使用真实公网解析（例如将代理DNS模式设为 `redir-host`）；不要为此放开保留地址检查。2026-09-24开发机经用户授权调整当前代理DNS后，后端及AI worker安全读取Python官方文档各1800字符，严格来源检查通过。此结果只覆盖当时网络和样例，动态页面、403/429、验证码和无正文页仍可能读取失败。
 
 正文工具比较了Trafilatura、readability-lxml以及已有lxml/bs4。选择Trafilatura以避免自写正文规则；Haystack HTMLToDocument也使用该提取器，LangChain WebBaseLoader主要提供bs4全文封装，因此未引入额外框架。固定Trafilatura 2.2.0（Apache-2.0）、HTTPCore 1.0.9（BSD-3-Clause，原已间接安装）；新增提取器及其轻量依赖，无模型权重、GPU或付费服务。OSV在选型时对这两个版本及readability-lxml 0.9均未返回已知公告，不代表完整安全认证。
 
@@ -41,10 +42,14 @@ docker compose -f docker-compose.yml -f docker-compose.search.yml down
 可手动运行真实公开来源检查（会联网，不调用主模型或写数据库）：
 
 ```powershell
-docker compose -f docker-compose.yml -f docker-compose.search.yml exec -T backend python -m backend.integration.web_sources_check --require-body
+docker compose exec -T backend python -m backend.integration.web_sources_check --require-body
 ```
 
 严格模式要求两个教学视频查询及Python官方中文正文均成功，否则非零退出。去掉 `--require-body` 只把视频检索作为通过条件，正文状态仍打印；不得把该模式成功解释为正文读取已验收。浏览器实际播放和模型回答质量需另行验证。
+
+可选真实播放验收：在PowerShell设置 `$env:EDUNOVA_LIVE_VIDEO='1'` 后运行 `./scripts/test_e2e.ps1`。它在隔离数据库的真实资源页临时替换合成视频载荷，要求B站视频播放时间推进超过2秒并保留原平台链接；不写入正式课程。默认E2E不依赖外部视频平台，测试结束可用 `Remove-Item Env:EDUNOVA_LIVE_VIDEO` 清除开关。
+
+2026-09-24该可选验收通过，样例为B站 `BV1b54y117KG`。这证明当时网络和浏览器下的页内播放，不保证其他视频、地区或平台均可播放。
 
 实际后端POST试验曾在未指定语言时返回空结果，明确中文语言后相同问题返回20条；配置因此明确 `default_lang: zh-CN`。英文问题也实测返回来源。Brave、DuckDuckGo和Wikidata先后出现限流/验证码，不能将少量成功查询表述为长期稳定或全面覆盖。
 

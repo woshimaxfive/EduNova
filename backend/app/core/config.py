@@ -70,9 +70,8 @@ class Settings(BaseSettings):
     model_max_concurrent_global: int = 12
     model_concurrency_wait_seconds: float = 2.0
     model_call_log_retention_days: int = 30
-    web_search_provider: str = "tavily"
-    web_search_endpoint: str = "https://api.tavily.com/search"
-    web_search_api_key: str = ""
+    web_search_provider: str = "searxng"
+    web_search_endpoint: str = "http://searxng:8080/search"
     web_search_max_results: int = 5
     export_dir: str = "storage/exports"
     export_queue_name: str = "edunova_exports"

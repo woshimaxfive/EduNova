@@ -12,6 +12,9 @@ docker info >nul 2>&1
 if errorlevel 1 goto :docker_not_running
 
 echo [3/3] Checking Compose configuration...
+rem Syntax check only: first-run .env secrets are initialized later by 02.
+rem setlocal keeps this placeholder out of the actual runtime environment.
+set "SEARXNG_SECRET=compose-validation-only-not-for-runtime"
 docker compose config --quiet
 if errorlevel 1 goto :compose_invalid
 

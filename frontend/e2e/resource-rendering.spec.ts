@@ -65,4 +65,30 @@ test("production chunks render real diagrams and execute browser Python", async 
   await page.getByRole("button", { name: "运行 Python 代码" }).click();
   await expect(page.locator(".resource-code-output.completed pre")).toHaveText("42", { timeout: 90_000 });
   expect(errors).toEqual([]);
+
+  // Opt-in live platform check, excluded from deterministic/offline CI.
+  // Uses the real resource page and iframe, but never persists the video fixture.
+  if (process.env.EDUNOVA_LIVE_VIDEO === "1") {
+    kind = "video";
+    artifact = { kind: "external_video", platform: "bilibili", video_id: "BV1b54y117KG",
+      title: "Python基本语法：列表推导式", watch_url: "https://www.bilibili.com/video/BV1b54y117KG",
+      fit_reason: "合成资源仅验证播放器，不作为课程或评分证据", embed_status: "unknown",
+      external_supplement: true, citation_refs: [] };
+    await open();
+    const embed = page.locator('.external-video-frame iframe');
+    await expect(embed).toBeVisible();
+    const frame = await embed.contentFrame();
+    const video = frame.locator('video');
+    await expect(video).toBeAttached({ timeout: 30_000 });
+    await video.evaluate(async (element: HTMLVideoElement) => {
+      element.muted = true;
+      await element.play();
+    });
+    const start = await video.evaluate((element: HTMLVideoElement) => element.currentTime);
+    await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime),
+      { timeout: 20_000 }).toBeGreaterThan(start + 2);
+    await expect(page.getByRole('link', { name: /无法播放时前往原平台/ }))
+      .toHaveAttribute('href', 'https://www.bilibili.com/video/BV1b54y117KG');
+    console.log('Live resource video: playback advanced over two seconds; original-platform fallback present.');
+  }
 });

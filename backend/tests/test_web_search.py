@@ -52,12 +52,31 @@ def test_tutor_local_selection_does_not_invoke_native_model_search():
     assert warnings
 
 
-def test_tavily_still_requires_explicit_key():
+def test_retired_paid_search_never_calls_network_or_native_fallback():
     client = Mock()
-    result = WebSearchService(Settings(_env_file=None, web_search_provider="tavily",
-                                      web_search_api_key=""), client).search("测试")
-    assert result.warning == "联网搜索未配置。"
+    search = WebSearchService(Settings(_env_file=None, web_search_provider="tavily",
+                                      web_search_api_key="retired-synthetic-key"), client)
+    result = search.search("测试")
+    assert "仅支持免Key" in result.warning
     client.post.assert_not_called()
+    native = Mock()
+    context = SimpleNamespace(native_web_search_provider=native, web_search_service=search)
+    assert TutorContextMixin._web_search_citations(context, "测试", [], user=object()) == []
+    native.native_web_search.assert_not_called()
+
+
+def test_default_search_needs_no_api_key(monkeypatch):
+    monkeypatch.delenv("WEB_SEARCH_PROVIDER", raising=False)
+    monkeypatch.delenv("WEB_SEARCH_ENDPOINT", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.web_search_provider == "searxng"
+    calls = []
+    def handler(request):
+        calls.append(request)
+        assert request.url.host == "searxng" and b"api_key" not in request.content
+        return httpx.Response(200, json={"results": [{"title": "文档", "url": "https://docs.python.org/"}]})
+    search = WebSearchService(settings, httpx.Client(transport=httpx.MockTransport(handler)))
+    assert search.search("Python").citations and len(calls) == 1
 
 
 def test_video_search_uses_dedicated_category_without_site_restriction():

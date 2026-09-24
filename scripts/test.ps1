@@ -23,6 +23,7 @@ Write-Host "== EduNova verification =="
 
 Write-Host "== Encoding check =="
 & "$repoRoot\scripts\verify_encoding.ps1"
+& "$repoRoot\scripts\test_local_search_setup.ps1"
 
 if (Test-Path -LiteralPath "$repoRoot\backend") {
   Write-Host "== Backend checks =="

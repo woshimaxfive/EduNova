@@ -52,6 +52,7 @@ try {
   }
 
   Write-Host "== Verify PostgreSQL/pgvector cosine ranking =="
+  Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "speech", "python", "-m", "backend.integration.local_speech_check"))
   Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.pgvector_rag_check"))
 
   Write-Host "== Verify embedding archive restoration and concurrency =="

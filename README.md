@@ -36,7 +36,7 @@ EduNova 是面向高校学生的个性化学习系统。它把课程资料、学
 
 - Docker Desktop 及 Docker Compose（建议分配不少于 8 GB 内存）
 - 可访问 Docker 镜像与 Python/Node 依赖源的网络环境
-- 如需体验 AI 生成、RAG 向量检索、图片或语音能力，需准备相应 Provider 的**个人或组织测试凭证**
+- AI 对话与生成只需一组主模型凭证；图片能力跟随该模型。默认向量、排序、搜索和语音不需要额外服务 Key。
 
 > 本项目不包含、也不要求提交任何真实 API Key、账号密码、私有资料或个人学习数据。
 
@@ -80,13 +80,13 @@ JWT_SECRET=
 MODEL_SETTINGS_ENCRYPTION_KEY=
 ```
 
-如需启用 AI 功能，配置主模型即可使用对话与生成；图片理解跟随主模型，通过图片能力测试后开放。`02_Start_EduNova.bat` 默认自动准备本地向量模型，不要求额外向量或重排序 Key，也不要求安装宿主机 Python。首次需联网下载依赖及约95MB模型，后续校验通过即复用；启动前进行断网推理检查。准备成功后，启动脚本清理本机 `.env` 的旧向量/重排序及搜索配置，保留主模型和独立语音凭证。05入口仅为兼容别名。旧索引不会在启动时隐式覆盖，可通过设置中的重建任务归档后迁移。联网搜索默认使用本地SearXNG且无需Key；语音仍为独立可选配置。
+如需启用 AI 功能，配置主模型即可使用对话与生成；图片理解跟随主模型，通过图片能力测试后开放。`02_Start_EduNova.bat` 自动准备本地向量和语音模型，无需额外Key或宿主机Python。首次需联网下载依赖、约95MB向量模型及约453MB语音模型，后续校验通过即复用；启动前进行断网推理检查。准备成功后，启动脚本清理本机 `.env` 的旧向量/重排序、搜索及语音配置，保留主模型。05入口仅为兼容别名。旧索引不会在启动时隐式覆盖，可通过设置中的重建任务归档后迁移。联网搜索使用本地SearXNG，不需Key但仍需互联网。语音效果、CPU等待时间和许可边界见[本地语音说明](docs/LOCAL_SPEECH.md)。
 
 不填写模型凭证也可以启动系统、注册账号并查看内置课程；AI 对话和学习路径、资源生成仍需有效的模型配置，不会自动生成演示答案。`.env.example` 中的 API Key 都是占位值。修改 `.env` 后重新执行启动脚本以更新容器配置；可在页面的模型设置中测试连接。不要将真实 `.env` 放进源码包。
 
 ### 2. 启动服务
 
-先准备本地模型（Windows无需宿主机Python）：`powershell -File scripts/prepare_local_runtime.ps1`。其他系统可按 [本地检索说明](docs/LOCAL_EMBEDDING.md) 准备固定权重。旧部署执行配置清理前先备份数据库，并为需保留的语音能力配置独立凭证。
+先准备本地模型（Windows无需宿主机Python）：`powershell -File scripts/prepare_local_runtime.ps1`。其他系统按[本地检索说明](docs/LOCAL_EMBEDDING.md)和[本地语音说明](docs/LOCAL_SPEECH.md)准备固定权重。旧部署执行配置清理前先备份数据库。
 
 ```powershell
 docker compose up -d --build

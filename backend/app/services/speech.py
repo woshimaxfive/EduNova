@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import re
-
 from backend.app.core.config import Settings
-from backend.app.providers.xfyun_speech import XfyunSpeechConfig, XfyunSpeechError, XfyunSpeechProvider
+from backend.app.providers.local_speech import LocalSpeechError, LocalSpeechProvider
 from backend.app.schemas.speech import SpeechTranscriptionResult
 
 
@@ -15,92 +13,26 @@ class SpeechServiceError(RuntimeError):
 
 
 class SpeechService:
-    def __init__(self, settings: Settings, provider: XfyunSpeechProvider | None = None) -> None:
+    def __init__(self, settings: Settings, provider: LocalSpeechProvider | None = None) -> None:
         self.settings = settings
-        self.provider = provider or XfyunSpeechProvider()
+        self.provider = provider or LocalSpeechProvider(settings.local_speech_url, settings.speech_request_timeout_seconds)
 
     def transcribe(self, audio: bytes) -> SpeechTranscriptionResult:
-        if self.settings.system_speech_provider.strip().lower() != "xfyun":
-            raise SpeechServiceError("服务器未启用讯飞语音识别。", code="SPEECH_NOT_CONFIGURED", status_code=503)
-        max_bytes = self.settings.speech_max_audio_seconds * 16000 * 2
-        if not audio or len(audio) > max_bytes or len(audio) % 2:
-            raise SpeechServiceError(
-                f"录音必须是最长 {self.settings.speech_max_audio_seconds} 秒的16k单声道PCM。",
-                code="INVALID_SPEECH_AUDIO",
-                status_code=400,
-            )
+        max_seconds = min(self.settings.speech_max_audio_seconds, 60)
+        if not audio or len(audio) > max_seconds * 16000 * 2 or len(audio) % 2:
+            raise SpeechServiceError(f"录音必须是最长 {max_seconds} 秒的16k单声道PCM。",
+                                     code="INVALID_SPEECH_AUDIO", status_code=400)
         try:
-            transcript = self.provider.transcribe_pcm(
-                self._config(),
-                audio,
-                timeout_seconds=self.settings.speech_request_timeout_seconds,
-            )
-        except XfyunSpeechError as exc:
-            raise self._map_error(exc) from exc
-        return SpeechTranscriptionResult(
-            transcript=transcript,
-            duration_ms=round(len(audio) / 32),
-        )
+            transcript = self.provider.transcribe_pcm(audio)
+        except LocalSpeechError as exc:
+            raise SpeechServiceError(str(exc), code=exc.code, status_code=exc.status_code) from exc
+        return SpeechTranscriptionResult(transcript=transcript, duration_ms=round(len(audio) / 32))
 
     def synthesize(self, text: str) -> bytes:
-        if self.settings.system_speech_provider.strip().lower() != "xfyun":
-            raise SpeechServiceError("服务器未启用讯飞语音合成。", code="SPEECH_NOT_CONFIGURED", status_code=503)
-        chunks = self._split_text(text)
-        if not chunks:
-            raise SpeechServiceError("朗读文本为空。", code="INVALID_SPEECH_TEXT", status_code=400)
-        audio_parts: list[bytes] = []
-        try:
-            for chunk in chunks:
-                audio_parts.append(self.provider.synthesize_mp3(
-                    self._config(),
-                    chunk,
-                    timeout_seconds=self.settings.speech_request_timeout_seconds,
-                ))
-        except XfyunSpeechError as exc:
-            raise self._map_error(exc) from exc
-        return b"".join(audio_parts)
-
-    def _config(self) -> XfyunSpeechConfig:
-        return XfyunSpeechConfig(
-            app_id=self.settings.system_speech_app_id,
-            api_key=self.settings.system_speech_api_key,
-            api_secret=self.settings.system_speech_api_secret,
-            asr_url=self.settings.system_speech_asr_url,
-            tts_url=self.settings.system_speech_tts_url,
-            tts_voice=self.settings.system_speech_tts_voice,
-            tts_speed=self.settings.system_speech_tts_speed,
-        )
-
-    @staticmethod
-    def _split_text(text: str) -> list[str]:
         normalized = " ".join(text.split()).strip()
-        if not normalized:
-            return []
-        pieces = [item.strip() for item in re.split(r"(?<=[。！？；.!?;])", normalized) if item.strip()]
-        chunks: list[str] = []
-        current = ""
-        for piece in pieces or [normalized]:
-            if len((current + piece).encode("utf-8")) < 7600:
-                current += piece
-                continue
-            if current:
-                chunks.append(current)
-            while len(piece.encode("utf-8")) >= 7600:
-                boundary = min(2400, len(piece))
-                while boundary > 1 and len(piece[:boundary].encode("utf-8")) >= 7600:
-                    boundary -= 1
-                chunks.append(piece[:boundary])
-                piece = piece[boundary:]
-            current = piece
-        if current:
-            chunks.append(current)
-        return chunks
-
-    @staticmethod
-    def _map_error(exc: XfyunSpeechError) -> SpeechServiceError:
-        status_code = 503 if exc.code in {"not_configured", "authentication_failed", "rate_limited"} else 502
-        if exc.code in {"invalid_audio", "invalid_text"}:
-            status_code = 400
-        if exc.code == "empty_transcript":
-            status_code = 422
-        return SpeechServiceError(str(exc), code=f"SPEECH_{exc.code.upper()}", status_code=status_code)
+        if not normalized or len(normalized) > 180:
+            raise SpeechServiceError("每段朗读需为1至180字，请分段朗读。", code="INVALID_SPEECH_TEXT", status_code=400)
+        try:
+            return self.provider.synthesize_wav(normalized)
+        except LocalSpeechError as exc:
+            raise SpeechServiceError(str(exc), code=exc.code, status_code=exc.status_code) from exc

@@ -3,7 +3,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
 try {
   # Reuse the serving image; no host Python installation or extra downloader image.
-  docker compose build backend
+  docker compose build backend speech
   if ($LASTEXITCODE -ne 0) { throw "Local runtime build failed." }
   $modelDir = Join-Path $repoRoot "storage/models/bge-small-zh-v1.5"
   New-Item -ItemType Directory -Force -Path $modelDir | Out-Null
@@ -20,5 +20,17 @@ try {
     --mount "type=bind,source=$modelDir,target=/models,readonly" `
     $imageName -m backend.integration.local_embedding_check
   if ($LASTEXITCODE -ne 0) { throw "Offline inference failed; services were not switched." }
+  $speechDir = Join-Path $repoRoot "storage/models/speech"
+  New-Item -ItemType Directory -Force -Path $speechDir | Out-Null
+  docker run --rm --user 0 --entrypoint python `
+    --mount "type=bind,source=$speechDir,target=/models" `
+    --mount "type=bind,source=$repoRoot/scripts/prepare_local_speech.py,target=/app/prepare_local_speech.py,readonly" `
+    $imageName /app/prepare_local_speech.py --model-dir /models
+  if ($LASTEXITCODE -ne 0) { throw "Local speech model preparation failed; services were not switched." }
+  docker run --rm --network none --entrypoint python `
+    --env LOCAL_SPEECH_MODEL_DIR=/models `
+    --mount "type=bind,source=$speechDir,target=/models,readonly" `
+    "$($composeConfig.name)-speech" -m backend.integration.local_speech_check
+  if ($LASTEXITCODE -ne 0) { throw "Offline speech inference failed; services were not switched." }
 }
 finally { Pop-Location }

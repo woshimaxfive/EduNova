@@ -31,6 +31,8 @@ PURPOSES = {
 }
 
 PACKAGE_METADATA_OVERRIDES = {
+    "sherpa-onnx": ("https://github.com/k2-fsa/sherpa-onnx", "Apache-2.0 source; 1.x wheels bundle GPL components; see docs/LOCAL_SPEECH.md"),
+    "sherpa-onnx-core": ("https://github.com/k2-fsa/sherpa-onnx", "Apache-2.0 source; 1.x wheels bundle GPL components; see docs/LOCAL_SPEECH.md"),
     "setuptools": ("https://github.com/pypa/setuptools", "MIT"),
     "bcrypt": ("https://github.com/pyca/bcrypt", "Apache-2.0"),
     "cryptography": ("https://github.com/pyca/cryptography", "Apache-2.0 OR BSD-3-Clause"),
@@ -107,6 +109,7 @@ def python_dependencies() -> list[tuple[str, str, str, str, str]]:
         "requirements-ai.txt",
         "requirements-dev.txt",
         "requirements-eval-network.txt",
+        "requirements-local-speech.txt",
     ):
         for line in (ROOT / "backend" / filename).read_text(encoding="utf-8").splitlines():
             value = line.strip()

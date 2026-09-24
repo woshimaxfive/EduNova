@@ -1091,7 +1091,7 @@ describe("LearningSpacePage", () => {
     expect(within(thread).getByRole("button", { name: "协作轨迹" })).toBeInTheDocument();
   });
 
-  it("uses browser speech recognition for voice input and browser speech synthesis for read aloud", async () => {
+  it("does not fall back to browser cloud speech when local capture or synthesis is unavailable", async () => {
     const user = userEvent.setup();
     const speakSpy = vi.fn();
     const cancelSpy = vi.fn();
@@ -1138,18 +1138,16 @@ describe("LearningSpacePage", () => {
 
     await user.click(screen.getByRole("button", { name: "语音输入" }));
 
-    expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("语音输入的问题");
+    expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("");
     expect(screen.queryByText("已识别语音输入，确认后再发送。")).not.toBeInTheDocument();
 
+    await user.type(screen.getByRole("textbox", { name: "学习问题输入" }), "手动输入的问题");
     await user.click(screen.getByRole("button", { name: "发送" }));
     await user.click(await screen.findByRole("button", { name: "朗读回答" }));
 
-    expect(speakSpy).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "停止朗读" })).toBeInTheDocument();
-    cancelSpy.mockClear();
-    await user.click(screen.getByRole("button", { name: "停止朗读" }));
-    expect(cancelSpy).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText("正在朗读回答。")).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("本地朗读暂不可用，请稍后重试。");
+    expect(speakSpy).not.toHaveBeenCalled();
+    expect(cancelSpy).not.toHaveBeenCalled();
   });
 
   it("shows a non-blocking warning when the browser does not support voice input", async () => {
@@ -1159,7 +1157,7 @@ describe("LearningSpacePage", () => {
 
     await user.click(screen.getByRole("button", { name: "语音输入" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("当前浏览器不支持语音输入，请使用键盘输入。");
+    expect(await screen.findByRole("alert")).toHaveTextContent("当前页面无法录音，请使用HTTPS或本机地址并允许麦克风权限。");
     expect(screen.getByRole("textbox", { name: "学习问题输入" })).toHaveValue("");
   });
 

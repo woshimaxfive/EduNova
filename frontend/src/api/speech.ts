@@ -27,7 +27,7 @@ export async function transcribeSpeech(audio: Blob): Promise<SpeechTranscription
     if (axios.isAxiosError(error)) {
       const body = error.response?.data as { error?: { code?: string; message?: string } } | undefined;
       throw new SpeechRequestError(
-        body?.error?.message ?? "讯飞语音识别暂时不可用。",
+        body?.error?.message ?? "本地语音识别暂时不可用。",
         body?.error?.code
       );
     }

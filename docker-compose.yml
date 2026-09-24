@@ -1,4 +1,41 @@
 services:
+  speech:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      target: local-speech
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+    environment:
+      LOCAL_SPEECH_MODEL_DIR: /models
+      LOCAL_SPEECH_THREADS: "2"
+      HF_HUB_OFFLINE: "1"
+    volumes:
+      - type: bind
+        source: ./storage/models/speech
+        target: /models
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - speech_net
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 1536m
+    cpus: 2
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 6
+
   searxng:
     image: searxng/searxng@sha256:bcfaed4091d59f7ce85670bd701a2d0295872196dc19908a3965a8353b149f83
     environment:
@@ -86,14 +123,7 @@ services:
       SYSTEM_RERANK_API_KEY: ""
       SYSTEM_RERANK_MODEL: ""
       SYSTEM_RERANK_WORKSPACE_ID: ""
-      SYSTEM_SPEECH_PROVIDER: ${SYSTEM_SPEECH_PROVIDER:-xfyun}
-      SYSTEM_SPEECH_APP_ID: ${SYSTEM_SPEECH_APP_ID:-}
-      SYSTEM_SPEECH_API_KEY: ${SYSTEM_SPEECH_API_KEY:-}
-      SYSTEM_SPEECH_API_SECRET: ${SYSTEM_SPEECH_API_SECRET:-}
-      SYSTEM_SPEECH_ASR_URL: ${SYSTEM_SPEECH_ASR_URL:-wss://iat-api.xfyun.cn/v2/iat}
-      SYSTEM_SPEECH_TTS_URL: ${SYSTEM_SPEECH_TTS_URL:-wss://tts-api.xfyun.cn/v2/tts}
-      SYSTEM_SPEECH_TTS_VOICE: ${SYSTEM_SPEECH_TTS_VOICE:-x4_yezi}
-      SYSTEM_SPEECH_TTS_SPEED: ${SYSTEM_SPEECH_TTS_SPEED:-50}
+      LOCAL_SPEECH_URL: http://speech:8091
       SPEECH_REQUEST_TIMEOUT_SECONDS: ${SPEECH_REQUEST_TIMEOUT_SECONDS:-75}
       SPEECH_MAX_AUDIO_SECONDS: ${SPEECH_MAX_AUDIO_SECONDS:-60}
       VISION_REQUEST_TIMEOUT_SECONDS: ${VISION_REQUEST_TIMEOUT_SECONDS:-60}
@@ -135,6 +165,8 @@ services:
       - material_data:/app/var/uploads/materials
       - chat_attachment_data:/app/var/uploads/chat-attachments
     depends_on:
+      speech:
+        condition: service_healthy
       searxng:
         condition: service_healthy
       postgres:
@@ -146,6 +178,7 @@ services:
     networks:
       - default
       - verification_net
+      - speech_net
     healthcheck:
       test:
         [
@@ -386,5 +419,7 @@ volumes:
   clamav_data:
 
 networks:
+  speech_net:
+    internal: true
   verification_net:
     internal: true

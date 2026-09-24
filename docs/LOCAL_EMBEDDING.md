@@ -38,7 +38,7 @@ Windows用户双击 `02_Start_EduNova.bat`：构建本地运行时、准备固�
 
 新增真实PostgreSQL检查覆盖：合成Markdown正文分块、本地512维向量落库、重新读取后检索及章节引用、跨用户拒绝；使用真实推理与pgvector，仅替换调用审计/Redis协调层。它从已解析资料开始，不替代文件上传解析验收。`-LocalEmbedding` E2E已包含此检查。
 
-启动脚本在模型准备成功后执行 `scripts/migrate_local_retrieval_env.ps1`：移除旧外部向量/重排序字段，设置本地provider；保留主模型和独立语音字段。若旧provider明确为讯飞且语音字段为空，先复制共享讯飞凭证至独立语音字段。默认Compose不再借用向量凭证用于语音。本地模式禁止旧重排序凭证生效；不删除数据库历史配置列或向量归档。
+启动脚本在模型准备成功后执行 `scripts/migrate_local_retrieval_env.ps1`：移除旧外部向量/重排序字段，设置本地provider并保留主模型。语音现已使用独立本地服务，不再复制或借用向量凭证；02随后单独清理旧语音配置。本地模式禁止旧重排序凭证生效；不删除数据库历史配置列或向量归档。
 
 本地运行时设置 `SYSTEM_EMBEDDING_PROVIDER=fastembed_local`，可选 `LOCAL_EMBEDDING_MODEL_DIR`（默认上文目录）及 `LOCAL_EMBEDDING_THREADS`（默认2，范围1–8）。不需要向量Key；此模式不读取主模型/外部向量凭证，固定模型revision参与索引profile。文件缺失时检索退回关键词；损坏或推理失败时报告失败，不下载或转用付费服务。
 

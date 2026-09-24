@@ -2,23 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { SpeechRequestError, synthesizeSpeech, transcribeSpeech } from "../../api/speech";
 
-type RecognitionResultEvent = { results: ArrayLike<ArrayLike<{ transcript: string }>> };
-type RecognitionErrorEvent = { error?: string };
-type Recognition = {
-  lang: string;
-  interimResults: boolean;
-  maxAlternatives: number;
-  onresult: ((event: RecognitionResultEvent) => void) | null;
-  onerror: ((event: RecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-};
-type RecognitionConstructor = new () => Recognition;
-type SpeechWindow = Window & typeof globalThis & {
-  SpeechRecognition?: RecognitionConstructor;
-  webkitSpeechRecognition?: RecognitionConstructor;
-};
 type AudioCapture = {
   recorder: MediaRecorder;
   stream: MediaStream;
@@ -81,7 +64,7 @@ async function decodeRecordingToPcm16k(recording: Blob): Promise<Blob> {
   }
 }
 
-function splitSpeechForPlayback(content: string, maxCharacters = 180): string[] {
+function splitSpeechForPlayback(content: string, maxCharacters = 40): string[] {
   const sentences = content.match(/[^。！？；.!?;]+[。！？；.!?;]?/g) ?? [content];
   const chunks: string[] = [];
   let current = "";
@@ -110,14 +93,11 @@ export function useBrowserSpeech(options: {
   onNotice: (message: string, tone: SpeechNoticeTone) => void;
 }) {
   const optionsRef = useRef(options);
-  const recognitionRef = useRef<Recognition | null>(null);
   const captureRef = useRef<AudioCapture | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const playbackTokenRef = useRef(0);
   const playbackResolveRef = useRef<(() => void) | null>(null);
-  const serverAsrUnavailableRef = useRef(false);
-  const serverTtsUnavailableRef = useRef(false);
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [activeSpeechId, setActiveSpeechId] = useState<string | null>(null);
@@ -135,7 +115,6 @@ export function useBrowserSpeech(options: {
     audioRef.current = null;
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     audioUrlRef.current = null;
-    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
     setActiveSpeechId(null);
     setIsSpeechPaused(false);
   }, []);
@@ -154,42 +133,7 @@ export function useBrowserSpeech(options: {
       }
       return;
     }
-    if ("speechSynthesis" in window) {
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-        setIsSpeechPaused(false);
-      } else {
-        window.speechSynthesis.pause();
-        setIsSpeechPaused(true);
-      }
-    }
   }, [activeSpeechId, stopSpeaking]);
-
-  const startBrowserRecognition = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const speechWindow = window as SpeechWindow;
-    const Constructor = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
-    if (!Constructor) {
-      optionsRef.current.onNotice("当前浏览器不支持语音输入，请使用键盘输入。", "warning");
-      return;
-    }
-    const recognition = new Constructor();
-    recognition.lang = "zh-CN";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onresult = (event) => {
-      const text = Array.from(event.results).map((result) => result[0]?.transcript ?? "").join("").trim();
-      if (text) optionsRef.current.onTranscript(text);
-    };
-    recognition.onerror = () => {
-      setIsListening(false);
-      optionsRef.current.onNotice("语音输入暂时不可用，请改用键盘输入。", "warning");
-    };
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    setIsListening(true);
-    recognition.start();
-  }, []);
 
   const finishServerRecording = useCallback(async () => {
     const capture = captureRef.current;
@@ -216,16 +160,10 @@ export function useBrowserSpeech(options: {
       const result = await transcribeSpeech(audio);
       optionsRef.current.onTranscript(result.transcript);
     } catch (error) {
-      const canRetryServer = error instanceof SpeechRequestError
-        && ["SPEECH_EMPTY_TRANSCRIPT", "SPEECH_INVALID_AUDIO"].includes(error.code);
-      serverAsrUnavailableRef.current = !canRetryServer;
       const message = error instanceof SpeechRequestError
         ? error.message
         : "录音处理失败，请重新录制。";
-      optionsRef.current.onNotice(
-        canRetryServer ? message : `${message} 再次点击将使用浏览器识别。`,
-        "warning"
-      );
+      optionsRef.current.onNotice(message, "warning");
     } finally {
       capture.stream.getTracks().forEach((track) => track.stop());
       setIsTranscribing(false);
@@ -237,7 +175,6 @@ export function useBrowserSpeech(options: {
       void finishServerRecording();
       return;
     }
-    recognitionRef.current?.stop();
     setIsListening(false);
   }, [finishServerRecording]);
 
@@ -251,12 +188,13 @@ export function useBrowserSpeech(options: {
       && Boolean(navigator.mediaDevices?.getUserMedia)
       && typeof AudioContext !== "undefined"
       && typeof MediaRecorder !== "undefined";
-    if (!canCapture || serverAsrUnavailableRef.current) {
-      startBrowserRecognition();
+    if (!canCapture) {
+      optionsRef.current.onNotice("当前页面无法录音，请使用HTTPS或本机地址并允许麦克风权限。", "warning");
       return;
     }
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       });
       const preferredType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"]
@@ -271,53 +209,21 @@ export function useBrowserSpeech(options: {
       recorder.start(250);
       setIsListening(true);
     } catch {
-      serverAsrUnavailableRef.current = true;
-      startBrowserRecognition();
+      stream?.getTracks().forEach((track) => track.stop());
+      if (captureRef.current) window.clearTimeout(captureRef.current.timeoutId);
+      captureRef.current = null;
+      optionsRef.current.onNotice("无法使用麦克风，请检查权限后重试。", "warning");
     }
-  }, [finishServerRecording, isListening, isTranscribing, startBrowserRecognition, stopListening]);
-
-  const speakWithBrowser = useCallback((content: string, speechId: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
-      optionsRef.current.onNotice("当前浏览器不支持朗读回答。", "warning");
-      setActiveSpeechId(null);
-      return;
-    }
-    const utterance = new SpeechSynthesisUtterance(content);
-    utterance.lang = "zh-CN";
-    utterance.rate = 0.95;
-    const voices = typeof window.speechSynthesis.getVoices === "function"
-      ? window.speechSynthesis.getVoices()
-      : [];
-    utterance.voice = voices.find((voice) => /xiaoxiao|yunxi|natural|online/i.test(voice.name) && voice.lang.startsWith("zh"))
-      ?? voices.find((voice) => voice.lang.startsWith("zh"))
-      ?? null;
-    utterance.onend = () => {
-      setActiveSpeechId(null);
-      setIsSpeechPaused(false);
-    };
-    utterance.onerror = () => {
-      setActiveSpeechId(null);
-      setIsSpeechPaused(false);
-      setIsSpeechPaused(false);
-    };
-    setActiveSpeechId(speechId);
-    setIsSpeechPaused(false);
-    window.speechSynthesis.speak(utterance);
-  }, []);
+  }, [finishServerRecording, isListening, isTranscribing, stopListening]);
 
   const speak = useCallback(async (content: string, speechId: string) => {
     const cleaned = cleanSpeechText(content);
     if (!cleaned) return;
     stopSpeaking();
-    if (serverTtsUnavailableRef.current) {
-      speakWithBrowser(cleaned, speechId);
-      return;
-    }
     const parts = splitSpeechForPlayback(cleaned);
     const playbackToken = ++playbackTokenRef.current;
     setActiveSpeechId(speechId);
     setIsSpeechPaused(false);
-    let partIndex = 0;
     try {
       const requestPart = async (text: string) => {
         try {
@@ -327,7 +233,7 @@ export function useBrowserSpeech(options: {
         }
       };
       let pending = requestPart(parts[0] ?? cleaned);
-      for (partIndex = 0; partIndex < parts.length; partIndex += 1) {
+      for (let partIndex = 0; partIndex < parts.length; partIndex += 1) {
         const result = await pending;
         if (result.error || !result.blob) throw result.error ?? new Error("speech synthesis returned no audio");
         const blob = result.blob;
@@ -352,14 +258,13 @@ export function useBrowserSpeech(options: {
       }
       setActiveSpeechId(null);
     } catch {
-      serverTtsUnavailableRef.current = true;
+      if (playbackToken !== playbackTokenRef.current) return;
       stopSpeaking();
-      speakWithBrowser(parts.slice(partIndex).join("") || cleaned, speechId);
+      optionsRef.current.onNotice("本地朗读暂不可用，请稍后重试。", "warning");
     }
-  }, [speakWithBrowser, stopSpeaking]);
+  }, [stopSpeaking]);
 
   useEffect(() => () => {
-    recognitionRef.current?.stop();
     const capture = captureRef.current;
     if (capture) {
       window.clearTimeout(capture.timeoutId);
@@ -368,7 +273,6 @@ export function useBrowserSpeech(options: {
     }
     audioRef.current?.pause();
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
   }, []);
 
   return {

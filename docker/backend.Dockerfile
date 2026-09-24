@@ -93,4 +93,11 @@ RUN --mount=type=cache,id=edunova-pip,target=/root/.cache/pip \
     python -m pip install -r /app/backend/requirements-local-embedding.txt && python -m pip check
 USER edunova
 
+FROM runtime AS local-speech
+USER root
+RUN --mount=type=cache,id=edunova-pip,target=/root/.cache/pip \
+    python -m pip install -r /app/backend/requirements-local-speech.txt && python -m pip check
+USER edunova
+CMD ["python", "-m", "uvicorn", "backend.app.speech_server:app", "--host", "0.0.0.0", "--port", "8091", "--no-access-log"]
+
 FROM runtime AS backend

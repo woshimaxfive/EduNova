@@ -69,7 +69,7 @@ describe("useBrowserSpeech server enhancement", () => {
   });
 
   it("records with MediaRecorder, converts to PCM, and writes the transcript", async () => {
-    vi.mocked(transcribeSpeech).mockResolvedValue({ transcript: "数据结构", provider: "xfyun", duration_ms: 200 });
+    vi.mocked(transcribeSpeech).mockResolvedValue({ transcript: "数据结构", provider: "sherpa_onnx", duration_ms: 200 });
     const onTranscript = vi.fn();
     const { result } = renderHook(() => useBrowserSpeech({ onTranscript, onNotice: vi.fn() }));
 
@@ -98,7 +98,7 @@ describe("useBrowserSpeech server enhancement", () => {
   });
 
   it("plays server-generated audio for read aloud", async () => {
-    vi.mocked(synthesizeSpeech).mockResolvedValue(new Blob(["mp3"], { type: "audio/mpeg" }));
+    vi.mocked(synthesizeSpeech).mockResolvedValue(new Blob(["wav"], { type: "audio/wav" }));
     const { result } = renderHook(() => useBrowserSpeech({ onTranscript: vi.fn(), onNotice: vi.fn() }));
 
     await act(async () => result.current.speak("## 你好 [来源1]", "message-1"));
@@ -108,14 +108,41 @@ describe("useBrowserSpeech server enhancement", () => {
     expect(result.current.activeSpeechId).toBe(null);
   });
 
+  it("does not call browser cloud recognition when the microphone fails", async () => {
+    const cloudRecognition = vi.fn();
+    Object.defineProperty(window, "webkitSpeechRecognition", { configurable: true, value: cloudRecognition });
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockRejectedValue(new Error("permission denied"));
+    const onNotice = vi.fn();
+    const { result } = renderHook(() => useBrowserSpeech({ onTranscript: vi.fn(), onNotice }));
+    await act(async () => result.current.toggleListening());
+    expect(cloudRecognition).not.toHaveBeenCalled();
+    expect(onNotice).toHaveBeenCalledWith("无法使用麦克风，请检查权限后重试。", "warning");
+    Reflect.deleteProperty(window, "webkitSpeechRecognition");
+  });
+
+  it("does not use browser online voices after local synthesis fails and allows retry", async () => {
+    const cloudSpeak = vi.fn();
+    Object.defineProperty(window, "speechSynthesis", { configurable: true, value: { speak: cloudSpeak } });
+    vi.mocked(synthesizeSpeech).mockRejectedValueOnce(new Error("unavailable"))
+      .mockResolvedValueOnce(new Blob(["wav"], { type: "audio/wav" }));
+    const onNotice = vi.fn();
+    const { result } = renderHook(() => useBrowserSpeech({ onTranscript: vi.fn(), onNotice }));
+    await act(async () => result.current.speak("测试", "test"));
+    expect(cloudSpeak).not.toHaveBeenCalled();
+    expect(onNotice).toHaveBeenCalledWith("本地朗读暂不可用，请稍后重试。", "warning");
+    await act(async () => result.current.speak("重试", "test"));
+    expect(audioPlay).toHaveBeenCalledTimes(1);
+    Reflect.deleteProperty(window, "speechSynthesis");
+  });
+
   it("starts long read-aloud in short chunks instead of waiting for the full answer", async () => {
-    vi.mocked(synthesizeSpeech).mockResolvedValue(new Blob(["mp3"], { type: "audio/mpeg" }));
+    vi.mocked(synthesizeSpeech).mockResolvedValue(new Blob(["wav"], { type: "audio/wav" }));
     const { result } = renderHook(() => useBrowserSpeech({ onTranscript: vi.fn(), onNotice: vi.fn() }));
 
     await act(async () => result.current.speak("这是需要朗读的学习回答。".repeat(30), "message-long"));
 
     expect(vi.mocked(synthesizeSpeech).mock.calls.length).toBeGreaterThan(1);
-    expect(vi.mocked(synthesizeSpeech).mock.calls[0]?.[0].length).toBeLessThanOrEqual(180);
+    expect(vi.mocked(synthesizeSpeech).mock.calls[0]?.[0].length).toBeLessThanOrEqual(40);
     expect(audioPlay.mock.calls.length).toBe(vi.mocked(synthesizeSpeech).mock.calls.length);
   });
 });

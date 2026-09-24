@@ -9171,7 +9171,7 @@
       "SpeechSynthesisRequest": {
         "properties": {
           "text": {
-            "maxLength": 12000,
+            "maxLength": 180,
             "minLength": 1,
             "title": "Text",
             "type": "string"
@@ -9191,7 +9191,7 @@
             "type": "integer"
           },
           "provider": {
-            "default": "xfyun",
+            "default": "sherpa_onnx",
             "title": "Provider",
             "type": "string"
           },
@@ -25657,7 +25657,7 @@
         "responses": {
           "200": {
             "content": {
-              "audio/mpeg": {}
+              "audio/wav": {}
             },
             "description": "Successful Response"
           },

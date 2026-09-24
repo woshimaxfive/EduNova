@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import Depends, File, Response, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api.contracts import TypedAPIRouter as APIRouter
 from backend.app.api.errors import ApiError, api_response
@@ -26,9 +27,9 @@ async def transcribe_speech(
 ) -> dict:
     if file.content_type not in {"application/octet-stream", "audio/pcm", "audio/L16"}:
         raise ApiError(400, "INVALID_SPEECH_AUDIO", "仅支持16k单声道PCM录音。")
-    audio = await file.read()
+    audio = await file.read(60 * 16000 * 2 + 1)
     try:
-        result = service.transcribe(audio)
+        result = await run_in_threadpool(service.transcribe, audio)
     except SpeechServiceError as exc:
         raise ApiError(exc.status_code, exc.code, str(exc)) from exc
     return api_response(result.model_dump())
@@ -38,7 +39,7 @@ async def transcribe_speech(
     "/synthesis",
     response_class=Response,
     response_model=None,
-    responses={200: {"content": {"audio/mpeg": {}}}},
+    responses={200: {"content": {"audio/wav": {}}}},
 )
 def synthesize_speech(
     payload: SpeechSynthesisRequest,
@@ -51,6 +52,6 @@ def synthesize_speech(
         raise ApiError(exc.status_code, exc.code, str(exc)) from exc
     return Response(
         content=audio,
-        media_type="audio/mpeg",
-        headers={"Cache-Control": "private, no-store", "X-Speech-Provider": "xfyun"},
+        media_type="audio/wav",
+        headers={"Cache-Control": "private, no-store", "X-Speech-Provider": "sherpa_onnx"},
     )

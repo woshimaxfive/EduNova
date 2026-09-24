@@ -5182,7 +5182,7 @@ export interface components {
             duration_ms: number;
             /**
              * Provider
-             * @default xfyun
+             * @default sherpa_onnx
              */
             provider: string;
             /** Transcript */
@@ -17003,7 +17003,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "audio/mpeg": unknown;
+                    "audio/wav": unknown;
                 };
             };
             /** @description Bad Request */

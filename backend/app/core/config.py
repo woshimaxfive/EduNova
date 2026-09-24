@@ -44,14 +44,7 @@ class Settings(BaseSettings):
     system_rerank_model: str = ""
     system_rerank_workspace_id: str = ""
     vision_request_timeout_seconds: float = 60.0
-    system_speech_provider: str = "xfyun"
-    system_speech_app_id: str = ""
-    system_speech_api_key: str = ""
-    system_speech_api_secret: str = ""
-    system_speech_asr_url: str = "wss://iat-api.xfyun.cn/v2/iat"
-    system_speech_tts_url: str = "wss://tts-api.xfyun.cn/v2/tts"
-    system_speech_tts_voice: str = "x4_yezi"
-    system_speech_tts_speed: int = 50
+    local_speech_url: str = "http://speech:8091"
     speech_request_timeout_seconds: float = 75.0
     speech_max_audio_seconds: int = 60
     model_settings_encryption_key: str = ""

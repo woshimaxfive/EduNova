@@ -6,3 +6,5 @@
 70b1fbecb0952281d1d39ae44126c4a3aee5322f:backend/tests/test_material_comparison.py:generic-api-key:95
 8ff4d133d46cc11cc21aec7361c343d11f5949ab:backend/tests/test_practice_assessment.py:generic-api-key:331
 d364b3233d6f2808dd46b390839ec611dfdc36b2:backend/tests/test_materials.py:generic-api-key:100
+# Synthetic login for the isolated learning-closure fixture, not a provider key.
+0aafca6dcf60a2d5b37d19a1e30cbc6ef160b87f:frontend/e2e/local-speech.spec.ts:generic-api-key:9

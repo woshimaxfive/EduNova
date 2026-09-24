@@ -46,7 +46,14 @@ if ($updated -notmatch '(?m)^POSTGRES_PASSWORD=') {
   $updated += "POSTGRES_PASSWORD=$postgresPassword$newLine"
 }
 
+if ($updated -notmatch '(?m)^SEARXNG_SECRET=\S+') {
+  $searchSecret = New-RandomBase64Url -ByteCount 32
+  $updated = [regex]::Replace($updated, '(?m)^SEARXNG_SECRET=[^\r\n]*(\r?\n|$)', '')
+  $updated = $updated.TrimEnd() + "`nSEARXNG_SECRET=$searchSecret`n"
+}
+
 if ($updated -ne $text) {
+  # Existing credentials remain unchanged on repeated runs.
   [System.IO.File]::WriteAllText(
     $resolvedPath,
     $updated,

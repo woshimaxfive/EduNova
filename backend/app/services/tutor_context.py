@@ -93,7 +93,8 @@ class TutorContextMixin:
         reasoning_mode: str = "auto",
         force: bool = False,
     ) -> list[dict[str, Any]]:
-        if user is not None and self.native_web_search_provider is not None:
+        local_search_selected = bool(getattr(self.web_search_service, "prefer_external_search", False))
+        if user is not None and self.native_web_search_provider is not None and not local_search_selected:
             try:
                 native = self.native_web_search_provider.native_web_search(
                     user,

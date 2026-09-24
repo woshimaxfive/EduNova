@@ -19,6 +19,7 @@ EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说
 | BAAI/bge-small-zh-v1.5（可选下载） | 中文 512 维向量模型 | MIT | https://huggingface.co/BAAI/bge-small-zh-v1.5 |
 | Pyodide | 隔离式 Python 代码验证运行时 | MPL-2.0 | https://pyodide.org |
 | Nginx | 统一 Web 入口与反向代理 | BSD-2-Clause | https://nginx.org |
+| SearXNG（可选独立容器） | 免Key联网搜索聚合 | AGPL-3.0-or-later | https://github.com/searxng/searxng |
 
 ## 运行时服务说明
 

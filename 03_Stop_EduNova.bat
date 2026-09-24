@@ -2,7 +2,8 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-docker compose down
+rem Also stop the optional search service belonging to this Compose project.
+docker compose down --remove-orphans
 if errorlevel 1 (
   echo.
   echo Stop failed. Verify that Docker Desktop is running and review the message above.

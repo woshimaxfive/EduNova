@@ -60,6 +60,8 @@ EduNova 是面向高校学生的个性化学习系统。它把课程资料、学
 04_Reset_Demo_Data.bat    删除本机演示数据，不可恢复
 ```
 
+需要免Key联网搜索时使用 `06_Start_Keyless_Search.bat`，详情见[搜索部署说明](docs/KEYLESS_SEARCH.md)。搜索服务在本机运行，但查询仍会发送给外部搜索引擎。
+
 ### 手动启动
 
 ### 1. 配置环境变量

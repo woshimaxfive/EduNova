@@ -2,6 +2,17 @@
 
 EduNova 后端使用 FastAPI，默认 API 前缀为 `/api/v1`。机器可读合同以 `backend/openapi.json` 为准。
 
+### 模型用量观测
+
+`GET /agents/traces/{trace_id}` 沿用当前账号权限，`summary.model_calls` 返回该轨迹的调用类型、模型、配置 ID、会话 ID、耗时和每次尝试的用量；`summary.model_usage` 汇总 token。没有新增管理面板。
+
+- `input_tokens` 是兼容接口报告的总输入，`cache_read_tokens` 是其中的缓存命中部分，不能再次相加。`reasoning_tokens` 是输出明细，不重复计入输出费用。
+- `cache_write_tokens` 与 `uncached_input_tokens` 在上游未提供足够信息时为 `null`。缺失不是零；旧审计记录不会补造 token。重试包含未知消耗时，完整合计为 `null`，`known_*` 仅表示已知部分，不是总账单。
+- `cache_hit_ratio` 仅在所有观察到的尝试都提供合法输入和缓存读取计数时返回。流式累计值按最后一次报告处理，不逐帧累加；取消或中断没有最终用量时保留未知。
+- `observed_attempt_count` 表示实际进入适配器的尝试数；限流或取消发生在调用前可能为零。既有 `attempt_count`、`retry_count` 沿用运行时语义。SDK 内部请求行为和原生搜索工具费用不由此字段推测。
+- 不保存 Key、完整提示词、回答或推理正文。观测独立提交，失败不阻断业务事务；因此它不是服务商账单替代品。
+- `estimated_cost` 默认为空。只有部署者提供明确报价且四项输入/输出计数完整时，单次调用才返回估算与报价快照。真实缓存表现需按实际服务采样，合成测试不能证明命中率。
+
 ### 主模型与图片验证
 
 - `POST /settings/model/catalog` 接收 `base_url` 与可选 `api_key`，返回 `models` 模型 ID 数组。需登录；仅请求公网 HTTPS 目录，不跟随重定向。无路径的服务地址请求 `/v1/models`，已有 API 路径则追加 `/models`。兼容 `data[].id` 和 `models[].slug`，列表经排序去重；不做逐模型测试或分页补全。

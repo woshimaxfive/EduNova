@@ -335,6 +335,8 @@ class ModelCallRun(IdMixin, Base):
     purpose: Mapped[str] = mapped_column(String(80), nullable=False, default="generation")
     operation: Mapped[str] = mapped_column(String(30), nullable=False)
     provider_source: Mapped[str] = mapped_column(String(30), nullable=False)
+    session_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    usage_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     model_name: Mapped[str] = mapped_column(String(120), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     error_category: Mapped[str | None] = mapped_column(String(60), nullable=True)

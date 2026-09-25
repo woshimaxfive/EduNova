@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.models import AgentRunLog, ModelCallRun, User
 from backend.app.schemas.agents import AgentTraceResponse, agent_log_to_api
+from backend.app.providers.model_usage import summarize_attempts
 
 
 class AgentTraceNotFoundError(Exception):
@@ -73,6 +74,23 @@ class AgentTraceService:
         artifact_id = self._first_metadata_value(logs, "artifact_id")
         total_duration = sum(int(log.duration_ms or 0) for log in logs)
         summary = {
+            "model_calls": [
+                {
+                    "operation": call.operation, "purpose": call.purpose,
+                    "model": call.model_name, "provider_source": call.provider_source,
+                    "model_config_id": str(call.model_config_id) if call.model_config_id else None,
+                    "session_id": str(call.session_id) if call.session_id else None,
+                    "status": call.status, "attempt_count": call.attempt_count,
+                    "retry_count": call.retry_count, "latency_ms": call.latency_ms,
+                    "usage": call.usage_json,
+                } for call in model_calls
+            ],
+            "model_usage": summarize_attempts([
+                attempt for call in model_calls
+                for attempt in (call.usage_json.get("attempts", []) if call.usage_json is not None else [
+                    {"usage_status": "unknown"} for _ in range(max(1, call.attempt_count or 1))
+                ])
+            ]),
             "duration_ms": total_duration,
             "course_source_count": int(self._last_metadata_value(logs, "course_citation_count") or 0),
             "web_source_count": int(self._last_metadata_value(logs, "web_citation_count") or 0),

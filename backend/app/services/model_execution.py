@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 import random
@@ -17,6 +17,7 @@ from backend.app.core.config import Settings
 from backend.app.db.session import SessionLocal
 from backend.app.models import ModelCallRun
 from backend.app.providers.openai_compatible import ModelProviderError
+from backend.app.providers.model_usage import capture_usage, estimate_cost, normalize_usage, summarize_attempts
 
 
 T = TypeVar("T")
@@ -24,6 +25,8 @@ T = TypeVar("T")
 
 @dataclass(frozen=True)
 class ModelExecutionContext:
+    session_id: int | None = None
+    usage_attempts: list[dict[str, Any]] = field(default_factory=list)
     trace_id: str | None = None
     workflow: str | None = None
     node_name: str | None = None
@@ -63,6 +66,7 @@ def execution_context_for_state(
     cancel_check = getattr(job_context, "check_cancelled", None)
     usage_recorder = getattr(job_context, "record_model_usage", None)
     return ModelExecutionContext(
+        session_id=getattr(state.get("session"), "id", None),
         trace_id=str(state.get("trace_id")) if state.get("trace_id") else None,
         workflow=workflow,
         node_name=node_name,
@@ -238,9 +242,10 @@ class ModelCallAuditRecorder:
         latency_ms: int,
         context: ModelExecutionContext,
     ) -> None:
-        if context.trace_id is None and context.purpose != "connection_test":
-            return
         try:
+            usage = summarize_attempts(context.usage_attempts)
+            pricing_key = f"{provider_source}:{model_config_id if model_config_id is not None else 'system'}:{model_name}"
+            usage.update(estimate_cost(usage, self.settings.model_usage_pricing.get(pricing_key)))
             with SessionLocal() as session:
                 session.add(
                     ModelCallRun(
@@ -254,6 +259,8 @@ class ModelCallAuditRecorder:
                         operation=operation,
                         provider_source=provider_source,
                         model_name=model_name[:120],
+                        session_id=context.session_id,
+                        usage_json=usage,
                         status=status,
                         error_category=error_category,
                         attempt_count=attempt_count,
@@ -300,7 +307,7 @@ class ModelExecutionRuntime:
         max_attempts: int | None = None,
         bypass_circuit: bool = False,
     ) -> T:
-        context = current_model_execution_context()
+        context = replace(current_model_execution_context(), usage_attempts=[])
         attempts_allowed = max(1, max_attempts or self.settings.model_max_attempts)
         circuit_key = self._circuit_key(provider_source, model_config_id, model_name, operation)
         started = time.perf_counter()
@@ -314,7 +321,8 @@ class ModelExecutionRuntime:
                 attempt += 1
                 self._check_cancel(context)
                 try:
-                    result = call()
+                    with self._observe_attempt(context):
+                        result = call()
                     self.state.success(circuit_key)
                     self._audit(user_id, provider_source, model_config_id, model_name, operation, "completed", None, attempt, started, context)
                     return result
@@ -361,7 +369,7 @@ class ModelExecutionRuntime:
         call: Callable[[], Iterator[str]],
         timeout_seconds: float,
     ) -> Iterator[str]:
-        context = current_model_execution_context()
+        context = replace(current_model_execution_context(), usage_attempts=[])
         operation = "stream"
         attempts_allowed = max(1, self.settings.model_max_attempts)
         circuit_key = self._circuit_key(provider_source, model_config_id, model_name, operation)
@@ -379,9 +387,13 @@ class ModelExecutionRuntime:
                     attempt += 1
                     self._check_cancel(context)
                     try:
-                        for token in call():
-                            yielded = True
-                            yield token
+                        yield_stream = self._observe_stream(context, call)
+                        try:
+                            for token in yield_stream:
+                                yielded = True
+                                yield token
+                        finally:
+                            yield_stream.close()
                         self.state.success(circuit_key)
                         self._audit(user_id, provider_source, model_config_id, model_name, operation, "completed", None, attempt, started, context)
                         return
@@ -398,6 +410,9 @@ class ModelExecutionRuntime:
             except ModelProviderError as exc:
                 if final_error is None:
                     self._audit(user_id, provider_source, model_config_id, model_name, operation, "failed", exc.code, max(1, attempt), started, context)
+                raise
+            except GeneratorExit:
+                self._audit(user_id, provider_source, model_config_id, model_name, operation, "cancelled", "cancelled", attempt, started, context)
                 raise
             except Exception as exc:
                 cancelled = "cancel" in exc.__class__.__name__.lower()
@@ -418,6 +433,61 @@ class ModelExecutionRuntime:
                 self.state.release(user_id, lease)
 
         return generate()
+
+    @staticmethod
+    def _observe_stream(context: ModelExecutionContext, call: Callable[[], Iterator[str]]) -> Iterator[str]:
+        started = time.perf_counter()
+        usage = normalize_usage(None)
+        status = "completed"
+        first_token_ms = None
+        stream = None
+        try:
+            with capture_usage(usage):
+                stream = iter(call())
+            while True:
+                # Do not leave a ContextVar set across a consumer yield: streams
+                # can be interleaved or resumed in another worker context.
+                with capture_usage(usage):
+                    try:
+                        token = next(stream)
+                    except StopIteration:
+                        break
+                if first_token_ms is None:
+                    first_token_ms = max(0, int((time.perf_counter() - started) * 1000))
+                yield token
+        except BaseException as exc:
+            status = "cancelled" if isinstance(exc, GeneratorExit) or "cancel" in type(exc).__name__.lower() else "failed"
+            raise
+        finally:
+            try:
+                if stream is not None and hasattr(stream, "close"):
+                    with capture_usage(usage):
+                        stream.close()
+            finally:
+                context.usage_attempts.append({
+                    **usage, "attempt": len(context.usage_attempts) + 1, "status": status,
+                    "first_token_ms": first_token_ms,
+                    "latency_ms": max(0, int((time.perf_counter() - started) * 1000)),
+                })
+
+    @staticmethod
+    @contextmanager
+    def _observe_attempt(context: ModelExecutionContext):
+        started = time.perf_counter()
+        with capture_usage() as usage:
+            status = "completed"
+            try:
+                yield
+            except BaseException as exc:
+                status = "cancelled" if isinstance(exc, GeneratorExit) or "cancel" in type(exc).__name__.lower() else "failed"
+                raise
+            finally:
+                context.usage_attempts.append({
+                    **usage,
+                    "attempt": len(context.usage_attempts) + 1,
+                    "status": status,
+                    "latency_ms": max(0, int((time.perf_counter() - started) * 1000)),
+                })
 
     def _sleep_before_retry(self, error: ModelProviderError, attempt: int, context: ModelExecutionContext) -> None:
         self._check_cancel(context)

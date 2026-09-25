@@ -4,6 +4,8 @@ EduNova 使用 PostgreSQL、SQLAlchemy、Alembic 和 pgvector。本文档说明�
 
 ## 1. 数据域
 
+模型调用审计的 `20260925_0038` 迁移增加可空的 `usage_json` 和 `session_id`。旧记录保留空值，不反推历史费用。`usage_json` 仅包含每次尝试的数值计数、状态、耗时与可选报价快照；记录沿用 `MODEL_CALL_LOG_RETENTION_DAYS`。升级先运行 Alembic 再启动新 worker；降级会删除新增用量和会话标识，应先备份需要保留的审计数据，不影响原始聊天。
+
 | 数据域 | 主要表 |
 | --- | --- |
 | 账号与课程 | `users`、`courses`、`course_enrollments` |

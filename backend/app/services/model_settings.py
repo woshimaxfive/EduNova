@@ -647,6 +647,7 @@ class ModelSettingsService:
             reasoning_protocol=capabilities.reasoning_protocol,
             thinking_type=thinking_type if runtime.preset_id in {"spark", "qwen"} else None,
         )
+        config = replace(config, include_stream_usage=self.settings.model_stream_usage_enabled)
         return self.execution_runtime.execute_stream(
             user_id=user.id,
             provider_source=runtime.source,

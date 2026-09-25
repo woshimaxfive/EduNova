@@ -53,6 +53,7 @@ try {
 
   Write-Host "== Verify path approval migration and concurrency =="
   Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.path_approval_check"))
+  Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.model_usage_check"))
 
   Write-Host "== Verify isolated code execution policy =="
   Invoke-CheckedCommand -FilePath "docker" -CommandArguments ($composeArgs + @("exec", "-T", "backend", "python", "-m", "backend.integration.code_verifier_check"))

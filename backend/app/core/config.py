@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     model_max_concurrent_global: int = 12
     model_concurrency_wait_seconds: float = 2.0
     model_call_log_retention_days: int = 30
+    model_stream_usage_enabled: bool = False
+    model_usage_pricing: dict[str, dict] = Field(default_factory=dict)
     web_search_provider: str = "searxng"
     web_search_endpoint: str = "http://searxng:8080/search"
     web_search_max_results: int = 5

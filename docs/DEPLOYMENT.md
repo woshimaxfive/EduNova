@@ -2,6 +2,18 @@
 
 推荐使用 Docker Compose 运行 EduNova。默认入口为 `http://127.0.0.1:8080`。
 
+### 可选模型用量设置
+
+默认记录服务商返回的 token，不改变提示词，不需要新增服务。OpenAI、DeepSeek 和 DashScope 已知官方域名的流式调用请求用量；自定义兼容服务默认不附加该参数。确认上游支持后可在 `.env` 设置 `MODEL_STREAM_USAGE_ENABLED=true`，重启后端与 AI worker。上游忽略用量时显示未知，不为统计重发请求。
+
+`MODEL_USAGE_PRICING` 默认 `{}`，即不估算费用。可按精确键 `provider_source:配置ID或system:模型名` 配置每百万 token 的价格。例如以下仅为合成示例，不是任何模型实际报价：
+
+```dotenv
+MODEL_USAGE_PRICING={"user:123:example-model":{"currency":"CNY","uncached_input_tokens":"2","cache_read_tokens":"0.2","cache_write_tokens":"3","output_tokens":"8"}}
+```
+
+只支持明确的 CNY/USD 报价，未知字段不补零；输入、缓存读写、输出计数不完整时不计算费用。推理 token 已包含在输出中，不重复收费。模型或中转地址更换后应重新核对报价；估算不含外部搜索工具、税费、包月或其他非 token 费用，以供应商账单为准。现有轨迹 API 可查询这些记录，不需要统计面板。
+
 ## 1. 前置条件
 
 - Docker Desktop 或 Docker Engine；

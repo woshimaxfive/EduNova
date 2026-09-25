@@ -21,6 +21,7 @@ from openai import (
 )
 
 from backend.app.providers.model_tasks import ModelTaskProfile
+from backend.app.providers.model_usage import report_usage
 
 
 class ModelProviderError(RuntimeError):
@@ -48,6 +49,7 @@ class OpenAICompatibleConfig:
     thinking_type: str | None = None
     reasoning_protocol: str = "none"
     task_profile: ModelTaskProfile | None = None
+    include_stream_usage: bool = False
 
 
 @dataclass(frozen=True)
@@ -113,6 +115,7 @@ class OpenAICompatibleChatProvider:
         except APIError as exc:
             raise self._sdk_error(exc) from exc
 
+        report_usage(getattr(response, "usage", None))
         if not hasattr(response, "choices"):
             raise ModelProviderError("模型服务返回了无法解析的响应。", code="invalid_response", retryable=True)
         content = response.choices[0].message.content if response.choices else None
@@ -167,6 +170,7 @@ class OpenAICompatibleChatProvider:
                 response = client.chat.completions.create(**request)  # type: ignore[arg-type]
         except APIError as exc:
             raise self._sdk_error(exc) from exc
+        report_usage(getattr(response, "usage", None))
         text = response.choices[0].message.content if response.choices else None
         if not isinstance(text, str) or not text.strip():
             raise ModelProviderError("图片理解服务没有返回可用内容。", code="invalid_response", retryable=True)
@@ -188,8 +192,12 @@ class OpenAICompatibleChatProvider:
                         temperature=0.2,
                         stream=True,
                         extra_body=self._thinking_body(config),
+                        **({"stream_options": {"include_usage": True}} if
+                           config.include_stream_usage or (urlparse(config.base_url).hostname or "").lower() in
+                           {"api.openai.com", "api.deepseek.com", "dashscope.aliyuncs.com"} else {}),
                     )
                     for chunk in stream:
+                        report_usage(getattr(chunk, "usage", None))
                         token = chunk.choices[0].delta.content if chunk.choices else None
                         if not isinstance(token, str) or not token:
                             continue
@@ -321,6 +329,7 @@ class OpenAICompatibleChatProvider:
             error = self._sdk_error(exc)
             return NativeWebSearchResult([], f"native_{native_kind}", str(error))
 
+        report_usage(getattr(response, "usage", None))
         payload = response.model_dump(mode="json") if hasattr(response, "model_dump") else {}
         citations = self._native_search_citations(payload, backend=f"native_{native_kind}")
         if not citations:

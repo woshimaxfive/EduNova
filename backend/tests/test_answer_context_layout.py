@@ -83,3 +83,14 @@ def test_home_tool_state_changes_and_course_resource_changes_keep_system_stable(
     course = build(False, resource_context={"title": "合成资源", "content": "资源内容"})
     assert course[0] == build(False)[0]
     assert "合成资源" in course[-1]["content"]
+
+
+@pytest.mark.parametrize("home", [True, False])
+def test_empty_history_uses_student_facing_missing_information_instruction(home):
+    builder = CourseAnswerService._build_home_messages if home else CourseAnswerService._build_messages
+    messages = builder(question="我上次记住的数组容量是多少？", citations=[])
+    prompt = messages[-1]["content"]
+    assert "没有可用的历史信息" in prompt
+    assert "涉及过去的具体事实时不要猜测" in prompt
+    assert "会话摘要：无" not in prompt
+    assert "不要向学生输出" in messages[0]["content"]

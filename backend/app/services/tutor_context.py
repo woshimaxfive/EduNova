@@ -286,7 +286,11 @@ class TutorContextMixin:
                 limit=CONTEXT_SUMMARY_CHAR_LIMIT,
             )
         if history_citations:
-            memory_summary = "；".join(str(item.get("snippet") or "")[:300] for item in history_citations[:3])
+            # Keep independent episodes distinct; proximity does not establish supersession.
+            memory_summary = "；".join(
+                f"历史记录{index}（独立来源）：{str(item.get('snippet') or '')[:300]}"
+                for index, item in enumerate(history_citations[:3], start=1)
+            )
             summary = self._safe_context_text(
                 f"{summary}；相关历史对话（仅用于理解上下文，不是课程证据）：{memory_summary}".strip("；"),
                 limit=CONTEXT_SUMMARY_CHAR_LIMIT,

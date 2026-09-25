@@ -90,7 +90,47 @@ def test_empty_history_uses_student_facing_missing_information_instruction(home)
     builder = CourseAnswerService._build_home_messages if home else CourseAnswerService._build_messages
     messages = builder(question="我上次记住的数组容量是多少？", citations=[])
     prompt = messages[-1]["content"]
-    assert "没有可用的历史信息" in prompt
-    assert "涉及过去的具体事实时不要猜测" in prompt
+    assert "未提供额外历史摘要" in prompt
+    assert "历史信息以本次实际提供的消息和来源为准" in prompt
     assert "会话摘要：无" not in prompt
-    assert "不要向学生输出" in messages[0]["content"]
+    assert "不要向学生" in messages[0]["content"]
+
+
+@pytest.mark.parametrize("home", [True, False])
+def test_missing_summary_does_not_deny_provided_messages_or_sources(home):
+    messages = build(home, summary="", question="我刚才说了什么？")
+    assert messages[1:-1] == HISTORY
+    assert "没有可用的历史信息" not in messages[-1]["content"]
+    assert "历史信息以本次实际提供的消息和来源为准" in messages[-1]["content"]
+
+
+@pytest.mark.parametrize("home", [True, False])
+def test_conflicting_episodes_require_disambiguation_without_selecting_latest(home):
+    messages = build(home, summary="历史记录1：容量13；历史记录2：容量17", question="上次的容量是多少？")
+    rules = messages[0]["content"]
+    assert "不得把它们拼成同一道题的条件" in rules
+    assert "不擅自选一个值" in rules
+    assert "用户本轮明确给出的条件优先" in rules
+    assert "容量13" in messages[-1]["content"] and "容量17" in messages[-1]["content"]
+    assert messages[0] == build(home, summary="只有一条历史")[0]
+
+
+def test_retrieved_episodes_remain_independent_in_tutor_context():
+    from types import SimpleNamespace
+    from backend.app.services.tutor_context import TutorContextMixin
+
+    entries = [
+        {"memory_id": "1", "snippet": "练习甲容量13"},
+        {"memory_id": "2", "snippet": "练习乙容量17"},
+    ]
+    service = TutorContextMixin()
+    service.repository = SimpleNamespace(list_messages=lambda _: [])
+    service.conversation_memory_service = SimpleNamespace(
+        confirmed_context=lambda _: "", search=lambda **_: entries,
+    )
+    context = service._build_conversation_context(
+        SimpleNamespace(id=1), user=SimpleNamespace(id=2), current_question="上次的容量？",
+    )
+    assert "历史记录1（独立来源）：练习甲容量13" in context.summary
+    assert "历史记录2（独立来源）：练习乙容量17" in context.summary
+    assert context.history_citations == entries

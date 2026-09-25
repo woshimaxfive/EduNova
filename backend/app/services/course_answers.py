@@ -10,6 +10,9 @@ from backend.app.api.errors import make_trace_id
 from backend.app.models import User
 from backend.app.providers.openai_compatible import ModelProviderError
 from backend.app.services.structured_output import parse_json_object
+from backend.app.services.answer_context_budget import (
+    AnswerContextBudget, AnswerContextBudgetError, BUDGET_NOTICE, fit_answer_context,
+)
 from backend.app.services.content_locale import china_first_content_policy
 from backend.app.services.model_settings import (
     MODEL_NOT_CONFIGURED_MESSAGE,
@@ -490,8 +493,11 @@ class CourseAnswerService:
         conversation_context: ConversationContext | None = None,
         plan_summary: str | None = None,
         learner_context: dict[str, Any] | None = None,
+        context_budget: AnswerContextBudget | None = None,
     ) -> list[dict[str, str]]:
         citation_blocks: list[str] = []
+        course_blocks: list[str] = []
+        web_blocks: list[str] = []
         for index, citation in enumerate((citations or [])[:8], start=1):
             source_type = str(citation.get("source_type") or "context")
             title = str(citation.get("title") or citation.get("source_title") or "学习来源")[:120]
@@ -511,6 +517,7 @@ class CourseAnswerService:
                     ]
                 )
             )
+            (web_blocks if source_type in {"web", "history"} else course_blocks).append(citation_blocks[-1])
         warning_lines = [f"- {warning}" for warning in (warnings or [])[:4]]
         mode_lines = [
             f"- 联网搜索：{'已请求' if use_web_search else '未请求'}",
@@ -528,36 +535,38 @@ class CourseAnswerService:
                 + china_first_content_policy.prompt_instruction()
             ),
         )
-        messages = [
-            {
-                "role": "system",
-                "content": system_content,
-            },
-        ]
-        messages.extend(CourseAnswerService._conversation_context_messages(conversation_context))
-        messages.append(
-            {
-                "role": "user",
-                "content": "\n".join(
+        def render(history, sections, reduced):
+            visible_sources = [block for block in citation_blocks
+                               if block in sections["course"] or block in sections["web"]]
+            return [{"role": "system", "content": system_content}, *history, {
+                "role": "user", "content": "\n".join(
                     [
-                        CourseAnswerService._conversation_summary_context(conversation_context),
+                        "\n".join(sections["memory"]) or "会话摘要：无。",
                         "工具状态：",
                         *mode_lines,
                         "可用来源摘要：",
-                        "\n\n".join(citation_blocks) if citation_blocks else "暂无可用来源摘要。",
+                        "\n\n".join(visible_sources) if visible_sources else "暂无可用来源摘要。",
                         "工具提示：",
                         "\n".join(warning_lines) if warning_lines else "无。",
                         "安全规划摘要：",
                         str(plan_summary or "未启用独立规划。")[:1000],
                         "可信学习画像摘要：",
                         CourseAnswerService._learner_context_text(learner_context),
+                        *([BUDGET_NOTICE] if reduced else []),
                         f"学生问题：{question}",
                         "请直接回答当前问题；如果信息不足，请明确说明缺少什么。",
                     ]
                 ),
-            },
-        )
-        return messages
+            }]
+        try:
+            return fit_answer_context(
+                CourseAnswerService._conversation_context_messages(conversation_context),
+                {"memory": [CourseAnswerService._conversation_summary_context(conversation_context)]
+                 if conversation_context and conversation_context.summary.strip() else [],
+                 "course": course_blocks, "web": web_blocks}, render, context_budget,
+            )
+        except AnswerContextBudgetError as exc:
+            raise CourseAnswerGenerationError(str(exc)) from exc
 
     @staticmethod
     def _select_answer_citations(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -578,6 +587,7 @@ class CourseAnswerService:
         learner_context: dict[str, Any] | None = None,
         plan_summary: str | None = None,
         resource_context: dict[str, Any] | None = None,
+        context_budget: AnswerContextBudget | None = None,
     ) -> list[dict[str, str]]:
         course_blocks: list[str] = []
         web_blocks: list[str] = []
@@ -635,29 +645,22 @@ class CourseAnswerService:
                 + china_first_content_policy.prompt_instruction()
             ),
         )
-        messages = [
-            {
-                "role": "system",
-                "content": system_content,
-            },
-        ]
-        messages.extend(CourseAnswerService._conversation_context_messages(conversation_context))
-        messages.append(
-            {
-                "role": "user",
-                "content": "\n\n".join(
+        def render(history, sections, reduced):
+            return [{"role": "system", "content": system_content}, *history, {
+                "role": "user", "content": "\n\n".join(
                     [
-                        CourseAnswerService._conversation_summary_context(conversation_context),
+                        "\n".join(sections["memory"]) or "会话摘要：无。",
                         "课程引用：",
-                        "\n\n".join(course_blocks) if course_blocks else "本次没有命中课程资料。",
+                        "\n\n".join(sections["course"]) if sections["course"] else "本次没有命中课程资料。",
                         "外部补充：",
-                        "\n\n".join(web_blocks) if web_blocks else "本次没有使用外部网页。",
+                        "\n\n".join(sections["web"]) if sections["web"] else "本次没有使用外部网页。",
                         "安全规划摘要：",
                         str(plan_summary or "模型自适应处理。")[:1000],
                         "可信课程画像摘要：",
                         CourseAnswerService._learner_context_text(learner_context),
                         "当前学习资源上下文：",
                         CourseAnswerService._resource_context_text(resource_context),
+                        *([BUDGET_NOTICE] if reduced else []),
                         f"学生问题：{question}",
                         "请基于上述来源生成学习回答；如果只有外部来源，必须明确称为外部补充。不要在正文列出来源编号、匹配度或片段，来源证据由前端来源面板展示。",
                         "回答范围：只解决学生本次提问，检索片段是备选依据，不是必须逐项讲解的提纲。"
@@ -666,9 +669,16 @@ class CourseAnswerService:
                         "任何情况下都保留正确性所需的前提、例外和证据边界，不为缩短而省略。",
                     ]
                 ),
-            },
-        )
-        return messages
+            }]
+        try:
+            return fit_answer_context(
+                CourseAnswerService._conversation_context_messages(conversation_context),
+                {"memory": [CourseAnswerService._conversation_summary_context(conversation_context)]
+                 if conversation_context and conversation_context.summary.strip() else [],
+                 "course": course_blocks, "web": web_blocks}, render, context_budget,
+            )
+        except AnswerContextBudgetError as exc:
+            raise CourseAnswerGenerationError(str(exc)) from exc
 
     def _ground_course_answer(
         self,

@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -65,6 +65,15 @@ class Settings(BaseSettings):
     model_call_log_retention_days: int = 30
     model_stream_usage_enabled: bool = False
     model_usage_pricing: dict[str, dict] = Field(default_factory=dict)
+    tutor_context_window_tokens: int = Field(default=16384, ge=4096, le=262144)
+    tutor_output_reserve_tokens: int = Field(default=4096, ge=512, le=32768)
+
+    @model_validator(mode="after")
+    def validate_tutor_context_budget(self):
+        if self.tutor_output_reserve_tokens + 512 >= self.tutor_context_window_tokens:
+            raise ValueError("Tutor context window must exceed output reserve plus 512 safety units")
+        return self
+
     web_search_provider: str = "searxng"
     web_search_endpoint: str = "http://searxng:8080/search"
     web_search_max_results: int = 5

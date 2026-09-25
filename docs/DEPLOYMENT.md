@@ -8,6 +8,8 @@
 
 `MODEL_USAGE_PRICING` 默认 `{}`，即不估算费用。可按精确键 `provider_source:配置ID或system:模型名` 配置每百万 token 的价格。例如以下仅为合成示例，不是任何模型实际报价：
 
+问答请求还会按 `TUTOR_CONTEXT_WINDOW_TOKENS` 和 `TUTOR_OUTPUT_RESERVE_TOKENS` 做输入预算估算。超出时依次省略旧历史、跨会话记忆、外部搜索片段和多余课程片段，同时保留固定规则、当前问题和至少一段课程依据；这只是保守的文本估算，不能替代具体模型 tokenizer 或供应商计费数据。
+
 ```dotenv
 MODEL_USAGE_PRICING={"user:123:example-model":{"currency":"CNY","uncached_input_tokens":"2","cache_read_tokens":"0.2","cache_write_tokens":"3","output_tokens":"8"}}
 ```

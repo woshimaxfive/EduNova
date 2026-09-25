@@ -161,6 +161,9 @@ export type ModelConnectionTestResponse = {
 export type PrivacySettings = {
   conversation_memory_enabled: boolean;
   indexed_memory_count: number;
+  episode_count?: number;
+  confirmed_fact_count?: number;
+  memory_revision?: number;
 };
 
 export type ClearConversationMemoryResponse = {

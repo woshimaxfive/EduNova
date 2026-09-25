@@ -10,6 +10,8 @@
 
 问答请求还会按 `TUTOR_CONTEXT_WINDOW_TOKENS` 和 `TUTOR_OUTPUT_RESERVE_TOKENS` 做输入预算估算。超出时依次省略旧历史、跨会话记忆、外部搜索片段和多余课程片段，同时保留固定规则、当前问题和至少一段课程依据；这只是保守的文本估算，不能替代具体模型 tokenizer 或供应商计费数据。
 
+记忆管理需要迁移 `20260925_0039`。升级保留已有摘要与索引，增加用户确认的长期信息和无正文删除标记。`CONVERSATION_MEMORY_MIN_SIMILARITY` 默认 0.72，须根据实际嵌入模型校准。暂停不再删除已有记忆，恢复不自动回填；“清除派生索引”后需在设置页手动重建，重建沿用现有 AI worker。迁移降级在存在长期信息、删除标记或隐私版本变更时主动拒绝，避免回滚悄悄丢失删除保障；部署前应按既有流程备份数据库。
+
 ```dotenv
 MODEL_USAGE_PRICING={"user:123:example-model":{"currency":"CNY","uncached_input_tokens":"2","cache_read_tokens":"0.2","cache_write_tokens":"3","output_tokens":"8"}}
 ```

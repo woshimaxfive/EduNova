@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import Depends, Header, Query, status
+from fastapi import Depends, Header, Query, Path, status
+from backend.app.schemas.memory import ConfirmedMemoryRequest, MemoryCorrectionRequest, MemoryLayer
+from backend.app.services.memory_control import MemoryControlService, MemoryControlError
 
 from backend.app.services.model_usage_report import get_usage_report
 
@@ -122,6 +124,70 @@ def clear_conversation_memory(
     service: ConversationMemoryService = Depends(get_conversation_memory_service),
 ) -> dict:
     return api_response(service.clear(current_user).model_dump())
+
+
+def _memory_result(action):
+    try:
+        return api_response(action().model_dump(mode="json"))
+    except MemoryControlError as exc:
+        raise ApiError(status_code=exc.status_code, code="MEMORY_CONTROL_ERROR", message=str(exc)) from exc
+
+
+@router.get("/privacy/memories")
+def list_memories(
+    layer: MemoryLayer = Query(default="episode"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(get_current_user), db=Depends(get_db_session),
+) -> dict:
+    return _memory_result(lambda: MemoryControlService(db).list_items(current_user.id, layer, page, page_size))
+
+
+@router.get("/privacy/memories/export")
+def export_memories(current_user: User = Depends(get_current_user), db=Depends(get_db_session)) -> dict:
+    return _memory_result(lambda: MemoryControlService(db).export(current_user.id))
+
+
+@router.post("/privacy/memories/facts")
+def create_confirmed_memory(
+    payload: ConfirmedMemoryRequest, current_user: User = Depends(get_current_user), db=Depends(get_db_session),
+) -> dict:
+    return _memory_result(lambda: MemoryControlService(db).create_fact(current_user.id, payload))
+
+
+@router.patch("/privacy/memories/{layer}/{item_id}")
+def correct_memory(
+    layer: MemoryLayer, payload: MemoryCorrectionRequest, item_id: int = Path(ge=1),
+    current_user: User = Depends(get_current_user), db=Depends(get_db_session),
+) -> dict:
+    return _memory_result(lambda: MemoryControlService(db).correct(current_user.id, layer, item_id, payload))
+
+
+@router.delete("/privacy/memories/{layer}/{item_id}")
+def delete_memory(
+    layer: MemoryLayer, item_id: int = Path(ge=1), revision: int = Query(ge=1),
+    current_user: User = Depends(get_current_user), db=Depends(get_db_session),
+) -> dict:
+    return _memory_result(lambda: MemoryControlService(db).remove(current_user.id, layer, item_id, revision))
+
+
+@router.delete("/privacy/memory-indexes")
+def clear_memory_indexes(current_user: User = Depends(get_current_user), db=Depends(get_db_session)) -> dict:
+    return _memory_result(lambda: MemoryControlService(db).clear_indexes(current_user.id))
+
+
+@router.post("/privacy/memory-indexes/rebuild")
+def rebuild_memory_indexes(
+    current_user: User = Depends(get_current_user),
+    service: ConversationMemoryService = Depends(get_conversation_memory_service),
+) -> dict:
+    try:
+        service.rebuild_indexes(current_user)
+    except MemoryControlError as exc:
+        raise ApiError(status_code=exc.status_code, code="MEMORY_CONTROL_ERROR", message=str(exc)) from exc
+    except Exception as exc:
+        raise ApiError(status_code=503, code="MEMORY_QUEUE_UNAVAILABLE", message="索引队列暂不可用，请稍后重试。") from exc
+    return api_response({"ok": True})
 
 
 @router.get("/model")

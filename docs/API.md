@@ -204,3 +204,23 @@ Authorization: Bearer <access-token>
 表中路径均以 `/api/v1` 为前缀，全部按用户隔离。源路径内容/资源绑定或当前基础版本变化时拒绝首次分支；摘要不匹配拒绝重新执行。同一重新执行键复用一个新任务，不消耗旧任务重试次数；不同键是明确的新请求，仍受权限、并发和预算限制。`retry` 是原有失败恢复入口，不等于 `reexecute`。
 
 这些接口提供运行历史基础；全新工作台界面另行提供。快照不是可恢复的模型上下文，也不能覆盖领域数据库事实。
+
+
+## 记忆管理
+
+接口均要求登录并按当前账号隔离，不接受调用方指定用户。记忆内容只用于不可信对话背景。
+
+| 方法与路径 | 行为 |
+| --- | --- |
+| `GET /api/v1/settings/privacy` | 开关、历史经历/长期信息数量、索引数量与隐私版本 |
+| `PUT /api/v1/settings/privacy` | `conversation_memory_enabled`；暂停保留记忆，恢复不自动回填 |
+| `GET /api/v1/settings/privacy/memories?layer=episode&page=1&page_size=20` | `episode` / `fact` 分页，最多每页 100 条 |
+| `POST /api/v1/settings/privacy/memories/facts` | `category` 为 goal/preference/difficulty/habit，`content` 最多 500 字，必须 `confirmed=true` |
+| `PATCH /api/v1/settings/privacy/memories/{layer}/{id}` | `content`、`revision`、`confirmed=true`；历史摘要最多 1600 字，长期信息最多 500 字 |
+| `DELETE /api/v1/settings/privacy/memories/{layer}/{id}?revision=1` | 永久删除；L2 保留无正文来源阻断标记 |
+| `GET /api/v1/settings/privacy/memories/export` | 完整 JSON 导出两层记忆及来源，不含原始聊天、向量、密钥 |
+| `DELETE /api/v1/settings/privacy/memory-indexes` | 仅清除派生向量，保留可查看/导出的摘要 |
+| `POST /api/v1/settings/privacy/memory-indexes/rebuild` | 显式排队重建保留摘要，暂停时返回 409；不恢复已删除来源 |
+| `DELETE /api/v1/settings/privacy/conversation-memory` | 清除 L2 和 L3，设置旧来源屏障；保留原始聊天 |
+
+`MemoryItem` 返回来源会话/消息、主题、创建/更新时间、版本与索引状态。修改/删除版本过期返回 409，未找到或越权返回 404；导出、分页及管理不触发模型回答。清空不关闭记忆开关，之后新对话仍可产生新记忆。

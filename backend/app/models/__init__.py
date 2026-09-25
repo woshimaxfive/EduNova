@@ -26,8 +26,11 @@ from backend.app.models.learning import (
 from backend.app.models.material import CourseMaterialLink, Material, MaterialChunk, MaterialComparisonRun
 from backend.app.models.user import User
 from backend.app.models.embedding_archive import ChunkEmbeddingArchive
+from backend.app.models.memory import LearningMemoryFact, MemorySuppression
 
 __all__ = [
+    "LearningMemoryFact",
+    "MemorySuppression",
     "ChunkEmbeddingArchive",
     "AgentRunLog",
     "AiJob",

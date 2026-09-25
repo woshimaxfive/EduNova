@@ -5,11 +5,13 @@ import re
 from typing import Any, Protocol
 
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from backend.app.models import ChatMessage, ChatSession, ConversationMemoryEntry, User, UserPrivacySetting
+from backend.app.models import ChatMessage, ChatSession, ConversationMemoryEntry, User, UserPrivacySetting, MemorySuppression, LearningMemoryFact
+from backend.app.core.config import get_settings
+from backend.app.services.memory_control import lock_memory_settings, MemoryControlService
 from backend.app.services.embeddings import EmbeddingService
 
 
@@ -19,6 +21,9 @@ logger = logging.getLogger(__name__)
 class PrivacySettingsResponse(BaseModel):
     conversation_memory_enabled: bool = True
     indexed_memory_count: int = 0
+    episode_count: int = 0
+    confirmed_fact_count: int = 0
+    memory_revision: int = 0
 
 
 class UpdatePrivacySettingsRequest(BaseModel):
@@ -31,8 +36,8 @@ class ClearConversationMemoryResponse(BaseModel):
 
 
 class ConversationMemoryQueue(Protocol):
-    def enqueue(self, *, user_id: int, session_id: int, user_message_id: int, assistant_message_id: int) -> None: ...
-    def enqueue_backfill(self, *, user_id: int) -> None: ...
+    def enqueue(self, *, user_id: int, session_id: int, user_message_id: int, assistant_message_id: int, expected_revision: int) -> None: ...
+    def enqueue_backfill(self, *, user_id: int, expected_revision: int) -> None: ...
 
 
 class RqConversationMemoryQueue:
@@ -40,7 +45,7 @@ class RqConversationMemoryQueue:
         self.redis_url = redis_url
         self.queue_name = queue_name
 
-    def enqueue(self, *, user_id: int, session_id: int, user_message_id: int, assistant_message_id: int) -> None:
+    def enqueue(self, *, user_id: int, session_id: int, user_message_id: int, assistant_message_id: int, expected_revision: int) -> None:
         from redis import Redis
         from rq import Queue
 
@@ -52,13 +57,14 @@ class RqConversationMemoryQueue:
             session_id,
             user_message_id,
             assistant_message_id,
-            job_id=f"conversation-memory-{assistant_message_id}",
+            expected_revision,
+            job_id=f"conversation-memory-{assistant_message_id}-{expected_revision}",
             job_timeout=300,
             result_ttl=3600,
             failure_ttl=86400,
         )
 
-    def enqueue_backfill(self, *, user_id: int) -> None:
+    def enqueue_backfill(self, *, user_id: int, expected_revision: int) -> None:
         from redis import Redis
         from rq import Queue
 
@@ -67,7 +73,8 @@ class RqConversationMemoryQueue:
         Queue(self.queue_name, connection=Redis.from_url(self.redis_url)).enqueue(
             backfill_conversation_memory,
             user_id,
-            job_id=f"conversation-memory-backfill-{user_id}",
+            expected_revision,
+            job_id=f"conversation-memory-backfill-{user_id}-{expected_revision}",
             job_timeout=1800,
             result_ttl=3600,
             failure_ttl=86400,
@@ -86,36 +93,43 @@ class ConversationMemoryService:
         self.queue = queue
 
     def get_settings(self, user: User) -> PrivacySettingsResponse:
-        setting = self.db.scalar(select(UserPrivacySetting).where(UserPrivacySetting.user_id == user.id))
+        setting = self.db.scalar(select(UserPrivacySetting).where(UserPrivacySetting.user_id == user.id)
+                                 .execution_options(populate_existing=True))
         count = int(self.db.scalar(
-            select(func.count(ConversationMemoryEntry.id)).where(ConversationMemoryEntry.user_id == user.id)
+            select(func.count(ConversationMemoryEntry.id)).where(ConversationMemoryEntry.user_id == user.id,
+                                                                 ConversationMemoryEntry.embedding.is_not(None))
         ) or 0)
         return PrivacySettingsResponse(
             conversation_memory_enabled=True if setting is None else setting.conversation_memory_enabled,
             indexed_memory_count=count,
+            episode_count=int(self.db.scalar(select(func.count(ConversationMemoryEntry.id))
+                              .where(ConversationMemoryEntry.user_id == user.id)) or 0),
+            confirmed_fact_count=int(self.db.scalar(select(func.count(LearningMemoryFact.id))
+                                     .where(LearningMemoryFact.user_id == user.id)) or 0),
+            memory_revision=setting.memory_revision if setting else 0,
         )
 
     def update_settings(self, user: User, enabled: bool) -> PrivacySettingsResponse:
-        setting = self.db.scalar(select(UserPrivacySetting).where(UserPrivacySetting.user_id == user.id))
-        if setting is None:
-            setting = UserPrivacySetting(user_id=user.id, conversation_memory_enabled=enabled)
-        else:
+        setting = lock_memory_settings(self.db, int(user.id))
+        if setting.conversation_memory_enabled != enabled:
             setting.conversation_memory_enabled = enabled
-        self.db.add(setting)
-        if not enabled:
-            self.db.execute(delete(ConversationMemoryEntry).where(ConversationMemoryEntry.user_id == user.id))
+            setting.memory_revision += 1
         self.db.commit()
-        if enabled and self.queue is not None:
-            try:
-                self.queue.enqueue_backfill(user_id=int(user.id))
-            except Exception:
-                pass
         return self.get_settings(user)
 
     def clear(self, user: User) -> ClearConversationMemoryResponse:
-        result = self.db.execute(delete(ConversationMemoryEntry).where(ConversationMemoryEntry.user_id == user.id))
-        self.db.commit()
-        return ClearConversationMemoryResponse(deleted_count=max(0, int(result.rowcount or 0)))
+        result = MemoryControlService(self.db).clear_all(int(user.id))
+        return ClearConversationMemoryResponse(deleted_count=result.affected_count)
+
+    def rebuild_indexes(self, user: User) -> None:
+        state = self.get_settings(user)
+        if not state.conversation_memory_enabled:
+            from backend.app.services.memory_control import MemoryControlError
+            raise MemoryControlError("请先恢复记忆使用，再重建派生索引。")
+        if self.queue is None:
+            from backend.app.services.memory_control import MemoryControlError
+            raise MemoryControlError("记忆索引队列暂不可用。", 503)
+        self.queue.enqueue_backfill(user_id=int(user.id), expected_revision=state.memory_revision)
 
     def index_pair(
         self,
@@ -124,20 +138,44 @@ class ConversationMemoryService:
         session: ChatSession,
         user_message: ChatMessage,
         assistant_message: ChatMessage,
+        expected_revision: int | None = None,
     ) -> bool:
-        if not self.get_settings(user).conversation_memory_enabled or self.embedding_service is None:
+        state = self.get_settings(user)
+        revision = state.memory_revision if expected_revision is None else expected_revision
+        if not state.conversation_memory_enabled or state.memory_revision != revision or self.embedding_service is None:
             return False
-        summary = self._safe_summary(user_message.content, assistant_message.content)
+        if (session.user_id != user.id or user_message.session_id != session.id
+                or assistant_message.session_id != session.id or user_message.role != "user"
+                or assistant_message.role != "assistant"):
+            return False
+        existing = self.db.scalar(select(ConversationMemoryEntry).where(
+            ConversationMemoryEntry.user_id == user.id, ConversationMemoryEntry.assistant_message_id == assistant_message.id))
+        summary = existing.summary if existing else self._safe_summary(user_message.content, assistant_message.content)
+        source_revision = existing.revision if existing else None
         batch = self.embedding_service.embed_documents(user, [summary])
         if batch.status != "completed" or len(batch.vectors) != 1 or not batch.profile_hash:
+            return False
+        setting = lock_memory_settings(self.db, int(user.id))
+        suppressed = self.db.scalar(select(MemorySuppression.id).where(
+            MemorySuppression.user_id == user.id, MemorySuppression.assistant_message_id == assistant_message.id))
+        source = self.db.scalar(select(ChatMessage).where(ChatMessage.id == assistant_message.id,
+                               ChatMessage.session_id == session.id).execution_options(populate_existing=True))
+        if (not setting.conversation_memory_enabled or setting.memory_revision != revision or suppressed is not None
+                or source is None or (setting.memory_cleared_before is not None
+                                      and source.created_at <= setting.memory_cleared_before)):
+            self.db.rollback()
             return False
         existing = self.db.scalar(
             select(ConversationMemoryEntry).where(
                 ConversationMemoryEntry.assistant_message_id == assistant_message.id
-            )
+            ).execution_options(populate_existing=True)
         )
+        if existing is not None and existing.revision != source_revision:
+            self.db.rollback()
+            return False
         if existing is not None:
             if self._matches_profile(existing, batch):
+                self.db.rollback()
                 return False
             # pgvector is intentionally unbounded here so profiles can migrate
             # between dimensions. Explicitly mark the value dirty before flush;
@@ -158,6 +196,7 @@ class ConversationMemoryService:
                     user_message_id=user_message.id,
                     assistant_message_id=assistant_message.id,
                     summary=summary,
+                    topic=self.redact(" ".join(user_message.content.split()))[:120] or "历史对话",
                     embedding=batch.vectors[0],
                     embedding_provider=batch.source,
                     embedding_model=batch.model,
@@ -175,7 +214,7 @@ class ConversationMemoryService:
             and entry.embedding_model == batch.model
             and entry.embedding_dimension == batch.dimension
             and entry.embedding_profile_hash == batch.profile_hash
-            and isinstance(entry.embedding, list)
+            and entry.embedding is not None
             and len(entry.embedding) == batch.dimension
         )
 
@@ -187,7 +226,8 @@ class ConversationMemoryService:
         user_message: ChatMessage,
         assistant_message: ChatMessage,
     ) -> bool:
-        if not self.get_settings(user).conversation_memory_enabled:
+        state = self.get_settings(user)
+        if not state.conversation_memory_enabled:
             return False
         if self.queue is None:
             return self.index_pair(
@@ -201,11 +241,13 @@ class ConversationMemoryService:
             session_id=int(session.id),
             user_message_id=int(user_message.id),
             assistant_message_id=int(assistant_message.id),
+            expected_revision=state.memory_revision,
         )
         return True
 
     def search(self, *, user: User, current_session_id: int, query: str, limit: int = 5) -> list[dict[str, Any]]:
-        if not self.get_settings(user).conversation_memory_enabled or self.embedding_service is None:
+        state = self.get_settings(user)
+        if not state.conversation_memory_enabled or self.embedding_service is None:
             logger.info("conversation_memory_search_skipped reason=disabled_or_unavailable user_id=%s", user.id)
             return []
         batch = self.embedding_service.embed_query(user, query)
@@ -216,7 +258,10 @@ class ConversationMemoryService:
                 batch.status,
             )
             return []
-        distance = ConversationMemoryEntry.embedding.cosine_distance(batch.vectors[0])
+        # A CASE guard avoids distance evaluation on a different vector dimension
+        # even if PostgreSQL reorders the WHERE predicates.
+        distance = case((ConversationMemoryEntry.embedding_dimension == batch.dimension,
+                         ConversationMemoryEntry.embedding.cosine_distance(batch.vectors[0])), else_=None)
         rows = list(
             self.db.scalars(
                 select(ConversationMemoryEntry)
@@ -225,11 +270,26 @@ class ConversationMemoryService:
                     ConversationMemoryEntry.session_id != current_session_id,
                     ConversationMemoryEntry.embedding_profile_hash == batch.profile_hash,
                     ConversationMemoryEntry.embedding_dimension == batch.dimension,
+                    ConversationMemoryEntry.embedding.is_not(None),
+                    distance <= 1 - get_settings().conversation_memory_min_similarity,
                 )
                 .order_by(distance.asc(), ConversationMemoryEntry.created_at.desc())
-                .limit(max(1, min(limit, 5)))
+                .limit(max(1, min(limit, 5)) * 4)
             )
         )
+        # Recheck pause/delete decisions after potentially slow embedding work.
+        current = self.get_settings(user)
+        if not current.conversation_memory_enabled or current.memory_revision != state.memory_revision:
+            return []
+        unique = []
+        seen = set()
+        for row in rows:
+            key = " ".join(row.summary.casefold().split())
+            if key not in seen:
+                unique.append(row)
+                seen.add(key)
+            if len(unique) >= max(1, min(limit, 5)):
+                break
         return [
             {
                 "source_type": "history",
@@ -239,14 +299,28 @@ class ConversationMemoryService:
                 "user_message_id": str(row.user_message_id),
                 "assistant_message_id": str(row.assistant_message_id),
                 "evidence_role": "conversation_memory",
+                "memory_id": str(row.id),
+                "topic": row.topic,
+                "created_at": row.created_at.isoformat(),
             }
-            for row in rows
+            for row in unique
         ]
+
+    def confirmed_context(self, user: User) -> str:
+        if not self.get_settings(user).conversation_memory_enabled:
+            return ""
+        rows = self.db.scalars(select(LearningMemoryFact).where(LearningMemoryFact.user_id == user.id)
+                               .order_by(LearningMemoryFact.updated_at.desc(), LearningMemoryFact.id.desc()).limit(8))
+        return "；".join(f"{row.category}：{row.content[:160]}" for row in rows)[:1200]
 
     @staticmethod
     def _safe_summary(question: str, answer: str) -> str:
         text = f"学生：{' '.join(question.split())[:500]}\n助手：{' '.join(answer.split())[:900]}"
+        return ConversationMemoryService.redact(text)[:1600]
+
+    @staticmethod
+    def redact(text: str) -> str:
         text = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", "[邮箱已隐藏]", text)
         text = re.sub(r"(?<!\d)1[3-9]\d{9}(?!\d)", "[手机号已隐藏]", text)
         text = re.sub(r"(?i)(api[_ -]?key|token|secret)\s*[:=]\s*\S+", r"\1=[已隐藏]", text)
-        return text[:1600]
+        return text

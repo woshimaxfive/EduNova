@@ -45,7 +45,7 @@ export function useSettingsController() {
   });
   const modelSummaryQuery = useQuery({ queryKey: ["settings", "model"], queryFn: getModelSettings });
   const privacyQuery = useQuery({
-    queryKey: ["settings", "privacy"],
+    queryKey: ["settings", "privacy", authUser?.id],
     queryFn: getPrivacySettings,
     enabled: activeSection === "privacy"
   });
@@ -108,9 +108,9 @@ export function useSettingsController() {
   const privacyMutation = useMutation({
     mutationFn: updatePrivacySettings,
     onSuccess: (response) => {
-      queryClient.setQueryData(["settings", "privacy"], response);
+      queryClient.setQueryData(["settings", "privacy", authUser?.id], response);
       showToast(
-        response.data.conversation_memory_enabled ? "跨会话记忆已开启。" : "跨会话记忆已关闭，派生索引已清除。",
+        response.data.conversation_memory_enabled ? "跨会话记忆已开启。" : "跨会话记忆已暂停，已有记忆保留。",
         "success"
       );
     },
@@ -121,7 +121,7 @@ export function useSettingsController() {
     mutationFn: clearConversationMemory,
     onSuccess: async (response) => {
       await queryClient.invalidateQueries({ queryKey: ["settings", "privacy"] });
-      showToast(`已清除 ${response.data.deleted_count} 条派生记忆，聊天记录仍保留。`, "success");
+      showToast(`已清除 ${response.data.deleted_count} 条记忆，聊天记录仍保留。`, "success");
     },
     onError: (error) => showToast(getApiErrorMessage(error, "派生记忆清除失败，请稍后重试。"), "warning")
   });

@@ -107,3 +107,11 @@ Session 沿用领域会话与 AIJob 执行身份；快照不序列化 ORM 对象
 任务进度由已批准 `learning_paths`、`learning_tasks.learning_bundle_json` 的资源快照、`resource_interactions.evidence_json`、`practice_sessions.assessment_json.source_binding` 与既有掌握度计算只读聚合，不新增可被前端直接写入的掌握度字段。历史 `learning_tasks.status=completed` 仍保留用户报告语义。资源活动与评估来源不匹配时不能闭合任务。
 
 路径/资源的领域事务与 AIJob 状态事务保持分离。提交后取消或超时保留产物，任务回写中记录原结果引用；worker 中断缺少回写时，显式重试使用原 `agent_trace_id` 查询同用户、同课程的领域产物。恢复验证状态与绑定，不替换原版本、不重新评分；没有已提交产物才重新执行，冲突需要用户明确创建新请求。本机制不替代其他工作流自己的恢复策略，也不提供通用快照、分支或重放引擎。
+
+## 12. 受控记忆增量（20260925_0039）
+
+`user_privacy_settings` 增加 `memory_revision` 与 `memory_cleared_before`，用于阻断隐私操作前的排队/在途写入及全量清空前的来源。`conversation_memory_entries` 保留原消息外键，增加主题、更新时间和纠正版本，向量允许为空以区分“保留摘要”和“拥有可用索引”。
+
+`learning_memory_facts` 保存账号隔离、用户明确确认的类别/文本/版本/时间，不从评分或助手回答自动生成。`memory_suppressions` 只保存账号与来源助手消息 ID，不保留已删除摘要正文；来源删除时随外键级联删除。所有记忆写入、纠正、隐私控制和删除由同一账号行锁串行化，外部向量计算在锁外完成，提交前复核隐私版本和来源屏障。
+
+升级不删除原聊天或已有记忆；有长期信息、删除标记或隐私版本变更时拒绝直接降级，防止旧代码恢复已删除内容。迁移兼容性、阈值隔离及后台并发删除由 `backend.integration.memory_control_check` 在隔离数据库验证。

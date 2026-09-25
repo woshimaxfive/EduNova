@@ -46,6 +46,14 @@ describe("student core pages", () => {
     previousAdapter = apiClient.defaults.adapter;
     apiClient.defaults.adapter = async (config) => {
       const method = (config.method ?? "get").toLowerCase();
+      if (config.url === SETTINGS_ENDPOINTS.privacy || config.url === "/settings/privacy/memories") {
+        return {
+          data: { data: config.url === SETTINGS_ENDPOINTS.privacy
+            ? { conversation_memory_enabled: true, indexed_memory_count: 0, episode_count: 0, confirmed_fact_count: 0 }
+            : { items: [], total: 0, page: 1, page_size: 20 }, trace_id: "memory_fixture" },
+          status: 200, statusText: "OK", headers: {}, config
+        };
+      }
       if (config.url === MATERIAL_ENDPOINTS.list) {
         const materials: MaterialListItem[] = [
           {
@@ -398,7 +406,7 @@ describe("student core pages", () => {
     expect(screen.queryByText("引用覆盖：AI 导论内置讲义、期末复习题样例")).not.toBeInTheDocument();
   });
 
-  it("renders settings as a sectioned model, account, and privacy workspace", () => {
+  it("renders settings as a sectioned model, account, and privacy workspace", async () => {
     renderPage(<SettingsPage />);
 
     expect(screen.getByRole("heading", { name: "设置" })).toHaveClass("visually-hidden");
@@ -421,8 +429,9 @@ describe("student core pages", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /数据隐私/ }));
     expect(screen.getByRole("region", { name: "隐私与数据" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "跨会话记忆" })).toBeChecked();
-    expect(screen.getByRole("button", { name: "清除派生记忆" })).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "跨会话记忆" })).toBeChecked());
+    expect(screen.getByRole("button", { name: "清除派生索引" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "清除全部记忆" })).toBeEnabled();
     expect(screen.queryByRole("region", { name: "回答模型设置" })).not.toBeInTheDocument();
   });
 

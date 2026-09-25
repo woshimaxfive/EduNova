@@ -604,9 +604,11 @@ class UserPrivacySetting(IdMixin, TimestampMixin, Base):
         index=True,
     )
     conversation_memory_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    memory_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    memory_cleared_before: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class ConversationMemoryEntry(IdMixin, CreatedAtMixin, Base):
+class ConversationMemoryEntry(IdMixin, TimestampMixin, Base):
     __tablename__ = "conversation_memory_entries"
     __table_args__ = (
         UniqueConstraint("assistant_message_id", name="uq_conversation_memory_assistant_message"),
@@ -636,7 +638,9 @@ class ConversationMemoryEntry(IdMixin, CreatedAtMixin, Base):
         nullable=False,
     )
     summary: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float]] = mapped_column(Vector(), nullable=False)
+    topic: Mapped[str] = mapped_column(String(120), nullable=False, default="历史对话", server_default="历史对话")
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(), nullable=True)
     embedding_provider: Mapped[str] = mapped_column(String(80), nullable=False)
     embedding_model: Mapped[str] = mapped_column(String(120), nullable=False)
     embedding_dimension: Mapped[int] = mapped_column(Integer, nullable=False)

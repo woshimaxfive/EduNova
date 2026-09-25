@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Generic, TypeVar
 from backend.app.schemas.model_usage import ModelUsageReport
+from backend.app.schemas.memory import MemoryPage, MemoryItem, MemoryExport, MemoryActionResult
 
 from backend.app.schemas.task_progress import TaskProgress
 from backend.app.services.model_catalog import ModelCatalogResponse
@@ -125,6 +126,13 @@ ERROR_RESPONSES = {
 
 
 RESPONSE_MODELS: dict[str, Any] = {
+    "list_memories": ApiEnvelope[MemoryPage],
+    "export_memories": ApiEnvelope[MemoryExport],
+    "create_confirmed_memory": ApiEnvelope[MemoryItem],
+    "correct_memory": ApiEnvelope[MemoryItem],
+    "delete_memory": ApiEnvelope[MemoryActionResult],
+    "clear_memory_indexes": ApiEnvelope[MemoryActionResult],
+    "rebuild_memory_indexes": ApiEnvelope[OkResponse],
     "get_runtime_capabilities": ApiEnvelope[RuntimeCatalog],
     "capture_run_snapshot": ApiEnvelope[RunSnapshot],
     "replay_run_snapshot": ApiEnvelope[RunSnapshot],

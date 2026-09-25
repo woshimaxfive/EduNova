@@ -46,7 +46,7 @@ export function SettingsWorkspace(controller: SettingsController) {
             {activeSection === "model" ? <PersonalAnswerModelSettings /> : null}
             {activeSection === "usage" ? <ModelUsageSettings /> : null}
             {activeSection === "account" ? <AccountSettingsSection {...controller} /> : null}
-            {activeSection === "privacy" ? <PrivacySettingsSection {...controller} /> : null}
+            {activeSection === "privacy" ? <PrivacySettingsSection /> : null}
           </main>
         </div>
         <ToastStack toast={toast} onDismiss={dismissToast} />

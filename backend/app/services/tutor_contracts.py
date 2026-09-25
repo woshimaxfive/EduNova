@@ -222,6 +222,8 @@ class SemanticDecisionProvider(Protocol):
 
 
 class ConversationMemoryProvider(Protocol):
+    def confirmed_context(self, user: User) -> str: ...
+
     def search(
         self, *, user: User, current_session_id: int, query: str, limit: int = 5
     ) -> list[dict[str, Any]]: ...

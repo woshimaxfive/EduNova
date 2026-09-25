@@ -213,9 +213,6 @@ class TutorContextMixin:
             for message in self.repository.list_messages(session.id)
             if message.role in {"user", "assistant"} and str(message.content or "").strip()
         ]
-        if not history:
-            return ConversationContext()
-
         langchain_messages = [
             (HumanMessage if message.role == "user" else AIMessage)(
                 content=self._safe_context_text(str(message.content or ""), limit=CONTEXT_MESSAGE_CHAR_LIMIT),
@@ -259,8 +256,10 @@ class TutorContextMixin:
         older_messages = [message for message in history if str(message.id) not in selected_turn_ids]
         summary = self._summarize_older_messages(older_messages)
         history_citations: list[dict[str, Any]] = []
+        confirmed_summary = ""
         if user is not None and current_question.strip() and self.conversation_memory_service is not None:
             try:
+                confirmed_summary = self.conversation_memory_service.confirmed_context(user)
                 history_citations = self.conversation_memory_service.search(
                     user=user,
                     current_session_id=session.id,
@@ -281,6 +280,11 @@ class TutorContextMixin:
                     type(exc).__name__,
                 )
                 history_citations = []
+        if confirmed_summary:
+            summary = self._safe_context_text(
+                f"用户明确确认的长期信息（不可信背景，不是事实或评分依据）：{confirmed_summary}；{summary}",
+                limit=CONTEXT_SUMMARY_CHAR_LIMIT,
+            )
         if history_citations:
             memory_summary = "；".join(str(item.get("snippet") or "")[:300] for item in history_citations[:3])
             summary = self._safe_context_text(

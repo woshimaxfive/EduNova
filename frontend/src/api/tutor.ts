@@ -308,7 +308,7 @@ export async function streamTutorMessage(
 
   const streamState: {
     finalDetail: TutorSessionDetail | null;
-    terminalEvent: "done" | "error" | null;
+    terminalEvent: "done" | "error" | "cancelled" | null;
   } = { finalDetail: null, terminalEvent: null };
 
   const dispatchEvent = (event: ParsedSseEvent) => {
@@ -330,6 +330,9 @@ export async function streamTutorMessage(
       streamState.finalDetail = event.data as TutorSessionDetail;
       streamState.terminalEvent = "done";
       handlers.onDone?.(streamState.finalDetail);
+    } else if (event.event === "cancelled") {
+      streamState.terminalEvent = "cancelled";
+      handlers.onError?.({ code: "ANSWER_CANCELLED", message: "回答已取消。", retryable: false });
     } else if (event.event === "error") {
       const error = event.data as TutorStreamError;
       streamState.terminalEvent = "error";
@@ -343,6 +346,9 @@ export async function streamTutorMessage(
     return streamState.terminalEvent === null ? undefined : false;
   });
 
+  if (streamState.terminalEvent === "cancelled") {
+    throw new TutorStreamRequestError({ code: "ANSWER_CANCELLED", message: "回答已取消。", retryable: false });
+  }
   if (streamState.finalDetail === null) {
     throw new Error("模型暂不可用，请检查设置或稍后重试。");
   }

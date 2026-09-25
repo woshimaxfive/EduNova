@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Iterator
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
+from backend.app.services.ai_job_contracts import AiJobCancelled
 from backend.app.api.errors import make_trace_id
 from backend.app.agents.runtime import PendingAgentTrace, agent_log_from_pending_trace
 from backend.app.agents.schemas import AgentState
@@ -111,6 +112,8 @@ class HomeTutorGraphRunner:
             if final_detail is None:
                 raise CourseAnswerGenerationError("主页回答未能完成持久化。")
             yield {"event": "done", "data": final_detail.model_dump()}
+        except AiJobCancelled:
+            yield {"event": "cancelled", "data": {"message": "回答已取消。"}}
         except Exception as exc:
             yield {
                 "event": "error",

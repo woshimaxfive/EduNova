@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import logging
 import re
 from typing import Any, Protocol
@@ -13,6 +14,10 @@ from backend.app.models import ChatMessage, ChatSession, ConversationMemoryEntry
 from backend.app.core.config import get_settings
 from backend.app.services.memory_control import lock_memory_settings, MemoryControlService
 from backend.app.services.embeddings import EmbeddingService
+from backend.app.services.ai_job_contracts import AiJobCancelled
+from backend.app.services.memory_selection import select_candidates
+from backend.app.services.semantic_decision import SemanticModelService
+from backend.app.services.model_execution import current_model_execution_context, model_execution_scope
 
 
 logger = logging.getLogger(__name__)
@@ -87,10 +92,13 @@ class ConversationMemoryService:
         db: Session,
         embedding_service: EmbeddingService | None = None,
         queue: ConversationMemoryQueue | None = None,
+        *,
+        selection_model: SemanticModelService | None = None,
     ) -> None:
         self.db = db
         self.embedding_service = embedding_service
         self.queue = queue
+        self.selection_model = selection_model
 
     def get_settings(self, user: User) -> PrivacySettingsResponse:
         setting = self.db.scalar(select(UserPrivacySetting).where(UserPrivacySetting.user_id == user.id)
@@ -246,11 +254,15 @@ class ConversationMemoryService:
         return True
 
     def search(self, *, user: User, current_session_id: int, query: str, limit: int = 5) -> list[dict[str, Any]]:
+        self._check_cancelled()
         state = self.get_settings(user)
         if not state.conversation_memory_enabled or self.embedding_service is None:
             logger.info("conversation_memory_search_skipped reason=disabled_or_unavailable user_id=%s", user.id)
             return []
         batch = self.embedding_service.embed_query(user, query)
+        self._check_cancelled()
+        if not self._revision_is_current(user, state.memory_revision):
+            return []
         if batch.status != "completed" or len(batch.vectors) != 1 or not batch.profile_hash:
             logger.warning(
                 "conversation_memory_search_skipped reason=embedding_status user_id=%s status=%s",
@@ -262,15 +274,18 @@ class ConversationMemoryService:
         # even if PostgreSQL reorders the WHERE predicates.
         distance = case((ConversationMemoryEntry.embedding_dimension == batch.dimension,
                          ConversationMemoryEntry.embedding.cosine_distance(batch.vectors[0])), else_=None)
+        statement = select(ConversationMemoryEntry)
+        statement = statement.where(
+            ConversationMemoryEntry.user_id == user.id,
+            ConversationMemoryEntry.session_id != current_session_id,
+            ConversationMemoryEntry.embedding_profile_hash == batch.profile_hash,
+            ConversationMemoryEntry.embedding_dimension == batch.dimension,
+            ConversationMemoryEntry.embedding.is_not(None),
+        ).execution_options(populate_existing=True)
         rows = list(
             self.db.scalars(
-                select(ConversationMemoryEntry)
+                statement
                 .where(
-                    ConversationMemoryEntry.user_id == user.id,
-                    ConversationMemoryEntry.session_id != current_session_id,
-                    ConversationMemoryEntry.embedding_profile_hash == batch.profile_hash,
-                    ConversationMemoryEntry.embedding_dimension == batch.dimension,
-                    ConversationMemoryEntry.embedding.is_not(None),
                     distance <= 1 - get_settings().conversation_memory_min_similarity,
                 )
                 .order_by(distance.asc(), ConversationMemoryEntry.created_at.desc())
@@ -278,8 +293,7 @@ class ConversationMemoryService:
             )
         )
         # Recheck pause/delete decisions after potentially slow embedding work.
-        current = self.get_settings(user)
-        if not current.conversation_memory_enabled or current.memory_revision != state.memory_revision:
+        if not self._revision_is_current(user, state.memory_revision):
             return []
         unique = []
         seen = set()
@@ -290,6 +304,41 @@ class ConversationMemoryService:
                 seen.add(key)
             if len(unique) >= max(1, min(limit, 5)):
                 break
+        selection_state = None
+        if (get_settings().conversation_memory_semantic_selection_enabled
+                and self.selection_model is not None and len(query) <= 4000):
+            candidates = list(self.db.scalars(statement.order_by(
+                distance.asc(), ConversationMemoryEntry.created_at.desc()).limit(5)))
+            if candidates:
+                self._check_cancelled()
+                if not self._revision_is_current(user, state.memory_revision):
+                    return []
+                payload = [{"id": f"c{i}", "summary": row.summary[:1600]}
+                           for i, row in enumerate(candidates)]
+                try:
+                    context = replace(current_model_execution_context(), session_id=current_session_id,
+                                      purpose="memory_selection")
+                    with model_execution_scope(context):
+                        _, decision = select_candidates(self.selection_model, user, query, payload)
+                except AiJobCancelled:
+                    raise
+                except Exception as exc:
+                    # Never promote the expanded candidate set on provider failure.
+                    decision = None
+                    logger.warning("memory_selection_fallback error_type=%s", type(exc).__name__)
+                self._check_cancelled()
+                if not self._revision_is_current(user, state.memory_revision):
+                    return []
+                if decision is not None:
+                    selected = set(decision["selected_ids"])
+                    selection_state = decision["state"]
+                    # Preserve all ambiguous alternatives; silently truncating them
+                    # would manufacture a unique match for downstream generation.
+                    unique = [row for i, row in enumerate(candidates) if f"c{i}" in selected]
+                    if selection_state != "ambiguous":
+                        unique = unique[:max(1, min(limit, 5))]
+                logger.info("memory_selection_completed state=%s count=%s",
+                            selection_state or "fallback", len(unique))
         return [
             {
                 "source_type": "history",
@@ -302,9 +351,20 @@ class ConversationMemoryService:
                 "memory_id": str(row.id),
                 "topic": row.topic,
                 "created_at": row.created_at.isoformat(),
+                **({"selection_state": selection_state} if selection_state else {}),
             }
             for row in unique
         ]
+
+    @staticmethod
+    def _check_cancelled() -> None:
+        check = current_model_execution_context().cancel_check
+        if check is not None:
+            check()
+
+    def _revision_is_current(self, user: User, revision: int) -> bool:
+        current = self.get_settings(user)
+        return current.conversation_memory_enabled and current.memory_revision == revision
 
     def confirmed_context(self, user: User) -> str:
         if not self.get_settings(user).conversation_memory_enabled:

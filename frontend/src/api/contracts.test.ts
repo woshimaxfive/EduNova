@@ -823,6 +823,23 @@ describe("frontend API contracts", () => {
     }
   });
 
+  it("treats cancelled as terminal and does not accept later answer events", async () => {
+    const previousFetch = globalThis.fetch;
+    const observed: string[] = [];
+    const body = 'event: cancelled\ndata: {}\n\nevent: token\ndata: {"content":"不应出现"}\n\nevent: done\ndata: {}\n\n';
+    globalThis.fetch = async () => new Response(body, { status: 200 });
+    try {
+      await expect(streamTutorMessage(501, { message: "旧题" }, {
+        onToken: () => observed.push("token"),
+        onDone: () => observed.push("done"),
+        onError: (error) => observed.push(error.code)
+      })).rejects.toMatchObject({ code: "ANSWER_CANCELLED", retryable: false, message: "回答已取消。" });
+      expect(observed).toEqual(["ANSWER_CANCELLED"]);
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+  });
+
   it("gets course learning state through the shared API client", async () => {
     const previousAdapter = apiClient.defaults.adapter;
     const calls: Array<{ url?: string; method?: string }> = [];

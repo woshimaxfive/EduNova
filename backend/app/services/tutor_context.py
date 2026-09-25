@@ -7,6 +7,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, trim_messages
 
 from backend.app.agents.search_tools import SearchToolExecutor
+from backend.app.services.ai_job_contracts import AiJobCancelled
 from backend.app.models import (
     ChatMessage,
     ChatSession,
@@ -259,6 +260,8 @@ class TutorContextMixin:
         confirmed_summary = ""
         if user is not None and current_question.strip() and self.conversation_memory_service is not None:
             try:
+                read_state = getattr(self.conversation_memory_service, "get_settings", None)
+                initial_state = read_state(user) if callable(read_state) else None
                 confirmed_summary = self.conversation_memory_service.confirmed_context(user)
                 history_citations = self.conversation_memory_service.search(
                     user=user,
@@ -266,12 +269,22 @@ class TutorContextMixin:
                     query=current_question,
                     limit=5,
                 )
+                # L3 was read before potentially slow L2 selection. Invalidate
+                # both layers if controls changed while selection was in flight.
+                if initial_state is not None:
+                    final_state = read_state(user)
+                    if (not final_state.conversation_memory_enabled
+                            or final_state.memory_revision != initial_state.memory_revision):
+                        confirmed_summary = ""
+                        history_citations = []
                 logger.info(
                     "conversation_memory_search_completed user_id=%s session_id=%s result_count=%s",
                     user.id,
                     session.id,
                     len(history_citations),
                 )
+            except AiJobCancelled:
+                raise
             except Exception as exc:
                 logger.warning(
                     "conversation_memory_search_failed user_id=%s session_id=%s error_type=%s",
@@ -280,19 +293,26 @@ class TutorContextMixin:
                     type(exc).__name__,
                 )
                 history_citations = []
+                confirmed_summary = ""
         if confirmed_summary:
             summary = self._safe_context_text(
                 f"用户明确确认的长期信息（不可信背景，不是事实或评分依据）：{confirmed_summary}；{summary}",
                 limit=CONTEXT_SUMMARY_CHAR_LIMIT,
             )
         if history_citations:
+            ambiguous = any(item.get("selection_state") == "ambiguous" for item in history_citations)
             # Keep independent episodes distinct; proximity does not establish supersession.
             memory_summary = "；".join(
-                f"历史记录{index}（独立来源）：{str(item.get('snippet') or '')[:300]}"
-                for index, item in enumerate(history_citations[:3], start=1)
+                f"历史记录{index}（独立来源）：{str(item.get('snippet') or '')[:200 if ambiguous else 300]}"
+                for index, item in enumerate(history_citations[:5 if ambiguous else 3], start=1)
             )
+            if ambiguous:
+                memory_summary = "存在多个可能对应的历史对象，先澄清具体对象，不选择其中一个作为唯一事实。" + memory_summary
+            memory_context = f"相关历史对话（仅用于理解上下文，不是课程证据）：{memory_summary}"
             summary = self._safe_context_text(
-                f"{summary}；相关历史对话（仅用于理解上下文，不是课程证据）：{memory_summary}".strip("；"),
+                # Keep the ambiguity instruction and alternatives together even
+                # when older/L3 summaries have filled their existing budget.
+                (f"{memory_context}；{summary}" if ambiguous else f"{summary}；{memory_context}").strip("；"),
                 limit=CONTEXT_SUMMARY_CHAR_LIMIT,
             )
         return ConversationContext(

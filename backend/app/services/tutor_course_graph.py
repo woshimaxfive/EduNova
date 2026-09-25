@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Iterator
 
 from langgraph.graph import END, START, StateGraph
 
+from backend.app.services.ai_job_contracts import AiJobCancelled
 from backend.app.api.errors import make_trace_id
 from backend.app.agents.runtime import PendingAgentTrace, agent_log_from_pending_trace
 from backend.app.agents.schemas import AgentState
@@ -91,18 +92,18 @@ class CourseTutorGraphRunner:
         vision_decision: dict[str, Any] | None = None,
         resource_context: dict[str, Any] | None = None,
     ) -> Iterator[dict[str, Any]]:
-        state = self._initial_state(
-            user=user,
-            session=session,
-            message_text=message_text,
-            force_search=force_search,
-            force_deep=force_deep,
-            attachment_ids=attachment_ids or [],
-            stored_message_text=stored_message_text or message_text,
-            vision_decision=vision_decision,
-            resource_context=resource_context,
-        )
         try:
+            state = self._initial_state(
+                user=user,
+                session=session,
+                message_text=message_text,
+                force_search=force_search,
+                force_deep=force_deep,
+                attachment_ids=attachment_ids or [],
+                stored_message_text=stored_message_text or message_text,
+                vision_decision=vision_decision,
+                resource_context=resource_context,
+            )
             yield {"event": "status", "data": {"stage": "profile", "label": "正在读取学习画像"}}
             state.update(self._profile_node(state))
             yield {"event": "status", "data": {"stage": "route", "label": "正在理解问题"}}
@@ -168,6 +169,8 @@ class CourseTutorGraphRunner:
                 resource_proposal=self.service._resource_proposal_from_state(state),
             )
             yield {"event": "done", "data": detail.model_dump()}
+        except AiJobCancelled:
+            yield {"event": "cancelled", "data": {"message": "回答已取消。"}}
         except Exception as exc:
             yield {
                 "event": "error",

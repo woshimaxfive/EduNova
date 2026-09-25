@@ -93,6 +93,7 @@ def get_tutor_session_service(db=Depends(get_db_session)) -> TutorSessionService
                 redis_url=get_settings().redis_url,
                 queue_name=get_settings().ai_job_queue_name,
             ),
+            selection_model=model_settings_service,
         ),
         vision_understanding_service=VisionUnderstandingService(model_settings_service, attachment_service),
     )

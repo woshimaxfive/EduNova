@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     model_usage_pricing: dict[str, dict] = Field(default_factory=dict)
     tutor_context_window_tokens: int = Field(default=16384, ge=4096, le=262144)
     tutor_output_reserve_tokens: int = Field(default=4096, ge=512, le=32768)
+    conversation_memory_semantic_selection_enabled: bool = False
     conversation_memory_min_similarity: float = Field(default=0.72, ge=0, le=1)
 
     @model_validator(mode="after")

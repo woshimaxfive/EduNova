@@ -153,6 +153,11 @@ class ModelSettingsService:
         if not payload.chat_model:
             raise ModelSettingsValidationError("兼容设置接口必须填写回答模型。")
         existing = self.repository.get_default_for_user(user.id)
+        address_changed = existing is not None and (existing.base_url or "").rstrip("/") != payload.base_url.rstrip("/")
+        if address_changed and not payload.api_key:
+            if not self._allows_empty_api_key(payload.base_url):
+                raise ModelSettingsValidationError("更换服务地址必须填写新的 API Key，不能复用原服务商密钥。")
+            existing.api_key_ciphertext = None
         setting = existing or ModelSetting(
             user_id=user.id,
             provider="openai_compatible",
@@ -1176,8 +1181,8 @@ class ModelSettingsService:
 
     @staticmethod
     def _allows_empty_api_key(base_url: str | None) -> bool:
-        cleaned = (base_url or "").strip().lower()
-        return cleaned.startswith(("http://localhost", "http://127.0.0.1", "http://host.docker.internal", "http://0.0.0.0"))
+        parsed = urlparse((base_url or "").strip())
+        return parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "host.docker.internal", "0.0.0.0"}
 
     @staticmethod
     def _mask_api_key(api_key: str | None) -> str | None:

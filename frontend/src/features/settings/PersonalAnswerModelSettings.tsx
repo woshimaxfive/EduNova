@@ -14,6 +14,8 @@ import { TEXT_CHAT_MODEL_PROVIDER_PRESETS, getChatProviderPreset } from "../../c
 import { InlineFeedback } from "../../components/feedback/InlineFeedback";
 import { ConnectionTestCard } from "./ConnectionTestCard";
 import { ModelCatalogPicker } from "./ModelCatalogPicker";
+import { ModelAddressHint } from "./ModelAddressHint";
+import { SavedModelConfigs } from "./SavedModelConfigs";
 
 type AnswerModelDraft = {
   presetId: string;
@@ -42,6 +44,7 @@ export function PersonalAnswerModelSettings() {
   const queryClient = useQueryClient();
   const modelQuery = useQuery({ queryKey: ["settings", "model"], queryFn: getModelSettings, staleTime: 30_000 });
   const [draft, setDraft] = useState<AnswerModelDraft | null>(null);
+  const [managing, setManaging] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<ModelConnectionTestResponse | null>(null);
   const [visionResult, setVisionResult] = useState<ModelConnectionTestResponse | null>(null);
@@ -60,6 +63,7 @@ export function PersonalAnswerModelSettings() {
       setTestResult(null);
       setVisionResult(null);
       await queryClient.invalidateQueries({ queryKey: ["settings", "model"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings", "model-configs"] });
     },
     onError: (error) => setFeedback(getApiErrorMessage(error, "回答模型保存失败，请检查地址、模型和密钥。"))
   });
@@ -82,7 +86,8 @@ export function PersonalAnswerModelSettings() {
     : summary?.vision_status === "unavailable" ? "图片验证未通过，可重试；不自动切换服务器模型。"
     : summary?.can_use_model ? "待验证主模型图片能力；验证前仅使用文本。" : "请先配置主模型。";
 
-  const requiresKey = !preset.allowEmptyApiKey && !summary?.has_api_key;
+  const samePersonalAddress = summary?.source === "user" && summary.has_api_key && summary.base_url?.replace(/\/+$/, "") === currentDraft.baseUrl.trim().replace(/\/+$/, "");
+  const requiresKey = !preset.allowEmptyApiKey && !samePersonalAddress;
   const canSave = Boolean(currentDraft.baseUrl.trim() && currentDraft.chatModel.trim() && (!requiresKey || currentDraft.apiKey.trim()));
 
   function applyPreset(presetId: string) {
@@ -108,11 +113,14 @@ export function PersonalAnswerModelSettings() {
 
       {modelQuery.isPending ? <div className="settings-query-state" role="status">正在读取回答模型配置...</div> : null}
       {modelQuery.isError ? <div className="settings-query-state failed" role="alert"><WarningCircle size={18} weight="fill" />读取失败，请刷新后重试。</div> : null}
+      <SavedModelConfigs disabled={dirty || testing || saveMutation.isPending || modelQuery.isPending || modelQuery.isError} onBusyChange={setManaging} onSwitch={() => { setDraft(null); setTestResult(null); setVisionResult(null); setFeedback(null); }} />
 
-      {!modelQuery.isError ? <section className="personal-model-editor" aria-label="回答模型编辑器">
+      {!modelQuery.isError ? <fieldset disabled={managing || saveMutation.isPending || testing || modelQuery.isPending} className="personal-model-editor" aria-label="回答模型编辑器">
         <label><span>回答服务商</span><select aria-label="回答服务商" value={currentDraft.presetId} onChange={(event) => applyPreset(event.target.value)}>{TEXT_CHAT_MODEL_PROVIDER_PRESETS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label><span>回答模型</span><input aria-label="回答模型" value={currentDraft.chatModel} onChange={(event) => setDraft({ ...currentDraft, chatModel: event.target.value })} /></label>
         <label className="personal-model-wide"><span>回答 Base URL</span><input aria-label="回答 Base URL" value={currentDraft.baseUrl} onChange={(event) => setDraft({ ...currentDraft, baseUrl: event.target.value })} /></label>
+        <ModelAddressHint value={currentDraft.baseUrl} example={preset.baseUrl} onChange={(baseUrl) => setDraft({ ...currentDraft, baseUrl })} />
+        {requiresKey && !currentDraft.apiKey.trim() ? <p className="personal-model-wide">请填写此地址的 API Key；更换服务地址不能复用原服务商密钥。</p> : null}
         <label className="personal-model-wide"><span>{preset.apiKeyLabel}</span><input aria-label="回答 API Key" type="password" autoComplete="off" value={currentDraft.apiKey} placeholder={summary?.has_api_key ? "留空保留已保存密钥" : preset.apiKeyPlaceholder} onChange={(event) => setDraft({ ...currentDraft, apiKey: event.target.value })} /></label>
         <div className="personal-model-provider"><strong>{preset.name}</strong><span>{preset.description}</span></div>
         <ModelCatalogPicker
@@ -131,7 +139,7 @@ export function PersonalAnswerModelSettings() {
         <ConnectionTestCard operation="chat" model={summary?.chat_model ?? null} result={dirty ? null : testResult} disabled={testing || dirty || saveMutation.isPending || !summary?.can_use_model} pending={testMutation.isPending} dirty={dirty} onTest={() => testMutation.mutate()} />
         <p>图片验证会向当前模型发送一张合成测试图片，可能产生少量模型费用。连接失败不等于模型不支持图片。</p>
         <ConnectionTestCard operation="vision" model={summary?.chat_model ?? null} result={dirty ? null : visionResult} disabled={testing || dirty || saveMutation.isPending || !summary?.can_use_model} pending={visionMutation.isPending} dirty={dirty} onTest={() => visionMutation.mutate()} />
-      </section> : null}
+      </fieldset> : null}
     </section>
   );
 }

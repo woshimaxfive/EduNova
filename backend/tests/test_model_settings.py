@@ -438,6 +438,21 @@ def test_save_user_model_settings_encrypts_key_and_user_config_wins() -> None:
     assert runtime.chat_model == "user-chat"
 
 
+def test_address_change_cannot_reuse_saved_key_and_local_change_clears_it() -> None:
+    module = load_model_settings_module()
+    user = make_user()
+    repo = FakeModelSettingsRepository(settings_by_user={})
+    service = module.ModelSettingsService(repository=repo, settings=make_settings(), provider=FakeProvider())
+    request = module.SaveModelSettingsRequest(provider="openai_compatible", base_url="https://original.example/v1", api_key="synthetic-secret", chat_model="chat")
+    service.save(user, request)
+    for url in ["https://other.example/v1", "http://localhost.evil.example/v1"]:
+        with pytest.raises(module.ModelSettingsValidationError, match="新的 API Key"):
+            service.save(user, request.model_copy(update={"base_url": url, "api_key": None}))
+        assert service.resolve_runtime_config(user).base_url == request.base_url
+    service.save(user, request.model_copy(update={"base_url": "http://localhost:11434/v1", "api_key": None}))
+    assert repo.settings_by_user[user.id].api_key_ciphertext is None
+
+
 def test_save_user_model_settings_allows_embedding_model_to_be_optional() -> None:
     module = load_model_settings_module()
     user = make_user()

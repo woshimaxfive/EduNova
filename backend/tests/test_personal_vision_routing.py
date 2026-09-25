@@ -53,6 +53,8 @@ def test_changing_connection_invalidates_vision_probe(field, value):
     assert service.test_connection(make_user(), "vision").ok
     payload = dict(provider="openai_compatible", base_url="https://personal.example/v1", chat_model="personal-model")
     payload[field] = value
+    if field == "base_url":
+        payload["api_key"] = "synthetic-new-provider-key"
     service.save(make_user(), SaveModelSettingsRequest(**payload))
     assert service.get_summary(make_user()).vision_status == "unverified"
     assert not service.resolve_vision_runtime_config(make_user()).can_use_model

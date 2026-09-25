@@ -1328,6 +1328,13 @@
 }
 
 .model-catalog { display: grid; gap: 10px; min-width: 0; }
+.saved-model-configs { margin-top: 18px; padding: 14px; border: 1px solid var(--wide-workspace-divider); border-radius: 7px; }
+.saved-model-configs summary { cursor: pointer; font-weight: 600; }
+.saved-model-configs article { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--wide-workspace-divider); flex-wrap: wrap; }
+.saved-model-configs article div { min-width: 0; overflow-wrap: anywhere; }
+.saved-model-configs article span, .saved-model-configs article small { display: block; color: var(--text-muted); }
+.saved-model-configs p, .model-address-hint p { color: var(--text-muted); font-size: 13px; overflow-wrap: anywhere; }
+.personal-model-editor { min-width: 0; margin-inline: 0; }
 .model-catalog > button { justify-self: start; }
 .model-catalog > p { margin: 0; color: var(--text-muted); font-size: 13px; }
 .model-catalog > label { display: grid; gap: 6px; min-width: 0; }

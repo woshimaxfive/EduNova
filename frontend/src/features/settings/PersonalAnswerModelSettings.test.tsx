@@ -2,11 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { fetchModelCatalog, getModelSettings, saveModelSettings, testModelSettings } from "../../api/settings";
+import { fetchModelCatalog, getModelSettings, saveModelSettings, testModelSettings, listModelConfigs } from "../../api/settings";
 import { PersonalAnswerModelSettings } from "./PersonalAnswerModelSettings";
 
 vi.mock("../../api/settings", () => ({
-  getModelSettings: vi.fn(), saveModelSettings: vi.fn(), testModelSettings: vi.fn(), fetchModelCatalog: vi.fn()
+  getModelSettings: vi.fn(), saveModelSettings: vi.fn(), testModelSettings: vi.fn(), fetchModelCatalog: vi.fn(), listModelConfigs: vi.fn(), createModelConfig: vi.fn(), setDefaultModelConfig: vi.fn()
 }));
 
 function mount() {
@@ -17,6 +17,7 @@ function mount() {
 describe("personal main model capabilities", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(listModelConfigs).mockResolvedValue({ data: { configs: [] } } as unknown as Awaited<ReturnType<typeof listModelConfigs>>);
     vi.mocked(getModelSettings).mockResolvedValue({
       data: {
         source: "user", provider: "openai_compatible", base_url: "https://personal.example/v1",
@@ -84,6 +85,14 @@ describe("personal main model capabilities", () => {
     expect(screen.getByRole("button", { name: "验证图片理解服务连接" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "验证回答服务连接" })).toBeDisabled();
     expect(testModelSettings).not.toHaveBeenCalled();
+  });
+
+  it("requires a new key when the provider address changes", async () => {
+    mount();
+    await screen.findByText(/待验证主模型图片能力/);
+    fireEvent.change(screen.getByRole("textbox", { name: "回答 Base URL" }), { target: { value: "https://other.example/v1" } });
+    expect(screen.getByRole("button", { name: "保存回答模型" })).toBeDisabled();
+    expect(screen.getByText(/更换服务地址不能复用/)).toBeInTheDocument();
   });
 
   it("allows probing the server main model before image support is verified", async () => {

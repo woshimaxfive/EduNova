@@ -2,6 +2,7 @@ import { ArrowClockwise, Info, Sparkle } from "@phosphor-icons/react";
 
 import { type ApiCourseSummary } from "../../api/courses";
 import { type GeneratedResource } from "../../api/resources";
+import { CourseReturnLink } from "../course-space/CourseReturnLink";
 import { generationModeLabel, resourceTypeMeta } from "./studioResourceMeta";
 
 type StudioWorkspaceToolbarProps = {
@@ -50,6 +51,7 @@ export function StudioWorkspaceToolbar({
       </div>
 
       <div className="studio-toolbar-actions">
+        <CourseReturnLink courseId={courseId} compact alwaysShow />
         <button className="soft-button" type="button" disabled={!selectedResource || isGenerating} onClick={onRegenerate}>
           <ArrowClockwise size={17} weight="duotone" aria-hidden="true" />
           <span>重新生成</span>

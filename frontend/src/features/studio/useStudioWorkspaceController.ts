@@ -292,6 +292,11 @@ export function useStudioWorkspaceController() {
     next.delete("resource_id");
     next.delete("path_task_id");
     next.delete("course_session_id");
+    next.delete("course_message_id");
+    next.delete("knowledge_point_id");
+    next.delete("return_to");
+    next.delete("return_view");
+    next.delete("return_detail");
     next.delete("mentor");
     setSearchParams(next, { replace: true });
   }

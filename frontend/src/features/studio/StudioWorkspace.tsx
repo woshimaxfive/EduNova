@@ -37,7 +37,7 @@ export function StudioWorkspace() {
 
   return (
     <>
-      <PageFrame title="资源工坊" titleMode="sr-only" variant="wide-workspace" courseId={course.id}>
+      <PageFrame title="资源工坊" titleMode="sr-only" variant="wide-workspace">
         <section className="studio-workspace" aria-label="资源成果工作台">
           <StudioWorkspaceToolbar
             courses={course.items}

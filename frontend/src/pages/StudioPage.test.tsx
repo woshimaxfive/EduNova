@@ -109,6 +109,34 @@ function makeQuality(resourceId = "901"): ResourceQualityScore[] {
 }
 
 describe("StudioPage resource generation", () => {
+  it("keeps home history while filtering courses and clears stale course return context", async () => {
+    const calls: Array<{ method: string; url: string; params: unknown }> = [];
+    apiClient.defaults.adapter = async (config) => {
+      const url = config.url ?? "";
+      calls.push({ method: config.method ?? "get", url, params: config.params });
+      const data = url === COURSE_ENDPOINTS.list
+        ? [{ id: "808", title: "课程甲", status: "ready" }, { id: "809", title: "课程乙", status: "ready" }]
+        : url === "/tutor/sessions/history"
+          ? { items: [{ id: "71", title: "主页学习对话", updated_at: "2026-09-25T08:00:00Z" }], page: 1, has_more: false }
+          : [];
+      return { data: { data }, status: 200, statusText: "OK", headers: {}, config };
+    };
+    renderWithProviders(<StudioPage />, `${PATHS.studio}?course_id=808&course_session_id=21&course_message_id=31&knowledge_point_id=401&return_to=course&return_view=graph&return_detail=knowledge`);
+    expect(await screen.findByText("主页学习对话")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "资源课程" })).toHaveValue("808"));
+    expect(screen.getByRole("link", { name: "返回课程空间" })).toHaveAttribute("href", "/app/courses/808?course_session_id=21&course_message_id=31&knowledge_point_id=401&mode=study&view=graph&detail=knowledge");
+
+    await userEvent.setup().selectOptions(screen.getByRole("combobox", { name: "资源课程" }), "809");
+    expect(screen.getByText("主页学习对话")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回课程空间" })).toHaveAttribute("href", "/app/courses/809");
+    expect(screen.getByTestId("studio-location")).toHaveTextContent(`${PATHS.studio}?course_id=809`);
+    await waitFor(() => expect(calls).toContainEqual(expect.objectContaining({ url: RESOURCE_ENDPOINTS.list, params: { course_id: 809 } })));
+    expect(calls.filter(({ method }) => method !== "get")).toEqual([]);
+
+    await userEvent.setup().click(screen.getByText("主页学习对话"));
+    expect(screen.getByTestId("studio-location")).toHaveTextContent("/app?session_id=71");
+  });
+
   it.each(["resource_id=999", "resource_id=901&path_task_id=61"])("does not substitute unrelated resources for %s", async (query) => {
     apiClient.defaults.adapter = async (config) => {
       const url = config.url ?? "";

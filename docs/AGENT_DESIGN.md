@@ -138,7 +138,7 @@ L1 复用当前会话的近期消息与输入预算；L2 保存脱敏历史片�
 
 ### 11.1 可选的候选语义选择
 
-默认关闭的`conversation_memory_semantic_selection_enabled`在ConversationMemoryService中复用已有ModelSettingsService、ModelTaskProfile和parse_json_object，不新增模型网关、框架、数据库表或依赖。新增memory_selection领域合同只决定matched/ambiguous/none及候选白名单，用户所有权、来源、隐私版本、纠正与删除仍由业务服务控制。调用走普通对话模型路由，不走资源生成模型路由。
+默认开启、可显式关闭的`conversation_memory_semantic_selection_enabled`在ConversationMemoryService中复用已有ModelSettingsService、ModelTaskProfile和parse_json_object，不新增模型网关、框架、数据库表或依赖。新增memory_selection领域合同只决定matched/ambiguous/none及候选白名单，用户所有权、来源、隐私版本、纠正与删除仍由业务服务控制。调用走普通对话模型路由，不走资源生成模型路由。
 
 原阈值结果单独保留作为失败回退；实验候选按相同用户/会话排除/配置指纹/维度条件取Top5。选择器不能创造ID或跨记录推断覆盖关系。取消向上传递，流式返回cancelled终态且不生成或持久化助手回答。模型请求超时12秒、一轮尝试；同步Provider调用中途不具备数据撤回保证。
 

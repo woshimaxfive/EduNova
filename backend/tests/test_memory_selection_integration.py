@@ -396,9 +396,10 @@ def test_ambiguous_alternatives_survive_full_long_term_summary(setup):
     assert len(context.summary) <= 1500
 
 
-def test_experiment_is_disabled_by_default():
+def test_semantic_selection_defaults_on_and_allows_explicit_opt_out(monkeypatch):
     from backend.app.core.config import Settings
 
-    assert (
-        Settings(_env_file=None).conversation_memory_semantic_selection_enabled is False
-    )
+    monkeypatch.delenv("CONVERSATION_MEMORY_SEMANTIC_SELECTION_ENABLED", raising=False)
+    assert Settings(_env_file=None).conversation_memory_semantic_selection_enabled is True
+    monkeypatch.setenv("CONVERSATION_MEMORY_SEMANTIC_SELECTION_ENABLED", "false")
+    assert Settings(_env_file=None).conversation_memory_semantic_selection_enabled is False

@@ -1,0 +1,39 @@
+/* Portals live under body: use global tokens with opaque fallbacks, never route-scoped tokens. */
+.confirm-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 20px;
+  background: rgba(18, 28, 32, 0.36);
+}
+
+.confirm-dialog-layer > section {
+  width: min(440px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  border: 1px solid var(--line, #dce4e0);
+  border-radius: 8px;
+  padding: 24px;
+  color: var(--text-strong, #0d1715);
+  background: var(--dialog-surface, #fafcfb);
+  box-shadow: 0 24px 72px rgba(16, 30, 27, 0.22);
+}
+
+.confirm-dialog-layer h2 { margin: 0 0 8px; font-size: 1.05rem; font-weight: 800; }
+.confirm-dialog-layer p { margin: 0 0 20px; color: var(--text-muted, #66736f); line-height: 1.65; }
+.confirm-dialog-layer section > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.confirm-dialog-layer button {
+  min-height: 40px;
+  border: 1px solid var(--line, #dce4e0);
+  border-radius: 5px;
+  padding: 0 14px;
+  color: var(--text-strong, #0d1715);
+  background: var(--bg-soft, #e9efed);
+  font: inherit;
+  cursor: pointer;
+}
+.confirm-dialog-layer button:last-child { border-color: var(--accent, #0b8f7f); color: #fff; background: var(--accent, #0b8f7f); }

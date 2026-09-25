@@ -406,7 +406,6 @@ export function PathTaskCanvas({
           : "本节仍有资源未完成，仍要跳过并完成本节吗？"}
         confirmLabel="仍然完成本节"
         cancelLabel="继续学习"
-        layerClassName="path-confirm-layer"
         onOpenChange={(open) => { if (!open) setPendingComplete(null); }}
         onConfirm={() => {
           if (pendingComplete) onUpdateTask(pendingComplete, "completed");

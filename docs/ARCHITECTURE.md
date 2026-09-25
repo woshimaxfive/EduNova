@@ -36,6 +36,8 @@ flowchart LR
 
 前端传输类型由 FastAPI OpenAPI 生成到 `frontend/src/types/openapi.generated.ts`。页面 ViewModel、Query Key、缓存失效和业务状态仍由前端维护。
 
+确认弹窗复用 `components/primitives/Dialog.tsx` 的 `ConfirmDialog`；默认布局与遮罩由随组件加载的 `styles/dialog.css` 提供。Portal 挂载在 `body`，弹窗面板必须使用全局不透明的 `--dialog-surface`（附实色回退），不能依赖 `.route-main-surface-wide` 内的局部变量。自定义确认框也遵守同一底色约束。浏览器回归需检查实际计算背景色、遮罩、焦点约束及窄屏边界；仅有组件交互测试不能证明背景不透明。
+
 ## 3. 后端
 
 后端位于 `backend/app/`，按以下边界组织：

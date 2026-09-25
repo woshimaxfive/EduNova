@@ -13,6 +13,4 @@
 .memory-list > li { border: 1px solid var(--wide-workspace-divider); border-radius: 6px; padding: 18px; min-width: 0; }
 .memory-list h4 { margin: 0; overflow-wrap: anywhere; }
 .memory-content { white-space: pre-wrap; }
-.memory-confirm-dialog { position: fixed; inset: 50% auto auto 50%; transform: translate(-50%, -50%); z-index: 1000; width: min(440px, calc(100vw - 40px)); padding: 24px; border: 1px solid var(--wide-workspace-divider); border-radius: 8px; background: var(--wide-workspace-control); color: var(--text-strong); box-shadow: 0 16px 80px #0006; box-sizing: border-box; }
-.memory-confirm-dialog button { padding: 10px 16px; margin: 8px 8px 0 0; cursor: pointer; }
 @media (max-width: 640px) { .memory-create, .memory-list > li { padding: 12px; } .memory-toolbar { align-items: stretch; } }

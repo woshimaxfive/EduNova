@@ -25,7 +25,7 @@ export function ModelUsageSettings() {
   return (
     <section className="settings-panel settings-usage" aria-label="模型用量">
       <header className="settings-panel-heading">
-        <div><h2>模型用量</h2><p>只统计当前账号在本应用中记录的模型调用，不是供应商账单。</p></div>
+        <div><h2>模型用量</h2><p>只统计当前账号的主模型调用（含对话、生成和图片理解），不包含向量、重排等辅助服务；不是供应商账单。</p></div>
       </header>
       <div className="settings-usage-controls">
         <label>统计时间 <select value={days} onChange={(event) => setDays(Number(event.target.value))}>

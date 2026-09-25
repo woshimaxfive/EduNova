@@ -810,58 +810,6 @@
   color: var(--warning-text, #8a5b12);
 }
 
-.path-confirm-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 120;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(18, 28, 32, 0.28);
-}
-
-.path-confirm-layer > section {
-  width: min(430px, 100%);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 24px;
-  background: var(--surface-strong, #fff);
-  box-shadow: 0 22px 60px rgba(16, 24, 32, 0.2);
-}
-
-.path-confirm-layer h2 {
-  margin: 0 0 8px;
-  color: var(--text-strong);
-  font-size: 1.05rem;
-}
-
-.path-confirm-layer p {
-  margin: 0 0 20px;
-  color: var(--text-muted);
-  line-height: 1.65;
-}
-
-.path-confirm-layer section > div {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.path-confirm-layer button {
-  min-height: 38px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 0 14px;
-  color: var(--text-strong);
-  background: var(--surface-muted);
-}
-
-.path-confirm-layer button:last-child {
-  border-color: var(--accent);
-  color: #fff;
-  background: var(--accent);
-}
-
 @media (max-width: 760px) {
   .path-workspace-toolbar {
     position: static;

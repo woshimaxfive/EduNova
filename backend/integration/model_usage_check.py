@@ -1,5 +1,6 @@
 """Synthetic PostgreSQL usage persistence and migration check; no model calls."""
 from importlib import import_module
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from alembic.migration import MigrationContext
@@ -10,6 +11,7 @@ from backend.app.core.config import get_settings
 from backend.app.db.session import SessionLocal, engine
 from backend.app.models import ModelCallRun, User
 from backend.app.services.model_execution import ModelCallAuditRecorder, ModelExecutionContext
+from backend.app.services.model_usage_report import get_usage_report
 
 
 def main() -> None:
@@ -54,6 +56,24 @@ def main() -> None:
             assert record.usage_json["known_input_tokens"] == 100
             assert record.usage_json["cache_hit_ratio"] is None
             assert record.usage_json["estimated_cost"] is None
+            # More auxiliary calls than the report limit must not hide main calls,
+            # mark the report truncated, or contaminate totals and costs.
+            common = dict(user_id=user_id, model_name="synthetic", provider_source="system",
+                          purpose="generation", status="completed", retry_count=0,
+                          started_at=datetime.now(timezone.utc), completed_at=datetime.now(timezone.utc))
+            for operation in ("chat", "stream", "structured", "vision", "chat:generate"):
+                db.add(ModelCallRun(**common, operation=operation, usage_json=record.usage_json))
+            for index in range(1001):
+                db.add(ModelCallRun(**{**common, "status": "failed", "retry_count": 9},
+                                    operation=("embedding", "rerank", "web_search", "chatty")[index % 4],
+                                    usage_json={"cost_status": "estimated", "currency": "USD", "estimated_cost": "99"}))
+            db.commit()
+            report = get_usage_report(db, user_id, 7, 30)
+            assert report.call_count == len(report.recent) == 6
+            assert report.truncated is False
+            assert report.failed_count == 0 and report.retry_count == 1
+            assert report.totals.known_input_tokens == 600
+            assert report.cost_subtotals == {}
         finally:
             db.rollback()
             if user_id is not None:

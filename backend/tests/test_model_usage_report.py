@@ -86,4 +86,8 @@ def test_api_requires_auth_bounds_window_and_filters_current_user_in_sql():
         assert compiled.params["user_id_1"] == 17
         assert "model_call_runs.started_at >=" in str(compiled)
         assert "model_call_runs.started_at <=" in str(compiled)
+        assert compiled.params["operation_1"] == ["chat", "stream", "structured", "vision"]
+        assert compiled.params["operation_2"] == "chat:"
+        assert "model_call_runs.operation IN" in str(compiled)
+        assert "model_call_runs.operation LIKE" in str(compiled)
         assert 1001 in compiled.params.values()

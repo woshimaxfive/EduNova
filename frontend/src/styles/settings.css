@@ -1128,7 +1128,7 @@
   border-radius: 8px;
   padding: 0;
   color: var(--text);
-  background: var(--surface-strong);
+  background: var(--dialog-surface, #fafcfb);
   box-shadow: 0 24px 72px rgba(16, 30, 27, 0.18);
   transform: translate(-50%, -50%);
   animation: settings-dialog-in 180ms ease-out;

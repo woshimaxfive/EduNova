@@ -1,6 +1,7 @@
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { type MouseEvent, type ReactNode, useEffect, useRef } from "react";
+import "../../styles/dialog.css";
 
 let modalLockCount = 0;
 let bodyOverflowBeforeModal = "";
@@ -68,7 +69,7 @@ type ConfirmDialogProps = {
   description: string;
   confirmLabel: string;
   cancelLabel?: string;
-  layerClassName: string;
+  layerClassName?: string;
   children?: ReactNode;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
@@ -80,7 +81,7 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   cancelLabel = "取消",
-  layerClassName,
+  layerClassName = "confirm-dialog-layer",
   children,
   onOpenChange,
   onConfirm

@@ -111,7 +111,7 @@ function MemoryPanel({ userId }: { userId: number | undefined }) {
       <span>第 {page} 页 · 共 {memories.data.total} 条</span>
       <button className="secondary-action" type="button" disabled={busy || page * memories.data.page_size >= memories.data.total} onClick={() => { setPage(page + 1); setEditing(null); }}>下一页</button>
     </nav> : null}
-    <ConfirmDialog open={action !== null} onOpenChange={(open) => { if (!open) setAction(null); }} layerClassName="memory-confirm-dialog"
+    <ConfirmDialog open={action !== null} onOpenChange={(open) => { if (!open) setAction(null); }}
       title={action?.kind === "indexes" ? "清除派生索引？" : action?.kind === "clear" ? "清除全部记忆？" : "永久删除这条记忆？"}
       description={action?.kind === "indexes" ? "保留摘要和长期信息，仅清除向量索引；不会自动重建。" : "删除记忆内容并阻止旧任务恢复。原始聊天记录仍然保留。"}
       confirmLabel="确认操作" onConfirm={confirmAction} />

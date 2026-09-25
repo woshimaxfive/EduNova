@@ -31,6 +31,7 @@ it("shows empty state and changes the requested time window", async () => {
   vi.mocked(getModelUsage).mockResolvedValue(empty);
   mount();
   expect(await screen.findByText(/这个时间段暂无模型调用记录/)).toBeInTheDocument();
+  expect(screen.getByText(/只统计当前账号的主模型调用/)).toBeInTheDocument();
   fireEvent.change(screen.getByRole("combobox"), { target: { value: "30" } });
   await waitFor(() => expect(getModelUsage).toHaveBeenCalledWith(30));
 });

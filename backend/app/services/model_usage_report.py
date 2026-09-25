@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from backend.app.models import ModelCallRun
 from backend.app.providers.model_usage import summarize_attempts
@@ -10,6 +10,7 @@ from backend.app.schemas.model_usage import ModelUsageReport, UsageCall, UsageTo
 
 
 REPORT_LIMIT = 1000
+MAIN_MODEL_OPERATIONS = ("chat", "stream", "structured", "vision")
 
 
 def _price(usage: dict) -> tuple[str, Decimal] | None:
@@ -65,6 +66,9 @@ def get_usage_report(db, user_id: int, days: int, retention_days: int) -> ModelU
     now = datetime.now(timezone.utc)
     rows = list(db.scalars(select(ModelCallRun).where(
         ModelCallRun.user_id == user_id,
+        # Filter before LIMIT and aggregation so auxiliary calls cannot skew totals
+        # or displace main-model history. Keep the underlying audit log intact.
+        or_(ModelCallRun.operation.in_(MAIN_MODEL_OPERATIONS), ModelCallRun.operation.startswith("chat:")),
         ModelCallRun.started_at >= now - timedelta(days=days),
         ModelCallRun.started_at <= now,
     ).order_by(ModelCallRun.started_at.desc(), ModelCallRun.id.desc()).limit(REPORT_LIMIT + 1)))

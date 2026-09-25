@@ -51,3 +51,22 @@ it("preserves a correction draft on failure and sends the original revision", as
   expect(memory.correctMemory).toHaveBeenCalledWith(item, "双端队列");
   expect(screen.getByLabelText("纠正内容")).toHaveValue("双端队列");
 });
+
+it.each([
+  ["清除派生索引", memory.clearMemoryIndexes],
+  ["清除全部记忆", settings.clearConversationMemory]
+] as const)("requires confirmation for %s and renders outside route styles", async (label, action) => {
+  mount(); await screen.findByText("学习队列");
+  const panel = screen.getByRole("region", { name: "记忆管理" });
+  fireEvent.click(screen.getByRole("button", { name: label }));
+  const dialog = screen.getByRole("alertdialog");
+  expect(dialog.parentElement).toBe(document.body);
+  expect(panel).not.toContainElement(dialog);
+  expect(action).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  expect(action).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: label }));
+  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "确认操作" }));
+  await waitFor(() => expect(action).toHaveBeenCalledOnce());
+});

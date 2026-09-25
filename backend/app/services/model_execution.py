@@ -445,6 +445,7 @@ class ModelExecutionRuntime:
             with capture_usage(usage):
                 stream = iter(call())
             while True:
+                ModelExecutionRuntime._check_cancel(context)
                 # Do not leave a ContextVar set across a consumer yield: streams
                 # can be interleaved or resumed in another worker context.
                 with capture_usage(usage):

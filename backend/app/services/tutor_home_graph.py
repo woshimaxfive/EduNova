@@ -800,6 +800,11 @@ class HomeTutorGraphRunner:
         opened = False
         closed = False
         for token in tokens:
+            # Exhaust the provider stream after the answer boundary so its
+            # terminal usage frame and normal-completion audit are observed.
+            # Trailing text is never student-visible.
+            if closed:
+                continue
             if not isinstance(token, str) or not token:
                 continue
             raw += token
@@ -818,7 +823,7 @@ class HomeTutorGraphRunner:
                     self._write(state, "token", {"content": piece})
                 closed = True
                 buffer = ""
-                break
+                continue
             safe_length = max(0, len(buffer) - len(closing) + 1)
             if safe_length > 0:
                 piece = buffer[:safe_length]

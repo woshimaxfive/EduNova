@@ -122,6 +122,75 @@ def test_stream_failure_without_usage_stays_unknown():
     assert audit.records[0]["context"].usage_attempts[0]["input_tokens"] is None
 
 
+@pytest.mark.parametrize("reported", [True, False])
+def test_home_answer_exhausts_stream_without_emitting_trailing_text(monkeypatch, reported):
+    from backend.app.services.tutor_home_graph import HomeTutorGraphRunner
+
+    def handler(request):
+        frames = [
+            {"choices": [{"delta": {"content": part}}]}
+            for part in ["<final_answer>答案</final_", "answer>隐藏尾文", "更多隐藏尾文"]
+        ]
+        if reported:
+            frames.append({"choices": [], "usage": {"prompt_tokens": 100, "completion_tokens": 12}})
+        return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                              text="".join(f"data: {json.dumps(f)}\n\n" for f in frames) + "data: [DONE]\n\n")
+
+    provider = OpenAICompatibleChatProvider(httpx.MockTransport(handler))
+    audit, state, emitted = FakeAudit(), FakeState(), []
+    runtime = ModelExecutionRuntime(make_settings(), state=state, audit=audit)
+    tokens = runtime.execute_stream(user_id=7, provider_source="user", model_config_id=3,
+        model_name="fixture", timeout_seconds=2,
+        call=lambda: provider.chat_completion_stream(
+            OpenAICompatibleConfig("https://fixture.test/v1", "synthetic", "fixture", include_stream_usage=True), [], 2))
+    runner = object.__new__(HomeTutorGraphRunner)
+    monkeypatch.setattr(runner, "_write", lambda _state, event, data: emitted.append((event, data)))
+    assert runner._consume_stream_tokens({}, tokens) == "答案"
+    assert "".join(data["content"] for event, data in emitted) == "答案"
+    assert len(audit.records) == 1
+    assert audit.records[0]["status"] == "completed"
+    usage = summarize_attempts(audit.records[0]["context"].usage_attempts)
+    assert usage["input_tokens"] == (100 if reported else None)
+    assert usage["output_tokens"] == (12 if reported else None)
+    assert state.released == ["lease"]
+
+
+@pytest.mark.parametrize("cancel", [True, False])
+def test_home_stream_tail_cancellation_or_failure_is_not_success(monkeypatch, cancel):
+    from backend.app.services.ai_job_contracts import AiJobCancelled
+    from backend.app.services.tutor_home_graph import HomeTutorGraphRunner
+
+    cancelled = False
+    closed = []
+    audit, state = FakeAudit(), FakeState()
+    runtime = ModelExecutionRuntime(make_settings(), state=state, audit=audit)
+
+    def check():
+        if cancelled:
+            raise AiJobCancelled()
+
+    def factory():
+        nonlocal cancelled
+        try:
+            cancelled = cancel
+            yield "<final_answer>答案</final_answer>"
+            raise ModelProviderError("tail interrupted", code="stream_interrupted")
+        finally:
+            closed.append(True)
+
+    with model_execution_scope(ModelExecutionContext(cancel_check=check)):
+        tokens = runtime.execute_stream(user_id=7, provider_source="user", model_config_id=3,
+            model_name="fixture", call=factory, timeout_seconds=2)
+    runner = object.__new__(HomeTutorGraphRunner)
+    monkeypatch.setattr(runner, "_write", lambda *_: None)
+    with pytest.raises(AiJobCancelled if cancel else ModelProviderError):
+        runner._consume_stream_tokens({}, tokens)
+    assert len(audit.records) == 1
+    assert audit.records[0]["status"] == ("cancelled" if cancel else "failed")
+    assert state.released == ["lease"]
+    assert closed == [True]
+
+
 def test_explicit_price_only_and_no_reasoning_double_count():
     summary = summarize_attempts([normalize_usage({"prompt_tokens": 100, "completion_tokens": 20,
         "prompt_tokens_details": {"cached_tokens": 60, "cache_write_tokens": 10},

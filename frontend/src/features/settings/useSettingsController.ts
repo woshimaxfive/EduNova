@@ -17,7 +17,7 @@ import { mapApiUserToStudentUser } from "../auth/authMappers";
 import { useAuthStore } from "../auth/authStore";
 import type { SettingsSection } from "./SettingsNavigation";
 
-const VALID_SECTIONS = new Set<SettingsSection>(["model", "account", "privacy"]);
+const VALID_SECTIONS = new Set<SettingsSection>(["model", "usage", "account", "privacy"]);
 
 export function useSettingsController() {
   const navigate = useNavigate();

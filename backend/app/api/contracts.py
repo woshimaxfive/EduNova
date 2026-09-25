@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Generic, TypeVar
+from backend.app.schemas.model_usage import ModelUsageReport
 
 from backend.app.schemas.task_progress import TaskProgress
 from backend.app.services.model_catalog import ModelCatalogResponse
@@ -224,6 +225,7 @@ RESPONSE_MODELS: dict[str, Any] = {
     "test_model_config": ApiEnvelope[ModelConnectionTestResponse],
     "test_model_settings": ApiEnvelope[ModelConnectionTestResponse],
     "fetch_model_catalog": ApiEnvelope[ModelCatalogResponse],
+    "get_model_usage": ApiEnvelope[ModelUsageReport],
     "create_embedding_reindex_job": ApiEnvelope[AiJobResponse],
     "get_privacy_settings": ApiEnvelope[PrivacySettingsResponse],
     "update_privacy_settings": ApiEnvelope[PrivacySettingsResponse],

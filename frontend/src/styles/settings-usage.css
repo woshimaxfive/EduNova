@@ -1,0 +1,15 @@
+.settings-usage-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0; }
+.settings-usage-controls select { padding: 8px; border: 1px solid var(--wide-workspace-divider); border-radius: 5px; color: var(--text-strong); background: var(--wide-workspace-control); }
+.settings-usage-note, .settings-usage p, .settings-usage small { color: var(--text-muted); font-size: var(--font-caption); line-height: 1.7; }
+.settings-usage-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 24px 0; }
+.settings-usage-metrics > div { border: 1px solid var(--wide-workspace-divider); padding: 18px; border-radius: 6px; }
+.settings-usage-metrics dt { color: var(--text-muted); }
+.settings-usage-metrics dd { margin: 10px 0; font-size: 24px; font-weight: 700; color: var(--text-strong); overflow-wrap: anywhere; }
+.settings-usage-cost { border-block: 1px solid var(--wide-workspace-divider); padding: 4px 0 16px; margin-bottom: 24px; }
+.settings-usage-cost strong { color: var(--accent-strong); overflow-wrap: anywhere; }
+.settings-usage-table { overflow-x: auto; max-width: 100%; }
+.settings-usage-table table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: var(--font-caption); text-align: left; }
+.settings-usage-table th, .settings-usage-table td { padding: 12px 10px; border-bottom: 1px solid var(--wide-workspace-divider); }
+.settings-usage-table td { max-width: 240px; overflow-wrap: anywhere; }
+.settings-usage-table small { display: block; }
+@media (max-width: 640px) { .settings-usage-metrics { grid-template-columns: minmax(0, 1fr); gap: 10px; } }

@@ -7,6 +7,7 @@ import { AccountSettingsSection } from "./AccountSettingsSection";
 import { PersonalAnswerModelSettings } from "./PersonalAnswerModelSettings";
 import { PrivacySettingsSection } from "./PrivacySettingsSection";
 import { SettingsNavigation } from "./SettingsNavigation";
+import { ModelUsageSettings } from "./ModelUsageSettings";
 import type { SettingsController } from "./useSettingsController";
 
 export function SettingsWorkspace(controller: SettingsController) {
@@ -43,6 +44,7 @@ export function SettingsWorkspace(controller: SettingsController) {
           <SettingsNavigation activeSection={activeSection} onSelect={selectSection} />
           <main className="settings-content" aria-label="设置内容">
             {activeSection === "model" ? <PersonalAnswerModelSettings /> : null}
+            {activeSection === "usage" ? <ModelUsageSettings /> : null}
             {activeSection === "account" ? <AccountSettingsSection {...controller} /> : null}
             {activeSection === "privacy" ? <PrivacySettingsSection {...controller} /> : null}
           </main>

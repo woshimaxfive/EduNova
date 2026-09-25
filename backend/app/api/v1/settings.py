@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import Depends, Header, status
+from fastapi import Depends, Header, Query, status
+
+from backend.app.services.model_usage_report import get_usage_report
 
 from backend.app.api.contracts import TypedAPIRouter as APIRouter
 from backend.app.api.errors import ApiError, api_response
@@ -34,6 +36,16 @@ from backend.app.services.model_catalog import (
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+
+@router.get("/model/usage")
+def get_model_usage(
+    days: int = Query(default=7, ge=1, le=30),
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db_session),
+) -> dict:
+    report = get_usage_report(db, current_user.id, days, get_settings().model_call_log_retention_days)
+    return api_response(report.model_dump())
 
 
 def get_model_settings_service(db=Depends(get_db_session)) -> ModelSettingsService:

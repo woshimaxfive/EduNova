@@ -1639,6 +1639,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/model/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Model Usage */
+        get: operations["get_model_usage_api_v1_settings_model_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/privacy": {
         parameters: {
             query?: never;
@@ -2212,6 +2229,12 @@ export interface components {
         /** ApiEnvelope[ModelSettingsSummary] */
         ApiEnvelope_ModelSettingsSummary_: {
             data: components["schemas"]["ModelSettingsSummary"];
+            /** Trace Id */
+            trace_id: string;
+        };
+        /** ApiEnvelope[ModelUsageReport] */
+        ApiEnvelope_ModelUsageReport_: {
+            data: components["schemas"]["ModelUsageReport"];
             /** Trace Id */
             trace_id: string;
         };
@@ -4376,6 +4399,46 @@ export interface components {
              */
             vision_status: "not_configured" | "unverified" | "verified" | "unavailable";
         };
+        /** ModelUsageReport */
+        ModelUsageReport: {
+            /** Call Count */
+            call_count: number;
+            /** Cost Subtotals */
+            cost_subtotals?: {
+                [key: string]: string;
+            };
+            /** Days */
+            days: number;
+            /** Failed Count */
+            failed_count: number;
+            /** Legacy Call Count */
+            legacy_call_count: number;
+            /** Limit */
+            limit: number;
+            /** Observed Attempt Count */
+            observed_attempt_count: number;
+            /** Priced Call Count */
+            priced_call_count: number;
+            /** Recent */
+            recent: components["schemas"]["UsageCall"][];
+            /** Retention Days */
+            retention_days: number;
+            /** Retry Count */
+            retry_count: number;
+            /**
+             * Since
+             * Format: date-time
+             */
+            since: string;
+            totals: components["schemas"]["UsageTotals"];
+            /** Truncated */
+            truncated: boolean;
+            /**
+             * Until
+             * Format: date-time
+             */
+            until: string;
+        };
         /** OkResponse */
         OkResponse: {
             /** Ok */
@@ -5614,6 +5677,46 @@ export interface components {
             selected_material_ids?: number[] | null;
             /** Title */
             title?: string | null;
+        };
+        /** UsageCall */
+        UsageCall: {
+            /** Currency */
+            currency?: string | null;
+            /** Estimated Cost */
+            estimated_cost?: string | null;
+            /** Id */
+            id: string;
+            /** Model Name */
+            model_name: string;
+            /** Purpose */
+            purpose: string;
+            /** Retry Count */
+            retry_count: number;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Status */
+            status: string;
+            usage: components["schemas"]["UsageTotals"];
+        };
+        /** UsageTotals */
+        UsageTotals: {
+            /** Cache Hit Ratio */
+            cache_hit_ratio?: number | null;
+            /** Cache Read Tokens */
+            cache_read_tokens?: number | null;
+            /** Cache Write Tokens */
+            cache_write_tokens?: number | null;
+            /** Input Tokens */
+            input_tokens?: number | null;
+            /** Known Input Tokens */
+            known_input_tokens?: number | null;
+            /** Known Output Tokens */
+            known_output_tokens?: number | null;
+            /** Output Tokens */
+            output_tokens?: number | null;
         };
         /** WeaknessProgress */
         WeaknessProgress: {
@@ -16724,6 +16827,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope_ModelConnectionTestResponse_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_model_usage_api_v1_settings_model_usage_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope_ModelUsageReport_"];
                 };
             };
             /** @description Bad Request */

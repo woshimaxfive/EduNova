@@ -1,6 +1,6 @@
-import { Database, Robot, UserCircle } from "@phosphor-icons/react";
+import { ChartBar, Database, Robot, UserCircle } from "@phosphor-icons/react";
 
-export type SettingsSection = "model" | "account" | "privacy";
+export type SettingsSection = "model" | "usage" | "account" | "privacy";
 
 type SettingsNavigationProps = {
   activeSection: SettingsSection;
@@ -13,6 +13,12 @@ const ITEMS = [
     label: "AI 服务",
     description: "回答、检索与排序",
     icon: Robot
+  },
+  {
+    id: "usage" as const,
+    label: "模型用量",
+    description: "调用、缓存与估算费用",
+    icon: ChartBar
   },
   {
     id: "account" as const,

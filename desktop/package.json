@@ -1,0 +1,18 @@
+{
+  "name": "edunova-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EduNova Windows desktop application",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "pack:check": "node packaging.cjs --check",
+    "pack:dir": "node packaging.cjs --dir",
+    "dist": "node packaging.cjs"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3"
+  }
+}

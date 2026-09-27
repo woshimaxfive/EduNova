@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
 import re
+import sys
 from typing import Any, Protocol
 from zipfile import BadZipFile, ZipFile
 from xml.etree import ElementTree
@@ -261,9 +262,21 @@ class DoclingDocumentExtractor:
             enable_remote_services=False,
             allow_external_plugins=False,
         )
+        pdf_format = PdfFormatOption(pipeline_options=pdf_options)
+        if sys.platform == "win32":
+            import docling_parse
+
+            # docling-parse opens bundled font resources using narrow C++ paths.
+            # Use Docling's installed PDFium backend for non-ASCII package paths;
+            # keep the same layout/table pipeline and page-aware output contract.
+            package_path = docling_parse.__file__
+            if package_path and not str(Path(package_path).parent).isascii():
+                from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
+
+                pdf_format.backend = PyPdfiumDocumentBackend
         return DocumentConverter(
             allowed_formats=[InputFormat.PDF, InputFormat.DOCX, InputFormat.PPTX],
-            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pdf_options)},
+            format_options={InputFormat.PDF: pdf_format},
         )
 
     @staticmethod

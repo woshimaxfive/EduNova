@@ -1,0 +1,2 @@
+# Windows lifecycle adapter, kept separate from Linux/server dependencies.
+pywin32==312; sys_platform == "win32"

@@ -8,3 +8,6 @@
 d364b3233d6f2808dd46b390839ec611dfdc36b2:backend/tests/test_materials.py:generic-api-key:100
 # Synthetic login for the isolated learning-closure fixture, not a provider key.
 0aafca6dcf60a2d5b37d19a1e30cbc6ef160b87f:frontend/e2e/local-speech.spec.ts:generic-api-key:9
+7148a4234f652c316e308f5c2a4dcb4d7d1fa9a5:frontend/e2e/resource-rendering.spec.ts:generic-api-key:6
+71f6837f5582cf5c922876f47176d4fa10fc3ab0:backend/integration/learning_closure_check.py:generic-api-key:45
+71f6837f5582cf5c922876f47176d4fa10fc3ab0:frontend/e2e/evidence-closure.spec.ts:generic-api-key:7

@@ -28,6 +28,10 @@ PURPOSES = {
     "vite": "前端构建",
     "vitest": "前端测试",
     "setuptools": "AI worker 的 PyTorch 运行依赖；固定安全版本",
+    "electron": "Windows 桌面宿主；捆绑组件另有第三方通知",
+    "pywin32": "Windows 桌面进程生命周期与 Job Objects",
+    "fastembed": "本地 CPU 向量推理",
+    "onnxruntime": "本地 ONNX 模型运行时",
 }
 
 PACKAGE_METADATA_OVERRIDES = {
@@ -53,6 +57,8 @@ PACKAGE_METADATA_OVERRIDES = {
     "rq": ("https://github.com/rq/rq", "BSD-2-Clause"),
     "scipy": ("https://github.com/scipy/scipy", "BSD-3-Clause"),
     "websockets": ("https://github.com/python-websockets/websockets", "BSD-3-Clause"),
+    # Checked against the v0.23.2 upstream LICENSE; wheel metadata omits License.
+    "tokenizers": ("https://github.com/huggingface/tokenizers", "Apache-2.0"),
     "clsx": ("https://github.com/lukeed/clsx", "MIT"),
     "eslint-plugin-react-refresh": ("https://github.com/ArnaudBarre/eslint-plugin-react-refresh", "MIT"),
     "globals": ("https://github.com/sindresorhus/globals", "MIT"),
@@ -110,6 +116,8 @@ def python_dependencies() -> list[tuple[str, str, str, str, str]]:
         "requirements-dev.txt",
         "requirements-eval-network.txt",
         "requirements-local-speech.txt",
+        "requirements-local-embedding.txt",
+        "requirements-desktop.txt",
     ):
         for line in (ROOT / "backend" / filename).read_text(encoding="utf-8").splitlines():
             value = line.strip()
@@ -124,7 +132,8 @@ def python_dependencies() -> list[tuple[str, str, str, str, str]]:
         try:
             package = metadata.metadata(name)
             project_urls = _project_urls(package)
-            source = project_urls.get("Source") or project_urls.get("Repository") or package.get("Home-page") or ""
+            source = (project_urls.get("Source") or project_urls.get("Repository")
+                      or project_urls.get("Homepage") or package.get("Home-page") or "")
             source_link, license_name = _resolved_metadata(
                 name,
                 source,
@@ -195,6 +204,8 @@ def main() -> None:
     lines.extend(f"| {name} | {version} | {source} | {license_name} | {purpose} |" for name, version, source, license_name, purpose in python_dependencies())
     for title, package_dir in (
         ("前端 Node.js 直接依赖", ROOT / "frontend"),
+        ("代码验证 Node.js 直接依赖", ROOT / "code-verifier"),
+        ("桌面宿主 Node.js 直接依赖", ROOT / "desktop"),
         ("离线评测 Node.js 直接依赖", ROOT / "evals" / "promptfoo"),
     ):
         lines.extend(("", f"## {title}", "", "| 依赖 | 版本 | 来源 | 声明许可证 | 用途 |", "| --- | --- | --- | --- | --- |"))

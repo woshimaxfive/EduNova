@@ -58,3 +58,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test_e2e.ps1
 更新接口合同后，在根目录使用项目 Python 环境运行 `python scripts/export_openapi.py`，再在 `frontend` 中运行 `pnpm exec openapi-typescript ../backend/openapi.json -o src/types/openapi.generated.ts`。两份生成文件一起检查与提交。
 
 脚本退出成功不等于模型质量或性能已达标；评测报告中的 `evidence_gap`、失败项与未验证范围需要单独核对。开发流程见[贡献指南](../CONTRIBUTING.md)。
+
+## 打包前桌面入口
+
+`scripts/desktop_runtime.py` 提供 Windows 前台服务控制器（`start / stop / status`）；manifest 与生命周期约定见 `docs/DESKTOP_RUNTIME.md`。它与现有 Docker BAT 入口分开，不生成 EXE，不自动替换当前部署。Windows 专属依赖单列在 `backend/requirements-desktop.txt`。
+
+Electron 宿主窗口已接入 `desktop/`，JSON-lines 桥为 `desktop_host_bridge.py`。桥只允许固定生命周期操作并持有控制器进程；运行时合同、窗口验收和未完成边界见 `docs/DESKTOP_RUNTIME.md`、`docs/DESKTOP_DISTRIBUTION.md`。当前仍停在生成 EXE 之前。

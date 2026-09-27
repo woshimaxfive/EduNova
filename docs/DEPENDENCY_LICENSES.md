@@ -5,18 +5,22 @@
 | Python 依赖 | 版本 | 来源 | 声明许可证 | 用途 |
 | --- | --- | --- | --- | --- |
 | alembic | 1.18.5 | [alembic](https://github.com/sqlalchemy/alembic/) | MIT | 数据库迁移 |
+| anyio | 4.14.2 | 需复核 | MIT | 项目直接运行、测试或构建依赖 |
 | bcrypt | 5.0.0 | [bcrypt](https://github.com/pyca/bcrypt) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | boto3 | 1.43.47 | [boto3](https://github.com/boto/boto3) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | cryptography | 50.0.1 | [cryptography](https://github.com/pyca/cryptography) | Apache-2.0 OR BSD-3-Clause | 项目直接运行、测试或构建依赖 |
 | docling-slim | 2.113.0 | [docling-slim](https://github.com/docling-project/docling) | MIT | 项目直接运行、测试或构建依赖 |
 | fastapi | 0.138.2 | [fastapi](https://github.com/fastapi/fastapi) | MIT | 后端 API 与 OpenAPI |
+| fastembed | 0.8.1 | [fastembed](https://github.com/qdrant/fastembed) | Apache-2.0 | 本地 CPU 向量推理 |
 | httpcore | 1.0.9 | [httpcore](https://github.com/encode/httpcore) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
 | httpx | 0.28.1 | [httpx](https://github.com/encode/httpx) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
-| httpx2 | 2.11.0 | [httpx2](https://github.com/pydantic/httpx2) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
+| httpx2 | 2.12.0 | [httpx2](https://github.com/pydantic/httpx2) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
+| huggingface-hub | 1.32.0 | [huggingface-hub](https://github.com/huggingface/huggingface_hub) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | json-repair | 0.61.4 | [json-repair](https://github.com/mangiucugna/json_repair) | MIT | 项目直接运行、测试或构建依赖 |
 | langchain | 1.3.11 | [langchain](https://github.com/langchain-ai/langchain) | MIT | 项目直接运行、测试或构建依赖 |
 | langgraph | 1.2.7 | [langgraph](https://github.com/langchain-ai/langgraph/tree/main/libs/langgraph) | MIT | 学习闭环状态图编排 |
 | numpy | 2.5.0 | 需复核 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | 项目直接运行、测试或构建依赖 |
+| onnxruntime | 1.30.0 | [onnxruntime](https://onnxruntime.ai) | MIT License | 本地 ONNX 模型运行时 |
 | openai | 2.45.0 | [openai](https://github.com/openai/openai-python) | Apache-2.0 | OpenAI-compatible 模型协议适配 |
 | opencv-python-headless | 4.13.0.92 | [opencv-python-headless](https://github.com/opencv/opencv-python) | MIT build scripts; bundled OpenCV Apache-2.0; bundled third-party licenses vary | 项目直接运行、测试或构建依赖 |
 | opentelemetry-exporter-otlp-proto-http | 1.43.0 | [opentelemetry-exporter-otlp-proto-http](https://github.com/open-telemetry/opentelemetry-python) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
@@ -38,6 +42,7 @@
 | python-docx | 1.2.0 | [python-docx](https://github.com/python-openxml/python-docx) | MIT | 项目直接运行、测试或构建依赖 |
 | python-multipart | 0.0.32 | [python-multipart](https://github.com/Kludex/python-multipart) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | python-pptx | 1.0.2 | [python-pptx](https://github.com/scanny/python-pptx) | MIT | 项目直接运行、测试或构建依赖 |
+| pywin32 | 312 | [pywin32](https://github.com/mhammond/pywin32) | PSF | Windows 桌面进程生命周期与 Job Objects |
 | ragas | 0.4.3 | [ragas](https://github.com/vibrantlabsai/ragas) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | redis | 8.0.1 | [redis](https://github.com/redis/redis-py) | MIT | 项目直接运行、测试或构建依赖 |
 | reportlab | 5.0.0 | [reportlab](https://www.reportlab.com/) | BSD license (see license.txt for details), Copyright (c) 2000-2025, ReportLab Inc. | 项目直接运行、测试或构建依赖 |
@@ -49,6 +54,7 @@
 | sherpa-onnx-core | 1.13.8 | [sherpa-onnx-core](https://github.com/k2-fsa/sherpa-onnx) | Apache-2.0 source; 1.x wheels bundle GPL components; see docs/LOCAL_SPEECH.md | 项目直接运行、测试或构建依赖 |
 | SQLAlchemy | 2.0.51 | [SQLAlchemy](https://www.sqlalchemy.org) | MIT | 数据访问与事务 |
 | sse-starlette | 3.4.5 | [sse-starlette](https://github.com/sysid/sse-starlette) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
+| tokenizers | 0.23.2 | [tokenizers](https://github.com/huggingface/tokenizers) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | trafilatura | 2.2.0 | [trafilatura](https://github.com/adbar/trafilatura) | Apache-2.0 | 项目直接运行、测试或构建依赖 |
 | uvicorn | 0.49.0 | [uvicorn](https://github.com/Kludex/uvicorn) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
 | websockets | 15.0.1 | [websockets](https://github.com/python-websockets/websockets) | BSD-3-Clause | 项目直接运行、测试或构建依赖 |
@@ -105,6 +111,19 @@
 | vite-plugin-static-copy | 4.1.1 | [vite-plugin-static-copy](https://github.com/sapphi-red/vite-plugin-static-copy#readme) | MIT | 项目直接运行、测试或构建依赖 |
 | vitest | 4.1.11 | [vitest](https://vitest.dev) | MIT | 前端测试 |
 | zustand | 5.0.15 | [zustand](https://github.com/pmndrs/zustand) | MIT | 轻量客户端状态 |
+
+## 代码验证 Node.js 直接依赖
+
+| 依赖 | 版本 | 来源 | 声明许可证 | 用途 |
+| --- | --- | --- | --- | --- |
+| pyodide | 0.29.2 | [pyodide](https://github.com/pyodide/pyodide) | MPL-2.0 | 项目直接运行、测试或构建依赖 |
+
+## 桌面宿主 Node.js 直接依赖
+
+| 依赖 | 版本 | 来源 | 声明许可证 | 用途 |
+| --- | --- | --- | --- | --- |
+| electron | 44.4.5 | [electron](https://github.com/electron/electron) | MIT | Windows 桌面宿主；捆绑组件另有第三方通知 |
+| electron-builder | 26.15.3 | [electron-builder](https://github.com/electron-userland/electron-builder) | MIT | 项目直接运行、测试或构建依赖 |
 
 ## 离线评测 Node.js 直接依赖
 

@@ -1,6 +1,6 @@
 # 第三方软件与许可证说明
 
-EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说明项目运行涉及的主要第三方组件；实际版本与完整依赖树以 `backend/requirements*.txt`、`frontend/package.json`、`frontend/pnpm-lock.yaml`、`code-verifier/package.json`、`code-verifier/package-lock.json` 和 Docker Compose 配置为准。
+EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说明项目运行涉及的主要第三方组件；实际版本与完整依赖树以 `backend/requirements*.txt`、`frontend/package.json`、`frontend/pnpm-lock.yaml`、`code-verifier/package.json`、`code-verifier/package-lock.json`、`desktop/package.json`、`desktop/package-lock.json` 和 Docker Compose 配置为准。这些声明及锁文件不替代最终交付包的完整组件清单和许可证正文。
 
 本项目不复制或分发用户上传资料、模型返回内容、第三方教材、API Key 或 Provider 账号凭证。
 
@@ -15,6 +15,9 @@ EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说
 | Redis 8.0 | 队列与进度存储 | RSALv2、SSPLv1 或 AGPLv3（三选一） | https://redis.io/legal/licenses/ |
 | RQ | 后台任务 | BSD-2-Clause | https://python-rq.org |
 | Docling | 文档结构提取 | MIT | https://github.com/docling-project/docling |
+| Electron（开发态桌面宿主） | 桌面窗口 | MIT；Chromium/Node及捆绑组件另有通知 | https://github.com/electron/electron |
+| pywin32 | Windows进程生命周期 | PSF；以实际包内许可证为准 | https://github.com/mhammond/pywin32 |
+| Docling Heron / TableFormer模型 | PDF版面与表格推理 | 与Docling代码分开；实际固定模型卡分别声明Apache-2.0 / CDLA-Permissive-2.0 | https://huggingface.co/docling-project/docling-layout-heron / https://huggingface.co/docling-project/docling-models |
 | FastEmbed、ONNX Runtime（可选） | 本地 CPU 向量验证 | Apache-2.0、MIT | https://github.com/qdrant/fastembed / https://github.com/microsoft/onnxruntime |
 | BAAI/bge-small-zh-v1.5（可选下载） | 中文 512 维向量模型 | MIT | https://huggingface.co/BAAI/bge-small-zh-v1.5 |
 | Pyodide | 隔离式 Python 代码验证运行时 | MPL-2.0 | https://pyodide.org |
@@ -27,6 +30,8 @@ EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说
 主模型通过可配置Adapter接入外部服务，图片理解跟随主模型；账号和凭证不随源码分发。默认向量、排序及语音在本地运行，SearXNG搜索仍访问外部网站。历史检索Provider适配保留兼容，默认配置不使用其凭证。
 
 本地语音采用Sherpa-ONNX 1.13.8（仓库Apache-2.0；当前预编译包包含espeak-ng/piper等GPL组件）、SenseVoice（FunASR MODEL_LICENSE 1.1）；朗读改用浏览器本地中文声音，不再下载或加载Kokoro。不得将整套运行时标注为纯MIT/Apache。固定来源、模型许可、分发义务和试验边界见[本地语音说明](docs/LOCAL_SPEECH.md)；本仓库不分发预构建语音镜像。
+
+桌面分发核查发现，当前固定语音权重为社区ONNX转换版本，其README指向ASLP-lab/WSYue-ASR的粤语微调分支。随目录保留的FunASR许可不应被视为整个转换/微调链的分发结论。当前桌面资产清单、许可缺项和本机路径依赖见[桌面分发核对](docs/DESKTOP_DISTRIBUTION.md)，正式分发尚未就绪。
 
 ## 合规边界
 

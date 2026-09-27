@@ -185,6 +185,46 @@ def test_docling_outline_uses_numbered_semantics_instead_of_every_visual_header(
     assert material.quality_json["empty_section_ratio"] == 0.0
 
 
+class DoclingWordHeadingParser:
+    def parse_document(self, _extension: str, _content: bytes) -> ParsedDocument:
+        return ParsedDocument([], [
+            ParsedBlock("栈与队列", None, "heading", 1),
+            ParsedBlock("栈的抽象与后进先出", None, "heading", 2),
+            ParsedBlock("栈仅允许在栈顶插入与删除，后入栈的元素先出栈。", None),
+            ParsedBlock("队列的先进先出", None, "heading", 2),
+            ParsedBlock("队列从队尾插入，从队头删除，先进入的元素先离开。", None),
+        ], "docling:test")
+
+
+def test_docling_docx_preserves_explicit_unnumbered_headings(tmp_path: Path) -> None:
+    storage = tmp_path / "materials"
+    source = storage / "user_1" / "notes.docx"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"docling-word-structural-headings-fixture")
+    material = make_material("notes.docx", "user_1/notes.docx")
+    session = FakeSession()
+    runner = MaterialIngestionGraphRunner(
+        session,  # type: ignore[arg-type]
+        settings=Settings(_env_file=None, material_storage_dir=str(storage)),
+        parser=DoclingWordHeadingParser(),  # type: ignore[arg-type]
+        trace_recorder=recorder([]),
+    )
+
+    runner.run(user=make_user(), material=material, trace_id="trace-docling-word")
+
+    sections = material.outline_json["sections"]
+    assert [section["title"] for section in sections if section["included"]] == [
+        "栈与队列", "栈的抽象与后进先出", "队列的先进先出",
+    ]
+    assert sections[1]["path"] == ["栈与队列", "栈的抽象与后进先出"]
+    chunks = [item for item in session.added if isinstance(item, MaterialChunk)]
+    assert len(chunks) == 2
+    assert all(section["chunk_indexes"] for section in sections[1:])
+    assert material.quality_json["passed"] is True
+    assert material.ingestion_status == "awaiting_confirmation"
+    assert material.outline_json["confirmed"] is False
+
+
 class DoclingTocParser:
     def parse_document(self, _extension: str, _content: bytes) -> ParsedDocument:
         blocks: list[ParsedBlock] = []

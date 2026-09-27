@@ -26,6 +26,8 @@
 
 复用Web Speech API，不新增前端语音库。识别继续复用现有PCM转换、权限、Sherpa适配和内部容器，不改变LangGraph、引用、评分、掌握度或事务逻辑。
 
-SenseVoice模型卡指向FunASR MODEL_LICENSE 1.1，不是Apache；准备脚本保留固定版本模型许可。Sherpa-ONNX仓库为Apache-2.0，但1.x预编译包仍包含espeak-ng/piper相关GPL组件：即使不再使用TTS，也不能把整个运行时称为纯MIT/Apache。再分发二进制镜像前需核对许可证、对应源码等义务；本仓库不发布预构建语音镜像。
+原始SenseVoice模型卡指向FunASR MODEL_LICENSE 1.1；当前固定的社区粤语转换/微调权重另有模型卡声明，准备脚本保留固定版本模型许可。Sherpa-ONNX仓库为Apache-2.0，但1.x预编译包仍包含espeak-ng/piper相关GPL组件：即使不再使用TTS，也不能把整个运行时称为纯MIT/Apache。再分发二进制镜像前需核对许可证、对应源码等义务；本仓库不发布预构建语音镜像。
+
+2026-09-26桌面资产复核补充：`prepare_local_speech.py`实际固定下载的是`csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09`，revision为`355f4d4884d8afd08aef04b9007a8556d7b463b2`。该版本README指向`ASLP-lab/WSYue-ASR/sensevoice_small_yue`，不是未经修改的FunAudioLLM原始权重。ASLP仓库模型卡声明Apache-2.0，但该声明与原始模型许可如何覆盖当前微调/转换产物仍需核对；不能仅凭现有`MODEL_LICENSE`文件或上游标签认定整条分发链已核清。本次没有更换权重或推理实现。
 
 来源：[浏览器本地声音标识](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesisVoice/localService)、[SenseVoice](https://huggingface.co/FunAudioLLM/SenseVoiceSmall)、[固定模型许可](https://github.com/modelscope/FunASR/blob/3ff9259aade4f7e4360645df28cad8f81959ee91/MODEL_LICENSE)、[Sherpa许可说明](https://github.com/k2-fsa/sherpa-onnx/issues/3731)。

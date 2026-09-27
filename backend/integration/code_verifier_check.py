@@ -8,6 +8,11 @@ def main() -> None:
     cases = (
         ("print(6 * 7)", "42", True, "passed"),
         ("print('actual')", "expected", False, "output_mismatch"),
+        ("runner = eval\nprint(runner('6 * 7'))", "42", False, "policy_rejected"),
+        (
+            "v = vars\nb = v(__builtins__)\nf = b['ev' + 'al']\nprint(f('6 * 7'))",
+            "42", False, "policy_rejected",
+        ),
         ("open('/tmp/result.txt', 'w')", "", False, "policy_rejected"),
         ("print(getattr(object, '__subclasses__')())", "", False, "policy_rejected"),
         ("import urllib.request\nprint('network')", "network", False, "policy_rejected"),

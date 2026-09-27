@@ -242,7 +242,9 @@ class MaterialIngestionGraphRunner:
                     heuristic_level = self._heading_level(part)
                     level = (
                         heuristic_level
-                        if is_docling and block.get("kind") == "heading"
+                        # Word headings come from document styles, unlike inferred
+                        # PDF visual headers. Keep explicit unnumbered DOCX titles.
+                        if is_docling and state["extension"] != ".docx" and block.get("kind") == "heading"
                         else block.get("heading_level") if block.get("kind") == "heading" else heuristic_level
                     )
                     if toc_page_range is not None and block.get("page_number") in toc_page_range:

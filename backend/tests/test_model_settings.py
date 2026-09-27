@@ -1428,7 +1428,7 @@ def test_openai_compatible_provider_creates_embeddings_and_retries_without_dimen
     assert requests[1].headers["authorization"] == "Bearer sk-user-secret"
 
 
-def test_model_settings_service_uses_embedding_model_for_vectors() -> None:
+def test_model_settings_service_uses_embedding_model_for_vectors(monkeypatch: pytest.MonkeyPatch) -> None:
     module = load_model_settings_module()
     user = make_user()
     provider = FakeProvider()
@@ -1448,7 +1448,12 @@ def test_model_settings_service_uses_embedding_model_for_vectors() -> None:
         ),
     )
 
+    # Unit tests must not connect to the developer database for audit writes.
+    records: list[dict[str, Any]] = []
+    monkeypatch.setattr(service.execution_runtime.audit, "record", lambda **kwargs: records.append(kwargs))
     vectors = service.embedding_vectors(user, ["启发式搜索"], dimensions=1536)
+    assert len(records) == 1
+    assert records[0]["operation"] == "embedding"
 
     assert len(vectors) == 1
     assert len(vectors[0]) == 1536

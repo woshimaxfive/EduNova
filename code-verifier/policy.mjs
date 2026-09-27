@@ -15,6 +15,10 @@ BLOCKED_CALLS = {
 tree = ast.parse(user_code)
 violations = []
 for node in ast.walk(tree):
+    # Reject references too: checking only Call nodes allows aliases such as
+    # runner = eval or mapping = vars to bypass the direct-call restriction.
+    if isinstance(node, ast.Name) and (node.id in BLOCKED_CALLS or node.id.startswith("__")):
+        violations.append("当前代码包含被禁用的内置能力引用。")
     if isinstance(node, (ast.Import, ast.ImportFrom)):
         names = [alias.name.split(".")[0] for alias in node.names] if isinstance(node, ast.Import) else [(node.module or "").split(".")[0]]
         if any(name not in ALLOWED_IMPORTS for name in names):

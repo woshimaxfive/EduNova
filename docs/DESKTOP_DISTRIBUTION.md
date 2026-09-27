@@ -4,7 +4,9 @@
 
 ## 当前发布状态
 
-2026-09-27 正在收尾源码候选、Windows CI 和 Release 草稿。下文保留此前各阶段的事实和失败记录；其中“尚未生成 EXE”“Redis 方案未定”“停止在 EXE 前”等文字只描述当时阶段。当前已有完成本机验收的 DOCX 修复版 LocalTest；本轮不改变其分发审查标记，也不把它当作新提交构建的正式安装器。
+2026-09-27 源码候选 `edf0e51f` 的 Windows CI 五个 job 已通过。下文保留此前各阶段的事实和失败记录；其中“尚未生成 EXE”“Redis 方案未定”“停止在 EXE 前”等文字只描述当时阶段。DOCX 修复版与后续安全更新版 LocalTest 均已完成本机验收，未改变分发审查标记，也不能作为正式安装器上传。
+
+安全更新版位于本地 `desktop/dist/local-test-security`：载荷 AnyIO 4.14.2、搜索运行时 pip 26.2.1；安装退出码 0、耗时 453.634 秒，44,416 个载荷文件及宿主文件哈希匹配。空数据首次启动 42.378 秒、重启 37.417 秒，注册登录、界面记忆、判题、35 条搜索结果、语音样例和后台任务通过；账户、密钥、窗口会话、记忆、Redis 数据重启后保留，两次服务清理通过。卸载退出码 0，1,665 个用户数据文件哈希不变，合成 profile 已归档而非删除。安装器 1,388,932,541 字节，SHA-256 `53b4b7d989721535099fa865e53c9615d34243a85dd973dfeae06964c73123ff`，Authenticode 为 `NotSigned`，`redistributionReviewed=false`。验收来自现有开发机，`cleanWindows=false`；原始证据在被忽略的 `.planning/desktop-feasibility`。
 
 人工语音、干净 Windows 和可信签名按用户本轮回复保留未验收。签名不是创建 GitHub 草稿或预发布的统一硬性要求。当前清单见 [Release Checklist](RELEASE_CHECKLIST.md)，草稿说明见 [发布说明](RELEASE_NOTES_0.1.0.md)。
 

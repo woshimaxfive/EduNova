@@ -1,6 +1,6 @@
 # Electron Windows 桌面客户端
 
-最新 DOCX 修复验收包位于 `dist/local-test-docxfix`，已完成实际安装、空数据启动、重启、卸载保留数据和真实模型练习/对话/PDF/DOCX 导出续验。Word 显式标题修复通过 31 项相关回归。旧 `dist/local-test` 作为基线保留；两者均为未签名 LocalTest，尚未完成干净 Windows、人工硬件及第三方完整分发审查。
+最新安全更新验收包位于 `dist/local-test-security`，已完成本机实际安装、44,416 个载荷文件哈希核对、空数据启动、重启和卸载保留数据；包含 AnyIO 4.14.2 与搜索运行时 pip 26.2.1。此前 `dist/local-test-docxfix` 已完成真实模型练习/对话/PDF/DOCX 导出续验，Word 显式标题修复通过 31 项相关回归。各 LocalTest 包均未签名，尚未完成干净 Windows、人工硬件及第三方完整分发审查，不作为正式发布附件。
 
 这是直接复用现有 EduNova 前端的 Windows 桌面宿主源码。NSIS 本机试装包已通过实际安装、空数据启动、重启持久化和卸载保留数据验收，产物位于 `dist/local-test`。该包未签名，干净 Windows 验收与第三方完整分发核对仍未完成；详细证据和边界见 `../docs/DESKTOP_DISTRIBUTION.md` 顶部记录。Electron 官方运行时位于被忽略的 node_modules，属于开发依赖。
 

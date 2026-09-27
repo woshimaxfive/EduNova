@@ -22,6 +22,8 @@ Gitleaks 检查全部 431 个历史提交。新增三条精确指纹例外均来
 
 逐项查现有 LocalTest 清单：AnyIO 为 4.14.1，搜索 Python 包含 pip 25.0.1；其余上述名称不在载荷。旧 EXE 保留以复现此前验收，不将源码依赖更新冒充为 EXE 更新。分发前必须使用修复版 AnyIO，并更新或从只读运行环境移除不需要的 pip，重建载荷、通知与哈希后重新安装验证。旧载荷仍由 `redistributionReviewed=false` 阻断正式打包。
 
+已另建安全更新版 LocalTest：载荷 AnyIO 4.14.2、搜索 Python pip 26.2.1，44,416 个文件；实际安装后逐文件哈希与宿主文件比对通过。空数据启动、重启、基础功能及卸载保留数据通过，安装器 SHA-256 为 `53b4b7d989721535099fa865e53c9615d34243a85dd973dfeae06964c73123ff`，Authenticode 为 `NotSigned`。其 `redistributionReviewed` 仍为 `false`，本机安全更新和功能验收不消除模型与原生组件的分发证据缺口，故不上传 EXE。
+
 ## JavaScript 依赖及桌面边界
 
 前端 pnpm、桌面 npm、代码验证器 npm 审计均通过。桌面测试覆盖麦克风权限、导出发起者、IPC 来源、路径校验、资源清单和未审查分发阻断；真实 Pyodide 用例覆盖受限内置引用和别名绕过。此范围不包括完整 OS 沙箱逃逸证明，也不代替操作系统补丁或人工使用验收。

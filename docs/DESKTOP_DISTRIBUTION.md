@@ -1,14 +1,18 @@
 # 桌面分发核对
 
-更新日期：2026-09-27
+更新日期：2026-09-28
 
 ## 当前发布状态
 
 2026-09-27 源码候选 `edf0e51f` 的 Windows CI 五个 job 已通过。下文保留此前各阶段的事实和失败记录；其中“尚未生成 EXE”“Redis 方案未定”“停止在 EXE 前”等文字只描述当时阶段。DOCX 修复版与后续安全更新版 LocalTest 均已完成本机验收，未改变分发审查标记，也不能作为正式安装器上传。
 
+2026-09-28 已生成正式分发候选 `desktop/dist/release/EduNova-Setup-0.1.0-x64.exe`：1,739,807,829 字节，SHA-256 为 `dbbece74fa3b0d1ff8a4b0974e08ea748fa96d597cb024850777aa416ad17d10`，Authenticode 为 `NotSigned`。候选载荷共 44,505 个文件；组装时改用固定修订 `2365baeacb507f821a0c8120fcee3d484dba7a07` 的 2024 SenseVoice 转换，保留其 LICENSE 指向的 FunASR Model License 1.1，并不包含此前许可未明确的 2025 转换权重。随包 `sources/release-review` 包含 Sherpa-ONNX wheel/构建对应材料、17 个原生组件源码归档与 notices、ONNX Runtime 源码/通知及实际 copyleft/MPL Python 包源码索引。此为工程分发材料核对，不能代替法律意见。
+
+正式候选的 `pack:check` 逐项核验 44,505 个文件；静默安装退出码为 0，安装后逐项哈希一致。首次空数据启动已实际发生；后续完整探针首次启动 67.843 秒、重启 70.083 秒，注册登录、窗口长期记忆保存、Pyodide 判题、48 条搜索结果、安装目录中的 2024 中文语音样例“开饭时间早上9点至下午5点。”、后台任务和服务清理通过，账户、密钥、记忆和 Redis 标记重启后保持。自带卸载器退出码为 0，程序目录已移除，用户数据 1,666 个文件的聚合 SHA-256 在卸载前后均为 `d7de8845c6c3b24a7c74a188d06415ae5e4a07402d6dc5f1ffe31caad70763cf`。该结果来自现有开发机，`cleanWindows=false`；本机验收记录仍在被忽略的 `.planning/desktop-feasibility`。正式附件尚未上传到 GitHub 草稿。
+
 安全更新版位于本地 `desktop/dist/local-test-security`：载荷 AnyIO 4.14.2、搜索运行时 pip 26.2.1；安装退出码 0、耗时 453.634 秒，44,416 个载荷文件及宿主文件哈希匹配。空数据首次启动 42.378 秒、重启 37.417 秒，注册登录、界面记忆、判题、35 条搜索结果、语音样例和后台任务通过；账户、密钥、窗口会话、记忆、Redis 数据重启后保留，两次服务清理通过。卸载退出码 0，1,665 个用户数据文件哈希不变，合成 profile 已归档而非删除。安装器 1,388,932,541 字节，SHA-256 `53b4b7d989721535099fa865e53c9615d34243a85dd973dfeae06964c73123ff`，Authenticode 为 `NotSigned`，`redistributionReviewed=false`。验收来自现有开发机，`cleanWindows=false`；原始证据在被忽略的 `.planning/desktop-feasibility`。
 
-人工语音、干净 Windows 和可信签名按用户本轮回复保留未验收。签名不是创建 GitHub 草稿或预发布的统一硬性要求。当前清单见 [Release Checklist](RELEASE_CHECKLIST.md)，草稿说明见 [发布说明](RELEASE_NOTES_0.1.0.md)。
+用户于 2026-09-27 接受人工语音、保存对话框和干净 Windows 未验收风险，要求继续推进；上述项目不再作为本轮等待项，但不能记为实际通过。可信签名仍不可用。第三方分发材料单独核对。当前清单见 [Release Checklist](RELEASE_CHECKLIST.md)，草稿说明见 [发布说明](RELEASE_NOTES_0.1.0.md)。
 
 ## DOCX 修复版续验与分发材料
 

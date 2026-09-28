@@ -16,16 +16,34 @@ MODELS = (
 
 )
 
+# The desktop distribution uses the original SenseVoice conversion with an
+# explicit upstream model-license pointer. Local tuned weights remain opt-in
+# through the existing default; preparing a release uses a separate directory.
+RELEASE_MODELS = (
+    ("sensevoice", "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
+     "2365baeacb507f821a0c8120fcee3d484dba7a07",
+     ["model.int8.onnx", "tokens.txt", "README.md", "LICENSE", "test_wavs/zh.wav"],
+     {"model.int8.onnx": "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51",
+      "tokens.txt": "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc",
+      "LICENSE": "221c6df10b0931a5629adad671ea48fb7747e034c414b6d2bfa275bc3dd4ea17"}),
+)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-dir", default="storage/models/speech")
+    parser.add_argument("--release-model", action="store_true",
+                        help="Prepare the explicitly licensed 2024 model in a separate --model-dir")
     args = parser.parse_args()
     root = Path(args.model_dir)
-    for name, repo, revision, patterns, hashes in MODELS:
+    if args.release_model and root.resolve() == Path("storage/models/speech").resolve():
+        parser.error("--release-model requires a separate --model-dir; local weights are preserved")
+    for name, repo, revision, patterns, hashes in RELEASE_MODELS if args.release_model else MODELS:
         target = root / name
         marker = target / ".prepared-revision"
         required = ["tokens.txt", "model.int8.onnx", "test_wavs/zh.wav"]
+        if args.release_model:
+            required.append("LICENSE")
         ready = marker.is_file() and marker.read_text(encoding="utf-8") == revision
         ready = ready and all((target / filename).is_file() for filename in required)
         if ready:

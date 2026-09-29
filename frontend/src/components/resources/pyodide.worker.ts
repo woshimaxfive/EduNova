@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import { type PyodideInterface } from "pyodide";
+import pyodidePackage from "pyodide/package.json";
 
 type RunMessage = {
   type: "run";
@@ -44,11 +45,11 @@ function readableError(error: unknown) {
 
 function loadRuntime() {
   if (!pyodidePromise) {
-    const indexURL = `${workerScope.location.origin}/pyodide/0.29.2/`;
+    const indexURL = `${workerScope.location.origin}/pyodide/${pyodidePackage.version}/`;
     pyodidePromise = import(/* @vite-ignore */ `${indexURL}pyodide.mjs`)
       .then((module: PyodideLoaderModule) => module.loadPyodide({
         indexURL,
-        stdLibURL: `${indexURL}python_stdlib.zip?runtime=0.29.2`,
+        stdLibURL: `${indexURL}python_stdlib.zip?runtime=${pyodidePackage.version}`,
         stdout: (message) => runtimeDiagnostics.push(message.slice(0, 1000)),
         stderr: (message) => runtimeDiagnostics.push(message.slice(0, 1000))
       }));

@@ -19,7 +19,9 @@ flowchart LR
     A --> S
 ```
 
-系统由八个默认 Compose 服务组成：`postgres`、`redis`、`backend`、`ai-worker`、`export-worker`、`code-verifier`、`frontend` 和 `nginx`；启用 `security` profile 后会增加一个可选的 ClamAV 扫描服务。本地 Web 入口通过 Nginx 提供，Backend 端口可用于查看 API 文档；生产环境应只公开 Nginx，数据库、队列、Backend 和代码验证服务保留在内部网络。
+Docker 部署由十个默认 Compose 服务组成：`postgres`、`redis`、`backend`、`ai-worker`、`export-worker`、`code-verifier`、`frontend`、`nginx`、`searxng` 和 `speech`；启用 `security` profile 后会增加一个可选的 ClamAV 扫描服务。本地 Web 入口通过 Nginx 提供，Backend 端口可用于查看 API 文档；生产环境应只公开 Nginx，数据库、队列、Backend 和代码验证服务保留在内部网络。
+
+Windows 桌面部署复用相同前端与领域后端，由 Electron 宿主和 Windows 服务控制器管理随包运行时，静态前端与 API 通过本地回环端口同源提供。桌面不依赖上述 Compose 服务名或 Nginx；生命周期合同见[桌面运行时](DESKTOP_RUNTIME.md)。
 
 ## 2. 前端
 

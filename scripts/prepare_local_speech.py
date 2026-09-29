@@ -17,8 +17,8 @@ MODELS = (
 )
 
 # The desktop distribution uses the original SenseVoice conversion with an
-# explicit upstream model-license pointer. Local tuned weights remain opt-in
-# through the existing default; preparing a release uses a separate directory.
+# explicit upstream model-license pointer. Local preparation keeps the tuned
+# weights as its default; --release-model uses a separate directory.
 RELEASE_MODELS = (
     ("sensevoice", "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
      "2365baeacb507f821a0c8120fcee3d484dba7a07",

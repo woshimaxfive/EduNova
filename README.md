@@ -30,7 +30,14 @@ EduNova 是面向高校学生的个性化学习系统。它把课程资料、学
 | AI 编排 | LangGraph、LangChain 适配层、OpenAI-compatible 与讯飞等 Provider 适配 |
 | 数据与任务 | PostgreSQL + pgvector、Redis、RQ |
 | 文档与安全 | Docling、Pyodide 隔离代码验证、MIME 检测、可选 ClamAV |
-| 部署 | Docker Compose、Nginx |
+| 部署 | Docker Compose、Nginx；Windows Electron + NSIS 桌面安装器 |
+
+## 运行方式
+
+- **Docker 源码部署**：使用以下 BAT 或 Compose 命令，详细步骤见[部署指南](docs/DEPLOYMENT.md)。
+- **Windows 桌面安装**：使用 Releases 实际提供的安装器，见[桌面分发说明](docs/DESKTOP_DISTRIBUTION.md)；桌面运行时随安装包提供，不使用 Docker BAT 启动。
+
+以下运行环境与快速启动步骤适用于 Docker 源码部署。
 
 ## 运行环境
 
@@ -42,7 +49,7 @@ EduNova 是面向高校学生的个性化学习系统。它把课程资料、学
 
 ## 快速启动
 
-### Windows 一键启动（推荐）
+### Windows Docker 一键启动
 
 在解压后的项目根目录中，按以下顺序双击：
 
@@ -99,6 +106,7 @@ Windows 首次启动无需宿主机 Python，但需要联网下载镜像、依�
 ```text
 backend/          FastAPI 服务、LangGraph 工作流、数据库迁移与后端测试
 frontend/         React 前端、组件、路由与前端测试
+desktop/          Electron 桌面宿主、权限边界和安装器构建
 code-verifier/    Pyodide 隔离代码验证服务
 docker/           Dockerfile 与 Nginx 配置
 evals/            离线 AI 质量评测
@@ -106,7 +114,7 @@ scripts/          启动辅助、检查与测试脚本（见 scripts/README.md�
 docs/             公共使用与技术文档（见 docs/README.md）
 docker-compose.yml Docker Compose 启动编排
 .env.example      不含真实密钥的配置示例
-VERSION.txt       公开源码发布版本标识
+VERSION.txt       源码发布线标识（桌面版本见 desktop/package.json）
 THIRD_PARTY_NOTICES.md 主要第三方组件与许可证说明
 ```
 

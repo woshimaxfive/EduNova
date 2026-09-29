@@ -22,7 +22,7 @@ EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说
 | BAAI/bge-small-zh-v1.5（可选下载） | 中文 512 维向量模型 | MIT | https://huggingface.co/BAAI/bge-small-zh-v1.5 |
 | Pyodide | 隔离式 Python 代码验证运行时 | MPL-2.0 | https://pyodide.org |
 | Nginx | 统一 Web 入口与反向代理 | BSD-2-Clause | https://nginx.org |
-| SearXNG（可选独立容器） | 免Key联网搜索聚合 | AGPL-3.0-or-later | https://github.com/searxng/searxng |
+| SearXNG（默认搜索容器） | 免Key联网搜索聚合 | AGPL-3.0-or-later | https://github.com/searxng/searxng |
 | Trafilatura、HTTPCore | 本地网页正文提取、受限公开网页读取 | Apache-2.0、BSD-3-Clause | https://github.com/adbar/trafilatura / https://github.com/encode/httpcore |
 
 ## 运行时服务说明
@@ -31,7 +31,7 @@ EduNova 项目源码采用根目录 [MIT License](LICENSE) 发布。本文件说
 
 本地语音采用Sherpa-ONNX 1.13.8（仓库Apache-2.0；当前预编译包包含espeak-ng/piper等GPL组件）、SenseVoice（FunASR MODEL_LICENSE 1.1）；朗读改用浏览器本地中文声音，不再下载或加载Kokoro。不得将整套运行时标注为纯MIT/Apache。固定来源、模型许可、分发义务和试验边界见[本地语音说明](docs/LOCAL_SPEECH.md)；本仓库不分发预构建语音镜像。
 
-桌面分发核查发现，当前固定语音权重为社区ONNX转换版本，其README指向ASLP-lab/WSYue-ASR的粤语微调分支。随目录保留的FunASR许可不应被视为整个转换/微调链的分发结论。当前桌面资产清单、许可缺项和本机路径依赖见[桌面分发核对](docs/DESKTOP_DISTRIBUTION.md)，正式分发尚未就绪。
+语音资产分为本地默认与桌面分发两种配置：本地准备脚本默认使用 2025 粤语转换权重，桌面分发使用 `--release-model` 对应的 2024 转换权重。两者来源与摘要分别记录在 `desktop/model-assets.lock.json` 和 `desktop/release-model-assets.lock.json`，不能混用许可结论。具体来源和使用方式见[本地语音说明](docs/LOCAL_SPEECH.md)，随包材料要求见[桌面分发说明](docs/DESKTOP_DISTRIBUTION.md)。
 
 ## 合规边界
 

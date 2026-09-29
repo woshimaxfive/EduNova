@@ -1,3 +1,4 @@
+import pyodidePackage from "pyodide/package.json";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { viteStaticCopy } from "vite-plugin-static-copy";
@@ -17,7 +18,7 @@ export default defineConfig({
       targets: [
         {
           src: "node_modules/pyodide/{pyodide.mjs,pyodide.asm.js,pyodide.asm.wasm,python_stdlib.zip,pyodide-lock.json}",
-          dest: "pyodide/0.29.2",
+          dest: `pyodide/${pyodidePackage.version}`,
           rename: { stripBase: true }
         }
       ]

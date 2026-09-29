@@ -28,6 +28,17 @@
 
 原始SenseVoice模型卡指向FunASR MODEL_LICENSE 1.1；当前固定的社区粤语转换/微调权重另有模型卡声明，准备脚本保留固定版本模型许可。Sherpa-ONNX仓库为Apache-2.0，但1.x预编译包仍包含espeak-ng/piper相关GPL组件：即使不再使用TTS，也不能把整个运行时称为纯MIT/Apache。再分发二进制镜像前需核对许可证、对应源码等义务；本仓库不发布预构建语音镜像。
 
-2026-09-26桌面资产复核补充：`prepare_local_speech.py`实际固定下载的是`csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09`，revision为`355f4d4884d8afd08aef04b9007a8556d7b463b2`。该版本README指向`ASLP-lab/WSYue-ASR/sensevoice_small_yue`，不是未经修改的FunAudioLLM原始权重。ASLP仓库模型卡声明Apache-2.0，但该声明与原始模型许可如何覆盖当前微调/转换产物仍需核对；不能仅凭现有`MODEL_LICENSE`文件或上游标签认定整条分发链已核清。本次没有更换权重或推理实现。
+## 模型配置与分发
 
-来源：[浏览器本地声音标识](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesisVoice/localService)、[SenseVoice](https://huggingface.co/FunAudioLLM/SenseVoiceSmall)、[固定模型许可](https://github.com/modelscope/FunASR/blob/3ff9259aade4f7e4360645df28cad8f81959ee91/MODEL_LICENSE)、[Sherpa许可说明](https://github.com/k2-fsa/sherpa-onnx/issues/3731)。
+准备脚本保留两种显式用途，不会自动覆盖已有本地权重：
+
+| 用途 | 模型仓库与固定修订 | 配置入口 |
+| --- | --- | --- |
+| 本地 / Docker 默认 | `csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09`，`355f4d4884d8afd08aef04b9007a8556d7b463b2` | `MODELS`；默认模型目录 |
+| 桌面分发 | `csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17`，`2365baeacb507f821a0c8120fcee3d484dba7a07` | `RELEASE_MODELS`；`--release-model --model-dir <独立目录>` |
+
+桌面来源及摘要见 `desktop/release-model-assets.lock.json`；`desktop/model-assets.lock.json` 对应本地准备资产，不能替代桌面分发清单。脚本拒绝将分发模型直接写入默认本地目录。
+
+2025 转换权重的适用分发许可链仍需单独核对。2024 转换仓库提供明确的 LICENSE 指针；随包仍须保留模型许可和实际运行时组件要求的材料。模型选择不意味着其推理运行时的所有捆绑组件采用同一许可证。
+
+来源：[模型准备脚本](../scripts/prepare_local_speech.py)、[桌面模型清单](../desktop/release-model-assets.lock.json)、[第三方声明](../THIRD_PARTY_NOTICES.md)。

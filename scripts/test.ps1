@@ -77,6 +77,11 @@ else {
   Write-Host "frontend package not found; skipped"
 }
 
+if (Test-Path -LiteralPath "$repoRoot\desktop\package.json") {
+  Write-Host "== Desktop permission and packaging checks =="
+  Invoke-CheckedCommand "node" --test "$repoRoot/desktop/test/*.test.cjs"
+}
+
 if (Test-Path -LiteralPath "$repoRoot\docker-compose.yml") {
   Write-Host "== Docker Compose config =="
   Invoke-CheckedCommand "docker" compose config --quiet

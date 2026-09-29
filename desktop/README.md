@@ -1,8 +1,6 @@
 # Electron Windows 桌面客户端
 
-最新安全更新验收包位于 `dist/local-test-security`，已完成本机实际安装、44,416 个载荷文件哈希核对、空数据启动、重启和卸载保留数据；包含 AnyIO 4.14.2 与搜索运行时 pip 26.2.1。此前 `dist/local-test-docxfix` 已完成真实模型练习/对话/PDF/DOCX 导出续验，Word 显式标题修复通过 31 项相关回归。各 LocalTest 包均未签名，尚未完成干净 Windows、人工硬件及第三方完整分发审查，不作为正式发布附件。
-
-这是直接复用现有 EduNova 前端的 Windows 桌面宿主源码。NSIS 本机试装包已通过实际安装、空数据启动、重启持久化和卸载保留数据验收，产物位于 `dist/local-test`。该包未签名，干净 Windows 验收与第三方完整分发核对仍未完成；详细证据和边界见 `../docs/DESKTOP_DISTRIBUTION.md` 顶部记录。Electron 官方运行时位于被忽略的 node_modules，属于开发依赖。
+基于 Electron 的 Windows 桌面宿主，复用 EduNova 前端。安装与数据说明见 [桌面分发说明](../docs/DESKTOP_DISTRIBUTION.md)。以下说明面向源码构建与维护。
 
 ## 安装器构建
 
@@ -78,8 +76,8 @@ URL 必须是 manifest 中有健康探针的同一个回环服务 origin。该�
 
 ## 验证
 
-`npm.cmd test --prefix desktop` 验证IPC、麦克风来源/种类/确认失效、导出frame/来源/重定向/文件名边界。真实窗口验证入口在本机忽略目录 `.planning/desktop-feasibility/probe_electron_stack.py`，复用已有学习闭环测试正文，采用私有PostgreSQL/Redis/RQ数据与受控生成夹具；不是外部模型质量或缓存性能测量。
+`npm.cmd test --prefix desktop` 验证 IPC、麦克风权限及导出来源、重定向和文件名边界。
 
-媒体与导出驱动使用Chromium模拟音频，自动回答权限确认并把保存位置定向到试验目录。这些替代行为仅存在于忽略目录的验收脚本，不进入桌面源码；不能据此宣称真实麦克风硬件、人工点击系统保存/覆盖对话框或所有格式生成已经验收。
+自动化权限检查不能替代真实麦克风、系统保存对话框及导出文件的人工验证。
 
 源码许可与版本依据：Electron MIT；Chromium/Node及捆绑内容须单独保留第三方通知。npm audit只覆盖npm树，不证明整个Chromium二进制无漏洞。正式分发前仍须审计最终完整依赖包。

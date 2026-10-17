@@ -1,6 +1,6 @@
 # EduNova 架构
 
-本文档描述当前代码的运行结构。接口细节以 `backend/openapi.json` 为准，数据库结构以 SQLAlchemy 模型和 Alembic 迁移为准。
+本文描述当前源码结构。接口以 `backend/openapi.json` 为准，数据结构以 SQLAlchemy 模型和 Alembic 迁移为准。
 
 ## 1. 系统概览
 
@@ -19,9 +19,9 @@ flowchart LR
     A --> S
 ```
 
-Docker 部署由十个默认 Compose 服务组成：`postgres`、`redis`、`backend`、`ai-worker`、`export-worker`、`code-verifier`、`frontend`、`nginx`、`searxng` 和 `speech`；启用 `security` profile 后会增加一个可选的 ClamAV 扫描服务。本地 Web 入口通过 Nginx 提供，Backend 端口可用于查看 API 文档；生产环境应只公开 Nginx，数据库、队列、Backend 和代码验证服务保留在内部网络。
+Docker 默认运行十个服务：`postgres`、`redis`、`backend`、`ai-worker`、`export-worker`、`code-verifier`、`frontend`、`nginx`、`searxng` 和 `speech`；`security` profile 额外启用 ClamAV。Web 入口由 Nginx 提供，Backend 端口可查看 API 文档。生产环境只公开 Nginx，其余服务留在内部网络。
 
-Windows 桌面部署复用相同前端与领域后端，由 Electron 宿主和 Windows 服务控制器管理随包运行时，静态前端与 API 通过本地回环端口同源提供。桌面不依赖上述 Compose 服务名或 Nginx；生命周期合同见[桌面运行时](DESKTOP_RUNTIME.md)。
+Windows 桌面版复用前端与领域后端，由 Electron 和 Windows 控制器管理随包服务，通过回环端口同源提供前端与 API，无需 Compose 或 Nginx。生命周期合同见[桌面运行时](DESKTOP_RUNTIME.md)。
 
 ## 2. 前端
 
@@ -38,7 +38,7 @@ Windows 桌面部署复用相同前端与领域后端，由 Electron 宿主和 W
 
 前端传输类型由 FastAPI OpenAPI 生成到 `frontend/src/types/openapi.generated.ts`。页面 ViewModel、Query Key、缓存失效和业务状态仍由前端维护。
 
-确认弹窗复用 `components/primitives/Dialog.tsx` 的 `ConfirmDialog`；默认布局与遮罩由随组件加载的 `styles/dialog.css` 提供。Portal 挂载在 `body`，弹窗面板必须使用全局不透明的 `--dialog-surface`（附实色回退），不能依赖 `.route-main-surface-wide` 内的局部变量。自定义确认框也遵守同一底色约束。浏览器回归需检查实际计算背景色、遮罩、焦点约束及窄屏边界；仅有组件交互测试不能证明背景不透明。
+确认弹窗复用 `components/primitives/Dialog.tsx` 的 `ConfirmDialog` 和 `styles/dialog.css`。Portal 挂在 `body`，面板须使用全局不透明的 `--dialog-surface` 及实色回退，不能依赖 `.route-main-surface-wide` 内的变量；自定义确认框同样适用。浏览器回归检查计算背景色、遮罩、焦点和窄屏边界，组件交互测试不能代替这些检查。
 
 ## 3. 后端
 
@@ -57,7 +57,7 @@ Windows 桌面部署复用相同前端与领域后端，由 Electron 宿主和 W
 
 ## 4. 数据与文件
 
-PostgreSQL 保存账号、课程、知识点、画像、学习任务、资源、练习、报告、会话、任务和安全元数据。pgvector 用于可选的向量检索；没有可用向量服务时可以退回关键词检索。
+PostgreSQL 保存账号、课程、知识点、画像、学习任务、资源、练习、报告、会话、后台任务和安全元数据。pgvector 支持向量检索；默认使用本地向量与关键词融合，向量不可用时可回退关键词。
 
 Redis 承担：
 
@@ -70,13 +70,11 @@ Redis 承担：
 
 ## 5. 异步任务
 
-耗时操作使用 `ai_jobs` 或 `export_jobs` 持久化状态，再交给 RQ Worker 执行。客户端可以查询任务，也可以订阅 SSE 进度。
-
-任务状态以数据库为准。Redis 负责排队和运行协调，但不能替代持久化事实。刷新页面后，客户端从后端恢复任务和产物状态。
+耗时操作先在 `ai_jobs` 或 `export_jobs` 保存状态，再交给 RQ Worker。客户端通过查询或 SSE 获取进度，刷新后从后端恢复任务与产物。数据库是状态依据，Redis 只负责排队与运行协调。
 
 ## 6. Agent 与模型调用
 
-EduNova 使用十类工作流处理画像、资料、建课、辅导、资源、路径、练习和报告。工作流只编排领域步骤；用户隔离、客观评分、引用合法性、数据写入和失败边界由确定性代码控制。
+十类工作流编排画像、资料、建课、辅导、资源、路径、练习和报告；用户隔离、客观评分、引用、数据写入和失败边界由确定性代码控制。
 
 模型调用统一经过配置解析、超时、有限重试、并发限制、取消检查和安全审计。用户配置与系统配置分开管理；请求失败不会自动转发到未经用户选择的其他 Provider。
 

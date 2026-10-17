@@ -1,10 +1,8 @@
 # EduNova 数据库设计
 
-EduNova 使用 PostgreSQL、SQLAlchemy、Alembic 和 pgvector。本文档说明当前数据域和约束，具体列定义以 `backend/app/models/` 和迁移文件为准。
+数据层使用 PostgreSQL、SQLAlchemy、Alembic 和 pgvector。本文说明数据域与约束，列定义以 `backend/app/models/` 和迁移为准。
 
 ## 1. 数据域
-
-模型调用审计的 `20260925_0038` 迁移增加可空的 `usage_json` 和 `session_id`。旧记录保留空值，不反推历史费用。`usage_json` 仅包含每次尝试的数值计数、状态、耗时与可选报价快照；记录沿用 `MODEL_CALL_LOG_RETENTION_DAYS`。升级先运行 Alembic 再启动新 worker；降级会删除新增用量和会话标识，应先备份需要保留的审计数据，不影响原始聊天。
 
 | 数据域 | 主要表 |
 | --- | --- |
@@ -17,12 +15,13 @@ EduNova 使用 PostgreSQL、SQLAlchemy、Alembic 和 pgvector。本文档说明�
 | 学习资源 | `generated_resources`、`resource_interactions`、`resource_quality_scores` |
 | 练习与报告 | `practice_sessions`、`practice_answers`、`assessment_reports` |
 | 会话与记忆 | `chat_sessions`、`chat_messages`、`chat_message_attachments`、`conversation_memory_entries` |
+| 长期信息与删除屏障 | `learning_memory_facts`、`memory_suppressions` |
 | 任务与审计 | `ai_jobs`、`export_jobs`、`agent_run_logs`、`model_call_runs` |
 | 设置与隐私 | `model_settings`、`user_privacy_settings` |
 
 ## 2. 所有权与隔离
 
-用户级数据必须能够追溯到 `user_id`。课程相关查询同时验证课程所有权或 enrollment，不接受仅凭资源 ID 的访问。
+用户数据须能追溯到 `user_id`。课程查询同时验证所有权或 enrollment，资源 ID 本身不代表访问权限。
 
 关键规则：
 
@@ -34,25 +33,25 @@ EduNova 使用 PostgreSQL、SQLAlchemy、Alembic 和 pgvector。本文档说明�
 
 ## 3. 资料与课程证据
 
-`materials` 保存原始资料元数据、解析状态和版本化目录；章节切片保存在 `material_chunks`。课程建立后，兼容课程来源保存在 `course_materials`，检索切片保存在 `knowledge_chunks`。
+`materials` 保存资料元数据、解析状态与版本化目录，`material_chunks` 保存章节切片。建课后，`course_materials` 保存兼容课程来源，`knowledge_chunks` 保存检索切片。
 
 引用只保存必要的资料、章节、页码、切片和检索状态。完整原文保留在受控文件或切片记录中，不复制到日志和 Trace。
 
-`20260923_0037` 增加向量归档表。每条归档只关联课程切片或资料切片之一，以切片 ID、内容摘要、模型 profile 唯一定位；模型标识、维度、向量与原生成时间一并保存。显式重建在同一批事务中归档旧向量、更新当前向量，锁定切片及所有者记录；模型调用不持有行锁。恢复复用同内容/profile 的历史向量。归档随切片级联删除，非空归档表禁止降级删除。普通检索不覆盖已有有效向量，仍按当前 profile 过滤候选。
+`20260923_0037` 增加向量归档。每条只关联课程或资料切片之一，由切片 ID、内容摘要、模型 profile 唯一定位，保留模型、维度、向量与原生成时间。显式重建在同一批事务中归档旧向量、更新当前向量，锁定切片及所有者；模型调用在锁外执行。同内容/profile 可恢复历史向量。归档随切片删除，非空时禁止降级删表。普通检索不覆盖有效向量，仅使用当前 profile 的候选。
 
 ## 4. 学习状态
 
-`20260914_0035` 为 `learning_paths` 增加 `approval_status` 与 `approved_at`。旧记录保留 `legacy`、确认时间为空，不修改 `plan_json`、任务状态或历史成绩。新增草稿使用 `status=draft`；批准后变为 active/approved，旧 active 路径归档。批准与路径生成的持久化阶段锁定同一课程行，并核对基础路径 ID，避免两个确认或生成覆盖当前版本；模型调用期间不持有这把锁。
+`20260914_0035` 为 `learning_paths` 增加 `approval_status` 和 `approved_at`。旧记录保持 `legacy`、空确认时间，保留 `plan_json`、任务状态和成绩。新草稿为 `status=draft`；批准后变为 active/approved，旧 active 路径归档。批准与生成提交共用课程行锁，核对基础路径 ID 以防并发覆盖；模型调用在锁外执行。
 
-迁移前需备份数据库并停止旧版本 worker 写入。升级采用 Alembic 正常版本追踪。降级仅在所有记录仍是 legacy 时允许删除新列；已有草稿或批准信息时主动拒绝降级，应保留数据做前向修复，不能为回滚应用而抹除用户确认。隔离 PostgreSQL 回归覆盖旧 JSON 保留、升级—降级—再升级及双会话竞争批准。
+迁移前备份数据库、停止旧 worker 写入，使用 Alembic 升级。仅在全部记录仍为 legacy 时允许降级删除新列；已有草稿或批准信息则拒绝，应前向修复，保留用户确认。隔离 PostgreSQL 回归覆盖旧 JSON、升级/降级/再升级及并发批准。
 
 `student_profiles` 保存可复用画像，`profile_events` 保存经过约束的画像证据。课程目标、课程基础、弱点、掌握度和路径通过 enrollment 与课程级表表达。
 
-`20260914_0036` 为 `resource_interactions` 添加非空 JSONB `evidence_json`，旧行默认空对象，禁止追认历史精确来源。有非空证据时降级拒绝删除该列，应备份并前向修复。隔离 PostgreSQL 检查升级、旧行默认值、降级/再升级和拒绝丢证据。
+`20260914_0036` 为 `resource_interactions` 增加非空 JSONB `evidence_json`，旧行默认为空对象，不追认历史来源。存在非空证据时拒绝降级删列，需备份并前向修复。隔离 PostgreSQL 检查升级、旧行默认值、降级/再升级及证据保留。
 
-任务继续复用 `learning_bundle_json.items` 的固定资源 ID，新增 binding 快照（版本族/序号、内容与引用摘要）和 `binding_contract=1`。没有引入平行版本系统；原资源、任务和交互外键保持不变。生成提交锁定任务行，仅填充空槽，不覆盖已有版本。活动创建锁定资源行以串行化重复 event_id；批准仍使用课程行锁。
+任务复用 `learning_bundle_json.items` 的固定资源 ID，增加 binding 快照（版本族/序号、内容与引用摘要）和 `binding_contract=1`；资源、任务和交互外键不变。生成提交锁定任务，只填空槽，不覆盖版本；活动创建锁定资源，串行化重复 event_id；批准使用课程行锁。
 
-绑定测验通过任务行锁保证相同任务/资源只创建一个 PracticeSession。`assessment_json.source_binding` 与 `PracticeAnswer.question_json.source_binding` 保存相同来源，原题引用和答案随题目快照保存；后续评分继续使用既有 AssessmentGraph、提交认领和事务，不直接从资源阅读推断掌握。已归档计划的既有测验不自动切换到新版本。
+绑定测验通过任务行锁保证同任务/资源只创建一个 PracticeSession。`assessment_json.source_binding` 与 `PracticeAnswer.question_json.source_binding` 保存同一来源，原题引用和答案随快照保存。评分沿用 AssessmentGraph、提交认领与事务，不从阅读推断掌握；归档计划的测验不自动切换版本。
 
 掌握度和报告中的确定性数字由练习、任务和资源互动记录计算，不把模型自然语言直接当作正式评分。
 
@@ -68,13 +67,15 @@ EduNova 使用 PostgreSQL、SQLAlchemy、Alembic 和 pgvector。本文档说明�
 
 `chat_messages` 保存用户和助手消息，引用保存在 `citation_json`。附件通过 `chat_message_attachments` 记录逻辑键和安全元数据，实际文件由存储适配器管理。
 
-跨会话记忆为用户可控的派生数据。关闭或清除记忆不会删除原始会话，但必须删除相应派生索引。
+跨会话记忆由用户控制：暂停保留内容与索引，清除索引保留摘要，永久删除移除相应内容并阻断旧来源恢复；各项均保留原始会话。
 
 ## 8. 模型设置
 
 用户模型配置按用户隔离。API Key 使用应用级加密密钥加密保存；接口只返回配置来源、模型、可用性和脱敏后的 Key 状态。
 
 数据库备份必须与 `MODEL_SETTINGS_ENCRYPTION_KEY` 分开保管。没有对应加密密钥的备份不能恢复用户模型凭据。
+
+模型调用审计由 `20260925_0038` 增加可空 `usage_json` 和 `session_id`；旧值保持为空，不反推历史费用。用量仅包含每次尝试的计数、状态、耗时及可选报价快照，沿用 `MODEL_CALL_LOG_RETENTION_DAYS`。升级先运行 Alembic 再启动新 worker；降级删除新增字段，须先备份审计数据，原始聊天不受影响。
 
 ## 9. 迁移
 
@@ -100,18 +101,22 @@ Redis 队列不是唯一事实来源，可以在数据库与文件恢复后重�
 
 ## 11. 任务证据投影与恢复
 
-运行历史扩展复用 `ai_jobs.progress_json.snapshot` 保存一次终态元数据，不新增数据库表或迁移。快照以整个 JSON 值替换持久化，包含 schema_version、任务/Trace/父运行身份、产物引用、输入及路径内容 SHA256、脱敏步骤、用量计数和整体摘要。捕获时锁定 Job 行，重复捕获保持原值；摘要用于一致性检测，不是防数据库管理员篡改的签名。删除 Job 会一并删除其快照，不宣称永久审计存档。
+运行历史用 `ai_jobs.progress_json.snapshot` 保存一次终态元数据，不新增表或迁移。快照整体替换持久化，包含 schema_version、任务/Trace/父运行身份、产物引用、输入及路径内容 SHA256、脱敏步骤、用量和整体摘要。捕获锁定 Job，重复捕获保留原值。摘要只检查一致性，不防数据库管理员篡改；快照随 Job 删除，不是永久审计存档。
 
-Session 沿用领域会话与 AIJob 执行身份；快照不序列化 ORM 对象、模型上下文或成绩。读取重放不修复 Job 状态，不写领域事实。计划分支在课程行锁内检查当前路径 ID 和源内容摘要，以 `plan_json.branch_snapshot` 实现并发幂等，创建 draft、记录 revision_of/branched_from，复制任务蓝图及固定资源引用但重置任务状态；不复制交互、练习、评分或掌握事实。新执行使用原队列、幂等键和权限门禁，在 progress_json 记录 reexecuted_from/source_snapshot，retry_of_job_id 保持空值。旧任务没有快照仍可读，可显式捕获终态元数据，不能补造历史批准或学习证据。
+Session 沿用领域会话与 AIJob 身份；快照不序列化 ORM、模型上下文或成绩。回放只读，不修复 Job 或写入领域事实。
 
-任务进度由已批准 `learning_paths`、`learning_tasks.learning_bundle_json` 的资源快照、`resource_interactions.evidence_json`、`practice_sessions.assessment_json.source_binding` 与既有掌握度计算只读聚合，不新增可被前端直接写入的掌握度字段。历史 `learning_tasks.status=completed` 仍保留用户报告语义。资源活动与评估来源不匹配时不能闭合任务。
+计划分支在课程行锁内核对当前路径 ID 与源内容摘要，以 `plan_json.branch_snapshot` 保证并发幂等。新版本为 draft，记录 revision_of/branched_from，复制任务蓝图及固定资源引用、重置状态，不复制交互、练习、评分或掌握事实。
 
-路径/资源的领域事务与 AIJob 状态事务保持分离。提交后取消或超时保留产物，任务回写中记录原结果引用；worker 中断缺少回写时，显式重试使用原 `agent_trace_id` 查询同用户、同课程的领域产物。恢复验证状态与绑定，不替换原版本、不重新评分；没有已提交产物才重新执行，冲突需要用户明确创建新请求。本机制不替代其他工作流自己的恢复策略，也不提供通用快照、分支或重放引擎。
+重新执行沿用队列、幂等键与权限门禁，在 progress_json 记录 reexecuted_from/source_snapshot，retry_of_job_id 为空。旧任务仍可读，可显式捕获终态元数据，不补造批准或学习证据。
+
+任务进度只读聚合已批准 `learning_paths`、`learning_tasks.learning_bundle_json` 资源快照、`resource_interactions.evidence_json`、`practice_sessions.assessment_json.source_binding` 和既有掌握度，不新增前端可写的掌握度。历史 `learning_tasks.status=completed` 仍是用户报告；资源活动与评估来源不匹配时不能闭合任务。
+
+路径/资源与 AIJob 状态分别提交。提交后取消或超时保留产物，回写记录原引用；worker 中断时，显式重试按原 `agent_trace_id` 查找同用户、同课程产物。恢复需核验状态与绑定，不替换版本或重评；无已提交产物才重新执行，冲突需新请求。其他工作流保留各自恢复策略，不提供通用快照、分支或重放引擎。
 
 ## 12. 受控记忆增量（20260925_0039）
 
-`user_privacy_settings` 增加 `memory_revision` 与 `memory_cleared_before`，用于阻断隐私操作前的排队/在途写入及全量清空前的来源。`conversation_memory_entries` 保留原消息外键，增加主题、更新时间和纠正版本，向量允许为空以区分“保留摘要”和“拥有可用索引”。
+`user_privacy_settings` 增加 `memory_revision` 和 `memory_cleared_before`，阻断隐私操作前的排队/在途写入及清空前来源。`conversation_memory_entries` 保留消息外键，增加主题、更新时间和纠正版本；向量可空，区分保留摘要与可用索引。
 
-`learning_memory_facts` 保存账号隔离、用户明确确认的类别/文本/版本/时间，不从评分或助手回答自动生成。`memory_suppressions` 只保存账号与来源助手消息 ID，不保留已删除摘要正文；来源删除时随外键级联删除。所有记忆写入、纠正、隐私控制和删除由同一账号行锁串行化，外部向量计算在锁外完成，提交前复核隐私版本和来源屏障。
+`learning_memory_facts` 按账号保存用户确认的类别、文本、版本和时间，不从评分或助手回答自动生成。`memory_suppressions` 只保存账号及来源助手消息 ID，不留已删正文，随来源级联删除。记忆写入、纠正、隐私控制与删除共用账号行锁；向量计算在锁外，提交前复核隐私版本与来源屏障。
 
 升级不删除原聊天或已有记忆；有长期信息、删除标记或隐私版本变更时拒绝直接降级，防止旧代码恢复已删除内容。迁移兼容性、阈值隔离及后台并发删除由 `backend.integration.memory_control_check` 在隔离数据库验证。

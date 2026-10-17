@@ -1,6 +1,6 @@
 # 文档索引
 
-首次使用请从根目录的 [README](../README.md) 开始。本页负责导航；具体行为以当前代码和对应专题文档为准。
+首次使用从 [README](../README.md) 开始。本索引与专题文档默认描述当前源码；已发布安装包的适用范围以对应 Release 为准。
 
 ## 使用与部署
 
@@ -42,11 +42,11 @@
 - `frontend/src/components`、`styles`：组件与样式；`api`、`types`：接口调用与类型。
 - `docker`、`code-verifier`、`evals`：部署配置、隔离代码验证与 AI 评测。
 
-`backend/openapi.json` 与 `frontend/src/types/openapi.generated.ts` 是生成合同，不应当作垃圾删除或手工改写；更新入口见[脚本说明](../scripts/README.md)。数据库迁移同样需要保留历史，不能仅保留最新文件。
+`backend/openapi.json` 与 `frontend/src/types/openapi.generated.ts` 由脚本生成，更新方式见[脚本说明](../scripts/README.md)，不要删除或手改。数据库迁移须保留完整历史。
 
 ## 哪些不是公开文档
 
-`docs/local/`、`.planning/` 和 `output/` 用于本地计划、过程记录或运行产物，不纳入公开源码。`.env`、`storage/`、`var/` 可能包含密钥、模型、备份或用户数据，不能仅因不受 Git 管理就删除。`docs/assets/` 的公开产品预览图属于文档资源。
+`docs/local/`、`.planning/` 和 `output/` 保存本地计划、过程记录及产物，不纳入公开源码。`.env`、`storage/`、`var/` 可能包含密钥、模型、备份或用户数据，清理前须核对内容。`docs/assets/` 的公开预览图属于文档资源。
 
 ## 文档与实现的对应关系
 
@@ -54,5 +54,5 @@
 - 数据结构以模型与 Alembic 迁移为准；架构和数据库文档说明其用途与约束。
 - 部署以 Compose、启动脚本和配置示例为准；桌面入口另由 desktop 配置和运行时合同定义。
 - 依赖版本以各组件清单和锁文件为准；许可证清单不能代替实际分发材料。
-- 源码发布线由 VERSION.txt 标识，API 版本由后端定义，桌面安装器版本由 desktop/package.json 定义；各版本用途不同，不按数字强行对齐。
-- 文档同步描述当前行为与已知限制；测试流水、参考项目审查和会话决策保留在本地忽略目录。
+- 源码发布线由 `VERSION.txt` 标识，API 版本由后端定义，安装器版本由 `desktop/package.json` 定义；各自独立维护。
+- 文档记录当前行为与已知限制；测试流水、参考项目审查和会话决策保存在本地忽略目录。

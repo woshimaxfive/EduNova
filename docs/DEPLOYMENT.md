@@ -33,11 +33,11 @@ docker compose up -d --build
 docker compose ps
 ```
 
-每条命令成功后再执行下一条；发生错误应停止，不要跳过模型准备。Windows 一键入口会自动检查各步骤退出码。初始化生成数据库密码、JWT、配置加密密钥和 SearXNG 内部密钥，不附带主模型 API Key。AI 功能可在设置页配置主模型，或由部署者配置系统主模型。
+逐条执行，失败即停止；不要跳过模型准备。Windows 一键入口自动检查退出码。初始化生成数据库密码、JWT、配置加密密钥和 SearXNG 内部密钥，不附带主模型 API Key；主模型可在设置页或系统配置中填写。
 
-首次准备会下载本地向量及语音识别权重并执行离线推理检查。Linux/macOS 请按[本地检索](LOCAL_EMBEDDING.md)和[本地语音](LOCAL_SPEECH.md)准备权重，同时设置下面的安全项，再运行 Compose；不要仅执行 `up` 就认为已完成首次安装。旧部署先备份数据库和 `.env`，迁移脚本会清除已退役的外部检索、搜索和语音配置。
+首次准备下载向量与语音识别权重，并检查离线推理。Linux/macOS 需按[本地检索](LOCAL_EMBEDDING.md)和[本地语音](LOCAL_SPEECH.md)准备权重、设置下方安全项，再运行 Compose；仅执行 `up` 不足以完成安装。升级前备份数据库和 `.env`，迁移会清理退役的外部检索、搜索与语音配置。
 
-若升级前已创建 PostgreSQL 数据卷，先初始化 `.env`，再执行以下命令同步数据库角色密码。该操作不会删除课程、用户或其他数据库内容：
+已有 PostgreSQL 数据卷时，先初始化 `.env` 再同步角色密码，保留课程、用户及其他数据：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\initialize_env.ps1 -Path .env
@@ -60,7 +60,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\sync_postgres_passwo
 | `speech` | 本地 SenseVoiceSmall | 语音识别，模型权重只读挂载 |
 | `clamav` | `clamav/clamav:1.4`（`security` profile） | 可选的恶意文件扫描 |
 
-默认宿主机端口只绑定 `127.0.0.1`。生产部署只需通过受保护的入口公开 Nginx；PostgreSQL、Redis、Backend、Worker 和代码验证服务应留在内部网络。
+端口默认只绑定 `127.0.0.1`。生产环境只公开受保护的 Nginx 入口；数据库、Redis、Backend、Worker 和代码验证服务留在内部网络。
 
 ## 4. 必填配置
 
@@ -93,11 +93,11 @@ SEARXNG_SECRET=<random-secret>
 - 上传资料与聊天附件；
 - 导出文件。
 
-公开部署可以设置 `STORAGE_BACKEND=s3`，并配置 S3-compatible endpoint、bucket、region 和凭据。应用数据库只保存逻辑键，不保存宿主机绝对路径。
+公开部署可设置 `STORAGE_BACKEND=s3`，配置 S3-compatible endpoint、bucket、region 和凭据。数据库保存逻辑键，不保存宿主机绝对路径。
 
 ## 6. 文档解析与文件安全
 
-TXT 和 Markdown 使用轻量解析；PDF、DOCX 和 PPTX 可由 Docling 提取结构。扫描件、图片和旧版 Office 文件不会被标记为已完成深度解析。
+TXT/Markdown 使用轻量解析，PDF/DOCX/PPTX 可由 Docling 提取结构。扫描件、图片与旧版 Office 文件不标记为已完成深度解析。
 
 公开上传入口建议启用：
 
@@ -172,43 +172,44 @@ docker compose config --quiet
 git diff --check
 ```
 
-涉及 Provider 的质量和性能结论必须使用当前环境的新样本；未运行的检查应明确标记为未验证。
+Provider 质量与性能结论须有当前环境的新样本；未运行项标为未验证。
 
 ## 12. 模型与版本维护边界
 
-聊天和生成示例配置使用 `qwen3.8-flash`，个人主模型配置可覆盖系统配置。图片能力复用主模型，本地向量、RRF 排序、SearXNG 搜索及本地语音不要求额外服务 Key。仅修改 `.env.example` 不会改写部署环境的 `.env`。搜索免 Key 不等于离线，也不保证上游始终可用。
+示例聊天与生成模型为 `qwen3.8-flash`，个人配置可覆盖系统配置。图片理解复用主模型；本地向量、RRF、SearXNG 与语音无需额外 Key，搜索仍依赖网络及上游服务。修改 `.env.example` 不会更新已有 `.env`。
 
-可执行 `python -m scripts.check_live_models` 以合成输入探测当前系统聊天、生成和向量连接。这会产生真实模型调用费用，输出不含密钥，结果默认保存在忽略目录 `output/release-readiness/`。连接成功不代表教学质量、完整学习闭环或性能验收通过。
+`python -m scripts.check_live_models` 使用合成输入检查系统聊天、生成与向量连接，会产生真实模型调用费用。输出不含密钥，默认保存在忽略目录 `output/release-readiness/`。
 
-离线夹具中的引用归属和服务端分数不作为新模型回答的证据。仅得到真实回答文本时，这两项保持未验证；发布检查区分离线质量、诊断耗时和完整真实验收，证据不足仍为 `evidence_gap`，不能因为探测成功宣布发布通过。
+连接成功或少量演示不能证明教学质量、完整学习流程和并发性能。离线夹具的引用与分数不能作为新回答的证据；只有真实文本时，这两项仍未验证。发布检查分别记录离线质量、诊断耗时和完整真实验收，证据不足保留 `evidence_gap`。
 
-资源生成和修订均传入真实引用编号；敏感内容错误只记录规则名，不保存原始响应。模型连接成功、少量演示成功与系统性教学质量/性能评测是不同的验证层级。
+资源生成与修订传入真实引用编号；敏感内容错误只记录规则名，不保存原始响应。
 
-回退 Git 只恢复受跟踪源码，不回退 `.env`、已安装依赖、镜像和数据库。用 `python -m alembic heads` 核对源码迁移头，用 `python -m alembic current` 核对目标数据库；已执行后续迁移的数据库不可直接认定兼容。先备份并确认迁移策略，禁止为启动旧代码直接删除数据卷。回归使用隔离 E2E 项目，不使用个人数据库。
+回退 Git 只恢复源码，不恢复 `.env`、依赖、镜像和数据库。分别用 `python -m alembic heads`、`python -m alembic current` 核对源码与目标数据库版本；已执行后续迁移时需另查兼容性。先备份、确认迁移策略，不得为运行旧代码删除数据卷。回归使用隔离 E2E 项目。
 
-前端和评测工具安装时保留各自的 `pnpm-workspace.yaml` 与锁文件。评测依赖兼容检查使用 `pnpm check:deps`；Promptfoo 位于开发依赖，审计不能使用 `--prod` 排除它。SWC 安装脚本明确禁用，当前评测入口不需要编译自定义 TypeScript 插件。
-
+安装前端与评测工具时保留各自的 `pnpm-workspace.yaml` 和锁文件。用 `pnpm check:deps` 检查评测依赖兼容性；审计须包含开发依赖中的 Promptfoo，不能用 `--prod` 排除。SWC 安装脚本已禁用，当前评测无需编译自定义 TypeScript 插件。
 
 ### 记忆语义筛选
 
-`CONVERSATION_MEMORY_SEMANTIC_SELECTION_ENABLED=true` 默认开启；显式设置为 `false` 可关闭并沿用原0.72阈值检索。已有部署中显式设置的 `false` 不会被代码默认值覆盖。开启后由现有对话模型适配器判定最多5条候选；每条最多1600字符，问题超过4000字符时沿用原检索，避免截断题目条件。每次至多增加一次结构化调用，Provider请求超时12秒、一次尝试。未配置或未通过个人结构化能力测试、调用失败、无效输出与未知候选ID均回退原阈值结果，绝不放行全部扩展候选；合法none才表示没有匹配。歧义保留独立来源并要求澄清。
+`CONVERSATION_MEMORY_SEMANTIC_SELECTION_ENABLED=true` 默认开启，已有显式 `false` 保持关闭，沿用原阈值检索（默认 0.72）。筛选使用现有对话模型，最多 5 条候选、每条 1600 字符；问题超过 4000 字符时沿用原检索，避免截断条件。每次至多增加一次结构化调用，超时 12 秒，仅尝试一次。
 
-这是服务级配置，有候选时可能额外产生一次主模型调用、增加 token 用量和等待时间；默认开启不代表所有模型与问法均已验证。开关不替代个人隐私设置；变更后需重建/重启backend和相关worker。调用审计操作为`chat:memory_selection`、purpose为`memory_selection`，失败回退另有无正文日志。沿用现有模型调用审计与用量展示，缺失报价仍为未知。
+未配置、个人结构化能力测试未通过、调用失败、输出无效或返回未知 ID 时，均回退原阈值结果，不放行全部扩展候选；合法 none 才表示无匹配。歧义保留独立来源并要求澄清。
+
+该服务级开关不替代个人隐私设置，变更后需重建或重启 backend 与相关 worker。有候选时可能增加 token 和等待时间，模型与问法仍需实际验证。审计操作为 `chat:memory_selection`、purpose 为 `memory_selection`，沿用既有用量展示；失败回退仅记无正文日志，缺失报价保持未知。
 
 ## 模型用量与记忆配置
 
-默认记录服务商返回的 token，不改变提示词，不需要新增服务。OpenAI、DeepSeek 和 DashScope 已知官方域名的流式调用请求用量；自定义兼容服务默认不附加该参数。确认上游支持后可在 `.env` 设置 `MODEL_STREAM_USAGE_ENABLED=true`，重启后端与 AI worker。上游忽略用量时显示未知，不为统计重发请求。
+默认记录服务商返回的 token，无需修改提示词或新增服务。OpenAI、DeepSeek 和 DashScope 的已知官方域名会请求流式用量；自定义服务默认不附加参数。确认支持后可在 `.env` 设置 `MODEL_STREAM_USAGE_ENABLED=true`，重启后端与 AI worker。未返回用量时显示未知，不重发请求。
 
-首页回答遇到 `</final_answer>` 后停止显示正文，但仍消费当前上游流的末尾用量帧，直到正常结束，避免将成功回答误记为取消。尾部文字不会发送到页面；尾部异常或取消仍记为失败或取消，不冒充成功。每次拉取流片段前检查取消，已阻塞的同步网络读取仍受上游超时约束。此处理不新增模型请求，也不补造缺失用量。
+首页遇到 `</final_answer>` 后不再显示正文，继续读取当前流的末尾用量帧。尾部文字不发到页面，异常或取消如实记录。每次读取前检查取消；已阻塞的同步读取仍受上游超时约束。不新增请求或补造用量。
 
-`MODEL_USAGE_PRICING` 默认 `{}`，即不估算费用。可按精确键 `provider_source:配置ID或system:模型名` 配置每百万 token 的价格。例如以下仅为合成示例，不是任何模型实际报价：
+`MODEL_USAGE_PRICING` 默认 `{}`，不估算费用。按精确键 `provider_source:配置ID或system:模型名` 配置每百万 token 价格。以下为合成示例，非实际报价：
 
 ```dotenv
 MODEL_USAGE_PRICING={"user:123:example-model":{"currency":"CNY","uncached_input_tokens":"2","cache_read_tokens":"0.2","cache_write_tokens":"3","output_tokens":"8"}}
 ```
 
-只支持明确的 CNY/USD 报价，未知字段不补零；输入、缓存读写、输出计数不完整时不计算费用。推理 token 已包含在输出中，不重复收费。模型或中转地址更换后应重新核对报价；估算不含外部搜索工具、税费、包月或其他非 token 费用，以供应商账单为准。设置页可查看主模型用量，轨迹 API 提供相应记录。
+仅支持明确的 CNY/USD 报价；输入、缓存读写或输出计数不完整时不估算，不将未知补零。推理 token 已含在输出中，不重复计费。更换模型或中转地址后重查报价；估算不含搜索工具、税费、包月等非 token 费用，以供应商账单为准。用量可在设置页和轨迹 API 查看。
 
-问答请求还会按 `TUTOR_CONTEXT_WINDOW_TOKENS` 和 `TUTOR_OUTPUT_RESERVE_TOKENS` 做输入预算估算。超出时依次省略旧历史、跨会话记忆、外部搜索片段和多余课程片段，同时保留固定规则、当前问题和至少一段课程依据；这只是保守的文本估算，不能替代具体模型 tokenizer 或供应商计费数据。
+输入预算使用 `TUTOR_CONTEXT_WINDOW_TOKENS` 和 `TUTOR_OUTPUT_RESERVE_TOKENS`。超出时依次省略旧历史、记忆、外部搜索和多余课程片段，保留固定规则、当前问题与至少一段课程依据。这是保守文本估算，不替代模型 tokenizer 或计费数据。
 
-记忆管理需要迁移 `20260925_0039`。升级保留已有摘要与索引，增加用户确认的长期信息和无正文删除标记。`CONVERSATION_MEMORY_MIN_SIMILARITY` 默认 0.72，须根据实际嵌入模型校准。暂停不再删除已有记忆，恢复不自动回填；“清除派生索引”后需在设置页手动重建，重建沿用现有 AI worker。迁移降级在存在长期信息、删除标记或隐私版本变更时主动拒绝，避免回滚悄悄丢失删除保障；部署前应按既有流程备份数据库。
+记忆管理需迁移 `20260925_0039`：保留摘要与索引，增加用户确认的长期信息和无正文删除标记。`CONVERSATION_MEMORY_MIN_SIMILARITY` 默认 0.72，需按嵌入模型校准。暂停保留内容，恢复不自动回填；清除派生索引后，在设置页手动重建，由既有 AI worker 执行。存在长期信息、删除标记或隐私版本变更时拒绝降级，避免丢失删除保障；迁移前备份数据库。
